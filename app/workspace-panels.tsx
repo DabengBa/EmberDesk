@@ -242,6 +242,14 @@ interface AuthoringWorkspacePanelState {
     draft?: Record<string, unknown>;
     candidates?: AuthoringCandidateState[];
     tagOptions?: AuthoringCandidateState[];
+    managementActions?: AuthoringManagementAction[];
+}
+
+interface AuthoringManagementAction {
+    id: string;
+    label: string;
+    danger?: boolean;
+    editAction?: boolean;
 }
 
 interface AuthoringCandidateState {
@@ -456,6 +464,99 @@ function asAuthoringState(state: unknown): AuthoringWorkspacePanelState {
     return state as AuthoringWorkspacePanelState;
 }
 
+function AuthoringActionsMenu({
+    actions,
+    disabled,
+    onRun,
+    onOpen,
+}: {
+    actions: AuthoringManagementAction[];
+    disabled: boolean;
+    onRun: (actionId: string) => void;
+    onOpen?: () => void;
+}) {
+    const [open, setOpen] = useState(false);
+    const wrapRef = useRef<HTMLDivElement>(null);
+    const menuRef = useRef<HTMLDivElement>(null);
+    const triggerRef = useRef<HTMLButtonElement>(null);
+    const orderedActions = useMemo(
+        () => [...actions.filter(action => !action.danger), ...actions.filter(action => action.danger)],
+        [actions],
+    );
+
+    useEffect(() => {
+        if (!open) {
+            return;
+        }
+        const firstItem = menuRef.current?.querySelector('button');
+        if (firstItem instanceof HTMLElement) {
+            firstItem.focus();
+        }
+        const onPointerDown = (event: PointerEvent) => {
+            if (!wrapRef.current?.contains(event.target as Node)) {
+                setOpen(false);
+            }
+        };
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                event.stopPropagation();
+                setOpen(false);
+                triggerRef.current?.focus();
+            }
+        };
+        document.addEventListener('pointerdown', onPointerDown, true);
+        document.addEventListener('keydown', onKeyDown, true);
+        return () => {
+            document.removeEventListener('pointerdown', onPointerDown, true);
+            document.removeEventListener('keydown', onKeyDown, true);
+        };
+    }, [open]);
+
+    if (orderedActions.length === 0) {
+        return null;
+    }
+
+    return (
+        <div ref={wrapRef} {...stylex.props(authoringStyles.actionMenuWrap)}>
+            <button
+                ref={triggerRef}
+                type="button"
+                className={`menu_button fa-solid fa-ellipsis ${stylex.props(authoringStyles.toolAction).className ?? ''}`}
+                disabled={disabled}
+                title="More character actions"
+                aria-label="More character actions"
+                aria-haspopup="menu"
+                aria-expanded={open}
+                data-i18n="[title]More...;[aria-label]More..."
+                onClick={() => setOpen(current => {
+                    if (!current) {
+                        onOpen?.();
+                    }
+                    return !current;
+                })}
+            />
+            {open ? (
+                <div ref={menuRef} role="menu" {...stylex.props(authoringStyles.actionMenu)}>
+                    {orderedActions.map(action => (
+                        <button
+                            key={action.id}
+                            type="button"
+                            role="menuitem"
+                            {...stylex.props(authoringStyles.actionMenuItem, action.danger ? authoringStyles.actionMenuItemDanger : null)}
+                            onClick={() => {
+                                setOpen(false);
+                                onRun(action.id);
+                            }}
+                        >
+                            {action.label}
+                        </button>
+                    ))}
+                </div>
+            ) : null}
+        </div>
+    );
+}
+
 function AuthoringWorkspacePanel({
     kind,
     state,
@@ -544,6 +645,35 @@ function AuthoringWorkspacePanel({
     const characterToolActionPayload = characterActionPayload ? { ...characterActionPayload, draft } : undefined;
     const isCreateMode = (bridgeState.mode ?? 'create') === 'create';
     const isActionPending = authoringCommandMutation.isPending;
+    const managementActions = useMemo(
+        () => (Array.isArray(bridgeState.managementActions) ? bridgeState.managementActions.filter(action => action && action.id) : [])
+            .filter(action => !(isCreateMode && action.editAction)),
+        [bridgeState.managementActions, isCreateMode],
+    );
+    const [liveManagementActions, setLiveManagementActions] = useState<AuthoringManagementAction[] | null>(null);
+    const refreshManagementActions = useCallback(() => {
+        // The hidden select is the compatibility host; read live options so
+        // extension-injected actions appear even if they were added post-mount.
+        const dropdown = document.getElementById('char-management-dropdown');
+        if (!(dropdown instanceof HTMLSelectElement)) {
+            return;
+        }
+        setLiveManagementActions(
+            Array.from(dropdown.options)
+                .filter(option => option instanceof HTMLOptionElement && option.id)
+                .map(option => ({
+                    id: option.id,
+                    label: option.textContent?.trim() || option.id,
+                    danger: option.classList.contains('red_button'),
+                    editAction: option.classList.contains('character-detail-edit-action'),
+                }))
+                .filter(action => !(isCreateMode && action.editAction)),
+        );
+    }, [isCreateMode]);
+
+    useEffect(() => {
+        setLiveManagementActions(null);
+    }, [bridgeState.managementActions]);
 
     return (
         <WorkspacePanelShell
@@ -595,6 +725,12 @@ function AuthoringWorkspacePanel({
                             </button>
                             <button type="button" className={`menu_button ${stylex.props(authoringStyles.toolAction).className ?? ''}`} disabled={isActionPending} onClick={() => void commands?.duplicateAuthoring?.(kind)}>Duplicate</button>
                             <button type="button" className={`menu_button ${stylex.props(authoringStyles.toolAction).className ?? ''}`} disabled={isActionPending} onClick={() => void commands?.exportAuthoring?.(characterActionPayload)}>Export</button>
+                            <AuthoringActionsMenu
+                                actions={liveManagementActions ?? managementActions}
+                                disabled={isActionPending}
+                                onOpen={refreshManagementActions}
+                                onRun={actionId => void commands?.runManagementAction?.({ ...characterToolActionPayload, actionId })}
+                            />
                     </>
                 </div>
                 <fieldset

@@ -140,6 +140,66 @@ describe('character list structure', () => {
         expect(tagsSource).not.toContain('FILTER_TYPES.GROUP');
     });
 
+    test('keeps character tag filter chips React-owned with legacy command bridges', () => {
+        const tagsSource = read('public/scripts/tags.js');
+        const scriptSource = read('public/script.js');
+        const toolbarSource = read('app/components/character-library/CharacterLibraryToolbar.tsx');
+        const rightNavSource = read('app/components/right-nav/RightNavPanel.tsx');
+
+        // The static contract containers stay; React portals chips into them.
+        expect(rightNavSource).toContain('data-react-tag-filters-owner="react"');
+        const printTagFiltersSource = extractFunctionSource(tagsSource, 'printTagFilters');
+        expect(printTagFiltersSource).toContain('removeMissingTagFilters()');
+        expect(printTagFiltersSource).toContain('data-react-tag-filters-owner="react"');
+
+        // Snapshot + DOM-free commands exported for the bridge.
+        expect(tagsSource).toContain('export function createCharacterTagFilterViewState(');
+        expect(tagsSource).toContain('export function cycleCharacterTagFilterState(');
+        expect(tagsSource).toContain('export function runCharacterTagFilterAction(');
+        expect(tagsSource).toContain('export function expandCharacterTagFilterList(');
+        expect(tagsSource).toContain('determineTagFilterState(filterHelper, tag, true)');
+        expect(tagsSource).toContain('getOpenBogusFolders()');
+        expect(tagsSource).toContain('filterHelper.setFilterData(FILTER_TYPES.TAG, { selected, excluded })');
+
+        // Bridge routes React chip events back into the filter pipeline.
+        expect(scriptSource).toContain('tagFilters: createCharacterTagFilterViewState(entitiesFilter)');
+        expect(scriptSource).toContain('cycleCharacterTagFilterState(String(tagId), entitiesFilter)');
+        expect(scriptSource).toContain('runCharacterTagFilterAction(String(tagId), entitiesFilter)');
+        expect(scriptSource).toContain('expandCharacterTagFilterList()');
+
+        // Toolbar renders chips into the contract containers and keeps
+        // data-toggle-state/class semantics that legacy DOM readers rely on.
+        expect(toolbarSource).toContain("querySelector('.rm_tag_filter')");
+        expect(toolbarSource).toContain("querySelector('.rm_tag_bogus_drilldown')");
+        expect(toolbarSource).toContain('data-toggle-state={chip.filterState ?? undefined}');
+        expect(toolbarSource).toContain('tag_remove');
+        expect(toolbarSource).toContain('placeholder-expander');
+        expect(toolbarSource).toContain('bridge.cycleTagFilter?.(chip.id)');
+        expect(toolbarSource).toContain('bridge.runTagFilterAction?.(chip.id)');
+        expect(toolbarSource).toContain('bridge.expandTagFilterList?.()');
+        expect(toolbarSource).toContain('hasActiveTagFilters');
+    });
+
+    test('keeps character-detail management actions bridged through the legacy dropdown host', () => {
+        const scriptSource = read('public/script.js');
+        const workspacePanelsSource = read('app/workspace-panels.tsx');
+        const rightNavSource = read('app/components/right-nav/RightNavPanel.tsx');
+        const commandsSource = read('app/compat/workspace-commands.ts');
+
+        // Hidden select stays the compatibility host; React menu reads live options
+        // (extension-injected entries included) and fires the same change event.
+        expect(rightNavSource).toContain('id="char-management-dropdown"');
+        expect(scriptSource).toContain('function getCharacterManagementDropdownActions()');
+        expect(scriptSource).toContain('managementActions: getCharacterManagementDropdownActions()');
+        expect(scriptSource).toContain('$(\'#char-management-dropdown\').trigger(\'change\')');
+        expect(commandsSource).toContain('runManagementAction?(payload: Record<string, unknown>): CommandResult;');
+        expect(workspacePanelsSource).toContain('function AuthoringActionsMenu(');
+        expect(workspacePanelsSource).toContain('commands?.runManagementAction?.(');
+        expect(workspacePanelsSource).toContain('aria-haspopup="menu"');
+        expect(workspacePanelsSource).toContain('role="menuitem"');
+        expect(workspacePanelsSource).toContain("event.key === 'Escape'");
+    });
+
     test('keeps generated character row selectors and active-state hooks stable', () => {
         const scriptSource = read('public/script.js');
         const rowSource = read('app/components/character-library/CharacterLibraryCharacterRow.tsx');
@@ -241,10 +301,10 @@ describe('character list structure', () => {
         const statusBlockSource = read('app/components/character-library/CharacterLibraryStatusBlocks.tsx');
         const renderStateSource = read('public/scripts/character-list-render-state.js');
 
-        expect(printCharactersSource).toContain('let pendingInitialFullRefresh = fullRefresh;');
-        expect(printCharactersSource).toContain('const useFullRefresh = pendingInitialFullRefresh;');
-        expect(printCharactersSource).toContain('pendingInitialFullRefresh = false;');
-        expect(printCharactersSource).toContain('await renderCharacterListPage(data, { fullRefresh: useFullRefresh });');
+        expect(printCharactersSource).toContain('const entitySnapshot = createCharacterListEntitySnapshot(getEntitiesList({ doFilter: true }));');
+        expect(printCharactersSource).toContain('currentCharacterListEntitySnapshot = entitySnapshot;');
+        expect(printCharactersSource).toContain('await renderCharacterListPage(entitySnapshot, {');
+        expect(renderCharacterListPageSource).toContain('getCharacterListPageEntities(entitySnapshot, currentPage, pageSize)');
         expect(renderCharacterListPageSource).toContain('createCharacterListPageRenderPlan({');
         expect(scriptSource).toContain('let currentCharacterListPageEntities = [];');
         expect(renderCharacterListPageSource).toContain('renderCharacterListPageReact');
@@ -309,19 +369,30 @@ describe('character list structure', () => {
     test('keeps character list pagination state synchronized after page-size changes', () => {
         const scriptSource = read('public/script.js');
         const printCharactersSource = extractFunctionSource(scriptSource, 'printCharacters');
+        const renderCharacterListPageSource = extractFunctionSource(scriptSource, 'renderCharacterListPage');
+        const panelSource = read('app/components/character-library/CharacterLibraryPanel.tsx');
         const renderStateSource = read('public/scripts/character-list-render-state.js');
 
-        expect(printCharactersSource).toMatch(/let pageSize = Number\(accountStorage\.getItem\(storageKey\)\) \|\| per_page_default;/);
-        expect(printCharactersSource).toContain('const sizeChangerOptions = CHARACTER_LIST_PAGE_SIZE_OPTIONS;');
-        expect(printCharactersSource).toMatch(/const getCurrentPageSize = \(\) => pageSize;/);
-        expect(printCharactersSource).toMatch(/const getPaginationRangeLabel = \(currentPage, totalNumber\) => \{/);
-        expect(printCharactersSource).toContain('return getCharacterListPaginationRangeLabel({');
+        // The visible pager is React-owned inside the contract #rm_print_characters_pagination host.
+        expect(printCharactersSource).not.toContain("$('#rm_print_characters_pagination').pagination(");
+        expect(scriptSource).not.toContain("$('#rm_print_characters_pagination').pagination(");
+        const snapshotSource = extractFunctionSource(scriptSource, 'createCharacterLibraryPanelStateSnapshot');
+        expect(renderCharacterListPageSource).toContain('const pageSize = getCharacterListCurrentPageSize();');
+        expect(snapshotSource).toContain('getCharacterListPaginationRangeLabel({');
+        expect(snapshotSource).toContain('pageSizeOptions: [...CHARACTER_LIST_PAGE_SIZE_OPTIONS]');
+        expect(renderCharacterListPageSource).toContain('saveCharactersPage = currentPage;');
+        expect(scriptSource).toContain('accountStorage.setItem(\'Characters_PerPage\', String(nextSize));');
+        expect(scriptSource).toContain('void requestCharacterListPage(1);');
+        expect(scriptSource).not.toContain('updateCharacterListPaginationState');
+        expect(panelSource).toContain('data-react-pagination-owner="react"');
+        expect(panelSource).toContain('J-paginationjs-size-select');
+        expect(panelSource).toContain('paginationjs-nav');
+        expect(panelSource).toContain('J-paginationjs-previous');
+        expect(panelSource).toContain('J-paginationjs-next');
+        expect(panelSource).toContain('bridge.setCharacterListPage?.(');
+        expect(panelSource).toContain('bridge.setCharacterListPageSize?.(');
         expect(renderStateSource).toContain('export const CHARACTER_LIST_PAGE_SIZE_OPTIONS = Object.freeze([10, 25, 50, 100, 250, 500, 1000]);');
         expect(renderStateSource).toMatch(/return `\$\{rangeStart\}-\$\{rangeEnd\} \/ \$\{actualTotal\}`;/);
-        expect(printCharactersSource).toMatch(/formatNavigator: function \(currentPage, _totalPage, totalNumber\) \{\s+return getPaginationRangeLabel\(currentPage, totalNumber\);/);
-        expect(printCharactersSource).toMatch(/formatSizeChanger: function \(\) \{\s+return renderPaginationDropdown\(getCurrentPageSize\(\), sizeChangerOptions\);/);
-        expect(printCharactersSource).toMatch(/beforeSizeSelectorChange: function \(_e, size\) \{\s+pageSize = Number\(size\) \|\| per_page_default;\s+saveCharactersPage = 1;/);
-        expect(printCharactersSource).toMatch(/afterSizeSelectorChange: function \(e, size\) \{\s+accountStorage\.setItem\(storageKey, String\(pageSize\)\);/);
     });
 
     test('keeps ordinary character delete on the incremental reconcile path with full-refresh fallback', () => {
@@ -341,7 +412,8 @@ describe('character list structure', () => {
         expect(scriptSource).toContain('shouldSuppressCharacterDeleteListReprintState');
         expect(printCharactersSource).toContain('allowDuringCharacterDelete = false');
         expect(printCharactersSource).toMatch(/if \(shouldSuppressCharacterDeleteListReprint\(deleteReconcileGenerationAtStart, \{ allowDuringDelete: allowDuringCharacterDelete \}\)\) \{\s+return;\s+\}/);
-        expect(printCharactersSource).toMatch(/callback: async function \(\/\*\* @type \{Entity\[\]\} \*\/ data\) \{\s+if \(shouldSuppressCharacterDeleteListReprint\(deleteReconcileGenerationAtStart, \{ allowDuringDelete: allowDuringCharacterDelete \}\)\) \{\s+return;\s+\}/);
+        expect(printCharactersSource).toContain('deleteReconcileGeneration: deleteReconcileGenerationAtStart');
+        expect(printCharactersSource).toContain('allowDuringDelete: allowDuringCharacterDelete');
         const lifecycleSource = read('public/scripts/character-lifecycle-service.js');
         const deleteCharacterSource = extractFunctionSource(lifecycleSource, 'deleteCharacter');
         expect(deleteCharacterSource).toContain('deleteContext = null');
@@ -358,16 +430,13 @@ describe('character list structure', () => {
         expect(reconcileSource).toContain('const hasActiveFilter = entitiesFilter.hasAnyFilter();');
         expect(reconcileSource).toContain('const isBulkEdit = $(\'#rm_print_characters_block\').hasClass(\'bulk_select\');');
         expect(reconcileSource).toContain('isBulkEdit: isBulkEdit && !isBulkDeleteContext');
-        expect(reconcileSource).toContain('renderCharacterListPageReact(createCharacterLibraryPanelStateSnapshot({');
+        expect(reconcileSource).toContain('currentCharacterListEntitySnapshot = afterSnapshot;');
+        expect(reconcileSource).toContain('await renderCharacterListPage(afterSnapshot, { requestedPage: plan.currentPage })');
         expect(reconcileSource).not.toContain('applyCharacterListPageRenderPlan');
-        expect(reconcileSource).toContain('currentCharacterListPageEntities = plan.pageEntities;');
-        expect(reconcileSource).toContain('updateCharacterListPaginationState(plan, afterSnapshot, { skipInitialCallback: true });');
-        expect(reconcileSource).toContain('await eventSource.emit(event_types.CHARACTER_PAGE_LOADED);');
-
-        const updatePaginationSource = extractFunctionSource(scriptSource, 'updateCharacterListPaginationState');
-        expect(updatePaginationSource).toContain('dataSource: afterSnapshot.entities');
-        expect(updatePaginationSource).toContain('triggerPagingOnInit: !skipInitialCallback');
-        expect(updatePaginationSource).not.toContain('paginationData.attributes.dataSource = afterSnapshot.entities;');
+        expect(reconcileSource).not.toContain('updateCharacterListPaginationState');
+        const renderCharacterListPageSource = extractFunctionSource(scriptSource, 'renderCharacterListPage');
+        expect(renderCharacterListPageSource).toContain('renderCharacterListPageReact(createCharacterLibraryPanelStateSnapshot({');
+        expect(renderCharacterListPageSource).toContain('await eventSource.emit(event_types.CHARACTER_PAGE_LOADED);');
     });
 
     test('keeps temporary-chat warning integrated into character delete confirmation', () => {

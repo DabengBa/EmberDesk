@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import * as stylex from '@stylexjs/stylex';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { CharacterLibraryCharacterRow } from './CharacterLibraryCharacterRow';
@@ -17,6 +18,7 @@ import {
     getCharacterLibraryGridRowCount,
     getCharacterLibraryGridRowRange,
 } from '@/lib/character-library-grid-helpers.js';
+import type { CharacterLibraryPaginationState } from '@/lib/character-library-helpers';
 import { characterLibraryStyles } from '@/styles/workspace-panels.styles';
 import { translate } from '../../compat/i18n.js';
 
@@ -51,6 +53,8 @@ export interface CharacterLibraryPanelState {
     pageSize: number;
     pageEntities: CharacterLibraryPanelEntity[];
     renderPlan: CharacterLibraryPanelRenderPlan;
+    pagination?: CharacterLibraryPaginationState | null;
+    paginationElement?: HTMLElement | null;
     estimatedRowHeight?: number;
     scrollElement: HTMLElement | null;
     isGrid?: boolean;
@@ -65,6 +69,89 @@ export interface CharacterLibraryPanelBridge {
     onBackFolder?(): void;
     onClearFilters?(): void;
     onBulkToggleCharacter?(id: string | number, checked: boolean): void;
+    setCharacterListPage?(page: number): void;
+    setCharacterListPageSize?(pageSize: number): void;
+}
+
+/**
+ * React-owned pagination control rendered inside the legacy
+ * #rm_print_characters_pagination host. Mirrors the paginationjs DOM shape
+ * (nav/pages/size-changer, including J-paginationjs-* hooks) so existing theme
+ * CSS and extension selectors keep matching.
+ */
+function CharacterLibraryPagination({
+    pagination,
+    container,
+    bridge,
+}: {
+    pagination: CharacterLibraryPaginationState;
+    container: HTMLElement;
+    bridge: CharacterLibraryPanelBridge;
+}) {
+    const totalPages = Math.max(Math.ceil(pagination.totalCount / Math.max(pagination.pageSize, 1)), 1);
+    const currentPage = pagination.currentPage;
+    const isFirstPage = currentPage <= 1;
+    const isLastPage = currentPage >= totalPages;
+    const goToPage = (page: number) => {
+        if (page >= 1 && page <= totalPages && page !== currentPage) {
+            bridge.setCharacterListPage?.(page);
+        }
+    };
+
+    return createPortal(
+        <div className="paginationjs" data-react-pagination-owner="react">
+            <div className="paginationjs-nav J-paginationjs-nav">{pagination.label}</div>
+            <div className="paginationjs-pages">
+                <ul>
+                    <li
+                        className={`paginationjs-first${isFirstPage ? ' disabled' : ' J-paginationjs-first'}`}
+                        data-num={isFirstPage ? undefined : 1}
+                        title={isFirstPage ? undefined : 'First page'}
+                        onClick={isFirstPage ? undefined : () => goToPage(1)}
+                    >
+                        <a>{'\u00AB'}</a>
+                    </li>
+                    <li
+                        className={`paginationjs-prev${isFirstPage ? ' disabled' : ' J-paginationjs-previous'}`}
+                        data-num={isFirstPage ? undefined : currentPage - 1}
+                        title={isFirstPage ? undefined : 'Previous page'}
+                        onClick={isFirstPage ? undefined : () => goToPage(currentPage - 1)}
+                    >
+                        <a>{'<'}</a>
+                    </li>
+                    <li
+                        className={`paginationjs-next${isLastPage ? ' disabled' : ' J-paginationjs-next'}`}
+                        data-num={isLastPage ? undefined : currentPage + 1}
+                        title={isLastPage ? undefined : 'Next page'}
+                        onClick={isLastPage ? undefined : () => goToPage(currentPage + 1)}
+                    >
+                        <a>{'>'}</a>
+                    </li>
+                    <li
+                        className={`paginationjs-last${isLastPage ? ' disabled' : ' J-paginationjs-last'}`}
+                        data-num={isLastPage ? undefined : totalPages}
+                        title={isLastPage ? undefined : 'Last page'}
+                        onClick={isLastPage ? undefined : () => goToPage(totalPages)}
+                    >
+                        <a>{'\u00BB'}</a>
+                    </li>
+                </ul>
+            </div>
+            <div className="paginationjs-size-changer">
+                <select
+                    className="J-paginationjs-size-select"
+                    aria-label="Characters per page"
+                    value={String(pagination.pageSize)}
+                    onChange={event => bridge.setCharacterListPageSize?.(Number(event.target.value))}
+                >
+                    {pagination.pageSizeOptions.map(option => (
+                        <option key={option} value={String(option)}>{`${option} ${translate('/ page')}`}</option>
+                    ))}
+                </select>
+            </div>
+        </div>,
+        container,
+    );
 }
 
 interface EntityRowProps {
@@ -168,6 +255,19 @@ export function CharacterLibraryPanel({ bridge, state }: { bridge: CharacterLibr
         return () => observer.disconnect();
     }, [isGrid, state.scrollElement]);
 
+    const lastRenderedPageRef = useRef(state.pagination?.currentPage ?? state.currentPage);
+    useEffect(() => {
+        const nextPage = state.pagination?.currentPage ?? state.currentPage;
+        if (lastRenderedPageRef.current === nextPage) {
+            return;
+        }
+        lastRenderedPageRef.current = nextPage;
+        const scrollElement = scrollElementRef.current;
+        if (scrollElement) {
+            scrollElement.scrollTop = 0;
+        }
+    }, [state.pagination?.currentPage, state.currentPage]);
+
     const estimatedRowHeight = state.estimatedRowHeight ?? 112;
     const bulkMode = Boolean(state.bulkMode);
     const selectedCharacterIds = state.selectedCharacterIds ?? [];
@@ -252,6 +352,15 @@ export function CharacterLibraryPanel({ bridge, state }: { bridge: CharacterLibr
             ) : null}
             {state.renderPlan.showHiddenBlock
                 ? <CharacterLibraryHiddenBlock hiddenCount={state.renderPlan.hiddenCount} />
+                : null}
+            {state.pagination && state.paginationElement instanceof HTMLElement
+                ? (
+                    <CharacterLibraryPagination
+                        pagination={state.pagination}
+                        container={state.paginationElement}
+                        bridge={bridge}
+                    />
+                )
                 : null}
         </>
     );

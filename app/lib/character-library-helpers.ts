@@ -6,6 +6,37 @@ export interface CharacterLibraryToolbarSortOption {
     hidden?: boolean;
 }
 
+export interface CharacterLibraryTagChip {
+    id: string;
+    name: string;
+    title?: string;
+    icon?: string;
+    className?: string;
+    color?: string;
+    color2?: string;
+    actionable?: boolean;
+    removable?: boolean;
+    filterState?: string | null;
+}
+
+export interface CharacterLibraryTagFiltersState {
+    showTagFilters: boolean;
+    hasActiveTagFilters: boolean;
+    actionableTags: CharacterLibraryTagChip[];
+    inListActionableTags: CharacterLibraryTagChip[];
+    tags: CharacterLibraryTagChip[];
+    skippedTagCount: number;
+    drilldownTags: CharacterLibraryTagChip[];
+}
+
+export interface CharacterLibraryPaginationState {
+    currentPage: number;
+    pageSize: number;
+    totalCount: number;
+    pageSizeOptions: number[];
+    label: string;
+}
+
 export interface CharacterLibraryToolbarState {
     searchQuery: string;
     sortValue: string;
@@ -14,6 +45,7 @@ export interface CharacterLibraryToolbarState {
     isBulkEdit: boolean;
     bulkSelectedCount: number;
     tagControlsElement: HTMLElement | null;
+    tagFilters: CharacterLibraryTagFiltersState | null;
     extensionButtonsElement: HTMLElement | null;
 }
 

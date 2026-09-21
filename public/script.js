@@ -118,9 +118,6 @@ import {
     saveBase64AsFile,
     uuidv4,
     equalsIgnoreCaseAndAccents,
-    localizePagination,
-    renderPaginationDropdown,
-    paginationDropdownChangeHandler,
     importFromExternalUrl,
     shiftUpByOne,
     shiftDownByOne,
@@ -170,6 +167,10 @@ import {
     chooseBogusFolder,
     loadTagsSettings,
     printTagFilters,
+    createCharacterTagFilterViewState,
+    cycleCharacterTagFilterState,
+    runCharacterTagFilterAction,
+    expandCharacterTagFilterList,
     getTagKeyForEntity,
     printTagList,
     createTagMapFromList,
@@ -404,6 +405,7 @@ import {
     createCharacterDeleteReconcilePlan,
     createCharacterListEntitySnapshot,
     createCharacterListPageRenderPlan,
+    getCharacterListPageEntities,
     getCharacterListPaginationRangeLabel,
     shouldSuppressCharacterDeleteListReprintState,
 } from './scripts/character-list-render-state.js';
@@ -2380,7 +2382,28 @@ function getCharacterAuthoringReactBridgeState(stateOverrides = {}) {
         dirty: getCharacterAuthoringDirtyFields(sourceDraft, draft).length > 0,
         draft,
         unsupportedFields: Array.isArray(draft.unsupportedFields) ? [...draft.unsupportedFields] : [],
+        managementActions: getCharacterManagementDropdownActions(),
     };
+}
+
+/**
+ * Projects the live #char-management-dropdown options (including extension-injected
+ * entries) into the React "More" action menu. The hidden select stays the
+ * compatibility host; this only reads its options.
+ */
+function getCharacterManagementDropdownActions() {
+    const dropdown = document.getElementById('char-management-dropdown');
+    if (!(dropdown instanceof HTMLSelectElement)) {
+        return [];
+    }
+    return Array.from(dropdown.options)
+        .filter(option => option instanceof HTMLOptionElement && option.id)
+        .map(option => ({
+            id: option.id,
+            label: option.textContent?.trim() || option.id,
+            danger: option.classList.contains('red_button'),
+            editAction: option.classList.contains('character-detail-edit-action'),
+        }));
 }
 
 function setAuthoringInputValue(selector, value) {
@@ -2477,6 +2500,30 @@ function getCharacterAuthoringReactCommands() {
                 applyCharacterAuthoringSaveModel(payload, { submit: false });
                 hideLegacyCharacterAuthoringEditor(false);
                 await openAlternateGreetings();
+                hideLegacyCharacterAuthoringEditor(true);
+                await reopenCharacterAuthoringAfterLegacyPopup(payload?.draft);
+                return false;
+            },
+            runManagementAction: async payload => {
+                const actionId = String(payload?.actionId ?? '');
+                if (!actionId) {
+                    return false;
+                }
+                // Only push the draft into the hidden form when it actually carries
+                // field data; an invalid draft payload must not blank the form values
+                // that legacy actions (rename, replace, popups) read back.
+                if (payload?.fields || payload?.extensions) {
+                    applyCharacterAuthoringSaveModel(payload, { submit: false });
+                }
+                hideLegacyCharacterAuthoringEditor(false);
+                const dropdown = document.getElementById('char-management-dropdown');
+                const option = dropdown?.querySelector?.(`option[id="${CSS.escape(actionId)}"]`);
+                if (option instanceof HTMLOptionElement) {
+                    option.selected = true;
+                    $('#char-management-dropdown').trigger('change');
+                    // Let the synchronous prefix of the legacy change handler settle before re-hiding.
+                    await delay(0);
+                }
                 hideLegacyCharacterAuthoringEditor(true);
                 await reopenCharacterAuthoringAfterLegacyPopup(payload?.draft);
                 return false;
@@ -3467,6 +3514,62 @@ function hideLegacyCharacterLibraryToolbarChrome() {
     document.getElementById('rm_characters_block')?.classList.add('react-character-library-toolbar-active');
 }
 
+/**
+ * Keeps legacy compatibility surfaces on the character-library toolbar alive after
+ * the React toolbar took over the visible controls:
+ * - paginationjs string/numeric method calls on #rm_print_characters_pagination
+ *   (extensions, character lookup jumps) route through the plugin's event
+ *   dispatch into the React page pipeline;
+ * - the retired #rm_button_search Find toggle focuses the React search input.
+ */
+function ensureCharacterLibraryToolbarCompatBridges() {
+    const $paginationHost = $('#rm_print_characters_pagination');
+    if (!$paginationHost.length) {
+        return;
+    }
+    if (!$paginationHost.data('pagination')) {
+        const compatData = { initialized: true };
+        Object.defineProperties(compatData, {
+            model: {
+                get: () => ({
+                    pageNumber: getCharacterListCurrentPage(),
+                    pageSize: getCharacterListCurrentPageSize(),
+                    totalNumber: Number(currentCharacterListEntitySnapshot?.total) || 0,
+                    disabled: false,
+                }),
+            },
+            currentPageData: {
+                get: () => currentCharacterListPageEntities,
+            },
+        });
+        $paginationHost.data('pagination', compatData);
+    }
+    $paginationHost
+        .off('.reactLibraryPaginationCompat')
+        .on('pagination:go.reactLibraryPaginationCompat', (_event, page) => {
+            void requestCharacterListPage(Number(Array.isArray(page) ? page[0] : page) || 1);
+        })
+        .on('pagination:previous.reactLibraryPaginationCompat', () => {
+            void requestCharacterListPage(getCharacterListCurrentPage() - 1);
+        })
+        .on('pagination:next.reactLibraryPaginationCompat', () => {
+            void requestCharacterListPage(getCharacterListCurrentPage() + 1);
+        })
+        .on('pagination:first.reactLibraryPaginationCompat', () => {
+            void requestCharacterListPage(1);
+        })
+        .on('pagination:last.reactLibraryPaginationCompat', () => {
+            const total = Number(currentCharacterListEntitySnapshot?.total) || 0;
+            void requestCharacterListPage(Math.max(Math.ceil(total / getCharacterListCurrentPageSize()), 1));
+        });
+
+    $(document)
+        .off('click.reactLibraryToolbarCompat', '#rm_button_search')
+        .on('click.reactLibraryToolbarCompat', '#rm_button_search', () => {
+            document.getElementById('emberdesk-react-character-search')?.focus();
+        });
+}
+
 function getReactCharacterLibraryPanelBridge() {
     return globalThis.__emberDeskCharacterLibraryPanelBridge ??= {
         onSelectCharacter(id) {
@@ -3574,6 +3677,29 @@ function getReactCharacterLibraryPanelBridge() {
                 void characterGroupOverlay.handleContextMenuDelete();
             }
         },
+        setCharacterListPage(page) {
+            void requestCharacterListPage(page);
+        },
+        setCharacterListPageSize(pageSize) {
+            const nextSize = Math.max(Number(pageSize) || per_page_default, 1);
+            if (!CHARACTER_LIST_PAGE_SIZE_OPTIONS.includes(nextSize)) {
+                return;
+            }
+            accountStorage.setItem('Characters_PerPage', String(nextSize));
+            void requestCharacterListPage(1);
+        },
+        cycleTagFilter(tagId) {
+            cycleCharacterTagFilterState(String(tagId), entitiesFilter);
+            void syncReactCharacterLibraryToolbarState();
+        },
+        runTagFilterAction(tagId) {
+            runCharacterTagFilterAction(String(tagId), entitiesFilter);
+            void syncReactCharacterLibraryToolbarState();
+        },
+        expandTagFilterList() {
+            expandCharacterTagFilterList();
+            void syncReactCharacterLibraryToolbarState();
+        },
     };
 }
 
@@ -3643,15 +3769,24 @@ function enrichCharacterLibraryPageEntities(pageEntities) {
     });
 }
 
-function createCharacterLibraryPanelStateSnapshot({ listElement, pageEntities, renderPlan, currentPage, pageSize }) {
+function createCharacterLibraryPanelStateSnapshot({ listElement, pageEntities, renderPlan, currentPage, pageSize, totalCount = null }) {
     const bulkMode = $('#rm_print_characters_block').hasClass('bulk_select');
     const selectedCharacterIds = Array.isArray(characterGroupOverlay?.selectedCharacters)
         ? characterGroupOverlay.selectedCharacters.slice()
         : [];
+    const resolvedTotalCount = Number.isFinite(totalCount) ? Number(totalCount) : pageEntities.length;
     return {
         currentPage,
         pageSize,
         pageEntities: enrichCharacterLibraryPageEntities(pageEntities),
+        pagination: {
+            currentPage,
+            pageSize,
+            totalCount: resolvedTotalCount,
+            pageSizeOptions: [...CHARACTER_LIST_PAGE_SIZE_OPTIONS],
+            label: getCharacterListPaginationRangeLabel({ currentPage, totalNumber: resolvedTotalCount, pageSize }),
+        },
+        paginationElement: document.getElementById('rm_print_characters_pagination'),
         renderPlan: {
             ...renderPlan,
             emptyText: renderPlan.showEmptyBlock ? ((entitiesFilter?.hasAnyFilter?.() ? 'No matching characters' : 'Here be dragons')) : undefined,
@@ -3682,6 +3817,7 @@ function createCharacterLibraryToolbarStateSnapshot() {
         isBulkEdit: $('#rm_print_characters_block').hasClass('bulk_select'),
         bulkSelectedCount: characterGroupOverlay?.selectedCharacters?.length ?? 0,
         tagControlsElement: document.querySelector('#charListFixedTop .rm_tag_controls'),
+        tagFilters: createCharacterTagFilterViewState(entitiesFilter),
         extensionButtonsElement: document.getElementById('rm_buttons_container'),
     };
 }
@@ -3726,6 +3862,7 @@ async function mountReactCharacterLibraryToolbar(state = createCharacterLibraryT
     }
 
     hideLegacyCharacterLibraryToolbarChrome();
+    ensureCharacterLibraryToolbarCompatBridges();
 
     try {
         const panelModule = await loadReactCharacterLibraryPanelModule();
@@ -3774,6 +3911,7 @@ export async function syncReactCharacterLibraryToolbarState() {
                     }),
                     currentPage: getCharacterListCurrentPage(),
                     pageSize: getCharacterListCurrentPageSize(),
+                    totalCount: currentCharacterListEntitySnapshot?.total,
                 }));
             } catch (error) {
                 console.warn('React character library panel sync failed.', error);
@@ -4092,6 +4230,7 @@ let is_delete_mode = false;
 let isCharacterDeleteReconcileInProgress = false;
 let characterDeleteReconcileGeneration = 0;
 let currentCharacterListPageEntities = [];
+let currentCharacterListEntitySnapshot = null;
 let fav_ch_checked = false;
 let scrollLock = false;
 export let abortStatusCheck = new AbortController();
@@ -4722,14 +4861,8 @@ export async function printCharacters(fullRefresh = false, { allowDuringCharacte
         return;
     }
 
-    const storageKey = 'Characters_PerPage';
-    const listId = '#rm_print_characters_block';
-
-    let currentScrollTop = $(listId).scrollTop();
-
     if (fullRefresh) {
         saveCharactersPage = 0;
-        currentScrollTop = 0;
         await delay(1);
     }
 
@@ -4743,171 +4876,94 @@ export async function printCharacters(fullRefresh = false, { allowDuringCharacte
     applyTagsOnCharacterSelect();
 
     const entitySnapshot = createCharacterListEntitySnapshot(getEntitiesList({ doFilter: true }));
-    const entities = entitySnapshot.entities;
-
-    let pageSize = Number(accountStorage.getItem(storageKey)) || per_page_default;
-    const sizeChangerOptions = CHARACTER_LIST_PAGE_SIZE_OPTIONS;
-    const getCurrentPageSize = () => pageSize;
-    const getPaginationRangeLabel = (currentPage, totalNumber) => {
-        return getCharacterListPaginationRangeLabel({
-            currentPage,
-            totalNumber,
-            pageSize: getCurrentPageSize(),
-            fallbackTotal: entitySnapshot.total,
-        });
-    };
-    let pendingInitialFullRefresh = fullRefresh;
-    $('#rm_print_characters_pagination').pagination({
-        dataSource: entities,
-        pageSize,
-        pageRange: 1,
-        pageNumber: saveCharactersPage || 1,
-        position: 'top',
-        showPageNumbers: false,
-        showSizeChanger: true,
-        prevText: '<',
-        nextText: '>',
-        formatNavigator: function (currentPage, _totalPage, totalNumber) {
-            return getPaginationRangeLabel(currentPage, totalNumber);
-        },
-        formatSizeChanger: function () {
-            return renderPaginationDropdown(getCurrentPageSize(), sizeChangerOptions);
-        },
-        showNavigator: true,
-        callback: async function (/** @type {Entity[]} */ data) {
-            if (shouldSuppressCharacterDeleteListReprint(deleteReconcileGenerationAtStart, { allowDuringDelete: allowDuringCharacterDelete })) {
-                return;
-            }
-            const useFullRefresh = pendingInitialFullRefresh;
-            pendingInitialFullRefresh = false;
-            await renderCharacterListPage(data, { fullRefresh: useFullRefresh });
-        },
-        beforeSizeSelectorChange: function (_e, size) {
-            pageSize = Number(size) || per_page_default;
-            saveCharactersPage = 1;
-        },
-        afterSizeSelectorChange: function (e, size) {
-            accountStorage.setItem(storageKey, String(pageSize));
-            paginationDropdownChangeHandler(e, size);
-        },
-        afterPaging: function (e) {
-            saveCharactersPage = e;
-        },
-        afterRender: function () {
-            $(listId).scrollTop(currentScrollTop);
-        },
+    currentCharacterListEntitySnapshot = entitySnapshot;
+    await renderCharacterListPage(entitySnapshot, {
+        deleteReconcileGeneration: deleteReconcileGenerationAtStart,
+        allowDuringDelete: allowDuringCharacterDelete,
+        resetScroll: fullRefresh,
     });
 
     favsToHotswap();
     updatePersonaConnectionsAvatarList();
+    // React owns the tag chips; printTagFilters above is guarded off, so refresh
+    // the toolbar projection here to keep chips in sync on every reprint.
+    void syncReactCharacterLibraryToolbarState();
 }
 
-async function renderCharacterListPage(data, { fullRefresh = false } = {}) {
+/**
+ * Re-renders the current page from the last entity snapshot (or a fresh one),
+ * after applying a requested page change. Used by the React pager through the
+ * character-library bridge.
+ * @param {number} page - 1-based page number requested by the pager
+ * @returns {Promise<boolean>} Whether the page rendered
+ */
+async function requestCharacterListPage(page) {
+    if (Number.isFinite(Number(page))) {
+        saveCharactersPage = Math.max(Number(page), 1);
+    }
+    const entitySnapshot = currentCharacterListEntitySnapshot ?? createCharacterListEntitySnapshot(getEntitiesList({ doFilter: true }));
+    currentCharacterListEntitySnapshot = entitySnapshot;
+    return renderCharacterListPage(entitySnapshot);
+}
+
+/**
+ * Slices the entity snapshot at the persisted page state and hands the page
+ * plan to the React character-library panel. The pagination control inside
+ * #rm_print_characters_pagination is React-owned; this is the single path that
+ * turns entity data + page state into a rendered page.
+ * @param {object} entitySnapshot - Full filtered entity snapshot
+ * @param {{requestedPage?: number, deleteReconcileGeneration?: number|null, allowDuringDelete?: boolean, resetScroll?: boolean}} options
+ * @returns {Promise<boolean>} Whether the page rendered
+ */
+async function renderCharacterListPage(entitySnapshot, { requestedPage = undefined, deleteReconcileGeneration = null, allowDuringDelete = false, resetScroll = false } = {}) {
+    if (deleteReconcileGeneration !== null && shouldSuppressCharacterDeleteListReprint(deleteReconcileGeneration, { allowDuringDelete })) {
+        return false;
+    }
     const listElement = document.getElementById('rm_print_characters_block');
+    if (!listElement) {
+        console.error('Character list container #rm_print_characters_block is missing.');
+        return false;
+    }
+
+    const pageSize = getCharacterListCurrentPageSize();
+    const totalCount = Number(entitySnapshot?.total ?? entitySnapshot?.entities?.length) || 0;
+    const totalPages = Math.max(Math.ceil(totalCount / pageSize), 1);
+    const currentPage = Math.min(Math.max(Number(requestedPage) || Number(saveCharactersPage) || 1, 1), totalPages);
+    saveCharactersPage = currentPage;
+    const pageEntities = getCharacterListPageEntities(entitySnapshot, currentPage, pageSize);
     const renderPlan = createCharacterListPageRenderPlan({
-        pageEntities: data,
+        pageEntities,
         includeBackBlock: power_user.bogus_folders && isBogusFolderOpen(),
         totalCharacters: characters.length,
         hasActiveFilter: entitiesFilter.hasAnyFilter(),
     });
-    if (!listElement) {
-        console.error('Character list container #rm_print_characters_block is missing.');
-        return;
+
+    const rendered = await renderCharacterListPageReact(createCharacterLibraryPanelStateSnapshot({
+        listElement,
+        pageEntities,
+        renderPlan,
+        currentPage,
+        pageSize,
+        totalCount,
+    }));
+    if (!rendered) {
+        return false;
     }
 
-    void fullRefresh;
-
-    await renderCharacterListPageReact(createCharacterLibraryPanelStateSnapshot({
-        listElement,
-        pageEntities: data,
-        renderPlan,
-        currentPage: getCharacterListCurrentPage(),
-        pageSize: getCharacterListCurrentPageSize(),
-    }));
-
-    currentCharacterListPageEntities = data;
-    localizePagination($('#rm_print_characters_pagination'));
+    currentCharacterListPageEntities = pageEntities;
+    if (resetScroll) {
+        listElement.scrollTop = 0;
+    }
     await eventSource.emit(event_types.CHARACTER_PAGE_LOADED);
+    return true;
 }
 
 function getCharacterListCurrentPage() {
-    try {
-        const currentPage = $('#rm_print_characters_pagination').pagination('getCurrentPageNum');
-        return Number(currentPage) || saveCharactersPage || 1;
-    } catch {
-        return saveCharactersPage || 1;
-    }
+    return Math.max(Number(saveCharactersPage) || 1, 1);
 }
 
 function getCharacterListCurrentPageSize() {
-    try {
-        const paginationData = $('#rm_print_characters_pagination').data('pagination');
-        const modelPageSize = Number(paginationData?.model?.pageSize);
-        if (modelPageSize) {
-            return modelPageSize;
-        }
-    } catch {
-        // Fall through to persisted/default size.
-    }
-    return Number(accountStorage.getItem('Characters_PerPage')) || per_page_default;
-}
-
-function updateCharacterListPaginationState(plan, afterSnapshot, { skipInitialCallback = false } = {}) {
-    const $pagination = $('#rm_print_characters_pagination');
-    const getPaginationRangeLabel = (currentPage, totalNumber) => {
-        return getCharacterListPaginationRangeLabel({
-            currentPage,
-            totalNumber,
-            pageSize: plan.pageSize,
-            fallbackTotal: afterSnapshot.total,
-        });
-    };
-
-    $pagination.pagination({
-        dataSource: afterSnapshot.entities,
-        pageSize: plan.pageSize,
-        pageRange: 1,
-        pageNumber: plan.currentPage,
-        position: 'top',
-        showPageNumbers: false,
-        showSizeChanger: true,
-        prevText: '<',
-        nextText: '>',
-        formatNavigator: function (currentPage, _totalPage, totalNumber) {
-            return getPaginationRangeLabel(currentPage, totalNumber);
-        },
-        formatSizeChanger: function () {
-            return renderPaginationDropdown(plan.pageSize, CHARACTER_LIST_PAGE_SIZE_OPTIONS);
-        },
-        showNavigator: true,
-        triggerPagingOnInit: !skipInitialCallback,
-        callback: async function (/** @type {Entity[]} */ data) {
-            await renderCharacterListPage(data);
-        },
-        beforeSizeSelectorChange: function (_e, size) {
-            plan.pageSize = Number(size) || per_page_default;
-            saveCharactersPage = 1;
-        },
-        afterSizeSelectorChange: function (e, size) {
-            accountStorage.setItem('Characters_PerPage', String(plan.pageSize));
-            paginationDropdownChangeHandler(e, size);
-        },
-        afterPaging: function (e) {
-            saveCharactersPage = e;
-        },
-    });
-
-    const paginationData = $pagination.data('pagination');
-    if (paginationData?.model) {
-        paginationData.model.pageNumber = plan.currentPage;
-        paginationData.model.pageSize = plan.pageSize;
-        paginationData.model.totalNumber = afterSnapshot.total;
-    }
-    paginationData && (paginationData.currentPageData = plan.pageEntities);
-    saveCharactersPage = plan.currentPage;
-    $pagination.find('.J-paginationjs-nav, .paginationjs-nav').text(plan.paginationLabel);
-    $pagination.find('.J-paginationjs-size-select').val(String(plan.pageSize));
-    localizePagination($pagination);
+    return Math.max(Number(accountStorage.getItem('Characters_PerPage')) || per_page_default, 1);
 }
 
 async function reconcileCharacterListAfterDelete(options) {
@@ -4955,28 +5011,13 @@ async function reconcileCharacterListAfterDelete(options) {
             return false;
         }
 
-        const renderPlan = createCharacterListPageRenderPlan({
-            pageEntities: plan.pageEntities,
-            includeBackBlock: false,
-            totalCharacters: characters.length,
-            hasActiveFilter,
-        });
-        const rendered = await renderCharacterListPageReact(createCharacterLibraryPanelStateSnapshot({
-            listElement,
-            pageEntities: plan.pageEntities,
-            renderPlan,
-            currentPage: plan.currentPage,
-            pageSize: plan.pageSize,
-        }));
+        currentCharacterListEntitySnapshot = afterSnapshot;
+        const rendered = await renderCharacterListPage(afterSnapshot, { requestedPage: plan.currentPage });
         if (!rendered) {
             return false;
         }
-
-        currentCharacterListPageEntities = plan.pageEntities;
-        updateCharacterListPaginationState(plan, afterSnapshot, { skipInitialCallback: true });
         favsToHotswap();
         updatePersonaConnectionsAvatarList();
-        await eventSource.emit(event_types.CHARACTER_PAGE_LOADED);
         return true;
     } catch (error) {
         console.warn('Character delete incremental reconcile failed; falling back to full refresh.', error);
@@ -8948,7 +8989,10 @@ export function select_rm_info(type, charId, previousCharId = null) {
                 const perPage = Number(accountStorage.getItem('Characters_PerPage')) || per_page_default;
                 const page = Math.floor(charIndex / perPage) + 1;
                 const selector = `#rm_print_characters_block [title*="${avatarFileName}"]`;
-                $('#rm_print_characters_pagination').pagination('go', page);
+                // Rebuild the page entities via the React pager path and refresh the cached snapshot,
+                // so the waitUntilCondition poll sees the row once rendering completes.
+                currentCharacterListEntitySnapshot = createCharacterListEntitySnapshot(charData);
+                void requestCharacterListPage(page);
 
                 waitUntilCondition(() => document.querySelector(selector) !== null).then(() => {
                     const element = $(selector).parent();

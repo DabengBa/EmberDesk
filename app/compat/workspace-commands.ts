@@ -110,6 +110,7 @@ export interface AuthoringCommands {
     exportAuthoring?(payload?: Record<string, unknown>): CommandResult;
     openWorldInfo?(payload?: Record<string, unknown>): CommandResult;
     openAlternateGreetings?(payload?: Record<string, unknown>): CommandResult;
+    runManagementAction?(payload: Record<string, unknown>): CommandResult;
 }
 
 export type WorkspacePanelCommands =

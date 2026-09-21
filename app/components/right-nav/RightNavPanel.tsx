@@ -272,7 +272,7 @@ export function RightNavPanel() {
                                 <div id="character_search_status" className="character_search_status" data-i18n="Filtering characters…" aria-live="polite" hidden>Filtering characters…</div>
                             </div>
                             <div className="rm_tag_controls">
-                                <div className="tags rm_tag_filter"></div>
+                                <div className="tags rm_tag_filter" data-react-tag-filters-owner="react"></div>
                                 <div className="tags rm_tag_bogus_drilldown"></div>
                             </div>
                         </div>

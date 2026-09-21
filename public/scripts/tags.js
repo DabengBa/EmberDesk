@@ -1280,6 +1280,174 @@ function onTagFilterClick(listElement) {
     updateTagFilterIndicator(listElement);
 }
 
+const CHARACTER_TAG_FILTER_CHIP_LIMIT = 50;
+let characterTagFilterListExpanded = false;
+
+/**
+ * Marks the React-rendered character tag filter list as expanded.
+ * Session-scoped, mirroring expanded_tags_cache behavior for the "..." overflow chip.
+ */
+export function expandCharacterTagFilterList() {
+    characterTagFilterListExpanded = true;
+}
+
+/**
+ * Builds the plain-data view state for the React-owned character tag filter chips.
+ * Semantics mirror printTagFilters: actionable tags first, then in-list actionables,
+ * then used tags limited to CHARACTER_TAG_FILTER_CHIP_LIMIT with bogus/active tags
+ * always printed.
+ * @param {FilterHelper} filterHelper - Filter helper owning the character list context
+ * @returns {{showTagFilters: boolean, actionableTags: object[], inListActionableTags: object[], tags: object[], skippedTagCount: number, drilldownTags: object[], hasActiveTagFilters: boolean}}
+ */
+export function createCharacterTagFilterViewState(filterHelper) {
+    const actionTags = Object.values(ACTIONABLE_TAGS);
+    actionTags.find(x => x == ACTIONABLE_TAGS.FOLDER).name = power_user.bogus_folders ? 'Show only folders' : 'Enable \'Tags as Folder\'\n\nAllows characters to be grouped in folders by their assigned tags.\nTags have to be explicitly chosen as folder to show up.\n\nClick here to start';
+
+    const toChipModel = (tag) => {
+        const isActionableFilter = 'filter_state' in tag;
+        return {
+            id: String(tag.id),
+            name: String(tag.name ?? ''),
+            title: tag.title ? String(tag.title) : '',
+            icon: tag.icon ? String(tag.icon) : '',
+            className: tag.class ? String(tag.class) : '',
+            color: tag.color ?? '',
+            color2: tag.color2 ?? '',
+            actionable: true,
+            removable: false,
+            filterState: isActionableFilter ? determineTagFilterState(filterHelper, tag, true) : null,
+        };
+    };
+
+    const usedTagIds = new Set(Object.values(tag_map).flat());
+    const printableTags = tags.filter(tag => usedTagIds.has(tag.id)).sort(compareTagsForSort);
+    const isFilterActive = (tag) => Boolean(tag.filter_state) && !isFilterState(tag.filter_state, FILTER_STATES.UNDEFINED);
+    const isMandatory = (tag) => isBogusFolder(tag) || isFilterActive(tag);
+    const mandatoryCount = printableTags.filter(isMandatory).length;
+    const availableSlots = characterTagFilterListExpanded
+        ? Number.MAX_SAFE_INTEGER
+        : Math.max(CHARACTER_TAG_FILTER_CHIP_LIMIT - mandatoryCount, 0);
+    const tagModels = [];
+    let additionalPrinted = 0;
+    let skippedTagCount = 0;
+    for (const tag of printableTags) {
+        const mandatory = isMandatory(tag);
+        if (mandatory || additionalPrinted < availableSlots) {
+            if (!mandatory) {
+                additionalPrinted++;
+            }
+            tagModels.push({
+                id: String(tag.id),
+                name: String(tag.name ?? ''),
+                title: tag.title ? String(tag.title) : '',
+                icon: '',
+                className: tag.class ? String(tag.class) : '',
+                color: tag.color ?? '',
+                color2: tag.color2 ?? '',
+                actionable: false,
+                removable: false,
+                filterState: determineTagFilterState(filterHelper, tag, false),
+            });
+        } else {
+            skippedTagCount++;
+        }
+    }
+
+    const drilldownTags = power_user.bogus_folders
+        ? getOpenBogusFolders().map(tag => ({
+            id: String(tag.id),
+            name: String(tag.name ?? ''),
+            title: tag.title ? String(tag.title) : '',
+            icon: '',
+            className: tag.class ? String(tag.class) : '',
+            color: tag.color ?? '',
+            color2: tag.color2 ?? '',
+            actionable: false,
+            removable: true,
+            filterState: null,
+        }))
+        : [];
+
+    const tagFilterData = filterHelper.getFilterData(FILTER_TYPES.TAG) ?? { selected: [], excluded: [] };
+
+    return {
+        showTagFilters: getTagFilterVisibility(tag_filter_type.character),
+        actionableTags: actionTags.map(toChipModel),
+        inListActionableTags: Object.values(InListActionable).map(toChipModel),
+        tags: tagModels,
+        skippedTagCount,
+        drilldownTags,
+        hasActiveTagFilters: (Array.isArray(tagFilterData.selected) ? tagFilterData.selected.length : 0) > 0
+            || (Array.isArray(tagFilterData.excluded) ? tagFilterData.excluded.length : 0) > 0,
+    };
+}
+
+/**
+ * Cycles a character-list tag filter chip through SELECTED → EXCLUDED → UNDEFINED
+ * directly on the filter data, without reading DOM state. Used by React-owned chips.
+ * @param {string} tagId - The tag id to cycle
+ * @param {FilterHelper} [filterHelper] - Filter helper owning the list context
+ * @returns {string} The resulting filter state key
+ */
+export function cycleCharacterTagFilterState(tagId, filterHelper = entitiesFilter) {
+    const tagFilterData = filterHelper.getFilterData(FILTER_TYPES.TAG) ?? { selected: [], excluded: [] };
+    const selected = Array.isArray(tagFilterData.selected) ? tagFilterData.selected : [];
+    const excluded = Array.isArray(tagFilterData.excluded) ? tagFilterData.excluded : [];
+
+    let nextState;
+    if (selected.includes(tagId)) {
+        removeFromArray(selected, tagId);
+        excluded.push(tagId);
+        nextState = FILTER_STATES.EXCLUDED.key;
+    } else if (excluded.includes(tagId)) {
+        removeFromArray(excluded, tagId);
+        nextState = FILTER_STATES.UNDEFINED.key;
+    } else {
+        selected.push(tagId);
+        nextState = FILTER_STATES.SELECTED.key;
+    }
+
+    filterHelper.setFilterData(FILTER_TYPES.TAG, { selected, excluded });
+
+    const existingTag = tags.find(tag => String(tag.id) === String(tagId));
+    if (existingTag && isMainCharacterList(filterHelper)) {
+        existingTag.filter_state = nextState;
+        saveSettingsDebounced();
+    }
+    const storagePrefix = getFilterStorageKey(filterHelper);
+    if (storagePrefix && existingTag) {
+        accountStorage.setItem(`${storagePrefix}_tag_${tagId}`, nextState);
+    }
+
+    return nextState;
+}
+
+/**
+ * Runs the click action of an actionable character tag filter chip (favorites,
+ * folders, tag manager, tag list visibility, clear filters, or extension-provided
+ * in-list actionables) with the same arguments the legacy chip binding used.
+ * @param {string} tagId - The actionable tag id
+ * @param {FilterHelper} [filterHelper] - Filter helper owning the list context
+ * @returns {boolean} Whether an action was found and invoked
+ */
+export function runCharacterTagFilterAction(tagId, filterHelper = entitiesFilter) {
+    const actionableTags = [...Object.values(ACTIONABLE_TAGS), ...Object.values(InListActionable)];
+    const tag = actionableTags.find(item => String(item.id) === String(tagId));
+    if (!tag || typeof tag.action !== 'function') {
+        return false;
+    }
+
+    if (tag === ACTIONABLE_TAGS.HINT) {
+        // The React chips own their own visibility; persist the toggle without DOM juggling.
+        setTagFilterVisibility(tag_filter_type.character, !getTagFilterVisibility(tag_filter_type.character));
+        return true;
+    }
+
+    const element = document.querySelector(`#rm_characters_block .rm_tag_filter .tag[id="${CSS.escape(String(tagId))}"]`);
+    tag.action.call(element ? $(element) : $([]), filterHelper, null);
+    return true;
+}
+
 /**
  * Loads persisted filter states for a given filter context.
  * @param {FilterHelper} filterHelper - The filter helper instance
@@ -1389,6 +1557,12 @@ function printTagFilters(type = tag_filter_type.character) {
     removeMissingTagFilters();
 
     const FILTER_SELECTOR = CHARACTER_FILTER_SELECTOR;
+
+    // The React character-library toolbar owns chip rendering once mounted.
+    // Filter bookkeeping above still runs so filter state stays accurate.
+    if ($(FILTER_SELECTOR).is('[data-react-tag-filters-owner="react"]')) {
+        return;
+    }
 
     $(FILTER_SELECTOR).empty();
 
