@@ -240,3 +240,15 @@ pnpm run build:react:workspace-panels  # app/ 或桥动过时
 - **文档**：`page.settings` 新增 retired sampler state 条目；`page.chat_workspace` 新增 retired token-inspection state；docs bundle 重建。
 - **验证**：lint+tsc 净；focused 10 suites/82 tests 绿；compat 8 suites/110 tests 全绿；unit 59 suites/555 tests 全绿；React/workspace-panels 构建与 docs:check/docs:build 通过。
 - **Commit**: `06f81b2e6`。
+
+### B-cut-14b: scrapers + themes + search + classify（外部内容/主题管线退役）
+
+**R0 裁决**：四者均为外部内容获取与 UI 主题管线——内置 Data Bank scrapers（Notepad/网页抓取/转录）、`power_user.theme` 主题 preset 系统与 `/theme` slash command、`/api/search/*`（SerpApi/Tavily/Serper + visit/transcript）、`/api/extra/classify` 的 transformers feature-extraction 管线。全部退役端点经新增 `utilityFeatureRetirementRouter`（`src/endpoints/feature-retirement.js`）回稳定 410 JSON；旧 URL 重定向（`/savetheme`→`/api/themes/save`、`/api/serpapi/*`→`/api/search/*`）保留并落到同一 tombstone。`initSettingsSearch` 为设置面板内搜索，与外部搜索无关，保留。
+
+- **删**：`src/endpoints/themes.js`、`src/endpoints/search.js`、`src/endpoints/classify.js`、`src/transformers.js` 整文件；`public/scripts/scrapers.js` 的内置 scraper 实现（仅保留 `ScraperManager` 注册表作 `st-context` `registerDataBankScraper` 兼容桩）；`templates/theme{Delete,ImportWarning}.html`；`power-user.js` 的主题 preset CRUD/`applyTheme`/`#themes`/`ui-preset-*` 接线与 `/theme` slash command、`themes` settings 消费；`PowerUserPanel` 的 `UI-presets-block`（主题选择器+导入导出删除按钮）；`SettingsSurface`/`settings-helpers` 的 `userInterface.theme` 绑定与 Themes 统计条目；`index.html` 的 `#websearch_container` 死挂载点；`preset-manager.js` 的 `enable_web_search` 排除键；`secrets.js`（前后端）的 SERPAPI/TAVILY/SERPER 键与 friendly names；`settings.js` `/get` 的 `themes` 目录聚合字段；`default/content/index.json` 的 5 条 theme 条目与 `default/content/themes/` 目录；`power_user` 默认对象与 `default/content/settings.json` 的 `theme` 死键。
+- **数据策略**：存量 `power_user.theme`、用户 `themes/` 目录、已存 secrets 惰性保留（merge 回写不丢键）；`directories.themes` 与 `CONTENT_TYPES.THEME` 保留为被动映射（历史目录 + `getContentOfType('theme')` 优雅返回空）；`/api/themes|/api/search|/api/extra/classify` 410 tombstone 保路由形状。
+- **保留**：`ScraperManager` 注册表（第三方 `registerDataBankScraper` 不崩）；`applyThemeColor` 等 UI Colors 单项设置（themeElements 存活面，非 theme preset）；`stscript.autocomplete.style` 的 `'theme'` 值（同名无关项）；settings/character-library/world-info 面板内搜索。
+- **测试翻转**：`canonical-settings-store` 移除 `themes` 目录聚合断言；`settings-react-route` 的 `theme` schema 断言翻转 + 稀疏保存用例改用 `chatWidth`、merge 断言改验历史 `power_user.theme` 保留；`power-user-react-surface` 移除主题控件 ID；`vector-retirement` 的 `transformers.js` 断言改为 `existsSync === false`。
+- **文档**：`page.settings` 移除 theme 条目与 `themes` 聚合字段说明；docs bundle 重建。
+- **验证**：lint+tsc 净；focused 7 suites/62 tests 绿；compat 8 suites/110 tests 全绿；unit 59 suites/555 tests 全绿；React/workspace-panels 构建与 docs:check/docs:build 通过。
+- **Commit**: `9e76c90a2`。
