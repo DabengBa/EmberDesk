@@ -264,3 +264,16 @@ pnpm run build:react:workspace-panels  # app/ 或桥动过时
 - **文档**：`page.chat_workspace` 语义条目移除 welcome 面板描述；docs bundle 重建（30 文档）。
 - **验证**：lint+tsc 净；focused、compat 8 suites/110 tests、unit 58 suites/551 tests 全绿；React/workspace-panels 构建与 docs:check/docs:build 通过；e2e 独立端口验证 `welcome-screen-character-management`/`vector-retirement`/`settings` 全绿（广域运行中 `chat-message-list-walkthrough` sprint-2 的 `.mes_reasoning_edit` 点击拦截失败归因为工作区未提交的 `.extraMesButtons` 浮动菜单 WIP，与本批无关；`settings.e2e` 的 Theme→Custom CSS 重定向与 fullyParallel 竞态加固见 `2410a3d66`）。
 - **Commit**: `da616937f`。
+
+### B-cut-15: quick-reply（快捷回复扩展退役，`/qr*` 兼容桩）
+
+**R0 裁决**：quick-reply 是唯一仍存活的首方大扩展（372K，18 个 `/qr*` 命令 + `/import` + 别名、`quickReplyApi`/`executeQuickReplyByName` 全局、auto-exec 事件钩子、按钮/右键 UI、React 编辑器/设置面板、`/api/quick-replies` 存取端点）。按计划倾向采用 stub 方案：命令注册保留并回执 "feature removed"，而非整删制造 unknown-command 破坏面。`/qr-arg` 经核实为纯 `_scope.setMacro('arg::*')` 作用域宏写入器、与 QR 运行时零依赖——作为通用宏工具保留功能（`{{arg::}}` 宏测试与第三方 arg 注入不受影响）。
+
+- **删**：`public/scripts/extensions/quick-reply/` 的 `src/`、`api/`、`style.css`、`style.less` 全部实现（QuickReplySet/QuickReply/Config/Settings/ContextLink/SetLink/AutoExecuteHandler/SlashCommandHandler/ButtonUi/SettingsUi/ctx 菜单）；`app/components/quick-reply/`（React 编辑器+设置面板）；`src/endpoints/quick-replies.js` 整文件，`/api/quick-replies` 挂载改接 `utilityFeatureRetirementRouter`（`/savequickreply`、`/deletequickreply` 旧重定向随之落到 410 tombstone）；`index.html` 的 `#qr_container`；`workspace-panels.tsx` 的 `mountQuickReplyEditor`/`mountQuickReplySettings`；`jsconfig.json` 的 quick-reply/lib 死排除项。
+- **Stub**：`index.js` 重写为 ~120 行兼容桩（manifest.json 保留、去 `css`）：全部退役命令名+别名注册为抛错 `Quick Replies functionality has been removed from EmberDesk.`；`quickReplyApi` 惰性面（list*→[]、get*→null、mutator/executor→抛错）；`executeQuickReplyByName` 抛同名回执；`didInit` 幂等防测试惰性二次注册。
+- **数据策略**：`QuickReplies/` 用户目录、`default/content/presets/quick-replies/Default.json` 与 `index.json` 条目、`extension_settings.quickReply`/`quickReplyV2` 键、`chat_metadata.quickReply`、`settings.js` 的 `quickReplyPresets` 聚合、`content-manager.js` 的 `QUICK_REPLIES` 类型、`user-migrations.js` 迁移全部惰性保留（对齐 movingUI 先例：死数据不主动清）。
+- **保留**：`/qr-arg`（纯 scope 宏工具）；`SlashCommandParser`/`world-info.js`/`slash-commands.js` 的 `quickReplyApi`/`executeQuickReplyByName`/`qrEnumProviderExecutables` 防御性 globalThis 读取（stub 使其优雅降级）；`extensions.js` 的 `quickReply: {}` 惰性默认值；JS-Slash-Runner vendored 的 `quickReplyV2.isCombined` 读取。
+- **测试翻转**：删 `quick-reply-react-surface.test.js`；`group-chat-retirement` 的 QR 文件断言翻转为 `existsSync === false` + stub 源码断言；`script-js-reverse-import-contract` 移除 4 条 QR 条目；`MacroSlashCommands.e2e` 辅助函数改为惰性调 stub `init()`（deferred 扩展激活竞态修复）。
+- **文档**：`feature.extension_panel_open` 的第三方扩展示例移除 Quick Reply；docs bundle 重建（30 文档）。
+- **验证**：lint+tsc 净；focused 4 suites/46 tests + unit 58 suites/551 tests + compat 8 suites/110 tests 全绿；workspace-panels/React 构建与 docs:check/docs:build 通过；e2e 探针验证 stub 激活、`/qr-list` 回执、`/qr-arg` 功能、`/api/quick-replies`+legacy redirect 410；`MacroSlashCommands.e2e` 12/12 通过（独立端口）。
+- **Commit**: `2c0a998da`。
