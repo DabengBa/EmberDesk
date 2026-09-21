@@ -3830,20 +3830,8 @@ export function initOpenAI() {
     $('#export_oai_preset').on('click', onExportPresetClick);
     $('#import_oai_preset').on('click', onImportPresetClick);
 
-    // Preset overflow popup menu
-    $('.preset-menu-trigger').on('click', function (e) {
-        e.stopPropagation();
-        const menu = $(this).find('.preset-popup-menu');
-        $('.preset-popup-menu').not(menu).removeClass('show');
-        menu.toggleClass('show');
-    });
-    $('.preset-popup-menu-item').on('click', function (e) {
-        e.stopPropagation();
-        $(this).closest('.preset-popup-menu').removeClass('show');
-    });
-    $(document).on('click', function () {
-        $('.preset-popup-menu').removeClass('show');
-    });
+    // Preset overflow popup menu open/close is React-owned (PresetActionsMenu);
+    // item action bindings below stay direct-by-ID because the items never unmount.
 
     $('#api_key_unified_show').on('click', onApiKeyUnifiedShowClick);
     $('#fallback_provider_api_key_show').on('click', onFallbackProviderApiKeyShowClick);

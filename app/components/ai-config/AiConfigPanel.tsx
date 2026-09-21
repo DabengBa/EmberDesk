@@ -1,5 +1,5 @@
-import { ContractButton } from '../contract/ContractButton';
 import { ContractIconButton } from '../contract/ContractIconButton';
+import { PresetActionsMenu } from './PresetActionsMenu';
 /**
  * AI Response Configuration drawer markup (React-owned shell inside
  * #left-nav-panel). Behavior stays legacy: openai.js/power-user.js bind the
@@ -33,14 +33,7 @@ export function AiConfigPanel() {
                                                 <i className="fa-fw fa-solid fa-link toggleOn" />
                                                 <i className="fa-fw fa-solid fa-link-slash toggleOff" />
                                             </label>
-                                            <div className="preset-menu-trigger margin0 menu_button menu_button_icon" title="More preset actions" data-i18n="[title]More preset actions">
-                                                <i className="fa-fw fa-solid fa-ellipsis-vertical" />
-                                                <div className="preset-popup-menu">
-                                                    <ContractButton id="import_oai_preset" className="preset-popup-menu-item" variant="ghost" label="Import" icon={<i className="fa-fw fa-solid fa-file-import" aria-hidden="true" />} />
-                                                    <ContractButton id="export_oai_preset" className="preset-popup-menu-item" variant="ghost" label="Export" icon={<i className="fa-fw fa-solid fa-file-export" aria-hidden="true" />} />
-                                                    <ContractButton id="delete_oai_preset" className="preset-popup-menu-item" variant="ghost" label="Delete" icon={<i className="fa-fw fa-solid fa-trash-can" aria-hidden="true" />} />
-                                                </div>
-                                            </div>
+                                            <PresetActionsMenu />
                                         </div>
                                     </div>
 
@@ -48,12 +41,6 @@ export function AiConfigPanel() {
                                         <select id="settings_preset_openai" className="flex1 text_pole" data-preset-manager-for="openai">
                                             <option value="gui" data-i18n="Default">Default</option>
                                         </select>
-                                        <div className="flex-container marginLeft5 gap3px">
-                                            <input id="openai_preset_import_file" type="file" accept=".json,.settings" hidden />
-                                            <ContractButton id="update_oai_preset" className="menu_button menu_button_icon preset-action-btn" variant="ghost" label="Save" nativeTitle title="Update current preset" icon={<i className="fa-fw fa-solid fa-save" aria-hidden="true" />} />
-                                            <ContractButton data-preset-manager-rename="openai" className="menu_button menu_button_icon preset-action-btn" variant="ghost" label="Rename" nativeTitle title="Rename current preset" icon={<i className="fa-fw fa-solid fa-pencil" aria-hidden="true" />} />
-                                            <ContractButton id="new_oai_preset" className="menu_button menu_button_icon preset-action-btn" variant="ghost" label="Save As" nativeTitle title="Save preset as" icon={<i className="fa-fw fa-solid fa-file-circle-plus" aria-hidden="true" />} />
-                                        </div>
                                     </div>
                                 </div>
                             </div>
