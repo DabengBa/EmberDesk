@@ -1,7 +1,6 @@
 import { Fuse } from '../lib.js';
 
 import { saveSettingsDebounced } from '../script.js';
-import { callGenericPopup, POPUP_TYPE } from './popup.js';
 import { power_user } from './power-user.js';
 import { getPresetManager } from './preset-manager.js';
 import { SlashCommand } from './slash-commands/SlashCommand.js';
@@ -9,7 +8,6 @@ import { ARGUMENT_TYPE, SlashCommandArgument, SlashCommandNamedArgument } from '
 import { commonEnumProviders, enumIcons } from './slash-commands/SlashCommandCommonEnumsProvider.js';
 import { enumTypes, SlashCommandEnumValue } from './slash-commands/SlashCommandEnumValue.js';
 import { SlashCommandParser } from './slash-commands/SlashCommandParser.js';
-import { renderTemplateAsync } from './templates.js';
 import { isTrueBoolean, resetScrollHeight } from './utils.js';
 
 export let system_prompts = [];
@@ -65,33 +63,6 @@ export async function loadSystemPrompts(data) {
     $postHistory.val(power_user.sysprompt.post_history || '');
     if (!CSS.supports('field-sizing', 'content')) {
         await resetScrollHeight($content);
-    }
-}
-
-/**
- * Checks if the instruct template has a system prompt and prompts the user to save it as a system prompt.
- * @param {string} name Name of the instruct template
- * @param {object} template Instruct template object
- */
-export async function checkForSystemPromptInInstructTemplate(name, template) {
-    if (!template || !name || typeof name !== 'string' || typeof template !== 'object') {
-        return;
-    }
-    if ('system_prompt' in template && template.system_prompt) {
-        const existingName = system_prompts.find(x => x.content === template.system_prompt)?.name;
-        const html = await renderTemplateAsync('migrateInstructPrompt', { prompt: template.system_prompt, existing: existingName });
-        const confirm = await callGenericPopup(html, POPUP_TYPE.CONFIRM);
-        if (confirm) {
-            const migratedName = `[Migrated] ${name}`;
-            const prompt = { name: migratedName, content: template.system_prompt };
-            const presetManager = getPresetManager('sysprompt');
-            await presetManager.savePreset(migratedName, prompt);
-            toastr.success(`System prompt "${migratedName}" has been saved.`);
-        } else {
-            toastr.info('System prompt has been discarded.');
-        }
-
-        delete template.system_prompt;
     }
 }
 

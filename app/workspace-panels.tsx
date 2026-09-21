@@ -2021,9 +2021,9 @@ export function mountLogprobsViewerPanel(container: HTMLElement) {
 }
 
 /**
- * Mounts the Advanced Formatting drawer content (instruct/context/sysprompt).
- * Presentation-only: instruct-mode.js and power-user.js keep behavior
- * ownership via the preserved element IDs.
+ * Mounts the Advanced Formatting drawer content (sysprompt/reasoning/tokenizer).
+ * Presentation-only: power-user.js keeps behavior ownership via the
+ * preserved element IDs.
  */
 export function mountAdvancedFormattingPanel(container: HTMLElement) {
     mountSmallPanel(container, <AdvancedFormattingPanel />);

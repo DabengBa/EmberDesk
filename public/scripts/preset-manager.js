@@ -13,17 +13,16 @@ import {
 import { eventSource, event_types } from './events.js';
 import { getRequestHeaders } from './request-context.js';
 import { t } from './i18n.js';
-import { instruct_presets } from './instruct-mode.js';
 import { oai_settings, openai_setting_names, openai_settings } from './openai.js';
 import { POPUP_RESULT, POPUP_TYPE, Popup } from './popup.js';
-import { context_presets, getContextSettings, power_user } from './power-user.js';
+import { power_user } from './power-user.js';
 import { reasoning_templates } from './reasoning.js';
 import { SlashCommand } from './slash-commands/SlashCommand.js';
 import { ARGUMENT_TYPE, SlashCommandArgument } from './slash-commands/SlashCommandArgument.js';
 import { enumIcons } from './slash-commands/SlashCommandCommonEnumsProvider.js';
 import { SlashCommandEnumValue, enumTypes } from './slash-commands/SlashCommandEnumValue.js';
 import { SlashCommandParser } from './slash-commands/SlashCommandParser.js';
-import { checkForSystemPromptInInstructTemplate, system_prompts } from './sysprompt.js';
+import { system_prompts } from './sysprompt.js';
 import { renderTemplateAsync } from './templates.js';
 
 import { download, ensurePlainObject, equalsIgnoreCaseAndAccents, getSanitizedFilename, parseJsonFile, waitUntilCondition } from './utils.js';
@@ -99,34 +98,6 @@ class PresetManager {
     }
 
     static masterSections = {
-        'instruct': {
-            name: 'Instruct Template',
-            getData: () => {
-                const manager = getPresetManager('instruct');
-                const name = manager.getSelectedPresetName();
-                return manager.getPresetSettings(name);
-            },
-            setData: (data) => {
-                const manager = getPresetManager('instruct');
-                const name = data.name;
-                return manager.savePreset(name, data);
-            },
-            isValid: (data) => PresetManager.isPossiblyInstructData(data),
-        },
-        'context': {
-            name: 'Context Template',
-            getData: () => {
-                const manager = getPresetManager('context');
-                const name = manager.getSelectedPresetName();
-                return manager.getPresetSettings(name);
-            },
-            setData: (data) => {
-                const manager = getPresetManager('context');
-                const name = data.name;
-                return manager.savePreset(name, data);
-            },
-            isValid: (data) => PresetManager.isPossiblyContextData(data),
-        },
         'sysprompt': {
             name: 'System Prompt',
             getData: () => {
@@ -174,16 +145,6 @@ class PresetManager {
         },
     };
 
-    static isPossiblyInstructData(data) {
-        const instructProps = ['name', 'input_sequence', 'output_sequence'];
-        return data && instructProps.every(prop => Object.keys(data).includes(prop));
-    }
-
-    static isPossiblyContextData(data) {
-        const contextProps = ['name', 'story_string'];
-        return data && contextProps.every(prop => Object.keys(data).includes(prop));
-    }
-
     static isPossiblySystemPromptData(data) {
         const sysPromptProps = ['name', 'content'];
         return data && sysPromptProps.every(prop => Object.keys(data).includes(prop));
@@ -211,26 +172,14 @@ class PresetManager {
         }
 
         // Check for legacy file imports
-        // 1. Instruct Template
-        if (this.isPossiblyInstructData(data)) {
-            toastr.info(t`Importing instruct template...`, t`Instruct template detected`);
-            return await getPresetManager('instruct').savePreset(data.name, data);
-        }
-
-        // 2. Context Template
-        if (this.isPossiblyContextData(data)) {
-            toastr.info(t`Importing as context template...`, t`Context template detected`);
-            return await getPresetManager('context').savePreset(data.name, data);
-        }
-
-        // 3. System Prompt
+        // 1. System Prompt
         if (this.isPossiblySystemPromptData(data)) {
             toastr.info(t`Importing as system prompt...`, t`System prompt detected`);
             return await getPresetManager('sysprompt').savePreset(data.name, data);
         }
 
 
-        // 4. Reasoning Template
+        // 2. Reasoning Template
         if (this.isPossiblyReasoningData(data)) {
             toastr.info(t`Importing as reasoning template...`, t`Reasoning template detected`);
             return await getPresetManager('reasoning').savePreset(data.name, data);
@@ -422,10 +371,6 @@ class PresetManager {
      * @param {boolean} [options.skipUpdate=false] If true, skips updating the preset list after saving.
      */
     async savePreset(name, settings, { skipUpdate = false } = {}) {
-        if (this.apiId === 'instruct' && settings) {
-            await checkForSystemPromptInInstructTemplate(name, settings);
-        }
-
         const preset = settings ?? this.getPresetSettings(name);
 
         const response = await fetch('/api/presets/save', {
@@ -491,16 +436,6 @@ class PresetManager {
                 preset_names = openai_setting_names;
                 settings = oai_settings;
                 break;
-            case 'context':
-                presets = context_presets;
-                preset_names = context_presets.map(x => x.name);
-                settings = power_user.context;
-                break;
-            case 'instruct':
-                presets = instruct_presets;
-                preset_names = instruct_presets.map(x => x.name);
-                settings = power_user.instruct;
-                break;
             case 'sysprompt':
                 presets = system_prompts;
                 preset_names = system_prompts.map(x => x.name);
@@ -529,7 +464,7 @@ class PresetManager {
      * Returns true if the API is from Advanced Formatting group.
      */
     isAdvancedFormatting() {
-        return ['context', 'instruct', 'sysprompt', 'reasoning'].includes(this.apiId);
+        return ['sysprompt', 'reasoning'].includes(this.apiId);
     }
 
     /**
@@ -578,16 +513,6 @@ class PresetManager {
     getPresetSettings(name) {
         function getSettingsByApiId(apiId) {
             switch (apiId) {
-                case 'context': {
-                    const context_preset = getContextSettings();
-                    context_preset.name = name || power_user.context.preset;
-                    return context_preset;
-                }
-                case 'instruct': {
-                    const instruct_preset = structuredClone(power_user.instruct);
-                    instruct_preset.name = name || power_user.instruct.preset;
-                    return instruct_preset;
-                }
                 case 'sysprompt': {
                     const sysprompt_preset = structuredClone(power_user.sysprompt);
                     sysprompt_preset.name = name || power_user.sysprompt.preset;

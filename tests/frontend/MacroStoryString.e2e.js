@@ -1,29 +1,28 @@
-import fs from 'node:fs';
-import path from 'node:path';
-
 import { test, expect } from '@playwright/test';
 import { testSetup } from './frontent-test-utils.js';
-import { serverDirectory } from '../../src/server-directory.js';
 
 test.describe('MacroStoryString', () => {
     test.beforeEach(testSetup.awaitST);
 
-    /** @type {any[]} */
-    const defaultContextPresets = [];
-
-    test.beforeAll(() => {
-        const contextPresetsPath = path.join(serverDirectory, 'default', 'content', 'presets', 'context');
-        const files = fs.readdirSync(contextPresetsPath).filter(f => path.extname(f).toLowerCase() === '.json');
-        for (const file of files) {
-            const fullPath = path.join(contextPresetsPath, file);
-            const fileContent = fs.readFileSync(fullPath, 'utf-8');
-            const preset = JSON.parse(fileContent);
-            defaultContextPresets.push(preset);
-        }
-    });
+    // Representative story-string templates (previously shipped as default
+    // Context Template presets; the preset files were retired in B-cut-13).
+    const storyStringTemplates = [
+        {
+            name: 'Default',
+            story_string: '{{#if system}}{{system}}\n{{/if}}{{#if description}}{{description}}\n{{/if}}{{#if personality}}{{char}}\'s personality: {{personality}}\n{{/if}}{{#if scenario}}Scenario: {{scenario}}\n{{/if}}{{#if persona}}{{persona}}\n{{/if}}',
+        },
+        {
+            name: 'Minimal',
+            story_string: '{{description}}\n{{persona}}',
+        },
+        {
+            name: 'Anchors',
+            story_string: '{{anchorBefore}}{{system}}\n{{description}}\n{{anchorAfter}}',
+        },
+    ];
 
     test('should produce equivalent story strings with new macro engine', async ({ page }) => {
-        const output = await page.evaluate(async ([defaultContextPresets]) => {
+        const output = await page.evaluate(async ([storyStringTemplates]) => {
             const { substituteParams, extension_prompt_types } = await import('./script.js');
             const { power_user, renderStoryString } = await import('./scripts/power-user.js');
 
@@ -47,10 +46,6 @@ test.describe('MacroStoryString', () => {
                 mesExamplesRaw: 'raw example messages',
             };
 
-            const customInstructSettings = {
-                enabled: false,
-            };
-
             const customContextSettings = {
                 story_string_position: extension_prompt_types.IN_PROMPT,
             };
@@ -66,14 +61,14 @@ test.describe('MacroStoryString', () => {
                 return output;
             }
 
-            for (const template of defaultContextPresets) {
-                const classicStoryString = renderStoryString(context, { customStoryString: template.story_string, customContextSettings, customInstructSettings });
+            for (const template of storyStringTemplates) {
+                const classicStoryString = renderStoryString(context, { customStoryString: template.story_string, customContextSettings });
                 const macroStoryString = getMacroStoryString(template.story_string);
                 result.push({ name: template.name, classicStoryString, macroStoryString });
             }
 
             return result;
-        }, [defaultContextPresets]);
+        }, [storyStringTemplates]);
 
         for (const { classicStoryString, macroStoryString, name } of output) {
             expect(macroStoryString, `Mismatch in template: ${name}`).toBe(classicStoryString);

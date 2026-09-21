@@ -23,7 +23,7 @@ Authenticated users complete supported settings work on `/settings` instead of w
 3. **General tab**: chat-completion defaults, sampling, reasoning, continue, inline media controls, prompt formats, assistant prefill, names behavior, and related oai_settings values.
 4. **Providers tab**: provider/model routing on the single OpenAI-compatible source, reverse proxy and custom body/headers, fallback provider, named connection-profile selection, and provider/fallback secrets. Returning to Workspace applies a newly selected profile through the existing Connection Manager workflow.
 5. **User Interface tab**: theme, layout density, colors, chat display, message visibility, and workspace interaction preferences previously edited in the user-settings drawer.
-6. **Advanced tab**: instruct/context/system-prompt/reasoning templates and sequences, tokenizer, auto-swipe/continue, streaming, and STscript controls previously edited under Advanced Formatting.
+6. **Advanced tab**: system-prompt/reasoning templates, tokenizer, custom stopping strings, Start Reply With, auto-swipe/continue, streaming, and STscript controls previously edited under Advanced Formatting. Retired instruct-mode and context-template fields are absent; stored `power_user.instruct`/`power_user.context` keys remain inert historical data.
 7. **Diagnostics sidebar**: optional ownership ledger and payload summary for debugging.
 8. **Save bar**: submits a compatibility payload derived from the loaded document while rewriting only the React-bound fields the user changed; save stays disabled until the form is dirty.
 
@@ -52,6 +52,7 @@ Authenticated users complete supported settings work on `/settings` instead of w
 - **Conflict state**: stale `settings_revision` yields HTTP 409; the page keeps the local draft visible, disables further save, and provides an explicit reload action. Reload intentionally discards that draft so the user can merge against current settings before saving again.
 - **Secret state**: provider and fallback values use SecretManager endpoints only and never enter settings JSON.
 - **Retired provider state**: legacy `vertexai`/`makersuite`/`palm`/`claude` sources load as OpenAI and save back as `openai`; retired provider model keys remain stored but inert.
+- **Retired template state**: instruct-mode and context-template presets are retired; `/api/settings/get` no longer returns `instruct`/`context` preset lists and `/api/presets/*` no longer accepts `instruct`/`context` API IDs. Stored `power_user.instruct`/`power_user.context` keys and per-user preset directories are preserved as inert historical data.
 - **Specialized surfaces**: World Info, Extensions, Personas, tags, and complex managers such as bias preset tables remain outside this page even if related values appear in the settings document.
 
 ## Navigation

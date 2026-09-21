@@ -149,7 +149,8 @@ describe('settings React route flag', () => {
         expect(routeSource).toContain('theme: z.string(),');
         expect(routeSource).toContain('systemPromptName: z.string(),');
         expect(routeSource).toContain('systemPromptContent: z.string(),');
-        expect(routeSource).toContain('contextPreset: z.string(),');
+        expect(routeSource).not.toContain('contextPreset');
+        expect(routeSource).not.toContain('instructPreset');
         expect(routeSource).toContain("fetch('/api/settings/get', {");
         expect(routeSource).toContain("fetch('/api/settings/save', {");
         expect(routeSource).toContain("fetch('/api/secrets/read', {");
@@ -432,22 +433,8 @@ describe('settings React route flag', () => {
                 smoothStreamingNoThink: false,
                 smoothStreamingSpeed: 30,
                 streamFadeIn: false,
-                instructEnabled: false,
-                instructPreset: 'Creative',
-                instructWrap: true,
-                instructMacro: true,
-                instructSequencesAsStopStrings: true,
-                instructSkipExamples: false,
-                instructBindToContext: false,
-                instructActivationRegex: '/gpt/i',
                 systemPromptName: 'Custom',
                 systemPromptContent: 'Updated prompt',
-                contextPreset: 'Story Rich',
-                contextStoryString: 'Story 2',
-                contextChatStart: 'Open',
-                contextExampleSeparator: '---',
-                contextUseStopStrings: true,
-                contextNamesAsStopStrings: true,
                 syspromptEnabled: true,
                 syspromptPostHistory: 'later',
                 reasoningName: 'Custom',
@@ -483,7 +470,7 @@ describe('settings React route flag', () => {
         expect(merged.power_user.auto_continue.enabled).toBe(true);
         expect(merged.power_user.sysprompt.name).toBe('Custom');
         expect(merged.power_user.sysprompt.content).toBe('Updated prompt');
-        expect(merged.power_user.context.preset).toBe('Story Rich');
+        expect(merged.power_user.context.preset).toBe('Default');
         expect(merged.oai_settings.preset_settings_openai).toBe('RecoveredRuins');
         expect(merged.oai_settings.chat_completion_source).toBe('openai');
         expect(merged.oai_settings.openai_model).toBe('gpt-5.2');
@@ -500,8 +487,10 @@ describe('settings React route flag', () => {
         expect(merged.power_user.toastr_position).toBe('toast-bottom-right');
         expect(merged.power_user.auto_swipe).toBe(false);
         expect(merged.power_user.auto_swipe_blacklist).toEqual(['skip', 'retry']);
-        expect(merged.power_user.instruct.enabled).toBe(false);
-        expect(merged.power_user.instruct.skip_examples).toBe(false);
+        expect(merged.power_user.instruct.enabled).toBe(true);
+        expect(merged.power_user.instruct.skip_examples).toBe(true);
+        expect(merged.power_user.instruct.activation_regex).toBe('/llama/i');
+        expect(merged.power_user.context.story_string).toBe('Story');
         expect(merged.power_user.sysprompt.post_history).toBe('later');
         expect(merged.power_user.reasoning.max_additions).toBe(1);
         expect(merged.power_user.stscript.autocomplete.state).toBe(1);
@@ -555,7 +544,6 @@ describe('settings React route flag', () => {
                 chat_display: '2',
                 send_on_enter: '-1',
                 tag_import_setting: '3',
-                context: { story_string_depth: '4' },
             },
         });
         expect(defaults.general.namesBehavior).toBe(2);
@@ -564,7 +552,6 @@ describe('settings React route flag', () => {
         expect(defaults.userInterface.chatDisplay).toBe(2);
         expect(defaults.userInterface.sendOnEnter).toBe(-1);
         expect(defaults.userInterface.tagImportSetting).toBe(3);
-        expect(defaults.advanced.contextStoryStringDepth).toBe(4);
     });
 
     test('owner inventory covers drawer fields with lossless single-field save round-trip', async () => {
@@ -759,18 +746,15 @@ describe('settings React route flag', () => {
 
 
 
-    test('advanced formatting sequences and context inject fields round-trip through React bindings', async () => {
+    test('stored instruct and context template keys survive a settings save untouched', async () => {
         const helperModule = await import(`../app/lib/settings-helpers.js?settingsAf=${Date.now()}-${Math.random()}`);
         const routeSource = fs.readFileSync(path.join(repoRoot, 'app', 'components', 'settings', 'SettingsSurface.tsx'), 'utf8');
         const pageRouteSource = fs.readFileSync(path.join(repoRoot, 'app', 'routes', 'settings.tsx'), 'utf8');
         expect(routeSource).toContain('settings-workspace-link');
         expect(routeSource).toContain('emberdesk-settings-saved-at');
-        expect(helperModule.settingsCoverage.reactOwned.advanced).toEqual(expect.arrayContaining([
+        expect(helperModule.settingsCoverage.reactOwned.advanced).not.toEqual(expect.arrayContaining([
             'power_user.instruct.input_sequence',
-            'power_user.instruct.output_sequence',
-            'power_user.instruct.stop_sequence',
             'power_user.context.story_string_position',
-            'power_user.context.story_string_depth',
         ]));
 
         const fixture = {
@@ -794,14 +778,10 @@ describe('settings React route flag', () => {
             keep: true,
         };
         const defaults = helperModule.buildSettingsFormDefaults(fixture);
-        expect(defaults.advanced.instructInputSequence).toBe('### Input:');
-        expect(defaults.advanced.contextStoryStringDepth).toBe(4);
-        const edited = structuredClone(defaults);
-        edited.advanced.instructOutputSequence = '### Assistant:';
-        const saved = helperModule.buildSettingsSavePayload(fixture, edited);
+        const saved = helperModule.buildSettingsSavePayload(fixture, defaults);
         expect(saved.keep).toBe(true);
         expect(saved.power_user.instruct.input_sequence).toBe('### Input:');
-        expect(saved.power_user.instruct.output_sequence).toBe('### Assistant:');
+        expect(saved.power_user.instruct.output_sequence).toBe('### Response:');
         expect(saved.power_user.instruct.stop_sequence).toBe('</s>');
         expect(saved.power_user.context.story_string_depth).toBe(4);
         expect(saved.power_user.instruct.system_same_as_user).toBe(true);

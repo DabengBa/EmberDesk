@@ -542,8 +542,6 @@ router.post('/get', async (request, response) => {
         world_names,
         themes,
         quickReplyPresets,
-        instruct,
-        context,
         sysprompt,
         reasoning,
     ] = await Promise.all([
@@ -554,8 +552,6 @@ router.post('/get', async (request, response) => {
         getCachedPayload(dirs.worlds, () => readWorldNamesAsync(dirs.worlds)),
         getCachedPayload(dirs.themes, () => readAndParseFromDirectoryAsync(dirs.themes)),
         getCachedPayload(dirs.quickreplies, () => readAndParseFromDirectoryAsync(dirs.quickreplies)),
-        getCachedPayload(dirs.instruct, () => readAndParseFromDirectoryAsync(dirs.instruct)),
-        getCachedPayload(dirs.context, () => readAndParseFromDirectoryAsync(dirs.context)),
         getCachedPayload(dirs.sysprompt, () => readAndParseFromDirectoryAsync(dirs.sysprompt)),
         getCachedPayload(dirs.reasoning, () => readAndParseFromDirectoryAsync(dirs.reasoning)),
     ]);
@@ -574,8 +570,6 @@ router.post('/get', async (request, response) => {
         openai_setting_names,
         themes,
         quickReplyPresets,
-        instruct,
-        context,
         sysprompt,
         reasoning,
         enable_extensions: ENABLE_EXTENSIONS,

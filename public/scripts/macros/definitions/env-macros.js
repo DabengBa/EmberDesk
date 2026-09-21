@@ -1,8 +1,6 @@
 import { MacroRegistry, MacroCategory, MacroValueType } from '../engine/MacroRegistry.js';
 import { isMobile } from '../../RossAscends-mods.js';
-import { parseMesExamples, main_api } from '../../../script.js';
-import { power_user } from '../../power-user.js';
-import { formatInstructModeExamples } from '../../instruct-mode.js';
+import { parseMesExamples } from '../../../script.js';
 
 /** @typedef {import('../engine/MacroEnv.types.js').MacroEnv} MacroEnv */
 
@@ -104,24 +102,19 @@ export function registerEnvMacros() {
 
     MacroRegistry.registerMacro('mesExamples', {
         category: MacroCategory.CHARACTER,
-        description: 'The character\'s dialogue examples, formatted for instruct mode when enabled.',
+        description: 'The character\'s dialogue examples.',
         returns: 'Formatted dialogue examples.',
         handler: ({ env }) => {
             const raw = env.character.mesExamplesRaw ?? '';
             if (!raw) return '';
 
-            const isInstruct = !!power_user?.instruct?.enabled && main_api !== 'openai';
-            const parsed = parseMesExamples(raw, isInstruct);
+            const parsed = parseMesExamples(raw);
 
             if (!Array.isArray(parsed) || parsed.length === 0) {
                 return '';
             }
-            if (!isInstruct) {
-                return parsed.join('');
-            }
 
-            const formatted = formatInstructModeExamples(parsed, env.names.user, env.names.char);
-            return Array.isArray(formatted) ? formatted.join('') : '';
+            return parsed.join('');
         },
     });
 

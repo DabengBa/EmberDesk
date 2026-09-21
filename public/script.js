@@ -58,6 +58,7 @@ import {
     loadMovingUIState,
     getCustomStoppingStrings,
     renderStoryString,
+    mountAdvancedFormattingPanel,
     sortEntitiesList,
     registerDebugFunction,
     flushEphemeralStoppingStrings,
@@ -200,15 +201,6 @@ import { registerPromptManagerMigration } from './scripts/PromptManager.js';
 import { getRegexedString, regex_placement } from './scripts/extensions/regex/engine.js';
 import { initLogprobs, mountLogprobsViewerPanel, saveLogprobsForActiveMessage } from './scripts/logprobs.js';
 import { FILTER_STATES, FILTER_TYPES, FilterHelper, isFilterState } from './scripts/filters.js';
-import {
-    force_output_sequence,
-    formatInstructModeChat,
-    formatInstructModePrompt,
-    formatInstructModeExamples,
-    formatInstructModeStoryString,
-    getInstructStoppingSequences,
-    mountAdvancedFormattingPanel,
-} from './scripts/instruct-mode.js';
 import { initLocales, t, translate } from './scripts/i18n.js';
 import { getFriendlyTokenizerName, getTokenCount, getTokenCountAsync, initTokenizers, saveTokenCache } from './scripts/tokenizers.js';
 import {
@@ -576,7 +568,6 @@ registerGenerationShellContext({
         get extension_settings() { return extension_settings; },
         get itemizedPrompts() { return itemizedPrompts; },
         get secret_state() { return secret_state; },
-        get force_output_sequence() { return force_output_sequence; },
         get persona_description_positions() { return persona_description_positions; },
         get regex_placement() { return regex_placement; },
         get system_message_types() { return system_message_types; },
@@ -685,10 +676,6 @@ registerGenerationShellContext({
     hasPendingFileAttachment: (...args) => hasPendingFileAttachment(...args),
     sendSystemMessage: (...args) => sendSystemMessage(...args),
     collapseNewlines: (...args) => collapseNewlines(...args),
-    formatInstructModeChat: (...args) => formatInstructModeChat(...args),
-    formatInstructModeExamples: (...args) => formatInstructModeExamples(...args),
-    formatInstructModePrompt: (...args) => formatInstructModePrompt(...args),
-    formatInstructModeStoryString: (...args) => formatInstructModeStoryString(...args),
     generatedTextFiltered: (...args) => generatedTextFiltered(...args),
     playMessageSound: (...args) => playMessageSound(...args),
     prepareOpenAIMessages: (...args) => prepareOpenAIMessages(...args),
@@ -3067,6 +3054,21 @@ function getMainChatMessageListReactBridgeState() {
                 : default_avatar;
         },
         timestampTitleForMessage: message => `${message?.extra?.api ? `${message.extra.api} - ` : ''}${message?.extra?.model ?? ''}`,
+        timerForMessage: message => formatGenerationTimer(
+            message?.gen_started,
+            message?.gen_finished,
+            message?.extra?.token_count,
+            message?.extra?.reasoning_duration,
+            message?.extra?.time_to_first_token,
+        ),
+        mediaDisplayForMessage: message => getMediaDisplay(message),
+        hasItemizedPromptForMessage: (message, messageId) => Array.isArray(itemizedPrompts)
+            && itemizedPrompts.some(prompt => Number(prompt?.mesId) === Number(messageId)),
+        swipePickerForMessage: messageId => ({
+            canOpen: canOpenSwipePickerForMessage(messageId),
+            canJump: canJumpToSwipeForMessage(messageId),
+        }),
+        modelIconEnabled: power_user.timestamp_model_icon === true,
         visibleMessageIds,
         composer: {
             value: composerElement instanceof HTMLTextAreaElement ? composerElement.value : '',
@@ -5973,12 +5975,7 @@ export function substituteParamsLegacy(content, _name1, _name2, _original, _grou
         environment.scenario = fields.scenario || '';
         environment.persona = fields.persona || '';
         environment.mesExamples = () => {
-            const isInstruct = power_user.instruct.enabled && main_api !== 'openai';
-            const mesExamplesArray = parseMesExamples(fields.mesExamples, isInstruct);
-            if (isInstruct) {
-                const instructExamples = formatInstructModeExamples(mesExamplesArray, name1, name2);
-                return instructExamples.join('');
-            }
+            const mesExamplesArray = parseMesExamples(fields.mesExamples);
             return mesExamplesArray.join('');
         };
         environment.mesExamplesRaw = fields.mesExamples || '';
@@ -6066,33 +6063,7 @@ export function substituteParams(content, options = {}) {
  * @returns {string[]} Array of stopping strings
  */
 export function getStoppingStrings(isImpersonate, isContinue, api = main_api) {
-    // Only custom stop strings apply to Chat Completion
-    if (api === 'openai') {
-        return getCustomStoppingStrings();
-    }
-
-    const result = [];
-
-    if (power_user.context.names_as_stop_strings) {
-        const charString = `\n${name2}:`;
-        const userString = `\n${name1}:`;
-        result.push(isImpersonate ? charString : userString);
-
-        result.push(userString);
-
-        if (isContinue && Array.isArray(chat) && chat[chat.length - 1]?.is_user) {
-            result.push(charString);
-        }
-    }
-
-    result.push(...getInstructStoppingSequences());
-    result.push(...getCustomStoppingStrings());
-
-    if (power_user.single_line) {
-        result.unshift('\n');
-    }
-
-    return result.filter(x => x).filter(onlyUnique);
+    return getCustomStoppingStrings();
 }
 
 /**
@@ -6513,7 +6484,7 @@ export function getCharacterCardFields({ chid = undefined } = {}) {
  * @param {string} examplesStr
  * @returns {string[]} Examples array with block heading
  */
-export function parseMesExamples(examplesStr, isInstruct) {
+export function parseMesExamples(examplesStr) {
     if (!examplesStr || examplesStr.length === 0 || examplesStr === '<START>') {
         return [];
     }
@@ -6522,8 +6493,7 @@ export function parseMesExamples(examplesStr, isInstruct) {
         examplesStr = '<START>\n' + examplesStr.trim();
     }
 
-    const exampleSeparator = power_user.context.example_separator ? `${substituteParams(power_user.context.example_separator)}\n` : '';
-    const blockHeading = (main_api === 'openai' || isInstruct) ? '<START>\n' : exampleSeparator;
+    const blockHeading = '<START>\n';
     const splitExamples = examplesStr.split(/<START>/gi).slice(1).map(block => `${blockHeading}${block.trim()}\n`);
 
     return splitExamples;
@@ -6554,15 +6524,13 @@ function hideStopButton() {
  * Constructs a prompt to be used for either Text Completion or Chat Completion. Input is format-agnostic.
  * @param {string | object[]} prompt Input prompt. Can be a string or an array of chat-style messages, i.e. [{role: '', content: ''}, ...]
  * @param {string} api API to use.
- * @param {boolean} instructOverride true to override instruct mode, false to use the default value
+ * @param {boolean} instructOverride Deprecated no-op kept for positional-call compatibility (instruct mode retired).
  * @param {boolean} quietToLoud true to generate a message in system mode, false to generate a message in character mode
  * @param {string} [systemPrompt] System prompt to use.
  * @param {string} [prefill] Prefill for the prompt.
  * @returns {string | object[]} Prompt ready for use in generation. If using TC, this will be a string. If using CC, this will be an array of chat-style messages.
  */
 export function createRawPrompt(prompt, api, instructOverride, quietToLoud, systemPrompt, prefill) {
-    const isInstruct = power_user.instruct.enabled && api !== 'openai' && !instructOverride;
-
     // If the prompt was given as a string, convert to a message-style object assuming user role
     if (typeof prompt === 'string') {
         const message = { role: 'user', content: prompt.trim() };
@@ -6576,41 +6544,18 @@ export function createRawPrompt(prompt, api, instructOverride, quietToLoud, syst
 
     // Format each message in the prompt, accounting for the provided roles
     for (const message of prompt) {
-        let name = '';
-        if (message.role === 'user') name = message.name ?? name1;
-        if (message.role === 'assistant') name = message.name ?? name2;
-        if (message.role === 'system') name = message.name ?? '';
-        const prefix = isInstruct || api === 'openai' ? '' : (name ? `${name}: ` : '');
-        message.content = prefix + substituteParams(message.content ?? '');
-        if (isInstruct) {  // instruct formatting for text completion
-            const isUser = message.role === 'user';
-            const isNarrator = message.role === 'system';
-            message.content = formatInstructModeChat(name, message.content, isUser, isNarrator, '', name1, name2, false);
-        }
+        message.content = substituteParams(message.content ?? '');
     }
 
     // prepend system prompt, if provided
     if (systemPrompt) {
-        systemPrompt = substituteParams(systemPrompt);
-        systemPrompt = isInstruct ? formatInstructModeStoryString(systemPrompt) : systemPrompt.trim();
-        if (isInstruct && systemPrompt.length > 0 && !systemPrompt.endsWith('\n')) {
-            if (power_user.instruct.wrap && !power_user.instruct.story_string_suffix) {
-                systemPrompt += '\n';
-            }
-        }
+        systemPrompt = substituteParams(systemPrompt).trim();
         prompt.unshift({ role: 'system', content: systemPrompt });
     }
 
     // with Chat Completion, the prefill is an additional assistant message at the end.
-    if (api === 'openai' && prefill) {
+    if (prefill) {
         prompt.push({ role: 'assistant', content: prefill });
-    }
-
-    // if text completion, convert to text prompt by concatenating all message contents and adding the prefill as a promptBias.
-    if (api !== 'openai') {
-        const joiner = isInstruct ? '' : '\n';
-        prompt = prompt.map(message => message.content).join(joiner);
-        prompt = prompt + (isInstruct ? formatInstructModePrompt(name2, false, prefill, name1, name2, true, quietToLoud) : `\n${prefill}`);  // add last line
     }
 
     return prompt;
@@ -6620,7 +6565,7 @@ export function createRawPrompt(prompt, api, instructOverride, quietToLoud, syst
  * @typedef {object} GenerateRawParams
  * @prop {string | object[]} [prompt] Prompt to generate a message from. Can be a string or an array of chat-style messages, i.e. [{role: '', content: ''}, ...]
  * @prop {string} [api] API to use. Main API is used if not specified.
- * @prop {boolean} [instructOverride] true to override instruct mode, false to use the default value
+ * @prop {boolean} [instructOverride] Deprecated no-op kept for compatibility (instruct mode retired).
  * @prop {boolean} [quietToLoud] true to generate a message in system mode, false to generate a message in character mode
  * @prop {string} [systemPrompt] System prompt to use.
  * @prop {number} [responseLength] Maximum response length. If unset, the global default value is used.
@@ -7126,10 +7071,8 @@ export function getBiasStrings(textareaText, type) {
 
 /**
  * @param {Object} chatItem Message history item.
- * @param {boolean} isInstruct Whether instruct mode is enabled.
- * @param {boolean|number} forceOutputSequence Whether to force the first/last output sequence for instruct mode.
  */
-function formatMessageHistoryItem(chatItem, isInstruct, forceOutputSequence) {
+function formatMessageHistoryItem(chatItem) {
     const isNarratorType = chatItem?.extra?.type === system_message_types.NARRATOR;
     const characterName = chatItem?.name ? chatItem.name : name2;
     const itemName = chatItem.is_user ? chatItem.name : characterName;
@@ -7143,10 +7086,6 @@ function formatMessageHistoryItem(chatItem, isInstruct, forceOutputSequence) {
 
     // Don't include a name if it's empty
     let textResult = chatItem?.name && shouldPrependName ? `${itemName}: ${chatItem.mes}\n` : `${chatItem.mes}\n`;
-
-    if (isInstruct) {
-        textResult = formatInstructModeChat(itemName, chatItem.mes, chatItem.is_user, isNarratorType, chatItem.force_avatar, name1, name2, forceOutputSequence);
-    }
 
     return textResult;
 }
@@ -10157,8 +10096,6 @@ API: ${getSettingsContents.main_api}
 API Type: ${getSettingsContents[getSettingsContents.main_api + '_settings'].type}
 API server: ${getSettingsContents.api_server}
 Model: ${getContextContents.onlineStatus}
-Context Template: ${power_user.context.preset}
-Instruct Template: ${power_user.instruct.preset}
 API Settings: ${JSON.stringify(getSettingsContents[getSettingsContents.main_api + '_settings'], null, 2)}
 \`\`\`
     `;

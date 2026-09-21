@@ -193,22 +193,8 @@ const settingsSchema = z.object({
         smoothStreamingNoThink: z.boolean(),
         smoothStreamingSpeed: z.number().int().min(0),
         streamFadeIn: z.boolean(),
-        instructEnabled: z.boolean(),
-        instructPreset: z.string(),
-        instructWrap: z.boolean(),
-        instructMacro: z.boolean(),
-        instructSequencesAsStopStrings: z.boolean(),
-        instructSkipExamples: z.boolean(),
-        instructBindToContext: z.boolean(),
-        instructActivationRegex: z.string(),
         systemPromptName: z.string(),
         systemPromptContent: z.string(),
-        contextPreset: z.string(),
-        contextStoryString: z.string(),
-        contextChatStart: z.string(),
-        contextExampleSeparator: z.string(),
-        contextUseStopStrings: z.boolean(),
-        contextNamesAsStopStrings: z.boolean(),
         syspromptEnabled: z.boolean(),
         syspromptPostHistory: z.string(),
         reasoningName: z.string(),
@@ -240,30 +226,6 @@ const settingsSchema = z.object({
         userPromptBias: z.string(),
         showUserPromptBias: z.boolean(),
         tokenPadding: z.coerce.number(),
-        instructDerived: z.boolean(),
-        contextDerived: z.boolean(),
-        contextSizeDerived: z.boolean(),
-        instructInputSequence: z.string(),
-        instructInputSuffix: z.string(),
-        instructOutputSequence: z.string(),
-        instructOutputSuffix: z.string(),
-        instructSystemSequence: z.string(),
-        instructSystemSuffix: z.string(),
-        instructLastSystemSequence: z.string(),
-        instructFirstInputSequence: z.string(),
-        instructFirstOutputSequence: z.string(),
-        instructLastInputSequence: z.string(),
-        instructLastOutputSequence: z.string(),
-        instructStoryStringPrefix: z.string(),
-        instructStoryStringSuffix: z.string(),
-        instructStopSequence: z.string(),
-        instructUserAlignmentMessage: z.string(),
-        instructSystemSameAsUser: z.boolean(),
-        instructNamesBehavior: z.string(),
-        instructSeparatorSequence: z.string(),
-        contextStoryStringPosition: z.coerce.number(),
-        contextStoryStringRole: z.coerce.number(),
-        contextStoryStringDepth: z.coerce.number(),
     }),
 });
 
@@ -666,7 +628,6 @@ export function SettingsSurface({
         return [
             { label: 'Themes', value: Array.isArray(settingsData.themes) ? settingsData.themes.length : 0 },
             { label: 'OpenAI Presets', value: Array.isArray(settingsData.openai_setting_names) ? settingsData.openai_setting_names.length : 0 },
-            { label: 'Context Presets', value: Array.isArray(settingsData.context) ? settingsData.context.length : 0 },
         ];
     }, [settingsData]);
 
@@ -2094,57 +2055,6 @@ export function SettingsSurface({
                                     />
                                     <SettingField
                                         form={settingsForm}
-                                        name="advanced.contextPreset"
-                                        label="Context Preset"
-                                        description="当前上下文模板 preset 名称。"
-                                        placeholder="Default"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.contextStoryString"
-                                        label="Context Story String"
-                                        description="上下文模板的 story string。"
-                                        variant="textarea"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.contextChatStart"
-                                        label="Context Chat Start"
-                                        description="上下文模板里的 chat start 文本。"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.contextExampleSeparator"
-                                        label="Example Separator"
-                                        description="上下文模板里的 example separator。"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.instructPreset"
-                                        label="Instruct Preset"
-                                        description="当前 instruct 模板 preset 名称。"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.instructActivationRegex"
-                                        label="Instruct Activation Regex"
-                                        description="模型名匹配该正则时自动启用 instruct preset。"
-                                        placeholder="/llama/i"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
                                         name="advanced.reasoningName"
                                         label="Reasoning Template"
                                         description="当前 reasoning template 名称。"
@@ -2405,78 +2315,6 @@ export function SettingsSurface({
                                     />
                                     <SettingField
                                         form={settingsForm}
-                                        name="advanced.instructEnabled"
-                                        label="Instruct Enabled"
-                                        description="启用 instruct 模式。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.instructWrap"
-                                        label="Instruct Wrap"
-                                        description="启用 instruct wrap。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.instructMacro"
-                                        label="Instruct Macro"
-                                        description="在 instruct 模板中启用 macro。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.instructSequencesAsStopStrings"
-                                        label="Instruct Sequences As Stop Strings"
-                                        description="将 instruct sequences 作为 stop strings。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.instructSkipExamples"
-                                        label="Instruct Skip Examples"
-                                        description="启用 instruct 时跳过 example messages。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.instructBindToContext"
-                                        label="Bind Instruct To Context"
-                                        description="按 instruct preset 绑定 context preset。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.contextUseStopStrings"
-                                        label="Context Use Stop Strings"
-                                        description="上下文模板注入时启用 stop strings。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.contextNamesAsStopStrings"
-                                        label="Context Names As Stop Strings"
-                                        description="把角色名也作为 stop strings。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
                                         name="advanced.syspromptEnabled"
                                         label="System Prompt Enabled"
                                         description="启用 system prompt。"
@@ -2668,220 +2506,6 @@ export function SettingsSurface({
                                         name="advanced.tokenPadding"
                                         label="Token Padding"
                                         description="Settings path binding for advanced.tokenPadding."
-                                        variant="number"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.instructDerived"
-                                        label="Instruct Derived"
-                                        description="Settings path binding for advanced.instructDerived."
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.contextDerived"
-                                        label="Context Derived"
-                                        description="Settings path binding for advanced.contextDerived."
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.contextSizeDerived"
-                                        label="Context Size Derived"
-                                        description="Settings path binding for advanced.contextSizeDerived."
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.instructInputSequence"
-                                        label="Instruct Input Sequence"
-                                        description="Settings path binding for advanced.instructInputSequence."
-                                        variant="textarea"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.instructInputSuffix"
-                                        label="Instruct Input Suffix"
-                                        description="Settings path binding for advanced.instructInputSuffix."
-                                        variant="textarea"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.instructOutputSequence"
-                                        label="Instruct Output Sequence"
-                                        description="Settings path binding for advanced.instructOutputSequence."
-                                        variant="textarea"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.instructOutputSuffix"
-                                        label="Instruct Output Suffix"
-                                        description="Settings path binding for advanced.instructOutputSuffix."
-                                        variant="textarea"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.instructSystemSequence"
-                                        label="Instruct System Sequence"
-                                        description="Settings path binding for advanced.instructSystemSequence."
-                                        variant="textarea"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.instructSystemSuffix"
-                                        label="Instruct System Suffix"
-                                        description="Settings path binding for advanced.instructSystemSuffix."
-                                        variant="textarea"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.instructLastSystemSequence"
-                                        label="Instruct Last System Sequence"
-                                        description="Settings path binding for advanced.instructLastSystemSequence."
-                                        variant="textarea"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.instructFirstInputSequence"
-                                        label="Instruct First Input Sequence"
-                                        description="Settings path binding for advanced.instructFirstInputSequence."
-                                        variant="textarea"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.instructFirstOutputSequence"
-                                        label="Instruct First Output Sequence"
-                                        description="Settings path binding for advanced.instructFirstOutputSequence."
-                                        variant="textarea"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.instructLastInputSequence"
-                                        label="Instruct Last Input Sequence"
-                                        description="Settings path binding for advanced.instructLastInputSequence."
-                                        variant="textarea"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.instructLastOutputSequence"
-                                        label="Instruct Last Output Sequence"
-                                        description="Settings path binding for advanced.instructLastOutputSequence."
-                                        variant="textarea"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.instructStoryStringPrefix"
-                                        label="Instruct Story String Prefix"
-                                        description="Settings path binding for advanced.instructStoryStringPrefix."
-                                        variant="textarea"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.instructStoryStringSuffix"
-                                        label="Instruct Story String Suffix"
-                                        description="Settings path binding for advanced.instructStoryStringSuffix."
-                                        variant="textarea"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.instructStopSequence"
-                                        label="Instruct Stop Sequence"
-                                        description="Settings path binding for advanced.instructStopSequence."
-                                        variant="textarea"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.instructUserAlignmentMessage"
-                                        label="Instruct User Alignment Message"
-                                        description="Settings path binding for advanced.instructUserAlignmentMessage."
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.instructSystemSameAsUser"
-                                        label="Instruct System Same As User"
-                                        description="Settings path binding for advanced.instructSystemSameAsUser."
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.instructNamesBehavior"
-                                        label="Instruct Names Behavior"
-                                        description="Settings path binding for advanced.instructNamesBehavior."
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.instructSeparatorSequence"
-                                        label="Instruct Separator Sequence"
-                                        description="Settings path binding for advanced.instructSeparatorSequence."
-                                        variant="textarea"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.contextStoryStringPosition"
-                                        label="Context Story String Position"
-                                        description="Settings path binding for advanced.contextStoryStringPosition."
-                                        variant="number"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.contextStoryStringRole"
-                                        label="Context Story String Role"
-                                        description="Settings path binding for advanced.contextStoryStringRole."
-                                        variant="number"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.contextStoryStringDepth"
-                                        label="Context Story String Depth"
-                                        description="Settings path binding for advanced.contextStoryStringDepth."
                                         variant="number"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}

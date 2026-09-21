@@ -329,10 +329,10 @@ describe('group chat retirement', () => {
         expect(storeSource).toContain('owner_type = \'group\'');
     });
 
-    test('preserves configured stopping strings for non-OpenAI generation', () => {
-        const scriptSource = fs.readFileSync(path.join(repoRoot, 'public', 'script.js'), 'utf8');
+    test('preserves configured stopping strings for OpenAI-compatible generation', () => {
+        const openaiSource = fs.readFileSync(path.join(repoRoot, 'public', 'scripts', 'openai.js'), 'utf8');
 
-        expect(scriptSource).toContain('result.push(...getCustomStoppingStrings());');
+        expect(openaiSource).toContain('getCustomStoppingStrings(');
     });
 
     test('retires first-party group slash and prompt/runtime paths', () => {
@@ -362,7 +362,6 @@ describe('group chat retirement', () => {
         expect(promptConverterSource).not.toMatch(/group_names|groupNames|startsWithGroupName|group chat/i);
         const retiredCoreSources = [
             'public/scripts/chats.js',
-            'public/scripts/instruct-mode.js',
             'public/scripts/itemized-prompts.js',
             'public/scripts/macros/engine/MacroEnvBuilder.js',
             'public/scripts/preset-manager.js',

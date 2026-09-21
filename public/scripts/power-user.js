@@ -21,7 +21,6 @@ import {
     setActiveCharacter,
     entitiesFilter,
     doNewChat,
-    online_status,
     messageFormatting,
     extension_prompt_types,
     extension_prompt_roles,
@@ -31,20 +30,13 @@ import {
 import { eventSource, event_types } from './events.js';
 import { getRequestHeaders } from './request-context.js';
 import { favsToHotswap } from './RossAscends-mods.js';
-import {
-    instruct_presets,
-    loadInstructMode,
-    names_behavior_types,
-    selectInstructPreset,
-    updateBindModelTemplatesState,
-} from './instruct-mode.js';
 
 import { getTagsList, tag_import_setting, tag_map, tag_sort_mode, tags } from './tags.js';
 import { tokenizers } from './tokenizers.js';
 import { BIAS_CACHE } from './logit-bias.js';
 import { renderTemplateAsync } from './templates.js';
 
-import { countOccurrences, debounce, delay, download, getFileText, getSanitizedFilename, getStringHash, isOdd, isTrueBoolean, resetScrollHeight, shuffle, sortMoments, stringToRange, timestampToMoment } from './utils.js';
+import { countOccurrences, debounce, delay, download, getFileText, getSanitizedFilename, getStringHash, isOdd, isTrueBoolean, shuffle, sortMoments, stringToRange, timestampToMoment } from './utils.js';
 import { FILTER_TYPES } from './filters.js';
 import { PARSER_FLAG, SlashCommandParser } from './slash-commands/SlashCommandParser.js';
 import { SlashCommand } from './slash-commands/SlashCommand.js';
@@ -57,7 +49,6 @@ import { loadSystemPrompts } from './sysprompt.js';
 import { fuzzySearchCategories } from './filters.js';
 import { accountStorage } from './util/AccountStorage.js';
 import { DEFAULT_REASONING_TEMPLATE, loadReasoningTemplates } from './reasoning.js';
-import { bindModelTemplates } from './chat-templates.js';
 import { IMAGE_OVERSWIPE, MEDIA_DISPLAY } from './constants.js';
 import { t } from './i18n.js';
 import { persona_description_positions as _persona_description_positions } from './personas.js';
@@ -219,7 +210,7 @@ export const power_user = {
         stop_sequence: '',
         wrap: true,
         macro: true,
-        names_behavior: names_behavior_types.FORCE,
+        names_behavior: 'force',
         activation_regex: '',
         bind_to_context: false,
         user_alignment_message: '',
@@ -329,28 +320,10 @@ export const power_user = {
 
 let themes = [];
 /** @type {ContextSettings[]} */
-export let context_presets = [];
-
 const storage_keys = {
     storyStringValidationCache: 'StoryStringValidationCache',
 };
 
-const contextControls = [
-    // Power user context scoped settings
-    { id: 'context_story_string', property: 'story_string', isCheckbox: false, isGlobalSetting: false },
-    { id: 'context_example_separator', property: 'example_separator', isCheckbox: false, isGlobalSetting: false },
-    { id: 'context_chat_start', property: 'chat_start', isCheckbox: false, isGlobalSetting: false },
-    { id: 'context_use_stop_strings', property: 'use_stop_strings', isCheckbox: true, isGlobalSetting: false, defaultValue: false },
-    { id: 'context_names_as_stop_strings', property: 'names_as_stop_strings', isCheckbox: true, isGlobalSetting: false, defaultValue: true },
-    { id: 'context_story_string_position', property: 'story_string_position', isCheckbox: false, isGlobalSetting: false, defaultValue: extension_prompt_types.IN_PROMPT, trigger: true },
-    { id: 'context_story_string_depth', property: 'story_string_depth', isCheckbox: false, isGlobalSetting: false, defaultValue: 1 },
-    { id: 'context_story_string_role', property: 'story_string_role', isCheckbox: false, isGlobalSetting: false, defaultValue: extension_prompt_roles.SYSTEM },
-
-    // Existing power user settings
-    { id: 'always-force-name2-checkbox', property: 'always_force_name2', isCheckbox: true, isGlobalSetting: true, defaultValue: true },
-    { id: 'trim_sentences_checkbox', property: 'trim_sentences', isCheckbox: true, isGlobalSetting: true, defaultValue: false },
-    { id: 'single_line', property: 'single_line', isCheckbox: true, isGlobalSetting: true, defaultValue: false },
-];
 
 let browser_has_focus = true;
 const debug_functions = [];
@@ -1401,10 +1374,6 @@ export async function loadPowerUserSettings(settings, data) {
         themes = data.themes;
     }
 
-    if (data.context !== undefined) {
-        context_presets = data.context;
-    }
-
     if (typeof power_user.chat_display !== 'number') {
         power_user.chat_display = chat_styles.DEFAULT;
     }
@@ -1427,9 +1396,6 @@ export async function loadPowerUserSettings(settings, data) {
         power_user.instruct_derived = true;
         delete power_user.instruct.derived;
     }
-
-    // Reset the saved chat template hash
-    power_user.chat_template_hash = '';
 
     $('#single_line').prop('checked', power_user.single_line);
     $('#relaxed_api_urls').prop('checked', power_user.relaxed_api_urls);
@@ -1457,9 +1423,6 @@ export async function loadPowerUserSettings(settings, data) {
     $('#experimental_macro_engine').prop('checked', power_user.experimental_macro_engine);
     $('#example_messages_behavior').val(getExampleMessagesBehavior());
     $(`#example_messages_behavior option[value="${getExampleMessagesBehavior()}"]`).prop('selected', true);
-    $('#instruct_derived').parent().find('i').toggleClass('toggleEnabled', !!power_user.instruct_derived);
-    $('#context_derived').parent().find('i').toggleClass('toggleEnabled', !!power_user.context_derived);
-    $('#context_size_derived').prop('checked', !!power_user.context_size_derived);
 
     $('#console_log_prompts').prop('checked', power_user.console_log_prompts);
     $('#request_token_probabilities').prop('checked', power_user.request_token_probabilities);
@@ -1577,8 +1540,6 @@ export async function loadPowerUserSettings(settings, data) {
     switchReducedMotion();
     switchCompactInputArea();
     reloadMarkdownProcessor();
-    await loadInstructMode(data);
-    await loadContextSettings();
     await loadSystemPrompts(data);
     await loadReasoningTemplates(data);
     switchSpoilerMode();
@@ -1644,173 +1605,6 @@ function switchMaxContextSize() {
         CreateZenSliders($('#max_context'));
     }
 }
-
-// Fetch a compiled object of all preset settings
-export function getContextSettings() {
-    let compiledSettings = {};
-
-    contextControls.forEach((control) => {
-        let value = control.isGlobalSetting ? power_user[control.property] : power_user.context[control.property];
-
-        // Force to a boolean if the setting is a checkbox
-        if (control.isCheckbox) {
-            value = !!value;
-        }
-
-        compiledSettings[control.property] = value;
-    });
-
-    return compiledSettings;
-}
-
-// TODO: Maybe add a refresh button to reset settings to preset
-// TODO: Add "global state" if a preset doesn't set the power_user checkboxes
-async function loadContextSettings() {
-    /**
-     * Auto-fix missing fields in the story string
-     * @param {ContextSettings} contextSettings Context settings instance
-     */
-    function autoFixStoryString(contextSettings) {
-        // Already migrated, no need to fix
-        if (!contextSettings || Object.hasOwn(contextSettings, 'story_string_position')) {
-            return;
-        }
-
-        let storyString = contextSettings.story_string || '';
-
-        /**
-         * @param {string} field Missing field name
-         * @param {'start'|'end'} position Position of auto-fix
-         */
-        function autoFixMissingField(field, position) {
-            if (storyString.includes(`{{${field}}}`)) {
-                return;
-            }
-
-            console.warn(`[Story String Validation] Story String is missing a field: ${field}. Adding it at the ${position}.`);
-            const fieldTemplate = `{{#if ${field}}}{{${field}}}\n{{/if}}`;
-            const firstCurlyPosition = storyString.includes('{{') ? storyString.indexOf('{{') : 0;
-            const lastCurlyPosition = storyString.includes('}}') ? storyString.lastIndexOf('}}') + '}}'.length : storyString.length;
-            const lastTrimPosition = storyString.includes('{{trim}}') ? storyString.lastIndexOf('{{trim}}') : storyString.length;
-            const endPosition = Math.min(lastTrimPosition, lastCurlyPosition);
-            storyString = position === 'start'
-                ? storyString.substring(0, firstCurlyPosition) + fieldTemplate + storyString.substring(firstCurlyPosition)
-                : storyString.substring(0, endPosition) + fieldTemplate + storyString.substring(endPosition);
-        }
-
-        autoFixMissingField('anchorBefore', 'start');
-        autoFixMissingField('anchorAfter', 'end');
-
-        contextSettings.story_string = storyString;
-    }
-
-    // Migrate story string to add missing fields
-    autoFixStoryString(power_user.context);
-
-    contextControls.forEach(control => {
-        const $element = $(`#${control.id}`);
-
-        if (control.isGlobalSetting) {
-            return;
-        }
-
-        if (control.defaultValue !== undefined && power_user.context[control.property] === undefined) {
-            power_user.context[control.property] = control.defaultValue;
-        }
-
-        if (control.isCheckbox) {
-            $element.prop('checked', power_user.context[control.property]);
-        } else {
-            $element.val(power_user.context[control.property]);
-        }
-        console.debug(`Setting ${$element.prop('id')} to ${power_user.context[control.property]}`);
-
-        // If the setting already exists, no need to duplicate it
-        // TODO: Maybe check the power_user object for the setting instead of a flag?
-        $element.on('input', async function () {
-            let value = control.isCheckbox ? !!$(this).prop('checked') : $(this).val();
-            if (typeof control.defaultValue === 'number') {
-                value = Number(value);
-            }
-            if (control.isGlobalSetting) {
-                power_user[control.property] = value;
-            } else {
-                power_user.context[control.property] = value;
-            }
-            console.debug(`Setting ${$element.prop('id')} to ${value}`);
-            if (!CSS.supports('field-sizing', 'content') && $(this).is('textarea')) {
-                await resetScrollHeight($(this));
-            }
-            saveSettingsDebounced();
-        });
-
-        if (control.trigger) {
-            $element.trigger('input');
-        }
-    });
-
-    context_presets.forEach((preset) => {
-        const name = preset.name;
-        const option = document.createElement('option');
-        option.value = name;
-        option.innerText = name;
-        option.selected = name === power_user.context.preset;
-        $('#context_presets').append(option);
-    });
-
-    $('#context_presets').on('change', function () {
-        const name = String($(this).find(':selected').text());
-        const preset = context_presets.find(x => x.name === name);
-
-        if (!preset) {
-            return;
-        }
-
-        // Migrate story string to add missing fields
-        autoFixStoryString(preset);
-
-        power_user.context.preset = name;
-
-        contextControls.forEach(control => {
-            const presetValue = preset[control.property] ?? control.defaultValue;
-
-            if (presetValue !== undefined) {
-                if (control.isGlobalSetting) {
-                    power_user[control.property] = presetValue;
-                } else {
-                    power_user.context[control.property] = presetValue;
-                }
-
-                const $element = $(`#${control.id}`);
-
-                if (control.isCheckbox) {
-                    $element
-                        .prop('checked', control.isGlobalSetting ? power_user[control.property] : power_user.context[control.property])
-                        .trigger('input');
-                } else {
-                    $element.val(control.isGlobalSetting ? power_user[control.property] : power_user.context[control.property]);
-                    $element.trigger('input');
-                }
-            }
-        });
-
-        if (power_user.instruct.bind_to_context) {
-            // Select matching instruct preset
-            for (const instruct_preset of instruct_presets) {
-                // If instruct preset matches the context template
-                if (instruct_preset.name === name) {
-                    selectInstructPreset(instruct_preset.name, { isAuto: true });
-                    break;
-                }
-            }
-        }
-
-        updateBindModelTemplatesState();
-
-        saveSettingsDebounced();
-    });
-}
-
 
 /**
  * Common function to perform fuzzy search with optional caching
@@ -1935,13 +1729,11 @@ export function fuzzySearchTags(searchValue, fuzzySearchCaches = null) {
  * @param {object} params Template parameters.
  * @param {object} [options] Additional options.
  * @param {string} [options.customStoryString] Custom story string template.
- * @param {InstructSettings} [options.customInstructSettings] Custom instruct settings.
  * @param {ContextSettings} [options.customContextSettings] Custom context settings.
  * @returns {string} The rendered story string.
  */
-export function renderStoryString(params, { customStoryString = null, customInstructSettings = null, customContextSettings = null } = {}) {
+export function renderStoryString(params, { customStoryString = null, customContextSettings = null } = {}) {
     try {
-        const instructSettings = structuredClone(customInstructSettings ?? power_user.instruct);
         const contextSettings = structuredClone(customContextSettings ?? power_user.context);
         const storyString = customStoryString ?? contextSettings.story_string;
         const storyStringPosition = contextSettings.story_string_position ?? extension_prompt_types.IN_PROMPT;
@@ -1963,9 +1755,7 @@ export function renderStoryString(params, { customStoryString = null, customInst
 
         // add a newline to the end of the story string if it doesn't have one
         if (output.length > 0 && !output.endsWith('\n') && storyStringPosition !== extension_prompt_types.IN_CHAT) {
-            if (!instructSettings.enabled || (instructSettings.wrap && !instructSettings.story_string_suffix)) {
-                output += '\n';
-            }
+            output += '\n';
         }
 
         return output;
@@ -2658,49 +2448,6 @@ jQuery(() => {
         power_user.single_line = value;
         saveSettingsDebounced();
     });
-
-    $('#context_derived').on('input', function () {
-        const value = !!$(this).prop('checked');
-        power_user.context_derived = value;
-        saveSettingsDebounced();
-    });
-
-    $('#context_derived').on('change', function () {
-        $('#context_derived').parent().find('i').toggleClass('toggleEnabled', !!power_user.context_derived);
-    });
-
-    $('#instruct_derived').on('input', function () {
-        const value = !!$(this).prop('checked');
-        power_user.instruct_derived = value;
-        saveSettingsDebounced();
-    });
-
-    $('#instruct_derived').on('change', function () {
-        $('#instruct_derived').parent().find('i').toggleClass('toggleEnabled', !!power_user.instruct_derived);
-    });
-
-    $('#context_size_derived').on('input', function () {
-        const value = !!$(this).prop('checked');
-        power_user.context_size_derived = value;
-        saveSettingsDebounced();
-    });
-
-    $('#context_size_derived').on('change', function () {
-        $('#context_size_derived').prop('checked', !!power_user.context_size_derived);
-    });
-
-    $('#context_story_string_position').on('input', function () {
-        const value = Number($(this).val());
-        $('#context_story_string_inject_settings').toggle(value === extension_prompt_types.IN_CHAT);
-    });
-
-    $('#bind_model_templates').on('input', function () {
-        if (bindModelTemplates(power_user, online_status)) {
-            saveSettingsDebounced();
-        }
-    });
-
-    $('#bind_model_templates').on('change', updateBindModelTemplatesState);
 
     $('#always-force-name2-checkbox').on('change', function () {
         power_user.always_force_name2 = !!$(this).prop('checked');
@@ -3830,5 +3577,33 @@ export async function mountPowerUserPanel() {
         drawerContent.dataset.reactPowerUserMounted = 'true';
     } catch (error) {
         console.error('Failed to mount power-user panel:', error);
+    }
+}
+
+/**
+ * Mounts the React-owned Advanced Formatting drawer content.
+ * Must run before getSettings(): loadPowerUserSettings binds every element
+ * ID that the React surface preserves.
+ */
+export async function mountAdvancedFormattingPanel() {
+    const drawerContent = document.getElementById('AdvancedFormatting');
+    if (!drawerContent) {
+        console.warn('Advanced Formatting drawer not found');
+        return;
+    }
+    if (drawerContent.dataset.reactAdvancedFormattingMounted === 'true') {
+        return;
+    }
+
+    const host = document.createElement('div');
+    host.id = 'emberdesk-react-advanced-formatting-host';
+    drawerContent.replaceChildren(host);
+
+    try {
+        const module = await loadWorkspacePanelsModule();
+        module.mountAdvancedFormattingPanel(host);
+        drawerContent.dataset.reactAdvancedFormattingMounted = 'true';
+    } catch (error) {
+        console.error('Failed to mount advanced formatting panel:', error);
     }
 }

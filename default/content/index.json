@@ -168,208 +168,12 @@
         "type": "openai_preset"
     },
     {
-        "filename": "presets/context/Adventure.json",
-        "type": "context"
-    },
-    {
-        "filename": "presets/context/Alpaca-Single-Turn.json",
-        "type": "context"
-    },
-    {
-        "filename": "presets/context/Alpaca.json",
-        "type": "context"
-    },
-    {
-        "filename": "presets/context/ChatML.json",
-        "type": "context"
-    },
-    {
-        "filename": "presets/context/Default.json",
-        "type": "context"
-    },
-    {
-        "filename": "presets/context/Libra-32B.json",
-        "type": "context"
-    },
-    {
-        "filename": "presets/context/Lightning 1.1.json",
-        "type": "context"
-    },
-    {
-        "filename": "presets/context/Llama 2 Chat.json",
-        "type": "context"
-    },
-    {
-        "filename": "presets/context/Minimalist.json",
-        "type": "context"
-    },
-    {
-        "filename": "presets/context/NovelAI.json",
-        "type": "context"
-    },
-    {
-        "filename": "presets/context/OldDefault.json",
-        "type": "context"
-    },
-    {
-        "filename": "presets/context/Metharme.json",
-        "type": "context"
-    },
-    {
-        "filename": "presets/context/Story.json",
-        "type": "context"
-    },
-    {
-        "filename": "presets/context/Synthia.json",
-        "type": "context"
-    },
-    {
-        "filename": "presets/context/simple-proxy-for-tavern.json",
-        "type": "context"
-    },
-    {
-        "filename": "presets/context/Command R.json",
-        "type": "context"
-    },
-    {
-        "filename": "presets/context/Llama 3 Instruct.json",
-        "type": "context"
-    },
-    {
-        "filename": "presets/context/Llama 4 Instruct.json",
-        "type": "context"
-    },
-    {
-        "filename": "presets/context/Phi.json",
-        "type": "context"
-    },
-    {
-        "filename": "presets/instruct/Adventure.json",
-        "type": "instruct"
-    },
-    {
-        "filename": "presets/instruct/Alpaca-Single-Turn.json",
-        "type": "instruct"
-    },
-    {
-        "filename": "presets/instruct/Alpaca.json",
-        "type": "instruct"
-    },
-    {
-        "filename": "presets/instruct/ChatML.json",
-        "type": "instruct"
-    },
-    {
-        "filename": "presets/instruct/Koala.json",
-        "type": "instruct"
-    },
-    {
-        "filename": "presets/instruct/Libra-32B.json",
-        "type": "instruct"
-    },
-    {
-        "filename": "presets/instruct/Lightning 1.1.json",
-        "type": "instruct"
-    },
-    {
-        "filename": "presets/instruct/Llama 2 Chat.json",
-        "type": "instruct"
-    },
-    {
-        "filename": "presets/instruct/Metharme.json",
-        "type": "instruct"
-    },
-    {
-        "filename": "presets/instruct/OpenOrca-OpenChat.json",
-        "type": "instruct"
-    },
-    {
-        "filename": "presets/instruct/Story.json",
-        "type": "instruct"
-    },
-    {
-        "filename": "presets/instruct/Synthia.json",
-        "type": "instruct"
-    },
-    {
-        "filename": "presets/instruct/Tulu.json",
-        "type": "instruct"
-    },
-    {
-        "filename": "presets/context/Tulu.json",
-        "type": "context"
-    },
-    {
-        "filename": "presets/instruct/Vicuna 1.0.json",
-        "type": "instruct"
-    },
-    {
-        "filename": "presets/instruct/Vicuna 1.1.json",
-        "type": "instruct"
-    },
-    {
-        "filename": "presets/instruct/WizardLM-13B.json",
-        "type": "instruct"
-    },
-    {
-        "filename": "presets/instruct/WizardLM.json",
-        "type": "instruct"
-    },
-    {
-        "filename": "presets/instruct/simple-proxy-for-tavern.json",
-        "type": "instruct"
-    },
-    {
-        "filename": "presets/instruct/Command R.json",
-        "type": "instruct"
-    },
-    {
-        "filename": "presets/instruct/Llama 3 Instruct.json",
-        "type": "instruct"
-    },
-    {
-        "filename": "presets/instruct/Llama 4 Instruct.json",
-        "type": "instruct"
-    },
-    {
-        "filename": "presets/instruct/Phi.json",
-        "type": "instruct"
-    },
-    {
         "filename": "presets/moving-ui/Default.json",
         "type": "moving_ui"
     },
     {
         "filename": "presets/quick-replies/Default.json",
         "type": "quick_replies"
-    },
-    {
-        "filename": "presets/instruct/Llama-3-Instruct-Names.json",
-        "type": "instruct"
-    },
-    {
-        "filename": "presets/instruct/ChatML-Names.json",
-        "type": "instruct"
-    },
-    {
-        "filename": "presets/instruct/KoboldAI.json",
-        "type": "instruct"
-    },
-    {
-        "filename": "presets/context/Llama-3-Instruct-Names.json",
-        "type": "context"
-    },
-    {
-        "filename": "presets/context/ChatML-Names.json",
-        "type": "context"
-    },
-    {
-        "filename": "presets/context/Gemma 2.json",
-        "type": "context"
-    },
-    {
-        "filename": "presets/instruct/Gemma 2.json",
-        "type": "instruct"
     },
     {
         "filename": "presets/sysprompt/Actor.json",
@@ -424,96 +228,12 @@
         "type": "sysprompt"
     },
     {
-        "filename": "presets/instruct/Mistral V1.json",
-        "type": "instruct"
-    },
-    {
-        "filename": "presets/context/Mistral V1.json",
-        "type": "context"
-    },
-    {
-        "filename": "presets/instruct/Mistral V2 & V3.json",
-        "type": "instruct"
-    },
-    {
-        "filename": "presets/context/Mistral V2 & V3.json",
-        "type": "context"
-    },
-    {
-        "filename": "presets/instruct/Mistral V3-Tekken.json",
-        "type": "instruct"
-    },
-    {
-        "filename": "presets/context/Mistral V3-Tekken.json",
-        "type": "context"
-    },
-    {
-        "filename": "presets/instruct/Mistral V7.json",
-        "type": "instruct"
-    },
-    {
-        "filename": "presets/context/Mistral V7.json",
-        "type": "context"
-    },
-    {
-        "filename": "presets/instruct/DeepSeek-V2.5.json",
-        "type": "instruct"
-    },
-    {
-        "filename": "presets/context/DeepSeek-V2.5.json",
-        "type": "context"
-    },
-    {
-        "filename": "presets/instruct/GLM-4.json",
-        "type": "instruct"
-    },
-    {
-        "filename": "presets/context/GLM-4.json",
-        "type": "context"
-    },
-    {
         "filename": "presets/reasoning/DeepSeek.json",
         "type": "reasoning"
     },
     {
         "filename": "presets/reasoning/Blank.json",
         "type": "reasoning"
-    },
-    {
-        "filename": "presets/instruct/Dots1.json",
-        "type": "instruct"
-    },
-    {
-        "filename": "presets/context/Dots1.json",
-        "type": "context"
-    },
-    {
-        "filename": "presets/context/Mistral V7-Tekken.json",
-        "type": "context"
-    },
-    {
-        "filename": "presets/instruct/Mistral V7-Tekken.json",
-        "type": "instruct"
-    },
-    {
-        "filename": "presets/instruct/Moonshot AI.json",
-        "type": "instruct"
-    },
-    {
-        "filename": "presets/context/Moonshot AI.json",
-        "type": "context"
-    },
-    {
-        "filename": "presets/context/OpenAI Harmony.json",
-        "type": "context"
-    },
-    {
-        "filename": "presets/instruct/OpenAI Harmony.json",
-        "type": "instruct"
-    },
-    {
-        "filename": "presets/instruct/OpenAI Harmony (Thinking).json",
-        "type": "instruct"
     },
     {
         "filename": "presets/reasoning/OpenAI Harmony.json",
@@ -526,14 +246,6 @@
     {
         "filename": "presets/reasoning/Gemma 4.json",
         "type": "reasoning"
-    },
-    {
-        "filename": "presets/instruct/Gemma 4.json",
-        "type": "instruct"
-    },
-    {
-        "filename": "presets/context/Gemma 4.json",
-        "type": "context"
     },
     {
         "filename": "user.css",

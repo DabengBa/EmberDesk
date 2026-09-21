@@ -70,7 +70,7 @@ import { getRegexedString, regex_placement } from './extensions/regex/engine.js'
 
 import { chat_completion_sources, MINIMAX_ENDPOINT, oai_settings, promptManager, SILICONFLOW_ENDPOINT, ZAI_ENDPOINT } from './openai.js';
 import { user_avatar } from './personas.js';
-import { addEphemeralStoppingString, chat_styles, context_presets, flushEphemeralStoppingStrings, playMessageSound, power_user } from './power-user.js';
+import { addEphemeralStoppingString, chat_styles, flushEphemeralStoppingStrings, playMessageSound, power_user } from './power-user.js';
 import { decodeTextTokens, getAvailableTokenizers, getFriendlyTokenizerName, getTextTokens, getTokenCountAsync, selectTokenizer } from './tokenizers.js';
 import { debounce, delay, findChar, getCharIndex, isFalseBoolean, isTrueBoolean, onlyUnique, regexFromString, showFontAwesomePicker, stringToRange, trimToEndSentence, trimToStartSentence, waitUntilCondition } from './utils.js';
 import { registerVariableCommands, resolveVariable } from './variables.js';
@@ -92,7 +92,6 @@ import { accountStorage } from './util/AccountStorage.js';
 import { SlashCommandDebugController } from './slash-commands/SlashCommandDebugController.js';
 import { SlashCommandScope } from './slash-commands/SlashCommandScope.js';
 import { t } from './i18n.js';
-import { instruct_presets, selectContextPreset, selectInstructPreset } from './instruct-mode.js';
 import { debounce_timeout, SWIPE_DIRECTION, SWIPE_SOURCE } from './constants.js';
 export {
     executeSlashCommands, executeSlashCommandsWithOptions, getSlashCommandsHelp, registerSlashCommand,
@@ -266,16 +265,6 @@ function setupConnectAPIMap() {
 export function initDefaultSlashCommands() {
     eventSource.on(event_types.CHAT_CHANGED, processChatSlashCommands);
     setupConnectAPIMap();
-
-    async function enableInstructCallback() {
-        $('#instruct_enabled').prop('checked', true).trigger('input').trigger('change');
-        return '';
-    }
-
-    async function disableInstructCallback() {
-        $('#instruct_enabled').prop('checked', false).trigger('input').trigger('change');
-        return '';
-    }
 
     SlashCommandParser.addCommandObject(SlashCommand.fromProps({
         name: 'api',
@@ -522,137 +511,6 @@ export function initDefaultSlashCommands() {
             return '';
         },
         helpString: t`Forces a save of the current chat and settings`,
-    }));
-    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
-        name: 'instruct',
-        callback: async function (args, name) {
-            if (!name) {
-                return power_user.instruct.enabled || isTrueBoolean(args?.forceGet?.toString()) ? power_user.instruct.preset : '';
-            }
-
-            const quiet = isTrueBoolean(args?.quiet?.toString());
-            const instructNames = instruct_presets.map(preset => preset.name);
-            const fuse = new Fuse(instructNames);
-            const result = fuse.search(name?.toString() ?? '');
-
-            if (result.length === 0) {
-                !quiet && toastr.warning(t`Instruct template '${name}' not found`);
-                return '';
-            }
-
-            const foundName = result[0].item;
-            selectInstructPreset(foundName, { quiet: quiet });
-            return foundName;
-        },
-        returns: t`current template`,
-        namedArgumentList: [
-            SlashCommandNamedArgument.fromProps({
-                name: 'quiet',
-                description: t`Suppress the toast message on template change`,
-                typeList: [ARGUMENT_TYPE.BOOLEAN],
-                defaultValue: 'false',
-                enumList: commonEnumProviders.boolean('trueFalse')(),
-            }),
-            SlashCommandNamedArgument.fromProps({
-                name: 'forceGet',
-                description: t`Force getting a name even if instruct mode is disabled`,
-                typeList: [ARGUMENT_TYPE.BOOLEAN],
-                defaultValue: 'false',
-                enumList: commonEnumProviders.boolean('trueFalse')(),
-            }),
-        ],
-        unnamedArgumentList: [
-            SlashCommandArgument.fromProps({
-                description: t`instruct template name`,
-                typeList: [ARGUMENT_TYPE.STRING],
-                enumProvider: () => instruct_presets.map(preset => new SlashCommandEnumValue(preset.name, null, enumTypes.enum, enumIcons.preset)),
-            }),
-        ],
-        helpString: `
-            <div>
-                ${t`Selects instruct mode template by name. Enables instruct mode if not already enabled.`}
-                ${t`Gets the current instruct template if no name is provided and instruct mode is enabled or <code>forceGet=true</code> is passed.`}
-            </div>
-            <div>
-                <strong>${t`Example:`}</strong>
-                <ul>
-                    <li>
-                        <pre><code class="language-stscript">/instruct creative</code></pre>
-                    </li>
-                </ul>
-            </div>
-        `,
-    }));
-    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
-        name: 'instruct-on',
-        callback: enableInstructCallback,
-        helpString: t`Enables instruct mode.`,
-    }));
-    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
-        name: 'instruct-off',
-        callback: disableInstructCallback,
-        helpString: t`Disables instruct mode`,
-    }));
-    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
-        name: 'instruct-state',
-        aliases: ['instruct-toggle'],
-        helpString: t`Gets the current instruct mode state. If an argument is provided, it will set the instruct mode state.`,
-        unnamedArgumentList: [
-            SlashCommandArgument.fromProps({
-                description: t`instruct mode state`,
-                typeList: [ARGUMENT_TYPE.BOOLEAN],
-                enumList: commonEnumProviders.boolean('trueFalse')(),
-            }),
-        ],
-        callback: async (_args, state) => {
-            if (!state || typeof state !== 'string') {
-                return String(power_user.instruct.enabled);
-            }
-
-            const newState = isTrueBoolean(state);
-            newState ? enableInstructCallback() : disableInstructCallback();
-            return String(power_user.instruct.enabled);
-        },
-    }));
-    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
-        name: 'context',
-        callback: async function (args, name) {
-            if (!name) {
-                return power_user.context.preset;
-            }
-
-            const quiet = isTrueBoolean(args?.quiet?.toString());
-            const contextNames = context_presets.map(preset => preset.name);
-            const fuse = new Fuse(contextNames);
-            const result = fuse.search(name?.toString() ?? '');
-
-            if (result.length === 0) {
-                !quiet && toastr.warning(t`Context template '${name}' not found`);
-                return '';
-            }
-
-            const foundName = result[0].item;
-            selectContextPreset(foundName, { quiet: quiet });
-            return foundName;
-        },
-        returns: t`template name`,
-        namedArgumentList: [
-            SlashCommandNamedArgument.fromProps({
-                name: 'quiet',
-                description: t`Suppress the toast message on template change`,
-                typeList: [ARGUMENT_TYPE.BOOLEAN],
-                defaultValue: 'false',
-                enumList: commonEnumProviders.boolean('trueFalse')(),
-            }),
-        ],
-        unnamedArgumentList: [
-            SlashCommandArgument.fromProps({
-                description: t`context template name`,
-                typeList: [ARGUMENT_TYPE.STRING],
-                enumProvider: () => context_presets.map(preset => new SlashCommandEnumValue(preset.name, null, enumTypes.enum, enumIcons.preset)),
-            }),
-        ],
-        helpString: t`Selects context template by name. Gets the current template if no name is provided`,
     }));
     SlashCommandParser.addCommandObject(SlashCommand.fromProps({
         name: 'chat-manager',
@@ -1985,7 +1843,7 @@ export function initDefaultSlashCommands() {
             ),
             SlashCommandNamedArgument.fromProps({
                 name: 'name',
-                description: t`in-prompt character name for instruct mode (or unique character identifier (avatar key), which will be used as name)`,
+                description: t`unique character identifier (avatar key), which will be used as name`,
                 typeList: [ARGUMENT_TYPE.STRING],
                 defaultValue: 'System',
                 enumProvider: () => [...commonEnumProviders.characters('character')(), new SlashCommandEnumValue('System', null, enumTypes.enum, enumIcons.assistant)],
@@ -2010,7 +1868,7 @@ export function initDefaultSlashCommands() {
         ],
         helpString: `
         <div>
-            ${t`Generates text using the provided prompt and passes it to the next command through the pipe, optionally locking user input while generating and allowing to configure the in-prompt name for instruct mode (default = "System").`}
+            ${t`Generates text using the provided prompt and passes it to the next command through the pipe, optionally locking user input while generating and allowing to configure the in-prompt name (default = "System").`}
         </div>
         <div>
             ${t`"as" argument controls the role of the output prompt: system (default) or char. If "length" argument is provided as a number in tokens, allows to temporarily override an API response length.`}
@@ -2026,7 +1884,7 @@ export function initDefaultSlashCommands() {
                 'lock', t`lock user input during generation`, [ARGUMENT_TYPE.BOOLEAN], false, false, 'off', commonEnumProviders.boolean('onOff')(),
             ),
             new SlashCommandNamedArgument(
-                'instruct', t`use instruct mode`, [ARGUMENT_TYPE.BOOLEAN], false, false, 'on', commonEnumProviders.boolean('onOff')(),
+                'instruct', t`deprecated no-op (instruct mode retired)`, [ARGUMENT_TYPE.BOOLEAN], false, false, 'on', commonEnumProviders.boolean('onOff')(),
             ),
             new SlashCommandNamedArgument(
                 'stop', t`one-time custom stop strings`, [ARGUMENT_TYPE.LIST], false, false, '[]',
@@ -2062,9 +1920,6 @@ export function initDefaultSlashCommands() {
         helpString: `
         <div>
             ${t`Generates text using the provided prompt and passes it to the next command through the pipe, optionally locking user input while generating. Does not include chat history or character card.`}
-        </div>
-        <div>
-            ${t`Use instruct=off to skip instruct formatting, e.g. <pre><code>/genraw instruct=off Why is the sky blue?</code></pre>`}
         </div>
         <div>
             ${t`Use stop=... with a JSON-serialized array to add one-time custom stop strings, e.g. <pre><code>/genraw stop=["\\n"] Say hi</code></pre>`}

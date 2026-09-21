@@ -22,25 +22,16 @@ describe('small configuration drawers React surface (Wave A)', () => {
     ];
 
     const advancedFormatting = {
-        name: 'Advanced Formatting (instruct/context/sysprompt)',
+        name: 'Advanced Formatting (sysprompt/reasoning)',
         shellId: 'AdvancedFormatting',
         component: 'app/components/panels/AdvancedFormattingPanel.tsx',
-        adapter: 'public/scripts/instruct-mode.js',
+        adapter: 'public/scripts/power-user.js',
         mountFn: 'mountAdvancedFormattingPanel',
         ids: [
-            'context_story_string',
-            'context_story_string_position',
-            'context_story_string_depth',
-            'context_example_separator',
-            'context_chat_start',
-            'instruct_macro',
-            'instruct_activation_regex',
-            'instruct_input_sequence',
-            'instruct_output_sequence',
-            'instruct_system_sequence',
-            'instruct_stop_sequence',
-            'instruct_user_alignment_message',
             'sysprompt_content',
+            'sysprompt_post_history',
+            'custom_stopping_strings',
+            'reasoning_prefix',
         ],
     };
 

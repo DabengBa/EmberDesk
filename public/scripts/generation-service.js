@@ -101,10 +101,6 @@ const getTokenCountAsync = (...args) => shell().getTokenCountAsync(...args);
 const hasPendingFileAttachment = (...args) => shell().hasPendingFileAttachment(...args);
 const sendSystemMessage = (...args) => shell().sendSystemMessage(...args);
 const collapseNewlines = (...args) => shell().collapseNewlines(...args);
-const formatInstructModeChat = (...args) => shell().formatInstructModeChat(...args);
-const formatInstructModeExamples = (...args) => shell().formatInstructModeExamples(...args);
-const formatInstructModePrompt = (...args) => shell().formatInstructModePrompt(...args);
-const formatInstructModeStoryString = (...args) => shell().formatInstructModeStoryString(...args);
 const generatedTextFiltered = (...args) => shell().generatedTextFiltered(...args);
 const playMessageSound = (...args) => shell().playMessageSound(...args);
 const prepareOpenAIMessages = (...args) => shell().prepareOpenAIMessages(...args);
@@ -589,8 +585,6 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
         state.abortController = new AbortController();
     }
 
-    // OpenAI doesn't need instruct mode. Use OAI main prompt instead.
-    const isInstruct = state.power_user.instruct.enabled && state.main_api !== 'openai';
     const isImpersonate = type == 'impersonate';
 
     if (!(dryRun || depth || type == 'regenerate' || type == 'swipe' || type == 'quiet')) {
@@ -812,7 +806,7 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
         force_name2 = false;
     }
 
-    let mesExamplesArray = parseMesExamples(mesExamples, isInstruct);
+    let mesExamplesArray = parseMesExamples(mesExamples);
 
     // Add WI to prompt (and also inject WI to AN value via hijack)
     // Make quiet prompt available for WIAN
@@ -840,7 +834,7 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
         }
 
         const formattedExample = baseChatReplace(exampleMessage);
-        const cleanedExample = parseMesExamples(formattedExample, isInstruct);
+        const cleanedExample = parseMesExamples(formattedExample);
 
         // Insert depending on before or after position
         if (example.position === wi_anchor_position.before) {
@@ -852,10 +846,6 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
 
     // At this point, the raw message examples can be created
     const mesExamplesRawArray = [...mesExamplesArray];
-
-    if (mesExamplesArray && isInstruct) {
-        mesExamplesArray = formatInstructModeExamples(mesExamplesArray, state.name1, state.name2);
-    }
 
     if (skipWIAN !== true) {
         console.log('skipWIAN not active, adding WIAN');
@@ -885,7 +875,6 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
             system = state.power_user.prefer_character_prompt && system
                 ? substituteParams(system, { original: state.power_user.sysprompt.content ?? '' })
                 : baseChatReplace(state.power_user.sysprompt.content);
-            system = isInstruct ? substituteParams(system, { original: state.power_user.sysprompt.content ?? '' }) : system;
         } else {
             // Nullify if it's not enabled
             system = '';
@@ -916,19 +905,9 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
 
     // Render the story string and combine with injections
     const storyString = renderStoryString(storyStringParams);
-    let combinedStoryString = isInstruct ? formatInstructModeStoryString(storyString) : storyString;
+    let combinedStoryString = storyString;
 
-    // Inject the story string as in-chat prompt (if needed)
-    const applyStoryStringInject = state.main_api !== 'openai' && state.power_user.context.story_string_position === state.extension_prompt_types.IN_CHAT;
-    if (applyStoryStringInject) {
-        const depth = state.power_user.context.story_string_depth ?? 1;
-        const role = state.power_user.context.story_string_role ?? state.extension_prompt_roles.SYSTEM;
-        setExtensionPrompt(inject_ids.STORY_STRING, combinedStoryString, state.extension_prompt_types.IN_CHAT, depth, false, role);
-        // Remove to prevent duplication
-        combinedStoryString = '';
-    } else {
-        setExtensionPrompt(inject_ids.STORY_STRING, '', state.extension_prompt_types.IN_CHAT, 0);
-    }
+    setExtensionPrompt(inject_ids.STORY_STRING, '', state.extension_prompt_types.IN_CHAT, 0);
 
     // Story string rendered, safe to remove
     if (state.power_user.strip_examples) {
@@ -963,8 +942,6 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
     let chat2 = [];
     let continue_mag = '';
     let userMessageIndices = [];
-    const lastUserMessageIndex = coreChat.findLastIndex(x => x.is_user);
-
     for (let i = coreChat.length - 1, j = 0; i >= 0; i--, j++) {
         if (state.main_api == 'openai') {
             chat2[i] = coreChat[j].mes;
@@ -975,34 +952,11 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
             continue;
         }
 
-        chat2[i] = formatMessageHistoryItem(coreChat[j], isInstruct, false);
-
-        if (j === 0 && isInstruct) {
-            // Reformat with the first output sequence (if any)
-            chat2[i] = formatMessageHistoryItem(coreChat[j], isInstruct, state.force_output_sequence.FIRST);
-        }
-
-        if (lastUserMessageIndex >= 0 && j === lastUserMessageIndex && isInstruct && !isImpersonate) {
-            // Reformat with the last input sequence (if any)
-            chat2[i] = formatMessageHistoryItem(coreChat[j], isInstruct, state.force_output_sequence.LAST);
-        }
+        chat2[i] = formatMessageHistoryItem(coreChat[j]);
 
         // Do not suffix the message for continuation
         if (i === 0 && isContinue) {
-            // Pick something that's very unlikely to be in a message
-            const FORMAT_TOKEN = '\u0000\ufffc\u0000\ufffd';
-
-            if (isInstruct) {
-                const originalMessage = String(coreChat[j].mes ?? '');
-                coreChat[j].mes = originalMessage.replaceAll(FORMAT_TOKEN, '') + FORMAT_TOKEN;
-                // Reformat with the last output sequence (if any)
-                chat2[i] = formatMessageHistoryItem(coreChat[j], isInstruct, state.force_output_sequence.LAST);
-                coreChat[j].mes = originalMessage;
-            }
-
-            chat2[i] = chat2[i].includes(FORMAT_TOKEN)
-                ? chat2[i].slice(0, chat2[i].lastIndexOf(FORMAT_TOKEN))
-                : chat2[i].slice(0, chat2[i].lastIndexOf(coreChat[j].mes) + coreChat[j].mes.length);
+            chat2[i] = chat2[i].slice(0, chat2[i].lastIndexOf(coreChat[j].mes) + coreChat[j].mes.length);
             continue_mag = coreChat[j].mes;
         }
 
@@ -1011,17 +965,7 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
         }
     }
 
-    let addUserAlignment = isInstruct && state.power_user.instruct.user_alignment_message;
-    let userAlignmentMessage = '';
-
-    if (addUserAlignment) {
-        const alignmentMessage = {
-            name: state.name1,
-            mes: substituteParams(state.power_user.instruct.user_alignment_message),
-            is_user: true,
-        };
-        userAlignmentMessage = formatMessageHistoryItem(alignmentMessage, isInstruct, state.force_output_sequence.FIRST);
-    }
+    const userAlignmentMessage = '';
 
     let oaiMessages = [];
     let oaiMessageExamples = [];
@@ -1122,15 +1066,6 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
         }
     }
 
-    // Add user alignment message if last message is not a user message
-    const stoppedAtUser = userMessageIndices.includes(lastAddedIndex);
-    if (addUserAlignment && !stoppedAtUser) {
-        tokenCount += await getTokenCountAsync(userAlignmentMessage.replace(/\r/gm, ''));
-        chatString = userAlignmentMessage + chatString;
-        arrMes.push(userAlignmentMessage);
-        injectedIndices.push(arrMes.length - 1);
-    }
-
     // Unsparse the array. Adjust injected indices
     const newArrMes = [];
     const newInjectedIndices = [];
@@ -1198,11 +1133,8 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
 
             // Cohee: This removes a newline from the end of the last message in the context
             // Last prompt line will add a newline if it's not a continuation
-            // In instruct mode it only removes it if wrap is enabled and it's not a quiet generation
             if (i === arrMes.length - 1 && type !== 'continue') {
-                if (!isInstruct || (state.power_user.instruct.wrap && type !== 'quiet')) {
-                    item = item.replace(/\n?$/, '');
-                }
+                item = item.replace(/\n?$/, '');
             }
 
             mesSend[mesSend.length] = { message: item, extensionPrompts: [] };
@@ -1229,21 +1161,8 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
 
         // Add quiet generation prompt at depth 0
         if (quiet_prompt && quiet_prompt.length) {
-            // here name1 is forced for all quiet prompts..why?
-            const name = state.name1;
-            //checks if we are in instruct, if so, formats the chat as such, otherwise just adds the quiet prompt
-            const quietAppend = isInstruct ? formatInstructModeChat(name, quiet_prompt, false, true, '', state.name1, state.name2, false) : `\n${quiet_prompt}`;
-
-            //This begins to fix quietPrompts (particularly /sysgen) for instruct
-            //previously instruct input sequence was being appended to the last chat message w/o '\n'
-            //and no output sequence was added after the input's content.
-            //TODO: respect output_sequence vs last_output_sequence settings
-            //TODO: decide how to prompt this to clarify who is talking 'Narrator', 'System', etc.
-            if (isInstruct) {
-                lastMesString += quietAppend; // + power_user.instruct.output_sequence + '\n';
-            } else {
-                lastMesString += quietAppend;
-            }
+            const quietAppend = `\n${quiet_prompt}`;
+            lastMesString += quietAppend;
 
 
             // Ross: bailing out early prevents quiet prompts from respecting other instruct prompt toggles
@@ -1252,21 +1171,14 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
             // need a detection for what the quiet prompt is being asked for...
 
             // Bail out early?
-            if (!isInstruct && !quietToLoud) {
+            if (!quietToLoud) {
                 return lastMesString;
             }
         }
 
 
-        // Get instruct mode line
-        if (isInstruct && !isContinue) {
-            const name = (quiet_prompt && !quietToLoud && !isImpersonate) ? (quietName ?? 'System') : (isImpersonate ? state.name1 : state.name2);
-            const isQuiet = quiet_prompt && type == 'quiet';
-            lastMesString += formatInstructModePrompt(name, isImpersonate, promptBias, state.name1, state.name2, isQuiet, quietToLoud);
-        }
-
-        // Get non-instruct impersonation line
-        if (!isInstruct && isImpersonate && !isContinue) {
+        // Get impersonation line
+        if (isImpersonate && !isContinue) {
             const name = state.name1;
             if (!lastMesString.endsWith('\n')) {
                 lastMesString += '\n';
@@ -1277,7 +1189,7 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
         // Add character's name
         // Force name append on continue (if not continuing on user message or first message)
         const isContinuingOnFirstMessage = state.chat.length === 1 && isContinue;
-        if (!isInstruct && force_name2 && !isContinuingOnFirstMessage) {
+        if (force_name2 && !isContinuingOnFirstMessage) {
             if (!lastMesString.endsWith('\n')) {
                 lastMesString += '\n';
             }
@@ -1339,7 +1251,7 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
 
         // Add prompt bias after everything else
         // Always run with continue
-        if (!isInstruct && !isImpersonate) {
+        if (!isImpersonate) {
             if (promptBias.trim().length !== 0) {
                 finalMesSend[finalMesSend.length - 1].message +=
                     /\s/.test(finalMesSend[finalMesSend.length - 1].message.slice(-1))

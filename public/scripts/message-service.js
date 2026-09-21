@@ -1166,33 +1166,6 @@ export function cleanUpMessage({ getMessage, isImpersonate, isContinue, displayI
     if (getMessage.indexOf('<|endoftext|>') != -1) {
         getMessage = getMessage.substring(0, getMessage.indexOf('<|endoftext|>'));
     }
-    const isInstruct = state.power_user.instruct.enabled && state.main_api !== 'openai';
-    const isNotEmpty = (str) => str && str.trim() !== '';
-    if (isInstruct && state.power_user.instruct.stop_sequence) {
-        if (getMessage.indexOf(state.power_user.instruct.stop_sequence) != -1) {
-            getMessage = getMessage.substring(0, getMessage.indexOf(state.power_user.instruct.stop_sequence));
-        }
-    }
-    // Hana: Only use the first sequence (should be <|model|>)
-    // of the prompt before <|user|> (as KoboldAI Lite does it).
-    if (isInstruct && isNotEmpty(state.power_user.instruct.input_sequence)) {
-        if (getMessage.indexOf(state.power_user.instruct.input_sequence) != -1) {
-            getMessage = getMessage.substring(0, getMessage.indexOf(state.power_user.instruct.input_sequence));
-        }
-    }
-
-    // Remove instruct sequences leaking to the output
-    if (isInstruct && state.power_user.instruct.sequences_as_stop_strings) {
-        const sequences = [
-            { value: state.power_user.instruct.input_sequence, apply: isImpersonate && isNotEmpty(state.power_user.instruct.input_sequence) },
-            { value: state.power_user.instruct.output_sequence, apply: !isImpersonate && isNotEmpty(state.power_user.instruct.output_sequence) },
-            { value: state.power_user.instruct.last_output_sequence, apply: !isImpersonate && isNotEmpty(state.power_user.instruct.last_output_sequence) },
-        ];
-        for (const seq of sequences.filter(s => s.apply)) {
-            seq.value.split('\n').filter(line => line.trim() !== '').forEach(line => { getMessage = getMessage.replaceAll(line, ''); });
-        }
-    }
-
     if (!state.power_user.allow_name2_display) {
         const name2Escaped = escapeRegex(state.name2);
         getMessage = getMessage.replace(new RegExp(`(^|\n)${name2Escaped}:\\s*`, 'g'), '$1');
