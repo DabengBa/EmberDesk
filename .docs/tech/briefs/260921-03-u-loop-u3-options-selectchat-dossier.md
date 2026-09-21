@@ -79,3 +79,5 @@ options 菜单开/关 + 各项可见性（`option_back_to_main` 仅分支会话�
 **U3 验收**：用户"可以,请继续"——菜单分组/危险项、弹层行渲染、搜索/空态/清除、分支显隐均过。
 
 **U5 语义文档**：契约面零变化（选择器/ID/事件/trigger 语义/API 全保），`.docs/db` 无需更新；本档案即台账。
+
+**提交**：`a6ea728b8` — `feat(ui): U-3 options menu + select-chat popup as React-owned surfaces`
