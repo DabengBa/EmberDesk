@@ -22,7 +22,7 @@ Authenticated users complete supported settings work on `/settings` instead of w
 2. **Tabs**: General, Providers, User Interface, Advanced.
 3. **General tab**: chat-completion defaults, sampling, reasoning, continue, inline media controls, prompt formats, assistant prefill, names behavior, and related oai_settings values.
 4. **Providers tab**: provider/model routing on the single OpenAI-compatible source, reverse proxy and custom body/headers, fallback provider, named connection-profile selection, and provider/fallback secrets. Returning to Workspace applies a newly selected profile through the existing Connection Manager workflow.
-5. **User Interface tab**: theme, layout density, colors, chat display, message visibility, and workspace interaction preferences previously edited in the user-settings drawer.
+5. **User Interface tab**: layout density, colors, chat display, message visibility, and workspace interaction preferences previously edited in the user-settings drawer.
 6. **Advanced tab**: system-prompt/reasoning templates, tokenizer, custom stopping strings, Start Reply With, auto-swipe/continue, streaming, and STscript controls previously edited under Advanced Formatting. Retired instruct-mode and context-template fields are absent; stored `power_user.instruct`/`power_user.context` keys remain inert historical data.
 7. **Diagnostics sidebar**: optional ownership ledger and payload summary for debugging.
 8. **Save bar**: submits a compatibility payload derived from the loaded document while rewriting only the React-bound fields the user changed; save stays disabled until the form is dirty.
@@ -71,7 +71,7 @@ clean, the full settings JSON document is authoritative in per-user
 the existing global storage flags or explicitly enable this settings slice; absent settings-slice
 values retain the global behavior.
 
-- **Get**: `/api/settings/get` may include `settings_revision` when serving from canonical SQLite. The `settings` field remains a JSON string. Directory-derived payload fields (presets, themes, world names, etc.) stay file/directory aggregates and are not part of the settings document.
+- **Get**: `/api/settings/get` may include `settings_revision` when serving from canonical SQLite. The `settings` field remains a JSON string. Directory-derived payload fields (presets, world names, etc.) stay file/directory aggregates and are not part of the settings document.
 - **Save**: `/api/settings/save` accepts protocol field `settings_revision` only (document fields named `revision` are ignored). Stale revisions return HTTP 409 with the current `settings_revision` (no full document body). React Settings sends the last-loaded revision, preserves the local draft on conflict, and requires an explicit reload before another save. Clients that still omit revision use the server current revision (compat LWW) until they adopt the field.
 - **Projection**: After a successful DB commit, the server projects `settings.json`. Projection failure keeps the DB revision, records `settings_projection_repairs`, and returns 500 with a repair key.
 - **Snapshots**: `/api/settings/make-snapshot` stores a canonical snapshot from the current revision and may also keep a file backup. Restore creates a **new** revision; the revision counter never rewinds. Open projection repairs block write rollback.

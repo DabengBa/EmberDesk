@@ -570,7 +570,6 @@ describe('canonical settings route integration', () => {
             oai_settings: { stream_openai: true },
         };
         writeSettingsFile(directories, filePayload);
-        fs.writeFileSync(path.join(directories.themes, 'Dark.json'), JSON.stringify({ name: 'Dark' }), 'utf8');
 
         const canonicalPayload = {
             firstRun: false,
@@ -588,7 +587,6 @@ describe('canonical settings route integration', () => {
         expect(response.statusCode).toBe(200);
         expect(JSON.parse(response.body.settings)).toEqual(canonicalPayload);
         expect(response.body.settings_revision).toBe(1);
-        expect(response.body.themes).toEqual([{ name: 'Dark' }]);
         // File still has the old payload; DB is authority for settings string.
         expect(JSON.parse(fs.readFileSync(path.join(directories.root, SETTINGS_FILE), 'utf8'))).toEqual(filePayload);
     });

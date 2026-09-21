@@ -146,7 +146,7 @@ describe('settings React route flag', () => {
         expect(routeSource).toContain('openaiModel: z.string(),');
         expect(routeSource).not.toContain('claudeModel');
         expect(routeSource).not.toContain('googleModel');
-        expect(routeSource).toContain('theme: z.string(),');
+        expect(routeSource).not.toContain('theme: z.string(),');
         expect(routeSource).toContain('systemPromptName: z.string(),');
         expect(routeSource).toContain('systemPromptContent: z.string(),');
         expect(routeSource).not.toContain('contextPreset');
@@ -398,7 +398,6 @@ describe('settings React route flag', () => {
                 bindPresetToConnection: true,
             },
             userInterface: {
-                theme: 'Solarized',
                 chatWidth: 72,
                 fontScale: 1.15,
                 customCss: '.chat { color: gold; }',
@@ -462,7 +461,7 @@ describe('settings React route flag', () => {
 
         expect(merged.untouched.keep).toBe(true);
         expect(merged.preset_settings).toBe('LegacyTextGenPreset');
-        expect(merged.power_user.theme).toBe('Solarized');
+        expect(merged.power_user.theme).toBe('Dark Lite');
         expect(merged.power_user.chat_width).toBe(72);
         expect(merged.power_user.font_scale).toBe(1.15);
         expect(merged.power_user.custom_stopping_strings).toBe('END');
@@ -731,7 +730,7 @@ describe('settings React route flag', () => {
         };
         const baseline = helperModule.buildSettingsFormDefaults(fixture);
         const edited = structuredClone(baseline);
-        edited.userInterface.theme = 'Sparse Theme';
+        edited.userInterface.chatWidth = 42;
         const saved = helperModule.buildSettingsSavePayload(fixture, edited, {
             baselineFormValues: baseline,
         });
@@ -739,7 +738,7 @@ describe('settings React route flag', () => {
         expect(saved).toEqual({
             untouched: { keep: true },
             power_user: {
-                theme: 'Sparse Theme',
+                chat_width: 42,
             },
         });
     });

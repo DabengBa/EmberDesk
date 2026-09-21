@@ -174,7 +174,6 @@ export const defaultSettingsFormValues = {
         connectionProfileId: '',
     },
     userInterface: {
-        theme: '',
         chatWidth: 50,
         fontScale: 1,
         customCss: '',
@@ -377,7 +376,6 @@ const fieldBindings = [
         },
     },
 
-    { tab: 'userInterface', formPath: 'userInterface.theme', settingsPath: 'power_user.theme' },
     { tab: 'userInterface', formPath: 'userInterface.chatWidth', settingsPath: 'power_user.chat_width' },
     { tab: 'userInterface', formPath: 'userInterface.fontScale', settingsPath: 'power_user.font_scale' },
     { tab: 'userInterface', formPath: 'userInterface.customCss', settingsPath: 'power_user.custom_css' },

@@ -225,7 +225,6 @@ import { evaluateMacros, getLastMessageId, initMacros } from './scripts/macros.j
 import { currentUser, setUserControls } from './scripts/user.js';
 import { POPUP_RESULT, POPUP_TYPE, Popup, callGenericPopup, fixToastrForDialogs } from './scripts/popup.js';
 import { renderTemplate, renderTemplateAsync } from './scripts/templates.js';
-import { initScrapers } from './scripts/scrapers.js';
 import { initCustomSelectedSamplers, validateDisabledSamplers } from './scripts/samplerSelect.js';
 import { DragAndDropHandler } from './scripts/dragdrop.js';
 import { INTERACTABLE_CONTROL_CLASS, initKeyboard } from './scripts/keyboard.js';
@@ -4536,7 +4535,6 @@ async function bootstrapWorkspace() {
         initReasoning();
         initWelcomeScreen();
     });
-    await measureStartupStage('initScrapers', () => initScrapers());
     await measureStartupStage('lateFeatureInit', () => Promise.resolve().then(() => {
         initCustomSelectedSamplers();
         initDataMaid();

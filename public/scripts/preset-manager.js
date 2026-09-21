@@ -572,7 +572,6 @@ class PresetManager {
             'assistant_impersonation',
             'use_sysprompt',
             'top_k_openai',
-            'enable_web_search',
             'request_images',
             'request_image_resolution',
             'request_image_aspect_ratio',

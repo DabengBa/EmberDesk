@@ -80,7 +80,7 @@ describe('built-in vector retirement', () => {
         expect(fs.existsSync(path.join(repoRoot, 'public', 'scripts', 'extensions', 'vectors'))).toBe(false);
         expect(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8')).not.toContain('"vectra"');
         expect(fs.readFileSync(path.join(repoRoot, 'pnpm-lock.yaml'), 'utf8')).not.toContain('vectra');
-        expect(fs.readFileSync(path.join(repoRoot, 'src', 'transformers.js'), 'utf8')).not.toContain('feature-extraction');
+        expect(fs.existsSync(path.join(repoRoot, 'src', 'transformers.js'))).toBe(false);
         expect(fs.readFileSync(path.join(repoRoot, 'src', 'config-init.js'), 'utf8')).not.toContain('extensions.models.embedding');
 
         const workspaceHtml = fs.readFileSync(path.join(repoRoot, 'public', 'index.html'), 'utf8');

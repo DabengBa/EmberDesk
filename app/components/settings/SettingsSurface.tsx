@@ -101,7 +101,6 @@ const settingsSchema = z.object({
         connectionProfileId: z.string(),
     }),
     userInterface: z.object({
-        theme: z.string(),
         chatWidth: z.number().min(20, 'Chat Width 不能小于 20').max(100, 'Chat Width 不能大于 100'),
         fontScale: z.number().min(0.5, 'Font Scale 不能小于 0.5').max(2, 'Font Scale 不能大于 2'),
         customCss: z.string(),
@@ -624,7 +623,6 @@ export function SettingsSurface({
         }
 
         return [
-            { label: 'Themes', value: Array.isArray(settingsData.themes) ? settingsData.themes.length : 0 },
             { label: 'OpenAI Presets', value: Array.isArray(settingsData.openai_setting_names) ? settingsData.openai_setting_names.length : 0 },
         ];
     }, [settingsData]);
@@ -1367,15 +1365,6 @@ export function SettingsSurface({
                                     title="Workspace Preferences"
                                     description="主题、布局、通知位置以及聊天显示密度。"
                                 >
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="userInterface.theme"
-                                        label="Theme"
-                                        description="当前 theme preset 名称。"
-                                        placeholder="Dark Lite"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
                                     <SettingField
                                         form={settingsForm}
                                         name="userInterface.chatWidth"

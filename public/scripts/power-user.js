@@ -28,14 +28,13 @@ import {
     settingsReady,
 } from '../script.js';
 import { eventSource, event_types } from './events.js';
-import { getRequestHeaders } from './request-context.js';
 import { favsToHotswap } from './RossAscends-mods.js';
 
 import { getTagsList, tag_import_setting, tag_map, tag_sort_mode, tags } from './tags.js';
 import { tokenizers } from './tokenizers.js';
 import { renderTemplateAsync } from './templates.js';
 
-import { countOccurrences, debounce, delay, download, getFileText, getSanitizedFilename, getStringHash, isOdd, isTrueBoolean, shuffle, sortMoments, stringToRange, timestampToMoment } from './utils.js';
+import { countOccurrences, debounce, delay, getStringHash, isOdd, isTrueBoolean, shuffle, sortMoments, stringToRange, timestampToMoment } from './utils.js';
 import { FILTER_TYPES } from './filters.js';
 import { PARSER_FLAG, SlashCommandParser } from './slash-commands/SlashCommandParser.js';
 import { SlashCommand } from './slash-commands/SlashCommand.js';
@@ -152,7 +151,6 @@ export const power_user = {
     custom_css: '',
 
     noShadows: false,
-    theme: 'Default (Dark) 1.7.1',
 
     gestures: true,
     auto_swipe: false,
@@ -316,7 +314,6 @@ export const power_user = {
     image_overswipe: IMAGE_OVERSWIPE.GENERATE,
 };
 
-let themes = [];
 /** @type {ContextSettings[]} */
 const storage_keys = {
     storyStringValidationCache: 'StoryStringValidationCache',
@@ -1000,231 +997,6 @@ function isMediaDisplayReloadNeeded() {
 }
 
 /**
- * Shows a toast notification prompting the user to reload the chat if media display settings have changed
- * and there are messages with media attachments that haven't been processed with the new display format.
- */
-function showMediaDisplayReloadPrompt() {
-    if (!isMediaDisplayReloadNeeded()) {
-        return;
-    }
-    toastr.info(
-        t`Reload the chat to apply the changes. Click here to reload.`,
-        t`Media Style changed`,
-        { onclick: () => void reloadCurrentChat() },
-    );
-}
-
-function applyTheme(name) {
-    const theme = themes.find(x => x.name == name);
-
-    if (!theme) {
-        return;
-    }
-
-    const themeProperties = [
-        { key: 'main_text_color', selector: '#main-text-color-picker', type: 'main' },
-        { key: 'italics_text_color', selector: '#italics-color-picker', type: 'italics' },
-        { key: 'underline_text_color', selector: '#underline-color-picker', type: 'underline' },
-        { key: 'quote_text_color', selector: '#quote-color-picker', type: 'quote' },
-        { key: 'blur_tint_color', selector: '#blur-tint-color-picker', type: 'blurTint' },
-        { key: 'chat_tint_color', selector: '#chat-tint-color-picker', type: 'chatTint' },
-        { key: 'user_mes_blur_tint_color', selector: '#user-mes-blur-tint-color-picker', type: 'userMesBlurTint' },
-        { key: 'bot_mes_blur_tint_color', selector: '#bot-mes-blur-tint-color-picker', type: 'botMesBlurTint' },
-        { key: 'shadow_color', selector: '#shadow-color-picker', type: 'shadow' },
-        { key: 'border_color', selector: '#border-color-picker', type: 'border' },
-        {
-            key: 'blur_strength',
-            action: () => {
-                applyBlurStrength();
-            },
-        },
-        {
-            key: 'custom_css',
-            action: () => {
-                applyCustomCSS();
-            },
-        },
-        {
-            key: 'shadow_width',
-            action: () => {
-                applyShadowWidth();
-            },
-        },
-        {
-            key: 'font_scale',
-            action: () => {
-                applyFontScale('forced');
-            },
-        },
-        {
-            key: 'fast_ui_mode',
-            action: () => {
-                switchUiMode();
-            },
-        },
-        {
-            key: 'chat_display',
-            action: () => {
-                applyChatDisplay();
-            },
-        },
-        {
-            key: 'toastr_position',
-            action: () => {
-                applyToastrPosition();
-            },
-        },
-        {
-            key: 'avatar_style',
-            action: () => {
-                applyAvatarStyle();
-            },
-        },
-        {
-            key: 'noShadows',
-            action: () => {
-                applyNoShadows();
-            },
-        },
-        {
-            key: 'chat_width',
-            action: () => {
-                // If chat width is not set, set it to 50
-                if (!power_user.chat_width) {
-                    power_user.chat_width = 50;
-                }
-                applyChatWidth('forced');
-            },
-        },
-        {
-            key: 'timer_enabled',
-            action: () => {
-                switchTimer();
-            },
-        },
-        {
-            key: 'timestamps_enabled',
-            action: () => {
-                switchTimestamps();
-            },
-        },
-        {
-            key: 'timestamp_model_icon',
-            action: () => {
-                switchIcons();
-            },
-        },
-        {
-            key: 'message_token_count_enabled',
-            action: () => {
-                switchTokenCount();
-            },
-        },
-        {
-            key: 'mesIDDisplay_enabled',
-            action: () => {
-                switchMesIDDisplay();
-            },
-        },
-        {
-            key: 'hideChatAvatars_enabled',
-            action: () => {
-                switchHideChatAvatars();
-            },
-        },
-        {
-            key: 'expand_message_actions',
-            action: () => {
-                switchMessageActions();
-            },
-        },
-        {
-            key: 'enableZenSliders',
-            action: () => {
-                switchMessageActions();
-            },
-        },
-        {
-            key: 'enableLabMode',
-            action: () => {
-                switchMessageActions();
-            },
-        },
-        {
-            key: 'hotswap_enabled',
-            action: () => {
-                switchHotswap();
-            },
-        },
-        {
-            key: 'bogus_folders',
-            action: () => {
-                $('#bogus_folders').prop('checked', power_user.bogus_folders);
-                printCharactersDebounced();
-            },
-        },
-        {
-            key: 'zoomed_avatar_magnification',
-            action: () => {
-                $('#zoomed_avatar_magnification').prop('checked', power_user.zoomed_avatar_magnification);
-                printCharactersDebounced();
-            },
-        },
-        {
-            key: 'reduced_motion',
-            action: () => {
-                $('#reduced_motion').prop('checked', power_user.reduced_motion);
-                switchReducedMotion();
-            },
-        },
-        {
-            key: 'compact_input_area',
-            action: () => {
-                $('#compact_input_area').prop('checked', power_user.compact_input_area);
-                switchCompactInputArea();
-            },
-        },
-        {
-            key: 'show_swipe_num_all_messages',
-            action: () => {
-                $('#show_swipe_num_all_messages').prop('checked', power_user.show_swipe_num_all_messages);
-                switchSwipeNumAllMessages();
-            },
-        },
-        {
-            key: 'click_to_edit',
-            action: () => {
-                $('#click_to_edit').prop('checked', power_user.click_to_edit);
-            },
-        },
-        {
-            key: 'media_display',
-            action: (oldValue, newValue) => {
-                $('#media_display').val(power_user.media_display);
-                if (oldValue !== newValue) {
-                    showMediaDisplayReloadPrompt();
-                }
-            },
-        },
-    ];
-
-    for (const { key, selector, type, action } of themeProperties) {
-        if (theme[key] !== undefined) {
-            const oldValue = power_user[key];
-            const newValue = theme[key];
-            power_user[key] = newValue;
-            if (selector) $(selector).attr('color', newValue);
-            if (type) applyThemeColor(type);
-            if (action) action(oldValue, newValue);
-        } else {
-            console.debug(`Empty theme key: ${key}`);
-        }
-    }
-
-    console.log('theme applied: ' + name);
-}
-
-/**
  * Register a function to be executed when the debug menu is opened.
  * @param {string} functionId Unique ID for the function.
  * @param {string} name Name of the function.
@@ -1368,9 +1140,6 @@ export async function loadPowerUserSettings(settings, data) {
         delete power_user.stscript.autocomplete_style;
     }
 
-    if (data.themes !== undefined) {
-        themes = data.themes;
-    }
 
     if (typeof power_user.chat_display !== 'number') {
         power_user.chat_display = chat_styles.DEFAULT;
@@ -1524,14 +1293,6 @@ export async function loadPowerUserSettings(settings, data) {
     $('#click_to_edit').prop('checked', power_user.click_to_edit);
     $('#media_display').val(power_user.media_display);
     $('#image_overswipe').val(power_user.image_overswipe);
-
-    for (const theme of themes) {
-        const option = document.createElement('option');
-        option.value = theme.name;
-        option.innerText = theme.name;
-        option.selected = theme.name == power_user.theme;
-        $('#themes').append(option);
-    }
 
     $(`#character_sort_order option[data-order="${power_user.sort_order}"][data-field="${power_user.sort_field}"]`).prop('selected', true);
     switchReducedMotion();
@@ -1874,219 +1635,6 @@ export function sortEntitiesList(entities, forceSearch, filterHelper = null) {
 }
 
 /**
- * Updates the current UI theme file.
- */
-async function updateTheme() {
-    await saveTheme(power_user.theme);
-    toastr.success('Theme saved.');
-}
-
-async function deleteTheme() {
-    const themeName = power_user.theme;
-
-    if (!themeName) {
-        toastr.info('No theme selected.');
-        return;
-    }
-
-    const template = $(await renderTemplateAsync('themeDelete', { themeName }));
-    const confirm = await callGenericPopup(template, POPUP_TYPE.CONFIRM);
-
-    if (!confirm) {
-        return;
-    }
-
-    const response = await fetch('/api/themes/delete', {
-        method: 'POST',
-        headers: getRequestHeaders(),
-        body: JSON.stringify({ name: themeName }),
-    });
-
-    if (!response.ok) {
-        toastr.error('Failed to delete theme. Check the console for more information.');
-        return;
-    }
-
-    const themeIndex = themes.findIndex(x => x.name == themeName);
-
-    if (themeIndex !== -1) {
-        themes.splice(themeIndex, 1);
-        $(`#themes option[value="${themeName}"]`).remove();
-        power_user.theme = themes[0]?.name;
-        saveSettingsDebounced();
-        if (power_user.theme) {
-            applyTheme(power_user.theme);
-        }
-        toastr.success('Theme deleted.');
-    }
-}
-
-/**
- * Exports the current theme to a file.
- */
-async function exportTheme() {
-    const themeFile = await saveTheme(power_user.theme);
-    const fileName = `${themeFile.name}.json`;
-    download(JSON.stringify(themeFile, null, 4), fileName, 'application/json');
-}
-
-/**
- * Imports a theme from a file.
- * @param {File} file File to import.
- * @returns {Promise<void>} A promise that resolves when the theme is imported.
- */
-async function importTheme(file) {
-    if (!file) {
-        return;
-    }
-
-    const fileText = await getFileText(file);
-    const parsed = JSON.parse(fileText);
-
-    if (!parsed.name) {
-        throw new Error('Missing name');
-    }
-
-    if (themes.some(t => t.name === parsed.name)) {
-        throw new Error('Theme with that name already exists');
-    }
-
-    if (typeof parsed.custom_css === 'string' && parsed.custom_css.includes('@import')) {
-        const template = $(await renderTemplateAsync('themeImportWarning'));
-        const confirm = await callGenericPopup(template, POPUP_TYPE.CONFIRM);
-        if (!confirm) {
-            throw new Error('Theme contains @import lines');
-        }
-    }
-
-    themes.push(parsed);
-    await saveTheme(parsed.name, getNewTheme(parsed));
-    const option = document.createElement('option');
-    option.selected = false;
-    option.value = parsed.name;
-    option.innerText = parsed.name;
-    $('#themes').append(option);
-    saveSettingsDebounced();
-    toastr.success(parsed.name, 'Theme imported');
-}
-
-/**
- * Saves the current theme to the server.
- * @param {string|undefined} name Theme name. If undefined, a popup will be shown to enter a name.
- * @param {object|undefined} theme Theme object. If undefined, the current theme will be saved.
- * @returns {Promise<object>} A promise that resolves when the theme is saved.
- */
-async function saveTheme(name = undefined, theme = undefined) {
-    if (typeof name !== 'string') {
-        const newName = await callGenericPopup('Enter a theme preset name:', POPUP_TYPE.INPUT, power_user.theme);
-
-        if (!newName) {
-            return;
-        }
-
-        name = await getSanitizedFilename(String(newName));
-    }
-
-    if (typeof theme !== 'object') {
-        theme = getThemeObject(name);
-    }
-
-    const response = await fetch('/api/themes/save', {
-        method: 'POST',
-        headers: getRequestHeaders(),
-        body: JSON.stringify(theme),
-    });
-
-    if (!response.ok) {
-        toastr.error('Check the server connection and reload the page to prevent data loss.', 'Theme could not be saved');
-        console.error('Theme could not be saved', response);
-        throw new Error('Theme could not be saved');
-    }
-
-    const themeIndex = themes.findIndex(x => x.name == name);
-
-    if (themeIndex == -1) {
-        themes.push(theme);
-        const option = document.createElement('option');
-        option.selected = true;
-        option.value = name;
-        option.innerText = name;
-        $('#themes').append(option);
-    } else {
-        themes[themeIndex] = theme;
-        $(`#themes option[value="${name}"]`).prop('selected', true);
-    }
-
-    power_user.theme = name;
-    saveSettingsDebounced();
-
-    return theme;
-}
-
-/**
- * Gets a snapshot of the current theme settings.
- * @param {string} name Name of the theme
- */
-export function getThemeObject(name) {
-    return {
-        name,
-        blur_strength: power_user.blur_strength,
-        main_text_color: power_user.main_text_color,
-        italics_text_color: power_user.italics_text_color,
-        underline_text_color: power_user.underline_text_color,
-        quote_text_color: power_user.quote_text_color,
-        blur_tint_color: power_user.blur_tint_color,
-        chat_tint_color: power_user.chat_tint_color,
-        user_mes_blur_tint_color: power_user.user_mes_blur_tint_color,
-        bot_mes_blur_tint_color: power_user.bot_mes_blur_tint_color,
-        shadow_color: power_user.shadow_color,
-        shadow_width: power_user.shadow_width,
-        border_color: power_user.border_color,
-        font_scale: power_user.font_scale,
-        fast_ui_mode: power_user.fast_ui_mode,
-        avatar_style: power_user.avatar_style,
-        chat_display: power_user.chat_display,
-        toastr_position: power_user.toastr_position,
-        noShadows: power_user.noShadows,
-        chat_width: power_user.chat_width,
-        timer_enabled: power_user.timer_enabled,
-        timestamps_enabled: power_user.timestamps_enabled,
-        timestamp_model_icon: power_user.timestamp_model_icon,
-
-        mesIDDisplay_enabled: power_user.mesIDDisplay_enabled,
-        hideChatAvatars_enabled: power_user.hideChatAvatars_enabled,
-        message_token_count_enabled: power_user.message_token_count_enabled,
-        expand_message_actions: power_user.expand_message_actions,
-        enableZenSliders: power_user.enableZenSliders,
-        enableLabMode: power_user.enableLabMode,
-        hotswap_enabled: power_user.hotswap_enabled,
-        custom_css: power_user.custom_css,
-        bogus_folders: power_user.bogus_folders,
-        zoomed_avatar_magnification: power_user.zoomed_avatar_magnification,
-        reduced_motion: power_user.reduced_motion,
-        compact_input_area: power_user.compact_input_area,
-        show_swipe_num_all_messages: power_user.show_swipe_num_all_messages,
-        click_to_edit: power_user.click_to_edit,
-        media_display: power_user.media_display,
-    };
-}
-
-/**
- * Applies imported theme properties to the theme object.
- * @param {object} parsed Parsed object to get the theme from.
- * @returns {Theme} Theme assigned to the parsed object.
- */
-function getNewTheme(parsed) {
-    const theme = getThemeObject(parsed.name);
-    for (const key in parsed) {
-        if (Object.hasOwn(theme, key)) {
-            theme[key] = parsed[key];
-        }
-    }
-    return theme;
-}
-
-/**
  * Resets the movable styles of the given element to their unset values.
  * @param {string} id Element ID
  */
@@ -2255,36 +1803,6 @@ async function doDelMode(_, text) {
 
     const range = `${chat.length - count}-${chat.length - 1}`;
     return doMesCut(_, range);
-}
-
-async function setThemeCallback(_, themeName) {
-    if (!themeName) {
-        // allow reporting of the theme name if called without args
-        // for use in ST Scripts via pipe
-        return power_user.theme;
-    }
-
-    // @ts-ignore
-    const fuse = new Fuse(themes, {
-        keys: [
-            { name: 'name', weight: 1 },
-        ],
-    });
-
-    const results = fuse.search(themeName);
-    console.debug('Theme fuzzy search results for ' + themeName, results);
-    const theme = results[0]?.item;
-
-    if (!theme) {
-        toastr.warning(`Could not find theme with name: ${themeName}`);
-        return;
-    }
-
-    power_user.theme = theme.name;
-    applyTheme(theme.name);
-    $('#themes').val(theme.name);
-    saveSettingsDebounced();
-    return '';
 }
 
 const EPHEMERAL_STOPPING_STRINGS = [];
@@ -2668,17 +2186,6 @@ jQuery(() => {
         applyThemeColor('border');
         saveSettingsDebounced();
     });
-
-    $('#themes').on('change', function () {
-        const themeSelected = String($(this).find(':selected').val());
-        power_user.theme = themeSelected;
-        applyTheme(themeSelected);
-        saveSettingsDebounced();
-    });
-
-    $('#ui-preset-save-button').on('click', () => saveTheme());
-    $('#ui-preset-update-button').on('click', () => updateTheme());
-    $('#ui-preset-delete-button').on('click', () => deleteTheme());
 
     $('#never_resize_avatars').on('input', function () {
         power_user.never_resize_avatars = !!$(this).prop('checked');
@@ -3185,30 +2692,6 @@ jQuery(() => {
         saveSettingsDebounced();
     });
 
-    $('#ui_preset_import_button').on('click', function () {
-        $('#ui_preset_import_file').trigger('click');
-    });
-
-    $('#ui_preset_import_file').on('change', async function () {
-        const inputElement = this instanceof HTMLInputElement && this;
-
-        try {
-            const file = inputElement?.files?.[0];
-            await importTheme(file);
-        } catch (error) {
-            console.error('Error importing UI theme', error);
-            toastr.error(String(error), 'Failed to import UI theme');
-        } finally {
-            if (inputElement) {
-                inputElement.value = null;
-            }
-        }
-    });
-
-    $('#ui_preset_export_button').on('click', async function () {
-        await exportTheme();
-    });
-
     $('#media_display').on('input', async function () {
         power_user.media_display = $(this).val().toString();
         saveSettingsDebounced();
@@ -3313,36 +2796,6 @@ jQuery(() => {
             </div>
         `,
         aliases: [],
-    }));
-    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
-        name: 'theme',
-        callback: setThemeCallback,
-        unnamedArgumentList: [
-            SlashCommandArgument.fromProps({
-                description: 'theme name',
-                typeList: [ARGUMENT_TYPE.STRING],
-                enumProvider: () => themes.map(theme => new SlashCommandEnumValue(theme.name)),
-            }),
-        ],
-        helpString: `
-        <div>
-            Sets a UI theme by name.
-        </div>
-        <div>
-            If no theme name is is provided, this will return the currently active theme.
-        </div>
-        <div>
-            <strong>Example:</strong>
-            <ul>
-                <li>
-                    <pre><code>/theme Cappuccino</code></pre>
-                </li>
-                <li>
-                    <pre><code>/theme</code></pre>
-                </li>
-            </ul>
-        </div>
-    `,
     }));
     SlashCommandParser.addCommandObject(SlashCommand.fromProps({
         name: 'css-var',

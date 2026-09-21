@@ -36,23 +36,6 @@ export function PowerUserPanel() {
                 </div>
                 <div id="user-settings-block-content" className="flex-container spaceEvenly">
                     <div name="UserSettingsFirstColumn" id="UI-Theme-Block" className="flex-container flexFlowColumn wide100p flex1">
-                        <div id="UI-presets-block" className="flex-container flexFlowColumn">
-                            <h4 className="title_restorable">
-                                <span data-i18n="UI Theme">UI Theme</span>
-                                <div className="flex-container">
-                                    <ContractIconButton id="ui_preset_import_button" className="menu_button menu_button_icon margin0" label="Import a theme file" title="Import a theme file" nativeTitle icon={<i className="fa-solid fa-file-import" aria-hidden="true" />} />
-                                    <ContractIconButton id="ui_preset_export_button" className="menu_button menu_button_icon margin0" label="Export a theme file" title="Export a theme file" nativeTitle icon={<i className="fa-solid fa-file-export" aria-hidden="true" />} />
-                                    <ContractIconButton id="ui-preset-delete-button" className="menu_button menu_button_icon margin0" label="Delete a theme" title="Delete a theme" nativeTitle icon={<i className="fa-solid fa-trash-can" aria-hidden="true" />} />
-                                </div>
-                                <input type="file" id="ui_preset_import_file" accept=".json" hidden />
-                            </h4>
-                            <div className="flex-container flexnowrap alignitemscenter">
-                                <select id="themes" className="margin0">
-                                </select>
-                                <ContractIconButton id="ui-preset-update-button" className="menu_button margin0" label="Update a theme file" title="Update a theme file" nativeTitle icon={<i className="fa-solid fa-save" aria-hidden="true" />} />
-                                <ContractIconButton id="ui-preset-save-button" className="menu_button margin0" label="Save as a new theme" title="Save as a new theme" nativeTitle icon={<i className="fa-solid fa-file-circle-plus" aria-hidden="true" />} />
-                            </div>
-                        </div>
                         <div name="themeElements" className="flex-container flexFlowColumn flexNoGap">
                             {/* <h4><span data-i18n="UI Colors">Theme Settings</span></h4> */}
                             <div name="AvatarAndChatDisplay" className="flex-container flexFlowColumn">
