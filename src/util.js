@@ -16,7 +16,7 @@ import mime from 'mime-types';
 import { default as simpleGit } from 'simple-git';
 import chalk from 'chalk';
 import bytes from 'bytes';
-import { LOG_LEVELS, CHAT_COMPLETION_SOURCES, MEDIA_REQUEST_TYPE } from './constants.js';
+import { LOG_LEVELS, MEDIA_REQUEST_TYPE } from './constants.js';
 import { serverDirectory } from './server-directory.js';
 import { sync as writeFileAtomicSync } from 'write-file-atomic';
 import { isFirefox } from './express-common.js';
@@ -1121,8 +1121,8 @@ export function getRequestURL(request) {
 }
 
 /**
- * Flattens and simplifies a JSON schema to be compatible with the strict requirements
- * of Google's Generative AI API.
+ * Flattens and simplifies a JSON schema by resolving $defs/$ref indirections
+ * for providers with strict schema requirements.
  * @param {object} schema The JSON schema to process.
  * @param {string} api The API source.
  * @returns {object} The flattened and simplified schema.
@@ -1133,7 +1133,6 @@ export function flattenSchema(schema, api) {
     }
 
     const schemaCopy = structuredClone(schema);
-    const isGoogleApi = api === CHAT_COMPLETION_SOURCES.MAKERSUITE;
 
     const definitions = schemaCopy.$defs || {};
     delete schemaCopy.$defs;
@@ -1160,11 +1159,6 @@ export function flattenSchema(schema, api) {
         const result = {};
         for (const key in obj) {
             if (!Object.prototype.hasOwnProperty.call(obj, key)) continue;
-
-            // For Google, filter unsupported top-level keywords
-            if (isGoogleApi && ['default', 'additionalProperties', 'exclusiveMinimum', 'propertyNames'].includes(key)) {
-                continue;
-            }
 
             result[key] = resolve(obj[key], parents);
         }

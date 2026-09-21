@@ -640,6 +640,17 @@ class PresetManager {
             'include_reasoning',
             'global_banned_tokens',
             'send_banned_tokens',
+            'claude_model',
+            'google_model',
+            'vertexai_model',
+            'assistant_prefill',
+            'assistant_impersonation',
+            'use_sysprompt',
+            'top_k_openai',
+            'enable_web_search',
+            'request_images',
+            'request_image_resolution',
+            'request_image_aspect_ratio',
 
             // Reasoning exclusions
             'auto_parse',

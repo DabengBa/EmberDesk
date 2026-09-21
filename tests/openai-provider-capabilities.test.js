@@ -21,14 +21,12 @@ const repoRoot = path.resolve(__dirname, '..');
 
 const SOURCES = {
     OPENAI: 'openai',
-    MAKERSUITE: 'makersuite',
 };
 
 function settings(overrides = {}) {
     return {
         chat_completion_source: SOURCES.OPENAI,
         openai_model: 'gpt-5.2',
-        google_model: 'gemini-2.5-pro',
         reasoning_effort: 'high',
         verbosity: 'auto',
         media_inlining: true,
@@ -136,7 +134,7 @@ describe('OpenAI provider capability helpers', () => {
 
     test('keeps provider-specific model selection compatible with current settings', () => {
         expect(getChatCompletionModelFromSettings(settings({ chat_completion_source: SOURCES.OPENAI }))).toBe('gpt-5.2');
-        expect(getChatCompletionModelFromSettings(settings({ chat_completion_source: SOURCES.MAKERSUITE }))).toBe('gemini-2.5-pro');
+        expect(getChatCompletionModelFromSettings(settings({ chat_completion_source: 'makersuite' }))).toBe('');
         expect(getChatCompletionModelFromSettings(settings({ chat_completion_source: 'unknown' }))).toBe('');
     });
 
@@ -151,9 +149,9 @@ describe('OpenAI provider capability helpers', () => {
         expect(resolveReasoningEffort(settings({ reasoning_effort: 'xhigh' }), 'gpt-5.2')).toBe('xhigh');
     });
 
-    test('passes through non-OpenAI reasoning effort behavior', () => {
+    test('passes through unknown-source reasoning effort behavior', () => {
         expect(resolveReasoningEffort(settings({
-            chat_completion_source: SOURCES.MAKERSUITE,
+            chat_completion_source: 'legacy-source',
             reasoning_effort: 'medium',
         }))).toBe('medium');
     });
@@ -165,10 +163,10 @@ describe('OpenAI provider capability helpers', () => {
     });
 
     test('keeps media support split by type and gated by main api and setting', () => {
-        const google = settings({ chat_completion_source: SOURCES.MAKERSUITE, google_model: 'gemini-2.5-pro' });
-        expect(isImageInliningSupportedForSettings(google, { mainApi: 'openai' })).toBe(true);
-        expect(isVideoInliningSupportedForSettings(google, { mainApi: 'openai' })).toBe(true);
-        expect(isAudioInliningSupportedForSettings(google, { mainApi: 'openai' })).toBe(true);
+        const geminiViaOpenAi = settings({ openai_model: 'gemini-2.5-pro' });
+        expect(isImageInliningSupportedForSettings(geminiViaOpenAi, { mainApi: 'openai' })).toBe(true);
+        expect(isVideoInliningSupportedForSettings(geminiViaOpenAi, { mainApi: 'openai' })).toBe(false);
+        expect(isAudioInliningSupportedForSettings(geminiViaOpenAi, { mainApi: 'openai' })).toBe(true);
 
         expect(isImageInliningSupportedForSettings(settings({ media_inlining: false }), { mainApi: 'openai' })).toBe(false);
         expect(isImageInliningSupportedForSettings(settings(), { mainApi: 'kobold' })).toBe(false);

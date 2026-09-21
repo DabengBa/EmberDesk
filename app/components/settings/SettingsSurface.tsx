@@ -62,8 +62,6 @@ const settingsSchema = z.object({
         frequencyPenalty: z.number().min(-2).max(2),
         presencePenalty: z.number().min(-2).max(2),
         topP: z.number().min(0).max(1),
-        topK: z.number().int().min(0),
-        enableWebSearch: z.boolean(),
         functionCalling: z.boolean(),
         showThoughts: z.boolean(),
         reasoningEffort: z.enum(['auto', 'low', 'medium', 'high', 'min', 'max', 'none', 'minimal', 'xhigh']),
@@ -75,9 +73,6 @@ const settingsSchema = z.object({
         verbosity: z.string(),
         mediaInlining: z.boolean(),
         inlineImageQuality: z.string(),
-        requestImages: z.boolean(),
-        requestImageAspectRatio: z.string(),
-        requestImageResolution: z.string(),
         toolReasoningMode: z.string(),
         toolCallRecurseLimit: z.coerce.number(),
         sendIfEmpty: z.string(),
@@ -92,9 +87,8 @@ const settingsSchema = z.object({
         biasPresetSelected: z.string(),
     }),
     providers: z.object({
-        chatCompletionSource: z.enum(['openai', 'makersuite']),
+        chatCompletionSource: z.enum(['openai']),
         openaiModel: z.string(),
-        googleModel: z.string(),
         reverseProxy: z.string(),
         proxyPassword: z.string(),
         customUrl: z.string(),
@@ -545,7 +539,6 @@ export function SettingsSurface({
         secretKey: providerSecretKey,
         chatCompletionSources: {
             OPENAI: 'openai',
-            MAKERSUITE: 'makersuite',
         },
     });
     const fallbackSecretKey = 'api_key_openai_fallback';
@@ -561,7 +554,6 @@ export function SettingsSurface({
         secretState: secretsData,
         chatCompletionSources: {
             OPENAI: 'openai',
-            MAKERSUITE: 'makersuite',
         },
     });
 
@@ -899,17 +891,6 @@ export function SettingsSurface({
                                     />
                                     <SettingField
                                         form={settingsForm}
-                                        name="general.topK"
-                                        label="Top K"
-                                        description="限制候选 token 数量。"
-                                        variant="number"
-                                        min={0}
-                                        step={1}
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
                                         name="general.frequencyPenalty"
                                         label="Frequency Penalty"
                                         description="减少重复输出。"
@@ -955,15 +936,6 @@ export function SettingsSurface({
                                         name="general.streamOpenai"
                                         label="Streaming"
                                         description="控制当前 chat-completion path 是否默认流式输出。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="general.enableWebSearch"
-                                        label="Web Search"
-                                        description="允许模型请求 web search。"
                                         variant="toggle"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
@@ -1047,31 +1019,6 @@ export function SettingsSurface({
                                         name="general.inlineImageQuality"
                                         label="Inline Image Quality"
                                         description="Settings path binding for general.inlineImageQuality."
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="general.requestImages"
-                                        label="Request Images"
-                                        description="Settings path binding for general.requestImages."
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="general.requestImageAspectRatio"
-                                        label="Request Image Aspect Ratio"
-                                        description="Settings path binding for general.requestImageAspectRatio."
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="general.requestImageResolution"
-                                        label="Request Image Resolution"
-                                        description="Settings path binding for general.requestImageResolution."
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
                                     />
@@ -1447,14 +1394,6 @@ export function SettingsSurface({
                                         name="providers.openaiModel"
                                         label="Openai Model"
                                         description="Settings path binding for providers.openaiModel."
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="providers.googleModel"
-                                        label="Google Model"
-                                        description="Settings path binding for providers.googleModel."
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
                                     />

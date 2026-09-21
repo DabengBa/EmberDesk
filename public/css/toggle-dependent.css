@@ -451,10 +451,6 @@ label[for="bind_preset_to_connection"]:has(input:checked) {
     cursor: not-allowed;
 }
 
-#request_images_block:has(#openai_request_images:not(:checked)) #request_images_settings {
-    display: none;
-}
-
 #openai_settings:has(#openai_function_calling:not(:checked)) #tool_call_recurse_limit_block {
     display: none;
 }

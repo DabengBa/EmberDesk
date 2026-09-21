@@ -80,26 +80,13 @@ export function AiConfigPanel() {
                                         <input id="stream_toggle" type="checkbox" /><span data-i18n="Streaming">Streaming</span>
                                     </label>
                                 </div>
-                                <div className="range-block" data-source="makersuite">
-                                    <div className="range-block-title" data-i18n="Top K">Top K</div>
-                                    <div className="wide100p">
-                                        <input className="neo-range-slider" type="range" id="top_k_openai" min="0" max="500" step="1" />
-                                        <input className="neo-range-input" type="number" id="top_k_openai_counter" data-for="top_k_openai" min="0" max="500" step="1" />
-                                    </div>
-                                </div>
                             </div>
                         </div>
                         <div id="advanced-ai-config-block" className="width100p">
                             <div id="openai_settings">
                                 <div className="config-section-header"><span data-i18n="Features">Features</span></div>
                                 <div className="features-grid">
-                                    <div className="range-block" data-source="makersuite">
-                                        <label htmlFor="openai_enable_web_search" className="checkbox_label widthFreeExpand">
-                                            <input id="openai_enable_web_search" type="checkbox" />
-                                            <span data-i18n="Enable web search">Web Search</span>
-                                        </label>
-                                    </div>
-                                    <div className="range-block" data-source="openai,makersuite">
+                                    <div className="range-block" data-source="openai">
                                         <label htmlFor="openai_function_calling" className="checkbox_label widthFreeExpand">
                                             <input id="openai_function_calling" type="checkbox" />
                                             <span data-i18n="Enable function calling">Function Calling</span>
@@ -111,19 +98,19 @@ export function AiConfigPanel() {
                                             </div>
                                         </div>
                                     </div>
-                                    <div className="range-block" data-source="openai,makersuite">
+                                    <div className="range-block" data-source="openai">
                                         <label htmlFor="openai_media_inlining" className="checkbox_label widthFreeExpand">
                                             <input id="openai_media_inlining" type="checkbox" />
                                             <span data-i18n="Send inline media">Inline Media</span>
                                         </label>
                                     </div>
-                                    <div className="range-block" data-source="makersuite">
+                                    <div className="range-block" data-source="openai">
                                         <label htmlFor="openai_show_thoughts" className="checkbox_label widthFreeExpand">
                                             <input id="openai_show_thoughts" type="checkbox" />
                                             <span data-i18n="Request model reasoning">Model Reasoning</span>
                                         </label>
                                     </div>
-                                    <div className="range-block full-width" data-source="openai,makersuite">
+                                    <div className="range-block full-width" data-source="openai">
                                         <div className="range-block-title" data-i18n="Reasoning Effort">Reasoning Effort</div>
                                         <div className="wide100p">
                                             <div className="segmented-control" data-sync-select="openai_reasoning_effort">
@@ -154,7 +141,7 @@ export function AiConfigPanel() {
                             </div>
                             <div className="inline-drawer-content">
                         <div className="config-section-header"><span data-i18n="Advanced Sampling">高级采样</span></div>
-                        <div className="range-block-pair" data-source="openai,makersuite">
+                        <div className="range-block-pair" data-source="openai">
                             <div className="range-block">
                                 <div className="range-block-title" data-i18n="Temperature">Temperature</div>
                                 <div className="wide100p">
@@ -218,46 +205,13 @@ export function AiConfigPanel() {
                             </div>
                         </div>
                         <div className="config-section-header"><span data-i18n="Image Generation">图片生成</span></div>
-                        <div id="request_images_block" className="range-block" data-source="makersuite">
-                            <label htmlFor="openai_request_images" className="checkbox_label widthFreeExpand">
-                                <input id="openai_request_images" type="checkbox" />
-                                <span data-i18n="Request inline images">Request Images</span>
-                            </label>
-                        </div>
-                        <div className="range-block full-width" data-source="openai,makersuite">
+                        <div className="range-block full-width" data-source="openai">
                             <div className="range-block-title"><small data-i18n="Inline Image Quality">Image Quality</small></div>
                             <select id="openai_inline_image_quality" className="text_pole">
                                 <option data-i18n="openai_inline_image_quality_auto" value="auto">Auto</option>
                                 <option data-i18n="openai_inline_image_quality_low" value="low">Low</option>
                                 <option data-i18n="openai_inline_image_quality_high" value="high">High</option>
                             </select>
-                        </div>
-                        <div id="request_images_settings" className="range-block-pair full-width" data-source="makersuite">
-                            <div className="range-block">
-                                <div className="range-block-title"><small data-i18n="Resolution">Resolution</small></div>
-                                <select id="request_image_resolution" className="text_pole">
-                                    <option value="">Auto</option>
-                                    <option value="1K">1K</option>
-                                    <option value="2K">2K</option>
-                                    <option value="4K">4K</option>
-                                </select>
-                            </div>
-                            <div className="range-block">
-                                <div className="range-block-title"><small data-i18n="Aspect Ratio">Aspect Ratio</small></div>
-                                <select id="request_image_aspect_ratio" className="text_pole">
-                                    <option value="">Auto</option>
-                                    <option value="1:1">1:1</option>
-                                    <option value="9:16">9:16</option>
-                                    <option value="16:9">16:9</option>
-                                    <option value="3:4">3:4</option>
-                                    <option value="4:3">4:3</option>
-                                    <option value="3:2">3:2</option>
-                                    <option value="2:3">2:3</option>
-                                    <option value="5:4">5:4</option>
-                                    <option value="4:5">4:5</option>
-                                    <option value="21:9">21:9</option>
-                                </select>
-                            </div>
                         </div>
                         <div className="config-section-header"><span data-i18n="Settings">设置</span></div>
                         <div className="range-block">

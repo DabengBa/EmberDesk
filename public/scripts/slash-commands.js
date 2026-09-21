@@ -247,12 +247,6 @@ function setupConnectAPIMap() {
             button: '#api_button_openai',
             source: chat_completion_sources.OPENAI,
         },
-        // Google alias
-        'google': {
-            selected: 'openai',
-            button: '#api_button_openai',
-            source: chat_completion_sources.MAKERSUITE,
-        },
     };
 
     // Fill connections map from chat_completion_sources
@@ -5737,7 +5731,6 @@ function getModelOptions(quiet) {
     const modelSelectMap = [
         { id: 'model_openai_select', api: 'openai', type: chat_completion_sources.OPENAI },
         { id: 'model_ai21_select', api: 'openai', type: chat_completion_sources.AI21 },
-        { id: 'model_google_select', api: 'openai', type: chat_completion_sources.MAKERSUITE },
         { id: 'model_mistralai_select', api: 'openai', type: chat_completion_sources.MISTRALAI },
         { id: 'model_cohere_select', api: 'openai', type: chat_completion_sources.COHERE },
         { id: 'model_perplexity_select', api: 'openai', type: chat_completion_sources.PERPLEXITY },

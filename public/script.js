@@ -7431,13 +7431,11 @@ function extractTitleFromData(data) {
 function extractImagesFromData(data, { mainApi = null, chatCompletionSource = null } = {}) {
     switch (mainApi ?? main_api) {
         case 'openai': {
-            switch (chatCompletionSource ?? oai_settings.chat_completion_source) {
-                case chat_completion_sources.MAKERSUITE: {
-                    const inlineData = data?.responseContent?.parts?.filter(x => x.inlineData && !x.thought)?.map(x => x.inlineData);
-                    if (Array.isArray(inlineData) && inlineData.length > 0) {
-                        return inlineData.map(x => `data:${x.mimeType};base64,${x.data}`).filter(isDataURL);
-                    }
-                } break;
+            // Data-shape-driven: OpenAI-compatible endpoints may return Gemini-style
+            // responseContent parts with inline media.
+            const inlineData = data?.responseContent?.parts?.filter(x => x.inlineData && !x.thought)?.map(x => x.inlineData);
+            if (Array.isArray(inlineData) && inlineData.length > 0) {
+                return inlineData.map(x => `data:${x.mimeType};base64,${x.data}`).filter(isDataURL);
             }
         } break;
     }
@@ -7516,7 +7514,6 @@ export function extractJsonFromData(data, { mainApi = null, chatCompletionSource
                         return text;
                     }
                     break;
-                case chat_completion_sources.MAKERSUITE:
                 case chat_completion_sources.DEEPSEEK:
                 case chat_completion_sources.AI21:
                 case chat_completion_sources.GROQ:

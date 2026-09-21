@@ -135,7 +135,6 @@ describe('settings React route flag', () => {
         expect(routeSource).toContain("{activeTab === 'providers' ? (");
         expect(routeSource).toContain("{activeTab === 'userInterface' ? (");
         expect(routeSource).toContain("{activeTab === 'advanced' ? (");
-        expect(routeSource).toContain('name="general.enableWebSearch"');
         expect(routeSource).toContain('name="providers.fallbackProviderEnabled"');
         expect(routeSource).toContain('name="userInterface.customCss"');
         expect(routeSource).toContain('name="advanced.autoSwipe"');
@@ -143,10 +142,10 @@ describe('settings React route flag', () => {
         expect(routeSource).not.toContain("{activeTab === 'providers' && (");
         expect(routeSource).not.toContain("{activeTab === 'userInterface' && (");
         expect(routeSource).not.toContain("{activeTab === 'advanced' && (");
-        expect(routeSource).toContain("chatCompletionSource: z.enum(['openai', 'makersuite']),");
+        expect(routeSource).toContain("chatCompletionSource: z.enum(['openai']),");
         expect(routeSource).toContain('openaiModel: z.string(),');
         expect(routeSource).not.toContain('claudeModel');
-        expect(routeSource).toContain('googleModel: z.string(),');
+        expect(routeSource).not.toContain('googleModel');
         expect(routeSource).toContain('theme: z.string(),');
         expect(routeSource).toContain('systemPromptName: z.string(),');
         expect(routeSource).toContain('systemPromptContent: z.string(),');
@@ -193,10 +192,9 @@ describe('settings React route flag', () => {
         expect(helperModule.settingsTabDefinitions).toHaveLength(4);
         expect(helperModule.providerOptions).toEqual([
             { value: 'openai', label: 'OpenAI' },
-            { value: 'makersuite', label: 'Google' },
         ]);
         expect(helperModule.providerSecretKeyBySource.claude).toBeUndefined();
-        expect(helperModule.providerSecretKeyBySource.makersuite).toBe('api_key_makersuite');
+        expect(helperModule.providerSecretKeyBySource.makersuite).toBeUndefined();
         expect(helperModule.reasoningEffortOptions.map(option => option.value)).toEqual([
             'auto',
             'low',
@@ -209,7 +207,7 @@ describe('settings React route flag', () => {
             'xhigh',
         ]);
         expect(helperModule.settingsCoverage.reactOwned.general).toContain('oai_settings.preset_settings_openai');
-        expect(helperModule.settingsCoverage.reactOwned.general).toContain('oai_settings.enable_web_search');
+        expect(helperModule.settingsCoverage.reactOwned.general).toContain('oai_settings.temp_openai');
         expect(helperModule.settingsCoverage.reactOwned.general).toContain('oai_settings.reasoning_effort');
         expect(helperModule.settingsCoverage.reactOwned.providers).toContain('oai_settings.chat_completion_source');
         expect(helperModule.settingsCoverage.reactOwned.providers).toContain('oai_settings.fallback_provider_enabled');
@@ -358,8 +356,8 @@ describe('settings React route flag', () => {
         expect(defaults.general.presetSettings).toBe('RecoveredRuins');
         expect(defaults.providers.openaiModel).toBe('gpt-4-turbo');
         expect(defaults.providers.claudeModel).toBeUndefined();
-        expect(defaults.providers.googleModel).toBe('gemini-2.5-pro');
-        expect(defaults.general.enableWebSearch).toBe(true);
+        expect(defaults.providers.googleModel).toBeUndefined();
+        expect(defaults.general.enableWebSearch).toBeUndefined();
         expect(defaults.providers.fallbackProviderEnabled).toBe(true);
         expect(defaults.providers.fallbackProviderModel).toBe('gpt-4.1-mini');
         expect(defaults.userInterface.customCss).toBe('.chat { color: white; }');
@@ -376,8 +374,6 @@ describe('settings React route flag', () => {
                 frequencyPenalty: 0.2,
                 presencePenalty: 0.3,
                 topP: 0.95,
-                topK: 20,
-                enableWebSearch: false,
                 functionCalling: false,
                 showThoughts: false,
                 reasoningEffort: 'high',
@@ -387,9 +383,8 @@ describe('settings React route flag', () => {
                 customPromptPostProcessing: 'strict_tools',
             },
             providers: {
-                chatCompletionSource: 'makersuite',
+                chatCompletionSource: 'openai',
                 openaiModel: 'gpt-5.2',
-                googleModel: 'gemini-2.5-flash',
                 reverseProxy: 'https://proxy.example.com',
                 proxyPassword: 'secret',
                 customUrl: 'https://custom.example.com/v1',
@@ -490,15 +485,14 @@ describe('settings React route flag', () => {
         expect(merged.power_user.sysprompt.content).toBe('Updated prompt');
         expect(merged.power_user.context.preset).toBe('Story Rich');
         expect(merged.oai_settings.preset_settings_openai).toBe('RecoveredRuins');
-        expect(merged.oai_settings.chat_completion_source).toBe('makersuite');
+        expect(merged.oai_settings.chat_completion_source).toBe('openai');
         expect(merged.oai_settings.openai_model).toBe('gpt-5.2');
         expect(merged.oai_settings.claude_model).toBe('claude-sonnet-4-5');
-        expect(merged.oai_settings.google_model).toBe('gemini-2.5-flash');
+        expect(merged.oai_settings.google_model).toBe('gemini-2.5-pro');
         expect(merged.oai_settings.reverse_proxy).toBe('https://proxy.example.com');
         expect(merged.oai_settings.stream_openai).toBe(false);
         expect(merged.oai_settings.openai_max_context).toBe(8192);
         expect(merged.oai_settings.openai_max_tokens).toBe(512);
-        expect(merged.oai_settings.enable_web_search).toBe(false);
         expect(merged.oai_settings.function_calling).toBe(false);
         expect(merged.oai_settings.reasoning_effort).toBe('high');
         expect(merged.oai_settings.fallback_provider_enabled).toBe(false);
@@ -591,7 +585,6 @@ describe('settings React route flag', () => {
         for (const path of [
             'oai_settings.tool_reasoning_mode',
             'oai_settings.names_behavior',
-            'oai_settings.request_images',
             'oai_settings.verbosity',
             'oai_settings.media_inlining',
             'power_user.main_text_color',
@@ -696,7 +689,7 @@ describe('settings React route flag', () => {
         expect(identity.power_user.main_text_color).toBe('rgba(1, 2, 3, 1)');
     });
 
-    test('downgrades legacy Vertex AI source to Google AI Studio and keeps advanced reasoning effort values saveable', async () => {
+    test('downgrades legacy Vertex AI source to OpenAI and keeps advanced reasoning effort values saveable', async () => {
         const routeSource = fs.readFileSync(path.join(repoRoot, 'app', 'components', 'settings', 'SettingsSurface.tsx'), 'utf8');
         const pageRouteSource = fs.readFileSync(path.join(repoRoot, 'app', 'routes', 'settings.tsx'), 'utf8');
         const helperModule = await import(`../app/lib/settings-helpers.js?settingsCompat=${Date.now()}-${Math.random()}`);
@@ -712,12 +705,12 @@ describe('settings React route flag', () => {
         });
 
         const defaults = helperModule.buildSettingsFormDefaults(parsed.settings);
-        expect(defaults.providers.chatCompletionSource).toBe('makersuite');
+        expect(defaults.providers.chatCompletionSource).toBe('openai');
         expect(defaults.general.reasoningEffort).toBe('minimal');
 
         const preserved = helperModule.buildSettingsSavePayload(parsed.settings, defaults);
         expect(preserved.untouched.keep).toBe(true);
-        expect(preserved.oai_settings.chat_completion_source).toBe('makersuite');
+        expect(preserved.oai_settings.chat_completion_source).toBe('openai');
         expect(preserved.oai_settings.reasoning_effort).toBe('minimal');
 
         expect(routeSource).toContain("reasoningEffort: z.enum(['auto', 'low', 'medium', 'high', 'min', 'max', 'none', 'minimal', 'xhigh']),");
@@ -824,17 +817,17 @@ describe('settings React route flag', () => {
         expect(routeSource).toContain('providers.connectionProfileId');
         expect(routeSource).toContain("fetch('/api/secrets/write'");
 
-        const makersuiteKey = secretHelpers.resolveProviderSecretKeyForSettings({
+        const openaiKey = secretHelpers.resolveProviderSecretKeyForSettings({
             settings: { reverse_proxy: '' },
-            source: 'makersuite',
-            secretKey: 'api_key_makersuite',
-            chatCompletionSources: { OPENAI: 'openai', MAKERSUITE: 'makersuite' },
+            source: 'openai',
+            secretKey: 'api_key_openai',
+            chatCompletionSources: { OPENAI: 'openai' },
         });
-        expect(makersuiteKey).toBe('api_key_makersuite');
+        expect(openaiKey).toBe('api_key_openai');
 
         const fixture = {
             oai_settings: {
-                chat_completion_source: 'makersuite',
+                chat_completion_source: 'openai',
             },
             extension_settings: {
                 connectionManager: {

@@ -105,8 +105,6 @@ export function extractReasoningFromData(data, {
                     return data?.choices?.[0]?.message?.reasoning_content ?? '';
                 case chat_completion_sources.XAI:
                     return data?.choices?.[0]?.message?.reasoning_content ?? '';
-                case chat_completion_sources.MAKERSUITE:
-                    return data?.responseContent?.parts?.filter(part => part.thought)?.map(part => part.text)?.join('\n\n') ?? '';
                 case chat_completion_sources.MISTRALAI:
                     return data?.choices?.[0]?.message?.content?.[0]?.thinking?.map(part => part.text)?.filter(x => x)?.join('\n\n') ?? '';
                 case chat_completion_sources.AIMLAPI:
@@ -142,27 +140,19 @@ export function extractReasoningFromData(data, {
  */
 export function extractReasoningSignatureFromData(data, {
     mainApi = null,
-    chatCompletionSource = null,
 } = {}) {
-    // Only Gemini models use thought signatures (via MakerSuite)
     if ((mainApi ?? main_api) !== 'openai') {
         return null;
     }
 
-    const source = chatCompletionSource ?? oai_settings.chat_completion_source;
-    const isGemini = source === chat_completion_sources.MAKERSUITE;
-
-    if (!isGemini) {
-        return null;
-    }
-
-    // Direct Gemini format: Extract from responseContent.parts if available (only text parts)
-    if (isGemini && Array.isArray(data?.responseContent?.parts)) {
-        data.responseContent.parts.forEach((part) => {
+    // Data-shape-driven: keep signatures for OpenAI-compatible endpoints that
+    // return Gemini-style responseContent parts.
+    if (Array.isArray(data?.responseContent?.parts)) {
+        for (const part of data.responseContent.parts) {
             if (part.thoughtSignature && typeof part.text === 'string') {
                 return part.thoughtSignature;
             }
-        });
+        }
     }
 
     return null;

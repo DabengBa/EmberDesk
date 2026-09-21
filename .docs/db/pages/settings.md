@@ -20,8 +20,8 @@ Authenticated users complete supported settings work on `/settings` instead of w
 
 1. **Header**: Settings title, short summary, and a return link to [Chat Workspace](page.chat_workspace).
 2. **Tabs**: General, Providers, User Interface, Advanced.
-3. **General tab**: chat-completion defaults, sampling, reasoning, continue, media/image request controls, prompt formats, assistant prefill, names behavior, and related oai_settings values.
-4. **Providers tab**: provider/model routing, reverse proxy and custom body/headers, Vertex AI modes including service-account secret JSON, fallback provider, named connection-profile selection, and provider/fallback secrets. Returning to Workspace applies a newly selected profile through the existing Connection Manager workflow.
+3. **General tab**: chat-completion defaults, sampling, reasoning, continue, inline media controls, prompt formats, assistant prefill, names behavior, and related oai_settings values.
+4. **Providers tab**: provider/model routing on the single OpenAI-compatible source, reverse proxy and custom body/headers, fallback provider, named connection-profile selection, and provider/fallback secrets. Returning to Workspace applies a newly selected profile through the existing Connection Manager workflow.
 5. **User Interface tab**: theme, layout density, colors, chat display, message visibility, and workspace interaction preferences previously edited in the user-settings drawer.
 6. **Advanced tab**: instruct/context/system-prompt/reasoning templates and sequences, tokenizer, auto-swipe/continue, streaming, and STscript controls previously edited under Advanced Formatting.
 7. **Diagnostics sidebar**: optional ownership ledger and payload summary for debugging.
@@ -50,8 +50,8 @@ Authenticated users complete supported settings work on `/settings` instead of w
 - **Dirty / busy / error states**: save is disabled until dirty; save/secret actions expose busy and error feedback without fake success.
 - **Save state**: save posts a document-compatible payload and rewrites only changed bound fields; unknown document fields round-trip without materializing unrelated defaults.
 - **Conflict state**: stale `settings_revision` yields HTTP 409; the page keeps the local draft visible, disables further save, and provides an explicit reload action. Reload intentionally discards that draft so the user can merge against current settings before saving again.
-- **Secret state**: provider, fallback, and Vertex service-account values use SecretManager endpoints only and never enter settings JSON.
-- **Vertex AI state**: legacy `vertexai` source maps to Google + Vertex enabled for editing and preserves `vertexai` on save when still enabled.
+- **Secret state**: provider and fallback values use SecretManager endpoints only and never enter settings JSON.
+- **Retired provider state**: legacy `vertexai`/`makersuite`/`palm`/`claude` sources load as OpenAI and save back as `openai`; retired provider model keys remain stored but inert.
 - **Specialized surfaces**: World Info, Extensions, Personas, tags, and complex managers such as bias preset tables remain outside this page even if related values appear in the settings document.
 
 ## Navigation

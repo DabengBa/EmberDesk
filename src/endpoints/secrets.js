@@ -37,7 +37,6 @@ export const SECRET_KEYS = {
     AI21: 'api_key_ai21',
     ONERING_URL: 'oneringtranslator_url',
     DEEPLX_URL: 'deeplx_url',
-    MAKERSUITE: 'api_key_makersuite',
     SERPAPI: 'api_key_serpapi',
     TOGETHERAI: 'api_key_togetherai',
     MISTRALAI: 'api_key_mistralai',

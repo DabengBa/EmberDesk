@@ -532,30 +532,6 @@ export class ToolManager {
                 }
             }
         }
-        if (Array.isArray(parsed?.candidates)) {
-            for (let choiceIndex = 0; choiceIndex < parsed.candidates.length; choiceIndex++) {
-                const candidate = parsed.candidates[choiceIndex];
-                if (Array.isArray(candidate?.content?.parts)) {
-                    for (let partIndex = 0; partIndex < candidate.content.parts.length; partIndex++) {
-                        const part = candidate.content.parts[partIndex];
-                        if (part.functionCall) {
-                            if (!Array.isArray(toolCalls[choiceIndex])) {
-                                toolCalls[choiceIndex] = [];
-                            }
-                            const toolCallIndex = toolCalls[choiceIndex].length;
-                            if (toolCalls[choiceIndex][toolCallIndex] === undefined) {
-                                toolCalls[choiceIndex][toolCallIndex] = {};
-                            }
-                            const targetToolCall = toolCalls[choiceIndex][toolCallIndex];
-                            if (part.thoughtSignature) {
-                                targetToolCall.thoughtSignature = part.thoughtSignature;
-                            }
-                            ToolManager.#applyToolCallDelta(targetToolCall, part.functionCall);
-                        }
-                    }
-                }
-            }
-        }
     }
 
     /**
@@ -650,7 +626,6 @@ export class ToolManager {
             chat_completion_sources.GROQ,
             chat_completion_sources.COHERE,
             chat_completion_sources.DEEPSEEK,
-            chat_completion_sources.MAKERSUITE,
             chat_completion_sources.AI21,
             chat_completion_sources.XAI,
             chat_completion_sources.POLLINATIONS,
@@ -690,26 +665,13 @@ export class ToolManager {
      * @returns {any[]} Tool calls from the response data
      */
     static #getToolCallsFromData(data) {
-        const getRandomId = () => Math.random().toString(36).substring(2);
-        const isGoogleToolCall = c => Array.isArray(c) ? c.filter(x => x).every(isGoogleToolCall) : c?.name && c?.args;
-        const convertGoogleToolCall = (c, signature = null) => ({ id: getRandomId(), function: { name: c.name, arguments: c.args }, signature });
-
         // Parsed tool calls from streaming data
         if (Array.isArray(data) && data.length > 0 && Array.isArray(data[0])) {
-            if (isGoogleToolCall(data[0])) {
-                return data[0].filter(x => x).map((c) => convertGoogleToolCall(c, c.thoughtSignature));
-            }
-
             if (typeof data[0]?.[0]?.tool_calls === 'object') {
                 return Array.isArray(data[0]?.[0]?.tool_calls) ? data[0][0].tool_calls : [data[0][0].tool_calls];
             }
 
             return data[0];
-        }
-
-        // Google AI Studio tool calls
-        if (Array.isArray(data?.responseContent?.parts)) {
-            return data.responseContent.parts.filter(p => p.functionCall).map(p => convertGoogleToolCall(p.functionCall, p.thoughtSignature));
         }
 
         // Parsed tool calls from non-streaming data

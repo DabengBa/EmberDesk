@@ -399,7 +399,6 @@
         "freq_pen_openai": 0,
         "pres_pen_openai": 0,
         "top_p_openai": 1,
-        "top_k_openai": 0,
         "stream_openai": true,
         "openai_max_context": 4095,
         "openai_max_tokens": 300,
@@ -560,7 +559,6 @@
         },
         "wi_format": "{0}",
         "openai_model": "gpt-4-turbo",
-        "claude_model": "claude-sonnet-4-5",
         "ai21_model": "jamba-large",
         "openrouter_model": "OR_Website",
         "reverse_proxy": "",
@@ -569,9 +567,6 @@
         "api_url_scale": "",
         "show_external_models": false,
         "proxy_password": "",
-        "assistant_prefill": "",
-        "assistant_impersonation": "",
-        "use_sysprompt": false,
         "squash_system_messages": false
     }
 }

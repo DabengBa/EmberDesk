@@ -69,7 +69,6 @@ describe('OpenAI-compatible fallback chat completions backend', () => {
             SECRET_KEYS: {
                 OPENAI: 'api_key_openai',
                 OPENAI_FALLBACK: 'api_key_openai_fallback',
-                MAKERSUITE: 'api_key_makersuite',
             },
             readSecret: readSecretMock,
         }));

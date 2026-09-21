@@ -54,7 +54,6 @@ export function getUnifiedKeyFieldState({
 
     const placeholders = {
         [chatCompletionSources.OPENAI]: 'sk-...',
-        [chatCompletionSources.MAKERSUITE]: 'AIza...',
     };
 
     return {

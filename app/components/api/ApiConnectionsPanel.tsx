@@ -18,18 +18,12 @@ export function ApiConnectionsPanel() {
                                         <span className="field-label" data-i18n="Provider">Provider</span>
                                         <select id="chat_completion_source">
                                             <option value="openai">OpenAI</option>
-                                            <option value="makersuite">Google</option>
                                         </select>
                                     </label>
                                     <div id="openai_form" className="chat-completion-field model-field" data-source="openai">
                                         <label className="field-label" htmlFor="model_openai_select" data-i18n="Model">Model</label>
                                         <input id="model_openai_select" list="model_openai_list" className="text_pole" placeholder="Select or type a model" />
                                         <datalist id="model_openai_list"></datalist>
-                                    </div>
-                                    <div id="makersuite_form" className="chat-completion-field model-field" data-source="makersuite">
-                                        <label className="field-label" htmlFor="model_google_select" data-i18n="Model">Model</label>
-                                        <input id="model_google_select" list="model_google_list" className="text_pole" placeholder="Select or type a model" />
-                                        <datalist id="model_google_list"></datalist>
                                     </div>
                                 </div>
                                 <div id="api_key_section">
@@ -40,7 +34,7 @@ export function ApiConnectionsPanel() {
                                     </div>
                                 </div>
                             </div>
-                            <div className="base-url-field wide100p" data-source="openai,makersuite">
+                            <div className="base-url-field wide100p" data-source="openai">
                                 <label className="chat-completion-field wide100p" htmlFor="openai_reverse_proxy">
                                     <span className="field-label" data-i18n="Base URL">Base URL</span>
                                     <input id="openai_reverse_proxy" type="text" className="text_pole" aria-label="Base URL" aria-describedby="base_url_status" placeholder="Optional endpoint" />

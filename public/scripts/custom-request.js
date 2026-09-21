@@ -69,7 +69,6 @@ export class ChatCompletionService {
             reverse_proxy,
             proxy_password,
             custom_prompt_post_processing,
-            use_sysprompt: true,
             ...props,
         };
 

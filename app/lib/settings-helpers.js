@@ -23,12 +23,10 @@ export const settingsTabDefinitions = [
 
 export const providerOptions = [
     { value: 'openai', label: 'OpenAI' },
-    { value: 'makersuite', label: 'Google' },
 ];
 
 export const providerSecretKeyBySource = {
     openai: 'api_key_openai',
-    makersuite: 'api_key_makersuite',
 };
 
 export const providerModelFieldBySource = {
@@ -36,11 +34,6 @@ export const providerModelFieldBySource = {
         name: 'providers.openaiModel',
         placeholder: 'gpt-5.2',
         description: 'OpenAI primary path 当前使用的模型名称。',
-    },
-    makersuite: {
-        name: 'providers.googleModel',
-        placeholder: 'gemini-2.5-pro',
-        description: 'Google primary path 当前使用的模型名称。',
     },
 };
 
@@ -142,8 +135,6 @@ export const defaultSettingsFormValues = {
         frequencyPenalty: 0,
         presencePenalty: 0,
         topP: 1,
-        topK: 0,
-        enableWebSearch: false,
         functionCalling: false,
         showThoughts: true,
         reasoningEffort: 'high',
@@ -155,9 +146,6 @@ export const defaultSettingsFormValues = {
         verbosity: 'auto',
         mediaInlining: true,
         inlineImageQuality: 'auto',
-        requestImages: false,
-        requestImageAspectRatio: '',
-        requestImageResolution: '',
         toolReasoningMode: 'disabled',
         toolCallRecurseLimit: 5,
         sendIfEmpty: '',
@@ -174,7 +162,6 @@ export const defaultSettingsFormValues = {
     providers: {
         chatCompletionSource: 'openai',
         openaiModel: '',
-        googleModel: '',
         reverseProxy: '',
         proxyPassword: '',
         customUrl: '',
@@ -369,10 +356,7 @@ function parseBlacklistToSettingsValue(value) {
 }
 
 function mapChatCompletionSourceToFormValue(value) {
-    if (value === 'vertexai') {
-        return 'makersuite';
-    }
-    if (value === 'claude') {
+    if (['vertexai', 'makersuite', 'palm', 'claude'].includes(value)) {
         return 'openai';
     }
     return value;
@@ -391,8 +375,6 @@ const fieldBindings = [
     { tab: 'general', formPath: 'general.frequencyPenalty', settingsPath: 'oai_settings.freq_pen_openai' },
     { tab: 'general', formPath: 'general.presencePenalty', settingsPath: 'oai_settings.pres_pen_openai' },
     { tab: 'general', formPath: 'general.topP', settingsPath: 'oai_settings.top_p_openai' },
-    { tab: 'general', formPath: 'general.topK', settingsPath: 'oai_settings.top_k_openai' },
-    { tab: 'general', formPath: 'general.enableWebSearch', settingsPath: 'oai_settings.enable_web_search' },
     { tab: 'general', formPath: 'general.functionCalling', settingsPath: 'oai_settings.function_calling' },
     { tab: 'general', formPath: 'general.showThoughts', settingsPath: 'oai_settings.show_thoughts' },
     { tab: 'general', formPath: 'general.reasoningEffort', settingsPath: 'oai_settings.reasoning_effort' },
@@ -409,7 +391,6 @@ const fieldBindings = [
         toSettings: mapChatCompletionSourceToSettingsValue,
     },
     { tab: 'providers', formPath: 'providers.openaiModel', settingsPath: 'oai_settings.openai_model' },
-    { tab: 'providers', formPath: 'providers.googleModel', settingsPath: 'oai_settings.google_model' },
     { tab: 'providers', formPath: 'providers.reverseProxy', settingsPath: 'oai_settings.reverse_proxy' },
     { tab: 'providers', formPath: 'providers.proxyPassword', settingsPath: 'oai_settings.proxy_password' },
     { tab: 'providers', formPath: 'providers.customUrl', settingsPath: 'oai_settings.custom_url' },
@@ -519,9 +500,6 @@ const fieldBindings = [
     { tab: 'general', formPath: 'general.verbosity', settingsPath: 'oai_settings.verbosity' },
     { tab: 'general', formPath: 'general.mediaInlining', settingsPath: 'oai_settings.media_inlining' },
     { tab: 'general', formPath: 'general.inlineImageQuality', settingsPath: 'oai_settings.inline_image_quality' },
-    { tab: 'general', formPath: 'general.requestImages', settingsPath: 'oai_settings.request_images' },
-    { tab: 'general', formPath: 'general.requestImageAspectRatio', settingsPath: 'oai_settings.request_image_aspect_ratio' },
-    { tab: 'general', formPath: 'general.requestImageResolution', settingsPath: 'oai_settings.request_image_resolution' },
     { tab: 'general', formPath: 'general.toolReasoningMode', settingsPath: 'oai_settings.tool_reasoning_mode' },
     { tab: 'general', formPath: 'general.toolCallRecurseLimit', settingsPath: 'oai_settings.tool_call_recurse_limit' },
     { tab: 'general', formPath: 'general.sendIfEmpty', settingsPath: 'oai_settings.send_if_empty' },

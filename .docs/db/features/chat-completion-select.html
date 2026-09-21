@@ -190,7 +190,7 @@ input::placeholder {
     accent-color: var(--amber);
 }
 
-/* ---------- Sub-config (Vertex et al) ---------- */
+/* ---------- Sub-config ---------- */
 .sub-config {
     display: flex;
     flex-direction: column;
@@ -272,7 +272,7 @@ input::placeholder {
             </div>
             <div class="config-flow">
                 <div class="provider-model">
-                    <select><option>OpenAI</option><option>Claude</option><option>Google</option></select>
+                    <select><option>OpenAI</option></select>
                     <input value="gpt-4.1-mini">
                 </div>
                 <div class="key-row">
@@ -288,7 +288,7 @@ input::placeholder {
         </div>
     </section>
 
-    <!-- ===== Claude, key saved, custom base URL ===== -->
+    <!-- ===== Key saved, custom base URL ===== -->
     <section>
         <p class="demo-label" style="margin:0 0 6px;color:var(--faint);font-size:0.72rem;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;">Key saved, custom base URL</p>
         <div class="panel">
@@ -298,11 +298,11 @@ input::placeholder {
             </div>
             <div class="config-flow">
                 <div class="provider-model">
-                    <select><option>OpenAI</option><option selected>Claude</option><option>Google</option></select>
-                    <input value="claude-sonnet-4-5">
+                    <select><option selected>OpenAI</option></select>
+                    <input value="gpt-4o">
                 </div>
                 <div class="key-row">
-                    <input type="password" value="sk-ant-xxxxxxxxxxxxxxxx">
+                    <input type="password" value="sk-xxxxxxxxxxxxxxxx">
                     <button class="icon-btn" title="Peek password">&#128065;</button>
                 </div>
                 <input type="text" value="https://proxy.example.com/v1" placeholder="Base URL">
@@ -314,9 +314,9 @@ input::placeholder {
         </div>
     </section>
 
-    <!-- ===== Google, Vertex enabled ===== -->
+    <!-- ===== Fallback provider enabled ===== -->
     <section>
-        <p class="demo-label" style="margin:0 0 6px;color:var(--faint);font-size:0.72rem;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;">Google + Vertex AI</p>
+        <p class="demo-label" style="margin:0 0 6px;color:var(--faint);font-size:0.72rem;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;">Fallback provider</p>
         <div class="panel">
             <div class="status-bar">
                 <span class="dot ok"></span>
@@ -324,20 +324,17 @@ input::placeholder {
             </div>
             <div class="config-flow">
                 <div class="provider-model">
-                    <select><option>OpenAI</option><option>Claude</option><option selected>Google</option></select>
-                    <input value="gemini-2.5-pro">
+                    <select><option selected>OpenAI</option></select>
+                    <input value="gpt-5.2">
                 </div>
                 <div class="key-row">
-                    <input type="password" value="AIza...">
+                    <input type="password" value="sk-xxxxxxxxxxxxxxxx">
                     <button class="icon-btn" title="Peek password">&#128065;</button>
                 </div>
-                <label class="check-row"><input type="checkbox" checked>Vertex AI</label>
+                <label class="check-row"><input type="checkbox" checked>Fallback provider</label>
                 <div class="sub-config">
-                    <div class="two-col">
-                        <select><option selected>API Key</option><option>Service Account</option></select>
-                        <input type="text" value="us-central1" placeholder="Region">
-                    </div>
-                    <input type="text" value="emberdesk-lab" placeholder="Project ID">
+                    <input type="text" value="https://fallback.example.com/v1" placeholder="Fallback Base URL">
+                    <input type="text" value="gpt-4.1-mini" placeholder="Fallback model">
                 </div>
                 <input type="text" placeholder="Base URL">
             </div>
@@ -358,7 +355,7 @@ input::placeholder {
             </div>
             <div class="config-flow">
                 <div class="provider-model">
-                    <select><option selected>OpenAI</option><option>Claude</option><option>Google</option></select>
+                    <select><option selected>OpenAI</option></select>
                     <input placeholder="Connect to load models">
                 </div>
                 <div class="key-row">

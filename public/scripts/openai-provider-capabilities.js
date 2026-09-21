@@ -1,6 +1,5 @@
 export const CHAT_COMPLETION_SOURCES = {
     OPENAI: 'openai',
-    MAKERSUITE: 'makersuite',
 };
 
 const REASONING_EFFORT_TYPES = {
@@ -46,14 +45,6 @@ const visionSupportedModels = [
     'gemma-4',
 ];
 
-const videoSupportedModels = [
-    'gemini-2.0',
-    'gemini-2.5',
-    'gemini-exp-1206',
-    'gemini-3',
-    'gemma-4',
-];
-
 const audioSupportedModels = [
     'gemini-2.0',
     'gemini-2.5',
@@ -89,8 +80,6 @@ export function getChatCompletionModelFromSettings(settings = {}) {
     switch (source) {
         case CHAT_COMPLETION_SOURCES.OPENAI:
             return settings.openai_model;
-        case CHAT_COMPLETION_SOURCES.MAKERSUITE:
-            return settings.google_model;
         default:
             return '';
     }
@@ -145,24 +134,13 @@ function isImageModelSupportedForSettings(settings = {}, { mainApi = 'openai' } 
     switch (settings.chat_completion_source) {
         case CHAT_COMPLETION_SOURCES.OPENAI:
             return openAiVisionModelMatchesCurrentRule(settings.openai_model);
-        case CHAT_COMPLETION_SOURCES.MAKERSUITE:
-            return includesAnyModel(settings.google_model, visionSupportedModels);
         default:
             return false;
     }
 }
 
-function isVideoModelSupportedForSettings(settings = {}, { mainApi = 'openai' } = {}) {
-    if (!providerMediaCapabilitiesCanRun({ mainApi })) {
-        return false;
-    }
-
-    switch (settings.chat_completion_source) {
-        case CHAT_COMPLETION_SOURCES.MAKERSUITE:
-            return includesAnyModel(settings.google_model, videoSupportedModels);
-        default:
-            return false;
-    }
+function isVideoModelSupportedForSettings() {
+    return false;
 }
 
 function isAudioModelSupportedForSettings(settings = {}, { mainApi = 'openai' } = {}) {
@@ -173,8 +151,6 @@ function isAudioModelSupportedForSettings(settings = {}, { mainApi = 'openai' } 
     switch (settings.chat_completion_source) {
         case CHAT_COMPLETION_SOURCES.OPENAI:
             return includesAnyModel(settings.openai_model, audioSupportedModels);
-        case CHAT_COMPLETION_SOURCES.MAKERSUITE:
-            return includesAnyModel(settings.google_model, audioSupportedModels);
         default:
             return false;
     }
@@ -193,7 +169,7 @@ export function isVideoInliningSupportedForSettings(settings = {}, { mainApi = '
         return false;
     }
 
-    return isVideoModelSupportedForSettings(settings, { mainApi });
+    return isVideoModelSupportedForSettings();
 }
 
 export function isAudioInliningSupportedForSettings(settings = {}, { mainApi = 'openai' } = {}) {

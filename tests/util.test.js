@@ -30,7 +30,7 @@ afterEach(() => {
 describe('flattenSchema', () => {
     test('should return the schema if it is not an object', () => {
         const schema = 'it is not an object';
-        expect(flattenSchema(schema, CHAT_COMPLETION_SOURCES.MAKERSUITE)).toBe(schema);
+        expect(flattenSchema(schema, CHAT_COMPLETION_SOURCES.OPENAI)).toBe(schema);
     });
 
     test('should handle schema with $defs and $ref', () => {
@@ -59,41 +59,10 @@ describe('flattenSchema', () => {
                 },
             },
         };
-        expect(flattenSchema(schema, CHAT_COMPLETION_SOURCES.MAKERSUITE)).toEqual(expected);
+        expect(flattenSchema(schema, CHAT_COMPLETION_SOURCES.OPENAI)).toEqual(expected);
     });
 
-    test('should filter unsupported properties for Google API schema', () => {
-        const schema = {
-            $defs: {
-                a: {
-                    type: 'string',
-                    default: 'test',
-                },
-            },
-            type: 'object',
-            properties: {
-                b: { $ref: '#/$defs/a' },
-                c: { type: 'number' },
-            },
-            additionalProperties: false,
-            exclusiveMinimum: 0,
-            propertyNames: {
-                pattern: '^[A-Za-z_][A-Za-z0-9_]*$',
-            },
-        };
-        const expected = {
-            type: 'object',
-            properties: {
-                b: {
-                    type: 'string',
-                },
-                c: { type: 'number' },
-            },
-        };
-        expect(flattenSchema(schema, CHAT_COMPLETION_SOURCES.MAKERSUITE)).toEqual(expected);
-    });
-
-    test('should not filter properties for non-Google API schema', () => {
+    test('should not filter unsupported keywords for any API schema', () => {
         const schema = {
             $defs: {
                 a: {

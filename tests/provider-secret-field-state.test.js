@@ -37,7 +37,7 @@ describe('provider secret field state', () => {
             source: 'openai',
             secretKey: 'api_key_openai',
             secretState: {},
-            chatCompletionSources: { OPENAI: 'openai', MAKERSUITE: 'makersuite' },
+            chatCompletionSources: { OPENAI: 'openai' },
         })).toEqual({
             placeholder: 'Proxy password',
             value: 'proxy-password',
@@ -48,37 +48,37 @@ describe('provider secret field state', () => {
             source: 'openai',
             secretKey: 'api_key_openai',
             secretState: { api_key_openai: [{ label: 'main-key', active: true }] },
-            chatCompletionSources: { OPENAI: 'openai', MAKERSUITE: 'makersuite' },
+            chatCompletionSources: { OPENAI: 'openai' },
         })).toMatchObject({ placeholder: 'Saved (main-key)', value: '' });
 
         expect(getUnifiedKeyFieldState({
             settings: {
-                chat_completion_source: 'makersuite',
+                chat_completion_source: 'openai',
             },
-            source: 'makersuite',
-            secretKey: 'api_key_makersuite',
+            source: 'openai',
+            secretKey: 'api_key_openai',
             secretState: {},
-            chatCompletionSources: { OPENAI: 'openai', MAKERSUITE: 'makersuite' },
-        })).toMatchObject({ placeholder: 'AIza...', value: '' });
+            chatCompletionSources: { OPENAI: 'openai' },
+        })).toMatchObject({ placeholder: 'sk-...', value: '' });
     });
 
     test('resolves React settings provider secret keys through the direct provider key', () => {
-        const sources = { OPENAI: 'openai', MAKERSUITE: 'makersuite' };
+        const sources = { OPENAI: 'openai' };
 
-        const makersuiteSecretKey = resolveProviderSecretKeyForSettings({
+        const directSecretKey = resolveProviderSecretKeyForSettings({
             settings: {
                 reverse_proxy: '',
             },
-            source: 'makersuite',
-            secretKey: 'api_key_makersuite',
+            source: 'openai',
+            secretKey: 'api_key_openai',
             chatCompletionSources: sources,
         });
-        expect(makersuiteSecretKey).toBe('api_key_makersuite');
+        expect(directSecretKey).toBe('api_key_openai');
         expect(canUseDirectProviderSecret({
             settings: {
                 reverse_proxy: '',
             },
-            secretKey: makersuiteSecretKey,
+            secretKey: directSecretKey,
         })).toBe(true);
 
         const proxySecretKey = resolveProviderSecretKeyForSettings({
