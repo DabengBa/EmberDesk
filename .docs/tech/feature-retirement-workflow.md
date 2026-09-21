@@ -252,3 +252,15 @@ pnpm run build:react:workspace-panels  # app/ 或桥动过时
 - **文档**：`page.settings` 移除 theme 条目与 `themes` 聚合字段说明；docs bundle 重建。
 - **验证**：lint+tsc 净；focused 7 suites/62 tests 绿；compat 8 suites/110 tests 全绿；unit 59 suites/555 tests 全绿；React/workspace-panels 构建与 docs:check/docs:build 通过。
 - **Commit**: `9e76c90a2`。
+
+### B-cut-14c: welcome-screen（欢迎屏/角色管理快捷面板退役）
+
+**R0 裁决**：welcome screen 是空会话时注入 `#chat` 的产品欢迎面板（版本信息、扩展/Discord/文档链接、最近角色卡片快捷入口），兼挂「永久助理」角色（`openPermanentAssistantCard`/`newAssistantChat` 的 temporary 分支）。面板实现横跨 legacy（`welcome-screen.js` 渲染 + `welcome.html`/`welcomePrompt.html` 模板）与 React（`WelcomePanel` + `welcome-panel.styles`），并占住 main-chat store 的 `welcome` snapshot/投影字段。全部随本批退役；角色库快捷入口改为直接打开 workspace character drawer，会话生命周期与角色管理主路径不受影响。无独立 HTTP 端点，不需要 410 tombstone。
+
+- **删**：`public/scripts/welcome-screen.js` 整文件；`app/components/welcome/WelcomePanel.tsx`、`app/styles/welcome-panel.styles.ts`；`templates/welcome.html`、`templates/welcomePrompt.html`；`script.js` 的 welcome 导入/shell 暴露/`MainChatWelcomeSnapshot` 接线/启动初始化/`displayVersion` 导出消费；`main-chat-store.ts` 的 `welcome` snapshot 类型与输入归一化；`main-chat-store-projection.js` 的 welcome 投影；`system-messages.js` 的 `WELCOME`/`WELCOME_PROMPT`/`ASSISTANT_MESSAGE` 类型与对应系统消息；`dom-handlers.js` 的 `openPermanentAssistantCard` 与 `option_select_chat` 分支、`newAssistantChat` temporary 判定坍塌为无参调用；`chat-ops-service.js`/`delete-character-preflight.js` 的 `suppressWelcomeScreen` 钩子；`chat-route-service.js` 的 welcome 分支；`workspace-panels.tsx`/`RightNavPanel`/`CharacterLibraryPanel`/`CharacterLibraryCharacterRow`/`character-library-row-helpers` 的 welcome 面板契约；`index.html` 的 welcome 挂载点；`seed-dev-environment.mjs` 顺带移除对已删 theme 文件的 `seedThemes()` 拷贝（B-cut-14b 遗漏，修复 e2e 启动 ENOENT）。
+- **数据策略**：无专属存量数据——欢迎屏为纯运行时渲染；`system_message_types` 中被删枚举仅影响新消息生成，历史聊天中的 welcome 系统消息按普通消息渲染。
+- **保留**：workspace character library/drawer 与角色管理全路径；`newAssistantChat` 助理会话创建本身（仅去 welcome 分支）；JS-Slash-Runner vendored 的 `$('#chat > .welcomePanel')` DOM 探测（永远为假的兼容检查，受保护面不动）。
+- **测试翻转**：删 `welcome-panel-structure.test.js`；`welcome-screen-character-management.e2e` 的 welcome 分支断言翻转为 drawer 直达契约；`group-chat-retirement`/`script-js-reverse-import-contract`/`interaction-performance-delete` 移除 welcome 条目与导入面。
+- **文档**：`page.chat_workspace` 语义条目移除 welcome 面板描述；docs bundle 重建（30 文档）。
+- **验证**：lint+tsc 净；focused、compat 8 suites/110 tests、unit 58 suites/551 tests 全绿；React/workspace-panels 构建与 docs:check/docs:build 通过；e2e 独立端口验证 `welcome-screen-character-management`/`vector-retirement`/`settings` 全绿（广域运行中 `chat-message-list-walkthrough` sprint-2 的 `.mes_reasoning_edit` 点击拦截失败归因为工作区未提交的 `.extraMesButtons` 浮动菜单 WIP，与本批无关；`settings.e2e` 的 Theme→Custom CSS 重定向与 fullyParallel 竞态加固见 `2410a3d66`）。
+- **Commit**: `da616937f`。
