@@ -71,3 +71,5 @@ preset 选择/重命名/导入导出/删除/绑定连接开关｜35 字段各自
 **U3 验收**：用户"好了继续"。
 
 **U5 语义文档**：契约面零变化（ID/data-*/trigger 语义/共享 preset-manager 路径全保），`.docs/db` 无需更新；本档案即台账。
+
+**提交**：`9adc52655` — `feat(ui): U-4 AI config preset actions as floating menu`
