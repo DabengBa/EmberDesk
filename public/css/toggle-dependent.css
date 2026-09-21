@@ -14,6 +14,18 @@ body.tts .mes_narrate {
     display: inline-block;
 }
 
+/* The extension-bound menu group only exists visually when a governing
+   extension body class is on; individual buttons keep their own rules. */
+.mes_menu_group_ext {
+    display: none;
+}
+
+body.sd .mes_menu_group_ext,
+body.translate .mes_menu_group_ext,
+body.tts .mes_menu_group_ext {
+    display: flex;
+}
+
 body:not(.tts) #ttsExtensionNarrateAll {
     display: none;
 }
@@ -382,6 +394,39 @@ body.expandMessageActions .mes .mes_buttons .extraMesButtons {
 
 body.expandMessageActions .mes .mes_buttons .extraMesButtonsHint {
     display: none !important;
+}
+
+/* Flatten the floating actions menu back into the legacy inline strip when
+   expandMessageActions is on. */
+body.expandMessageActions .extraMesButtons.visible {
+    position: static;
+    flex-direction: row;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+    padding: 1px;
+    border: none;
+    border-radius: 0;
+    background-color: transparent;
+    box-shadow: none;
+}
+
+body.expandMessageActions .extraMesButtons .mes_menu_group,
+body.expandMessageActions .extraMesButtons .mes_menu_group_ext {
+    display: contents;
+}
+
+body.expandMessageActions .extraMesButtons .mes_menu_label {
+    display: none;
+}
+
+body.expandMessageActions .extraMesButtons.visible .mes_button {
+    width: auto;
+    justify-content: center;
+    min-height: calc(var(--mainFontSize) * 1.45);
+    padding: 2px 4px;
+    text-align: center;
+    opacity: 0.55;
 }
 
 #smooth_streaming_control:has(#smooth_streaming:not(:checked))~#smooth_streaming_speed_control,

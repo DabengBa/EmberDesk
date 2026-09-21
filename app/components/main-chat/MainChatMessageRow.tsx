@@ -1,3 +1,5 @@
+import { useEffect, useRef, useState } from 'react';
+import type { RefObject } from 'react';
 import type { MainChatCommands } from '../../compat/workspace-commands';
 import type { MainChatMessageRecord } from '../../stores/main-chat-store';
 import { translate } from '../../compat/i18n.js';
@@ -22,6 +24,38 @@ function normalizeClassNames(message: MainChatMessageRecord, isLast: boolean) {
     ].join(' ');
 }
 
+/**
+ * Inserts a legacy `.icon-svg` model icon into a DOM host and upgrades it via
+ * the shared `SVGInject` global (set by public/lib.js). The injected <svg>
+ * replaces the <img> node, so the element is managed imperatively and kept
+ * outside React's child list — matching insertSVGIcon() in message-service.js.
+ */
+function useModelIcon(
+    hostRef: RefObject<HTMLElement | null>,
+    api: string | null,
+    title: string,
+    className: string,
+    anchorSelector?: string,
+) {
+    useEffect(() => {
+        const host = hostRef.current;
+        if (!host || !api) {
+            return;
+        }
+        const image = document.createElement('img');
+        image.className = `icon-svg ${className}`;
+        image.src = `/img/${api}.svg`;
+        image.title = title;
+        image.alt = '';
+        const anchor = anchorSelector ? host.querySelector(anchorSelector) : null;
+        host.insertBefore(image, anchor);
+        void (globalThis as { SVGInject?: (element: Element) => Promise<void> }).SVGInject?.(image);
+        return () => {
+            host.querySelectorAll(`.icon-svg.${className}`).forEach(node => node.remove());
+        };
+    }, [hostRef, api, title, className, anchorSelector]);
+}
+
 function MessageActionShell({
     message,
     commands,
@@ -32,6 +66,8 @@ function MessageActionShell({
     const messageId = message.id;
     const numericMessageId = Number(messageId);
     const canAddressMessage = Number.isInteger(numericMessageId) && numericMessageId >= 0;
+    const hintRef = useRef<HTMLDivElement>(null);
+    const menuRef = useRef<HTMLDivElement>(null);
     const retryGeneration = () => {
         if (canAddressMessage) {
             void commands?.triggerVisibleGeneration({ kind: 'retryGeneration', messageId: numericMessageId });
@@ -39,6 +75,7 @@ function MessageActionShell({
     };
     const startEditing = () => {
         if (canAddressMessage) {
+            void commands?.toggleMessageActionsShell({ kind: 'close' });
             void commands?.startMessageEdit(numericMessageId);
         }
     };
@@ -52,13 +89,45 @@ function MessageActionShell({
             void commands?.deleteMessage(numericMessageId);
         }
     };
+    const closeActionsMenu = () => {
+        void commands?.toggleMessageActionsShell({ kind: 'close' });
+    };
+    const openActionsMenu = () => {
+        if (canAddressMessage) {
+            void commands?.toggleMessageActionsShell({ kind: 'open', messageId: numericMessageId });
+        }
+    };
+
+    useEffect(() => {
+        if (!message.actionsExpanded) {
+            return;
+        }
+        const menu = menuRef.current;
+        if (!menu) {
+            return;
+        }
+        const firstVisible = Array.from(menu.querySelectorAll<HTMLElement>('.mes_button'))
+            .find(element => element.offsetParent !== null);
+        firstVisible?.focus();
+    }, [message.actionsExpanded]);
 
     // Legacy welcome.css hid action buttons on assistant welcome messages via
     // `#chat .mes[type="assistant_message"] .mes_button`. Preserve it structurally.
     const assistantMessage = message.extraType === 'assistant_message';
 
     return (
-        <div className="mes_buttons" style={{ display: message.editing || assistantMessage ? 'none' : undefined }}>
+        <div
+            className="mes_buttons"
+            style={{ display: message.editing || assistantMessage ? 'none' : undefined }}
+            onKeyDown={event => {
+                if (event.key === 'Escape' && message.actionsExpanded) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    closeActionsMenu();
+                    hintRef.current?.focus();
+                }
+            }}
+        >
             {message.failureRetryVisible ? (
                 <div
                     className="mes_button generation_failure_retry fa-solid fa-rotate-right"
@@ -76,82 +145,121 @@ function MessageActionShell({
                 />
             ) : null}
             <div
+                ref={hintRef}
                 title="Message Actions"
                 className="mes_button extraMesButtonsHint fa-solid fa-ellipsis"
                 data-i18n="[title]Message Actions;[aria-label]Message Actions"
                 role="button"
                 aria-label="Message Actions"
+                aria-haspopup="true"
                 tabIndex={0}
                 aria-expanded={message.actionsExpanded}
-                style={{ display: message.actionsExpanded ? 'none' : undefined }}
                 onClick={event => {
                     event.stopPropagation();
-                    if (canAddressMessage) {
-                        void commands?.toggleMessageActionsShell({ kind: 'open', messageId: numericMessageId });
-                    }
+                    openActionsMenu();
                 }}
                 onKeyDown={event => {
                     if ((event.key === 'Enter' || event.key === ' ') && canAddressMessage) {
                         event.preventDefault();
                         event.stopPropagation();
-                        void commands?.toggleMessageActionsShell({ kind: 'open', messageId: numericMessageId });
+                        openActionsMenu();
                     }
                 }}
             />
             <div
+                ref={menuRef}
                 className={message.actionsExpanded ? 'extraMesButtons visible' : 'extraMesButtons'}
                 style={{ display: message.actionsExpanded ? 'flex' : undefined }}
+                onClick={event => {
+                    if ((event.target as HTMLElement | null)?.closest?.('.mes_button')) {
+                        closeActionsMenu();
+                    }
+                }}
             >
-                <div title="Translate message" className="mes_button mes_translate fa-solid fa-language" data-i18n="[title]Translate message;[aria-label]Translate message" role="button" aria-label="Translate message" tabIndex={0} />
-                <div title="Generate Image" className="mes_button sd_message_gen fa-solid fa-paintbrush" data-i18n="[title]Generate Image;[aria-label]Generate Image" role="button" aria-label="Generate Image" tabIndex={0} />
-                <div title="Narrate" className="mes_button mes_narrate fa-solid fa-bullhorn" data-i18n="[title]Narrate;[aria-label]Narrate" role="button" aria-label="Narrate" tabIndex={0} />
-                <div title="Prompt" className="mes_button mes_prompt fa-solid fa-square-poll-horizontal" data-i18n="[title]Prompt;[aria-label]Prompt" role="button" aria-label="Prompt" tabIndex={0} style={{ display: 'none' }} />
-                <div title="Exclude message from prompts" className="mes_button mes_hide fa-solid fa-eye" data-i18n="[title]Exclude message from prompts;[aria-label]Exclude message from prompts" role="button" aria-label="Exclude message from prompts" tabIndex={0} />
-                <div title="Include message in prompts" className="mes_button mes_unhide fa-solid fa-eye-slash" data-i18n="[title]Include message in prompts;[aria-label]Include message in prompts" role="button" aria-label="Include message in prompts" tabIndex={0} />
-                <div title="Toggle media display style" className="mes_button mes_media_gallery fa-solid fa-photo-film" data-i18n="[title]Toggle media display style;[aria-label]Toggle media display style" role="button" aria-label="Toggle media display style" tabIndex={0} />
-                <div title="Toggle media display style" className="mes_button mes_media_list fa-solid fa-table-cells-large" data-i18n="[title]Toggle media display style;[aria-label]Toggle media display style" role="button" aria-label="Toggle media display style" tabIndex={0} />
-                <div title="Embed file or image" className="mes_button mes_embed fa-solid fa-paperclip" data-i18n="[title]Embed file or image;[aria-label]Embed file or image" role="button" aria-label="Embed file or image" tabIndex={0} />
-                <div title="Jump to swipe history" className="mes_button mes_swipe_picker fa-solid fa-bookmark" data-i18n="[title]Jump to swipe history;[aria-label]Jump to swipe history" role="button" aria-label="Jump to swipe history" tabIndex={0} style={{ display: 'none' }} />
-                <div title="Create branch" className="mes_button mes_create_branch fa-regular fa-code-branch" data-i18n="[title]Create Branch;[aria-label]Create branch" role="button" aria-label="Create branch" tabIndex={0} />
-                <div
-                    className="mes_button mes_copy fa-solid fa-copy"
-                    title="Copy"
-                    data-i18n="[title]Copy;[aria-label]Copy"
-                    role="button"
-                    aria-label="Copy"
-                    tabIndex={0}
-                    onPointerUp={event => event.stopPropagation()}
-                    onClick={event => {
-                        event.stopPropagation();
-                        copyMessage();
-                    }}
-                    onKeyDown={event => {
-                        if ((event.key === 'Enter' || event.key === ' ') && canAddressMessage) {
-                            event.preventDefault();
+                <span className="mes_menu_group mes_menu_group_ext">
+                    <div title="Translate message" className="mes_button mes_translate fa-solid fa-language" data-i18n="[title]Translate message;[aria-label]Translate message" role="button" aria-label="Translate message" tabIndex={0}>
+                        <span className="mes_menu_label">{translate('Translate message')}</span>
+                    </div>
+                    <div title="Generate Image" className="mes_button sd_message_gen fa-solid fa-paintbrush" data-i18n="[title]Generate Image;[aria-label]Generate Image" role="button" aria-label="Generate Image" tabIndex={0}>
+                        <span className="mes_menu_label">{translate('Generate Image')}</span>
+                    </div>
+                    <div title="Narrate" className="mes_button mes_narrate fa-solid fa-bullhorn" data-i18n="[title]Narrate;[aria-label]Narrate" role="button" aria-label="Narrate" tabIndex={0}>
+                        <span className="mes_menu_label">{translate('Narrate')}</span>
+                    </div>
+                </span>
+                <span className="mes_menu_group">
+                    <div title="Prompt" className="mes_button mes_prompt fa-solid fa-square-poll-horizontal" data-i18n="[title]Prompt;[aria-label]Prompt" role="button" aria-label="Prompt" tabIndex={0} style={{ display: message.promptButtonVisible ? undefined : 'none' }}>
+                        <span className="mes_menu_label">{translate('Prompt')}</span>
+                    </div>
+                    <div title="Jump to swipe history" className="mes_button mes_swipe_picker fa-solid fa-bookmark" data-i18n="[title]Jump to swipe history;[aria-label]Jump to swipe history" role="button" aria-label="Jump to swipe history" tabIndex={0} style={{ display: message.swipePickerEnabled ? undefined : 'none' }}>
+                        <span className="mes_menu_label">{translate('Jump to swipe history')}</span>
+                    </div>
+                    <div title="Create branch" className="mes_button mes_create_branch fa-regular fa-code-branch" data-i18n="[title]Create Branch;[aria-label]Create branch" role="button" aria-label="Create branch" tabIndex={0}>
+                        <span className="mes_menu_label">{translate('Create branch')}</span>
+                    </div>
+                </span>
+                <span className="mes_menu_group">
+                    <div title="Toggle media display style" className="mes_button mes_media_gallery fa-solid fa-photo-film" data-i18n="[title]Toggle media display style;[aria-label]Toggle media display style" role="button" aria-label="Toggle media display style" tabIndex={0}>
+                        <span className="mes_menu_label">{translate('Gallery view')}</span>
+                    </div>
+                    <div title="Toggle media display style" className="mes_button mes_media_list fa-solid fa-table-cells-large" data-i18n="[title]Toggle media display style;[aria-label]Toggle media display style" role="button" aria-label="Toggle media display style" tabIndex={0}>
+                        <span className="mes_menu_label">{translate('List view')}</span>
+                    </div>
+                    <div title="Embed file or image" className="mes_button mes_embed fa-solid fa-paperclip" data-i18n="[title]Embed file or image;[aria-label]Embed file or image" role="button" aria-label="Embed file or image" tabIndex={0}>
+                        <span className="mes_menu_label">{translate('Embed file or image')}</span>
+                    </div>
+                    <div title="Exclude message from prompts" className="mes_button mes_hide fa-solid fa-eye" data-i18n="[title]Exclude message from prompts;[aria-label]Exclude message from prompts" role="button" aria-label="Exclude message from prompts" tabIndex={0}>
+                        <span className="mes_menu_label">{translate('Exclude message from prompts')}</span>
+                    </div>
+                    <div title="Include message in prompts" className="mes_button mes_unhide fa-solid fa-eye-slash" data-i18n="[title]Include message in prompts;[aria-label]Include message in prompts" role="button" aria-label="Include message in prompts" tabIndex={0}>
+                        <span className="mes_menu_label">{translate('Include message in prompts')}</span>
+                    </div>
+                </span>
+                <span className="mes_menu_group">
+                    <div
+                        className="mes_button mes_copy fa-solid fa-copy"
+                        title="Copy"
+                        data-i18n="[title]Copy;[aria-label]Copy"
+                        role="button"
+                        aria-label="Copy"
+                        tabIndex={0}
+                        onPointerUp={event => event.stopPropagation()}
+                        onClick={event => {
                             event.stopPropagation();
                             copyMessage();
-                        }
-                    }}
-                />
-                <div
-                    className="mes_button mes_edit_delete fa-solid fa-trash-can"
-                    title="Delete this message"
-                    data-i18n="[title]Delete this message;[aria-label]Delete this message"
-                    role="button"
-                    aria-label="Delete this message"
-                    tabIndex={0}
-                    onClick={event => {
-                        event.stopPropagation();
-                        deleteMessage();
-                    }}
-                    onKeyDown={event => {
-                        if ((event.key === 'Enter' || event.key === ' ') && canAddressMessage) {
-                            event.preventDefault();
+                        }}
+                        onKeyDown={event => {
+                            if ((event.key === 'Enter' || event.key === ' ') && canAddressMessage) {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                copyMessage();
+                            }
+                        }}
+                    >
+                        <span className="mes_menu_label">{translate('Copy')}</span>
+                    </div>
+                    <div
+                        className="mes_button mes_edit_delete fa-solid fa-trash-can"
+                        title="Delete this message"
+                        data-i18n="[title]Delete this message;[aria-label]Delete this message"
+                        role="button"
+                        aria-label="Delete this message"
+                        tabIndex={0}
+                        onClick={event => {
                             event.stopPropagation();
                             deleteMessage();
-                        }
-                    }}
-                />
+                        }}
+                        onKeyDown={event => {
+                            if ((event.key === 'Enter' || event.key === ' ') && canAddressMessage) {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                deleteMessage();
+                            }
+                        }}
+                    >
+                        <span className="mes_menu_label">{translate('Delete this message')}</span>
+                    </div>
+                </span>
             </div>
             <div
                 className="mes_button mes_edit fa-solid fa-pencil"
@@ -197,6 +305,14 @@ export function MainChatMessageRow({
         type: message.extraType || undefined,
     };
     const hasReasoning = render.reasoningHtml !== '' || message.reasoningEditing;
+    const metaStripRef = useRef<HTMLDivElement>(null);
+    const reasoningHeaderRef = useRef<HTMLDivElement>(null);
+    const [avatarFailed, setAvatarFailed] = useState(false);
+    useEffect(() => {
+        setAvatarFailed(false);
+    }, [message.avatarUrl]);
+    useModelIcon(metaStripRef, message.modelIconApi, message.modelIconTitle, 'timestamp-icon');
+    useModelIcon(reasoningHeaderRef, message.modelIconApi, message.modelIconTitle, 'thinking-icon', '.mes_reasoning_header_title');
     const setReasoningOpen = (open: boolean) => {
         if (canAddressMessage && hasReasoning) {
             void commands?.setMessageReasoningOpen(numericMessageId, open);
@@ -235,18 +351,34 @@ export function MainChatMessageRow({
             data-main-chat-message-row-owner="react"
             data-main-chat-message-row={message.id}
             data-main-chat-message-row-state={message.state}
+            data-reasoning-state={message.reasoningState ?? undefined}
+            data-media-display={message.mediaDisplay ?? undefined}
+            onClick={event => {
+                if (message.actionsExpanded
+                    && !(event.target as HTMLElement | null)?.closest?.('.extraMesButtons, .extraMesButtonsHint')) {
+                    void commands?.toggleMessageActionsShell({ kind: 'close' });
+                }
+            }}
         >
             <div className="for_checkbox" />
             <input type="checkbox" className="del_checkbox" />
             <div className="mesAvatarWrapper">
                 <div className="avatar">
-                    <img src={message.avatarUrl || 'img/No-Image-Placeholder.svg'} alt={message.name} />
+                    {avatarFailed ? (
+                        <div className="missing-avatar fa-solid fa-user-slash" />
+                    ) : (
+                        <img
+                            src={message.avatarUrl || 'img/No-Image-Placeholder.svg'}
+                            alt={message.name}
+                            onError={() => setAvatarFailed(true)}
+                        />
+                    )}
                 </div>
                 <div className="mesIDDisplay">#{message.id}</div>
-                <div className="mes_timer" />
-                {message.tokenCount !== null ? (
-                    <div className="tokenCounterDisplay">{message.tokenCount}t</div>
-                ) : null}
+                <div className="mes_timer" title={message.timerTitle || undefined}>{message.timer}</div>
+                <div className="tokenCounterDisplay">
+                    {message.tokenCount !== null ? `${message.tokenCount}t` : ''}
+                </div>
             </div>
             <div
                 className="swipe_left fa-solid fa-chevron-left"
@@ -262,7 +394,7 @@ export function MainChatMessageRow({
             <div className="mes_block">
                 <div className="ch_name flex-container justifySpaceBetween">
                     <div className="flex-container flex1 alignitemscenter">
-                        <div className="flex-container alignItemsBaseline">
+                        <div className="flex-container alignItemsBaseline" ref={metaStripRef}>
                             <span className="name_text">{message.name}</span>
                             <i className="mes_ghost fa-solid fa-ghost" title="This message is invisible for the AI" data-i18n="[title]This message is invisible for the AI" aria-hidden="true" />
                             <small className="timestamp" title={message.timestampTitle}>{message.timestamp}</small>
@@ -375,6 +507,8 @@ export function MainChatMessageRow({
                 <details
                     className="mes_reasoning_details"
                     open={message.reasoningOpen}
+                    data-state={message.reasoningState ?? undefined}
+                    data-type={message.reasoningType ?? undefined}
                     onClick={event => event.stopPropagation()}
                 >
                     <summary
@@ -386,7 +520,7 @@ export function MainChatMessageRow({
                         }}
                     >
                         <div className="mes_reasoning_header_block flex-container">
-                            <div className="mes_reasoning_header flex-container">
+                            <div className="mes_reasoning_header flex-container" ref={reasoningHeaderRef}>
                                 <span className="mes_reasoning_header_title" data-i18n="Thought for some time">Thought for some time</span>
                                 <div className="mes_reasoning_arrow fa-solid fa-chevron-up" />
                             </div>
@@ -501,7 +635,10 @@ export function MainChatMessageRow({
                         }}
                     />
                 ) : (
-                    <div className="mes_text" dangerouslySetInnerHTML={{ __html: render.messageHtml }} />
+                    <div
+                        className={message.inlineMediaText ? 'mes_text inline_media' : 'mes_text'}
+                        dangerouslySetInnerHTML={{ __html: render.messageHtml }}
+                    />
                 )}
                 {message.recoveryStatus ? (
                     <div
@@ -560,7 +697,15 @@ export function MainChatMessageRow({
                         }
                     }}
                 />
-                <div className="swipes-counter" hidden={message.swipeCounterHidden}>
+                <div
+                    className={message.swipePickerEnabled ? 'swipes-counter swipe-picker-enabled interactable' : 'swipes-counter'}
+                    hidden={message.swipeCounterHidden}
+                    role={message.swipePickerEnabled ? 'button' : undefined}
+                    title={message.swipePickerEnabled
+                        ? (message.swipePickerCanJump ? translate('Click to jump to a swipe') : translate('Click to view swipe history'))
+                        : undefined}
+                    tabIndex={message.swipePickerEnabled ? 0 : undefined}
+                >
                     {message.swipeCount > 0
                         ? `${message.swipeIndex + 1}\u200b/\u200b${message.swipeCount}`
                         : ''}

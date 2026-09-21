@@ -1042,7 +1042,7 @@ test('renders an Extensions Host workflow through React-owned controls and expli
         expect(panelBlock).not.toMatch(/\bHTMLElement\b|\bquerySelector(?:All)?\b|\bmessageNodes\b|innerHTML/);
         expect(rowSource).toContain('className="mes');
         expect(rowSource).toContain('mesid: message.id');
-        expect(rowSource).toContain('className="mes_text"');
+        expect(rowSource).toContain("'mes_text inline_media' : 'mes_text'");
         expect(rowSource).toContain('data-main-chat-message-row-owner="react"');
         expect(rowSource).toContain('dangerouslySetInnerHTML={{ __html: render.messageHtml }}');
     });

@@ -99,9 +99,9 @@ describe('chat workspace structure', () => {
         expect(panelBlock).not.toMatch(/\bHTMLElement\b|\bquerySelector(?:All)?\b|\bmessageNodes\b/);
         expect(rowSource).toContain('className="mes');
         expect(rowSource).toContain('mesid: message.id');
-        expect(rowSource).toContain('className="mes_text"');
+        expect(rowSource).toContain("'mes_text inline_media' : 'mes_text'");
         expect(rowSource).toContain('data-main-chat-message-row-owner="react"');
-        expect(rowSource).toContain('className="swipes-counter"');
+        expect(rowSource).toContain("'swipes-counter swipe-picker-enabled interactable' : 'swipes-counter'");
     });
 
     test('keeps send-form controls discoverable by role and accessible name', () => {

@@ -101,6 +101,11 @@ function getProjectedSwipeState(message, {
  * @param {boolean} [options.pristineChat] Whether this is an untainted chat
  * @param {string} [options.mediaDisplay]
  * @param {number} [options.mediaIndex]
+ * @param {Function} [options.timerForMessage] Resolves { timerValue, timerTitle } for .mes_timer
+ * @param {Function} [options.mediaDisplayForMessage] Resolves the media display attribute for the row
+ * @param {Function} [options.hasItemizedPromptForMessage] Whether an itemized prompt exists for the message
+ * @param {Function} [options.swipePickerForMessage] Resolves { canOpen, canJump } swipe-picker affordances
+ * @param {boolean} [options.modelIconEnabled] Whether the timestamp/thinking model icon is enabled
  * @returns {object} Typed message record containing HTML strings only
  */
 export function buildMainChatMessageRecord(message, {
@@ -114,6 +119,11 @@ export function buildMainChatMessageRecord(message, {
     pristineChat = false,
     mediaDisplay,
     mediaIndex,
+    timerForMessage = () => null,
+    mediaDisplayForMessage = null,
+    hasItemizedPromptForMessage = () => false,
+    swipePickerForMessage = () => null,
+    modelIconEnabled = false,
     includeRender = true,
 } = {}) {
     const numericMessageId = normalizeMessageId(messageId);
@@ -121,11 +131,15 @@ export function buildMainChatMessageRecord(message, {
         messageId: numericMessageId,
         timestamp,
     });
+    const hasMedia = Array.isArray(message?.extra?.media) && message.extra.media.length > 0;
+    const resolvedMediaDisplay = hasMedia
+        ? normalizeString(mediaDisplayForMessage?.(message, numericMessageId) ?? mediaDisplay) || null
+        : null;
     const render = includeRender
         ? buildChatMessageRichBodyRender(message, {
             messageId: numericMessageId,
             formatMessage,
-            mediaDisplay,
+            mediaDisplay: resolvedMediaDisplay ?? mediaDisplay,
             mediaIndex,
         })
         : null;
@@ -145,6 +159,14 @@ export function buildMainChatMessageRecord(message, {
         chatLength,
         pristineChat,
     });
+    const timer = timerForMessage(message, numericMessageId) ?? {};
+    const swipePicker = swipePickerForMessage(numericMessageId, message) ?? {};
+    const messageState = normalizeMessageState(message, descriptor, messageUi);
+    const reasoningState = message?.extra?.reasoning
+        ? (messageState === 'streaming' ? 'thinking' : 'done')
+        : message?.extra?.reasoning_duration
+            ? 'hidden'
+            : null;
 
     return {
         id: String(numericMessageId),
@@ -164,7 +186,23 @@ export function buildMainChatMessageRecord(message, {
             ...(message?.extra?.isSmallSys === true ? ['smallSysMes'] : []),
             ...(Array.isArray(message?.extra?.tool_invocations) ? ['toolCall'] : []),
         ],
-        state: normalizeMessageState(message, descriptor, messageUi),
+        state: messageState,
+        timer: normalizeString(timer.timerValue),
+        timerTitle: normalizeString(timer.timerTitle),
+        modelIconApi: modelIconEnabled && normalizeString(message?.extra?.api)
+            ? normalizeString(message.extra.api)
+            : null,
+        modelIconTitle: normalizeString(message?.extra?.api)
+            ? `${normalizeString(message.extra.api)}${normalizeString(message?.extra?.model) ? ` - ${normalizeString(message.extra.model)}` : ''}`
+            : '',
+        promptButtonVisible: message?.is_user !== true
+            && hasItemizedPromptForMessage(message, numericMessageId) === true,
+        swipePickerEnabled: swipePicker.canOpen === true,
+        swipePickerCanJump: swipePicker.canJump === true,
+        mediaDisplay: resolvedMediaDisplay,
+        inlineMediaText: hasMedia && message?.extra?.inline_image === false,
+        reasoningState,
+        reasoningType: normalizeString(message?.extra?.reasoning_type) || null,
         recoveryStatus: normalizeString(messageUi.recoveryStatus).trim() || null,
         recoveryStage: messageUi.recoveryStage === 'fallback'
             ? 'fallback'
@@ -227,6 +265,11 @@ function normalizeMessageIds(value) {
  * @param {Function} [options.avatarUrlForMessage]
  * @param {Function} [options.timestampTitleForMessage]
  * @param {Function} [options.timestampForMessage]
+ * @param {Function} [options.timerForMessage]
+ * @param {Function} [options.mediaDisplayForMessage]
+ * @param {Function} [options.hasItemizedPromptForMessage]
+ * @param {Function} [options.swipePickerForMessage]
+ * @param {boolean} [options.modelIconEnabled]
  * @param {string[]} [options.visibleMessageIds]
  * @param {object} [options.composer]
  * @param {object} [options.generation]
@@ -245,6 +288,11 @@ export function buildMainChatSnapshotFromLegacyChat({
     avatarUrlForMessage = () => '',
     timestampTitleForMessage = () => '',
     timestampForMessage = () => '',
+    timerForMessage,
+    mediaDisplayForMessage,
+    hasItemizedPromptForMessage,
+    swipePickerForMessage,
+    modelIconEnabled = false,
     visibleMessageIds,
     composer = {},
     generation = {},
@@ -287,6 +335,11 @@ export function buildMainChatSnapshotFromLegacyChat({
             messageUi: messageUiById[id],
             chatLength: chat.length,
             pristineChat,
+            timerForMessage,
+            mediaDisplayForMessage,
+            hasItemizedPromptForMessage,
+            swipePickerForMessage,
+            modelIconEnabled,
         });
     }
 

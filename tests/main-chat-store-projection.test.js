@@ -223,6 +223,75 @@ describe('main chat store projection', () => {
         }));
     });
 
+    test('projects legacy DOM affordances (timer, model icon, prompt, swipe picker, media display) as data', () => {
+        const record = buildMainChatMessageRecord({
+            name: 'Assistant',
+            mes: 'Answer',
+            is_user: false,
+            is_system: false,
+            swipe_id: 0,
+            swipes: ['a', 'b'],
+            extra: {
+                api: 'openai',
+                model: 'gpt-test',
+                token_count: 42,
+                reasoning_duration: 1200,
+                media: [{ type: 'image', url: '/files/x.png' }],
+                inline_image: false,
+            },
+        }, {
+            messageId: 0,
+            formatMessage: createFormatMessage(),
+            chatLength: 1,
+            timerForMessage: () => ({ timerValue: '4.2s', timerTitle: 'Generation took 4.2s' }),
+            mediaDisplayForMessage: () => 'gallery',
+            hasItemizedPromptForMessage: () => true,
+            swipePickerForMessage: () => ({ canOpen: true, canJump: false }),
+            modelIconEnabled: true,
+        });
+
+        expect(record).toEqual(expect.objectContaining({
+            timer: '4.2s',
+            timerTitle: 'Generation took 4.2s',
+            modelIconApi: 'openai',
+            modelIconTitle: 'openai - gpt-test',
+            promptButtonVisible: true,
+            swipePickerEnabled: true,
+            swipePickerCanJump: false,
+            mediaDisplay: 'gallery',
+            inlineMediaText: true,
+            reasoningState: 'hidden',
+        }));
+    });
+
+    test('marks reasoning state done for stored reasoning and thinking while streaming', () => {
+        const done = buildMainChatMessageRecord({
+            name: 'A', mes: 'x', is_user: false, is_system: false,
+            extra: { reasoning: 'chain', reasoning_type: 'model' },
+        }, { messageId: 0, formatMessage: createFormatMessage() });
+        const streaming = buildMainChatMessageRecord({
+            name: 'A', mes: 'x', is_user: false, is_system: false,
+            extra: { reasoning: 'chain', streaming: true },
+        }, { messageId: 0, formatMessage: createFormatMessage() });
+
+        expect(done.reasoningState).toBe('done');
+        expect(done.reasoningType).toBe('model');
+        expect(streaming.reasoningState).toBe('thinking');
+    });
+
+    test('suppresses the itemized-prompt button on user messages', () => {
+        const record = buildMainChatMessageRecord({
+            name: 'User', mes: 'hi', is_user: true, is_system: false, extra: {},
+        }, {
+            messageId: 0,
+            formatMessage: createFormatMessage(),
+            hasItemizedPromptForMessage: () => true,
+        });
+
+        expect(record.promptButtonVisible).toBe(false);
+        expect(record.mediaDisplay).toBeNull();
+    });
+
     test('projects the React editing lifecycle state from transient edit ownership', () => {
         const snapshot = buildMainChatSnapshotFromLegacyChat({
             chat: [{

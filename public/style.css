@@ -911,9 +911,10 @@ body .panelControlBar {
     backdrop-filter: blur(var(--SmartThemeBlurStrength));
 }
 
-/* #send_form.no-connection {
-    background-color: var(--crimson70a) !important;
-} */
+#send_form.no-connection {
+    border-color: color-mix(in srgb, var(--warning) 55%, var(--chat-workspace-border));
+    background-color: color-mix(in srgb, var(--SmartThemeBlurTintColor) 82%, var(--warning) 7%);
+}
 
 #nonQRFormItems {
     padding: 0;
@@ -4451,6 +4452,9 @@ input[type='checkbox'].del_checkbox {
     opacity: 0.7;
     margin-top: 12px;
     margin-right: 12px;
+    width: calc(var(--mainFontSize) * 1.3);
+    height: calc(var(--mainFontSize) * 1.3);
+    font-size: calc(var(--mainFontSize) * 1.3);
 }
 
 
@@ -4855,6 +4859,89 @@ input[type="range"]::-webkit-slider-thumb {
 
 .extraMesButtons {
     display: none;
+}
+
+.extraMesButtons.visible {
+    position: absolute;
+    top: calc(100% + 4px);
+    right: 0;
+    z-index: 60;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+    min-width: 184px;
+    padding: 4px;
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 8px;
+    background-color: color-mix(in srgb, var(--SmartThemeBlurTintColor) 92%, var(--SmartThemeBodyColor) 4%);
+    box-shadow: 0 8px 24px var(--SmartThemeShadowColor);
+    max-height: min(60vh, 420px);
+    overflow-x: hidden;
+    overflow-y: auto;
+    opacity: 1;
+}
+
+/* The floating actions menu must escape the row's overflow clipping and
+   stay fully opaque even when the row itself is not hovered. */
+.mes_buttons:has(.extraMesButtons.visible) {
+    overflow: visible;
+    opacity: 1;
+}
+
+.mes_block:has(.extraMesButtons.visible) {
+    overflow: visible;
+}
+
+.mes:has(.extraMesButtons.visible) {
+    z-index: 2;
+}
+
+.mes_menu_group {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+}
+
+.mes_menu_group + .mes_menu_group {
+    margin-top: 4px;
+    padding-top: 4px;
+    border-top: 1px solid var(--chat-message-border-subtle);
+}
+
+.extraMesButtons.visible .mes_button {
+    width: 100%;
+    justify-content: flex-start;
+    gap: 8px;
+    min-height: 30px;
+    padding: 4px 8px;
+    text-align: left;
+    opacity: 0.85;
+}
+
+.extraMesButtons.visible .mes_menu_label {
+    font-size: calc(var(--mainFontSize) * 0.85);
+    font-weight: 600;
+    line-height: 1.3;
+    color: inherit;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.extraMesButtons.visible .mes_button:hover,
+.extraMesButtons.visible .mes_button:focus-visible {
+    opacity: 1;
+}
+
+.extraMesButtons.visible .mes_edit_delete {
+    color: var(--warning);
+}
+
+.extraMesButtons.visible .mes_edit_delete:hover,
+.extraMesButtons.visible .mes_edit_delete:focus-visible {
+    color: var(--warning);
+    background-color: color-mix(in srgb, var(--warning) 16%, transparent);
 }
 
 .mes_button,
@@ -6941,6 +7028,10 @@ body:has(#character_popup.open) #top-settings-holder:has(.drawer-content.openDra
     .extraMesButtons>div {
         min-width: calc(var(--mainFontSize) * 1.7);
         min-height: calc(var(--mainFontSize) * 1.7);
+    }
+
+    .extraMesButtons.visible .mes_button {
+        min-height: 36px;
     }
 
     .mes_text {

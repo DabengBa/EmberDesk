@@ -53,6 +53,17 @@ export interface MainChatMessageRecord {
     readonly swipesVisible: boolean;
     readonly lastSwipe: boolean;
     readonly extraType: string;
+    readonly timer: string;
+    readonly timerTitle: string;
+    readonly modelIconApi: string | null;
+    readonly modelIconTitle: string;
+    readonly promptButtonVisible: boolean;
+    readonly swipePickerEnabled: boolean;
+    readonly swipePickerCanJump: boolean;
+    readonly mediaDisplay: string | null;
+    readonly inlineMediaText: boolean;
+    readonly reasoningState: string | null;
+    readonly reasoningType: string | null;
     readonly render?: MainChatMessageRender;
 }
 
@@ -326,6 +337,17 @@ function normalizeMessages(value: unknown) {
             swipesVisible: message.swipesVisible === true,
             lastSwipe: message.lastSwipe === true,
             extraType: normalizeString(message.extraType),
+            timer: normalizeString(message.timer),
+            timerTitle: normalizeString(message.timerTitle),
+            modelIconApi: normalizeNullableString(message.modelIconApi),
+            modelIconTitle: normalizeString(message.modelIconTitle),
+            promptButtonVisible: message.promptButtonVisible === true,
+            swipePickerEnabled: message.swipePickerEnabled === true,
+            swipePickerCanJump: message.swipePickerCanJump === true,
+            mediaDisplay: normalizeNullableString(message.mediaDisplay),
+            inlineMediaText: message.inlineMediaText === true,
+            reasoningState: normalizeNullableString(message.reasoningState),
+            reasoningType: normalizeNullableString(message.reasoningType),
             ...(render && Object.keys(render).length > 0 ? { render } : {}),
         };
     }
