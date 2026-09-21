@@ -255,7 +255,6 @@ import { initBulkEdit } from './scripts/bulk-edit.js';
 import { getContext } from './scripts/st-context.js';
 import { extractReasoningFromData, extractReasoningSignatureFromData, initReasoning, parseReasoningInSwipes, PromptReasoning, ReasoningHandler, removeReasoningFromString, updateReasoningUI } from './scripts/reasoning.js';
 import { accountStorage } from './scripts/util/AccountStorage.js';
-import { initWelcomeScreen, openPermanentAssistantChat, openPermanentAssistantCard, getPermanentAssistantAvatar, getWelcomePanelVisible, suppressNextChatChangedWelcomeScreen } from './scripts/welcome-screen.js';
 import { initDataMaid } from './scripts/data-maid.js';
 
 import { getSystemMessageByType, initSystemMessages, SAFETY_CHAT, sendSystemMessage, system_message_types, system_messages } from './scripts/system-messages.js';
@@ -774,7 +773,6 @@ registerChatOpsShellContext({
     setCharacterId: (...args) => setCharacterId(...args),
     setCharacterName: (...args) => setCharacterName(...args),
     sortMoments: (...args) => sortMoments(...args),
-    suppressNextChatChangedWelcomeScreen: (...args) => suppressNextChatChangedWelcomeScreen(...args),
     t: (...args) => t(...args),
     timestampToMoment: (...args) => timestampToMoment(...args),
     unshallowCharacter: (...args) => unshallowCharacter(...args),
@@ -1067,7 +1065,6 @@ registerDomHandlersShellContext({
     openCharacterChat: (...args) => openCharacterChat(...args),
     openCharacterWorldPopup: (...args) => openCharacterWorldPopup(...args),
     openMessageDelete: (...args) => openMessageDelete(...args),
-    openPermanentAssistantCard: (...args) => openPermanentAssistantCard(...args),
     pauseScriptExecution: (...args) => pauseScriptExecution(...args),
     processDroppedFiles: (...args) => processDroppedFiles(...args),
     queueReactCharacterAuthoringRemount: (...args) => queueReactCharacterAuthoringRemount(...args),
@@ -3094,7 +3091,6 @@ function getMainChatMessageListReactBridgeState() {
             errorLabel: slashCommand.errorLabel,
         },
         messageUiById: getMainChatMessageUiStateById(),
-        welcome: { visible: getWelcomePanelVisible(), version: displayVersion },
         window: {
             visibleMessageIds,
             anchorMessageId: visibleMessageIds[0] ?? null,
@@ -3639,7 +3635,6 @@ function enrichCharacterLibraryPageEntities(pageEntities) {
                     avatarUrl,
                 },
                 tags: getCharacterLibraryEntityTags(entity.id),
-                assistantAvatar: getPermanentAssistantAvatar(),
                 auxFieldName: power_user.aux_field || 'character_version',
                 showAvatarUrl: Boolean(power_user.show_card_avatar_urls),
             };
@@ -4162,7 +4157,6 @@ async function getClientVersion() {
         }
 
         $('#version_display').text(displayVersion);
-        $('#version_display_welcome').text(displayVersion);
     } catch (err) {
         console.error('Couldn\'t get client version', err);
     }
@@ -4533,7 +4527,6 @@ async function bootstrapWorkspace() {
         initSettingsSearch();
         initBulkEdit();
         initReasoning();
-        initWelcomeScreen();
     });
     await measureStartupStage('lateFeatureInit', () => Promise.resolve().then(() => {
         initCustomSelectedSamplers();
@@ -9894,15 +9887,11 @@ async function removeCharacterFromUI(deletedAvatars = [], { deleteContext = null
 /**
  * Creates a new assistant chat.
  * @param {object} params - Parameters for the new assistant chat
- * @param {boolean} [params.temporary=false] I need a temporary secretary
+ * @param {boolean} [params.temporary=false] Deprecated: retained for caller compatibility; assistant chats are always temporary
  * @returns {Promise<void>} - A promise that resolves when the new assistant chat is created
  */
 export async function newAssistantChat({ temporary = false } = {}) {
     await clearChat();
-    if (!temporary) {
-        setTemporaryChatStatus(false);
-        return openPermanentAssistantChat();
-    }
     chat.splice(0, chat.length);
     chat_metadata = {};
     setCharacterName(neutralCharacterName);

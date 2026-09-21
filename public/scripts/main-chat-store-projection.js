@@ -236,7 +236,6 @@ function normalizeMessageIds(value) {
  * @param {object} [options.window.scrollRestore] One-shot anchor restore owned by the React output lifecycle
  * @param {Record<string, object>} [options.messageUiById]
  * @param {boolean} [options.pristineChat]
- * @param {object|null} [options.welcome] Welcome panel projection { visible, version }
  * @returns {object} Main-chat store snapshot input
  */
 export function buildMainChatSnapshotFromLegacyChat({
@@ -254,7 +253,6 @@ export function buildMainChatSnapshotFromLegacyChat({
     window = {},
     messageUiById = {},
     pristineChat = false,
-    welcome = null,
 } = {}) {
     if (!Array.isArray(chat)) {
         throw new TypeError('Main chat snapshot projection requires a chat array');
@@ -341,8 +339,5 @@ export function buildMainChatSnapshotFromLegacyChat({
             clientHeight: window.clientHeight ?? 0,
             scrollRestore: window.scrollRestore ?? null,
         },
-        welcome: welcome && typeof welcome === 'object' && welcome.visible === true
-            ? { visible: true, version: normalizeString(welcome.version) }
-            : null,
     };
 }

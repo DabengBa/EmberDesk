@@ -129,7 +129,7 @@ export async function searchChatPayload({
 /**
  * @param {object} options
  * @param {import('../users.js').UserDirectoryList} options.directories
- * @param {import('../../public/scripts/welcome-screen.js').PinnedChat[]} [options.pinned]
+ * @param {object[]} [options.pinned]
  * @param {number|string} [options.max]
  * @param {boolean} [options.metadata]
  * @param {ChatRouteServiceDependencies} options.dependencies

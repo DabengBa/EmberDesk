@@ -61,14 +61,13 @@ export const FIRST_PARTY_SCRIPT_JS_IMPORT_CONTRACT = Object.freeze([
     contractEntry('streaming-display.js', '/script.js', ['animation_duration', 'messageFormatting']),
     contractEntry('swipe-picker.js', '/script.js', ['chat', 'deleteSwipe', 'ensureSwipes', 'isMessageSwipeable', 'isSwipingAllowed', 'swipe', 'syncMesToSwipe']),
     contractEntry('sysprompt.js', '../script.js', ['saveSettingsDebounced']),
-    contractEntry('system-messages.js', '../script.js', ['addOneMessage', 'chat', 'displayVersion', 'setSendButtonState', 'system_avatar', 'systemUserName']),
+    contractEntry('system-messages.js', '../script.js', ['addOneMessage', 'chat', 'setSendButtonState', 'system_avatar', 'systemUserName']),
     contractEntry('tags.js', '../script.js', ['characters', 'saveSettingsDebounced', 'this_chid', 'menu_type', 'entitiesFilter', 'printCharactersDebounced', 'buildAvatarList', 'DEFAULT_PRINT_TIMEOUT', 'printCharacters']),
     contractEntry('tokenizers.js', '../script.js', ['characters', 'main_api', 'this_chid']),
     contractEntry('tool-calling.js', '../script.js', ['addOneMessage', 'chat', 'getGeneratingApi', 'getGeneratingModel', 'main_api', 'saveChatConditional', 'system_avatar', 'systemUserName']),
     contractEntry('util/AccountStorage.js', '../../script.js', ['saveSettingsDebounced']),
     contractEntry('utils.js', '../script.js', ['characters', 'processDroppedFiles', 'this_chid', 'user_avatar']),
     contractEntry('variables.js', '../script.js', ['chat_metadata', 'getCurrentChatId', 'saveSettingsDebounced']),
-    contractEntry('welcome-screen.js', '../script.js', ['addOneMessage', 'characters', 'chat', 'doNewChat', 'getCharacters', 'getCurrentChatId', 'getSystemMessageByType', 'getThumbnailUrl', 'is_send_press', 'neutralCharacterName', 'printCharactersDebounced', 'scheduleMainChatMessageListPanelRefresh', 'selectCharacterById', 'system_avatar', 'system_message_types', 'this_chid', 'unshallowCharacter']),
 ]);
 
 export const FIRST_PARTY_SCRIPT_JS_IMPORT_ALLOWLIST = Object.freeze(

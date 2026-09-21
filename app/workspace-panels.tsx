@@ -44,7 +44,6 @@ import type {
     MainChatSnapshot,
 } from './stores/main-chat-store';
 import { MainChatMessageRow } from './components/main-chat/MainChatMessageRow';
-import { WelcomePanel } from './components/welcome/WelcomePanel';
 import {
     createCharacterAuthoringSession,
     shouldApplyCharacterAuthoringSaveResult,
@@ -1089,9 +1088,6 @@ function MainChatMessageListWorkspacePanel({
 
     return (
         <>
-            {snapshot.welcome?.visible ? (
-                <WelcomePanel version={snapshot.welcome.version} />
-            ) : null}
             {snapshot.window.showMoreVisible ? (
                 <button
                     type="button"

@@ -1,8 +1,8 @@
 /**
  * Performs the delete-only chat close preflight.
  * It preserves the save/generation safety gates and low-level cleanup,
- * but intentionally skips the heavier chat transition work that would
- * trigger welcome-screen hydration before the delete request.
+ * but intentionally skips the heavier chat transition work before the
+ * delete request.
  *
  * @param {object} dependencies
  * @param {() => boolean} dependencies.isGenerationInProgress
@@ -11,7 +11,6 @@
  * @param {() => Promise<void>} dependencies.clearCurrentChat
  * @param {() => void} dependencies.resetSelectionState
  * @param {() => void} [dependencies.selectCharactersView]
- * @param {() => void} [dependencies.suppressWelcomeScreen]
  * @param {() => Promise<void>} [dependencies.emitChatChanged]
  * @returns {Promise<boolean>}
  */
@@ -22,7 +21,6 @@ export async function runDeleteCharacterClosePreflight({
     clearCurrentChat,
     resetSelectionState,
     selectCharactersView,
-    suppressWelcomeScreen,
     emitChatChanged,
 }) {
     if (isGenerationInProgress()) {
@@ -34,7 +32,6 @@ export async function runDeleteCharacterClosePreflight({
     await clearCurrentChat();
     resetSelectionState();
     selectCharactersView?.();
-    suppressWelcomeScreen?.();
     await emitChatChanged?.();
     return true;
 }

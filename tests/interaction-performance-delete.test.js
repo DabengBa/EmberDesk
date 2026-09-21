@@ -27,7 +27,6 @@ describe('runDeleteCharacterClosePreflight', () => {
             clearCurrentChat: async () => calls.push('clear'),
             resetSelectionState: () => calls.push('reset-selection'),
             selectCharactersView: () => calls.push('select-characters-view'),
-            suppressWelcomeScreen: () => calls.push('suppress-welcome-screen'),
             emitChatChanged: async () => calls.push('emit-chat-changed'),
         });
 
@@ -37,7 +36,6 @@ describe('runDeleteCharacterClosePreflight', () => {
             'clear',
             'reset-selection',
             'select-characters-view',
-            'suppress-welcome-screen',
             'emit-chat-changed',
         ]);
     });

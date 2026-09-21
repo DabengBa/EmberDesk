@@ -367,7 +367,6 @@ describe('group chat retirement', () => {
             'public/scripts/PromptManager.js',
             'public/scripts/tokenizers.js',
             'public/scripts/utils.js',
-            'public/scripts/welcome-screen.js',
             'public/scripts/chat-backups.js',
         ];
         for (const file of retiredCoreSources) {

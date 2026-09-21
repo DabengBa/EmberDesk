@@ -1,5 +1,5 @@
 import { lodash } from '../lib.js';
-import { addOneMessage, chat, displayVersion, setSendButtonState, system_avatar, systemUserName } from '../script.js';
+import { addOneMessage, chat, setSendButtonState, system_avatar, systemUserName } from '../script.js';
 import { t } from './i18n.js';
 import { getMessageTimeStamp } from './RossAscends-mods.js';
 import { getSlashCommandsHelp } from './slash-commands.js';
@@ -17,7 +17,6 @@ export const SAFETY_CHAT = [];
  */
 export const system_message_types = {
     HELP: 'help',
-    WELCOME: 'welcome',
     EMPTY: 'empty',
     GENERIC: 'generic',
     NARRATOR: 'narrator',
@@ -26,9 +25,7 @@ export const system_message_types = {
     FORMATTING: 'formatting',
     HOTKEYS: 'hotkeys',
     MACROS: 'macros',
-    WELCOME_PROMPT: 'welcome_prompt',
     ASSISTANT_NOTE: 'assistant_note',
-    ASSISTANT_MESSAGE: 'assistant_message',
 };
 
 export async function initSystemMessages() {
@@ -63,27 +60,12 @@ export async function initSystemMessages() {
             mes: '',
         }),
         /** @type {ChatMessage} */
-        welcome: lodash.merge(structuredClone(defaultMessage), {
-            mes: await renderTemplateAsync('welcome', { displayVersion }),
-            extra: {
-                uses_system_ui: true,
-            },
-        }),
-        /** @type {ChatMessage} */
         empty: lodash.merge(structuredClone(defaultMessage), {
             mes: 'No one hears you. <b>Hint&#58;</b> choose a character to start chatting.',
         }),
         /** @type {ChatMessage} */
         generic: lodash.merge(structuredClone(defaultMessage), {
             mes: 'Generic system message. User `text` parameter to override the contents',
-        }),
-        /** @type {ChatMessage} */
-        welcome_prompt: lodash.merge(structuredClone(defaultMessage), {
-            mes: await renderTemplateAsync('welcomePrompt'),
-            extra: {
-                uses_system_ui: true,
-                isSmallSys: true,
-            },
         }),
         /** @type {ChatMessage} */
         assistant_note: lodash.merge(structuredClone(defaultMessage), {

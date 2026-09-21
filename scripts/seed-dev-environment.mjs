@@ -70,7 +70,6 @@ for (const dir of Object.values(directories)) {
 
 await seedBootstrapContent();
 await seedSettings();
-await seedThemes();
 await seedUserAccount();
 
 const worldNames = await seedWorlds();
@@ -139,13 +138,6 @@ async function seedUserAccount() {
         admin: true,
         enabled: true,
     });
-}
-
-async function seedThemes() {
-    await copyFile(
-        path.join(repoRoot, 'default', 'content', 'themes', 'Dark V 1.0.json'),
-        path.join(directories.themes, 'Dark V 1.0.json'),
-    );
 }
 
 async function seedWorlds() {

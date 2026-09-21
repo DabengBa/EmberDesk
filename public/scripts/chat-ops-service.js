@@ -54,7 +54,6 @@ const setActiveCharacter = (...args) => shell().setActiveCharacter(...args);
 const setCharacterId = (...args) => shell().setCharacterId(...args);
 const setCharacterName = (...args) => shell().setCharacterName(...args);
 const sortMoments = (...args) => shell().sortMoments(...args);
-const suppressNextChatChangedWelcomeScreen = (...args) => shell().suppressNextChatChangedWelcomeScreen(...args);
 const t = (...args) => shell().t(...args);
 const timestampToMoment = (...args) => shell().timestampToMoment(...args);
 const unshallowCharacter = (...args) => shell().unshallowCharacter(...args);
@@ -726,9 +725,6 @@ export async function closeCurrentChatForDelete() {
         selectCharactersView: () => {
             $('#rm_button_selected_ch').children('h2').text('');
             select_rm_characters();
-        },
-        suppressWelcomeScreen: () => {
-            suppressNextChatChangedWelcomeScreen();
         },
         emitChatChanged: async () => {
             await eventSource.emit(event_types.CHAT_CHANGED, getCurrentChatId());

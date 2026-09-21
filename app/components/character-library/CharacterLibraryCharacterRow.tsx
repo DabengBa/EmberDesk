@@ -83,11 +83,6 @@ export function CharacterLibraryCharacterRow({
                     <small className="entity_type_badge character_type_badge" data-i18n="Character">Character</small>
                     <span className="ch_name" title={`[Character] ${model.name}`}>{model.name}</span>
                     <small className="ch_additional_info ch_add_placeholder">+++</small>
-                    {model.isAssistant ? (
-                        <small className="ch_assistant" title="This character will be used as a welcome page assistant." data-i18n="[title]This character will be used as a welcome page assistant.">
-                            <i className="fa-solid fa-sm fa-user-graduate" />
-                        </small>
-                    ) : null}
                     {model.auxFieldValue
                         ? <small className="ch_additional_info character_version">{model.auxFieldValue}</small>
                         : <small className="ch_additional_info character_version" style={{ display: 'none' }} />}

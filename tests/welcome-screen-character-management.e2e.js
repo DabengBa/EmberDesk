@@ -10,17 +10,9 @@ test.describe('welcome screen shortcuts', () => {
             .locator('[data-react-workspace-shell-chrome] nav button')
             .filter({ hasText: 'Character Library' });
 
-        if (await characterLibraryButton.isVisible()) {
-            await characterLibraryButton.click();
-            await expect(characterLibraryButton).toHaveAttribute('aria-pressed', 'true', { timeout: 10_000 });
-        } else {
-            const welcomeCharacterManagementButton = page
-                .locator('.mes .drawer-opener[data-target="rightNavHolder"]')
-                .filter({ hasText: /Character Management|角色管理/ })
-                .first();
-            await expect(welcomeCharacterManagementButton).toBeVisible({ timeout: 10_000 });
-            await welcomeCharacterManagementButton.click();
-        }
+        await expect(characterLibraryButton).toBeVisible({ timeout: 10_000 });
+        await characterLibraryButton.click();
+        await expect(characterLibraryButton).toHaveAttribute('aria-pressed', 'true', { timeout: 10_000 });
 
         await expect(page.locator('#right-nav-panel')).toHaveClass(/openDrawer/, { timeout: 10_000 });
         await expect(page.locator('#right-nav-panel.openDrawer #rm_characters_block')).toBeVisible({ timeout: 10_000 });

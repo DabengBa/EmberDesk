@@ -20,7 +20,6 @@ export interface CharacterLibraryCharacterRowModel {
     auxFieldValue?: string;
     isFav: boolean;
     isActive: boolean;
-    isAssistant?: boolean;
     showAvatarUrl?: boolean;
     tags?: CharacterLibraryTagModel[];
     tagsDisplayLimit?: number;
@@ -80,7 +79,6 @@ export function projectCharacterEntityToRowModel(
     },
     options: {
         activeCharacterId?: string | number | null;
-        assistantAvatar?: string | null;
         defaultAvatarUrl?: string;
         showAvatarUrl?: boolean;
         resolveAvatarUrl?: (avatar: string) => string;
@@ -114,7 +112,6 @@ export function projectCharacterEntityToRowModel(
         isFav: isCharacterFav(item),
         isActive: options.activeCharacterId != null
             && String(options.activeCharacterId) === String(entity.id),
-        isAssistant: options.assistantAvatar != null && avatar === options.assistantAvatar,
         showAvatarUrl: Boolean(options.showAvatarUrl),
         tags: options.resolveTags?.(entity.id, item) ?? [],
     };

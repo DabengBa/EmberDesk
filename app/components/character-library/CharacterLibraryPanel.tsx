@@ -32,7 +32,6 @@ export interface CharacterLibraryPanelEntity {
     folderColor?: string;
     folderColor2?: string;
     tags?: CharacterLibraryTagModel[];
-    assistantAvatar?: string | null;
     auxFieldName?: string;
     showAvatarUrl?: boolean;
 }
@@ -90,7 +89,6 @@ function EntityRow({
             item: entity.item,
         }, {
             activeCharacterId,
-            assistantAvatar: entity.assistantAvatar,
             auxFieldName: entity.auxFieldName,
             showAvatarUrl: entity.showAvatarUrl,
             resolveTags: () => entity.tags ?? [],

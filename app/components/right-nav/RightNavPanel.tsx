@@ -119,9 +119,6 @@ export function RightNavPanel() {
                                                         <option id="import_tags" data-i18n="Import Tags">
                                                             Import Tags
                                                         </option>
-                                                        <option id="set_as_assistant" data-i18n="Set / Unset as Welcome Page Assistant">
-                                                            Set / Unset as Welcome Page Assistant
-                                                        </option>
                                                         <option id="character_action_export" className="character-detail-edit-action" data-i18n="Export and Download">
                                                             Export
                                                         </option>

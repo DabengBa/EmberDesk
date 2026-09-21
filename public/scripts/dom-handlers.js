@@ -89,7 +89,6 @@ const openAlternateGreetings = (...args) => shell().openAlternateGreetings(...ar
 const openCharacterChat = (...args) => shell().openCharacterChat(...args);
 const openCharacterWorldPopup = (...args) => shell().openCharacterWorldPopup(...args);
 const openMessageDelete = (...args) => shell().openMessageDelete(...args);
-const openPermanentAssistantCard = (...args) => shell().openPermanentAssistantCard(...args);
 const pauseScriptExecution = (...args) => shell().pauseScriptExecution(...args);
 const processDroppedFiles = (...args) => shell().processDroppedFiles(...args);
 const queueReactCharacterAuthoringRemount = (...args) => shell().queueReactCharacterAuthoringRemount(...args);
@@ -729,9 +728,6 @@ export async function bindLegacyShellHandlers() {
         });
 
         if (id == 'option_select_chat') {
-            if (state.this_chid === undefined && !state.is_send_press) {
-                await openPermanentAssistantCard();
-            }
             if ((state.this_chid !== undefined && !state.is_send_press) || fromSlashCommand) {
                 await displayPastChats();
                 //this is just to avoid the shadow for past chat view when using /delchat
@@ -760,8 +756,7 @@ export async function bindLegacyShellHandlers() {
                 await doNewChat({ deleteCurrentChat: deleteCurrentChat });
             }
             if (state.this_chid === undefined && !state.is_send_press) {
-                const alreadyInTempChat = state.this_chid === undefined && state.name2 === state.neutralCharacterName;
-                await newAssistantChat({ temporary: alreadyInTempChat });
+                await newAssistantChat();
             }
         } else if (id == 'option_regenerate') {
             //Attempting to regenerate a user message will instead generate a new message.

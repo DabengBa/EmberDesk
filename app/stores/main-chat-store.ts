@@ -56,11 +56,6 @@ export interface MainChatMessageRecord {
     readonly render?: MainChatMessageRender;
 }
 
-export interface MainChatWelcomeSnapshot {
-    readonly visible: boolean;
-    readonly version: string;
-}
-
 export interface MainChatComposerSnapshot {
     readonly value: string;
     readonly activeContext: MainChatContext;
@@ -123,7 +118,6 @@ export interface MainChatSnapshot {
     readonly streaming: MainChatStreamingSnapshot;
     readonly slash: MainChatSlashSnapshot;
     readonly window: MainChatWindowSnapshot;
-    readonly welcome: MainChatWelcomeSnapshot | null;
 }
 
 export type MainChatSnapshotInput = Partial<{
@@ -135,7 +129,6 @@ export type MainChatSnapshotInput = Partial<{
     streaming: Partial<MainChatStreamingSnapshot>;
     slash: Partial<MainChatSlashSnapshot>;
     window: MainChatWindowSnapshotInput;
-    welcome: Partial<MainChatWelcomeSnapshot> | null;
 }>;
 
 export interface MainChatStoreState {
@@ -387,12 +380,6 @@ function normalizeSnapshot(input: MainChatSnapshotInput = {}) {
             aborted: slash.aborted === true,
             errorLabel: normalizeNullableString(slash.errorLabel),
         },
-        welcome: input.welcome && typeof input.welcome === 'object' && input.welcome.visible === true
-            ? {
-                visible: true,
-                version: normalizeString(input.welcome.version),
-            }
-            : null,
         window: {
             visibleMessageIds: normalizeIdList(window.visibleMessageIds, knownMessageIds),
             anchorMessageId: normalizeNullableString(window.anchorMessageId),
