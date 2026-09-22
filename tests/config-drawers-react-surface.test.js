@@ -45,6 +45,12 @@ describe('small configuration drawers React surface (Wave A)', () => {
         expect(component).toContain('PresetManagerActionsMenu apiId="reasoning"');
         expect(component).toContain('data-preset-manager-file="sysprompt"');
         expect(component).toContain('data-preset-manager-file="reasoning"');
+        // Selects must carry data-preset-manager-for: registerPresetManagers()
+        // scans `select[data-preset-manager-for]`, so the html2jsx-mangled
+        // htmlFor variant would leave both managers permanently unregistered.
+        expect(component).toContain('data-preset-manager-for="sysprompt"');
+        expect(component).toContain('data-preset-manager-for="reasoning"');
+        expect(component).not.toContain('data-preset-manager-htmlFor');
         expect(component).not.toContain('data-preset-manager-update=');
         // Menu emits the delegated data-preset-manager-* contract attrs.
         for (const action of ['update', 'new', 'rename', 'import', 'export', 'restore', 'delete']) {

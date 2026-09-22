@@ -1260,7 +1260,10 @@ function showWorkspaceChildSlotContent(selectedMenuId) {
         rm_characters_block: 'flex',
     };
 
-    $('#result_info').toggle(normalizedMenuId === 'rm_ch_create_block');
+    const reactAuthoringOwnsPanel = normalizedMenuId === 'rm_ch_create_block'
+        && Boolean(getWorkspaceReactFeatures()?.reactPanels?.characterAuthoring);
+    $('#result_info').toggle(normalizedMenuId === 'rm_ch_create_block' && !reactAuthoringOwnsPanel);
+    $('#rm_button_selected_ch h2').toggle(!reactAuthoringOwnsPanel);
     document.querySelectorAll('#right-nav-panel .right_menu').forEach(menu => {
         if (!(menu instanceof HTMLElement)) {
             return;
@@ -2313,7 +2316,8 @@ function hideLegacyWorldInfoWorkbench(hidden, { revealGlobalPanel = false } = {}
             // Prefer opening the rules drawer when it is collapsed.
             const isCollapsed = rulesContent.hidden
                 || rulesContent.style.display === 'none'
-                || rulesContent.classList.contains('displayNone');
+                || rulesContent.classList.contains('displayNone')
+                || !rulesContent.classList.contains('openInlineDrawer');
             if (isCollapsed) {
                 rulesToggle?.dispatchEvent(new Event('click', { bubbles: true }));
             }
@@ -2387,6 +2391,11 @@ function getCharacterAuthoringReactBridgeState(stateOverrides = {}) {
         subtitle: 'Character draft',
         dirty: getCharacterAuthoringDirtyFields(sourceDraft, draft).length > 0,
         draft,
+        avatarUrl: draft.avatar ? getThumbnailUrl('avatar', draft.avatar) : '',
+        tokenSummary: {
+            total: String($('#result_info_total_tokens').text() || '').trim(),
+            permanent: String($('#result_info_permanent_tokens').text() || '').trim(),
+        },
         unsupportedFields: Array.isArray(draft.unsupportedFields) ? [...draft.unsupportedFields] : [],
         managementActions: getCharacterManagementDropdownActions(),
     };
@@ -2403,7 +2412,9 @@ function getCharacterManagementDropdownActions() {
         return [];
     }
     return Array.from(dropdown.options)
-        .filter(option => option instanceof HTMLOptionElement && option.id)
+        // React owns the advanced fields; projecting the legacy advanced
+        // editor would expose a second visible editing surface for them.
+        .filter(option => option instanceof HTMLOptionElement && option.id && option.id !== 'character_action_advanced')
         .map(option => ({
             id: option.id,
             label: option.textContent?.trim() || option.id,
@@ -2449,6 +2460,49 @@ function applyCharacterAuthoringSaveModel(saveModel = {}, { submit = true } = {}
     // Direct API save owns writes; submit flag is ignored.
 }
 
+/**
+ * Makes the pending React draft visible to a legacy action. In edit mode the
+ * draft is persisted outright (returns true) so that actions which read or
+ * mutate the server-side card — rename, export, duplicate, lore import — work
+ * on current data, and a fresh remount won't regress them. On failure the
+ * draft is only mirrored into the hidden form as before.
+ */
+async function persistAuthoringDraftBeforeLegacyAction(payload) {
+    if (!(payload?.fields || payload?.extensions)) {
+        return false;
+    }
+    if (getCurrentCharacterAuthoringMode() !== 'edit') {
+        applyCharacterAuthoringSaveModel(payload, { submit: false });
+        return false;
+    }
+    try {
+        await saveCharacterAuthoringFromPayload(payload);
+        return true;
+    } catch {
+        applyCharacterAuthoringSaveModel(payload, { submit: false });
+        return false;
+    }
+}
+
+function syncAuthoringDraftFromPopups(draft) {
+    if (!draft || typeof draft !== 'object') {
+        return draft;
+    }
+    const editMode = getCurrentCharacterAuthoringMode() === 'edit';
+    const sourceCharacter = editMode ? getCurrentCharacterAuthoringSource() : null;
+    // The greetings popup mutates characters[chid].data.alternate_greetings in edit
+    // mode and create_save.alternate_greetings in create mode.
+    const greetingSource = editMode
+        ? sourceCharacter?.data?.alternate_greetings ?? create_save.alternate_greetings
+        : create_save.alternate_greetings;
+    draft.alternateGreetings = Array.isArray(greetingSource) ? [...greetingSource] : [];
+    // charUpdatePrimaryWorld mirrors the latest selection into #character_world.
+    const worldValue = String($('#character_world').val() ?? '')
+        || String(editMode ? sourceCharacter?.data?.extensions?.world ?? '' : create_save.world ?? '');
+    draft.characterWorld = worldValue;
+    return draft;
+}
+
 async function reopenCharacterAuthoringAfterLegacyPopup(draft) {
     await mountReactCharacterAuthoringPanel({ draft });
 }
@@ -2485,28 +2539,34 @@ function getCharacterAuthoringReactCommands() {
                 $('#delete_button').trigger('click');
                 return false;
             },
-            duplicateAuthoring: () => {
+            duplicateAuthoring: async payload => {
+                // Duplicate reads the saved card — persist pending edits first.
+                await persistAuthoringDraftBeforeLegacyAction(payload);
                 $('#dupe_button').trigger('click');
                 return false;
             },
-            exportAuthoring: payload => {
-                applyCharacterAuthoringSaveModel(payload, { submit: false });
+            exportAuthoring: async payload => {
+                // Export reads the saved card — persist pending edits first.
+                await persistAuthoringDraftBeforeLegacyAction(payload);
                 toggleCharacterExportPopup(getVisibleCharacterExportTrigger());
                 return false;
             },
             openWorldInfo: async payload => {
                 applyCharacterAuthoringSaveModel(payload, { submit: false });
-                hideLegacyCharacterAuthoringEditor(false);
+                // Popups operate on cloned templates + create_save/characters[chid].data
+                // and read the form via FormData — all fine while #form_create stays
+                // hidden. Unhiding would flash the legacy editor under the React panel.
                 await openCharacterWorldPopup();
-                hideLegacyCharacterAuthoringEditor(true);
+                // The popup writes back to legacy stores; pull them into the React
+                // draft so the remount doesn't lose popup edits.
+                syncAuthoringDraftFromPopups(payload?.draft);
                 await reopenCharacterAuthoringAfterLegacyPopup(payload?.draft);
                 return false;
             },
             openAlternateGreetings: async payload => {
                 applyCharacterAuthoringSaveModel(payload, { submit: false });
-                hideLegacyCharacterAuthoringEditor(false);
                 await openAlternateGreetings();
-                hideLegacyCharacterAuthoringEditor(true);
+                syncAuthoringDraftFromPopups(payload?.draft);
                 await reopenCharacterAuthoringAfterLegacyPopup(payload?.draft);
                 return false;
             },
@@ -2515,27 +2575,35 @@ function getCharacterAuthoringReactCommands() {
                 if (!actionId) {
                     return false;
                 }
-                // Only push the draft into the hidden form when it actually carries
-                // field data; an invalid draft payload must not blank the form values
-                // that legacy actions (rename, replace, popups) read back.
-                if (payload?.fields || payload?.extensions) {
-                    applyCharacterAuthoringSaveModel(payload, { submit: false });
-                }
-                hideLegacyCharacterAuthoringEditor(false);
+                // Push the draft into the hidden form so legacy actions read current
+                // values. In edit mode, persist it outright first: actions like rename
+                // or lore import mutate characters[chid] server-side, and remounting
+                // the stale draft afterwards would let the next autosave overwrite
+                // the action's result.
+                const draftPersisted = await persistAuthoringDraftBeforeLegacyAction(payload);
                 const dropdown = document.getElementById('char-management-dropdown');
                 const option = dropdown?.querySelector?.(`option[id="${CSS.escape(actionId)}"]`);
                 if (option instanceof HTMLOptionElement) {
                     option.selected = true;
                     $('#char-management-dropdown').trigger('change');
-                    // Let the synchronous prefix of the legacy change handler settle before re-hiding.
+                    // Let the synchronous prefix of the legacy change handler settle.
                     await delay(0);
                 }
-                hideLegacyCharacterAuthoringEditor(true);
-                await reopenCharacterAuthoringAfterLegacyPopup(payload?.draft);
+                // Fresh remount when the draft was persisted: picks up both the saved
+                // edits and whatever the management action mutated. On pre-save
+                // failure keep the live draft so unsaved edits survive the action.
+                await reopenCharacterAuthoringAfterLegacyPopup(draftPersisted ? undefined : payload?.draft);
                 return false;
             },
         },
-        shouldRemount(commandResult) {
+        shouldRemount(commandResult, commandName) {
+            // Edit-mode saves rebase the React session client-side; remounting on
+            // every autosave would reset the draft baseline, collapse the advanced
+            // section, and close the field editor mid-typing. Create-mode saves must
+            // still remount so the panel flips into edit mode on the new card.
+            if (commandName === 'saveCharacterAuthoring') {
+                return commandResult?.mode !== 'edit';
+            }
             return commandResult !== false;
         },
         shouldRemountOnError() {
@@ -2566,7 +2634,11 @@ async function mountReactCharacterAuthoringPanel(stateOverrides = undefined) {
 
     // Always hide legacy form; React is the only editable owner.
     hideLegacyCharacterAuthoringEditor(true);
-    if (!result?.mounted) {
+    if (result?.mounted) {
+        // The gates in selectRightMenuWithAnimation/showWorkspaceChildSlotContent run
+        // before the async mount settles, so the legacy tab title must be hidden here too.
+        $('#rm_button_selected_ch h2').hide();
+    } else {
         const host = ensureCharacterAuthoringReactHost();
         if (host && !host.querySelector('[data-react-authoring-build-error]')) {
             host.innerHTML = '<div class="react-authoring-panel" data-react-authoring-build-error="true" role="alert">Character Authoring React build is missing or failed to mount. Redeploy the workspace-panels bundle.</div>';
@@ -8945,7 +9017,10 @@ export function selectRightMenuWithAnimation(selectedMenuId) {
         'rm_api_block': 'grid',
         'rm_characters_block': 'flex',
     };
-    $('#result_info').toggle(selectedMenuId === 'rm_ch_create_block');
+    const reactAuthoringOwnsPanel = selectedMenuId === 'rm_ch_create_block'
+        && Boolean(getWorkspaceReactFeatures()?.reactPanels?.characterAuthoring);
+    $('#result_info').toggle(selectedMenuId === 'rm_ch_create_block' && !reactAuthoringOwnsPanel);
+    $('#rm_button_selected_ch h2').toggle(!reactAuthoringOwnsPanel);
     document.querySelectorAll('#right-nav-panel .right_menu').forEach((menu) => {
         $(menu).css('display', 'none');
 

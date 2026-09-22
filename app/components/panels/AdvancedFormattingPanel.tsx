@@ -74,7 +74,7 @@ export function AdvancedFormattingPanel() {
                         </h4>
                         <div id="SystemPromptBlock" className="marginBot10">
                             <div className="flex-container" title="Select your current System Prompt" data-i18n="[title]Select your current System Prompt">
-                                <select id="sysprompt_select" data-preset-manager-htmlFor="sysprompt" className="flex1 text_pole"></select>
+                                <select id="sysprompt_select" data-preset-manager-for="sysprompt" className="flex1 text_pole"></select>
                                 <div className="flex-container margin0 justifyCenter gap3px">
                                     <input type="file" hidden data-preset-manager-file="sysprompt" accept=".json, .settings" />
                                     <PresetManagerActionsMenu apiId="sysprompt" noun="prompt" />
@@ -204,7 +204,7 @@ export function AdvancedFormattingPanel() {
                                         Reasoning Formatting
                                     </summary>
                                     <div className="flex-container" title="Select your current Reasoning Template" data-i18n="[title]Select your current Reasoning Template">
-                                        <select id="reasoning_select" data-preset-manager-htmlFor="reasoning" className="flex1 text_pole"></select>
+                                        <select id="reasoning_select" data-preset-manager-for="reasoning" className="flex1 text_pole"></select>
                                         <div className="flex-container margin0 justifyCenter gap3px">
                                             <input type="file" hidden data-preset-manager-file="reasoning" accept=".json, .settings" />
                                             <PresetManagerActionsMenu apiId="reasoning" noun="template" />

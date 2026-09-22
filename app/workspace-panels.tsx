@@ -1,4 +1,4 @@
-import { Fragment, StrictMode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactElement, type ReactNode } from 'react';
+import { Fragment, StrictMode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ChangeEvent, type ReactElement, type ReactNode, type TextareaHTMLAttributes } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { flushSync } from 'react-dom';
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
@@ -85,6 +85,8 @@ import { DialogueDelMesControls, DialoguePopupControls } from './components/dial
 import { OnboardingActions } from './components/onboarding/OnboardingActions';
 import { ExportFormatPopup } from './components/export-format/ExportFormatPopup';
 import * as stylex from '@stylexjs/stylex';
+import type { StyleXStyles } from '@stylexjs/stylex';
+import { createPortal } from 'react-dom';
 import { authoringStyles, workspacePanelStyles, workspaceShellStyles } from './styles/workspace-panels.styles.js';
 import { Theme } from '@astryxdesign/core';
 import { emberDeskTheme } from './lib/theme-tokens';
@@ -246,6 +248,8 @@ interface AuthoringWorkspacePanelState {
     dirty?: boolean;
     unsupportedFields?: string[];
     draft?: Record<string, unknown>;
+    avatarUrl?: string;
+    tokenSummary?: { total?: string; permanent?: string };
     candidates?: AuthoringCandidateState[];
     tagOptions?: AuthoringCandidateState[];
     managementActions?: AuthoringManagementAction[];
@@ -315,6 +319,7 @@ function WorkspacePanelShell({
     actions = [],
     legacyBoundary,
     hideDiagnostics = false,
+    hideTitle = false,
     slots = [],
     children,
 }: {
@@ -324,12 +329,14 @@ function WorkspacePanelShell({
     actions?: WorkspacePanelRecoveryAction[];
     legacyBoundary?: string;
     hideDiagnostics?: boolean;
+    hideTitle?: boolean;
     slots?: WorkspacePanelLegacySlot[];
     children: ReactNode;
 }) {
     const boundaryAttributes = legacyBoundary ? {
         [`data-${kind.replace(/[A-Z]/g, letter => `-${letter.toLowerCase()}`)}-legacy-boundary`]: legacyBoundary,
     } : {};
+    const showStatusBadge = status === 'loading' || status === 'error';
 
     return (
         <section
@@ -340,20 +347,22 @@ function WorkspacePanelShell({
             {...boundaryAttributes}
         >
             <div className="flex-container flexFlowColumn gap8">
-                <div className="flex-container justifyspacebetween alignitemscenter gap8">
-                    <div className="title_restorable">{title}</div>
-                    {status === 'loading' || status === 'error' ? (
-                        <span
-                            {...stylex.props(
-                                workspacePanelStyles.statusBadge,
-                                status === 'loading' ? workspacePanelStyles.statusBadgeLoading : workspacePanelStyles.statusBadgeError,
-                            )}
-                            data-workspace-panel-status={status}
-                        >
-                            {getWorkspacePanelVisibleStatusLabel(status)}
-                        </span>
-                    ) : null}
-                </div>
+                {!hideTitle || showStatusBadge ? (
+                    <div className="flex-container justifyspacebetween alignitemscenter gap8">
+                        {!hideTitle ? <div className="title_restorable">{title}</div> : <span aria-hidden="true" />}
+                        {showStatusBadge ? (
+                            <span
+                                {...stylex.props(
+                                    workspacePanelStyles.statusBadge,
+                                    status === 'loading' ? workspacePanelStyles.statusBadgeLoading : workspacePanelStyles.statusBadgeError,
+                                )}
+                                data-workspace-panel-status={status}
+                            >
+                                {getWorkspacePanelVisibleStatusLabel(status)}
+                            </span>
+                        ) : null}
+                    </div>
+                ) : null}
                 {actions.length > 0 ? (
                     <div
                         {...stylex.props(workspacePanelStyles.recovery)}
@@ -563,6 +572,63 @@ function AuthoringActionsMenu({
     );
 }
 
+function AuthoringFieldLabel({ text, dirty, meta, onExpand }: { text: string; dirty?: boolean; meta?: string; onExpand?: () => void }) {
+    return (
+        <span {...stylex.props(authoringStyles.fieldLabel)}>
+            {text}
+            {dirty ? <span {...stylex.props(authoringStyles.dirtyDot)} title="Unsaved change" aria-label="Unsaved change" /> : null}
+            {meta ? <span {...stylex.props(authoringStyles.fieldMeta)}>{meta}</span> : null}
+            {onExpand ? (
+                <button
+                    type="button"
+                    {...stylex.props(authoringStyles.iconAction)}
+                    title="Open in full editor"
+                    aria-label={`Open ${text} in full editor`}
+                    onClick={onExpand}
+                >
+                    <i className="fa-solid fa-up-right-and-down-left-from-center" aria-hidden="true" />
+                </button>
+            ) : null}
+        </span>
+    );
+}
+
+function AuthoringTextarea({
+    value,
+    onChange,
+    rows = 2,
+    xstyle,
+    ...rest
+}: {
+    value: string;
+    rows?: number;
+    xstyle?: StyleXStyles;
+    onChange: (event: ChangeEvent<HTMLTextAreaElement>) => void;
+} & Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, 'value' | 'onChange' | 'rows'>) {
+    const ref = useRef<HTMLTextAreaElement | null>(null);
+
+    useLayoutEffect(() => {
+        const element = ref.current;
+        if (!element) {
+            return;
+        }
+        element.style.height = 'auto';
+        element.style.height = `${element.scrollHeight}px`;
+    }, [value]);
+
+    return (
+        <textarea
+            ref={ref}
+            className="text_pole"
+            rows={rows}
+            value={value}
+            onChange={onChange}
+            {...stylex.props(authoringStyles.control, authoringStyles.textareaAuto, xstyle)}
+            {...rest}
+        />
+    );
+}
+
 function AuthoringWorkspacePanel({
     kind,
     state,
@@ -574,7 +640,6 @@ function AuthoringWorkspacePanel({
 }) {
     const bridgeState = asAuthoringState(state);
     const title = bridgeState.title ?? 'Character Authoring';
-    const subtitle = bridgeState.subtitle ?? 'React owner for character drafts';
     const unsupportedFields = Array.isArray(bridgeState.unsupportedFields) ? bridgeState.unsupportedFields : [];
     const initialSession = useMemo(() => createCharacterAuthoringSession(bridgeState.draft ?? {}, { mode: bridgeState.mode ?? 'create' }), [bridgeState.draft, bridgeState.mode]);
     const [authoringSession, setAuthoringSession] = useState(initialSession);
@@ -589,6 +654,9 @@ function AuthoringWorkspacePanel({
         saveGenerationRef.current += 1;
         setAuthoringSession(initialSession);
         setFieldErrors({});
+        setAdvancedOpen(false);
+        setExpandedField(null);
+        setAvatarPreviewOverride(null);
     }, [initialSession]);
 
     const updateDraft = useCallback((patch: Record<string, unknown>) => {
@@ -597,6 +665,9 @@ function AuthoringWorkspacePanel({
     }, []);
 
     const submitDraft = useCallback(() => {
+        if (authoringCommandMutation.isPending) {
+            return;
+        }
         const submitResult = authoringSession.submit();
         if (!submitResult.ok) {
             setFieldErrors((submitResult.fieldErrors ?? {}) as Record<string, string>);
@@ -617,22 +688,38 @@ function AuthoringWorkspacePanel({
                 })) {
                     return;
                 }
-                setAuthoringSession(() => createCharacterAuthoringSession(submittedDraft, { mode: bridgeState.mode ?? 'create' }));
+                setAuthoringSession((currentSession: typeof initialSession) => {
+                    if (currentSession.draft === submittedDraft) {
+                        return createCharacterAuthoringSession(submittedDraft, { mode: bridgeState.mode ?? 'create' });
+                    }
+                    // The user kept typing while the save was in flight — keep the
+                    // live draft and only advance the clean baseline so the
+                    // remaining diff stays dirty for the next autosave pass.
+                    return typeof currentSession.rebase === 'function'
+                        ? currentSession.rebase(submittedDraft)
+                        : createCharacterAuthoringSession(currentSession.draft, { mode: bridgeState.mode ?? 'create' });
+                });
             })
             .catch(() => {
                 // Mutation state carries the failed status; keep the dirty draft intact for retry.
             });
     }, [authoringCommandMutation, authoringSession, bridgeState.mode, kind]);
 
-    const cancelDraft = useCallback(() => {
-        saveGenerationRef.current += 1;
-        setAuthoringSession((currentSession: typeof initialSession) => currentSession.cancel());
-        setFieldErrors({});
-        void commands?.cancelAuthoring?.(kind);
-    }, [commands, kind]);
+    const submitDraftRef = useRef(submitDraft);
+    useEffect(() => {
+        submitDraftRef.current = submitDraft;
+    }, [submitDraft]);
+
+    // Autosave: edit mode only — create-mode submits would mint a new card per pass.
+    useEffect(() => {
+        if (bridgeState.mode !== 'edit' || !authoringSession.dirty) {
+            return;
+        }
+        const timer = window.setTimeout(() => submitDraftRef.current(), 900);
+        return () => window.clearTimeout(timer);
+    }, [authoringSession, bridgeState.mode]);
 
     const draft = authoringSession.draft as Record<string, unknown>;
-    const statusLabel = authoringCommandMutation.isPending ? 'Saving' : authoringSession.dirty ? 'Unsaved' : 'Ready';
     const stringDraft = (key: string) => (typeof draft[key] === 'string' ? draft[key] as string : '');
     const nameValue = stringDraft('name');
     const descriptionValue = stringDraft('description');
@@ -640,9 +727,7 @@ function AuthoringWorkspacePanel({
     const tagsText = Array.isArray(draft.tags)
         ? draft.tags.filter((tag): tag is string => typeof tag === 'string').join(', ')
         : '';
-    const alternateGreetingsText = Array.isArray(draft.alternateGreetings)
-        ? draft.alternateGreetings.filter((item): item is string => typeof item === 'string').join('\n')
-        : '';
+
     const depthPrompt = draft.depthPrompt && typeof draft.depthPrompt === 'object'
         ? draft.depthPrompt as { prompt?: string; depth?: number | null; role?: string | number | null }
         : { prompt: '', depth: null, role: 'system' };
@@ -651,11 +736,57 @@ function AuthoringWorkspacePanel({
     const characterToolActionPayload = characterActionPayload ? { ...characterActionPayload, draft } : undefined;
     const isCreateMode = (bridgeState.mode ?? 'create') === 'create';
     const isActionPending = authoringCommandMutation.isPending;
+    const dirtyFieldSet = new Set(authoringSession.dirtyFields);
+    const isFieldDirty = (key: string) => dirtyFieldSet.has(key);
+    const advancedChips = [
+        stringDraft('systemPrompt').trim() ? { label: 'system prompt', field: 'systemPrompt' } : null,
+        stringDraft('postHistoryInstructions').trim() ? { label: 'post-history', field: 'postHistoryInstructions' } : null,
+        stringDraft('personality').trim() ? { label: 'personality', field: 'personality' } : null,
+        stringDraft('scenario').trim() ? { label: 'scenario', field: 'scenario' } : null,
+        stringDraft('exampleMessages').trim() ? { label: 'examples', field: 'exampleMessages' } : null,
+        (depthPrompt.prompt?.trim() || depthPrompt.depth != null) ? { label: `note@${depthPrompt.depth ?? 4}`, field: 'depthPrompt.prompt' } : null,
+        stringDraft('creator').trim() ? { label: 'creator', field: 'creator' } : null,
+        stringDraft('characterVersion').trim() ? { label: `v${stringDraft('characterVersion').trim()}`, field: 'characterVersion' } : null,
+        stringDraft('creatorNotes').trim() ? { label: 'notes', field: 'creatorNotes' } : null,
+    ].filter((chip): chip is { label: string; field: string } => chip !== null);
+    const greetings = Array.isArray(draft.alternateGreetings)
+        ? draft.alternateGreetings.filter((greeting): greeting is string => typeof greeting === 'string')
+        : [];
+    const jumpToAdvancedField = (fieldKey: string) => {
+        setAdvancedOpen(true);
+        window.requestAnimationFrame(() => {
+            const target = document.querySelector(`[data-react-authoring-field="${CSS.escape(fieldKey)}"]`);
+            target?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+            (target?.querySelector('textarea, input, select') as HTMLElement | null)?.focus({ preventScroll: true });
+        });
+    };
+    const [avatarPreviewOverride, setAvatarPreviewOverride] = useState<string | null>(null);
+    useEffect(() => {
+        return () => {
+            if (avatarPreviewOverride) {
+                URL.revokeObjectURL(avatarPreviewOverride);
+            }
+        };
+    }, [avatarPreviewOverride]);
+    const avatarPreviewSrc = avatarPreviewOverride || bridgeState.avatarUrl || 'img/ai4.png';
+    const tokenTotal = String(bridgeState.tokenSummary?.total ?? '').trim();
+    const tokenPermanent = String(bridgeState.tokenSummary?.permanent ?? '').trim();
     const managementActions = useMemo(
         () => (Array.isArray(bridgeState.managementActions) ? bridgeState.managementActions.filter(action => action && action.id) : [])
             .filter(action => !(isCreateMode && action.editAction)),
         [bridgeState.managementActions, isCreateMode],
     );
+    const [advancedOpen, setAdvancedOpen] = useState(false);
+    const [expandedField, setExpandedField] = useState<{ key: string; label: string } | null>(null);
+    const getExpandedFieldValue = (key: string) =>
+        key === 'depthPrompt.prompt' ? (depthPrompt.prompt ?? '') : stringDraft(key);
+    const setExpandedFieldValue = (key: string, value: string) => {
+        if (key === 'depthPrompt.prompt') {
+            updateDraft({ depthPrompt: { ...depthPrompt, prompt: value } });
+            return;
+        }
+        updateDraft({ [key]: value });
+    };
     const [liveManagementActions, setLiveManagementActions] = useState<AuthoringManagementAction[] | null>(null);
     const refreshManagementActions = useCallback(() => {
         // The hidden select is the compatibility host; read live options so
@@ -686,6 +817,7 @@ function AuthoringWorkspacePanel({
             kind={kind as WorkspacePanelKind}
             title={title}
             status={authoringCommandMutation.isError ? 'error' : 'success'}
+            hideDiagnostics={true}
         >
             <section
                 {...stylex.props(authoringStyles.panel)}
@@ -693,78 +825,46 @@ function AuthoringWorkspacePanel({
                 data-react-authoring-owner={kind}
                 data-react-authoring-mode={bridgeState.mode ?? 'create'}
                 data-react-authoring-dirty={authoringSession.dirty ? 'true' : 'false'}
+                onKeyDown={(event) => {
+                    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
+                        event.preventDefault();
+                        submitDraft();
+                    }
+                }}
             >
                 <header {...stylex.props(authoringStyles.panelHeader)}>
-                    <div>
-                        <div {...stylex.props(authoringStyles.panelKicker)}>{bridgeState.mode === 'edit' ? 'Editing' : 'Creating'}</div>
-                        <h3 {...stylex.props(authoringStyles.panelHeaderTitle)}>{title}</h3>
-                        <p {...stylex.props(authoringStyles.panelHeaderText)}>{subtitle}</p>
-                    </div>
-                    <span {...stylex.props(authoringStyles.panelState)} aria-live="polite">
-                        {statusLabel}
-                    </span>
+                    <div {...stylex.props(authoringStyles.panelKicker)}>{bridgeState.mode === 'edit' ? 'Editing' : 'Creating'}</div>
                 </header>
                 {unsupportedFields.length > 0 ? (
                     <div {...stylex.props(authoringStyles.panelWarning)} role="status">
-                        Unsupported extension fields are preserved server-side and not edited here: {unsupportedFields.join(', ')}
+                        Extension data preserved on save but not editable here: {unsupportedFields.join(', ')}
                     </div>
                 ) : null}
-                <div {...stylex.props(authoringStyles.panelActions)} aria-label={`${title} actions`}>
-                    <button type="button" className={`menu_button ${stylex.props(authoringStyles.saveButton).className ?? ''}`} disabled={isActionPending} onClick={submitDraft}>Save</button>
-                    <button type="button" className={`menu_button ${stylex.props(authoringStyles.secondaryAction).className ?? ''}`} disabled={isActionPending} onClick={cancelDraft}>Cancel</button>
-                    <>
-                            <button
-                                type="button"
-                                className={`menu_button ${stylex.props(authoringStyles.toolAction).className ?? ''}`}
-                                disabled={isActionPending}
-                                onClick={() => void commands?.openWorldInfo?.(characterToolActionPayload)}
-                            >
-                                World Info
-                            </button>
-                            <button
-                                type="button"
-                                className={`menu_button ${stylex.props(authoringStyles.toolAction).className ?? ''}`}
-                                disabled={isActionPending}
-                                onClick={() => void commands?.openAlternateGreetings?.(characterToolActionPayload)}
-                            >
-                                Alternate Greetings
-                            </button>
-                            <button type="button" className={`menu_button ${stylex.props(authoringStyles.toolAction).className ?? ''}`} disabled={isActionPending} onClick={() => void commands?.duplicateAuthoring?.(kind)}>Duplicate</button>
-                            <button type="button" className={`menu_button ${stylex.props(authoringStyles.toolAction).className ?? ''}`} disabled={isActionPending} onClick={() => void commands?.exportAuthoring?.(characterActionPayload)}>Export</button>
-                            <AuthoringActionsMenu
-                                actions={liveManagementActions ?? managementActions}
-                                disabled={isActionPending}
-                                onOpen={refreshManagementActions}
-                                onRun={actionId => void commands?.runManagementAction?.({ ...characterToolActionPayload, actionId })}
-                            />
-                    </>
-                </div>
                 <fieldset
                     {...stylex.props(authoringStyles.fields)}
                     disabled={isActionPending}
                     style={{ border: 0, margin: 0, minWidth: 0, padding: 0 }}
                 >
-                    <label {...stylex.props(authoringStyles.field)} data-react-authoring-field="name">
-                        <span {...stylex.props(authoringStyles.fieldLabel)}>Name</span>
-                        <input
-                            className="text_pole"
-                            value={nameValue}
-                            aria-invalid={fieldErrors.name ? 'true' : 'false'}
-                            onChange={(event) => updateDraft({ name: event.target.value })}
-                        />
-                        {fieldErrors.name ? <small role="alert" {...stylex.props(authoringStyles.fieldWarning)}>{fieldErrors.name}</small> : null}
-                    </label>
-                    <>
-                            <div {...stylex.props(authoringStyles.field)} data-react-authoring-field="avatar">
-                                <span {...stylex.props(authoringStyles.fieldLabel)}>Avatar</span>
-                                <input
-                                    className="text_pole"
-                                    value={stringDraft('avatar')}
-                                    aria-label="Avatar filename"
-                                    onChange={(event) => updateDraft({ avatar: event.target.value })}
-                                    placeholder="Avatar filename"
+                    <div {...stylex.props(authoringStyles.section, authoringStyles.sectionFirst)} data-react-authoring-section="basics">
+                        <div {...stylex.props(authoringStyles.heroRow)}>
+                            <label {...stylex.props(authoringStyles.heroAvatar)} title="Change avatar" data-react-authoring-field="avatar">
+                                <img
+                                    {...stylex.props(authoringStyles.heroAvatarImg)}
+                                    src={avatarPreviewSrc}
+                                    alt="Character avatar"
+                                    onError={(event) => {
+                                        const img = event.currentTarget;
+                                        if (!img.dataset.fallbackApplied) {
+                                            img.dataset.fallbackApplied = 'true';
+                                            img.src = 'img/ai4.png';
+                                        }
+                                    }}
                                 />
+                                <span {...stylex.props(authoringStyles.heroAvatarOverlay)} aria-hidden="true">
+                                    <i className="fa-solid fa-camera" />
+                                </span>
                                 <input
+                                    hidden
                                     type="file"
                                     accept="image/*"
                                     aria-label="Upload character avatar"
@@ -777,192 +877,438 @@ function AuthoringWorkspacePanel({
                                             legacyInput.files = transfer.files;
                                         }
                                         if (file) {
+                                            setAvatarPreviewOverride(URL.createObjectURL(file));
                                             updateDraft({ avatar: file.name });
                                         }
                                     }}
                                 />
+                            </label>
+                            <div {...stylex.props(authoringStyles.heroMain)}>
+                                <label {...stylex.props(authoringStyles.field)} data-react-authoring-field="name">
+                                    <span className="sr-only">Name</span>
+                                    <input
+                                        className="text_pole"
+                                        {...stylex.props(authoringStyles.heroNameInput, authoringStyles.control)}
+                                        value={nameValue}
+                                        placeholder="Character name"
+                                        aria-invalid={fieldErrors.name ? 'true' : 'false'}
+                                        onChange={(event) => updateDraft({ name: event.target.value })}
+                                    />
+                                    {fieldErrors.name ? <small role="alert" {...stylex.props(authoringStyles.fieldWarning)}>{fieldErrors.name}</small> : null}
+                                </label>
+                                <div {...stylex.props(authoringStyles.heroMetaRow)}>
+                                    <button
+                                        type="button"
+                                        {...stylex.props(authoringStyles.favToggle, draft.favorite ? authoringStyles.favToggleActive : null)}
+                                        aria-pressed={Boolean(draft.favorite)}
+                                        aria-label="Favorite"
+                                        title="Toggle favorite"
+                                        data-react-authoring-field="favorite"
+                                        onClick={() => updateDraft({ favorite: !draft.favorite })}
+                                    >
+                                        <i className={`fa-${draft.favorite ? 'solid' : 'regular'} fa-star`} aria-hidden="true" />
+                                        Favorite
+                                    </button>
+                                    {tokenTotal ? (
+                                        <span
+                                            {...stylex.props(authoringStyles.metaChip)}
+                                            title={`${tokenTotal} tokens${tokenPermanent ? ` (${tokenPermanent} permanent)` : ''} — last counted on save`}
+                                        >
+                                            <i className="fa-solid fa-coins" aria-hidden="true" />
+                                            {tokenTotal} tokens
+                                        </span>
+                                    ) : null}
+                                </div>
                             </div>
-                            <label {...stylex.props(authoringStyles.field)} data-react-authoring-field="favorite">
-                                <span {...stylex.props(authoringStyles.fieldLabel)}>Favorite</span>
-                                <input
-                                    type="checkbox"
-                                    checked={Boolean(draft.favorite)}
-                                    onChange={(event) => updateDraft({ favorite: event.target.checked })}
-                                />
-                            </label>
-                            <label {...stylex.props(authoringStyles.field)} data-react-authoring-field="description">
-                                <span {...stylex.props(authoringStyles.fieldLabel)}>Description</span>
-                                <textarea
-                                    className="text_pole"
-                                    rows={5}
-                                    value={descriptionValue}
-                                    onChange={(event) => updateDraft({ description: event.target.value })}
-                                />
-                            </label>
-                            <label {...stylex.props(authoringStyles.field)} data-react-authoring-field="firstMessage">
-                                <span {...stylex.props(authoringStyles.fieldLabel)}>First message</span>
-                                <textarea
-                                    className="text_pole"
-                                    rows={4}
-                                    value={firstMessageValue}
-                                    onChange={(event) => updateDraft({ firstMessage: event.target.value })}
-                                />
-                            </label>
-                            <label {...stylex.props(authoringStyles.field)} data-react-authoring-field="alternateGreetings">
-                                <span {...stylex.props(authoringStyles.fieldLabel)}>Alternate greetings</span>
-                                <textarea
-                                    className="text_pole"
-                                    rows={3}
-                                    value={alternateGreetingsText}
-                                    onChange={(event) => updateDraft({
-                                        alternateGreetings: event.target.value
-                                            .split('\n')
-                                            .map(line => line.trimEnd())
-                                            .filter((line, index, lines) => line.length > 0 || index < lines.length - 1),
-                                    })}
-                                    placeholder="One greeting per line"
-                                />
-                            </label>
-                            <label {...stylex.props(authoringStyles.field)} data-react-authoring-field="personality">
-                                <span {...stylex.props(authoringStyles.fieldLabel)}>Personality</span>
-                                <textarea
-                                    className="text_pole"
-                                    rows={3}
-                                    value={stringDraft('personality')}
-                                    onChange={(event) => updateDraft({ personality: event.target.value })}
-                                />
-                            </label>
-                            <label {...stylex.props(authoringStyles.field)} data-react-authoring-field="scenario">
-                                <span {...stylex.props(authoringStyles.fieldLabel)}>Scenario</span>
-                                <textarea
-                                    className="text_pole"
-                                    rows={3}
-                                    value={stringDraft('scenario')}
-                                    onChange={(event) => updateDraft({ scenario: event.target.value })}
-                                />
-                            </label>
-                            <label {...stylex.props(authoringStyles.field)} data-react-authoring-field="exampleMessages">
-                                <span {...stylex.props(authoringStyles.fieldLabel)}>Example messages</span>
-                                <textarea
-                                    className="text_pole"
-                                    rows={4}
-                                    value={stringDraft('exampleMessages')}
-                                    onChange={(event) => updateDraft({ exampleMessages: event.target.value })}
-                                />
-                            </label>
-                            <label {...stylex.props(authoringStyles.field)} data-react-authoring-field="systemPrompt">
-                                <span {...stylex.props(authoringStyles.fieldLabel)}>System prompt</span>
-                                <textarea
-                                    className="text_pole"
-                                    rows={3}
-                                    value={stringDraft('systemPrompt')}
-                                    onChange={(event) => updateDraft({ systemPrompt: event.target.value })}
-                                />
-                            </label>
-                            <label {...stylex.props(authoringStyles.field)} data-react-authoring-field="postHistoryInstructions">
-                                <span {...stylex.props(authoringStyles.fieldLabel)}>Post-history instructions</span>
-                                <textarea
-                                    className="text_pole"
-                                    rows={3}
-                                    value={stringDraft('postHistoryInstructions')}
-                                    onChange={(event) => updateDraft({ postHistoryInstructions: event.target.value })}
-                                />
-                            </label>
-                            <label {...stylex.props(authoringStyles.field)} data-react-authoring-field="creatorNotes">
-                                <span {...stylex.props(authoringStyles.fieldLabel)}>Creator notes</span>
-                                <textarea
-                                    className="text_pole"
-                                    rows={3}
-                                    value={stringDraft('creatorNotes')}
-                                    onChange={(event) => updateDraft({ creatorNotes: event.target.value })}
-                                />
-                            </label>
-                            <label {...stylex.props(authoringStyles.field)} data-react-authoring-field="creator">
-                                <span {...stylex.props(authoringStyles.fieldLabel)}>Creator</span>
-                                <input
-                                    className="text_pole"
-                                    value={stringDraft('creator')}
-                                    onChange={(event) => updateDraft({ creator: event.target.value })}
-                                />
-                            </label>
-                            <label {...stylex.props(authoringStyles.field)} data-react-authoring-field="characterVersion">
-                                <span {...stylex.props(authoringStyles.fieldLabel)}>Character version</span>
-                                <input
-                                    className="text_pole"
-                                    value={stringDraft('characterVersion')}
-                                    onChange={(event) => updateDraft({ characterVersion: event.target.value })}
-                                />
-                            </label>
-                            <label {...stylex.props(authoringStyles.field)} data-react-authoring-field="tags">
-                                <span {...stylex.props(authoringStyles.fieldLabel)}>Tags</span>
-                                <input
-                                    className="text_pole"
-                                    value={tagsText}
-                                    onChange={(event) => updateDraft({
-                                        tags: event.target.value
-                                            .split(',')
-                                            .map(tag => tag.trim())
-                                            .filter(Boolean),
-                                    })}
-                                    placeholder="Comma-separated tags"
-                                />
-                            </label>
-                            <label {...stylex.props(authoringStyles.field)} data-react-authoring-field="characterWorld">
-                                <span {...stylex.props(authoringStyles.fieldLabel)}>World Info</span>
-                                <input
-                                    className="text_pole"
-                                    value={stringDraft('characterWorld')}
-                                    onChange={(event) => updateDraft({ characterWorld: event.target.value })}
-                                    placeholder="Linked world file name"
-                                />
-                            </label>
-                            <label {...stylex.props(authoringStyles.field)} data-react-authoring-field="depthPrompt.prompt">
-                                <span {...stylex.props(authoringStyles.fieldLabel)}>Depth prompt</span>
-                                <textarea
-                                    className="text_pole"
-                                    rows={3}
-                                    value={depthPrompt.prompt}
-                                    onChange={(event) => updateDraft({
-                                        depthPrompt: { ...depthPrompt, prompt: event.target.value },
-                                    })}
-                                />
-                            </label>
-                            <label {...stylex.props(authoringStyles.field)} data-react-authoring-field="depthPrompt.depth">
-                                <span {...stylex.props(authoringStyles.fieldLabel)}>Depth</span>
-                                <input
-                                    className="text_pole"
-                                    type="number"
-                                    min={0}
-                                    value={depthPrompt.depth ?? ''}
-                                    onChange={(event) => updateDraft({
-                                        depthPrompt: {
-                                            ...depthPrompt,
-                                            depth: event.target.value === '' ? null : Number(event.target.value),
-                                        },
-                                    })}
-                                />
-                            </label>
-                            <label {...stylex.props(authoringStyles.field)} data-react-authoring-field="depthPrompt.role">
-                                <span {...stylex.props(authoringStyles.fieldLabel)}>Depth role</span>
-                                <select
-                                    className="text_pole"
-                                    value={String(depthPrompt.role ?? 'system')}
-                                    onChange={(event) => updateDraft({
-                                        depthPrompt: { ...depthPrompt, role: event.target.value },
-                                    })}
-                                >
-                                    <option value="system">System</option>
-                                    <option value="user">User</option>
-                                    <option value="assistant">Assistant</option>
-                                </select>
-                            </label>
-                        </>
-
-                </fieldset>
-                {!isCreateMode ? (
-                    <div {...stylex.props(authoringStyles.dangerZone)}>
-                        <button type="button" className="menu_button red_button" disabled={isActionPending} onClick={() => void commands?.deleteAuthoring?.(kind)}>Delete</button>
+                        </div>
+                        <div {...stylex.props(authoringStyles.fieldRow)}>
+                            <div {...stylex.props(authoringStyles.fieldRowItem)}>
+                                <label {...stylex.props(authoringStyles.field)} data-react-authoring-field="tags">
+                                    <AuthoringFieldLabel text="Tags" dirty={isFieldDirty('tags')} />
+                                    <input
+                                        className="text_pole"
+                                        {...stylex.props(authoringStyles.control)}
+                                        value={tagsText}
+                                        onChange={(event) => updateDraft({
+                                            tags: event.target.value
+                                                .split(',')
+                                                .map(tag => tag.trim())
+                                                .filter(Boolean),
+                                        })}
+                                        placeholder="Comma-separated tags"
+                                    />
+                                </label>
+                            </div>
+                            <div {...stylex.props(authoringStyles.fieldRowItem)}>
+                                <label {...stylex.props(authoringStyles.field)} data-react-authoring-field="characterWorld">
+                                    <AuthoringFieldLabel text="World Info" dirty={isFieldDirty('characterWorld')} />
+                                    <input
+                                        className="text_pole"
+                                        {...stylex.props(authoringStyles.control)}
+                                        value={stringDraft('characterWorld')}
+                                        onChange={(event) => updateDraft({ characterWorld: event.target.value })}
+                                        placeholder="Linked world file name"
+                                    />
+                                </label>
+                            </div>
+                        </div>
                     </div>
+                    <div {...stylex.props(authoringStyles.section)} data-react-authoring-section="content">
+                        <h4 {...stylex.props(authoringStyles.subsectionLabel)}>Card content</h4>
+                        <label {...stylex.props(authoringStyles.field)} data-react-authoring-field="description">
+                            <AuthoringFieldLabel
+                                text="Description"
+                                dirty={isFieldDirty('description')}
+                                meta={descriptionValue.trim() ? `${descriptionValue.length} chars` : undefined}
+                                onExpand={() => setExpandedField({ key: 'description', label: 'Description' })}
+                            />
+                            <AuthoringTextarea
+                                rows={4}
+                                value={descriptionValue}
+                                xstyle={authoringStyles.textareaPreview}
+                                placeholder="Describe the character. Supports {{char}} and {{user}} macros."
+                                onChange={(event) => updateDraft({ description: event.target.value })}
+                            />
+                        </label>
+                        <label {...stylex.props(authoringStyles.field)} data-react-authoring-field="firstMessage">
+                            <AuthoringFieldLabel
+                                text="First message"
+                                dirty={isFieldDirty('firstMessage')}
+                                meta={firstMessageValue.trim() ? `${firstMessageValue.length} chars` : undefined}
+                                onExpand={() => setExpandedField({ key: 'firstMessage', label: 'First message' })}
+                            />
+                            <AuthoringTextarea
+                                rows={3}
+                                value={firstMessageValue}
+                                xstyle={authoringStyles.textareaPreview}
+                                placeholder="The opening message. Supports {{char}} and {{user}} macros."
+                                onChange={(event) => updateDraft({ firstMessage: event.target.value })}
+                            />
+                        </label>
+                        <div {...stylex.props(authoringStyles.field)} data-react-authoring-field="alternateGreetings">
+                            <AuthoringFieldLabel
+                                text="Alternate greetings"
+                                dirty={isFieldDirty('alternateGreetings')}
+                                meta={`${greetings.length} greeting${greetings.length === 1 ? '' : 's'}`}
+                            />
+                            <button
+                                type="button"
+                                {...stylex.props(authoringStyles.greetingAdd)}
+                                onClick={() => void commands?.openAlternateGreetings?.(characterToolActionPayload)}
+                            >
+                                <i className="fa-solid fa-pen-to-square" aria-hidden="true" />
+                                {greetings.length > 0 ? 'Manage greetings' : 'Add alternate greetings'}
+                            </button>
+                        </div>
+                    </div>
+                    <section {...stylex.props(authoringStyles.advancedSection)} data-react-authoring-section="advanced">
+                        <div {...stylex.props(authoringStyles.advancedHead)}>
+                            <button
+                                type="button"
+                                {...stylex.props(authoringStyles.advancedToggle)}
+                                aria-expanded={advancedOpen}
+                                aria-controls="character-authoring-advanced-body"
+                                onClick={() => setAdvancedOpen(open => !open)}
+                            >
+                                <i
+                                    className={`fa-solid fa-chevron-down ${stylex.props(authoringStyles.advancedToggleIcon, advancedOpen ? authoringStyles.advancedToggleIconOpen : null).className ?? ''}`}
+                                    aria-hidden="true"
+                                />
+                                <span>Advanced</span>
+                            </button>
+                            {advancedChips.length > 0 ? (
+                                <span
+                                    {...stylex.props(authoringStyles.advancedChips)}
+                                    title={advancedChips.map(chip => chip.label).join(' · ')}
+                                >
+                                    {advancedChips.slice(0, 3).map(chip => (
+                                        <button
+                                            key={chip.field}
+                                            type="button"
+                                            {...stylex.props(authoringStyles.advancedChipButton)}
+                                            title={`Jump to ${chip.label}`}
+                                            onClick={() => jumpToAdvancedField(chip.field)}
+                                        >
+                                            {chip.label}
+                                        </button>
+                                    ))}
+                                    {advancedChips.length > 3 ? (
+                                        <button
+                                            type="button"
+                                            {...stylex.props(authoringStyles.advancedChipButton)}
+                                            title="Expand advanced section"
+                                            onClick={() => setAdvancedOpen(true)}
+                                        >
+                                            +{advancedChips.length - 3}
+                                        </button>
+                                    ) : null}
+                                </span>
+                            ) : null}
+                        </div>
+                        {!advancedOpen && advancedChips.length === 0 ? (
+                            <p {...stylex.props(authoringStyles.advancedHint)}>
+                                Prompt overrides, extra definition fields, character note and creator metadata.
+                            </p>
+                        ) : null}
+                        <div {...stylex.props(authoringStyles.advancedClip, advancedOpen ? authoringStyles.advancedClipOpen : null)}>
+                            <div
+                                id="character-authoring-advanced-body"
+                                inert={!advancedOpen}
+                                aria-hidden={!advancedOpen}
+                                {...stylex.props(authoringStyles.advancedBody)}
+                            >
+                                <div {...stylex.props(authoringStyles.advancedSubgroup)}>
+                                    <h4 {...stylex.props(authoringStyles.subsectionLabel)}>Prompt overrides</h4>
+                                    <label {...stylex.props(authoringStyles.field)} data-react-authoring-field="systemPrompt">
+                                        <AuthoringFieldLabel text="System prompt" dirty={isFieldDirty('systemPrompt')} meta={stringDraft('systemPrompt').trim() ? `${stringDraft('systemPrompt').length} chars` : undefined} onExpand={() => setExpandedField({ key: 'systemPrompt', label: 'System prompt' })} />
+                                        <AuthoringTextarea
+                                            rows={2}
+                                            value={stringDraft('systemPrompt')}
+                                            placeholder="Replaces the default main prompt. Use {{original}} to include it."
+                                            onChange={(event) => updateDraft({ systemPrompt: event.target.value })}
+                                        />
+                                    </label>
+                                    <label {...stylex.props(authoringStyles.field)} data-react-authoring-field="postHistoryInstructions">
+                                        <AuthoringFieldLabel text="Post-history instructions" dirty={isFieldDirty('postHistoryInstructions')} meta={stringDraft('postHistoryInstructions').trim() ? `${stringDraft('postHistoryInstructions').length} chars` : undefined} onExpand={() => setExpandedField({ key: 'postHistoryInstructions', label: 'Post-history instructions' })} />
+                                        <AuthoringTextarea
+                                            rows={2}
+                                            value={stringDraft('postHistoryInstructions')}
+                                            placeholder="Replaces the default post-history instructions. Use {{original}} to include it."
+                                            onChange={(event) => updateDraft({ postHistoryInstructions: event.target.value })}
+                                        />
+                                    </label>
+                                </div>
+                                <div {...stylex.props(authoringStyles.advancedSubgroup)}>
+                                    <h4 {...stylex.props(authoringStyles.subsectionLabel)}>Definition</h4>
+                                    <label {...stylex.props(authoringStyles.field)} data-react-authoring-field="personality">
+                                        <AuthoringFieldLabel text="Personality" dirty={isFieldDirty('personality')} meta={stringDraft('personality').trim() ? `${stringDraft('personality').length} chars` : undefined} onExpand={() => setExpandedField({ key: 'personality', label: 'Personality' })} />
+                                        <AuthoringTextarea
+                                            rows={2}
+                                            value={stringDraft('personality')}
+                                            onChange={(event) => updateDraft({ personality: event.target.value })}
+                                        />
+                                    </label>
+                                    <label {...stylex.props(authoringStyles.field)} data-react-authoring-field="scenario">
+                                        <AuthoringFieldLabel text="Scenario" dirty={isFieldDirty('scenario')} meta={stringDraft('scenario').trim() ? `${stringDraft('scenario').length} chars` : undefined} onExpand={() => setExpandedField({ key: 'scenario', label: 'Scenario' })} />
+                                        <AuthoringTextarea
+                                            rows={2}
+                                            value={stringDraft('scenario')}
+                                            onChange={(event) => updateDraft({ scenario: event.target.value })}
+                                        />
+                                    </label>
+                                    <label {...stylex.props(authoringStyles.field)} data-react-authoring-field="exampleMessages">
+                                        <AuthoringFieldLabel text="Example messages" dirty={isFieldDirty('exampleMessages')} meta={stringDraft('exampleMessages').trim() ? `${stringDraft('exampleMessages').length} chars` : undefined} onExpand={() => setExpandedField({ key: 'exampleMessages', label: 'Example messages' })} />
+                                        <AuthoringTextarea
+                                            rows={3}
+                                            value={stringDraft('exampleMessages')}
+                                            placeholder="Example dialogue. Begin each example with <START> on a new line."
+                                            onChange={(event) => updateDraft({ exampleMessages: event.target.value })}
+                                        />
+                                    </label>
+                                </div>
+                                <div {...stylex.props(authoringStyles.advancedSubgroup)}>
+                                    <h4 {...stylex.props(authoringStyles.subsectionLabel)}>Character&apos;s note</h4>
+                                    <label {...stylex.props(authoringStyles.field)} data-react-authoring-field="depthPrompt.prompt">
+                                        <AuthoringFieldLabel text="Depth prompt" dirty={isFieldDirty('depthPrompt')} meta={depthPrompt.prompt?.trim() ? `${depthPrompt.prompt.length} chars` : undefined} onExpand={() => setExpandedField({ key: 'depthPrompt.prompt', label: 'Depth prompt' })} />
+                                        <AuthoringTextarea
+                                            rows={2}
+                                            value={depthPrompt.prompt ?? ''}
+                                            placeholder="Inserted in-chat at the chosen depth and role."
+                                            onChange={(event) => updateDraft({
+                                                depthPrompt: { ...depthPrompt, prompt: event.target.value },
+                                            })}
+                                        />
+                                    </label>
+                                    <div {...stylex.props(authoringStyles.fieldRow)}>
+                                        <div {...stylex.props(authoringStyles.fieldRowItem)}>
+                                            <label {...stylex.props(authoringStyles.field)} data-react-authoring-field="depthPrompt.depth">
+                                                <AuthoringFieldLabel text="Depth" dirty={isFieldDirty('depthPrompt')} />
+                                                <input
+                                                    className="text_pole"
+                                                    {...stylex.props(authoringStyles.control)}
+                                                    type="number"
+                                                    min={0}
+                                                    value={depthPrompt.depth ?? ''}
+                                                    onChange={(event) => updateDraft({
+                                                        depthPrompt: {
+                                                            ...depthPrompt,
+                                                            depth: event.target.value === '' ? null : Number(event.target.value),
+                                                        },
+                                                    })}
+                                                />
+                                            </label>
+                                        </div>
+                                        <div {...stylex.props(authoringStyles.fieldRowItem)}>
+                                            <label {...stylex.props(authoringStyles.field)} data-react-authoring-field="depthPrompt.role">
+                                                <AuthoringFieldLabel text="Depth role" dirty={isFieldDirty('depthPrompt')} />
+                                                <select
+                                                    className="text_pole"
+                                                    {...stylex.props(authoringStyles.control)}
+                                                    value={String(depthPrompt.role ?? 'system')}
+                                                    onChange={(event) => updateDraft({
+                                                        depthPrompt: { ...depthPrompt, role: event.target.value },
+                                                    })}
+                                                >
+                                                    <option value="system">System</option>
+                                                    <option value="user">User</option>
+                                                    <option value="assistant">Assistant</option>
+                                                </select>
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div {...stylex.props(authoringStyles.advancedSubgroup)}>
+                                    <h4 {...stylex.props(authoringStyles.subsectionLabel)}>Creator metadata</h4>
+                                    <div {...stylex.props(authoringStyles.fieldRow)}>
+                                        <div {...stylex.props(authoringStyles.fieldRowItem)}>
+                                            <label {...stylex.props(authoringStyles.field)} data-react-authoring-field="creator">
+                                                <AuthoringFieldLabel text="Creator" dirty={isFieldDirty('creator')} />
+                                                <input
+                                                    className="text_pole"
+                                                    {...stylex.props(authoringStyles.control)}
+                                                    value={stringDraft('creator')}
+                                                    onChange={(event) => updateDraft({ creator: event.target.value })}
+                                                />
+                                            </label>
+                                        </div>
+                                        <div {...stylex.props(authoringStyles.fieldRowItem)}>
+                                            <label {...stylex.props(authoringStyles.field)} data-react-authoring-field="characterVersion">
+                                                <AuthoringFieldLabel text="Character version" dirty={isFieldDirty('characterVersion')} />
+                                                <input
+                                                    className="text_pole"
+                                                    {...stylex.props(authoringStyles.control)}
+                                                    value={stringDraft('characterVersion')}
+                                                    onChange={(event) => updateDraft({ characterVersion: event.target.value })}
+                                                />
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <label {...stylex.props(authoringStyles.field)} data-react-authoring-field="creatorNotes">
+                                        <AuthoringFieldLabel text="Creator notes" dirty={isFieldDirty('creatorNotes')} meta={stringDraft('creatorNotes').trim() ? `${stringDraft('creatorNotes').length} chars` : undefined} onExpand={() => setExpandedField({ key: 'creatorNotes', label: 'Creator notes' })} />
+                                        <AuthoringTextarea
+                                            rows={2}
+                                            value={stringDraft('creatorNotes')}
+                                            placeholder="Shown in the character list. Not sent to the model."
+                                            onChange={(event) => updateDraft({ creatorNotes: event.target.value })}
+                                        />
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+                </fieldset>
+                <div {...stylex.props(authoringStyles.panelActions)} aria-label={`${title} actions`}>
+                    {!isCreateMode ? (
+                        <button
+                            type="button"
+                            className={`menu_button ${stylex.props(authoringStyles.dangerButton).className ?? ''}`}
+                            disabled={isActionPending}
+                            title="Permanently delete this card — the confirmation can also remove its chats"
+                            onClick={() => void commands?.deleteAuthoring?.(kind)}
+                        >
+                            <i className="fa-solid fa-triangle-exclamation" aria-hidden="true" />
+                            Delete
+                        </button>
+                    ) : null}
+                    {isCreateMode ? (
+                        <button
+                            type="button"
+                            className={`menu_button ${stylex.props(authoringStyles.saveButton).className ?? ''}`}
+                            disabled={isActionPending}
+                            title="Create character (Ctrl+S)"
+                            onClick={submitDraft}
+                        >
+                            Create
+                        </button>
+                    ) : (
+                        <span {...stylex.props(authoringStyles.footerStatus)} aria-live="polite">
+                            <i
+                                {...stylex.props(
+                                    authoringStyles.footerDot,
+                                    authoringCommandMutation.isError
+                                        ? authoringStyles.footerDotError
+                                        : (authoringCommandMutation.isPending || authoringSession.dirty)
+                                            ? authoringStyles.footerDotBusy
+                                            : null,
+                                )}
+                                aria-hidden="true"
+                            />
+                            {authoringCommandMutation.isPending
+                                ? 'Saving…'
+                                : authoringCommandMutation.isError
+                                    ? 'Save failed — next change retries'
+                                    : authoringSession.dirty
+                                        ? `${dirtyFieldSet.size} unsaved`
+                                        : 'Saved'}
+                        </span>
+                    )}
+                    <div {...stylex.props(authoringStyles.footerTools)}>
+                        <button
+                            type="button"
+                            className={`menu_button ${stylex.props(authoringStyles.toolAction).className ?? ''}`}
+                            disabled={isActionPending}
+                            onClick={() => void commands?.openWorldInfo?.(characterToolActionPayload)}
+                        >
+                            World Info
+                        </button>
+                        <AuthoringActionsMenu
+                            actions={liveManagementActions ?? managementActions}
+                            disabled={isActionPending}
+                            onOpen={refreshManagementActions}
+                            onRun={actionId => void commands?.runManagementAction?.({ ...characterToolActionPayload, actionId })}
+                        />
+                    </div>
+                </div>
+                {expandedField ? createPortal(
+                    <div
+                        {...stylex.props(authoringStyles.modalOverlay)}
+                        role="dialog"
+                        aria-modal="true"
+                        aria-label={expandedField.label}
+                        onMouseDown={(event) => {
+                            if (event.target === event.currentTarget) {
+                                setExpandedField(null);
+                            }
+                        }}
+                        onKeyDown={(event) => {
+                            if (event.key === 'Escape') {
+                                event.stopPropagation();
+                                setExpandedField(null);
+                            }
+                            if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
+                                event.preventDefault();
+                                submitDraft();
+                            }
+                        }}
+                    >
+                        <div {...stylex.props(authoringStyles.modalCard)}>
+                            <div {...stylex.props(authoringStyles.modalHead)}>
+                                <span {...stylex.props(authoringStyles.modalTitle)}>{expandedField.label}</span>
+                                <span {...stylex.props(authoringStyles.fieldMeta)}>
+                                    {getExpandedFieldValue(expandedField.key).length} chars
+                                </span>
+                                <button
+                                    type="button"
+                                    {...stylex.props(authoringStyles.iconAction)}
+                                    title="Close editor"
+                                    aria-label="Close editor"
+                                    onClick={() => setExpandedField(null)}
+                                >
+                                    <i className="fa-solid fa-xmark" aria-hidden="true" />
+                                </button>
+                            </div>
+                            <AuthoringTextarea
+                                autoFocus
+                                value={getExpandedFieldValue(expandedField.key)}
+                                xstyle={authoringStyles.modalTextarea}
+                                onChange={(event) => setExpandedFieldValue(expandedField.key, event.target.value)}
+                            />
+                            <p {...stylex.props(authoringStyles.modalHint)}>
+                                Esc to close{bridgeState.mode === 'edit' ? ' — changes autosave' : ''}. Ctrl+S saves now.
+                            </p>
+                        </div>
+                    </div>,
+                    document.body,
                 ) : null}
             </section>
         </WorkspacePanelShell>
@@ -1004,6 +1350,7 @@ function WorldInfoWorkspacePanel({ state, commands }: { state?: unknown; command
                     actions={recoveryActions}
                     legacyBoundary="activation-import-regex-prompt-delete"
                     hideDiagnostics={true}
+                    hideTitle={true}
                     slots={[
                         { id: 'global-selector', label: 'Global selector', ready: bridgeState.globalSelectorPresent },
                         { id: 'editor-selector', label: 'Editor selector', ready: Boolean(bridgeState.editorSelectorPresent && bridgeState.selectorsSeparated) },

@@ -1,6 +1,8 @@
 const CHARACTER_EXTENSION_FIELD_MAP = Object.freeze({
     world: 'characterWorld',
     depth_prompt: 'depthPrompt',
+    fav: 'favorite',
+    talkativeness: 'talkativeness',
 });
 
 const CHARACTER_FIELD_DEFAULTS = Object.freeze({
@@ -266,7 +268,7 @@ export function createCharacterAuthoringSaveModel(draft) {
             character_version: normalizeString(draft?.characterVersion),
             fav: Boolean(draft?.favorite),
             tags: cloneArray(draft?.tags),
-            alternate_greetings: cloneArray(draft?.alternateGreetings),
+            alternate_greetings: cloneArray(draft?.alternateGreetings).filter(greeting => normalizeString(greeting).trim().length > 0),
             talkativeness: draft?.talkativeness,
         },
         extensions: {
@@ -346,6 +348,11 @@ export function createCharacterAuthoringSession(character = {}, options = {}) {
             },
             cancel() {
                 return createSession(initialDraft);
+            },
+            rebase(savedDraft) {
+                // Advance the clean baseline to the just-saved draft while keeping
+                // edits made in this session after the save request was issued.
+                return createCharacterAuthoringSession(savedDraft, options).update(nextDraft);
             },
             submit() {
                 return createCharacterSubmitResult(nextDraft);
