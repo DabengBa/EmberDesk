@@ -60,24 +60,24 @@ describe('AI Response Configuration drawer React surface', () => {
         expect(presetMenu).toContain('preset-menu-trigger');
         expect(presetMenu).toContain('aria-haspopup="menu"');
         expect(presetMenu).toContain('preset-menu-danger');
-        expect(presetMenu).toContain("event.key === 'Escape'");
+        expect(presetMenu).toContain('event.key === \'Escape\'');
         // The row keeps only the select + trigger (actions folded into the menu).
         const selectRow = panel.match(/settings_preset_openai[\s\S]*?<\/div>/)?.[0] ?? '';
         expect(selectRow).not.toContain('preset-action-btn');
         // jQuery open/close bindings are retired (React owns .show).
         const openai = readRepoFile('public/scripts/openai.js');
-        expect(openai).not.toContain("$('.preset-menu-trigger').on('click'");
-        expect(openai).not.toContain("removeClass('show')");
+        expect(openai).not.toContain('$(\'.preset-menu-trigger\').on(\'click\'');
+        expect(openai).not.toContain('removeClass(\'show\')');
         // Item action bindings remain direct-by-ID in initOpenAI.
-        expect(openai).toContain("$('#delete_oai_preset').on('click'");
-        expect(openai).toContain("$('#update_oai_preset').on('click'");
+        expect(openai).toContain('$(\'#delete_oai_preset\').on(\'click\'');
+        expect(openai).toContain('$(\'#update_oai_preset\').on(\'click\'');
     });
 
     test('mount runs before initSecrets and initPresetManager', () => {
-        const mountIdx = script.indexOf("measureStartupStage('mountAiConfigPanel'");
-        const secretsIdx = script.indexOf("measureStartupStage('initSecrets'");
-        const presetIdx = script.indexOf("measureStartupStage('initPresetManager'");
-        const coreIdx = script.indexOf("measureStartupStage('registerCoreModules'");
+        const mountIdx = script.indexOf('measureStartupStage(\'mountAiConfigPanel\'');
+        const secretsIdx = script.indexOf('measureStartupStage(\'initSecrets\'');
+        const presetIdx = script.indexOf('measureStartupStage(\'initPresetManager\'');
+        const coreIdx = script.indexOf('measureStartupStage(\'registerCoreModules\'');
         expect(mountIdx).toBeGreaterThan(-1);
         expect(mountIdx).toBeLessThan(secretsIdx);
         expect(mountIdx).toBeLessThan(coreIdx);
