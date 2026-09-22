@@ -9,7 +9,10 @@ import {
     buildWorldInfoEntryList,
     buildWorldInfoWorkbenchEntryDetail,
     buildWorldInfoWorkbenchEntrySummary,
+    sortWorldInfoEntries,
 } from './world-info-domain.js';
+
+const WORKBENCH_COMMENT_MAX_LENGTH = 100;
 
 /** Default sort options for the React workbench (parity with legacy select). */
 export const WORLD_INFO_DEFAULT_SORT_OPTIONS = [
@@ -387,6 +390,156 @@ export function createWorldInfoWorkbenchSession(deps) {
         return true;
     }
 
+    /**
+     * Fill empty comment/memo fields with the entry's primary keywords.
+     * @returns {Promise<number>} count of updated entries
+     */
+    async function backfillMemos() {
+        if (!selectedWorldName) {
+            return 0;
+        }
+
+        const data = await deps.loadWorldInfo(selectedWorldName);
+        if (!data?.entries) {
+            return 0;
+        }
+
+        let counter = 0;
+        for (const entry of Object.values(data.entries)) {
+            if (!entry.comment && Array.isArray(entry.key) && entry.key.length > 0) {
+                entry.comment = entry.key.join(', ').slice(0, WORKBENCH_COMMENT_MAX_LENGTH);
+                if (typeof deps.setOriginalDataValue === 'function') {
+                    deps.setOriginalDataValue(data, entry.uid, 'comment', entry.comment);
+                }
+                counter++;
+            }
+        }
+
+        if (counter > 0) {
+            await deps.saveWorldInfo(selectedWorldName, data);
+        }
+        return counter;
+    }
+
+    /**
+     * Rewrite entry `order` values to follow the currently displayed sorting,
+     * counting down from `start` (never below 0).
+     * @param {number} start
+     * @returns {Promise<number>} count of updated entries
+     */
+    async function applySortingAsOrder(start) {
+        if (!selectedWorldName) {
+            return 0;
+        }
+
+        const data = await deps.loadWorldInfo(selectedWorldName);
+        if (!data?.entries) {
+            return 0;
+        }
+
+        const entries = Object.values(data.entries);
+        sortWorldInfoEntries(entries, {
+            customSort: resolveSortOption(),
+            getSearchScore: typeof deps.getSearchScore === 'function' ? deps.getSearchScore : null,
+        });
+
+        let updated = 0;
+        let current = start;
+        for (const entry of entries) {
+            const newOrder = Math.max(current--, 0);
+            if (entry.order === newOrder) {
+                continue;
+            }
+            entry.order = newOrder;
+            if (typeof deps.setOriginalDataValue === 'function') {
+                deps.setOriginalDataValue(data, entry.uid, 'order', newOrder);
+            }
+            updated++;
+        }
+
+        if (updated > 0) {
+            await deps.saveWorldInfo(selectedWorldName, data, true);
+        }
+        return updated;
+    }
+
+    /**
+     * Delete entries by uid (caller confirms first).
+     * @param {Array<string|number>} uids
+     * @returns {Promise<number>} count of deleted entries
+     */
+    async function deleteEntries(uids) {
+        if (!selectedWorldName || !Array.isArray(uids) || uids.length === 0) {
+            return 0;
+        }
+
+        const data = await deps.loadWorldInfo(selectedWorldName);
+        if (!data?.entries) {
+            return 0;
+        }
+
+        let deleted = 0;
+        for (const uid of uids) {
+            const key = data.entries[String(uid)] !== undefined ? String(uid) : String(Number(uid));
+            if (data.entries[key] === undefined) {
+                continue;
+            }
+            delete data.entries[key];
+            if (typeof deps.deleteOriginalDataValue === 'function') {
+                deps.deleteOriginalDataValue(data, uid);
+            }
+            deleted++;
+        }
+
+        if (deleted > 0) {
+            if (uids.map(String).includes(selectedEntryUid)) {
+                selectedEntryUid = '';
+            }
+            await deps.saveWorldInfo(selectedWorldName, data, true);
+        }
+        return deleted;
+    }
+
+    /**
+     * Enable or disable entries by uid.
+     * @param {Array<string|number>} uids
+     * @param {boolean} enabled
+     * @returns {Promise<number>} count of updated entries
+     */
+    async function setEntriesEnabled(uids, enabled) {
+        if (!selectedWorldName || !Array.isArray(uids) || uids.length === 0) {
+            return 0;
+        }
+
+        const data = await deps.loadWorldInfo(selectedWorldName);
+        if (!data?.entries) {
+            return 0;
+        }
+
+        let updated = 0;
+        for (const uid of uids) {
+            const key = data.entries[String(uid)] !== undefined ? String(uid) : String(Number(uid));
+            const entry = data.entries[key];
+            if (!entry) {
+                continue;
+            }
+            const nextDisable = !enabled;
+            if (entry.disable === nextDisable) {
+                continue;
+            }
+            entry.disable = nextDisable;
+            if (typeof deps.setOriginalDataValue === 'function') {
+                deps.setOriginalDataValue(data, entry.uid, 'disable', nextDisable);
+            }
+            updated++;
+        }
+
+        if (updated > 0) {
+            await deps.saveWorldInfo(selectedWorldName, data, true);
+        }
+        return updated;
+    }
+
     async function getFacadeSnapshot() {
         const editorWorldName = selectedWorldName;
         const entrySummaries = await getEntrySummaries();
@@ -438,6 +591,10 @@ export function createWorldInfoWorkbenchSession(deps) {
         getEntrySummaries,
         getSelectedEntryDetail,
         updateEntryFields,
+        backfillMemos,
+        applySortingAsOrder,
+        deleteEntries,
+        setEntriesEnabled,
         getFacadeSnapshot,
         getReactPanelState,
     };

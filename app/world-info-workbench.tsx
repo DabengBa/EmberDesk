@@ -5,6 +5,7 @@ import { z } from 'zod';
 import * as stylex from '@stylexjs/stylex';
 import {
     buildWorldInfoPanelFormDefaults,
+    countRegexKeywords,
     getWorldInfoPanelStatus,
 } from './lib/world-info-workbench-helpers';
 import { worldInfoWorkbenchStyles as s } from '@/styles/world-info-workbench.styles';
@@ -251,6 +252,7 @@ function EntryEditor({
     const advanced = isAdvancedDefault(entry);
     const entryUid = entry?.uid;
     const focusTitleOnOpen = Boolean(onBack);
+    const regexKeywordCount = countRegexKeywords([...(draft?.key ?? []), ...(draft?.keysecondary ?? [])]);
 
     useEffect(() => {
         setDraft(entry);
@@ -552,6 +554,27 @@ function EntryEditor({
                     </label>
                 </AdvancedSection>
             </section>
+
+            <section {...stylex.props(s.editorSection)} data-world-info-react-section="ops">
+                <header {...stylex.props(s.editorSectionHeader)}>
+                    <h4 {...stylex.props(s.editorSectionTitle)}>条目操作</h4>
+                </header>
+                <div {...stylex.props(s.flexRow)}>
+                    <button
+                        type="button"
+                        className={`menu_button ${stylex.props(s.button).className ?? ''}`}
+                        data-world-info-react-action="move-copy-entry"
+                        onClick={() => void commands.moveOrCopyEntry(entry.uid)}
+                    >
+                        移动 / 复制到其他世界书
+                    </button>
+                </div>
+                {regexKeywordCount > 0 ? (
+                    <p {...stylex.props(s.opsHint)} data-world-info-react-regex-hint>
+                        关键词包含 {regexKeywordCount} 个正则表达式（/pattern/flags 形式直接生效）
+                    </p>
+                ) : null}
+            </section>
         </div>
     );
 }
@@ -587,6 +610,8 @@ export function WorldInfoWorkbenchPanel({
     const [listScrollTop, setListScrollTop] = useState(0);
     const [returnEntryUid, setReturnEntryUid] = useState('');
     const [isNarrow, setIsNarrow] = useState(false);
+    const [multiSelectMode, setMultiSelectMode] = useState(false);
+    const [selectedUids, setSelectedUids] = useState<ReadonlySet<string>>(new Set());
 
     useEffect(() => {
         if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
@@ -608,6 +633,11 @@ export function WorldInfoWorkbenchPanel({
             setMobileView('list');
         }
     }, [bridgeState.selectedEntryUid]);
+
+    useEffect(() => {
+        setMultiSelectMode(false);
+        setSelectedUids(new Set());
+    }, [bridgeState.selectedWorldName]);
 
     const worldNames = bridgeState.worldNames ?? [];
     const sortOptions = bridgeState.sortOptions ?? [];
@@ -659,6 +689,35 @@ export function WorldInfoWorkbenchPanel({
     const clearSearch = () => {
         worldInfoForm.setFieldValue('searchQuery', '');
         worldInfoCommandMutation.mutate(() => commands.applySearchQuery(''));
+    };
+
+    const toggleEntrySelected = (uid: string) => {
+        setSelectedUids(current => {
+            const next = new Set(current);
+            if (next.has(uid)) {
+                next.delete(uid);
+            } else {
+                next.add(uid);
+            }
+            return next;
+        });
+    };
+
+    const handleEntryClick = (uid: string) => {
+        if (multiSelectMode) {
+            toggleEntrySelected(uid);
+            return;
+        }
+        openEntry(uid);
+    };
+
+    const runBulkCommand = (command: (uids: string[]) => Promise<unknown> | unknown) => {
+        const uids = [...selectedUids];
+        if (uids.length === 0) {
+            return;
+        }
+        setSelectedUids(new Set());
+        worldInfoCommandMutation.mutate(() => command(uids));
     };
 
     const showListPane = !isNarrow || mobileView === 'list';
@@ -795,6 +854,22 @@ export function WorldInfoWorkbenchPanel({
                                 >
                                     新建条目
                                 </button>
+                                <button
+                                    type="button"
+                                    className={`menu_button ${stylex.props(s.button).className ?? ''}`}
+                                    data-world-info-react-action="toggle-multi-select"
+                                    aria-pressed={multiSelectMode}
+                                    onClick={() => {
+                                        setMultiSelectMode(current => {
+                                            if (current) {
+                                                setSelectedUids(new Set());
+                                            }
+                                            return !current;
+                                        });
+                                    }}
+                                >
+                                    多选
+                                </button>
                                 <button type="button" className={`menu_button ${stylex.props(s.button).className ?? ''}`} data-world-info-react-action="new-world"
                                     onClick={() => worldInfoCommandMutation.mutate(() => commands.createWorld())}>新建</button>
                                 <button type="button" className={`menu_button ${stylex.props(s.button).className ?? ''}`} data-world-info-react-action="import"
@@ -812,6 +887,24 @@ export function WorldInfoWorkbenchPanel({
                                 <button type="button" className={`menu_button ${stylex.props(s.button).className ?? ''}`} data-world-info-react-action="duplicate"
                                     disabled={!bridgeState.duplicateMenuPresent}
                                     onClick={() => worldInfoCommandMutation.mutate(() => commands.duplicateWorld())}>复制</button>
+                                <button
+                                    type="button"
+                                    className={`menu_button ${stylex.props(s.button).className ?? ''}`}
+                                    data-world-info-react-action="backfill-memos"
+                                    title="将空标题回填为主关键词"
+                                    onClick={() => worldInfoCommandMutation.mutate(() => commands.backfillMemos())}
+                                >
+                                    回填标题
+                                </button>
+                                <button
+                                    type="button"
+                                    className={`menu_button ${stylex.props(s.button).className ?? ''}`}
+                                    data-world-info-react-action="apply-sorting"
+                                    title="将当前排序写入 Order 字段"
+                                    onClick={() => worldInfoCommandMutation.mutate(() => commands.applyCurrentSorting())}
+                                >
+                                    应用排序
+                                </button>
                                 <button type="button" className={`menu_button redWarningBG ${stylex.props(s.button).className ?? ''}`} data-world-info-react-action="delete"
                                     disabled={!bridgeState.deleteMenuPresent}
                                     onClick={() => worldInfoCommandMutation.mutate(() => commands.deleteWorld())}>删除</button>
@@ -834,6 +927,57 @@ export function WorldInfoWorkbenchPanel({
                         data-world-info-react-pane="list"
                         hidden={!showListPane}
                     >
+                        {multiSelectMode ? (
+                            <div {...stylex.props(s.multiBar)} data-world-info-react-multiselect-bar>
+                                <span {...stylex.props(s.multiBarCount)} data-world-info-react-selected-count>
+                                    已选 {selectedUids.size}
+                                </span>
+                                <button
+                                    type="button"
+                                    className={`menu_button ${stylex.props(s.button).className ?? ''}`}
+                                    data-world-info-react-action="multi-select-all"
+                                    onClick={() => setSelectedUids(new Set(entrySummaries.map(entry => entry.uid)))}
+                                >
+                                    全选
+                                </button>
+                                <button
+                                    type="button"
+                                    className={`menu_button ${stylex.props(s.button).className ?? ''}`}
+                                    data-world-info-react-action="multi-select-clear"
+                                    disabled={selectedUids.size === 0}
+                                    onClick={() => setSelectedUids(new Set())}
+                                >
+                                    清空
+                                </button>
+                                <button
+                                    type="button"
+                                    className={`menu_button ${stylex.props(s.button).className ?? ''}`}
+                                    data-world-info-react-action="multi-enable"
+                                    disabled={selectedUids.size === 0}
+                                    onClick={() => runBulkCommand(uids => commands.bulkSetEntriesEnabled(uids, true))}
+                                >
+                                    启用
+                                </button>
+                                <button
+                                    type="button"
+                                    className={`menu_button ${stylex.props(s.button).className ?? ''}`}
+                                    data-world-info-react-action="multi-disable"
+                                    disabled={selectedUids.size === 0}
+                                    onClick={() => runBulkCommand(uids => commands.bulkSetEntriesEnabled(uids, false))}
+                                >
+                                    停用
+                                </button>
+                                <button
+                                    type="button"
+                                    className={`menu_button redWarningBG ${stylex.props(s.button).className ?? ''}`}
+                                    data-world-info-react-action="multi-delete"
+                                    disabled={selectedUids.size === 0}
+                                    onClick={() => runBulkCommand(uids => commands.bulkDeleteEntries(uids))}
+                                >
+                                    删除
+                                </button>
+                            </div>
+                        ) : null}
                         <div
                             {...stylex.props(s.list)}
                             data-world-info-react-list-scroll
@@ -845,21 +989,47 @@ export function WorldInfoWorkbenchPanel({
                                     type="button"
                                     {...stylex.props(s.entryRow, bridgeState.selectedEntryUid === entry.uid ? s.entryRowSelected : null)}
                                     data-world-info-react-entry={entry.uid}
-                                    aria-current={bridgeState.selectedEntryUid === entry.uid ? 'true' : undefined}
-                                    onClick={() => openEntry(entry.uid)}
+                                    aria-current={!multiSelectMode && bridgeState.selectedEntryUid === entry.uid ? 'true' : undefined}
+                                    aria-pressed={multiSelectMode ? selectedUids.has(entry.uid) : undefined}
+                                    data-world-info-react-selected={multiSelectMode && selectedUids.has(entry.uid) ? 'true' : undefined}
+                                    onClick={() => handleEntryClick(entry.uid)}
                                 >
-                                    <span {...stylex.props(s.entryTitle)}>
-                                        <span {...stylex.props(s.entryState, entry.disabled ? s.entryStateDisabled : null)}>
-                                            {entry.disabled ? '停用' : '启用'}
+                                    {multiSelectMode ? (
+                                        <span {...stylex.props(s.entryRowInner)}>
+                                            <span {...stylex.props(s.entryCheck, selectedUids.has(entry.uid) ? s.entryCheckOn : null)} aria-hidden="true">
+                                                {selectedUids.has(entry.uid) ? '✓' : ''}
+                                            </span>
+                                            <span {...stylex.props(s.entryRowContent)}>
+                                                <span {...stylex.props(s.entryTitle)}>
+                                                    <span {...stylex.props(s.entryState, entry.disabled ? s.entryStateDisabled : null)}>
+                                                        {entry.disabled ? '停用' : '启用'}
+                                                    </span>
+                                                    {entry.title}
+                                                </span>
+                                                <span {...stylex.props(s.entryMeta)}>
+                                                    {entry.keywordsSummary || '无关键词'}
+                                                </span>
+                                                <span {...stylex.props(s.entryMeta)}>
+                                                    {entry.positionLabel || '位置未设'}
+                                                </span>
+                                            </span>
                                         </span>
-                                        {entry.title}
-                                    </span>
-                                    <span {...stylex.props(s.entryMeta)}>
-                                        {entry.keywordsSummary || '无关键词'}
-                                    </span>
-                                    <span {...stylex.props(s.entryMeta)}>
-                                        {entry.positionLabel || '位置未设'}
-                                    </span>
+                                    ) : (
+                                        <>
+                                            <span {...stylex.props(s.entryTitle)}>
+                                                <span {...stylex.props(s.entryState, entry.disabled ? s.entryStateDisabled : null)}>
+                                                    {entry.disabled ? '停用' : '启用'}
+                                                </span>
+                                                {entry.title}
+                                            </span>
+                                            <span {...stylex.props(s.entryMeta)}>
+                                                {entry.keywordsSummary || '无关键词'}
+                                            </span>
+                                            <span {...stylex.props(s.entryMeta)}>
+                                                {entry.positionLabel || '位置未设'}
+                                            </span>
+                                        </>
+                                    )}
                                 </button>
                             )) : (
                                 <div {...stylex.props(s.empty)} data-world-info-react-empty="entries">

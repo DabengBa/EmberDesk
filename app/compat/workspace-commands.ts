@@ -86,6 +86,11 @@ export interface WorldInfoCommands {
     updateEntryFields(uid: string, fields: Record<string, unknown>): CommandResult;
     clearSelectedEntry(): CommandResult;
     toggleActivationRules(open: boolean): CommandResult;
+    backfillMemos(): CommandResult;
+    applyCurrentSorting(): CommandResult;
+    bulkDeleteEntries(uids: string[]): CommandResult;
+    bulkSetEntriesEnabled(uids: string[], enabled: boolean): CommandResult;
+    moveOrCopyEntry(uid: string): CommandResult;
 }
 
 export interface ExtensionsHostCommands {

@@ -836,6 +836,51 @@ describe('React workspace panels bridge helpers', () => {
         expect(panelStyleSource).toContain('authoringStyles');
     });
 
+    test('exposes World Info workbench gap-fill commands through the session, facades, and React surface', () => {
+        const scriptSource = read('public/script.js');
+        const worldInfoSource = read('public/scripts/world-info.js');
+        const serviceSource = read('public/scripts/world-info-workbench-service.js');
+        const commandsSource = read('app/compat/workspace-commands.ts');
+        const workbenchSource = read('app/world-info-workbench.tsx');
+
+        expect(scriptSource).toContain('backfillMemos: () => backfillWorldInfoMemosFromWorkbench()');
+        expect(scriptSource).toContain('applyCurrentSorting: () => promptApplyWorldInfoCurrentSorting()');
+        expect(scriptSource).toContain('bulkDeleteEntries: uids => bulkDeleteWorldInfoEntries(uids)');
+        expect(scriptSource).toContain('bulkSetEntriesEnabled: (uids, enabled) => bulkSetWorldInfoEntriesEnabled(uids, enabled)');
+        expect(scriptSource).toContain('moveOrCopyEntry: uid => promptMoveOrCopyWorldInfoEntry(uid)');
+
+        expect(worldInfoSource).toContain('export async function backfillWorldInfoMemosFromWorkbench()');
+        expect(worldInfoSource).toContain('export async function promptApplyWorldInfoCurrentSorting()');
+        expect(worldInfoSource).toContain('export async function bulkDeleteWorldInfoEntries(uids)');
+        expect(worldInfoSource).toContain('export async function bulkSetWorldInfoEntriesEnabled(uids, enabled)');
+        expect(worldInfoSource).toContain('export async function promptMoveOrCopyWorldInfoEntry(uid, sourceWorld = \'\')');
+        expect(worldInfoSource).toContain('deleteOriginalDataValue: deleteWIOriginalDataValue');
+        expect(worldInfoSource).toContain('await promptMoveOrCopyWorldInfoEntry($(this).attr(\'data-uid\'), $(this).attr(\'data-current-world\'))');
+
+        expect(serviceSource).toContain('async function backfillMemos()');
+        expect(serviceSource).toContain('async function applySortingAsOrder(start)');
+        expect(serviceSource).toContain('async function deleteEntries(uids)');
+        expect(serviceSource).toContain('async function setEntriesEnabled(uids, enabled)');
+
+        for (const signature of [
+            'backfillMemos()',
+            'applyCurrentSorting()',
+            'bulkDeleteEntries(uids: string[])',
+            'bulkSetEntriesEnabled(uids: string[], enabled: boolean)',
+            'moveOrCopyEntry(uid: string)',
+        ]) {
+            expect(commandsSource).toContain(signature);
+        }
+
+        expect(workbenchSource).toContain('data-world-info-react-action="toggle-multi-select"');
+        expect(workbenchSource).toContain('data-world-info-react-multiselect-bar');
+        expect(workbenchSource).toContain('data-world-info-react-action="multi-delete"');
+        expect(workbenchSource).toContain('data-world-info-react-action="backfill-memos"');
+        expect(workbenchSource).toContain('data-world-info-react-action="apply-sorting"');
+        expect(workbenchSource).toContain('data-world-info-react-action="move-copy-entry"');
+        expect(workbenchSource).toContain('data-world-info-react-regex-hint');
+    });
+
     test('wires Extensions Host to an independent React host without replacing protected mount points', () => {
         const scriptSource = read('public/script.js');
         const extensionsSource = read('public/scripts/extensions.js');

@@ -45,6 +45,11 @@ import {
     updateWorldInfoWorkbenchEntryFields,
     getWorldInfoWorkbenchFacadeSnapshot,
     getWorldInfoReactPanelState,
+    backfillWorldInfoMemosFromWorkbench,
+    promptApplyWorldInfoCurrentSorting,
+    bulkDeleteWorldInfoEntries,
+    bulkSetWorldInfoEntriesEnabled,
+    promptMoveOrCopyWorldInfoEntry,
 } from './scripts/world-info.js';
 import { scanImportedCharacter, showUnifiedImportConfirm, applyImportChoices, buildSkipAllChoices } from './scripts/import-confirm-dialog.js';
 
@@ -2699,6 +2704,11 @@ function getWorldInfoReactCommands() {
             updateEntryFields: (uid, fields) => updateWorldInfoWorkbenchEntryFields(uid, fields),
             clearSelectedEntry: () => selectWorldInfoWorkbenchEntry(''),
             toggleActivationRules: open => setWorldInfoActivationRulesVisible(open),
+            backfillMemos: () => backfillWorldInfoMemosFromWorkbench(),
+            applyCurrentSorting: () => promptApplyWorldInfoCurrentSorting(),
+            bulkDeleteEntries: uids => bulkDeleteWorldInfoEntries(uids),
+            bulkSetEntriesEnabled: (uids, enabled) => bulkSetWorldInfoEntriesEnabled(uids, enabled),
+            moveOrCopyEntry: uid => promptMoveOrCopyWorldInfoEntry(uid),
         },
         shouldRemount(_result, commandName) {
             // Field edits keep local draft focus; activation toggle is DOM-only under React owner.

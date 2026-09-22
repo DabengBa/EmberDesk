@@ -1218,6 +1218,174 @@ export async function openWorldInfoEntryByUid(uid) {
     return button instanceof HTMLElement;
 }
 
+/**
+ * Backfill empty entry memos with primary keywords (workbench command).
+ * @returns {Promise<number>} count of updated entries
+ */
+export async function backfillWorldInfoMemosFromWorkbench() {
+    const session = getWorldInfoWorkbenchSession();
+    const counter = await session.backfillMemos();
+    if (counter > 0) {
+        toastr.info(t`Backfilled ${counter} titles`);
+    }
+    return counter;
+}
+
+/**
+ * Prompt for a start number then rewrite entry `order` values to follow the
+ * currently displayed sorting (workbench command).
+ * @returns {Promise<number|false>} count of updated entries, or false when cancelled
+ */
+export async function promptApplyWorldInfoCurrentSorting() {
+    const session = getWorldInfoWorkbenchSession();
+    const name = session.getSelectedWorldName();
+    if (!name) {
+        return false;
+    }
+
+    const data = await loadWorldInfo(name);
+    const entryCount = Object.keys(data?.entries ?? {}).length;
+    const moreThan100 = entryCount > 100;
+
+    let content = '<span>' + t`Apply your current sorting to the "Order" field. The Order values will go down from the chosen number.` + '</span>';
+    if (moreThan100) {
+        content += '<div class="m-t-1"><i class="fa-solid fa-triangle-exclamation" style="color: #FFD43B;"></i> ' + t`More than 100 entries in this world. If you don't choose a number higher than that, the lower entries will default to 0.<br />(Usual default: 100)<br />Minimum: ${entryCount}` + '</div>';
+    }
+
+    const result = await Popup.show.input(t`Apply Current Sorting`, content, '100', { okButton: t`Apply`, cancelButton: 'Cancel' });
+    if (!result) {
+        return false;
+    }
+
+    const start = Number(result);
+    if (isNaN(start) || start < 0) {
+        toastr.error(t`Invalid number: ${result}`, t`Apply Current Sorting`);
+        return false;
+    }
+    if (start < entryCount) {
+        toastr.warning(t`A number lower than the entry count has been chosen. All entries below that will default to 0.`, t`Apply Current Sorting`);
+    }
+
+    const updated = await session.applySortingAsOrder(start);
+    if (updated > 0) {
+        toastr.info(t`Updated ${updated} Order values`, 'Apply Custom Sorting');
+    } else {
+        toastr.info('All values up to date', 'Apply Custom Sorting');
+    }
+    return updated;
+}
+
+/**
+ * Confirm then delete multiple entries in the selected world (workbench command).
+ * @param {Array<string|number>} uids
+ * @returns {Promise<number|false>} count of deleted entries, or false when cancelled
+ */
+export async function bulkDeleteWorldInfoEntries(uids) {
+    const session = getWorldInfoWorkbenchSession();
+    if (!session.getSelectedWorldName() || !Array.isArray(uids) || uids.length === 0) {
+        return false;
+    }
+
+    const confirmation = await Popup.show.confirm(
+        t`Delete ${uids.length} world info entries?`,
+        t`This action is irreversible!`,
+    );
+    if (!confirmation) {
+        return false;
+    }
+
+    const deleted = await session.deleteEntries(uids);
+    if (deleted > 0) {
+        toastr.info(t`Deleted ${deleted} entries`);
+    }
+    return deleted;
+}
+
+/**
+ * Enable or disable multiple entries in the selected world (workbench command).
+ * @param {Array<string|number>} uids
+ * @param {boolean} enabled
+ * @returns {Promise<number>} count of updated entries
+ */
+export async function bulkSetWorldInfoEntriesEnabled(uids, enabled) {
+    const session = getWorldInfoWorkbenchSession();
+    const updated = await session.setEntriesEnabled(uids, enabled);
+    if (updated > 0) {
+        toastr.info(enabled ? t`Enabled ${updated} entries` : t`Disabled ${updated} entries`);
+    }
+    return updated;
+}
+
+/**
+ * Move or copy an entry to another lorebook via confirm popup (workbench command
+ * and legacy card button share this path).
+ * @param {string|number} uid
+ * @param {string} [sourceWorld] defaults to the workbench-selected world
+ * @returns {Promise<boolean>}
+ */
+export async function promptMoveOrCopyWorldInfoEntry(uid, sourceWorld = '') {
+    const session = getWorldInfoWorkbenchSession();
+    const resolvedSource = sourceWorld || session.getSelectedWorldName();
+    if (!resolvedSource) {
+        return false;
+    }
+
+    const sourceWorldInfo = await loadWorldInfo(resolvedSource);
+    if (!sourceWorldInfo) {
+        return false;
+    }
+    const sourceUid = String(uid ?? '');
+    const sourceName = sourceWorldInfo.entries?.[sourceUid]?.comment;
+    if (sourceName === undefined) {
+        return false;
+    }
+
+    const select = document.createElement('select');
+    select.id = 'move_entry_target_select';
+    select.classList.add('text_pole', 'wide100p', 'marginTop10');
+    const defaultOption = document.createElement('option');
+    defaultOption.value = '';
+    defaultOption.textContent = `-- ${t`Select Target Lorebook`} --`;
+    select.appendChild(defaultOption);
+    let selectableWorldCount = 0;
+    world_names.forEach(worldName => {
+        if (worldName !== resolvedSource) {
+            const option = document.createElement('option');
+            option.value = world_names.indexOf(worldName).toString();
+            option.textContent = worldName;
+            select.appendChild(option);
+            selectableWorldCount++;
+        }
+    });
+    if (selectableWorldCount === 0) {
+        toastr.warning(t`There are no other lorebooks to move to.`);
+        return false;
+    }
+
+    const wrapper = document.createElement('div');
+    wrapper.textContent = t`Move/Copy '${sourceName}' to:`;
+    const container = document.createElement('div');
+    container.appendChild(wrapper);
+    container.appendChild(select);
+    let selectedWorldIndex = -1;
+    select.addEventListener('change', function () { selectedWorldIndex = this.value === '' ? -1 : Number(this.value); });
+    const popup = new Popup(container, POPUP_TYPE.CONFIRM, '', {
+        cancelButton: t`Cancel`,
+        customButtons: [{ text: t`Move`, result: POPUP_RESULT.CUSTOM1 }, { text: t`Copy`, result: POPUP_RESULT.CUSTOM2 }],
+    });
+    popup.okButton.style.display = 'none';
+    const popupConfirm = await popup.show();
+    if (!popupConfirm || selectedWorldIndex === -1) {
+        return false;
+    }
+    const selectedValue = world_names[selectedWorldIndex];
+    if (!selectedValue) {
+        toastr.warning(t`Please select a target lorebook.`);
+        return false;
+    }
+    return await moveWorldInfoEntry(resolvedSource, selectedValue, sourceUid, { deleteOriginal: popupConfirm === POPUP_RESULT.CUSTOM1 });
+}
+
 /** @type {string} */
 let worldInfoWorkbenchSelectedEntryUid = '';
 
@@ -1235,6 +1403,7 @@ function getWorldInfoWorkbenchSession() {
             applyFilters: (entries) => getWorldInfoFilter().applyFilters(entries),
             getSearchScore: (uid) => getWorldInfoFilter().getScore(FILTER_TYPES.WORLD_INFO_SEARCH, uid),
             setOriginalDataValue: setWIOriginalDataValue,
+            deleteOriginalDataValue: deleteWIOriginalDataValue,
         });
     }
 
@@ -3953,47 +4122,7 @@ function setupEditFormBindings(editTemplate, outlet, name, data, entry) {
     });
     editTemplate.find('.move_entry_button').attr('data-uid', entry.uid).attr('data-current-world', name).on('click', async function (e) {
         e.stopPropagation();
-        const sourceUid = $(this).attr('data-uid');
-        const sourceWorld = $(this).attr('data-current-world');
-        const sourceWorldInfo = await loadWorldInfo(sourceWorld);
-        if (!sourceWorldInfo) return;
-        const sourceName = sourceWorldInfo.entries[sourceUid]?.comment;
-        if (sourceName === undefined) return;
-        const select = document.createElement('select');
-        select.id = 'move_entry_target_select';
-        select.classList.add('text_pole', 'wide100p', 'marginTop10');
-        const defaultOption = document.createElement('option');
-        defaultOption.value = '';
-        defaultOption.textContent = `-- ${t`Select Target Lorebook`} --`;
-        select.appendChild(defaultOption);
-        let selectableWorldCount = 0;
-        world_names.forEach(worldName => {
-            if (worldName !== sourceWorld) {
-                const option = document.createElement('option');
-                option.value = world_names.indexOf(worldName).toString();
-                option.textContent = worldName;
-                select.appendChild(option);
-                selectableWorldCount++;
-            }
-        });
-        if (selectableWorldCount === 0) { toastr.warning(t`There are no other lorebooks to move to.`); return; }
-        const wrapper = document.createElement('div');
-        wrapper.textContent = t`Move/Copy '${sourceName}' to:`;
-        const container = document.createElement('div');
-        container.appendChild(wrapper);
-        container.appendChild(select);
-        let selectedWorldIndex = -1;
-        select.addEventListener('change', function () { selectedWorldIndex = this.value === '' ? -1 : Number(this.value); });
-        const popup = new Popup(container, POPUP_TYPE.CONFIRM, '', {
-            cancelButton: t`Cancel`,
-            customButtons: [{ text: t`Move`, result: POPUP_RESULT.CUSTOM1 }, { text: t`Copy`, result: POPUP_RESULT.CUSTOM2 }],
-        });
-        popup.okButton.style.display = 'none';
-        const popupConfirm = await popup.show();
-        if (!popupConfirm || selectedWorldIndex === -1) return;
-        const selectedValue = world_names[selectedWorldIndex];
-        if (!selectedValue) { toastr.warning(t`Please select a target lorebook.`); return; }
-        await moveWorldInfoEntry(sourceWorld, selectedValue, sourceUid, { deleteOriginal: popupConfirm === POPUP_RESULT.CUSTOM1 });
+        await promptMoveOrCopyWorldInfoEntry($(this).attr('data-uid'), $(this).attr('data-current-world'));
     });
 
     outlet.append(editTemplate);
