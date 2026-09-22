@@ -22,7 +22,6 @@ import { getRequestHeaders } from './request-context.js';
 import { power_user } from './power-user.js';
 import { getTokenCountAsync } from './tokenizers.js';
 import {
-    PAGINATION_TEMPLATE,
     clearInfoBlock,
     debounce,
     delay,
@@ -36,9 +35,6 @@ import {
     onlyUnique,
     parseJsonFile,
     setInfoBlock,
-    localizePagination,
-    renderPaginationDropdown,
-    paginationDropdownChangeHandler,
     addLongPressEvent,
     stringToRange,
     sortIgnoreCaseAndAccents,
@@ -234,33 +230,103 @@ function verifyPersonaSearchSortRule() {
 }
 
 /**
- * Gets a rendered avatar block.
+ * Projects a persona into the plain item model consumed by the React-owned
+ * avatar list (PersonaAvatarList). Carries every state the legacy
+ * #user_avatar_template clone + updatePersonaUIStates pass used to write into
+ * the DOM.
  * @param {string} avatarId Avatar file name
- * @returns {JQuery<HTMLElement>} Avatar block
+ * @returns {object} Persona avatar list item
  */
-function getUserAvatarBlock(avatarId) {
-    const template = $('#user_avatar_template .avatar-container').clone();
+function buildPersonaAvatarItem(avatarId) {
     const personaName = power_user.personas[avatarId];
     const personaDescription = power_user.persona_descriptions[avatarId]?.description;
     const personaTitle = power_user.persona_descriptions[avatarId]?.title;
+    const states = getPersonaStates(avatarId);
 
-    template.find('.ch_name').text(personaName || '[Unnamed Persona]');
-    template.find('.ch_description').text(personaDescription || $('#user_avatar_block').attr('no_desc_text')).toggleClass('text_muted', !personaDescription);
-    template.find('.ch_additional_info').text(personaTitle || '');
-    template.attr('data-avatar-id', avatarId);
-    template.find('.avatar').attr('data-avatar-id', avatarId).attr('title', avatarId);
-    template.toggleClass('default_persona', avatarId === power_user.default_persona);
-    const avatarUrl = getThumbnailUrl('persona', avatarId, isFirefox());
-    template.find('img').attr('src', avatarUrl);
-
+    let description = personaDescription || $('#user_avatar_block').attr('no_desc_text') || '';
     // Make sure description block has at least three rows. Otherwise height looks inconsistent. I don't have a better idea for this.
-    const currentText = template.find('.ch_description').text();
-    if (currentText.split('\n').length < 3) {
-        template.find('.ch_description').text(currentText + '\n\xa0\n\xa0');
+    if (description.split('\n').length < 3) {
+        description += '\n\xa0\n\xa0';
     }
 
-    $('#user_avatar_block').append(template);
-    return template;
+    return {
+        avatarId,
+        name: personaName || '[Unnamed Persona]',
+        description,
+        descriptionMuted: !personaDescription,
+        title: personaTitle || '',
+        avatarUrl: getThumbnailUrl('persona', avatarId, isFirefox()),
+        isDefault: states.default,
+        lockedToChat: states.locked.chat,
+        lockedToCharacter: states.locked.character,
+        selected: avatarId === user_avatar,
+    };
+}
+
+/** Filtered + sorted persona avatar ids from the last getUserAvatars run. */
+let personaListEntities = null;
+const PERSONAS_PER_PAGE_KEY = 'Personas_PerPage';
+const PERSONA_PAGE_SIZE_OPTIONS = [5, 10, 25, 50, 100, 250, 500, 1000];
+
+const personaAvatarListBridge = {
+    setPage(page) {
+        if (page !== savePersonasPage) {
+            savePersonasPage = page;
+            void renderPersonaAvatarList();
+        }
+    },
+    setPageSize(size) {
+        accountStorage.setItem(PERSONAS_PER_PAGE_KEY, String(size));
+        void renderPersonaAvatarList();
+    },
+};
+
+/**
+ * Renders the React-owned persona avatar list + pagination pager from the
+ * current filtered/sorted entities and savePersonasPage. No-ops while the
+ * panel host or the entity list is absent (panel not mounted / before the
+ * first getUserAvatars render).
+ * @returns {Promise<void>}
+ */
+async function renderPersonaAvatarList() {
+    const container = document.getElementById('user_avatar_block');
+    if (!container || !Array.isArray(personaListEntities)) {
+        return;
+    }
+
+    const perPage = Number(accountStorage.getItem(PERSONAS_PER_PAGE_KEY)) || 5;
+    const totalCount = personaListEntities.length;
+    const totalPages = Math.max(Math.ceil(totalCount / perPage), 1);
+    if (!savePersonasPage || savePersonasPage < 1) {
+        savePersonasPage = 1;
+    }
+    if (savePersonasPage > totalPages) {
+        savePersonasPage = totalPages;
+    }
+    const rangeStart = totalCount === 0 ? 0 : (savePersonasPage - 1) * perPage + 1;
+    const rangeEnd = Math.min(savePersonasPage * perPage, totalCount);
+    const items = personaListEntities.slice(Math.max(rangeStart - 1, 0), rangeEnd).map(buildPersonaAvatarItem);
+    const pageSizeOptions = PERSONA_PAGE_SIZE_OPTIONS.includes(perPage)
+        ? PERSONA_PAGE_SIZE_OPTIONS
+        : [...PERSONA_PAGE_SIZE_OPTIONS, perPage].sort((a, b) => a - b);
+
+    try {
+        const module = await loadWorkspacePanelsModule();
+        module.mountPersonaAvatarList(container, personaAvatarListBridge, {
+            items,
+            gridView: accountStorage.getItem(GRID_STORAGE_KEY) === 'true',
+            pagination: {
+                currentPage: savePersonasPage,
+                pageSize: perPage,
+                totalCount,
+                label: `${rangeStart}-${rangeEnd} .. ${totalCount}`,
+                pageSizeOptions,
+            },
+        });
+        container.scrollTop = 0;
+    } catch (error) {
+        console.error('Failed to render persona avatar list:', error);
+    }
 }
 
 /**
@@ -306,51 +372,16 @@ export async function getUserAvatars(doRender = true, openPageAt = '') {
         let entities = getPersonasFilter().applyFilters(allEntities);
         entities = sortPersonas(entities);
 
-        const storageKey = 'Personas_PerPage';
-        const listId = '#user_avatar_block';
-        const perPage = Number(accountStorage.getItem(storageKey)) || 5;
-        const sizeChangerOptions = [5, 10, 25, 50, 100, 250, 500, 1000];
-
-        $('#persona_pagination_container').pagination({
-            dataSource: entities,
-            pageSize: perPage,
-            sizeChangerOptions,
-            pageRange: 1,
-            pageNumber: savePersonasPage || 1,
-            position: 'top',
-            showPageNumbers: false,
-            showSizeChanger: true,
-            formatSizeChanger: renderPaginationDropdown(perPage, sizeChangerOptions),
-            prevText: '<',
-            nextText: '>',
-            formatNavigator: PAGINATION_TEMPLATE,
-            showNavigator: true,
-            callback: function (data) {
-                $(listId).empty();
-                for (const item of data) {
-                    $(listId).append(getUserAvatarBlock(item));
-                }
-                updatePersonaUIStates();
-                localizePagination($('#persona_pagination_container'));
-            },
-            afterSizeSelectorChange: function (e, size) {
-                accountStorage.setItem(storageKey, e.target.value);
-                paginationDropdownChangeHandler(e, size);
-            },
-            afterPaging: function (e) {
-                savePersonasPage = e;
-            },
-            afterRender: function () {
-                $(listId).scrollTop(0);
-            },
-        });
+        personaListEntities = entities;
+        await renderPersonaAvatarList();
 
         navigateToAvatar = (avatarId) => {
             const avatarIndex = entities.indexOf(avatarId);
-            const page = Math.floor(avatarIndex / perPage) + 1;
 
             if (avatarIndex !== -1) {
-                $('#persona_pagination_container').pagination('go', page);
+                const perPage = Number(accountStorage.getItem(PERSONAS_PER_PAGE_KEY)) || 5;
+                savePersonasPage = Math.floor(avatarIndex / perPage) + 1;
+                void renderPersonaAvatarList();
             }
         };
 
@@ -1457,15 +1488,9 @@ function updatePersonaUIStates({ navigateToCurrent = false } = {}) {
         navigateToAvatar(user_avatar);
     }
 
-    // Update the persona list
-    $('#user_avatar_block .avatar-container').each(function () {
-        const avatarId = $(this).attr('data-avatar-id');
-        const states = getPersonaStates(avatarId);
-        $(this).toggleClass('default_persona', states.default);
-        $(this).toggleClass('locked_to_chat', states.locked.chat);
-        $(this).toggleClass('locked_to_character', states.locked.character);
-        $(this).toggleClass('selected', avatarId === user_avatar);
-    });
+    // Card state classes (default_persona/locked_to_chat/locked_to_character/
+    // selected) live in the React item model now; re-render re-projects them.
+    void renderPersonaAvatarList();
 
     // Buttons for the persona panel on the right
     const personaStates = getPersonaStates(user_avatar);

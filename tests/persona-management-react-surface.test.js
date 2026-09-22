@@ -78,6 +78,63 @@ describe('persona management React surface (Wave A)', () => {
         expect(settingsIndex).toBeLessThan(initIndex);
     });
 
+    test('avatar list is React-owned while personas.js keeps data/page orchestration', () => {
+        const personas = readRepoFile('public/scripts/personas.js');
+        const list = readRepoFile('app/components/personas/PersonaAvatarList.tsx');
+        const workspacePanels = readRepoFile('app/workspace-panels.tsx');
+        const panel = readRepoFile('app/components/personas/PersonaManagementPanel.tsx');
+
+        // personas.js projects items and mounts the React list; the jQuery
+        // pagination plugin and #user_avatar_template cloning are gone.
+        expect(personas).toContain('module.mountPersonaAvatarList(container, personaAvatarListBridge');
+        expect(personas).toContain('function buildPersonaAvatarItem(avatarId)');
+        expect(personas).not.toContain("$('#persona_pagination_container').pagination(");
+        expect(personas).not.toContain("$('#user_avatar_template .avatar-container').clone()");
+
+        // #user_avatar_block is an empty host for the React list root;
+        // the .avatar_upload "+" card moved into the list component so it
+        // survives renders (legacy empty() used to destroy it).
+        expect(panel).toContain('id="user_avatar_block"');
+        expect(panel).not.toContain('className={`avatar_upload');
+
+        // Card contract: classes/attrs the delegated handlers, lock-state CSS
+        // and keyboard interactable observer rely on.
+        for (const marker of [
+            'avatar-container',
+            'data-avatar-id={item.avatarId}',
+            'default_persona',
+            'locked_to_chat',
+            'locked_to_character',
+            'selected',
+            'avatar_upload',
+            'ch_name flex1',
+            'ch_additional_info',
+            'ch_description',
+            'locked_to_chat_label',
+            'locked_to_character_label',
+            'character_select_container',
+        ]) {
+            expect(list).toContain(marker);
+        }
+
+        // Pager mirrors the paginationjs DOM contract inside the legacy host.
+        for (const marker of [
+            'paginationjs',
+            'J-paginationjs-nav',
+            'paginationjs-first',
+            'J-paginationjs-size-select',
+            'paginationjs-size-changer',
+            "getElementById('persona_pagination_container')",
+        ]) {
+            expect(list).toContain(marker);
+        }
+
+        // workspace-panels exposes mount/update and projects gridView.
+        expect(workspacePanels).toContain('export function mountPersonaAvatarList(');
+        expect(workspacePanels).toContain('export function updatePersonaAvatarList(');
+        expect(workspacePanels).toContain("classList.toggle('gridView'");
+    });
+
     test('persona-owned CSS moved to StyleX while shared state rules stay legacy', () => {
         const styles = readRepoFile('app/styles/persona-panel.styles.ts');
         const styleCss = readRepoFile('public/style.css');

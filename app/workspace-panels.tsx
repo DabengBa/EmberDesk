@@ -57,6 +57,7 @@ import { SettingsSurface } from './components/settings/SettingsSurface';
 import { ChatBackupsBrowser, type ChatBackupsCommands } from './components/chat-backups/ChatBackupsBrowser';
 import { DataMaidDialog } from './components/data-maid/DataMaidDialog';
 import { PersonaManagementPanel } from './components/personas/PersonaManagementPanel';
+import { PersonaAvatarList, type PersonaAvatarListBridge, type PersonaAvatarListState } from './components/personas/PersonaAvatarList';
 import { PowerUserPanel } from './components/power-user/PowerUserPanel';
 import { AdvancedFormattingPanel } from './components/panels/AdvancedFormattingPanel';
 import { PromptManagerPopup } from './components/panels/PromptManagerPopup';
@@ -2081,6 +2082,62 @@ export function unmountPersonaManagement() {
     if (mountedPanels.size === 0 && !mountedShellChrome && !mountedSettingsOverlay && !mountedChatBackups && !mountedDataMaid) {
         detachGlobalCompatibilityBridge();
     }
+}
+
+let personaAvatarListRoot: Root | null = null;
+let personaAvatarListContainer: HTMLElement | null = null;
+let personaAvatarListBridge: PersonaAvatarListBridge | null = null;
+let personaAvatarListState: PersonaAvatarListState | null = null;
+
+function renderPersonaAvatarList() {
+    if (!personaAvatarListContainer || !personaAvatarListBridge || !personaAvatarListState) {
+        return;
+    }
+    if (!personaAvatarListContainer.isConnected) {
+        personaAvatarListRoot = null;
+        personaAvatarListContainer = null;
+        return;
+    }
+    personaAvatarListRoot ??= createRoot(personaAvatarListContainer);
+    personaAvatarListContainer.classList.toggle('gridView', personaAvatarListState.gridView);
+    // Synchronous commit: delegated click handlers and the keyboard
+    // interactable observer must see stable DOM right after this returns.
+    flushSync(() => personaAvatarListRoot?.render(
+        <StrictMode>
+            <Theme theme={emberDeskTheme} mode="dark">
+                <PersonaAvatarList state={personaAvatarListState as PersonaAvatarListState} bridge={personaAvatarListBridge as PersonaAvatarListBridge} />
+            </Theme>
+        </StrictMode>,
+    ));
+}
+
+/**
+ * Mounts or updates the React-owned persona avatar list inside
+ * #user_avatar_block (cards + .avatar_upload) and the pagination pager inside
+ * #persona_pagination_container. personas.js stays the fetch/filter/sort/page
+ * orchestration and calls this with projected item data; returns false when
+ * the container is absent so the caller can fail closed.
+ */
+export function mountPersonaAvatarList(container: HTMLElement, bridge: PersonaAvatarListBridge, state: PersonaAvatarListState): boolean {
+    if (!(container instanceof HTMLElement)) {
+        return false;
+    }
+    attachGlobalCompatibilityBridge();
+    personaAvatarListContainer = container;
+    personaAvatarListBridge = bridge;
+    personaAvatarListState = state;
+    renderPersonaAvatarList();
+    container.dataset.reactPersonaAvatarListOwner = 'react';
+    return true;
+}
+
+export function updatePersonaAvatarList(state: PersonaAvatarListState): boolean {
+    if (!personaAvatarListContainer?.isConnected) {
+        return false;
+    }
+    personaAvatarListState = state;
+    renderPersonaAvatarList();
+    return true;
 }
 
 let mountedPowerUser: { root: Root; container: HTMLElement } | null = null;

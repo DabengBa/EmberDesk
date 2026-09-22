@@ -6,7 +6,8 @@ import { personaPanelStyles as styles } from '../../styles/persona-panel.styles'
 /**
  * Presentational owner of the Persona Management drawer content.
  * Element IDs and behavior classes are preserved verbatim: personas.js keeps
- * owning behavior (bindings, avatar list, pagination, lock state writes).
+ * owning behavior (bindings, lock state, connections) while the avatar list
+ * inside #user_avatar_block is React-owned via mountPersonaAvatarList.
  */
 export function PersonaManagementPanel() {
     return (
@@ -39,9 +40,7 @@ export function PersonaManagementPanel() {
                         <div id="persona_pagination_container" className="flex1" />
                         <ContractIconButton id="persona_grid_toggle" className="menu_button" label="Toggle grid view" nativeTitle title="Toggle grid view" icon={<i className="fa-solid fa-table-cells-large" aria-hidden="true" />} />
                     </div>
-                    <div id="user_avatar_block" className={stylex.props(styles.avatarBlock).className ?? ''} data-i18n="[no_desc_text]No persona description" {...{ no_desc_text: '[No description]' } as Record<string, string>}>
-                        <div className={`avatar_upload ${stylex.props(styles.avatarUpload).className ?? ''}`}>+</div>
-                    </div>
+                    <div id="user_avatar_block" className={stylex.props(styles.avatarBlock).className ?? ''} data-i18n="[no_desc_text]No persona description" {...{ no_desc_text: '[No description]' } as Record<string, string>} />
                     <form id="form_upload_avatar" method="post" encType="multipart/form-data" onSubmit={event => event.preventDefault()}>
                         <input type="file" id="avatar_upload_file" accept="image/*" name="avatar" />
                         <input type="hidden" id="avatar_upload_overwrite" name="overwrite_name" value="" />
