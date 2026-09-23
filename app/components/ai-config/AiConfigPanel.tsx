@@ -28,11 +28,6 @@ export function AiConfigPanel() {
                                         </strong>
 
                                         <div className="flex-container gap3px">
-                                            <label htmlFor="bind_preset_to_connection" className="margin0 menu_button menu_button_icon" title="Bind presets to API connections" data-i18n="[title]Bind presets to API connections">
-                                                <input id="bind_preset_to_connection" type="checkbox" className="displayNone" />
-                                                <i className="fa-fw fa-solid fa-link toggleOn" />
-                                                <i className="fa-fw fa-solid fa-link-slash toggleOff" />
-                                            </label>
                                             <PresetActionsMenu />
                                         </div>
                                     </div>
@@ -61,58 +56,32 @@ export function AiConfigPanel() {
                                         </div>
                                     </div>
                                 </div>
-                                <div className="config-section-header"><span data-i18n="Options">Options</span></div>
                                 <div className="range-block">
-                                    <label htmlFor="stream_toggle" title="Enable OpenAI completion streaming" data-i18n="[title]Enable OpenAI completion streaming" className="checkbox_label widthFreeExpand">
-                                        <input id="stream_toggle" type="checkbox" /><span data-i18n="Streaming">Streaming</span>
+                                    <label htmlFor="stream_toggle" title="Enable OpenAI completion streaming" data-i18n="[title]Enable OpenAI completion streaming" className="ai-switch-row widthFreeExpand">
+                                        <input id="stream_toggle" type="checkbox" className="ai-switch-input" />
+                                        <span className="ai-switch" aria-hidden="true"><span className="ai-switch-thumb" /></span>
+                                        <span data-i18n="Streaming">Streaming</span>
                                     </label>
                                 </div>
                             </div>
                         </div>
                         <div id="advanced-ai-config-block" className="width100p">
                             <div id="openai_settings">
-                                <div className="config-section-header"><span data-i18n="Features">Features</span></div>
-                                <div className="features-grid">
-                                    <div className="range-block" data-source="openai">
-                                        <label htmlFor="openai_function_calling" className="checkbox_label widthFreeExpand">
-                                            <input id="openai_function_calling" type="checkbox" />
-                                            <span data-i18n="Enable function calling">Function Calling</span>
-                                        </label>
-                                        <div id="tool_call_recurse_limit_block" className="wide100p" style={{ "marginTop": "4px" }}>
-                                            <div className="range-block-title"><small data-i18n="Tool Call Recurse Limit">Recurse Limit</small></div>
-                                            <div className="wide100p">
-                                                <input type="number" id="tool_call_recurse_limit" className="text_pole" min="1" max="50" step="1" />
-                                            </div>
+                                <div className="range-block" data-source="openai">
+                                    <div className="range-block-title" data-i18n="Reasoning Effort">Reasoning Effort</div>
+                                    <div className="wide100p">
+                                        <div className="segmented-control" data-sync-select="openai_reasoning_effort">
+                                            <label className="seg-option"><input type="radio" name="reasoning_effort_ui" defaultValue="auto" /><span data-i18n="openai_reasoning_effort_auto">Auto</span></label>
+                                            <label className="seg-option"><input type="radio" name="reasoning_effort_ui" defaultValue="low" /><span data-i18n="openai_reasoning_effort_low">Low</span></label>
+                                            <label className="seg-option"><input type="radio" name="reasoning_effort_ui" defaultValue="medium" /><span data-i18n="openai_reasoning_effort_medium">Medium</span></label>
+                                            <label className="seg-option"><input type="radio" name="reasoning_effort_ui" defaultValue="high" /><span data-i18n="openai_reasoning_effort_high">High</span></label>
                                         </div>
-                                    </div>
-                                    <div className="range-block" data-source="openai">
-                                        <label htmlFor="openai_media_inlining" className="checkbox_label widthFreeExpand">
-                                            <input id="openai_media_inlining" type="checkbox" />
-                                            <span data-i18n="Send inline media">Inline Media</span>
-                                        </label>
-                                    </div>
-                                    <div className="range-block" data-source="openai">
-                                        <label htmlFor="openai_show_thoughts" className="checkbox_label widthFreeExpand">
-                                            <input id="openai_show_thoughts" type="checkbox" />
-                                            <span data-i18n="Request model reasoning">Model Reasoning</span>
-                                        </label>
-                                    </div>
-                                    <div className="range-block full-width" data-source="openai">
-                                        <div className="range-block-title" data-i18n="Reasoning Effort">Reasoning Effort</div>
-                                        <div className="wide100p">
-                                            <div className="segmented-control" data-sync-select="openai_reasoning_effort">
-                                                <label className="seg-option"><input type="radio" name="reasoning_effort_ui" defaultValue="auto" /><span data-i18n="openai_reasoning_effort_auto">Auto</span></label>
-                                                <label className="seg-option"><input type="radio" name="reasoning_effort_ui" defaultValue="low" /><span data-i18n="openai_reasoning_effort_low">Low</span></label>
-                                                <label className="seg-option"><input type="radio" name="reasoning_effort_ui" defaultValue="medium" /><span data-i18n="openai_reasoning_effort_medium">Medium</span></label>
-                                                <label className="seg-option"><input type="radio" name="reasoning_effort_ui" defaultValue="high" /><span data-i18n="openai_reasoning_effort_high">High</span></label>
-                                            </div>
-                                            <select id="openai_reasoning_effort" className="displayNone">
-                                                <option value="auto">Auto</option>
-                                                <option value="low">Low</option>
-                                                <option value="medium">Medium</option>
-                                                <option value="high">High</option>
-                                            </select>
-                                        </div>
+                                        <select id="openai_reasoning_effort" className="displayNone">
+                                            <option value="auto">Auto</option>
+                                            <option value="low">Low</option>
+                                            <option value="medium">Medium</option>
+                                            <option value="high">High</option>
+                                        </select>
                                     </div>
                                 </div>
                                 <div className="config-section-header"><span data-i18n="Prompt Manager">Prompt Manager</span></div>
@@ -127,6 +96,39 @@ export function AiConfigPanel() {
                                 <div className="fa-solid fa-circle-chevron-down inline-drawer-icon down"></div>
                             </div>
                             <div className="inline-drawer-content">
+                        <div className="config-section-header"><span data-i18n="Features">功能</span></div>
+                        <div className="features-grid">
+                            <div className="range-block" data-source="openai">
+                                <label htmlFor="openai_function_calling" className="checkbox_label widthFreeExpand">
+                                    <input id="openai_function_calling" type="checkbox" />
+                                    <span data-i18n="Enable function calling">Function Calling</span>
+                                </label>
+                                <div id="tool_call_recurse_limit_block" className="wide100p" style={{ "marginTop": "4px" }}>
+                                    <div className="range-block-title"><small data-i18n="Tool Call Recurse Limit">Recurse Limit</small></div>
+                                    <div className="wide100p">
+                                        <input type="number" id="tool_call_recurse_limit" className="text_pole" min="1" max="50" step="1" />
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="range-block" data-source="openai">
+                                <label htmlFor="openai_media_inlining" className="checkbox_label widthFreeExpand">
+                                    <input id="openai_media_inlining" type="checkbox" />
+                                    <span data-i18n="Send inline media">Inline Media</span>
+                                </label>
+                            </div>
+                            <div className="range-block" data-source="openai">
+                                <label htmlFor="openai_show_thoughts" className="checkbox_label widthFreeExpand">
+                                    <input id="openai_show_thoughts" type="checkbox" />
+                                    <span data-i18n="Request model reasoning">Model Reasoning</span>
+                                </label>
+                            </div>
+                            <div className="range-block" data-source="openai">
+                                <label htmlFor="bind_preset_to_connection" className="checkbox_label widthFreeExpand" title="Bind presets to API connections" data-i18n="[title]Bind presets to API connections">
+                                    <input id="bind_preset_to_connection" type="checkbox" />
+                                    <span data-i18n="Bind presets to API connections">Bind Presets to Connection</span>
+                                </label>
+                            </div>
+                        </div>
                         <div className="config-section-header"><span data-i18n="Advanced Sampling">高级采样</span></div>
                         <div className="range-block-pair" data-source="openai">
                             <div className="range-block">
