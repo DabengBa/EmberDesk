@@ -25,10 +25,9 @@ The sttest environment is a shared remote test target, not a source of canonical
 - Port mapping: `8001:8000`
 - Container healthcheck: `node src/healthcheck.js`
 
-Use the non-root SSH user for Git work and root only for Docker operations:
+The sttest host is now reachable via the local SSH alias `vps-kl` (`root@72.62.76.115`, key `~/.ssh/hostinger_root_ed25519`). The previous `31.97.210.149` host and `hostops`/`hostinger` aliases are retired; on the current host all operations run as root, and Git commands in `/opt/emberdesk-test` need `git -c safe.directory=/opt/emberdesk-test` because the checkout is owned by uid 1002.
 
-- `hostinger` - `hostops@31.97.210.149`
-- `hostinger-root` - `root@31.97.210.149`
+- `vps-kl` - `root@72.62.76.115` (Git work + Docker operations)
 
 Do not document or commit private key material, credentials, cookies, session tokens, exported browser storage, or remote config secrets.
 
@@ -45,10 +44,10 @@ Keep these mounts intact. The Git checkout and rebuilt image are replaceable; co
 
 ### Process Summary
 
-The most recent documented deploy removed the welcome-panel `Recent Chats` area, committed it as:
+The most recent documented deploy slimmed the AI config drawer (feature toggles folded into the Advanced drawer, toggle switch and pill segmented controls), committed as:
 
 ```text
-3647298e5 fix(welcome): remove recent chats panel
+8ab9083b2 feat(ui): AI config 面板收敛——低频功能项收进高级抽屉,开关/分段控件现代化
 ```
 
 The change was pushed to `origin/csp-dev-techupgrade`, fast-forwarded to `origin/sttest`, pulled on Hostinger, rebuilt with Docker Compose, recorded in `.deploy-revision`, and verified through container health plus HTTPS checks.
@@ -76,22 +75,22 @@ Task-owned new files may be staged by explicit path when they are intended to en
 
 ### Remote Deploy
 
-Run Git updates as `hostinger` so the working tree stays owned by `hostops:hostops`.
+Git work runs as root on `vps-kl`; the checkout is owned by uid 1002, so pass `-c safe.directory=/opt/emberdesk-test` (or use `git -C` with the flag) on every Git command.
 
 ```bash
-ssh hostinger "cd /opt/emberdesk-test && git fetch origin csp-dev-techupgrade && git pull --ff-only origin csp-dev-techupgrade && git rev-parse HEAD"
+ssh vps-kl "git -c safe.directory=/opt/emberdesk-test -C /opt/emberdesk-test fetch origin csp-dev-techupgrade && git -c safe.directory=/opt/emberdesk-test -C /opt/emberdesk-test pull --ff-only origin csp-dev-techupgrade && git -c safe.directory=/opt/emberdesk-test -C /opt/emberdesk-test rev-parse HEAD"
 ```
 
 Rebuild and restart the container as root:
 
 ```bash
-ssh hostinger-root "cd /opt/emberdesk-test/deploy && docker compose up -d --build"
+ssh vps-kl "cd /opt/emberdesk-test/deploy && docker compose up -d --build"
 ```
 
 Record the deployed revision:
 
 ```bash
-ssh hostinger "cd /opt/emberdesk-test && git rev-parse HEAD > .deploy-revision && cat .deploy-revision"
+ssh vps-kl "git -c safe.directory=/opt/emberdesk-test -C /opt/emberdesk-test rev-parse HEAD > /opt/emberdesk-test/.deploy-revision && cat /opt/emberdesk-test/.deploy-revision"
 ```
 
 ### Verification
@@ -99,21 +98,21 @@ ssh hostinger "cd /opt/emberdesk-test && git rev-parse HEAD > .deploy-revision &
 Check the container status:
 
 ```bash
-ssh hostinger-root 'docker ps --filter name=emberdesk-test --format "table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}"'
-ssh hostinger-root 'docker inspect --format "{{.State.Health.Status}} {{.Image}}" emberdesk-test'
+ssh vps-kl 'docker ps --filter name=emberdesk-test --format "table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}"'
+ssh vps-kl 'docker inspect --format "{{.State.Health.Status}} {{.Image}}" emberdesk-test'
 ```
 
 Check the public HTTP surface:
 
 ```bash
-ssh hostinger-root 'curl -sSI --max-time 15 https://sttest.tanyaleoallen.cloud/ | sed -n "1,12p"'
-ssh hostinger-root 'curl -sSI --max-time 15 https://sttest.tanyaleoallen.cloud/login | sed -n "1,12p"'
+ssh vps-kl 'curl -sSI --max-time 15 https://sttest.tanyaleoallen.cloud/ | sed -n "1,12p"'
+ssh vps-kl 'curl -sSI --max-time 15 https://sttest.tanyaleoallen.cloud/login | sed -n "1,12p"'
 ```
 
 For feature-specific verification, inspect the container filesystem or run a focused browser check. Example grep used for the welcome-panel deployment:
 
 ```bash
-ssh hostinger-root 'docker exec emberdesk-test sh -lc "grep -n \"Recent Chats\\|recentChat\\|welcomeRecent\\|Temporary Chat\" /home/node/app/public/scripts/templates/welcomePanel.html || true"'
+ssh vps-kl 'docker exec emberdesk-test sh -lc "grep -n \"Recent Chats\\|recentChat\\|welcomeRecent\\|Temporary Chat\" /home/node/app/public/scripts/templates/welcomePanel.html || true"'
 ```
 
 The expected result for that check is no match for the removed `Recent Chats` surface.
@@ -123,9 +122,9 @@ The expected result for that check is no match for the removed `Recent Chats` su
 Prefer rolling back to a known-good commit and rebuilding rather than using destructive resets.
 
 ```bash
-ssh hostinger "cd /opt/emberdesk-test && git fetch origin csp-dev-techupgrade && git checkout <known-good-sha>"
-ssh hostinger-root "cd /opt/emberdesk-test/deploy && docker compose up -d --build"
-ssh hostinger "cd /opt/emberdesk-test && git rev-parse HEAD > .deploy-revision && cat .deploy-revision"
+ssh vps-kl "git -c safe.directory=/opt/emberdesk-test -C /opt/emberdesk-test fetch origin csp-dev-techupgrade && git -c safe.directory=/opt/emberdesk-test -C /opt/emberdesk-test checkout <known-good-sha>"
+ssh vps-kl "cd /opt/emberdesk-test/deploy && docker compose up -d --build"
+ssh vps-kl "git -c safe.directory=/opt/emberdesk-test -C /opt/emberdesk-test rev-parse HEAD > /opt/emberdesk-test/.deploy-revision && cat /opt/emberdesk-test/.deploy-revision"
 ```
 
 After rollback, repeat the container health and public HTTP checks. If the rollback commit should become the branch tip, make that branch update explicitly from the local repo and document why.
