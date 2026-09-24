@@ -2852,7 +2852,7 @@ async function displayWorldEntries(name, data, navigation = navigation_option.no
         updateWorldEntryKeyOptionsCache(keys, { reset: true });
 
         // Run the callback for printing this
-        typeof callback === 'function' && callback(entriesArray);
+        if (typeof callback === 'function') callback(entriesArray);
         return entriesArray;
     }
 
@@ -3231,7 +3231,7 @@ function handleMatchCheckboxHelper({ template, entry, fieldName, data, name }) {
         const value = $(this).prop('checked');
         data.entries[uid][fieldName] = value;
         setWIOriginalDataValue(data, uid, key, data.entries[uid][fieldName]);
-        !noSave && await saveWorldInfo(name, data);
+        if (!noSave) await saveWorldInfo(name, data);
     });
     checkBoxElem.prop('checked', !!entry[fieldName]).trigger('input', { noSave: true });
 }
@@ -3286,7 +3286,7 @@ function fillCharacterAndTagOptionsHelper({ characterFilter, entry }) {
  * @param {object} params.entry - The entry object to update.
  * @param {string} params.name - The name of the world info to save changes to.
  */
-function handleCharacterFilterChangeHelper({ characterFilter, data, entry, name }) {
+function handleCharacterFilterChangeHelper({ characterFilter, data, entry: _entry, name }) {
     characterFilter.on('mousedown change', async function (e) {
         if (world_names.length === 0) {
             e.preventDefault();
@@ -3336,7 +3336,7 @@ function handleProbabilityInputHelper({ probabilityInput, data, entry, name }) {
             }
         }
         setWIOriginalDataValue(data, uid, 'extensions.probability', data.entries[uid].probability);
-        !noSave && await saveWorldInfo(name, data);
+        if (!noSave) await saveWorldInfo(name, data);
     });
     probabilityInput.val(entry.probability).trigger('input', { noSave: true });
     probabilityInput.css('width', 'calc(3em + 15px)');
@@ -3358,8 +3358,8 @@ function handleProbabilityToggleHelper({ probabilityToggle, data, entry, name, p
         const value = $(this).prop('checked');
         data.entries[uid].useProbability = value;
         const probabilityContainer = $(this).closest('.world_entry').find('.probabilityContainer');
-        !noSave && await saveWorldInfo(name, data);
-        value ? probabilityContainer.show() : probabilityContainer.hide();
+        if (!noSave) await saveWorldInfo(name, data);
+        if (value) probabilityContainer.show(); else probabilityContainer.hide();
         if (value && data.entries[uid].probability === null) {
             data.entries[uid].probability = 100;
         }
@@ -3388,7 +3388,7 @@ function handleBooleanSelectHelper({ selectElem, entry, entryKey, data, name }) 
         const value = $(this).val();
         data.entries[uid][entryKey] = value === 'null' ? null : value === 'true';
         setWIOriginalDataValue(data, uid, `extensions.${entryKey.replace(/[A-Z]/g, m => `_${m.toLowerCase()}`)}`, data.entries[uid][entryKey]);
-        !noSave && await saveWorldInfo(name, data);
+        if (!noSave) await saveWorldInfo(name, data);
     });
     selectElem.val((entry[entryKey] === null || entry[entryKey] === undefined) ? 'null' : entry[entryKey] ? 'true' : 'false').trigger('input', { noSave: true });
 }
@@ -3421,7 +3421,7 @@ function handleNumberInputHelper({ inputElem, entry, entryKey, data, name, min, 
         }
         data.entries[uid][entryKey] = !isNaN(value) ? value : null;
         setWIOriginalDataValue(data, uid, `extensions.${entryKey.replace(/[A-Z]/g, m => `_${m.toLowerCase()}`)}`, data.entries[uid][entryKey]);
-        !noSave && await saveWorldInfo(name, data);
+        if (!noSave) await saveWorldInfo(name, data);
     });
     inputElem.val(entry[entryKey] ?? (clamp ? min : '')).trigger('input', { noSave: true });
 }
@@ -3480,7 +3480,7 @@ async function updateEntryPositionFromSelect($select, entry, data, name, templat
         $expandedPosition.trigger('input', { noSave: true });
     }
 
-    !noSave && await saveWorldInfo(name, data);
+    if (!noSave) await saveWorldInfo(name, data);
 }
 
 /**
@@ -3514,10 +3514,10 @@ export function renderCollapsedCard(name, data, entry) {
     commentInput.on('input', async function (_, { skipReset = false, noSave = false } = {}) {
         const uid = $(this).data('uid');
         const value = $(this).val();
-        !skipReset && await resetScrollHeight(this);
+        if (!skipReset) await resetScrollHeight(this);
         data.entries[uid].comment = value;
         setWIOriginalDataValue(data, uid, 'comment', data.entries[uid].comment);
-        !noSave && await saveWorldInfo(name, data);
+        if (!noSave) await saveWorldInfo(name, data);
     });
     commentInput.val(entry.comment).trigger('input', { skipReset: true, noSave: true });
     commentInput.on('click', e => e.stopPropagation());
@@ -3710,7 +3710,7 @@ function setupEditFormBindings(editTemplate, outlet, name, data, entry) {
         setWIOriginalDataValue(data, uid, 'extensions.role', data.entries[uid].role);
         const $cardPositionControl = outlet.closest('.world_entry').find('.wi-card-position-control');
         selectEntryPositionOption($cardPositionControl, data.entries[uid]);
-        !noSave && await saveWorldInfo(name, data);
+        if (!noSave) await saveWorldInfo(name, data);
     });
     selectEntryPositionOption($posSelect, entry);
     $posControl.append($posSelect);
@@ -3734,7 +3734,7 @@ function setupEditFormBindings(editTemplate, outlet, name, data, entry) {
         const value = Number($(this).val());
         data.entries[uid].order = !isNaN(value) ? value : 0;
         setWIOriginalDataValue(data, uid, 'insertion_order', data.entries[uid].order);
-        !noSave && await saveWorldInfo(name, data);
+        if (!noSave) await saveWorldInfo(name, data);
     });
     $orderInput.val(entry.order).trigger('input', { noSave: true });
     $orderInput.css('width', 'calc(3em + 15px)');
@@ -3764,8 +3764,8 @@ function setupEditFormBindings(editTemplate, outlet, name, data, entry) {
         const value = $(this).prop('checked');
         const commentContainer = $(this).closest('.world_entry').find('.commentContainer');
         data.entries[uid].addMemo = value;
-        !noSave && await saveWorldInfo(name, data);
-        value ? commentContainer.show() : commentContainer.hide();
+        if (!noSave) await saveWorldInfo(name, data);
+        if (value) commentContainer.show(); else commentContainer.hide();
     });
     commentToggle.prop('checked', true).trigger('input', { noSave: true });
     commentToggle.parent().hide();
@@ -3779,7 +3779,7 @@ function setupEditFormBindings(editTemplate, outlet, name, data, entry) {
         const value = Number($(this).val());
         data.entries[uid].selectiveLogic = !isNaN(value) ? value : world_info_logic.AND_ANY;
         setWIOriginalDataValue(data, uid, 'selectiveLogic', data.entries[uid].selectiveLogic);
-        !noSave && await saveWorldInfo(name, data);
+        if (!noSave) await saveWorldInfo(name, data);
     });
     editTemplate.find(`select[name="entryLogicType"] option[value=${entry.selectiveLogic}]`).prop('selected', true).trigger('input', { noSave: true });
 
@@ -3791,13 +3791,13 @@ function setupEditFormBindings(editTemplate, outlet, name, data, entry) {
         const value = $(this).prop('checked');
         data.entries[uid].selective = value;
         setWIOriginalDataValue(data, uid, 'selective', data.entries[uid].selective);
-        !noSave && await saveWorldInfo(name, data);
+        if (!noSave) await saveWorldInfo(name, data);
         const keysecondary = $(this).closest('.world_entry').find('.keysecondary');
         const keysecondarytextpole = $(this).closest('.world_entry').find('.keysecondarytextpole');
         const keyprimaryselect = $(this).closest('.world_entry').find('.keyprimaryselect');
         const keyprimaryHeight = keyprimaryselect.outerHeight();
         keysecondarytextpole.css('height', keyprimaryHeight + 'px');
-        value ? keysecondary.show() : keysecondary.hide();
+        if (value) keysecondary.show(); else keysecondary.hide();
     });
     selectiveInput.prop('checked', true).trigger('input', { noSave: true });
     selectiveInput.parent().hide();
@@ -3821,14 +3821,14 @@ function setupEditFormBindings(editTemplate, outlet, name, data, entry) {
             Object.assign(data.entries[uid], { characterFilter: { isExclude: true, names: [], tags: [] } });
         }
         if (data.entries[uid]?.characterFilter?.names?.length > 0) {
-            for (const name of [...data.entries[uid].characterFilter.names]) {
+            for (const name of data.entries[uid].characterFilter.names) {
                 if (!getContext().characters.find(x => x.avatar.replace(/\.[^/.]+$/, '') === name)) {
                     data.entries[uid].characterFilter.names = data.entries[uid].characterFilter.names.filter(x => x !== name);
                 }
             }
         }
         setWIOriginalDataValue(data, uid, 'character_filter', data.entries[uid].characterFilter);
-        !noSave && await saveWorldInfo(name, data);
+        if (!noSave) await saveWorldInfo(name, data);
     });
     characterExclusionInput.prop('checked', entry.characterFilter?.isExclude ?? false).trigger('input', { noSave: true });
 
@@ -3954,7 +3954,7 @@ function setupEditFormBindings(editTemplate, outlet, name, data, entry) {
         updateContentPreview(value);
         data.entries[uid].content = value;
         setWIOriginalDataValue(data, uid, 'content', data.entries[uid].content);
-        !noSave && await saveWorldInfo(name, data);
+        if (!noSave) await saveWorldInfo(name, data);
         if (!skipCount) countTokensDebounced(counter, value);
     });
     contentInput.val(entry.content).trigger('input', { skipCount: true, noSave: true });
@@ -3967,7 +3967,7 @@ function setupEditFormBindings(editTemplate, outlet, name, data, entry) {
         const value = $(this).val();
         data.entries[uid].outletName = value;
         setWIOriginalDataValue(data, uid, 'extensions.outlet_name', data.entries[uid].outletName);
-        !noSave && await saveWorldInfo(name, data);
+        if (!noSave) await saveWorldInfo(name, data);
     });
     outletNameInput.val(entry.outletName ?? '').trigger('input', { noSave: true });
     setTimeout(() => createEntryInputAutocomplete(outletNameInput, getOutletNameCallback(data), { allowMultiple: true }), 1);
@@ -3983,7 +3983,7 @@ function setupEditFormBindings(editTemplate, outlet, name, data, entry) {
         if (value > MAX_SCAN_DEPTH) { $(this).val(MAX_SCAN_DEPTH).trigger('input'); toastr.warning(`Scan depth cannot exceed ${MAX_SCAN_DEPTH}`); return; }
         data.entries[uid].scanDepth = !isEmpty && !isNaN(value) && value >= 0 && value <= MAX_SCAN_DEPTH ? Math.floor(value) : null;
         setWIOriginalDataValue(data, uid, 'extensions.scan_depth', data.entries[uid].scanDepth);
-        !noSave && await saveWorldInfo(name, data);
+        if (!noSave) await saveWorldInfo(name, data);
     });
     scanDepthInput.val(entry.scanDepth ?? null).trigger('input', { noSave: true });
 
@@ -3995,7 +3995,7 @@ function setupEditFormBindings(editTemplate, outlet, name, data, entry) {
         const value = String($(this).val()).trim();
         data.entries[uid].group = value;
         setWIOriginalDataValue(data, uid, 'extensions.group', data.entries[uid].group);
-        !noSave && await saveWorldInfo(name, data);
+        if (!noSave) await saveWorldInfo(name, data);
     });
     groupInput.val(entry.group ?? '').trigger('input', { noSave: true });
     setTimeout(() => createEntryInputAutocomplete(groupInput, getInclusionGroupCallback(data), { allowMultiple: true }), 1);
@@ -4008,7 +4008,7 @@ function setupEditFormBindings(editTemplate, outlet, name, data, entry) {
         const value = $(this).prop('checked');
         data.entries[uid].groupOverride = value;
         setWIOriginalDataValue(data, uid, 'extensions.group_override', data.entries[uid].groupOverride);
-        !noSave && await saveWorldInfo(name, data);
+        if (!noSave) await saveWorldInfo(name, data);
     });
     groupOverrideInput.prop('checked', entry.groupOverride).trigger('input', { noSave: true });
 
@@ -4034,7 +4034,7 @@ function setupEditFormBindings(editTemplate, outlet, name, data, entry) {
         if (!toggled) delayUntilRecursionLevelInput.val('');
         data.entries[uid].delayUntilRecursion = value;
         setWIOriginalDataValue(data, uid, 'extensions.delay_until_recursion', data.entries[uid].delayUntilRecursion);
-        !noSave && await saveWorldInfo(name, data);
+        if (!noSave) await saveWorldInfo(name, data);
     });
     delayUntilRecursionInput.prop('checked', entry.delayUntilRecursion).trigger('input', { noSave: true });
     delayUntilRecursionLevelInput.on('input', async function (_, { noSave = false } = {}) {
@@ -4046,7 +4046,7 @@ function setupEditFormBindings(editTemplate, outlet, name, data, entry) {
                     : false;
         data.entries[uid].delayUntilRecursion = value;
         setWIOriginalDataValue(data, uid, 'extensions.delay_until_recursion', data.entries[uid].delayUntilRecursion);
-        !noSave && await saveWorldInfo(name, data);
+        if (!noSave) await saveWorldInfo(name, data);
     });
     delayUntilRecursionLevelInput.val(['number', 'string'].includes(typeof entry.delayUntilRecursion) ? entry.delayUntilRecursion : '').trigger('input', { noSave: true });
 
@@ -4071,7 +4071,7 @@ function setupEditFormBindings(editTemplate, outlet, name, data, entry) {
         const value = $(this).val();
         data.entries[uid].automationId = value;
         setWIOriginalDataValue(data, uid, 'extensions.automation_id', data.entries[uid].automationId);
-        !noSave && await saveWorldInfo(name, data);
+        if (!noSave) await saveWorldInfo(name, data);
     });
     automationIdInput.val(entry.automationId ?? '').trigger('input', { noSave: true });
     setTimeout(() => createEntryInputAutocomplete(automationIdInput, getAutomationIdCallback(data)), 1);
@@ -4084,7 +4084,7 @@ function setupEditFormBindings(editTemplate, outlet, name, data, entry) {
         const value = $(this).val();
         data.entries[uid].triggers = Array.isArray(value) ? value : [];
         setWIOriginalDataValue(data, uid, 'extensions.triggers', data.entries[uid].triggers);
-        !noSave && await saveWorldInfo(name, data);
+        if (!noSave) await saveWorldInfo(name, data);
     });
     if (!isMobile()) {
         generationTypeTriggers.select2({ placeholder: t`All types (default)`, width: '100%', closeOnSelect: false, allowClear: true });
@@ -4099,7 +4099,7 @@ function setupEditFormBindings(editTemplate, outlet, name, data, entry) {
         const value = $(this).prop('checked');
         data.entries[uid].ignoreBudget = value;
         setWIOriginalDataValue(data, uid, 'extensions.ignore_budget', data.entries[uid].ignoreBudget);
-        !noSave && await saveWorldInfo(name, data);
+        if (!noSave) await saveWorldInfo(name, data);
     });
     ignoreBudgetInput.prop('checked', entry.ignoreBudget ?? false).trigger('input', { noSave: true });
 

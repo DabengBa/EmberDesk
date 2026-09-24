@@ -280,7 +280,7 @@ export async function bindLegacyShellHandlers() {
             if (e.target instanceof HTMLTextAreaElement && e.target.classList.contains('edit_textarea')) {
                 const scrollbarShown = e.target.clientWidth < e.target.offsetWidth && e.target.offsetHeight >= window.innerHeight * 0.75;
                 const immediately = (e.target.scrollHeight > e.target.offsetHeight && !scrollbarShown) || e.target.value === '';
-                immediately ? autoFitEditTextArea(e.target) : autoFitEditTextAreaDebounced(e.target);
+                if (immediately) autoFitEditTextArea(e.target); else autoFitEditTextAreaDebounced(e.target);
             }
         });
     }
@@ -432,7 +432,7 @@ export async function bindLegacyShellHandlers() {
         }
     });
 
-    $('#dialogue_popup_cancel').on('click', function (e) {
+    $('#dialogue_popup_cancel').on('click', function (_e) {
         state.dialogueCloseStop = false;
         $('#shadow_popup').transition({
             opacity: 0,
@@ -865,7 +865,7 @@ export async function bindLegacyShellHandlers() {
 
     $('input[type=\'range\']').on('touchstart', function () {
         // Unlock the slider after 300ms
-        setTimeout(function () {
+        sliderTimer = setTimeout(function () {
             sliderLocked = false;
             $(this).css('background-color', 'var(--SmartThemeQuoteColor)');
         }.bind(this), 300);

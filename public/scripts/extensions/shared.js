@@ -71,7 +71,7 @@ export async function countWebLlmTokens(text) {
         const engine = SillyTavern.llm;
         const response = await engine.countTokens(text);
         return response;
-    } catch (error) {
+    } catch {
         // Fallback to using current model's tokenizer
         return await getTokenCountAsync(text);
     }
@@ -179,7 +179,7 @@ export class ConnectionManagerRequestService {
     * @param {string} profileId ID of a given connection profile (from which to infer a completion preset).
     * @param {InstructSettings} instructSettings optional instruct settings
     */
-    static constructPrompt(prompt, profileId, instructSettings = null) {
+    static constructPrompt(prompt, profileId, _instructSettings = null) {
         const profile = this.getProfile(profileId);
         const selectedApiMap = this.validateProfile(profile);
 

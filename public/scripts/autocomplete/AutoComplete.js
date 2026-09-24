@@ -867,7 +867,7 @@ export class AutoComplete {
             this.selectionStart = this.textarea.selectionStart;
             this.show(this.isReplaceable || oldText != this.textarea.value);
         } else if (this.isActive) {
-            this.text != this.textarea.value && this.show(this.isReplaceable);
+            if (this.text != this.textarea.value) this.show(this.isReplaceable);
         }
     }
 }

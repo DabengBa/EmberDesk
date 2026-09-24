@@ -330,10 +330,10 @@ export function select_selected_character(chid, { switchMenu = true } = {}) {
     $(`#CharID${chid}`).addClass('is_active');
 
     select_rm_create({ switchMenu });
-    switchMenu && setMenuType('character_edit');
+    if (switchMenu) setMenuType('character_edit');
     // Selecting a character switches the right nav to rm_ch_create_block, which
     // hosts the sole-owner React authoring panel; mount it on this path too.
-    switchMenu && queueReactCharacterAuthoringRemount();
+    if (switchMenu) queueReactCharacterAuthoringRemount();
     $('#delete_button').css('display', 'flex');
     $('#export_button').css('display', 'flex');
     $('#world_button').css('display', 'flex');
@@ -563,13 +563,13 @@ export async function createOrEditCharacter(e) {
                 { id: '#character_json_data', callback: () => { } },
                 { id: '#alternate_greetings_template', callback: value => state.create_save.alternate_greetings = value, defaultValue: [] },
                 { id: '#character_world', callback: value => state.create_save.world = value },
-                { id: '#_character_extensions_fake', callback: value => state.create_save.extensions = {} },
+                { id: '#_character_extensions_fake', callback: _value => state.create_save.extensions = {} },
             ];
 
             fields.forEach(field => {
                 const fieldValue = field.defaultValue !== undefined ? field.defaultValue : '';
                 $(field.id).val(fieldValue);
-                field.callback && field.callback(fieldValue);
+                if (field.callback) field.callback(fieldValue);
             });
 
             if (Array.isArray(state.create_save.extra_books) && state.create_save.extra_books.length > 0) {

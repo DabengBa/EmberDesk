@@ -385,7 +385,7 @@ export async function getUserAvatars(doRender = true, openPageAt = '') {
             }
         };
 
-        openPageAt && navigateToAvatar(openPageAt);
+        if (openPageAt) navigateToAvatar(openPageAt);
 
         return allEntities;
     }
@@ -1723,7 +1723,7 @@ export async function showCharConnections() {
         okButton: t`Ok`,
         highlightPersonas: true,
         targetedChar: getCurrentConnectionObj(),
-        shiftClickHandler: (element, ev) => {
+        shiftClickHandler: (element, _ev) => {
             const personaId = $(element).attr('data-pid');
 
             /** @type {PersonaConnection[]} */

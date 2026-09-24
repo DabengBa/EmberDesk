@@ -107,7 +107,7 @@ export function resolveReasoningEffort(settings = {}, model = null) {
             if (/^gpt-5\.(4|5)/.test(model)) {
                 return REASONING_EFFORT_TYPES.none;
             }
-            if (/^gpt-5/.test(model)) {
+            if (model?.startsWith('gpt-5')) {
                 return REASONING_EFFORT_TYPES.min;
             }
             return REASONING_EFFORT_TYPES.low;

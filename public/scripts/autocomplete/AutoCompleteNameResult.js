@@ -10,7 +10,7 @@ export class AutoCompleteNameResult extends AutoCompleteNameResultBase {
      * @param {boolean} isSelect Whether autocomplete was triggered by selecting an autocomplete option
      * @returns {AutoCompleteSecondaryNameResult}
      */
-    getSecondaryNameAt(text, index, isSelect) {
+    getSecondaryNameAt(_text, _index, _isSelect) {
         return null;
     }
 }

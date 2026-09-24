@@ -1529,8 +1529,8 @@ export function initChatUtilities() {
         }
         textarea.value = String(contentEditable ? bro[0].innerText : bro.val());
         textarea.classList.add('height100p', 'wide100p', 'maximized_textarea');
-        bro.hasClass('monospace') && textarea.classList.add('monospace');
-        bro.hasClass('mdHotkeys') && textarea.classList.add('mdHotkeys');
+        if (bro.hasClass('monospace')) textarea.classList.add('monospace');
+        if (bro.hasClass('mdHotkeys')) textarea.classList.add('mdHotkeys');
         textarea.addEventListener('input', function () {
             if (contentEditable) {
                 bro[0].innerText = textarea.value;

@@ -164,7 +164,7 @@ export function createExtensionHostSession(deps) {
                     obj[name] = manifest;
                 }
             } catch (error) {
-                console.log('Could not load manifest.json for ' + name, error);
+                console.warn('Could not load manifest.json for ' + name, error);
             }
         }));
         return obj;

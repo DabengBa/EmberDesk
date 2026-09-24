@@ -35,7 +35,7 @@ import { tokenizers } from './tokenizers.js';
 import { renderTemplateAsync } from './templates.js';
 
 import { countOccurrences, debounce, delay, getStringHash, isOdd, isTrueBoolean, shuffle, sortMoments, stringToRange, timestampToMoment } from './utils.js';
-import { FILTER_TYPES } from './filters.js';
+import { FILTER_TYPES, fuzzySearchCategories } from './filters.js';
 import { PARSER_FLAG, SlashCommandParser } from './slash-commands/SlashCommandParser.js';
 import { SlashCommand } from './slash-commands/SlashCommand.js';
 import { ARGUMENT_TYPE, SlashCommandArgument, SlashCommandNamedArgument } from './slash-commands/SlashCommandArgument.js';
@@ -44,7 +44,6 @@ import { SlashCommandEnumValue, enumTypes } from './slash-commands/SlashCommandE
 import { commonEnumProviders, enumIcons } from './slash-commands/SlashCommandCommonEnumsProvider.js';
 import { POPUP_TYPE, callGenericPopup, fixToastrForDialogs } from './popup.js';
 import { loadSystemPrompts } from './sysprompt.js';
-import { fuzzySearchCategories } from './filters.js';
 import { accountStorage } from './util/AccountStorage.js';
 import { DEFAULT_REASONING_TEMPLATE, loadReasoningTemplates } from './reasoning.js';
 import { IMAGE_OVERSWIPE, MEDIA_DISPLAY } from './constants.js';
@@ -722,7 +721,7 @@ async function CreateZenSliders(elmnt) {
         slide: handleSlideEvent,
     });
 
-    function handleSlideEvent(event, ui, type) {
+    function handleSlideEvent(event, ui, _type) {
         var handle = $(this).find('.ui-slider-handle');
         var numVal = parseFloat(Number(ui.value).toFixed(decimals));
         offVal = parseFloat(Number(offVal).toFixed(decimals));
@@ -2113,14 +2112,14 @@ jQuery(() => {
         saveSettingsDebounced();
     });
 
-    $('input[name="blur_strength"]').on('input', async function (e) {
+    $('input[name="blur_strength"]').on('input', async function (_e) {
         power_user.blur_strength = Number($(this).val());
         $('#blur_strength_counter').val(power_user.blur_strength);
         applyBlurStrength();
         saveSettingsDebounced();
     });
 
-    $('input[name="shadow_width"]').on('input', async function (e) {
+    $('input[name="shadow_width"]').on('input', async function (_e) {
         power_user.shadow_width = Number($(this).val());
         $('#shadow_width_counter').val(power_user.shadow_width);
         applyShadowWidth();

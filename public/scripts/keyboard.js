@@ -176,7 +176,7 @@ function getAllInteractables(element) {
  * @param {Element} container - The container
  */
 const applyScrollResetBehavior = (container) => {
-    container.addEventListener('focusout', (e) => {
+    container.addEventListener('focusout', (_e) => {
         setTimeout(() => {
             const focusedElement = document.activeElement;
             if (!container.contains(focusedElement)) {

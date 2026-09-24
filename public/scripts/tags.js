@@ -525,7 +525,7 @@ function renameTagKey(oldKey, newKey) {
 }
 
 function createTagMapFromList(listElement, key) {
-    const tagIds = [...($(listElement).find('.tag').map((_, el) => $(el).attr('id')))];
+    const tagIds = $(listElement).find('.tag').map((_, el) => $(el).attr('id')).get();
     tag_map[key] = tagIds;
     saveSettingsDebounced();
 }
@@ -783,7 +783,7 @@ function removeTagFromMap(tagId, characterId = null) {
 }
 
 function findTag(request, resolve, listSelector) {
-    const skipIds = [...($(listSelector).find('.tag').map((_, el) => $(el).attr('id')))];
+    const skipIds = $(listSelector).find('.tag').map((_, el) => $(el).attr('id')).get();
     const haystack = tags.filter(t => !skipIds.includes(t.id)).sort(compareTagsForSort).map(t => t.name);
     const needle = request.term;
     const hasExactMatch = haystack.findIndex(x => equalsIgnoreCaseAndAccents(x, needle)) !== -1;
@@ -1198,7 +1198,7 @@ function appendTagToList(listElement, tag, { removable = false, isFilter = false
 
     tagElement.find('.tag_name').text(tag.name);
     const removeButton = tagElement.find('.tag_remove');
-    removable ? removeButton.show() : removeButton.hide();
+    if (removable) removeButton.show(); else removeButton.hide();
     if (removable && removeAction) {
         tagElement.attr('custom-remove-action', String(true));
         removeButton.on('click', () => {
@@ -1547,8 +1547,8 @@ function toggleTagThreeState(element, { stateOverride = undefined, simulateClick
 }
 
 function runTagFilters(listElement) {
-    const tagIds = [...($(listElement).find('.tag.selected:not(.actionable)').map((_, el) => $(el).attr('id')))];
-    const excludedTagIds = [...($(listElement).find('.tag.excluded:not(.actionable)').map((_, el) => $(el).attr('id')))];
+    const tagIds = $(listElement).find('.tag.selected:not(.actionable)').map((_, el) => $(el).attr('id')).get();
+    const excludedTagIds = $(listElement).find('.tag.excluded:not(.actionable)').map((_, el) => $(el).attr('id')).get();
     const filterHelper = getFilterHelper($(listElement));
     filterHelper.setFilterData(FILTER_TYPES.TAG, { excluded: excludedTagIds, selected: tagIds });
 }
@@ -1652,7 +1652,7 @@ function onTagRemoveClick(event) {
 }
 
 // @ts-ignore
-function onTagInput(event) {
+function onTagInput(_event) {
     let val = $(this).val();
     if (getTag(String(val))) return;
     // @ts-ignore
@@ -2594,7 +2594,7 @@ export function applyCharacterTagsToMessageDivs({ mesIds = [] } = {}) {
         messages.each(function () {
             const element = this; // Get the raw DOM element
 
-            for (const attr of [...element.attributes]) {
+            for (const attr of Array.from(element.attributes)) {
                 if (attr.name.startsWith('data-char-tag-') || attr.name === 'data-char-tags') {
                     element.removeAttribute(attr.name);
                 }

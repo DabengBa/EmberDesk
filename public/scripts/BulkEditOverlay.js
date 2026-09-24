@@ -602,7 +602,7 @@ class BulkEditOverlay {
 
         let cancel = false;
 
-        const cancelHold = (event) => cancel = true;
+        const cancelHold = (_event) => cancel = true;
         this.container.addEventListener('mouseup', cancelHold);
         this.container.addEventListener('touchend', cancelHold);
 
@@ -645,13 +645,6 @@ class BulkEditOverlay {
         event.clientY || event.touches[0].clientY,
     ];
 
-    #stopEventPropagation = (event) => {
-        if (this.#contextMenuOpen) {
-            this.handleContextMenuHide(event);
-        }
-        event.stopPropagation();
-    };
-
     #enableClickEventsForCharacters = () => this.#getEnabledElements().forEach(element => element.removeEventListener('click', this.toggleCharacterSelected));
 
     #disableClickEventsForCharacters = () => this.#getEnabledElements().forEach(element => element.addEventListener('click', this.toggleCharacterSelected));
@@ -661,8 +654,6 @@ class BulkEditOverlay {
     #disableBulkEditButtonHighlight = () => document.getElementById('bulkEditButton').classList.remove('bulk_edit_overlay_active');
 
     #getEnabledElements = () => [...this.container.getElementsByClassName(BulkEditOverlay.characterClass)];
-
-    #getDisabledElements = () => [...this.container.getElementsByClassName(BulkEditOverlay.bogusFolderClass)];
 
     toggleCharacterSelected = event => {
         event.stopPropagation();

@@ -93,7 +93,7 @@ function toggleReasoningAutoExpand() {
 export function extractReasoningFromData(data, {
     mainApi = null,
     ignoreShowThoughts = false,
-    textGenType = null,
+    textGenType: _textGenType = null,
     chatCompletionSource = null,
 } = {}) {
     switch (mainApi ?? main_api) {
@@ -829,7 +829,7 @@ function selectReasoningTemplateCallback(args, name) {
         const result = performFuzzySearch('reasoning-templates', templateNames, [], name);
 
         if (result.length === 0) {
-            !quiet && toastr.warning(`Reasoning template "${name}" not found`);
+            if (!quiet) toastr.warning(`Reasoning template "${name}" not found`);
             return '';
         }
 
@@ -837,7 +837,7 @@ function selectReasoningTemplateCallback(args, name) {
     }
 
     UI.$select.val(foundName).trigger('change');
-    !quiet && toastr.success(`Reasoning template "${foundName}" selected`);
+    if (!quiet) toastr.success(`Reasoning template "${foundName}" selected`);
     return foundName;
 }
 

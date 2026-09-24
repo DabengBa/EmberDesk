@@ -1402,7 +1402,7 @@ export async function checkWorldInfo(chat, maxContext, isDryRun, globalScanData 
         filterByInclusionGroups(newEntries, allActivatedEntries, buffer, scanState, timedEffects);
 
         console.debug('[WI] --- PROBABILITY CHECKS ---');
-        !newEntries.length && console.debug('[WI] No probability checks to do');
+        if (!newEntries.length) console.debug('[WI] No probability checks to do');
 
         let ignoresBudget = newEntries.filter(e => e.ignoreBudget).length;
 
@@ -1479,7 +1479,7 @@ export async function checkWorldInfo(chat, maxContext, isDryRun, globalScanData 
         }
 
         function logNextState(...args) {
-            args.length && console.debug(args.shift(), ...args);
+            if (args.length) console.debug(args.shift(), ...args);
             console.debug('[WI] Setting scan state', Object.entries(scan_state).find(x => x[1] === scanState));
         }
 

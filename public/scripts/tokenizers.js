@@ -166,7 +166,7 @@ export async function saveTokenCache() {
         console.debug('Chat Completions: saving token cache');
         await objectStore.setItem('tokenCache', tokenCache);
     } catch (e) {
-        console.log('Chat Completions: unable to save token cache', e);
+        console.warn('Chat Completions: unable to save token cache', e);
     }
 }
 
@@ -177,7 +177,7 @@ async function resetTokenCache() {
         await objectStore.removeItem('tokenCache');
         toastr.success('Token cache cleared. Please reload the chat to re-tokenize it.');
     } catch (e) {
-        console.log('Chat Completions: unable to reset token cache', e);
+        console.warn('Chat Completions: unable to reset token cache', e);
     }
 }
 
@@ -764,7 +764,7 @@ function countTokensFromServer(endpoint, str, resolve) {
                 tokenCount = apiFailureTokenCount(str);
             }
 
-            isAsync && resolve(tokenCount);
+            if (isAsync) resolve(tokenCount);
         },
     });
 
@@ -798,7 +798,7 @@ function countTokensFromKoboldAPI(str, resolve) {
                 tokenCount = apiFailureTokenCount(str);
             }
 
-            isAsync && resolve(tokenCount);
+            if (isAsync) resolve(tokenCount);
         },
     });
 
@@ -851,7 +851,7 @@ function getTextTokensFromServer(endpoint, str, resolve) {
                 Object.defineProperty(ids, 'chunks', { value: data.chunks });
             }
 
-            isAsync && resolve(ids);
+            if (isAsync) resolve(ids);
         },
     });
     return ids;
@@ -879,7 +879,7 @@ function getTextTokensFromKoboldAPI(str, resolve) {
         contentType: 'application/json',
         success: function (data) {
             ids = data.ids;
-            isAsync && resolve(ids);
+            if (isAsync) resolve(ids);
         },
     });
 
@@ -907,7 +907,7 @@ function decodeTextTokensFromServer(endpoint, ids, resolve) {
         success: function (data) {
             text = data.text;
             chunks = data.chunks;
-            isAsync && resolve({ text, chunks });
+            if (isAsync) resolve({ text, chunks });
         },
     });
     return { text, chunks };

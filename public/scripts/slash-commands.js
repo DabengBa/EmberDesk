@@ -1,5 +1,5 @@
 import { Fuse, DOMPurify } from '../lib.js';
-import { canUseNegativeLookbehind, copyText, findPersona, flashHighlight, resolveAvatarData } from './utils.js';
+import { canUseNegativeLookbehind, copyText, debounce, delay, findChar, findPersona, flashHighlight, getCharIndex, isFalseBoolean, isTrueBoolean, onlyUnique, regexFromString, resolveAvatarData, showFontAwesomePicker, stringToRange, trimToEndSentence, trimToStartSentence, waitUntilCondition } from './utils.js';
 
 import {
     Generate,
@@ -72,7 +72,6 @@ import { chat_completion_sources, MINIMAX_ENDPOINT, oai_settings, promptManager,
 import { user_avatar } from './personas.js';
 import { addEphemeralStoppingString, chat_styles, flushEphemeralStoppingStrings, playMessageSound, power_user } from './power-user.js';
 import { decodeTextTokens, getAvailableTokenizers, getFriendlyTokenizerName, getTextTokens, getTokenCountAsync, selectTokenizer } from './tokenizers.js';
-import { debounce, delay, findChar, getCharIndex, isFalseBoolean, isTrueBoolean, onlyUnique, regexFromString, showFontAwesomePicker, stringToRange, trimToEndSentence, trimToStartSentence, waitUntilCondition } from './utils.js';
 import { registerVariableCommands, resolveVariable } from './variables.js';
 import { registerActionLoaderSlashCommands } from './action-loader-slashcommands.js';
 import { SlashCommandClosure } from './slash-commands/SlashCommandClosure.js';
@@ -2835,7 +2834,7 @@ export function initDefaultSlashCommands() {
     SlashCommandParser.addCommandObject(SlashCommand.fromProps({
         name: 'substr',
         aliases: ['substring'],
-        callback: (arg, text) => typeof text === 'string' ? text.slice(...[Number(arg.start), arg.end && Number(arg.end)]) : '',
+        callback: (arg, text) => typeof text === 'string' ? text.slice(Number(arg.start), arg.end && Number(arg.end)) : '',
         returns: t`substring`,
         namedArgumentList: [
             new SlashCommandNamedArgument(
@@ -3681,7 +3680,7 @@ async function buttonsCallback(args, text) {
         /** @type {Map<number, ButtonLabel>} */
         const resultToButtonMap = new Map(buttons.map((button, index) => [index + 2, button]));
 
-        return new Promise(async (resolve) => {
+        return new Promise((resolve) => {
             const safeValue = DOMPurify.sanitize(text || '');
 
             /** @type {Popup} */
@@ -5013,27 +5012,29 @@ async function deleteCharacterCallback(args) {
 async function continueChatCallback(args, prompt) {
     const shouldAwait = isTrueBoolean(args?.await);
 
-    const outerPromise = new Promise(async (resolve, reject) => {
-        try {
-            await waitUntilCondition(() => !is_send_press, 10000, 100);
-        } catch {
-            console.warn('Timeout waiting for generation unlock');
-            toastr.warning(t`Cannot run /continue command while the reply is being generated.`);
-            return reject();
-        }
+    const outerPromise = new Promise((resolve, reject) => {
+        (async () => {
+            try {
+                await waitUntilCondition(() => !is_send_press, 10000, 100);
+            } catch {
+                console.warn('Timeout waiting for generation unlock');
+                toastr.warning(t`Cannot run /continue command while the reply is being generated.`);
+                return reject();
+            }
 
-        try {
-            // Prevent infinite recursion
-            $('#send_textarea').val('')[0].dispatchEvent(new Event('input', { bubbles: true }));
+            try {
+                // Prevent infinite recursion
+                $('#send_textarea').val('')[0].dispatchEvent(new Event('input', { bubbles: true }));
 
-            const options = prompt?.trim() ? { quiet_prompt: prompt.trim(), quietToLoud: true } : {};
-            await Generate('continue', options);
+                const options = prompt?.trim() ? { quiet_prompt: prompt.trim(), quietToLoud: true } : {};
+                await Generate('continue', options);
 
-            resolve();
-        } catch (error) {
-            console.error('Error running /continue command:', error);
-            reject(error);
-        }
+                resolve();
+            } catch (error) {
+                console.error('Error running /continue command:', error);
+                reject(error);
+            }
+        })();
     });
 
     if (shouldAwait) {
@@ -5641,14 +5642,14 @@ function getModelOptions(quiet) {
     const modelSelectItem = modelSelectMap.find(x => x.api == main_api && x.type == apiSubType)?.id;
 
     if (!modelSelectItem) {
-        !quiet && toastr.info(t`Setting a model for your API is not supported or not implemented yet.`);
+        if (!quiet) toastr.info(t`Setting a model for your API is not supported or not implemented yet.`);
         return nullResult;
     }
 
     const modelSelectControl = document.getElementById(modelSelectItem);
 
     if (!(modelSelectControl instanceof HTMLSelectElement) && !(modelSelectControl instanceof HTMLInputElement)) {
-        !quiet && toastr.error(t`Model select control not found: ${main_api}[${apiSubType}]`);
+        if (!quiet) toastr.error(t`Model select control not found: ${main_api}[${apiSubType}]`);
         return nullResult;
     }
 
@@ -5701,12 +5702,12 @@ function modelCallback(args, model) {
     if (modelSelectControl instanceof HTMLInputElement) {
         modelSelectControl.value = model;
         $(modelSelectControl).trigger('input');
-        !quiet && toastr.success(t`Model set to "${model}"`);
+        if (!quiet) toastr.success(t`Model set to "${model}"`);
         return model;
     }
 
     if (!options.length) {
-        !quiet && toastr.warning(t`No model options found. Check your API settings.`);
+        if (!quiet) toastr.warning(t`No model options found. Check your API settings.`);
         return '';
     }
 
@@ -5729,10 +5730,10 @@ function modelCallback(args, model) {
     if (newSelectedOption) {
         modelSelectControl.value = newSelectedOption.value;
         $(modelSelectControl).trigger('change');
-        !quiet && toastr.success(t`Model set to "${newSelectedOption.text}"`);
+        if (!quiet) toastr.success(t`Model set to "${newSelectedOption.text}"`);
         return newSelectedOption.value;
     } else {
-        !quiet && toastr.warning(t`No model found with name "${model}"`);
+        if (!quiet) toastr.warning(t`No model found with name "${model}"`);
         return '';
     }
 }
@@ -5934,7 +5935,7 @@ async function setApiUrlCallback({ api = null, connect = 'true', quiet = 'false'
 
         const permittedValues = Object.values(ZAI_ENDPOINT);
         if (!permittedValues.includes(url)) {
-            !isQuiet && toastr.warning(t`Valid options are: ${permittedValues.join(', ')}`, t`ZAI endpoint '${url}' is not a valid option.`);
+            if (!isQuiet) toastr.warning(t`Valid options are: ${permittedValues.join(', ')}`, t`ZAI endpoint '${url}' is not a valid option.`);
             return '';
         }
 
@@ -5960,7 +5961,7 @@ async function setApiUrlCallback({ api = null, connect = 'true', quiet = 'false'
 
         const permittedValues = Object.values(SILICONFLOW_ENDPOINT);
         if (!permittedValues.includes(url)) {
-            !isQuiet && toastr.warning(t`Valid options are: ${permittedValues.join(', ')}`, t`SiliconFlow endpoint '${url}' is not a valid option.`);
+            if (!isQuiet) toastr.warning(t`Valid options are: ${permittedValues.join(', ')}`, t`SiliconFlow endpoint '${url}' is not a valid option.`);
             return '';
         }
 
@@ -5986,7 +5987,7 @@ async function setApiUrlCallback({ api = null, connect = 'true', quiet = 'false'
 
         const permittedValues = Object.values(MINIMAX_ENDPOINT);
         if (!permittedValues.includes(url)) {
-            !isQuiet && toastr.warning(t`Valid options are: ${permittedValues.join(', ')}`, t`MiniMax endpoint '${url}' is not a valid option.`);
+            if (!isQuiet) toastr.warning(t`Valid options are: ${permittedValues.join(', ')}`, t`MiniMax endpoint '${url}' is not a valid option.`);
             return '';
         }
 
@@ -6005,7 +6006,7 @@ async function setApiUrlCallback({ api = null, connect = 'true', quiet = 'false'
     }
 
     // The requested API is not supported for server URL configuration
-    !isQuiet && toastr.warning(t`API '${api || main_api}' does not support setting the server URL via this command.`);
+    if (!isQuiet) toastr.warning(t`API '${api || main_api}' does not support setting the server URL via this command.`);
     return '';
 }
 

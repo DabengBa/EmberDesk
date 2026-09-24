@@ -458,7 +458,7 @@ export function buildVariableShorthandOptions(context, opts = {}) {
  * @param {boolean} [opts.isForced=false] - Whether autocomplete was force-triggered (Ctrl+Space).
  * @returns {AnyMacroAutoCompleteOption[]}
  */
-export function buildEnhancedMacroOptions(context, textUpToCursor, { isForced = false } = {}) {
+export function buildEnhancedMacroOptions(context, textUpToCursor, { isForced: _isForced = false } = {}) {
     /** @type {AnyMacroAutoCompleteOption[]} */
     const options = [];
 

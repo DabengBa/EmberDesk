@@ -434,9 +434,9 @@ export function registerCoreMacros() {
         description: 'Bans a word. (Strips quotes surrounding the banned word, if present)',
         returns: '',
         exampleUsage: ['{{banned::delve}}'],
-        handler: ({ unnamedArgs: [bannedWord] }) => {
+        handler: ({ unnamedArgs: [_bannedWord] }) => {
             // Strip quotes via regex, which were allowed in legacy syntax
-            bannedWord = bannedWord.replace(/^"|"$/g, '');
+            _bannedWord = _bannedWord.replace(/^"|"$/g, '');
             return '';
         },
     });

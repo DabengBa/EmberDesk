@@ -996,7 +996,7 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
     }
 
     // Collect enough messages to fill the context
-    let arrMes = new Array(chat2.length);
+    let arrMes = Array.from({ length: chat2.length });
     let tokenCount = await getMessagesTokenCount();
     let lastAddedIndex = 0;
 
@@ -1110,7 +1110,7 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
         console.debug('generating prompt');
         chatString = '';
         arrMes = arrMes.reverse();
-        arrMes.forEach(function (item, i, arr) {
+        arrMes.forEach(function (item, i, _arr) {
             // OAI doesn't need all of this
             if (state.main_api === 'openai') {
                 return;
@@ -1451,7 +1451,7 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
                     const lastMessage = state.chat[state.chat.length - 1];
                     const hasToolCalls = state.ToolManager.hasToolCalls(state.streamingProcessor.toolCalls);
                     const shouldDeleteMessage = type !== 'swipe' && ['', '...'].includes(lastMessage?.mes) && !lastMessage?.extra?.reasoning && ['', '...'].includes(state.streamingProcessor?.result);
-                    hasToolCalls && shouldDeleteMessage && await deleteLastMessage();
+                    if (hasToolCalls && shouldDeleteMessage) await deleteLastMessage();
                     if (hasToolCalls && !shouldDeleteMessage) {
                         await state.streamingProcessor.finalizeIntermediaryMessage(state.streamingProcessor.messageId, getMessage, { unlockUI: false });
                     }
@@ -1681,7 +1681,7 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
         if (canPerformToolCalls) {
             const hasToolCalls = state.ToolManager.hasToolCalls(data);
             const shouldDeleteMessage = type !== 'swipe' && ['', '...'].includes(getMessage) && !reasoning;
-            hasToolCalls && shouldDeleteMessage && await deleteLastMessage();
+            if (hasToolCalls && shouldDeleteMessage) await deleteLastMessage();
             const invocationResult = await state.ToolManager.invokeFunctionTools(data, { reasoningText: reasoning });
             const shouldStopGeneration = (!invocationResult.invocations.length && shouldDeleteMessage) || invocationResult.stealthCalls.length;
             if (hasToolCalls) {
@@ -1913,7 +1913,7 @@ export async function swipe(event, direction, {
      * @param {number} animation_duration
      * @returns {number} The adjusted swipe duration.
      */
-    function getSwipeDuration(animation_duration) {
+    function getSwipeDuration(_animation_duration) {
         const now = performance.now();
         const resetTime = state.animation_duration * 2 + 300;
 
@@ -2079,7 +2079,7 @@ export async function swipe(event, direction, {
         const messages = state.chatElement.children('.mes');
         const firstDisplayedMesId = Number(messages.first().attr('mesid'));
 
-        const swipedMessagesDiv = messages.filter((index, div) => {
+        const swipedMessagesDiv = messages.filter((index, _div) => {
             // const messageId = Number($(div).attr('mesid')); //Slower.
             //This assumes the messages are in order and their Id's are accurate.
             const divMessageId = firstDisplayedMesId + index;
@@ -2154,7 +2154,7 @@ export async function swipe(event, direction, {
         thisMesDiv.animate({ height: new_height + 'px' }, {
             duration: 0, //used to be 100 //Disabled on Cohee's request. https://github.com/SillyTavern/SillyTavern/pull/4610/files#r2408731744
             queue: false,
-            progress: function (animation, progress, remainingMs) {
+            progress: function (_animation, _progress, _remainingMs) {
                 if (is_animation_scroll) state.chatElement.scrollTop(getMessageBottomHeight(thisMesDiv));
             },
             complete: function () {

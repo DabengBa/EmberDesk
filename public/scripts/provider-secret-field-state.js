@@ -13,9 +13,9 @@ export function getFallbackProviderStatus(settings, secretState, fallbackSecretK
 
 export function resolveProviderSecretKeyForSettings({
     settings,
-    source,
+    source: _source,
     secretKey,
-    chatCompletionSources,
+    chatCompletionSources: _chatCompletionSources,
 }) {
     if (settings?.reverse_proxy) {
         return null;
