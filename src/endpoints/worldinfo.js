@@ -248,7 +248,10 @@ export function scanCharacterWorldBindingsFromFiles(directories) {
     let files = [];
     try {
         files = fs.readdirSync(directories.characters, { withFileTypes: true });
-    } catch {
+    } catch (error) {
+        if (error.code !== 'ENOENT') {
+            console.warn(`Failed to read characters directory ${directories.characters}:`, error);
+        }
         return emptyResult;
     }
 
@@ -463,7 +466,7 @@ router.post('/import', (request, response) => {
         if (!('entries' in worldContent)) {
             throw new Error('File must contain a world info entries list');
         }
-    } catch (err) {
+    } catch {
         return response.status(400).send('Is not a valid world info file');
     }
 
@@ -517,7 +520,7 @@ router.post('/edit', (request, response) => {
         if (!('entries' in request.body.data)) {
             throw new Error('World info must contain an entries list');
         }
-    } catch (err) {
+    } catch {
         return response.status(400).send('Is not a valid world info file');
     }
 

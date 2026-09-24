@@ -36,7 +36,6 @@ export default function accessLoggerMiddleware() {
         const userAgent = req.headers['user-agent'];
 
         if (!knownIPs.has(clientIp)) {
-            // Log new connection
             knownIPs.add(clientIp);
 
             // Write to access log if enabled

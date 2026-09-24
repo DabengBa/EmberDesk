@@ -30,8 +30,8 @@ class CacheBuster {
         if (userAgentPattern) {
             try {
                 this.#userAgentRegex = new RegExp(userAgentPattern, 'i');
-            } catch {
-                console.error('[Cache Buster] Invalid user agent pattern:', userAgentPattern);
+            } catch (error) {
+                console.error('[Cache Buster] Invalid user agent pattern:', userAgentPattern, error);
             }
         }
     }

@@ -391,6 +391,7 @@ function createRouteHandler(directoryFn) {
             invalidateFirefoxCache(filePath, req, res);
             return res.sendFile(filePath, { root: directory });
         } catch (error) {
+            console.error('Failed to serve user file:', error);
             return res.sendStatus(500);
         }
     };

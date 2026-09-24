@@ -22,7 +22,8 @@ if (fs.existsSync(whitelistPath)) {
         let whitelistTxt = fs.readFileSync(whitelistPath, 'utf-8');
         whitelist = whitelistTxt.split('\n').filter(ip => ip).map(ip => ip.trim());
     } catch (e) {
-        // Ignore errors that may occur when reading the whitelist (e.g. permissions)
+        // Surface errors that may occur when reading the whitelist (e.g. permissions), but keep the config.yaml entries
+        console.warn(color.yellow(`Failed to read whitelist.txt: ${e.message}`));
     }
 }
 

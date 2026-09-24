@@ -10,7 +10,7 @@ import { sync as writeFileAtomicSync } from 'write-file-atomic';
 
 import { Tokenizer } from '@agnai/web-tokenizers';
 import { SentencePieceProcessor } from '@agnai/sentencepiece-js';
-import tiktoken from 'tiktoken';
+import { encoding_for_model } from 'tiktoken';
 
 import { convertClaudePrompt } from '../prompt-converters.js';
 import { getConfigValue, isValidUrl } from '../util.js';
@@ -500,7 +500,7 @@ export function getTiktokenTokenizer(model) {
         return tokenizersCache[model];
     }
 
-    const tokenizer = tiktoken.encoding_for_model(model);
+    const tokenizer = encoding_for_model(model);
     console.info('Instantiated the tokenizer for', model);
     tokenizersCache[model] = tokenizer;
     return tokenizer;
@@ -980,8 +980,8 @@ router.post('/openai/count', async function (req, res) {
                         num_tokens += tokensPerName;
                     }
                 }
-            } catch {
-                console.warn('Error tokenizing message:', msg);
+            } catch (error) {
+                console.warn('Error tokenizing message:', msg, error);
             }
         }
         num_tokens += tokensPadding;

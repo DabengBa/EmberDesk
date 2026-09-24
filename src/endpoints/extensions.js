@@ -617,7 +617,7 @@ router.post('/version', async (request, response) => {
                 throw new Error(`Directory is not a Git repository at ${extensionPath}`);
             }
             currentCommitHash = await git.revparse(['HEAD']);
-        } catch (error) {
+        } catch {
             // it is not a git repo, or has no commits yet, or is a bare repo
             // not possible to update it, most likely can't get the branch name either
             return response.send({ currentBranchName: '', currentCommitHash: '', isUpToDate: true, remoteUrl: '' });
