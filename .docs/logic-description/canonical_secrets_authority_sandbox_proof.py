@@ -27,12 +27,14 @@ def import_records(file_state, existing=None):
                 ),
                 None,
             )
-            records = [{
-                "id": previous["id"] if previous else f"generated-{key}",
-                "value": value,
-                "label": key,
-                "active": True,
-            }]
+            records = [
+                {
+                    "id": previous["id"] if previous else f"generated-{key}",
+                    "value": value,
+                    "label": key,
+                    "active": True,
+                }
+            ]
         active_seen = False
         for record in records:
             if record["active"] and active_seen:
@@ -59,23 +61,27 @@ def audit(file_state, db_state, repairs):
             for row in actual_rows
         ]
         if expected_view != actual_view:
-            entries.append({
-                "key": key,
-                "status": "drift",
-                "drift": ["value_hash_mismatch"],
-                "expected_count": len(expected_rows),
-                "actual_count": len(actual_rows),
-            })
+            entries.append(
+                {
+                    "key": key,
+                    "status": "drift",
+                    "drift": ["value_hash_mismatch"],
+                    "expected_count": len(expected_rows),
+                    "actual_count": len(actual_rows),
+                }
+            )
     for repair_key, repair in repairs.items():
         if not repair["resolved"]:
-            entries.append({
-                "key": repair["key"],
-                "status": "drift",
-                "drift": ["open_secret_projection_repair"],
-                "repair_key": repair_key,
-                "operation": repair["operation"],
-                "error_class": repair["error_class"],
-            })
+            entries.append(
+                {
+                    "key": repair["key"],
+                    "status": "drift",
+                    "drift": ["open_secret_projection_repair"],
+                    "repair_key": repair_key,
+                    "operation": repair["operation"],
+                    "error_class": repair["error_class"],
+                }
+            )
     return {
         "scope": "secrets",
         "ok": not entries,
@@ -87,12 +93,14 @@ def audit(file_state, db_state, repairs):
 def write_secret(db_state, key, value, label, record_id):
     for record in db_state.get(key, []):
         record["active"] = False
-    db_state.setdefault(key, []).append({
-        "id": record_id,
-        "value": value,
-        "label": label,
-        "active": True,
-    })
+    db_state.setdefault(key, []).append(
+        {
+            "id": record_id,
+            "value": value,
+            "label": label,
+            "active": True,
+        }
+    )
 
 
 def project(db_state):
@@ -107,9 +115,7 @@ def project(db_state):
 
 def rollback_blockers(audit_state, repairs):
     open_repairs = [
-        repair_key
-        for repair_key, repair in repairs.items()
-        if not repair["resolved"]
+        repair_key for repair_key, repair in repairs.items() if not repair["resolved"]
     ]
     blockers = []
     if audit_state["blocking"]:
@@ -123,7 +129,12 @@ def main():
     file_state = {
         "api_key_openai": [
             {"id": "old", "value": f"{CANARY}-old", "label": "Old", "active": False},
-            {"id": "active", "value": f"{CANARY}-active", "label": "Active", "active": True},
+            {
+                "id": "active",
+                "value": f"{CANARY}-active",
+                "label": "Active",
+                "active": True,
+            },
         ],
         "api_key_custom": f"{CANARY}-custom",
         "_migrated": [],
@@ -143,7 +154,9 @@ def main():
         "Committed",
         "committed",
     )
-    assert [row["id"] for row in db_state["api_key_openai"] if row["active"]] == ["committed"]
+    assert [row["id"] for row in db_state["api_key_openai"] if row["active"]] == [
+        "committed"
+    ]
 
     repairs = {
         "secrets:api_key_openai:committed:write": {

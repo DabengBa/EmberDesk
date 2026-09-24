@@ -122,7 +122,9 @@ def build_settings_form_defaults(settings):
 
 
 def build_settings_save_payload(base_settings, form_values):
-    next_settings = copy.deepcopy(base_settings if isinstance(base_settings, dict) else {})
+    next_settings = copy.deepcopy(
+        base_settings if isinstance(base_settings, dict) else {}
+    )
     for binding in FIELD_BINDINGS:
         form_value = get_value_at_path(form_values, binding["formPath"])
         next_value = to_settings_value(binding, form_value, form_values, base_settings)
@@ -133,21 +135,28 @@ def build_settings_save_payload(base_settings, form_values):
 def main():
     invalid = parse_settings_payload({"settings": "not json"})
     assert invalid["settings"] == {}
-    assert build_settings_form_defaults(invalid["settings"])["general"]["reasoningEffort"] == "high"
+    assert (
+        build_settings_form_defaults(invalid["settings"])["general"]["reasoningEffort"]
+        == "high"
+    )
 
-    parsed = parse_settings_payload({
-        "settings": json.dumps({
-            "untouched": {"keep": True},
-            "oai_settings": {
-                "chat_completion_source": "vertexai",
-                "google_model": "gemini-2.5-pro",
-                "reasoning_effort": "minimal",
-            },
-            "power_user": {
-                "auto_swipe_blacklist": ["skip", "retry"],
-            },
-        }),
-    })
+    parsed = parse_settings_payload(
+        {
+            "settings": json.dumps(
+                {
+                    "untouched": {"keep": True},
+                    "oai_settings": {
+                        "chat_completion_source": "vertexai",
+                        "google_model": "gemini-2.5-pro",
+                        "reasoning_effort": "minimal",
+                    },
+                    "power_user": {
+                        "auto_swipe_blacklist": ["skip", "retry"],
+                    },
+                }
+            ),
+        }
+    )
 
     defaults = build_settings_form_defaults(parsed["settings"])
     assert defaults["providers"]["chatCompletionSource"] == "makersuite"

@@ -18,7 +18,9 @@ class ShellContextRegistry:
 
     def require(self):
         if self.context is None:
-            raise MissingWorldInfoShellContext("World Info shell context is not registered.")
+            raise MissingWorldInfoShellContext(
+                "World Info shell context is not registered."
+            )
         return self.context
 
     def get_event_source_property(self, property_name):

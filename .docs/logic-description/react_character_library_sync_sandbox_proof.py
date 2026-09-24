@@ -9,7 +9,9 @@ import json
 
 class CharacterLibraryFetchError(Exception):
     def __init__(self, response, data):
-        super().__init__(f"Failed to fetch characters: {response.status} {response.statusText}")
+        super().__init__(
+            f"Failed to fetch characters: {response.status} {response.statusText}"
+        )
         self.name = "CharacterLibraryFetchError"
         self.status = response.status
         self.statusText = response.statusText
@@ -93,7 +95,9 @@ def sync_characters_from_query(
 
     current_characters[:] = [dict(character) for character in next_characters]
     reselected_avatar = None
-    if active_avatar and any(character.get("avatar") == active_avatar for character in current_characters):
+    if active_avatar and any(
+        character.get("avatar") == active_avatar for character in current_characters
+    ):
         reselected_avatar = active_avatar
 
     return {
@@ -161,8 +165,16 @@ def main():
             "tags": ["new"],
         }
     ]
-    assert has_character_library_payload_changed(current_characters, next_characters) is True
-    assert has_character_library_payload_changed(next_characters, [dict(next_characters[0])]) is False
+    assert (
+        has_character_library_payload_changed(current_characters, next_characters)
+        is True
+    )
+    assert (
+        has_character_library_payload_changed(
+            next_characters, [dict(next_characters[0])]
+        )
+        is False
+    )
 
     sync_decision = sync_characters_from_query(
         current_characters,
