@@ -472,7 +472,7 @@ export async function getChat() {
             if ($(document.activeElement).is('input:visible, textarea:visible')) {
                 return;
             }
-            $('#send_textarea').trigger('click').trigger('focus');
+            $('#send_textarea').trigger('focus');
         });
     } catch (error) {
         await getChatResult();

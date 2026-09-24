@@ -56,7 +56,7 @@ This page exists so a user can configure how EmberDesk connects to an LLM API pr
 
 ## Navigation
 
-- This drawer is accessed from the [Chat Workspace](page.chat_workspace) sidebar.
+- The [Chat Workspace](page.chat_workspace) shell AI Config entry opens the shared [Settings](page.settings) overlay on Providers; from there, the Workspace Panels links open this drawer for connection-profile capture/apply and provider fields outside React coverage. The shell Presets entry separately opens the AI Response Configuration drawer (`#left-nav-panel`) directly for the chat-completion preset row, sampling controls, and Prompt Manager.
 - Connection profiles can be switched without leaving the page.
 
 ## Superseded Product Entry

@@ -138,14 +138,12 @@ function getUnexpectedConsoleErrors(errors) {
         // provisioned user data dirs; fresh e2e data roots do not seed it.
         const isTransparentBackgroundSeed404 = error.text.includes('Failed to load resource')
             && url.includes('/backgrounds/__transparent.png');
-        // Third-party extensions fetch external CDNs (e.g. jsdelivr for Vue);
-        // offline sandboxes surface those as resource/fetch failures, not app errors.
+        // External CDN requests (e.g. fonts) surface as resource/fetch failures
+        // in offline sandboxes, not as app errors.
         const isExternalResourceFailure = error.text.includes('Failed to load resource')
             && url !== '' && !url.startsWith(localOrigin);
-        const isThirdPartyExtensionNetworkFailure = url.includes('/scripts/extensions/third-party/')
-            && (error.text.includes('Failed to fetch') || error.text === 'Event');
 
-        return !isSeedPersonaThumbnail404 && !isTransparentBackgroundSeed404 && !isExternalResourceFailure && !isThirdPartyExtensionNetworkFailure;
+        return !isSeedPersonaThumbnail404 && !isTransparentBackgroundSeed404 && !isExternalResourceFailure;
     });
 }
 
@@ -415,6 +413,10 @@ test.describe('main chat message list walkthrough', () => {
         // Expanding must be owned by the React snapshot, not a transient legacy DOM mutation.
         await firstReasoningRow.getByRole('button', { name: 'Message Actions' }).click();
         await expect(firstReasoningDetails).toHaveAttribute('open', '');
+        const firstActionsButton = firstReasoningRow.getByRole('button', { name: 'Message Actions' });
+        await expect(firstActionsButton).toHaveAttribute('aria-expanded', 'true');
+        await page.keyboard.press('Escape');
+        await expect(firstActionsButton).toHaveAttribute('aria-expanded', 'false');
         await firstReasoningRow.locator('.mes_reasoning_copy').click();
         await expectClipboardText(page, 'First reasoning block.\nCheck the visible answer boundary before finalizing.');
 

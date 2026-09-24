@@ -137,10 +137,9 @@ import { debounce_timeout, IGNORE_SYMBOL, inject_ids, MEDIA_SOURCE, MEDIA_TYPE, 
 
 import {
     cancelDebouncedMetadataSave,
-    doDailyExtensionUpdatesCheck,
     extension_settings,
+    initCoreFeatureExtensions,
     initExtensions,
-    loadExtensionSettings,
     runGenerationInterceptors,
     setDeferredExtensionLoader,
     toggleExtensionsHostNotifyUpdates,
@@ -484,6 +483,18 @@ const reactRuntimePort = createReactRuntimeProvider({
                     Object.assign(runtimeSettings, savedSettings);
                 }
             }
+        },
+        // Drawer-content host id (e.g. 'left-nav-panel', 'AdvancedFormatting').
+        // Settings overlay links use this to reach legacy-owned surfaces that
+        // still live inside workspace drawers. The allowlist keeps the command
+        // from turning into generic "open any element by id" DOM access.
+        openWorkspaceDrawer: hostId => {
+            const normalizedHostId = String(hostId ?? '');
+            if (!WORKSPACE_DRAWER_COMMAND_HOST_IDS.has(normalizedHostId)) {
+                console.warn('openWorkspaceDrawer rejected unknown drawer host id.', normalizedHostId);
+                return;
+            }
+            openWorkspaceChildSlotHostImmediate(normalizedHostId);
         },
     },
 });
@@ -1102,6 +1113,7 @@ registerDomHandlersShellContext({
     stopScriptExecution: (...args) => stopScriptExecution(...args),
     t: (strings, ...values) => t(strings, ...values),
     toggleCharacterExportPopup: (...args) => toggleCharacterExportPopup(...args),
+    getVisibleCharacterExportTrigger: (...args) => getVisibleCharacterExportTrigger(...args),
     toggleDrawer: (...args) => toggleDrawer(...args),
     translate: (...args) => translate(...args),
     updateCharacterRow: (...args) => updateCharacterRow(...args),
@@ -1204,6 +1216,17 @@ const WORKSPACE_DRAWER_OPENED_STORAGE_KEYS = {
     WorldInfo: 'WINavOpened',
 };
 
+// Drawer-content host ids reachable through the openWorkspaceDrawer runtime
+// command. These are the legacy-owned surfaces the Settings overlay links to.
+const WORKSPACE_DRAWER_COMMAND_HOST_IDS = new Set([
+    'left-nav-panel',
+    'rm_api_block',
+    'AdvancedFormatting',
+    'user-settings-block',
+    'PersonaManagement',
+    'RegexPanel',
+]);
+
 export async function openWorkspaceChildSlotHost(hostId) {
     const drawer = document.getElementById(hostId);
     if (!(drawer instanceof HTMLElement)) {
@@ -1296,6 +1319,8 @@ function getWorkspaceChildSlotHostId(slotKey) {
         worldInfo: 'WorldInfo',
         extensionsHost: 'rm_extensions_block',
         characterAuthoring: 'right-nav-panel',
+        aiConfigDrawer: 'left-nav-panel',
+        regex: 'RegexPanel',
     }[slotKey];
 }
 
@@ -1354,6 +1379,10 @@ async function activateWorkspaceShellSlot(slotKey) {
             return openWorkspaceShellExtensions();
         case 'characterAuthoring':
             return openWorkspaceShellCharacterAuthoring();
+        case 'aiConfigDrawer':
+            return openWorkspaceShellAiConfigDrawer();
+        case 'regex':
+            return openWorkspaceShellRegex();
         default:
             throw new Error(`Unsupported workspace shell slot: ${String(slotKey)}`);
     }
@@ -1365,6 +1394,8 @@ function deactivateWorkspaceShellSlot(slotKey) {
         worldInfo: 'worldInfo',
         extensionsHost: 'extensionsHost',
         characterAuthoring: 'characterAuthoring',
+        aiConfigDrawer: 'aiConfigDrawer',
+        regex: 'regex',
     }[slotKey];
 
     if (!kind) {
@@ -1451,6 +1482,33 @@ async function openWorkspaceShellExtensions() {
     return createWorkspaceShellPanelResult('extensionsHost', await mountReactExtensionsHostPanel());
 }
 
+async function openWorkspaceShellRegex() {
+    await waitForWorkspaceShellPanelOpenTask();
+    // React-owned regex workbench mounts at startup via the regex feature init;
+    // opening the slot only needs to reveal the drawer.
+    await openWorkspaceChildSlotHost('RegexPanel');
+    await waitForWorkspaceShellPanelOpenTask();
+    return createWorkspaceShellPanelResult('regex', {
+        kind: 'regex',
+        mounted: true,
+        status: 'success',
+    });
+}
+
+async function openWorkspaceShellAiConfigDrawer() {
+    await waitForWorkspaceShellPanelOpenTask();
+    // Legacy-owned drawer: AI Response Configuration (chat completion preset
+    // row, sampling controls, Prompt Manager). React markup inside was mounted
+    // by the mountAiConfigPanel startup stage; nothing else needs mounting here.
+    await openWorkspaceChildSlotHost('left-nav-panel');
+    await waitForWorkspaceShellPanelOpenTask();
+    return createWorkspaceShellPanelResult('aiConfigDrawer', {
+        kind: 'aiConfigDrawer',
+        mounted: true,
+        status: 'success',
+    });
+}
+
 async function closeWorkspacePanel(kind) {
     if (kind === 'settings' || kind === 'aiConfig' || kind === 'advancedFormatting') {
         // Reserve the close generation before awaiting; a superseding reopen
@@ -1478,6 +1536,8 @@ function getWorkspaceShellCommands() {
         openSettings: () => openWorkspaceSettingsOverlay({ tab: null, panelKind: 'settings' }),
         closeWorkspacePanel,
         openCharacterAuthoring: openWorkspaceShellCharacterAuthoring,
+        openAIConfigDrawer: openWorkspaceShellAiConfigDrawer,
+        openRegex: openWorkspaceShellRegex,
     };
 }
 
@@ -3397,9 +3457,6 @@ function ensureExtensionsHostReactHost() {
 function getExtensionsHostReactBridgeState(stateOverrides = {}) {
     const extensionsSettings = document.getElementById('extensions_settings');
     const extensionsSettings2 = document.getElementById('extensions_settings2');
-    const regexContainer = document.getElementById('regex_container');
-    const extensionsMenuButton = document.getElementById('extensionsMenuButton');
-    const extensionsMenu = document.getElementById('extensionsMenu');
     const deferredPlaceholder = document.getElementById('extensions_startup_loading');
     const session = typeof getExtensionHostSession === 'function' ? getExtensionHostSession() : null;
     const sessionSnapshot = session && typeof session.getHostStateSnapshot === 'function'
@@ -3415,9 +3472,6 @@ function getExtensionsHostReactBridgeState(stateOverrides = {}) {
     return {
         extensionsSettingsPresent: Boolean(extensionsSettings),
         extensionsSettings2Present: Boolean(extensionsSettings2),
-        regexContainerPresent: Boolean(regexContainer),
-        extensionsMenuButtonPresent: Boolean(extensionsMenuButton),
-        extensionsMenuPresent: Boolean(extensionsMenu),
         // Extras controls are React-owned; the service layer is always reachable.
         extrasApiControlsPresent: true,
         manageButtonPresent: true,
@@ -4384,25 +4438,18 @@ async function getClientVersion() {
     }
 }
 
-function configureDeferredStartupTasks(settingsPlan) {
+function configureDeferredStartupTasks() {
     deferredExtensionTask = null;
     setDeferredExtensionLoader(null);
-
-    if (!settingsPlan?.extensionPlan?.shouldLoadDeferred) {
-        return;
-    }
 
     deferredExtensionTask = createSingleFlightTask(async () => {
         try {
             await deferredVersionTask.ensure();
 
-            const isVersionChanged = settingsPlan.extensionPlan.savedVersion !== currentVersion;
-            await measureStartupStage('deferred.loadExtensionSettings', async () => {
-                await loadExtensionSettings(settingsPlan.settings, isVersionChanged, settingsPlan.extensionPlan.enableAutoUpdate);
-                await eventSource.emit(event_types.EXTENSION_SETTINGS_LOADED);
+            await measureStartupStage('deferred.coreFeatureInit', async () => {
+                await initCoreFeatureExtensions();
             });
 
-            doDailyExtensionUpdatesCheck();
             setDeferredExtensionLoader(null);
         } catch (error) {
             if (error && typeof error === 'object') {
@@ -8176,7 +8223,7 @@ async function applyStartupSettingsCore(data, initLoaderHandle = null) {
         }
     }
 
-    configureDeferredStartupTasks(settingsPlan);
+    configureDeferredStartupTasks();
     await validateDisabledSamplers();
     settingsReady = true;
     await eventSource.emit(event_types.SETTINGS_LOADED);

@@ -23,6 +23,7 @@ export interface RuntimeCommands {
     retryMessage(messageId: string): Promise<void>;
     loadEarlier(anchorId?: string): Promise<void>;
     saveSettings(settings: SettingsDocument): Promise<void>;
+    openWorkspaceDrawer(hostId: string): Promise<void>;
 }
 
 export interface RuntimePort {

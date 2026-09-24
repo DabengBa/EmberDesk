@@ -273,6 +273,26 @@ function resolveInitialSettingsTab(initialTab?: string | null) {
     return settingsTabDefinitions[0].id;
 }
 
+// Overlay-only navigation into workspace drawers. Preset CRUD, the Prompt
+// Manager, connection-profile capture/apply, persona management, and the
+// user-settings extras still live in drawer surfaces the shell no longer opens.
+// Each target is the drawer's .drawer-content host id opened through the
+// openWorkspaceDrawer runtime command; the link also runs onRequestClose so the
+// overlay does not cover the drawer it just opened.
+const WORKSPACE_DRAWER_LINKS: Record<string, Array<{ target: string; label: string; hint: string }>> = {
+    providers: [
+        { target: 'left-nav-panel', label: 'Open AI Response Configuration', hint: 'Preset 下拉与操作、采样滑条、Prompt Manager。' },
+        { target: 'rm_api_block', label: 'Open API Connections', hint: 'Connect、API key、connection profile 的捕获与应用。' },
+    ],
+    userInterface: [
+        { target: 'user-settings-block', label: 'Open User Settings', hint: '主题色、字体缩放、模糊与杂项开关。' },
+        { target: 'PersonaManagement', label: 'Open Persona Management', hint: 'Persona 网格、描述与锁定。' },
+    ],
+    advanced: [
+        { target: 'AdvancedFormatting', label: 'Open Advanced Formatting', hint: 'System prompt / reasoning 预设操作与 master 导入导出。' },
+    ],
+};
+
 export function SettingsSurface({
     variant = 'page',
     initialTab = null,
@@ -2481,6 +2501,28 @@ export function SettingsSurface({
                                     />
 </SettingsSection>
                             </div>
+                            ) : null}
+
+                            {isOverlay && (WORKSPACE_DRAWER_LINKS[activeTab]?.length ?? 0) > 0 ? (
+                                <SettingsSection
+                                    title="Workspace Panels"
+                                    description="本页未覆盖的高级控件仍在对应的工作区抽屉中维护；点击后此面板会关闭。"
+                                >
+                                    {(WORKSPACE_DRAWER_LINKS[activeTab] ?? []).map(link => (
+                                        <button
+                                            key={link.target}
+                                            type="button"
+                                            {...stylex.props(settingsStyles.button, settingsStyles.buttonSecondary)}
+                                            title={link.hint}
+                                            onClick={() => {
+                                                runtime?.commands.openWorkspaceDrawer(link.target);
+                                                onRequestClose?.();
+                                            }}
+                                        >
+                                            {link.label}
+                                        </button>
+                                    ))}
+                                </SettingsSection>
                             ) : null}
                             </div>
 

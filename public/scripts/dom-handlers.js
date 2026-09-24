@@ -118,6 +118,7 @@ const stopGeneration = (...args) => shell().stopGeneration(...args);
 const stopScriptExecution = (...args) => shell().stopScriptExecution(...args);
 const t = (...args) => shell().t(...args);
 const toggleCharacterExportPopup = (...args) => shell().toggleCharacterExportPopup(...args);
+const getVisibleCharacterExportTrigger = (...args) => shell().getVisibleCharacterExportTrigger(...args);
 const toggleDrawer = (...args) => shell().toggleDrawer(...args);
 const translate = (...args) => shell().translate(...args);
 const updateCharListGridToggleLabel = (...args) => shell().updateCharListGridToggleLabel(...args);
@@ -1503,7 +1504,7 @@ export async function bindLegacyShellHandlers() {
                 await importTags(state.characters[state.this_chid], { importSetting: state.tag_import_setting.ASK });
             } break;
             case 'character_action_export': {
-                toggleCharacterExportPopup(targetElement);
+                toggleCharacterExportPopup(getVisibleCharacterExportTrigger());
             } break;
             case 'character_action_duplicate': {
                 await duplicateCharacter();

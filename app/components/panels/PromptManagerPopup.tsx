@@ -89,10 +89,11 @@ export function PromptManagerPopup() {
                         </div>
                         <div className="completion_prompt_manager_popup_entry_form_control">
                             <div className="flex-container alignItemsCenter" data-i18n="[external_piece_text]The content of this prompt is pulled from elsewhere and cannot be edited here." external_piece_text="The content of this prompt is pulled from elsewhere and cannot be edited here.">
-                                <div className="flex1">
+                                <div className="flex1 pm-prompt-label-row">
                                     <label htmlFor="completion_prompt_manager_popup_entry_form_prompt">
                                         <span data-i18n="Prompt">Prompt</span>
                                     </label>
+                                    <small id="completion_prompt_manager_popup_entry_form_prompt_meta" className="pm-prompt-meta" aria-live="polite"></small>
                                 </div>
                                 <div id="completion_prompt_manager_forbid_overrides_block">
                                     <label className="checkbox_label" htmlFor="completion_prompt_manager_popup_entry_form_forbid_overrides" title="This prompt cannot be overridden by character cards, even if overrides are preferred." data-i18n="[title]This prompt cannot be overridden by character cards, even if overrides are preferred.">

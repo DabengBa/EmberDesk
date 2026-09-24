@@ -2,6 +2,9 @@
  * Provider-neutral frontend compatibility contract manifest.
  * Test-only structured data used by `pnpm run test:compat` and retirement gates.
  * Behavior is the contract; legacy file paths are current providers, not permanent APIs.
+ *
+ * Third-party extension support has been retired: this manifest now pins only
+ * surfaces our own shell and test infrastructure still depend on internally.
  */
 
 import fs from 'node:fs';
@@ -12,19 +15,14 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, '../..');
 const publicRoot = path.join(repoRoot, 'public');
-const tavernHelperRoot = path.join(publicRoot, 'scripts', 'extensions', 'third-party', 'JS-Slash-Runner');
-const tavernHelperSourceRoot = path.join(tavernHelperRoot, 'src');
 
 /** Contract families used for failure localization. */
 export const COMPAT_CONTRACT_FAMILIES = Object.freeze([
-    'globals',
     'events',
     'aliases',
     'slash',
     'regex',
-    'mounts',
     'selectors',
-    'message-mutation',
     'internal-bridge',
 ]);
 
@@ -42,14 +40,6 @@ export const requiredScriptExports = Object.freeze([
     'substituteParams',
     'substituteParamsExtended',
     'this_chid',
-]);
-
-export const requiredExtensionExports = Object.freeze([
-    'extension_settings',
-    'getContext',
-    'renderExtensionTemplateAsync',
-    'saveMetadataDebounced',
-    'writeExtensionField',
 ]);
 
 export const requiredRegexExports = Object.freeze([
@@ -86,25 +76,6 @@ export const requiredSlashCommandExports = Object.freeze([
     'initSlashCommandAutoComplete',
 ]);
 
-export const tavernHelperCriticalEvents = Object.freeze({
-    APP_READY: 'app_ready',
-    CHAT_CHANGED: 'chat_id_changed',
-    CHAT_COMPLETION_SETTINGS_READY: 'chat_completion_settings_ready',
-    CHARACTER_DELETED: 'characterDeleted',
-    CHARACTER_MESSAGE_RENDERED: 'character_message_rendered',
-    CHARACTER_RENAMED: 'character_renamed',
-    GENERATE_AFTER_DATA: 'generate_after_data',
-    MESSAGE_RECEIVED: 'message_received',
-    OAI_PRESET_CHANGED_AFTER: 'oai_preset_changed_after',
-    PRESET_DELETED: 'preset_deleted',
-    PRESET_RENAMED_BEFORE: 'preset_renamed_before',
-    SETTINGS_UPDATED: 'settings_updated',
-    TTS_AUDIO_READY: 'tts_audio_ready',
-    TTS_JOB_COMPLETE: 'tts_job_complete',
-    TTS_JOB_STARTED: 'tts_job_started',
-    USER_MESSAGE_RENDERED: 'user_message_rendered',
-});
-
 export const requiredRegexPlacements = Object.freeze({
     USER_INPUT: 1,
     AI_OUTPUT: 2,
@@ -134,12 +105,6 @@ export const messageRowMarkers = Object.freeze([
     'is_system',
 ]);
 
-/** Extension-owned lifecycle markers that React owners must not swallow. */
-export const extensionMessageMutationMarkers = Object.freeze([
-    'TH-streaming',
-    'TH-render',
-]);
-
 /** Names that must never appear as public third-party contract entries. */
 export const internalOnlyNames = Object.freeze([
     '__emberDeskReactCompatibilityBridge',
@@ -163,29 +128,11 @@ export const internalOnlyNames = Object.freeze([
  */
 export const compatibilityContractEntries = Object.freeze([
     {
-        id: 'global-sillytavern',
-        family: 'globals',
-        behavior: 'globalThis.SillyTavern remains a supported public compatibility object without requiring the internal React bridge',
-        currentProvider: 'public browser shell (script.js / lib boundary)',
-        replacementProvider: 'same public object shape supplied by React-era shell without dual legacy owner',
-        proofCommand: 'pnpm run test:compat',
-        deletionReadiness: 'not-ready',
-    },
-    {
         id: 'event-source-and-types',
         family: 'events',
-        behavior: 'eventSource emitter methods and event_types values remain stable for Tavern Helper and other supported consumers',
+        behavior: 'eventSource emitter methods and event_types values remain stable for internal event consumers',
         currentProvider: 'public/scripts/events.js',
         replacementProvider: 'compatible emitter and event-name table owned by the React-era workspace shell',
-        proofCommand: 'pnpm run test:compat',
-        deletionReadiness: 'not-ready',
-    },
-    {
-        id: 'sillytavern-import-aliases',
-        family: 'aliases',
-        behavior: '@sillytavern/* browser imports resolve into public modules used by JS-Slash-Runner',
-        currentProvider: 'public/ module tree plus import maps / alias resolution',
-        replacementProvider: 'stable browser import surface without requiring legacy page owners',
         proofCommand: 'pnpm run test:compat',
         deletionReadiness: 'not-ready',
     },
@@ -201,7 +148,7 @@ export const compatibilityContractEntries = Object.freeze([
     {
         id: 'slash-command-exports',
         family: 'slash',
-        behavior: 'slash-command public exports remain callable for compatible extensions and automation',
+        behavior: 'slash-command public exports remain callable for internal STscript automation and tests',
         currentProvider: 'public/scripts/slash-commands.js',
         replacementProvider: 'compatible slash registry/executor reachable from the same public exports',
         proofCommand: 'pnpm run test:compat',
@@ -217,30 +164,12 @@ export const compatibilityContractEntries = Object.freeze([
         deletionReadiness: 'not-ready',
     },
     {
-        id: 'extension-mount-points',
-        family: 'mounts',
-        behavior: 'extension drawers, wand menu, and regex mount nodes remain present and loadable',
-        currentProvider: 'public/index.html templates and public/scripts/extensions.js',
-        replacementProvider: 'React-owned mount protocol that keeps extension content reachable',
-        proofCommand: 'pnpm run test:compat',
-        deletionReadiness: 'not-ready',
-    },
-    {
         id: 'character-list-row-identity',
         family: 'selectors',
-        behavior: 'character/group/folder rows preserve protected selectors and identity attributes',
+        behavior: 'character/folder rows preserve the selectors and identity attributes internal consumers rely on',
         currentProvider: 'character list renderer (legacy or React-owned compatible rows)',
         replacementProvider: 'React Character Library as sole row producer with the same selectors',
         proofCommand: 'pnpm run test:compat; pnpm --dir tests run test:unit -- character-list-structure.test.js --runInBand',
-        deletionReadiness: 'proof-pending',
-    },
-    {
-        id: 'message-row-and-extension-mutation',
-        family: 'message-mutation',
-        behavior: 'message rows remain identifiable and extension-owned TH-streaming / TH-render mutations are not swallowed by React owners',
-        currentProvider: 'React main-chat rich-body owner with stable mutation-zone hosts and preserveLiveContent',
-        replacementProvider: 'React main-chat owner that preserves extension lifecycle markers via data-main-chat-mutation-zone hosts',
-        proofCommand: 'pnpm run test:compat; pnpm --dir tests run test:e2e -- third-party-extension-runtime.e2e.js --workers=1',
         deletionReadiness: 'proof-pending',
     },
     {
@@ -249,7 +178,7 @@ export const compatibilityContractEntries = Object.freeze([
         behavior: 'internal React compatibility bridge must not become a public third-party API',
         currentProvider: 'app/compat/global-compatibility-bridge.js (first-party only)',
         replacementProvider: 'no public replacement; bridge remains internal-only',
-        proofCommand: 'pnpm --dir tests run test:unit -- global-compatibility-bridge.test.js third-party-extension-compatibility.test.js --runInBand',
+        proofCommand: 'pnpm --dir tests run test:unit -- global-compatibility-bridge.test.js --runInBand',
         deletionReadiness: 'ready-when-replacement-proven',
     },
 ]);
@@ -259,31 +188,24 @@ export const compatibilityContractEntries = Object.freeze([
  */
 export const frontendCompatibilityContract = Object.freeze({
     version: 1,
-    primaryConsumer: 'JS-Slash-Runner',
     families: COMPAT_CONTRACT_FAMILIES,
     entries: compatibilityContractEntries,
     publicShape: Object.freeze({
         scriptExports: requiredScriptExports,
-        extensionExports: requiredExtensionExports,
         regexExports: requiredRegexExports,
         slashCommandExports: requiredSlashCommandExports,
-        criticalEvents: tavernHelperCriticalEvents,
         regexPlacements: requiredRegexPlacements,
         characterRowSelectors,
         messageRowMarkers,
-        extensionMessageMutationMarkers,
     }),
     exclusions: Object.freeze({
         publicNames: internalOnlyNames,
-        reason: 'Internal React migration diagnostics and Zustand snapshots are not third-party APIs.',
+        reason: 'Internal React migration diagnostics and Zustand snapshots are not public APIs.',
     }),
     paths: Object.freeze({
         repoRoot,
         publicRoot,
         indexHtmlPath: path.join(publicRoot, 'index.html'),
-        tavernHelperRoot,
-        tavernHelperSourceRoot,
-        tavernHelperDistPath: path.join(tavernHelperRoot, 'dist', 'index.js'),
         scriptPath: path.join(publicRoot, 'script.js'),
         eventsPath: path.join(publicRoot, 'scripts', 'events.js'),
         extensionsPath: path.join(publicRoot, 'scripts', 'extensions.js'),
@@ -355,22 +277,6 @@ export function listSourceFiles(root) {
         }
         return /\.(js|ts|vue)$/.test(entry.name) ? [entryPath] : [];
     });
-}
-
-export function collectSillyTavernImports(sourceRoot = tavernHelperSourceRoot) {
-    const imports = new Set();
-    const importPattern = /(?:from\s*|import\s*\(\s*)['"](@sillytavern\/[^'"]+)['"]/g;
-    for (const filePath of listSourceFiles(sourceRoot)) {
-        const content = fs.readFileSync(filePath, 'utf8');
-        for (const match of content.matchAll(importPattern)) {
-            imports.add(match[1]);
-        }
-    }
-    return [...imports].sort();
-}
-
-export function resolveSillyTavernImport(importPath) {
-    return path.join(publicRoot, `${importPath.replace('@sillytavern/', '')}.js`);
 }
 
 export function sourceHasNamedExport(source, exportName) {

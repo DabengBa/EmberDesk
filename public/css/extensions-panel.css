@@ -126,9 +126,6 @@ input.extension_missing[type="checkbox"] {
     display: contents;
 }
 
-#extensionsMenu>div.extension_container:empty {
-    display: none;
-}
 
 .extensions_info .extension_text_block {
     white-space: nowrap;

@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from 'react';
+import { createPortal } from 'react-dom';
 import { useMutation } from '@tanstack/react-query';
 import { useForm } from '@tanstack/react-form';
 import { z } from 'zod';
@@ -153,10 +154,6 @@ const SELECTIVE_LOGIC_OPTIONS = [
 
 const MAX_KEYWORD_CHIPS = 4;
 
-function joinKeywords(values: string[] | undefined): string {
-    return Array.isArray(values) ? values.filter(Boolean).join(', ') : '';
-}
-
 function splitKeywords(value: string): string[] {
     return String(value || '')
         .split(',')
@@ -248,6 +245,82 @@ function SectionHeader({ icon, title, aside }: { icon: string; title: string; as
     );
 }
 
+function KeywordField({
+    label,
+    values,
+    field,
+    onCommit,
+}: {
+    label: string;
+    values: string[];
+    field: string;
+    onCommit: (values: string[]) => void;
+}) {
+    const [pending, setPending] = useState('');
+    const boxRef = useRef<HTMLDivElement>(null);
+
+    const commit = (raw: string) => {
+        const parts = splitKeywords(raw);
+        if (parts.length > 0) {
+            onCommit([...values, ...parts]);
+        }
+        setPending('');
+    };
+
+    return (
+        <div {...stylex.props(s.field)}>
+            <span {...stylex.props(s.fieldLabel)}>{label}</span>
+            <div
+                {...stylex.props(s.pillBox)}
+                ref={boxRef}
+                onClick={() => boxRef.current?.querySelector('input')?.focus()}
+            >
+                {values.map((keyword, index) => (
+                    <span key={`${index}-${keyword}`} {...stylex.props(s.pill)}>
+                        {keyword}
+                        <button
+                            type="button"
+                            {...stylex.props(s.pillRemove)}
+                            aria-label={`移除关键词 ${keyword}`}
+                            onMouseDown={event => event.preventDefault()}
+                            onClick={event => {
+                                event.stopPropagation();
+                                onCommit(values.filter((_, i) => i !== index));
+                            }}
+                        >
+                            ×
+                        </button>
+                    </span>
+                ))}
+                <input
+                    {...stylex.props(s.pillInput)}
+                    value={pending}
+                    aria-label={`${label}（回车或逗号添加）`}
+                    data-world-info-react-field={field}
+                    placeholder={values.length === 0 ? '输入关键词，回车添加' : ''}
+                    onChange={event => {
+                        const value = event.target.value;
+                        if (value.includes(',')) {
+                            commit(value);
+                        } else {
+                            setPending(value);
+                        }
+                    }}
+                    onKeyDown={event => {
+                        if (event.key === 'Enter') {
+                            event.preventDefault();
+                            commit(pending);
+                        } else if (event.key === 'Backspace' && pending === '' && values.length > 0) {
+                            onCommit(values.slice(0, -1));
+                        }
+                    }}
+                    onBlur={event => commit(event.target.value)}
+                />
+            </div>
+        </div>
+    );
+}
+
 function AdvancedSection({
     id,
     title,
@@ -261,15 +334,52 @@ function AdvancedSection({
     defaultOpen?: boolean;
     children: ReactNode;
 }) {
+    const [open, setOpen] = useState(defaultOpen || Boolean(summary));
+    const bodyRef = useRef<HTMLDivElement>(null);
+
+    const openAndFocus = () => {
+        setOpen(true);
+        requestAnimationFrame(() => {
+            const body = bodyRef.current;
+            body?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+            body?.querySelector<HTMLElement>('[data-world-info-react-field], input, select, textarea')
+                ?.focus({ preventScroll: true });
+        });
+    };
+
     return (
-        <details {...stylex.props(s.advanced)} data-world-info-react-advanced={id} open={defaultOpen || Boolean(summary)}>
-            <summary {...stylex.props(s.advancedSummary)}>
-                <i className={`fa-solid fa-chevron-right wi-adv-chevron ${stylex.props(s.advancedChevron).className ?? ''}`} aria-hidden="true" />
-                <span>{title}</span>
-                {summary ? <span {...stylex.props(s.advancedChip)}>{summary}</span> : null}
-            </summary>
-            <div {...stylex.props(s.advancedBody)}>{children}</div>
-        </details>
+        <div {...stylex.props(s.advanced)} data-world-info-react-advanced={id}>
+            <div {...stylex.props(s.advancedHead)}>
+                <button
+                    type="button"
+                    {...stylex.props(s.advancedSummary)}
+                    aria-expanded={open}
+                    data-world-info-react-advanced-toggle={id}
+                    onClick={() => setOpen(value => !value)}
+                >
+                    <i className={`fa-solid fa-chevron-right wi-adv-chevron ${stylex.props(s.advancedChevron).className ?? ''}`} aria-hidden="true" />
+                    <span>{title}</span>
+                </button>
+                {summary ? (
+                    <button
+                        type="button"
+                        {...stylex.props(s.advancedChip, s.advancedChipLink)}
+                        title="展开并定位到字段"
+                        onClick={openAndFocus}
+                    >
+                        {summary}
+                    </button>
+                ) : null}
+            </div>
+            <div
+                {...stylex.props(s.advancedCollapse, open ? s.advancedCollapseOpen : null)}
+                ref={bodyRef}
+                inert={!open}
+                aria-hidden={!open}
+            >
+                <div {...stylex.props(s.advancedBody)}>{children}</div>
+            </div>
+        </div>
     );
 }
 
@@ -439,12 +549,19 @@ function EntryEditor({
     emptyMessage?: string;
 }) {
     const [draft, setDraft] = useState(entry);
+    const [contentModalOpen, setContentModalOpen] = useState(false);
     const titleInputRef = useRef<HTMLInputElement>(null);
     const contentInputRef = useRef<HTMLTextAreaElement>(null);
+    const modalContentRef = useRef<HTMLTextAreaElement>(null);
     const advanced = isAdvancedDefault(entry);
     const entryUid = entry?.uid;
     const focusTitleOnOpen = Boolean(onBack);
     const regexKeywordCount = countRegexKeywords([...(draft?.key ?? []), ...(draft?.keysecondary ?? [])]);
+    const secondaryCount = draft?.keysecondary?.length ?? 0;
+    const secondarySummary = [
+        secondaryCount > 0 ? `${secondaryCount} 个条件词` : '',
+        draft?.selectiveLogic ? (SELECTIVE_LOGIC_OPTIONS.find(o => o.value === draft.selectiveLogic)?.label ?? '') : '',
+    ].filter(Boolean).join(' · ');
 
     useEffect(() => {
         setDraft(entry);
@@ -473,8 +590,8 @@ function EntryEditor({
         void commands.updateEntryFields(entry.uid, fields);
     };
 
-    const insertMacro = (macro: string) => {
-        const element = contentInputRef.current;
+    const insertMacro = (macro: string, targetRef: RefObject<HTMLTextAreaElement | null> = contentInputRef) => {
+        const element = targetRef.current;
         const source = draft.content ?? '';
         const start = element?.selectionStart ?? source.length;
         const end = element?.selectionEnd ?? source.length;
@@ -488,7 +605,21 @@ function EntryEditor({
         }
     };
 
-    return (
+    const closeContentModal = () => {
+        saveFields({ content: draft.content ?? '' });
+        setContentModalOpen(false);
+        requestAnimationFrame(() => contentInputRef.current?.focus());
+    };
+
+    const onModalKeyDown = (event: KeyboardEvent) => {
+        if (event.key === 'Escape' || ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's')) {
+            event.preventDefault();
+            event.stopPropagation();
+            closeContentModal();
+        }
+    };
+
+    return (<>
         <div {...stylex.props(s.editor)} data-world-info-react-editor="active" data-world-info-react-entry-uid={entry.uid}>
             {onBack ? (
                 <button
@@ -542,39 +673,18 @@ function EntryEditor({
                 <SectionHeader icon="fa-key" title="何时触发" />
                 {!draft.constant ? (
                     <>
-                        <label {...stylex.props(s.field)}>
-                            <span {...stylex.props(s.fieldLabel)}>主要关键词</span>
-                            <input
-                                className="text_pole"
-                                value={joinKeywords(draft.key)}
-                                data-world-info-react-field="key"
-                                onChange={event => setDraft({ ...draft, key: splitKeywords(event.target.value) })}
-                                onBlur={event => saveFields({ key: splitKeywords(event.target.value) })}
-                            />
-                        </label>
-                        <label {...stylex.props(s.field)}>
-                            <span {...stylex.props(s.fieldLabel)}>可选条件</span>
-                            <input
-                                className="text_pole"
-                                value={joinKeywords(draft.keysecondary)}
-                                data-world-info-react-field="keysecondary"
-                                onChange={event => setDraft({ ...draft, keysecondary: splitKeywords(event.target.value) })}
-                                onBlur={event => saveFields({ keysecondary: splitKeywords(event.target.value) })}
-                            />
-                        </label>
-                        <label {...stylex.props(s.field)}>
-                            <span {...stylex.props(s.fieldLabel)}>逻辑</span>
-                            <select
-                                className="text_pole"
-                                value={String(draft.selectiveLogic)}
-                                data-world-info-react-field="selectiveLogic"
-                                onChange={event => saveFields({ selectiveLogic: Number(event.target.value) })}
-                            >
-                                {SELECTIVE_LOGIC_OPTIONS.map(option => (
-                                    <option key={option.value} value={option.value}>{option.label}</option>
-                                ))}
-                            </select>
-                        </label>
+                        <KeywordField
+                            label="主要关键词"
+                            values={draft.key ?? []}
+                            field="key"
+                            onCommit={values => saveFields({ key: values })}
+                        />
+                        {regexKeywordCount > 0 ? (
+                            <p {...stylex.props(s.callout)} data-world-info-react-regex-hint>
+                                <i className={iconClass('fa-circle-info', s.calloutIcon)} aria-hidden="true" />
+                                <span>关键词包含 {regexKeywordCount} 个正则表达式（/pattern/flags 形式直接生效）</span>
+                            </p>
+                        ) : null}
                     </>
                 ) : (
                     <p {...stylex.props(s.callout)}>
@@ -585,7 +695,18 @@ function EntryEditor({
             </section>
 
             <section {...stylex.props(s.editorSection)} data-world-info-react-section="content">
-                <SectionHeader icon="fa-align-left" title="注入内容" />
+                <SectionHeader icon="fa-align-left" title="注入内容" aside={(
+                    <button
+                        type="button"
+                        {...stylex.props(s.sectionAction)}
+                        title="放大编辑"
+                        aria-label="放大编辑注入内容"
+                        data-world-info-react-action="expand-content"
+                        onClick={() => setContentModalOpen(true)}
+                    >
+                        <i className="fa-solid fa-expand" aria-hidden="true" />
+                    </button>
+                )} />
                 <div {...stylex.props(s.macroBar)} role="toolbar" aria-label="插入宏">
                     {['{{user}}', '{{char}}', '{{// }}'].map(macro => (
                         <button
@@ -706,6 +827,29 @@ function EntryEditor({
                         <span {...stylex.props(s.advancedChip)}>{buildAdvancedSummary(entry)}</span>
                     ) : null}
                 />
+                {!draft.constant ? (
+                    <AdvancedSection id="secondary" title="可选条件与逻辑" summary={secondarySummary}>
+                        <KeywordField
+                            label="可选条件"
+                            values={draft.keysecondary ?? []}
+                            field="keysecondary"
+                            onCommit={values => saveFields({ keysecondary: values })}
+                        />
+                        <label {...stylex.props(s.field)}>
+                            <span {...stylex.props(s.fieldLabel)}>逻辑</span>
+                            <select
+                                className="text_pole"
+                                value={String(draft.selectiveLogic)}
+                                data-world-info-react-field="selectiveLogic"
+                                onChange={event => saveFields({ selectiveLogic: Number(event.target.value) })}
+                            >
+                                {SELECTIVE_LOGIC_OPTIONS.map(option => (
+                                    <option key={option.value} value={option.value}>{option.label}</option>
+                                ))}
+                            </select>
+                        </label>
+                    </AdvancedSection>
+                ) : null}
                 <AdvancedSection id="timing" title="递归与时序" summary={advanced.timing ? buildAdvancedSummary(entry).split(' · ')[0] : ''}>
                     <div {...stylex.props(s.flexRow)}>
                         <label {...stylex.props(s.field, s.fieldGrow)}>
@@ -774,29 +918,87 @@ function EntryEditor({
                     </label>
                 </AdvancedSection>
             </section>
-
-            <section {...stylex.props(s.editorSection)} data-world-info-react-section="ops">
-                <SectionHeader icon="fa-screwdriver-wrench" title="条目操作" />
-                <div {...stylex.props(s.flexRow)}>
-                    <button
-                        type="button"
-                        className={buttonClass(s.button, s.buttonGhost)}
-                        data-world-info-react-action="move-copy-entry"
-                        onClick={() => void commands.moveOrCopyEntry(entry.uid)}
-                    >
-                        <i className={iconClass('fa-folder-tree', s.buttonIconSlot)} aria-hidden="true" />
-                        移动 / 复制到其他世界书
-                    </button>
-                </div>
-                {regexKeywordCount > 0 ? (
-                    <p {...stylex.props(s.callout)} data-world-info-react-regex-hint>
-                        <i className={iconClass('fa-circle-info', s.calloutIcon)} aria-hidden="true" />
-                        <span>关键词包含 {regexKeywordCount} 个正则表达式（/pattern/flags 形式直接生效）</span>
-                    </p>
-                ) : null}
-            </section>
         </div>
-    );
+        <footer {...stylex.props(s.statusBar)} data-world-info-react-section="ops">
+            <button
+                type="button"
+                className={buttonClass(s.button, s.buttonGhost)}
+                data-world-info-react-action="move-copy-entry"
+                onClick={() => void commands.moveOrCopyEntry(entry.uid)}
+            >
+                <i className={iconClass('fa-folder-tree', s.buttonIconSlot)} aria-hidden="true" />
+                移动 / 复制
+            </button>
+            <span {...stylex.props(s.statusMeta)}>
+                <span
+                    {...stylex.props(s.statusDot, draft.disable ? s.statusDotOff : draft.constant ? s.statusDotConstant : null)}
+                    aria-hidden="true"
+                />
+                UID {entry.uid} · {(draft.content ?? '').length} 字符
+            </span>
+            <button
+                type="button"
+                {...stylex.props(s.sectionAction)}
+                aria-label="放大编辑"
+                title="放大编辑"
+                onClick={() => setContentModalOpen(true)}
+            >
+                <i className="fa-solid fa-expand" aria-hidden="true" />
+            </button>
+        </footer>
+        {contentModalOpen ? createPortal(
+            <div
+                {...stylex.props(s.modalOverlay)}
+                data-world-info-react-modal="content"
+                onMouseDown={event => {
+                    event.stopPropagation();
+                    if (event.target === event.currentTarget) {
+                        closeContentModal();
+                    }
+                }}
+                onMouseUp={event => event.stopPropagation()}
+                onClick={event => event.stopPropagation()}
+                onKeyDown={onModalKeyDown}
+            >
+                <div {...stylex.props(s.modalPanel)} role="dialog" aria-modal="true" aria-label="放大编辑注入内容">
+                    <header {...stylex.props(s.modalHead)}>
+                        <span {...stylex.props(s.modalTitle)}>注入内容</span>
+                        <div {...stylex.props(s.macroBar)}>
+                            {['{{user}}', '{{char}}', '{{// }}'].map(macro => (
+                                <button
+                                    key={macro}
+                                    type="button"
+                                    {...stylex.props(s.macroChip)}
+                                    onClick={() => insertMacro(macro, modalContentRef)}
+                                >
+                                    {macro}
+                                </button>
+                            ))}
+                        </div>
+                        <button
+                            type="button"
+                            {...stylex.props(s.sectionAction)}
+                            aria-label="关闭"
+                            title="关闭"
+                            onClick={closeContentModal}
+                        >
+                            <i className="fa-solid fa-xmark" aria-hidden="true" />
+                        </button>
+                    </header>
+                    <textarea
+                        {...stylex.props(s.modalTextarea)}
+                        ref={modalContentRef}
+                        autoFocus
+                        aria-label="注入内容（放大编辑）"
+                        value={draft.content}
+                        onChange={event => setDraft({ ...draft, content: event.target.value })}
+                    />
+                    <footer {...stylex.props(s.modalFoot)}>Esc 或点击遮罩关闭并保存 · Ctrl/⌘+S 保存并关闭</footer>
+                </div>
+            </div>,
+            document.body,
+        ) : null}
+    </>);
 }
 
 export function WorldInfoWorkbenchPanel({

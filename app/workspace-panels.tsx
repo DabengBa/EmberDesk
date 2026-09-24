@@ -26,7 +26,6 @@ import {
     getWorkspaceShellChildSlot,
     recordWorkspacePanelDockIntent,
     recordWorkspacePanelDockClose,
-    recordWorkspacePanelDockPin,
     recordWorkspacePanelDockResult,
     recordWorkspacePanelMount,
     recordWorkspacePanelUnmount,
@@ -178,9 +177,6 @@ type WorldInfoWorkspacePanelState = WorldInfoWorkbenchPanelState;
 interface ExtensionsHostWorkspacePanelState {
     extensionsSettingsPresent?: boolean;
     extensionsSettings2Present?: boolean;
-    regexContainerPresent?: boolean;
-    extensionsMenuButtonPresent?: boolean;
-    extensionsMenuPresent?: boolean;
     extrasApiControlsPresent?: boolean;
     manageButtonPresent?: boolean;
     installButtonPresent?: boolean;
@@ -406,10 +402,7 @@ function WorkspacePanelShell({
                                 <div className="flex-container flexFlowColumn gap4" data-workspace-legacy-slots={kind}>
                                     {slots.map(slot => {
                                         const protectedSlot = slot.id === 'extensions-settings'
-                                            || slot.id === 'extensions-settings2'
-                                            || slot.id === 'regex-container'
-                                            || slot.id === 'extensions-menu-button'
-                                            || slot.id === 'extensions-menu';
+                                            || slot.id === 'extensions-settings2';
 
                                         return (
                                             <div
@@ -586,7 +579,7 @@ function AuthoringFieldLabel({ text, dirty, meta, onExpand }: { text: string; di
                     aria-label={`Open ${text} in full editor`}
                     onClick={onExpand}
                 >
-                    <i className="fa-solid fa-up-right-and-down-left-from-center" aria-hidden="true" />
+                    <i className="fa-solid fa-expand" aria-hidden="true" />
                 </button>
             ) : null}
         </span>
@@ -1251,6 +1244,16 @@ function AuthoringWorkspacePanel({
                         >
                             World Info
                         </button>
+                        {!isCreateMode ? (
+                            <button
+                                type="button"
+                                className={`menu_button ${stylex.props(authoringStyles.toolAction).className ?? ''}`}
+                                disabled={isActionPending}
+                                onClick={() => void commands?.exportAuthoring?.(characterToolActionPayload)}
+                            >
+                                Export
+                            </button>
+                        ) : null}
                         <AuthoringActionsMenu
                             actions={liveManagementActions ?? managementActions}
                             disabled={isActionPending}
@@ -1266,10 +1269,13 @@ function AuthoringWorkspacePanel({
                         aria-modal="true"
                         aria-label={expandedField.label}
                         onMouseDown={(event) => {
+                            event.stopPropagation();
                             if (event.target === event.currentTarget) {
                                 setExpandedField(null);
                             }
                         }}
+                        onMouseUp={event => event.stopPropagation()}
+                        onClick={event => event.stopPropagation()}
                         onKeyDown={(event) => {
                             if (event.key === 'Escape') {
                                 event.stopPropagation();
@@ -1327,7 +1333,6 @@ function getExtensionsHostPanelStatus(bridgeState: ExtensionsHostWorkspacePanelS
     if (
         bridgeState.extensionsSettingsPresent
         || bridgeState.extensionsSettings2Present
-        || bridgeState.regexContainerPresent
         || bridgeState.extrasApiControlsPresent
     ) {
         return 'success';
@@ -1433,9 +1438,6 @@ function ExtensionsHostWorkspacePanel({ state, commands }: { state?: unknown; co
             slots={[
                 { id: 'extensions-settings', label: 'Settings column', ready: bridgeState.extensionsSettingsPresent },
                 { id: 'extensions-settings2', label: 'Settings column 2', ready: bridgeState.extensionsSettings2Present },
-                { id: 'regex-container', label: 'Regex container', ready: bridgeState.regexContainerPresent },
-                { id: 'extensions-menu-button', label: 'Wand button', ready: bridgeState.extensionsMenuButtonPresent },
-                { id: 'extensions-menu', label: 'Wand menu', ready: bridgeState.extensionsMenuPresent },
                 { id: 'extras-api', label: 'Extras API', ready: bridgeState.extrasApiControlsPresent },
             ]}
         >
@@ -1692,10 +1694,12 @@ function WorkspacePanelRoot({
 
 const workspaceShellNavigationEntries: WorkspaceShellNavigationEntry[] = [
     { command: 'openAIConfig', icon: 'fa-sliders', label: 'AI Config', panelKind: 'aiConfig' },
+    { command: 'openAIConfigDrawer', icon: 'fa-bookmark', label: 'Presets', panelKind: 'aiConfigDrawer', slotKey: 'aiConfigDrawer' },
     { command: 'openFormatting', icon: 'fa-font', label: 'Formatting', panelKind: 'advancedFormatting' },
     { command: 'openCharacterLibrary', icon: 'fa-address-book', label: 'Character Library', panelKind: 'characterLibrary', slotKey: 'characterLibrary' },
     { command: 'openWorldInfo', icon: 'fa-book-atlas', label: 'World Info', panelKind: 'worldInfo', slotKey: 'worldInfo' },
     { command: 'openExtensions', icon: 'fa-cubes', label: 'Extensions', panelKind: 'extensionsHost', slotKey: 'extensionsHost' },
+    { command: 'openRegex', icon: 'fa-code', label: 'Regex', panelKind: 'regex', slotKey: 'regex' },
     { command: 'openSettings', icon: 'fa-gear', label: 'Settings', panelKind: 'settings' },
 ];
 
@@ -1791,6 +1795,10 @@ function executeWorkspaceShellNavigationCommand(
             return commands.openSettings();
         case 'openCharacterAuthoring':
             return commands.openCharacterAuthoring();
+        case 'openAIConfigDrawer':
+            return commands.openAIConfigDrawer();
+        case 'openRegex':
+            return commands.openRegex();
         case 'activateWorkspaceShellSlot':
         case 'deactivateWorkspaceShellSlot':
         case 'closeWorkspacePanel':
@@ -1876,23 +1884,6 @@ function ReactWorkspaceShellChrome({
         }
     }, [commands]);
 
-    const togglePanelPin = useCallback(async (entry: WorkspaceShellNavigationEntry, isPinned: boolean) => {
-        if (!entry.panelKind || !entry.slotKey) {
-            return;
-        }
-
-        try {
-            await commands?.setWorkspaceShellSlotPinned(entry.slotKey, !isPinned);
-            recordWorkspacePanelDockPin(entry.panelKind, !isPinned);
-        } catch (error) {
-            recordWorkspacePanelDockResult(entry.panelKind, {
-                fallbackReason: 'pin-failed',
-                status: 'error',
-            });
-            console.warn('React workspace shell panel pin failed.', error);
-        }
-    }, [commands]);
-
     return (
         <header
             {...stylex.props(workspaceShellStyles.chrome)}
@@ -1907,11 +1898,17 @@ function ReactWorkspaceShellChrome({
             <nav {...stylex.props(workspaceShellStyles.nav)} aria-label="Workspace navigation">
                 {workspaceShellNavigationEntries.map(entry => {
                     const isPanelEntryActive = Boolean(entry.panelKind && dockSnapshot.activePanelKind === entry.panelKind);
-                    const isPinned = Boolean(entry.panelKind && dockSnapshot.pinnedPanelKinds.includes(entry.panelKind));
+                    const childSlot = entry.slotKey ? getWorkspaceShellChildSlot(entry.slotKey) : null;
+                    // Drawer pinning is owned by the legacy in-drawer lock toggle
+                    // (e.g. #lm_button_panel_pin), which writes .pinnedOpen on the
+                    // drawer host. Lock toggles do not trigger a React re-render,
+                    // so the click guard must re-read the class at click time.
+                    const isDrawerPinned = () => Boolean(childSlot?.mountTarget
+                        && document.querySelector(childSlot.mountTarget)?.closest('.drawer-content')?.classList.contains('pinnedOpen'));
+                    const isPinned = isDrawerPinned();
                     const panelActionLabel = entry.panelKind
                         ? `${isPanelEntryActive && dockSnapshot.activePanelStatus !== 'error' && !isPinned ? 'Close' : 'Open'} ${entry.label}`
                         : entry.label;
-                    const childSlot = entry.slotKey ? getWorkspaceShellChildSlot(entry.slotKey) : null;
 
                     return (
                         <Fragment key={entry.command}>
@@ -1928,7 +1925,7 @@ function ReactWorkspaceShellChrome({
                                 onClick={(event) => {
                                     event.preventDefault();
                                     event.stopPropagation();
-                                    if (entry.panelKind && isPanelEntryActive && dockSnapshot.activePanelStatus !== 'error' && !isPinned) {
+                                    if (entry.panelKind && isPanelEntryActive && dockSnapshot.activePanelStatus !== 'error' && !isDrawerPinned()) {
                                         window.setTimeout(() => {
                                             void closePanel(entry);
                                         }, 0);
@@ -1942,20 +1939,6 @@ function ReactWorkspaceShellChrome({
                                 <i className={`fa-solid ${entry.icon}`} aria-hidden="true" />
                                 <span {...stylex.props(workspaceShellStyles.navButtonLabel)}>{entry.label}</span>
                             </button>
-                            {entry.panelKind && entry.slotKey && isPanelEntryActive ? (
-                                <button
-                                    type="button"
-                                    {...stylex.props(workspaceShellStyles.pinButton, isPinned ? workspaceShellStyles.pinButtonPressed : null)}
-                                    aria-label={`${isPinned ? 'Unpin' : 'Pin'} ${entry.label}`}
-                                    aria-pressed={isPinned}
-                                    data-workspace-shell-panel-pin={entry.panelKind}
-                                    onClick={() => {
-                                        void togglePanelPin(entry, isPinned);
-                                    }}
-                                >
-                                    <i className="fa-solid fa-thumbtack" aria-hidden="true" />
-                                </button>
-                            ) : null}
                         </Fragment>
                     );
                 })}

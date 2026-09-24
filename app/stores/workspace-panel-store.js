@@ -15,6 +15,8 @@ export const WORKSPACE_PANEL_DOCK_KINDS = Object.freeze([
     'extensionsHost',
     'settings',
     'characterAuthoring',
+    'aiConfigDrawer',
+    'regex',
 ]);
 
 /**
@@ -46,6 +48,18 @@ export const WORKSPACE_SHELL_CHILD_SLOTS = Object.freeze({
         allowedCapabilities: Object.freeze(['editCharacter']),
         contentOwner: 'character-authoring',
         mountTarget: '#rm_ch_create_block',
+    }),
+    aiConfigDrawer: Object.freeze({
+        accessibleName: 'AI Response Configuration',
+        allowedCapabilities: Object.freeze(['selectPreset', 'managePresets']),
+        contentOwner: 'ai-config',
+        mountTarget: '#left-nav-panel',
+    }),
+    regex: Object.freeze({
+        accessibleName: 'Regex',
+        allowedCapabilities: Object.freeze(['editRegexScripts', 'openRegexEditor', 'openRegexDebugger']),
+        contentOwner: 'regex',
+        mountTarget: '#RegexPanel',
     }),
     mainChat: Object.freeze({
         accessibleName: 'Main Chat',

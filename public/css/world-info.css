@@ -1294,26 +1294,18 @@ select.keyselect + span.select2-container .select2-selection--multiple {
    React workbench (sole-owner) finishing layer
    ========================================================================== */
 
-/* Accordion chevrons: StyleX cannot express the [open] descendant state. */
-[data-world-info-react-advanced] > summary {
-    list-style: none;
-}
-
-[data-world-info-react-advanced] > summary::-webkit-details-marker {
-    display: none;
-}
-
-[data-world-info-react-advanced] > summary .wi-adv-chevron {
+/* Accordion chevrons: StyleX cannot express the aria-expanded descendant state. */
+[data-world-info-react-advanced-toggle] .wi-adv-chevron {
     display: inline-block;
 }
 
 @media (prefers-reduced-motion: no-preference) {
-    [data-world-info-react-advanced] > summary .wi-adv-chevron {
+    [data-world-info-react-advanced-toggle] .wi-adv-chevron {
         transition: transform 0.15s ease;
     }
 }
 
-[data-world-info-react-advanced][open] > summary .wi-adv-chevron {
+[data-world-info-react-advanced-toggle][aria-expanded="true"] .wi-adv-chevron {
     transform: rotate(90deg);
 }
 

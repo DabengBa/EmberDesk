@@ -25,7 +25,6 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, '..');
 const packageJson = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8'));
-const globalExtensionRoot = path.join(process.cwd(), 'public', 'scripts', 'extensions', 'third-party', 'express5-local');
 const configTmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-express5-config-'));
 const configPath = path.join(configTmpDir, 'config.yaml');
 fs.writeFileSync(configPath, 'extensions:\n  enabled: true\n', 'utf8');
@@ -92,14 +91,11 @@ describe('Express 5 route compatibility', () => {
 
     beforeAll(() => {
         globalThis.DATA_ROOT = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-express5-data-'));
-        fs.mkdirSync(globalExtensionRoot, { recursive: true });
-        fs.writeFileSync(path.join(globalExtensionRoot, 'fallback.txt'), 'global extension', 'utf8');
     });
 
     afterAll(() => {
         fs.rmSync(configTmpDir, { recursive: true, force: true });
         fs.rmSync(globalThis.DATA_ROOT, { recursive: true, force: true });
-        fs.rmSync(globalExtensionRoot, { recursive: true, force: true });
     });
 
     afterEach(() => {
@@ -213,7 +209,7 @@ describe('Express 5 route compatibility', () => {
         });
     });
 
-    test('user file wildcard routes preserve nested files, encoded avatar path, extension fallback, and errors', async () => {
+    test('user file wildcard routes preserve nested files, encoded avatar path, and errors', async () => {
         const root = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-express5-user-'));
         tmpRoots.push(root);
         const directories = createUserDirectories(root);
@@ -222,9 +218,6 @@ describe('Express 5 route compatibility', () => {
         fs.writeFileSync(path.join(directories.characters, 'nested', 'hero.png'), 'character file', 'utf8');
         fs.mkdirSync(path.join(directories.avatars, 'folder'), { recursive: true });
         fs.writeFileSync(path.join(directories.avatars, 'folder', 'avatar.png'), 'avatar file', 'utf8');
-        fs.mkdirSync(path.join(directories.extensions, 'local'), { recursive: true });
-        fs.writeFileSync(path.join(directories.extensions, 'local', 'asset.txt'), 'local extension', 'utf8');
-
         await usingApp(createUserRouterApp(directories), async (url) => {
             const nested = await fetch(`${url}/characters/nested/hero.png`);
             expect(nested.status).toBe(200);
@@ -234,13 +227,9 @@ describe('Express 5 route compatibility', () => {
             expect(avatar.status).toBe(200);
             expect(await avatar.text()).toBe('avatar file');
 
+            // Third-party extension serving is retired: the route no longer exists.
             const localExtension = await fetch(`${url}/scripts/extensions/third-party/local/asset.txt`);
-            expect(localExtension.status).toBe(200);
-            expect(await localExtension.text()).toBe('local extension');
-
-            const globalExtension = await fetch(`${url}/scripts/extensions/third-party/express5-local/fallback.txt`);
-            expect(globalExtension.status).toBe(200);
-            expect(await globalExtension.text()).toBe('global extension');
+            expect(localExtension.status).toBe(404);
 
             const traversal = await fetch(`${url}/characters/%252e%252e%252fsecret.txt`);
             expect(traversal.status).toBe(404);

@@ -1,0 +1,4 @@
+contract_version = 1
+feature_slug = "message-frontend-rendering"
+brief = ".docs/specs/260924-01-message-frontend-rendering/spec.md"
+doc_ids = ["feature.chat_message_rendering", "page.chat_workspace", "term.shared_browser_library"]

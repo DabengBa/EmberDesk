@@ -878,6 +878,52 @@ describe('settings React route flag', () => {
         expect(scriptSource).not.toContain("window.location.assign('/settings");
     });
 
+    test('settings overlay exposes workspace drawer openers for legacy-owned panels', () => {
+        const routeSource = fs.readFileSync(path.join(repoRoot, 'app', 'components', 'settings', 'SettingsSurface.tsx'), 'utf8');
+        const indexHtml = fs.readFileSync(path.join(repoRoot, 'public', 'index.html'), 'utf8');
+        const portSource = fs.readFileSync(path.join(repoRoot, 'app', 'compat', 'runtime-port.ts'), 'utf8');
+        const providerSource = fs.readFileSync(path.join(repoRoot, 'public', 'scripts', 'react-runtime-provider.js'), 'utf8');
+        const scriptSource = fs.readFileSync(path.join(repoRoot, 'public', 'script.js'), 'utf8');
+
+        // Legacy-owned surfaces (preset CRUD, Prompt Manager, connection-profile
+        // capture/apply, persona management, user-settings extras) still render
+        // inside workspace drawers that the shell no longer opens. Overlay links
+        // reach them through the openWorkspaceDrawer runtime command, which
+        // resolves to openWorkspaceChildSlotHostImmediate on the drawer host id.
+        for (const target of [
+            'left-nav-panel',
+            'rm_api_block',
+            'AdvancedFormatting',
+            'user-settings-block',
+            'PersonaManagement',
+        ]) {
+            expect(routeSource).toContain(`'${target}'`);
+            expect(indexHtml).toContain(`id="${target}" class="drawer-content`);
+        }
+
+        expect(routeSource).toContain('runtime?.commands.openWorkspaceDrawer(link.target)');
+        expect(routeSource).toContain('onRequestClose?.()');
+        expect(routeSource).toContain('isOverlay');
+        expect(portSource).toContain('openWorkspaceDrawer(hostId: string): Promise<void>');
+        expect(providerSource).toContain("'openWorkspaceDrawer'");
+        expect(scriptSource).toContain('openWorkspaceDrawer:');
+        expect(scriptSource).toContain('openWorkspaceChildSlotHostImmediate');
+
+        // The command is allowlisted so it cannot become generic "open any
+        // element by id" DOM access for React callers.
+        expect(scriptSource).toContain('WORKSPACE_DRAWER_COMMAND_HOST_IDS');
+        expect(scriptSource).toContain('rejected unknown drawer host id');
+        for (const target of [
+            'left-nav-panel',
+            'rm_api_block',
+            'AdvancedFormatting',
+            'user-settings-block',
+            'PersonaManagement',
+        ]) {
+            expect(scriptSource).toContain(`'${target}'`);
+        }
+    });
+
     test('redirects unauthenticated /settings requests to /login', async () => {
         const { app } = await createSettingsRouteApp({ isLoggedIn: false });
 

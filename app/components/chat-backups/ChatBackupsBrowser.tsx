@@ -186,7 +186,18 @@ export function ChatBackupsBrowser({ buttonContainer, listContainer, commands, r
                 listContainer,
             )}
             {viewing !== null && createPortal(
-                <div {...stylex.props(styles.dialogOverlay)} onClick={() => setViewing(null)}>
+                <div
+                    {...stylex.props(styles.dialogOverlay)}
+                    onClick={event => { event.stopPropagation(); setViewing(null); }}
+                    onMouseDown={event => event.stopPropagation()}
+                    onMouseUp={event => event.stopPropagation()}
+                    onKeyDown={event => {
+                        if (event.key === 'Escape') {
+                            event.stopPropagation();
+                            setViewing(null);
+                        }
+                    }}
+                >
                     <div
                         role="dialog"
                         aria-modal="true"
@@ -207,7 +218,18 @@ export function ChatBackupsBrowser({ buttonContainer, listContainer, commands, r
                 document.body,
             )}
             {confirmingDelete !== null && createPortal(
-                <div {...stylex.props(styles.dialogOverlay)} onClick={() => setConfirmingDelete(null)}>
+                <div
+                    {...stylex.props(styles.dialogOverlay)}
+                    onClick={event => { event.stopPropagation(); setConfirmingDelete(null); }}
+                    onMouseDown={event => event.stopPropagation()}
+                    onMouseUp={event => event.stopPropagation()}
+                    onKeyDown={event => {
+                        if (event.key === 'Escape') {
+                            event.stopPropagation();
+                            setConfirmingDelete(null);
+                        }
+                    }}
+                >
                     <div
                         role="alertdialog"
                         aria-modal="true"

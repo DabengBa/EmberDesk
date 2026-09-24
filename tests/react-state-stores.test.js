@@ -42,6 +42,8 @@ describe('React state stores', () => {
             'extensionsHost',
             'settings',
             'characterAuthoring',
+            'aiConfigDrawer',
+            'regex',
         ]);
     });
 
@@ -67,6 +69,16 @@ describe('React state stores', () => {
         expect(getWorkspaceShellChildSlot('extensionsHost')).toEqual(expect.objectContaining({
             accessibleName: 'Extensions',
             contentOwner: 'extensions-host',
+        }));
+        expect(getWorkspaceShellChildSlot('aiConfigDrawer')).toEqual(expect.objectContaining({
+            accessibleName: 'AI Response Configuration',
+            contentOwner: 'ai-config',
+            mountTarget: '#left-nav-panel',
+        }));
+        expect(getWorkspaceShellChildSlot('regex')).toEqual(expect.objectContaining({
+            accessibleName: 'Regex',
+            contentOwner: 'regex',
+            mountTarget: '#RegexPanel',
         }));
         expect(() => getWorkspaceShellChildSlot('unknownSlot')).toThrow('Unsupported workspace shell child slot');
     });

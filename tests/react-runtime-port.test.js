@@ -24,6 +24,7 @@ describe('React runtime provider', () => {
                 retryMessage: () => undefined,
                 loadEarlier: () => undefined,
                 saveSettings: () => undefined,
+                openWorkspaceDrawer: () => undefined,
             },
         });
 
@@ -46,6 +47,7 @@ describe('React runtime provider', () => {
             retryMessage: jest.fn(),
             loadEarlier: jest.fn(),
             saveSettings: jest.fn(),
+            openWorkspaceDrawer: jest.fn(),
         };
         const eventSource = {
             on: jest.fn(),
@@ -86,12 +88,14 @@ describe('React runtime provider', () => {
         await runtime.commands.retryMessage('4');
         await runtime.commands.loadEarlier('2');
         await runtime.commands.saveSettings({ oai_settings: { temperature: 0.7 } });
+        runtime.commands.openWorkspaceDrawer('left-nav-panel');
 
         expect(commands.submitMessage).toHaveBeenCalledWith('hello');
         expect(commands.stopGeneration).toHaveBeenCalledTimes(1);
         expect(commands.retryMessage).toHaveBeenCalledWith('4');
         expect(commands.loadEarlier).toHaveBeenCalledWith('2');
         expect(commands.saveSettings).toHaveBeenCalledWith({ oai_settings: { temperature: 0.7 } });
+        expect(commands.openWorkspaceDrawer).toHaveBeenCalledWith('left-nav-panel');
     });
 
     test('subscribes only to named lifecycle events and detaches them', () => {
@@ -116,6 +120,7 @@ describe('React runtime provider', () => {
                 retryMessage: () => undefined,
                 loadEarlier: () => undefined,
                 saveSettings: () => undefined,
+                openWorkspaceDrawer: () => undefined,
             },
         });
         const listener = jest.fn();
@@ -165,6 +170,7 @@ describe('React runtime provider', () => {
                 retryMessage: () => undefined,
                 loadEarlier: () => undefined,
                 saveSettings: () => undefined,
+                openWorkspaceDrawer: () => undefined,
             },
         });
         const initialSnapshot = runtime.getSnapshot();

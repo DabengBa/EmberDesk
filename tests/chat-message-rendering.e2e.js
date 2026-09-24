@@ -89,14 +89,12 @@ function getUnexpectedConsoleErrors(errors) {
         // production installs; seeded fixtures surface a 404, not an app error.
         const isSeedTransparentBackground404 = error.text.includes('Failed to load resource')
             && url.includes('/backgrounds/__transparent.png');
-        // Third-party extensions fetch external CDNs (e.g. jsdelivr for Vue);
-        // offline sandboxes surface those as resource/fetch failures, not app errors.
+        // External CDN requests (e.g. fonts) surface as resource/fetch failures
+        // in offline sandboxes, not as app errors.
         const isExternalResourceFailure = error.text.includes('Failed to load resource')
             && url !== '' && !url.startsWith(localOrigin);
-        const isThirdPartyExtensionNetworkFailure = url.includes('/scripts/extensions/third-party/')
-            && (error.text.includes('Failed to fetch') || error.text === 'Event');
 
-        return !isSeedPersonaThumbnail404 && !isSeedTransparentBackground404 && !isExternalResourceFailure && !isThirdPartyExtensionNetworkFailure;
+        return !isSeedPersonaThumbnail404 && !isSeedTransparentBackground404 && !isExternalResourceFailure;
     });
 }
 

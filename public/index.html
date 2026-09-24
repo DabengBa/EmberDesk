@@ -38,6 +38,8 @@
     <link rel="stylesheet" type="text/css" href="css/toggle-dependent.css">
     <link rel="stylesheet" type="text/css" href="css/world-info.css">
     <link rel="stylesheet" type="text/css" href="css/extensions-panel.css">
+    <link rel="stylesheet" type="text/css" href="scripts/extensions/regex/style.css">
+    <link rel="stylesheet" type="text/css" href="scripts/extensions/connection-manager/style.css">
     <link rel="stylesheet" type="text/css" href="css/select2-overrides.css">
     <link rel="stylesheet" type="text/css" href="css/mobile-styles.css">
     <link rel="stylesheet" type="text/css" href="css/macros.css">
@@ -84,9 +86,13 @@
                     <div id="extensions_settings" class="flex1 wide50p">
                     </div>
                     <div id="extensions_settings2" class="flex1 wide50p">
-                        <div id="regex_container" class="extension_container"></div>
                     </div>
                 </div>
+            </div>
+        </div>
+        <div id="regex-panel-button" class="drawer">
+            <div id="RegexPanel" class="drawer-content closedDrawer">
+                <!-- React-owned surface: mounted by the regex feature init via mountRegexSettings(). -->
             </div>
         </div>
         <div id="persona-management-button" class="drawer">

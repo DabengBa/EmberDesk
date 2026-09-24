@@ -560,6 +560,8 @@ class PromptManager {
                 const sourceName = this.promptSources[promptId];
                 entrySource.textContent = sourceName;
             }
+
+            this.#clearDirtyFormMarks();
         };
 
         // Append prompt to selected character
@@ -757,6 +759,59 @@ class PromptManager {
         document.getElementById(this.configuration.prefix + 'prompt_manager_popup_close_button').addEventListener('click', closeAndClearPopup);
         closeAndClearPopup();
 
+        const closeFooterMenu = () => {
+            document.querySelectorAll('.pm-overflow-menu.show').forEach(el => el.classList.remove('show'));
+            document.getElementById('prompt-manager-more')?.setAttribute('aria-expanded', 'false');
+        };
+
+        // Footer overflow ⋮ menu (document-delegated: the footer is re-rendered).
+        $(document).on('click', '#prompt-manager-more', (event) => {
+            event.stopPropagation();
+            const trigger = document.getElementById('prompt-manager-more');
+            const menu = trigger?.closest('.pm-footer-menu')?.querySelector('.pm-overflow-menu');
+            if (!menu) return;
+            const willOpen = !menu.classList.contains('show');
+            closeFooterMenu();
+            menu.classList.toggle('show', willOpen);
+            trigger.setAttribute('aria-expanded', String(willOpen));
+        });
+        $(document).on('click', '.pm-overflow-item', () => closeFooterMenu());
+        $(document).on('mousedown', (event) => {
+            if (!(event.target instanceof Element) || event.target.closest('.pm-footer-menu')) return;
+            closeFooterMenu();
+        });
+
+        // Popup keyboard: Esc closes menu then popup; Ctrl/Cmd+S saves.
+        $(document).on('keydown', (event) => {
+            const menuOpen = document.querySelector('.pm-overflow-menu.show');
+            if (event.key === 'Escape' && menuOpen) {
+                closeFooterMenu();
+                return;
+            }
+
+            const popup = document.getElementById(this.configuration.prefix + 'prompt_manager_popup');
+            if (!popup?.classList.contains('openDrawer')) return;
+
+            if (event.key === 'Escape') {
+                closeAndClearPopup();
+            } else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
+                event.preventDefault();
+                document.getElementById(this.configuration.prefix + 'prompt_manager_popup_entry_form_save')?.click();
+            }
+        });
+
+        // Field-as-editor: dirty marking + live char count on the prompt field.
+        const popupSelector = `#${this.configuration.prefix}prompt_manager_popup`;
+        $(document).on('input change', `${popupSelector} .completion_prompt_manager_popup_entry_form :input`, function () {
+            this.closest('.completion_prompt_manager_popup_entry_form_control')?.classList.add('pm-field-dirty');
+        });
+        $(document).on('input', `${popupSelector} #${this.configuration.prefix}prompt_manager_popup_entry_form_prompt`, (event) => {
+            const meta = document.getElementById(this.configuration.prefix + 'prompt_manager_popup_entry_form_prompt_meta');
+            if (meta && event.target instanceof HTMLTextAreaElement) {
+                meta.textContent = `${event.target.value.length} chars`;
+            }
+        });
+
         // Re-render prompt manager on openai preset change
         eventSource.on(event_types.OAI_PRESET_CHANGED_AFTER, () => {
             this.sanitizeServiceSettings();
@@ -787,6 +842,20 @@ class PromptManager {
     #setScrollPosition(scrollPosition) {
         if (scrollPosition === undefined || scrollPosition === null) return;
         document.getElementById(this.configuration.prefix + 'prompt_manager')?.closest('.scrollableInner')?.scrollTo(0, scrollPosition);
+    }
+
+    /**
+     * Clears dirty-field marks in the prompt edit form and refreshes the
+     * prompt field's char-count meta to match the loaded value.
+     */
+    #clearDirtyFormMarks() {
+        const popup = document.getElementById(this.configuration.prefix + 'prompt_manager_popup');
+        popup?.querySelectorAll('.pm-field-dirty').forEach(el => el.classList.remove('pm-field-dirty'));
+        const meta = document.getElementById(this.configuration.prefix + 'prompt_manager_popup_entry_form_prompt_meta');
+        const promptField = document.getElementById(this.configuration.prefix + 'prompt_manager_popup_entry_form_prompt');
+        if (meta && promptField instanceof HTMLTextAreaElement) {
+            meta.textContent = `${promptField.value.length} chars`;
+        }
     }
 
     /**
@@ -1265,6 +1334,8 @@ class PromptManager {
 
         const savePromptButton = document.getElementById(this.configuration.prefix + 'prompt_manager_popup_entry_form_save');
         savePromptButton.dataset.pmPrompt = prompt.identifier;
+
+        this.#clearDirtyFormMarks();
     }
 
     handleInjectionPositionChange(event) {
@@ -1358,6 +1429,8 @@ class PromptManager {
         entrySource.textContent = '';
 
         roleField.disabled = false;
+
+        this.#clearDirtyFormMarks();
     }
 
     clearInspectForm() {
@@ -1470,7 +1543,11 @@ class PromptManager {
 
         const totalActiveTokens = this.tokenUsage;
 
-        const headerHtml = await renderTemplateAsync('promptManagerHeader', { error: this.error, errorDiv, prefix: this.configuration.prefix, totalActiveTokens });
+        const orderEntries = this.activeCharacter ? this.getPromptOrderForCharacter(this.activeCharacter) : [];
+        const enabledCount = orderEntries.filter(entry => entry.enabled).length;
+        const promptCounts = orderEntries.length ? `${enabledCount}/${orderEntries.length}` : '';
+
+        const headerHtml = await renderTemplateAsync('promptManagerHeader', { error: this.error, errorDiv, prefix: this.configuration.prefix, totalActiveTokens, promptCounts });
         promptManagerDiv.insertAdjacentHTML('beforeend', headerHtml);
 
         this.listElement = promptManagerDiv.querySelector(`#${this.configuration.prefix}prompt_manager_list`);
@@ -1496,9 +1573,9 @@ class PromptManager {
             rangeBlockDiv.querySelector('#prompt-manager-reset-character').addEventListener('click', this.handleCharacterReset);
 
             const footerDiv = rangeBlockDiv.querySelector(`.${this.configuration.prefix}prompt_manager_footer`);
-            footerDiv.querySelector('.menu_button:nth-child(2)').addEventListener('click', this.handleAppendPrompt);
-            footerDiv.querySelector('.caution').addEventListener('click', this.handleDeletePrompt);
-            footerDiv.querySelector('.menu_button:last-child').addEventListener('click', this.handleNewPrompt);
+            footerDiv.querySelector('#prompt-manager-append-prompt').addEventListener('click', this.handleAppendPrompt);
+            footerDiv.querySelector('#prompt-manager-delete-prompt').addEventListener('click', this.handleDeletePrompt);
+            footerDiv.querySelector('#prompt-manager-new-prompt').addEventListener('click', this.handleNewPrompt);
             footerDiv.querySelector('select').selectedIndex = selectedPromptIndex;
 
             // Add prompt export dialogue and options

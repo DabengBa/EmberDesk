@@ -209,10 +209,6 @@ router.post('/install', async (request, response) => {
             fs.mkdirSync(context.userExtensionsDir);
         }
 
-        if (!fs.existsSync(context.globalExtensionsDir)) {
-            fs.mkdirSync(context.globalExtensionsDir);
-        }
-
         return await withExtensionOperationLock(
             getExtensionOperationLockPaths({
                 extensionName: decision.extensionName,
@@ -712,10 +708,6 @@ router.get('/discover', function (request, response) {
         fs.mkdirSync(path.join(request.user.directories.extensions));
     }
 
-    if (!fs.existsSync(PUBLIC_DIRECTORIES.globalExtensions)) {
-        fs.mkdirSync(PUBLIC_DIRECTORIES.globalExtensions);
-    }
-
     // Get all folders in system extensions folder, excluding third-party
     const builtInExtensions = fs
         .readdirSync(PUBLIC_DIRECTORIES.extensions)
@@ -732,12 +724,14 @@ router.get('/discover', function (request, response) {
 
     // Get all folders in global extensions folder
     // In case of a conflict, the extension will be loaded from the user folder
-    const globalExtensions = fs
-        .readdirSync(PUBLIC_DIRECTORIES.globalExtensions)
-        .filter(f => fs.statSync(path.join(PUBLIC_DIRECTORIES.globalExtensions, f)).isDirectory())
-        .filter(f => !f.startsWith('.'))
-        .map(f => ({ type: 'global', name: `third-party/${f}` }))
-        .filter(f => !userExtensions.some(e => e.name === f.name));
+    const globalExtensions = fs.existsSync(PUBLIC_DIRECTORIES.globalExtensions)
+        ? fs
+            .readdirSync(PUBLIC_DIRECTORIES.globalExtensions)
+            .filter(f => fs.statSync(path.join(PUBLIC_DIRECTORIES.globalExtensions, f)).isDirectory())
+            .filter(f => !f.startsWith('.'))
+            .map(f => ({ type: 'global', name: `third-party/${f}` }))
+            .filter(f => !userExtensions.some(e => e.name === f.name))
+        : [];
 
     // Combine all extensions
     const allExtensions = [...builtInExtensions, ...userExtensions, ...globalExtensions];

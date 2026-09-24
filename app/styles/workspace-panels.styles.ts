@@ -167,44 +167,6 @@ export const workspaceShellStyles = stylex.create({
             whiteSpace: 'nowrap',
         },
     },
-    pinButton: {
-        display: 'inline-flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        width: '24px',
-        height: '24px',
-        marginLeft: '-7px',
-        borderWidth: '1px',
-        borderStyle: 'solid',
-        borderColor: {
-            default: 'transparent',
-            ':hover': 'color-mix(in srgb, var(--SmartThemeQuoteColor) 52%, transparent)',
-            ':focus-visible': 'color-mix(in srgb, var(--SmartThemeQuoteColor) 52%, transparent)',
-        },
-        borderRadius: '999px',
-        color: {
-            default: 'var(--SmartThemeBodyColor)',
-            ':hover': 'var(--SmartThemeQuoteColor)',
-            ':focus-visible': 'var(--SmartThemeQuoteColor)',
-        },
-        backgroundColor: {
-            default: 'transparent',
-            ':hover': 'color-mix(in srgb, var(--SmartThemeQuoteColor) 14%, transparent)',
-            ':focus-visible': 'color-mix(in srgb, var(--SmartThemeQuoteColor) 14%, transparent)',
-        },
-        cursor: 'pointer',
-        outline: {
-            ':focus-visible': '1px solid var(--interactable-outline-color)',
-        },
-        outlineOffset: {
-            ':focus-visible': '2px',
-        },
-    },
-    pinButtonPressed: {
-        borderColor: 'color-mix(in srgb, var(--SmartThemeQuoteColor) 52%, transparent)',
-        color: 'var(--SmartThemeQuoteColor)',
-        backgroundColor: 'color-mix(in srgb, var(--SmartThemeQuoteColor) 14%, transparent)',
-    },
 });
 
 export const authoringStyles = stylex.create({

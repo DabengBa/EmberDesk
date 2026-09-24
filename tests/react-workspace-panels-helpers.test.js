@@ -180,7 +180,6 @@ describe('React workspace panels bridge helpers', () => {
 
         expect(workspacePanelSource).toContain('recordWorkspacePanelDockIntent,');
         expect(workspacePanelSource).toContain('recordWorkspacePanelDockClose,');
-        expect(workspacePanelSource).toContain('recordWorkspacePanelDockPin,');
         expect(workspacePanelSource).toContain('recordWorkspacePanelDockResult,');
         expect(workspacePanelSource).toContain('getWorkspacePanelDockSnapshot,');
         expect(workspacePanelSource).toContain('subscribeWorkspacePanelDock,');
@@ -200,13 +199,17 @@ describe('React workspace panels bridge helpers', () => {
         expect(workspacePanelSource).toContain('status: normalizeWorkspacePanelDockStatus(result),');
         expect(workspacePanelSource).toContain('data-workspace-shell-panel-entry={entry.panelKind}');
         expect(workspacePanelSource).toContain('data-workspace-shell-panel-active={isPanelEntryActive ? \'true\' : \'false\'}');
-        expect(workspacePanelSource).toContain("const isPinned = Boolean(entry.panelKind && dockSnapshot.pinnedPanelKinds.includes(entry.panelKind));");
+        // No top-bar pin control: pinning lives on the drawer's own lock toggle
+        // (.pinnedOpen on the drawer host), which the shell reads for its guard.
+        expect(workspacePanelSource).not.toContain('data-workspace-shell-panel-pin');
+        expect(workspacePanelSource).not.toContain('workspaceShellStyles.pinButton');
+        expect(workspacePanelSource).toContain("?.closest('.drawer-content')?.classList.contains('pinnedOpen')");
         expect(workspacePanelSource).toContain("? `${isPanelEntryActive && dockSnapshot.activePanelStatus !== 'error' && !isPinned ? 'Close' : 'Open'} ${entry.label}`");
         expect(workspacePanelSource).toContain('aria-label={panelActionLabel}');
         expect(workspacePanelSource).toContain('title={panelActionLabel}');
         expect(workspacePanelSource).toContain('aria-pressed={entry.panelKind ? isPanelEntryActive : undefined}');
         expect(workspacePanelSource).toContain('event.stopPropagation();');
-        expect(workspacePanelSource).toContain("if (entry.panelKind && isPanelEntryActive && dockSnapshot.activePanelStatus !== 'error' && !isPinned) {");
+        expect(workspacePanelSource).toContain("if (entry.panelKind && isPanelEntryActive && dockSnapshot.activePanelStatus !== 'error' && !isDrawerPinned()) {");
         expect(workspacePanelSource).toContain("void closePanel(entry);");
         expect(workspacePanelSource).toContain('void dispatchCommand(entry);');
         expect(scriptSource).toContain('function getWorkspaceShellCommands()');
@@ -243,6 +246,11 @@ describe('React workspace panels bridge helpers', () => {
         expect(workspacePanelSource).toContain("panelKind: 'worldInfo'");
         expect(scriptSource).toContain('openExtensions: openWorkspaceShellExtensions,');
         expect(workspacePanelSource).toContain("panelKind: 'extensionsHost'");
+        expect(scriptSource).toContain('async function openWorkspaceShellAiConfigDrawer()');
+        expect(scriptSource).toContain("await openWorkspaceChildSlotHost('left-nav-panel');");
+        expect(scriptSource).toContain('openAIConfigDrawer: openWorkspaceShellAiConfigDrawer,');
+        expect(workspacePanelSource).toContain("panelKind: 'aiConfigDrawer'");
+        expect(workspacePanelSource).toContain("slotKey: 'aiConfigDrawer'");
         expect(scriptSource).toContain('return createWorkspaceShellPanelResult(');
         expect(scriptSource).not.toContain('getWorkspaceShellPanelDockState');
         expect(scriptSource).not.toContain('locked: dockState.locked,');
@@ -283,7 +291,6 @@ describe('React workspace panels bridge helpers', () => {
         expect(workspacePanelSource).toContain('getWorkspaceShellChildSlot(entry.slotKey)');
         expect(workspacePanelSource).toContain('commands?.activateWorkspaceShellSlot(entry.slotKey)');
         expect(workspacePanelSource).toContain('commands?.deactivateWorkspaceShellSlot(entry.slotKey)');
-        expect(workspacePanelSource).toContain('recordWorkspacePanelDockPin(entry.panelKind, !isPinned);');
         expect(workspacePanelSource).not.toContain('pinned: Boolean(asWorkspacePanelDockDispatchResult(result).pinned)');
         expect(scriptSource).toContain('async function activateWorkspaceShellSlot(slotKey)');
         expect(scriptSource).toContain('function deactivateWorkspaceShellSlot(slotKey)');
@@ -419,19 +426,25 @@ describe('React workspace panels bridge helpers', () => {
         expect(workspacePanelSource).toContain("status={authoringCommandMutation.isError ? 'error' : 'success'}");
         expect(workspacePanelSource).toContain("const isCreateMode = (bridgeState.mode ?? 'create') === 'create';");
         expect(workspacePanelSource).toContain('const isActionPending = authoringCommandMutation.isPending;');
-        expect(workspacePanelSource).toContain('void commands?.cancelAuthoring?.(kind);');
+        expect(workspacePanelSource).toContain('submitDraftRef.current()');
+        expect(workspacePanelSource).toContain("bridgeState.mode !== 'edit'");
+        expect(workspacePanelSource).toContain('rebase(submittedDraft)');
         expect(workspacePanelSource).not.toContain("id: 'retry-authoring-save'");
         expect(workspacePanelSource).not.toContain('actions={shellActions}');
         expect(workspacePanelSource).not.toContain('recoveryActions={[]}');
-        expect(workspacePanelSource).toContain('authoringStyles.secondaryAction');
+        expect(workspacePanelSource).toContain('authoringStyles.footerStatus');
         expect(workspacePanelSource).toContain('authoringStyles.toolAction');
-        expect(workspacePanelSource).toContain('authoringStyles.dangerZone');
+        expect(workspacePanelSource).toContain('authoringStyles.dangerButton');
         expect(workspacePanelSource).toContain('{...stylex.props(authoringStyles.panelWarning)} role="status"');
         expect(workspacePanelSource).toContain('disabled={isActionPending}');
         expect(workspacePanelSource).toContain('{!isCreateMode ? (');
         expect(scriptSource).toContain('function getCharacterAuthoringReactCommands()');
         expect(scriptSource).not.toContain('function getGroupAuthoringReactCommands()');
         expect(scriptSource).toContain('saveCharacterAuthoring: payload => saveCharacterAuthoringFromPayload(payload)');
+        // Edit-mode autosave must not remount (resets session/draft baseline);
+        // create-mode saves still remount to flip the panel into edit mode.
+        expect(scriptSource).toContain("commandName === 'saveCharacterAuthoring'");
+        expect(scriptSource).toContain("commandResult?.mode !== 'edit'");
         expect(scriptSource).not.toContain('saveGroupAuthoring: payload => applyGroupAuthoringSaveModel(payload)');
         expect(scriptSource).toContain('function applyCharacterAuthoringSaveModel');
         const characterLifecycleSource = read('public/scripts/character-lifecycle-service.js');
@@ -451,6 +464,15 @@ describe('React workspace panels bridge helpers', () => {
         expect(scriptSource).toContain('function queueReactCharacterAuthoringRemount()');
         expect(characterLifecycleSource).toContain('queueReactCharacterAuthoringRemount();');
         expect(scriptSource).toContain('hideLegacyCharacterAuthoringEditor(true);');
+        // Legacy popups must never reveal #form_create while React owns the panel.
+        expect(scriptSource).not.toContain('hideLegacyCharacterAuthoringEditor(false)');
+        // Popup/management actions mutate canonical stores: sync popup edits back
+        // into the draft, and persist before actions that read the saved card.
+        expect(scriptSource).toContain('syncAuthoringDraftFromPopups(payload?.draft)');
+        expect(scriptSource).toContain('persistAuthoringDraftBeforeLegacyAction');
+        // The legacy advanced-definition popup is a second visible editor for
+        // React-owned fields; keep it out of the projected action menu.
+        expect(scriptSource).toContain("option.id !== 'character_action_advanced'");
         expect(scriptSource).toContain('data-react-authoring-build-error');
         expect(scriptSource).not.toContain('hideLegacyCharacterAuthoringEditor(Boolean(result?.mounted));');
         expect(scriptSource.match(/openWorkspaceShellCharacterAuthoring\(\) \{[\s\S]*?\n\}/)?.[0] ?? '').toContain("select_selected_character(this_chid, { switchMenu: false });");
@@ -458,7 +480,7 @@ describe('React workspace panels bridge helpers', () => {
         expect(scriptSource).not.toContain("import { unmountReactWorkspacePanel } from './scripts/workspace-panels-react-bridge.js';");
         expect(scriptSource).not.toContain('MAIN_CHAT_MESSAGE_LIST_REACT_HOST_ID');
         expect(workspacePanelSource).not.toContain("action: 'openGroupChats'");
-        expect(workspacePanelSource).toContain('void commands?.cancelAuthoring?.(kind);');
+        expect(workspacePanelSource).toContain('submitDraftRef.current()');
     });
 
     test('keeps authoring action hierarchy visible through the StyleX module', () => {
@@ -466,12 +488,12 @@ describe('React workspace panels bridge helpers', () => {
         const panelSource = read('app/workspace-panels.tsx');
 
         expect(styleSource).toContain('saveButton');
-        expect(styleSource).toContain('secondaryAction');
+        expect(styleSource).toContain('footerStatus');
         expect(styleSource).toContain('toolAction');
         expect(styleSource).toContain("filter: 'grayscale(0.35)'");
         expect(styleSource).toContain("position: 'sticky'");
         expect(panelSource).toContain('authoringStyles.saveButton');
-        expect(panelSource).toContain('authoringStyles.secondaryAction');
+        expect(panelSource).toContain('authoringStyles.footerStatus');
         expect(panelSource).toContain('authoringStyles.toolAction');
         expect(styleSource).not.toContain('memberRow');
         expect(styleSource).not.toContain('candidates');
@@ -891,9 +913,10 @@ describe('React workspace panels bridge helpers', () => {
         expect(scriptSource).toContain('function getExtensionsHostReactBridgeState(');
         expect(scriptSource).toContain('extensionsSettingsPresent: Boolean(extensionsSettings)');
         expect(scriptSource).toContain('extensionsSettings2Present: Boolean(extensionsSettings2)');
-        expect(scriptSource).toContain('regexContainerPresent: Boolean(regexContainer)');
-        expect(scriptSource).toContain('extensionsMenuButtonPresent: Boolean(extensionsMenuButton)');
-        expect(scriptSource).toContain('extensionsMenuPresent: Boolean(extensionsMenu)');
+        // Regex lives in its own workspace panel; the wand menu is retired.
+        expect(scriptSource).not.toContain('regexContainerPresent');
+        expect(scriptSource).not.toContain('extensionsMenuButtonPresent');
+        expect(scriptSource).not.toContain('extensionsMenuPresent');
         // Legacy extensions controls are retired; the React host is the sole owner
         // and reads Extras state from extension_settings/service state.
         expect(scriptSource).toContain('extrasApiControlsPresent: true');
@@ -922,9 +945,9 @@ describe('React workspace panels bridge helpers', () => {
         expect(workspacePanelSource).toContain('kind="extensionsHost"');
         expect(workspacePanelSource).toContain("{ id: 'extensions-settings', label: 'Settings column', ready: bridgeState.extensionsSettingsPresent }");
         expect(workspacePanelSource).toContain("{ id: 'extensions-settings2', label: 'Settings column 2', ready: bridgeState.extensionsSettings2Present }");
-        expect(workspacePanelSource).toContain("{ id: 'regex-container', label: 'Regex container', ready: bridgeState.regexContainerPresent }");
-        expect(workspacePanelSource).toContain("{ id: 'extensions-menu-button', label: 'Wand button', ready: bridgeState.extensionsMenuButtonPresent }");
-        expect(workspacePanelSource).toContain("{ id: 'extensions-menu', label: 'Wand menu', ready: bridgeState.extensionsMenuPresent }");
+        expect(workspacePanelSource).not.toContain('regex-container');
+        expect(workspacePanelSource).not.toContain('extensions-menu-button');
+        expect(workspacePanelSource).not.toContain('extensions-menu');
         expect(workspacePanelSource).toContain("{ id: 'extras-api', label: 'Extras API', ready: bridgeState.extrasApiControlsPresent }");
         expect(workspacePanelSource).not.toContain('data-extensions-host-bridge-state={stateId}');
         expect(workspacePanelSource).toContain('legacyBoundary="react-owned-slots-lifecycle"');
@@ -956,10 +979,10 @@ describe('React workspace panels bridge helpers', () => {
         expect(extensionsSource).toContain('notifyExtensionOperationFailure(error, t`Extension delete failed`)');
         expect(extensionsSource).toContain('notifyExtensionOperationFailure(error, t`Extension move failed`)');
         expect(extensionsSource).toContain('notifyExtensionOperationFailure(error, t`Extension branch switch failed`)');
-        // Protected mount points remain established.
+        // Protected mount points remain established; the wand menu is retired.
         expect(extensionsSource).toContain("$('#extensions_settings')");
-        expect(extensionsSource).toContain("$('#extensionsMenuButton')");
-        expect(extensionsSource).toContain("$('#extensionsMenu')");
+        expect(extensionsSource).not.toContain("$('#extensionsMenuButton')");
+        expect(extensionsSource).not.toContain("$('#extensionsMenu')");
     });
 
 test('renders an Extensions Host workflow through React-owned controls and explicit extensions helpers', () => {
@@ -1046,7 +1069,10 @@ test('renders an Extensions Host workflow through React-owned controls and expli
         expect(workspacePanelSource).toContain('function MainChatMessageListWorkspacePanel');
         expect(workspacePanelSource).not.toContain('LegacyMainChatMessageListWorkspacePanel');
         expect(workspacePanelSource).not.toContain('MainChatMessageListRestoreController');
-        expect(workspacePanelSource).not.toContain('createPortal');
+        const mainChatPanelSource = workspacePanelSource.match(
+            /function MainChatMessageListWorkspacePanel[\s\S]*?\n\}/,
+        )?.[0] ?? '';
+        expect(mainChatPanelSource).not.toContain('createPortal');
         expect(workspacePanelSource).toContain('<MainChatMessageRow');
     });
 

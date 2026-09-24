@@ -128,9 +128,6 @@ function sanitizeWorkspacePanelState(kind, state) {
         return cloneJsonSafe({
             extensionsSettingsPresent: state.extensionsSettingsPresent,
             extensionsSettings2Present: state.extensionsSettings2Present,
-            regexContainerPresent: state.regexContainerPresent,
-            extensionsMenuButtonPresent: state.extensionsMenuButtonPresent,
-            extensionsMenuPresent: state.extensionsMenuPresent,
             extrasApiControlsPresent: state.extrasApiControlsPresent,
             manageButtonPresent: state.manageButtonPresent,
             installButtonPresent: state.installButtonPresent,

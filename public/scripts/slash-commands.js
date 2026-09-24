@@ -3375,6 +3375,29 @@ export function initDefaultSlashCommands() {
         },
     }));
 
+    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
+        name: 'qr-arg',
+        callback: ({ _scope }, [key, value]) => {
+            _scope.setMacro(`arg::${key}`, value, key.includes('*'));
+            return '';
+        },
+        unnamedArgumentList: [
+            SlashCommandArgument.fromProps({
+                description: 'argument name',
+                typeList: ARGUMENT_TYPE.STRING,
+                isRequired: true,
+            }),
+            SlashCommandArgument.fromProps({
+                description: 'argument value',
+                typeList: [ARGUMENT_TYPE.STRING, ARGUMENT_TYPE.NUMBER, ARGUMENT_TYPE.BOOLEAN, ARGUMENT_TYPE.LIST, ARGUMENT_TYPE.DICTIONARY],
+                isRequired: true,
+            }),
+        ],
+        splitUnnamedArgument: true,
+        splitUnnamedArgumentCount: 2,
+        helpString: 'Set a fallback value for a slash-command argument macro.',
+    }));
+
     registerVariableCommands();
     registerActionLoaderSlashCommands();
 }

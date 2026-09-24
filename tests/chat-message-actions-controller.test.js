@@ -59,11 +59,12 @@ class FakeElement {
         }, { once: true });
     }
 
-    dispatchClick(target) {
+    dispatchClick(target, extra = {}) {
         const event = {
             target,
             preventDefault: jest.fn(),
             stopPropagation: jest.fn(),
+            ...extra,
         };
 
         for (const listener of this.listeners.get('click') ?? []) {
@@ -356,6 +357,26 @@ describe('chat message actions controller', () => {
         root.dispatchClick(outside);
 
         expect(onStateChanged).toHaveBeenCalledTimes(2);
+    });
+
+    test('ignores synthetic outside clicks so focus-keeping triggers cannot close menus', async () => {
+        const { createChatMessageActionsController } = await importFreshControllerModule();
+        const { root, hint, buttons, outside } = createMessageActionsRoot();
+        const onReactOwnedOutsideClick = jest.fn();
+        const transitionElement = jest.fn((element, options) => options.complete?.call(element));
+
+        const controller = createChatMessageActionsController(root, {
+            onReactOwnedOutsideClick,
+            transitionElement,
+        });
+        controller.init();
+
+        root.dispatchClick(hint);
+        root.dispatchClick(outside, { isTrusted: false });
+
+        expect(onReactOwnedOutsideClick).not.toHaveBeenCalled();
+        expect(buttons.classList.contains('visible')).toBe(true);
+        expect(buttons.style.display).toBe('flex');
     });
 
     test('leaves visible extra actions open when expanded actions are enabled', async () => {

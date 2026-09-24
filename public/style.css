@@ -1094,7 +1094,6 @@ body .panelControlBar {
 }
 
 #options,
-#extensionsMenu,
 .popup .popper-modal {
     display: flex;
     z-index: 29999;
@@ -1107,7 +1106,6 @@ body .panelControlBar {
     padding: 2px;
 }
 
-#extensionsMenu,
 .options-content {
     padding: 2px;
 }
@@ -1122,15 +1120,13 @@ body .panelControlBar {
     font-size: calc(var(--mainFontSize) * 1.1);
 }
 
-#extensionsMenu,
 #options .options-content {
     max-height: calc(100vh - calc(2 * var(--bottomFormBlockSize) + 10px));
     max-height: calc(100dvh - calc(2 * var(--bottomFormBlockSize) + 10px));
     overflow-y: auto;
 }
 
-.options-content i,
-.extensionsMenuExtensionButton {
+.options-content i {
     height: 20px;
     width: 20px;
     font-size: calc(var(--mainFontSize) * 1.1);
@@ -1147,14 +1143,7 @@ body .panelControlBar {
     background: none;
 }
 
-#extensionsMenuButton {
-    order: 4;
-    padding: 1px;
-}
-
     .options-content :is(a, button),
-    #extensionsMenu>.extension_container>div,
-    #extensionsMenu>div:not(.extension_container),
     .list-group>div,
     .list-group .list-group-item {
     color: var(--SmartThemeBodyColor);
@@ -1175,15 +1164,11 @@ body .panelControlBar {
     text-align: left;
 }
 
-#extensionsMenu>.extension_container>div,
-#extensionsMenu>div:not(.extension_container),
 .options-content :is(a, button),
 .list-group-item {
     opacity: 0.5;
 }
 
-#extensionsMenu>.extension_container>div:hover,
-#extensionsMenu>div:not(.extension_container):hover,
 .options-content :is(a, button):hover,
 .list-group-item:hover {
     opacity: 1;

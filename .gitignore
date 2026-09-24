@@ -16,7 +16,6 @@ public/NovelAI Settings/
 public/TextGen Settings/
 public/instruct/
 public/context/
-public/scripts/extensions/third-party/
 public/stats.json
 /uploads/
 *.jsonl
@@ -52,7 +51,6 @@ public/error/
 /plugins/
 /data
 /default/scaffold
-public/scripts/extensions/third-party
 /certs
 .aider*
 .env

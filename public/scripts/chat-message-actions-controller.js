@@ -248,6 +248,10 @@ export function createChatMessageActionsController(root = globalThis.document, d
         }
 
         if (!target?.closest?.(EXTRA_ACTIONS_CLICK_AREA_SELECTOR)) {
+            if (event.isTrusted === false) {
+                return;
+            }
+
             dependencies.onReactOwnedOutsideClick();
             closeExtraActions();
         }

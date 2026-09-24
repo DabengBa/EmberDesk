@@ -85,7 +85,11 @@ export async function getUserDirectoriesList() {
  * @returns {Promise<import('./user-directories.js').UserDirectoryList[]>} - The list of user directories
  */
 export async function ensurePublicDirectoriesExist() {
-    for (const dir of Object.values(PUBLIC_DIRECTORIES)) {
+    for (const [key, dir] of Object.entries(PUBLIC_DIRECTORIES)) {
+        // Third-party extensions are retired; never auto-recreate their directory.
+        if (key === 'globalExtensions') {
+            continue;
+        }
         if (!fs.existsSync(dir)) {
             fs.mkdirSync(dir, { recursive: true });
         }

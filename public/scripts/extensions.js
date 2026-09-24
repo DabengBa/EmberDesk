@@ -1,9 +1,7 @@
-import { Popper } from '../lib.js';
-
 import { eventSource } from './events.js';
 import { event_types } from './events.js';
 import { getRequestHeaders } from './request-context.js';
-import { saveSettings, saveSettingsDebounced, animation_duration, CLIENT_VERSION } from '../script.js';
+import { saveSettings, saveSettingsDebounced, CLIENT_VERSION } from '../script.js';
 import { POPUP_RESULT, POPUP_TYPE, Popup } from './popup.js';
 import { renderTemplate, renderTemplateAsync } from './templates.js';
 import { delay, deleteValueByPath, equalsIgnoreCaseAndAccents, escapeHtml, sanitizeSelector, setValueByPath } from './utils.js';
@@ -124,8 +122,6 @@ export function setDeferredExtensionLoader(loader = null, { state } = {}) {
  *   owner?: string,
  *   parentForSettings?: ParentNode|null,
  *   parentForSettings2?: ParentNode|null,
- *   parentForRegex?: ParentNode|null,
- *   parentForMenu?: ParentNode|null,
  * }} [options]
  */
 export function ensureExtensionCompatibilitySlots(options = {}) {
@@ -137,8 +133,6 @@ export function ensureExtensionCompatibilitySlots(options = {}) {
         owner: options.owner || 'react-extensions-host',
         parentForSettings: options.parentForSettings ?? document.getElementById('rm_extensions_block')?.querySelector?.(':scope > .extensions_block') ?? document.getElementById('rm_extensions_block'),
         parentForSettings2: options.parentForSettings2 ?? options.parentForSettings ?? document.getElementById('rm_extensions_block')?.querySelector?.(':scope > .extensions_block') ?? document.getElementById('rm_extensions_block'),
-        parentForRegex: options.parentForRegex ?? options.parentForSettings2 ?? null,
-        parentForMenu: options.parentForMenu ?? document.body,
     });
 }
 
@@ -293,22 +287,6 @@ export const extension_settings = {
         global: {},
     },
 };
-
-function showHideExtensionsMenu() {
-    // Get the number of menu items that are not hidden
-    const hasMenuItems = $('#extensionsMenu').children().filter((_, child) => $(child).css('display') !== 'none').length > 0;
-
-    // We have menu items, so we can stop checking
-    if (hasMenuItems) {
-        clearInterval(menuInterval);
-    }
-
-    // Show or hide the menu button
-    $('#extensionsMenuButton').toggle(hasMenuItems);
-}
-
-// Periodically check for new extensions
-const menuInterval = setInterval(showHideExtensionsMenu, 1000);
 
 /**
  * Gets the type of an extension based on its external ID.
@@ -742,43 +720,6 @@ function setAutoConnectEnabled(value) {
 
     saveSettingsDebounced();
     syncExtensionsHostReactState();
-}
-
-async function addExtensionsButtonAndMenu() {
-    const buttonHTML = await renderTemplateAsync('wandButton');
-    const extensionsMenuHTML = await renderTemplateAsync('wandMenu');
-
-    $(document.body).append(extensionsMenuHTML);
-    $('#leftSendForm').append(buttonHTML);
-
-    const button = $('#extensionsMenuButton');
-    const dropdown = $('#extensionsMenu');
-    let isDropdownVisible = false;
-
-    let popper = Popper.createPopper(button.get(0), dropdown.get(0), {
-        placement: 'top-start',
-    });
-
-    $(button).on('click', function () {
-        if (isDropdownVisible) {
-            dropdown.fadeOut(animation_duration);
-            isDropdownVisible = false;
-        } else {
-            dropdown.fadeIn(animation_duration);
-            isDropdownVisible = true;
-        }
-        popper.update();
-    });
-
-    $('html').on('click', function (e) {
-        if (!isDropdownVisible) return;
-        const clickTarget = $(e.target);
-        const noCloseTargets = ['#sd_gen', '#extensionsMenuButton', '#roll_dice'];
-        if (!noCloseTargets.some(id => clickTarget.closest(id).length > 0)) {
-            dropdown.fadeOut(animation_duration);
-            isDropdownVisible = false;
-        }
-    });
 }
 
 function setNotifyUpdatesEnabled(value) {
@@ -2595,9 +2536,51 @@ export function getAuthorFromUrl(url) {
     return domainGetAuthorFromUrl(url);
 }
 
+/**
+ * Tracks per-feature initialization so a deferred-task retry only re-runs the
+ * features that failed. Successful inits are cached: re-running them would
+ * double-mount DOM and re-bind event handlers.
+ * @type {Map<string, Promise<void>>}
+ */
+const coreFeatureInitPromises = new Map();
+
+/**
+ * @param {string} key
+ * @param {() => Promise<void>} loader
+ * @returns {Promise<void>}
+ */
+function initCoreFeatureOnce(key, loader) {
+    let promise = coreFeatureInitPromises.get(key);
+    if (!promise) {
+        promise = loader().catch((error) => {
+            coreFeatureInitPromises.delete(key);
+            throw error;
+        });
+        coreFeatureInitPromises.set(key, promise);
+    }
+    return promise;
+}
+
+/**
+ * Initializes the built-in features that were previously activated through the
+ * extension manifest pipeline. These are fixed product features, not
+ * user-installable extensions; third-party extension loading has been removed.
+ * @returns {Promise<void>}
+ */
+export async function initCoreFeatureExtensions() {
+    await Promise.all([
+        initCoreFeatureOnce('connection-manager', async () => {
+            const { init } = await import('./extensions/connection-manager/index.js');
+            await init();
+        }),
+        initCoreFeatureOnce('regex', async () => {
+            const { init } = await import('./extensions/regex/index.js');
+            await init();
+        }),
+    ]);
+}
+
 export async function initExtensions() {
-    await addExtensionsButtonAndMenu();
-    $('#extensionsMenuButton').css('display', 'flex');
     renderDeferredExtensionPlaceholder();
 
     $(document).on('click', '.extensions_info .extension_block .toggle_disable', onDisableExtensionClick);

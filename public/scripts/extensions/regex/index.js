@@ -709,7 +709,7 @@ async function loadRegexScripts() {
         });
         scriptHtml.find('.regex_bulk_checkbox').on('change', function () {
             setMoveButtonsVisibility();
-            const checkboxes = $('#regex_container .regex_bulk_checkbox');
+            const checkboxes = $('#RegexPanel .regex_bulk_checkbox');
             const allAreChecked = checkboxes.length === checkboxes.filter(':checked').length;
             setToggleAllIcon(allAreChecked);
         });
@@ -1580,7 +1580,7 @@ function getScriptType(script) {
 
 function getSelectedScripts() {
     const scripts = getRegexScripts();
-    const selector = '#regex_container .regex-script-label:has(.regex_bulk_checkbox:checked)';
+    const selector = '#RegexPanel .regex-script-label:has(.regex_bulk_checkbox:checked)';
     const selectedIds = Array.from(document.querySelectorAll(selector))
         .map(e => e.getAttribute('id'))
         .filter(id => id);
@@ -1722,15 +1722,16 @@ export async function init() {
         extension_settings.regex_presets = [];
     }
 
-    // Manually disable the extension since static imports auto-import the JS file
-    if (extension_settings.disabledExtensions.includes('regex')) {
+    migrateSettings();
+
+    const regexPanel = document.getElementById('RegexPanel');
+    if (!regexPanel) {
+        console.warn('Regex workspace panel host not found');
         return;
     }
 
-    migrateSettings();
-
     const regexSettingsHost = $(document.createElement('div'));
-    $('#regex_container').append(regexSettingsHost);
+    $(regexPanel).append(regexSettingsHost);
     const workspacePanels = await loadWorkspacePanelsModule();
     workspacePanels.mountRegexSettings(regexSettingsHost.get(0));
     $('#open_regex_editor').on('click', function () {
@@ -1769,7 +1770,7 @@ export async function init() {
     });
 
     $('#bulk_select_all_toggle').on('click', async function () {
-        const checkboxes = $('#regex_container .regex_bulk_checkbox');
+        const checkboxes = $('#RegexPanel .regex_bulk_checkbox');
         if (checkboxes.length === 0) {
             return;
         }

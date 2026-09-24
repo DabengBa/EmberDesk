@@ -155,7 +155,8 @@ describe('group chat retirement', () => {
         const forbidMediaSource = fs.readFileSync(path.join(repoRoot, 'public', 'scripts', 'templates', 'forbidMedia.html'), 'utf8');
         const hiddenBlockSource = fs.readFileSync(path.join(repoRoot, 'public', 'scripts', 'templates', 'hiddenBlock.html'), 'utf8');
         const stableDiffusionExtensionPath = path.join(repoRoot, 'public', 'scripts', 'extensions', 'stable-diffusion');
-        const quickReplySlashSource = fs.readFileSync(path.join(repoRoot, 'public', 'scripts', 'extensions', 'quick-reply', 'index.js'), 'utf8');
+        const quickReplyExtensionIndexPath = path.join(repoRoot, 'public', 'scripts', 'extensions', 'quick-reply', 'index.js');
+        const slashCommandsSource = fs.readFileSync(path.join(repoRoot, 'public', 'scripts', 'slash-commands.js'), 'utf8');
         const defaultSettingsSource = fs.readFileSync(path.join(repoRoot, 'default', 'content', 'settings.json'), 'utf8');
         const defaultOpenAiPresetSource = fs.readFileSync(path.join(repoRoot, 'default', 'content', 'presets', 'openai', 'Default.json'), 'utf8');
         const presetManagerSource = fs.readFileSync(path.join(repoRoot, 'public', 'scripts', 'preset-manager.js'), 'utf8');
@@ -186,7 +187,8 @@ describe('group chat retirement', () => {
         expect(defaultSettingsSource).not.toContain('new_group_chat_prompt');
         expect(defaultOpenAiPresetSource).not.toContain('new_group_chat_prompt');
         expect(defaultOpenAiPresetSource).not.toContain('group_nudge_prompt');
-        expect(quickReplySlashSource).not.toMatch(/new SlashCommandNamedArgument\('group'/);
+        expect(fs.existsSync(quickReplyExtensionIndexPath)).toBe(false);
+        expect(slashCommandsSource).not.toMatch(/new SlashCommandNamedArgument\('group'/);
         expect(presetManagerSource).not.toContain('character/group');
 
     });
@@ -401,8 +403,7 @@ describe('group chat retirement', () => {
         ]) {
             expect(fs.existsSync(path.join(repoRoot, file))).toBe(false);
         }
-        const quickReplyStubSource = fs.readFileSync(path.join(repoRoot, 'public', 'scripts', 'extensions', 'quick-reply', 'index.js'), 'utf8');
-        expect(quickReplyStubSource).not.toMatch(/GROUP_MEMBER_DRAFTED|executeOnGroupMemberDraft|group member draft|args\.group/i);
+        expect(fs.existsSync(path.join(repoRoot, 'public', 'scripts', 'extensions', 'quick-reply', 'index.js'))).toBe(false);
 
         const enumSource = fs.readFileSync(path.join(repoRoot, 'public', 'scripts', 'slash-commands', 'SlashCommandCommonEnumsProvider.js'), 'utf8');
         expect(enumSource).not.toMatch(/group-chats|groupMembers|enumIcons\.group/i);

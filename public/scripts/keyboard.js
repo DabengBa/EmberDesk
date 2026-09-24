@@ -25,11 +25,6 @@ const interactableSelectors = [
     '.select_chat_block .renameChatButton', // The button to rename a past chat in the past chats menu
 ];
 
-if (CSS.supports('selector(:has(*))')) {
-    // Option entries in the extension menu popup that are coming from extensions
-    interactableSelectors.push('#extensionsMenu div:has(.extensionsMenuExtensionButton)');
-}
-
 export const INTERACTABLE_CONTROL_CLASS = 'interactable';
 export const CUSTOM_INTERACTABLE_CONTROL_CLASS = 'custom_interactable';
 

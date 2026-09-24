@@ -433,7 +433,6 @@ describe('extension compatibility slots', () => {
             parentForMenu: doc.body,
         });
         expect(first.find(s => s.id === 'extensions_settings')?.ready).toBe(true);
-        expect(first.find(s => s.id === 'regex_container')?.ready).toBe(true);
         expect(first.every(s => s.ready)).toBe(true);
         const gen1 = manager.getGeneration();
 
@@ -459,9 +458,9 @@ describe('extension compatibility slots', () => {
         const source = read('public/scripts/extension-compatibility-slots.js');
         expect(source).toContain('extensions_settings');
         expect(source).toContain('extensions_settings2');
-        expect(source).toContain('regex_container');
-        expect(source).toContain('extensionsMenuButton');
-        expect(source).toContain('extensionsMenu');
+        expect(source).not.toContain('regex_container');
+        expect(source).not.toContain('extensionsMenuButton');
+        expect(source).not.toContain('extensionsMenu');
         expect(source).not.toMatch(/innerHTML\s*=/);
     });
 

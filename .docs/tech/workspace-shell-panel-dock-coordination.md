@@ -15,8 +15,8 @@ The global Backgrounds entry, Background Library gallery, Expressions/waifu cont
 - The shell always mounts from the shared workspace-panel bundle. There is no shell flag, inline workspace feature payload, strict mode, or same-version legacy fallback.
 - A missing shell bundle is a release-gate failure. Operational rollback deploys the prior application version.
 - `app/workspace-panels.tsx` owns the registry, visible chrome, navigation state, local recovery UI, and shell-facing data attributes.
-- `app/stores/workspace-panel-store.js` owns in-memory active/open/pin snapshots and the declared child-slot contract. State is limited to the current browser page session.
-- `public/script.js` owns feature-local slot activation helpers. It may project React decisions to a documented legacy host, but does not read drawer classes to determine active, pinned, or closed shell state.
+- `app/stores/workspace-panel-store.js` owns in-memory active/open snapshots and the declared child-slot contract. State is limited to the current browser page session. Drawer pin state is owned by each drawer's legacy lock toggle (`.pinnedOpen`, persisted via accountStorage); the chrome renders no pin control and reads that class only to guard active-entry clicks on locked drawers.
+- `public/script.js` owns feature-local slot activation helpers. It may project React decisions to a documented legacy host, but does not read drawer classes to determine active or closed shell state.
 - `app/compat/global-compatibility-bridge.js` exposes a sanitized `workspacePanelDock` snapshot for internal diagnostics only. It does not replace `globalThis.SillyTavern`, `eventSource`, `event_types`, or `@sillytavern/*`.
 - Protected extension mounts, message and character selectors, slash commands, and regex behavior remain compatibility contracts. The shell cannot remove them as incidental cleanup.
 

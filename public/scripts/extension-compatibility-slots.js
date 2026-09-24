@@ -3,7 +3,7 @@
  * Owns slot identity and single-mount lifecycle; does not re-render extension content.
  */
 
-/** @typedef {'extensions_settings'|'extensions_settings2'|'regex_container'|'extensionsMenuButton'|'extensionsMenu'} ExtensionCompatibilitySlotId */
+/** @typedef {'extensions_settings'|'extensions_settings2'} ExtensionCompatibilitySlotId */
 
 /**
  * @type {ReadonlyArray<{
@@ -29,33 +29,6 @@ export const EXTENSION_COMPATIBILITY_SLOTS = Object.freeze([
         reactSlotId: 'extensions-settings2',
         tagName: 'div',
         className: 'flex1 wide50p',
-    },
-    {
-        id: 'regex_container',
-        label: 'Regex container',
-        reactSlotId: 'regex-container',
-        tagName: 'div',
-        className: 'extension_container',
-    },
-    {
-        id: 'extensionsMenuButton',
-        label: 'Wand button',
-        reactSlotId: 'extensions-menu-button',
-        tagName: 'div',
-        className: 'list-group-item flex-container flexGap5 interactable',
-        attributes: {
-            tabindex: '0',
-            role: 'listitem',
-            'data-i18n': '[title]Extensions',
-            title: 'Extensions',
-        },
-    },
-    {
-        id: 'extensionsMenu',
-        label: 'Wand menu',
-        reactSlotId: 'extensions-menu',
-        tagName: 'div',
-        className: 'list-group',
     },
 ]);
 
@@ -120,8 +93,6 @@ export function createExtensionCompatibilitySlotManager(doc = globalThis.documen
      *   owner?: string,
      *   parentForSettings?: ParentNode|null,
      *   parentForSettings2?: ParentNode|null,
-     *   parentForRegex?: ParentNode|null,
-     *   parentForMenu?: ParentNode|null,
      * }} [options]
      */
     function ensureSlots(options = {}) {
@@ -139,10 +110,6 @@ export function createExtensionCompatibilitySlotManager(doc = globalThis.documen
                 parent = options.parentForSettings ?? null;
             } else if (descriptor.id === 'extensions_settings2') {
                 parent = options.parentForSettings2 ?? null;
-            } else if (descriptor.id === 'regex_container') {
-                parent = options.parentForRegex ?? options.parentForSettings2 ?? null;
-            } else if (descriptor.id === 'extensionsMenuButton' || descriptor.id === 'extensionsMenu') {
-                parent = options.parentForMenu ?? null;
             }
 
             const existing = findSlot(descriptor.id);

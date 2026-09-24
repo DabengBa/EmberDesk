@@ -460,7 +460,7 @@ describe('character list structure', () => {
         expect(scriptSource).toContain('function setTemporaryChatStatus');
         expect(scriptSource).toContain('$(\'#temporary_chat_status\')');
         expect(newAssistantChatSource).toContain('setTemporaryChatStatus(true)');
-        expect(newAssistantChatSource).toContain('setTemporaryChatStatus(false)');
+        expect(newAssistantChatSource).not.toContain('openPermanentAssistantChat');
         expect(deleteCharacterSource).toContain('temporaryChatAcknowledged = false');
         expect(deleteCharacterSource).toContain('if (inTempChat && !temporaryChatAcknowledged)');
         expect(scriptSource).toContain('buildTemporaryChatDeleteWarningHtml');

@@ -353,7 +353,7 @@ export function MainChatMessageRow({
             data-main-chat-message-row-state={message.state}
             data-reasoning-state={message.reasoningState ?? undefined}
             data-media-display={message.mediaDisplay ?? undefined}
-            onClick={event => {
+            onClickCapture={event => {
                 if (message.actionsExpanded
                     && !(event.target as HTMLElement | null)?.closest?.('.extraMesButtons, .extraMesButtonsHint')) {
                     void commands?.toggleMessageActionsShell({ kind: 'close' });

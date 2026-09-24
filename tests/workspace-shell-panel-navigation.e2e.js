@@ -77,27 +77,30 @@ test.describe('workspace shell panel navigation', () => {
         await expect(page.locator('#right-nav-panel')).toHaveClass(/openDrawer/);
     });
 
-    test('React shell owns a slot pin through refocus, unpin, and close', async ({ page }) => {
+    test('renders no shell pin control; a drawer-locked panel survives an active-entry click', async ({ page }) => {
         await testSetup.awaitST({ page });
 
         const panelButton = page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: 'Character Library' });
         await panelButton.click({ timeout: 10_000 });
         await expect(panelButton).toHaveAttribute('aria-pressed', 'true', { timeout: 10_000 });
 
-        const pinButton = page.locator('[data-workspace-shell-panel-pin="characterLibrary"]');
-        await expect(pinButton).toBeVisible({ timeout: 10_000 });
-        await pinButton.click();
-        await expect(pinButton).toHaveAttribute('aria-pressed', 'true');
+        // The top bar no longer renders a pin toggle; pinning is owned by the
+        // drawer's own lock checkbox (writes .pinnedOpen on the drawer host).
+        await expect(page.locator('[data-workspace-shell-panel-pin]')).toHaveCount(0);
 
+        await page.evaluate(() => {
+            const pinCheckbox = document.getElementById('rm_button_panel_pin');
+            if (!(pinCheckbox instanceof HTMLInputElement)) {
+                throw new Error('right-nav drawer pin checkbox missing');
+            }
+            pinCheckbox.click();
+        });
+        await expect(page.locator('#right-nav-panel')).toHaveClass(/pinnedOpen/);
+
+        // Clicking the active entry must not close a locked drawer.
         await panelButton.click();
-        await expect(panelButton).toHaveAttribute('aria-pressed', 'true');
         await expect(page.locator('#right-nav-panel')).toHaveClass(/openDrawer/);
-
-        await pinButton.click();
-        await expect(pinButton).toHaveAttribute('aria-pressed', 'false');
-        await panelButton.click();
-        await expect(panelButton).toHaveAttribute('aria-pressed', 'false', { timeout: 10_000 });
-        await expect(page.locator('#right-nav-panel')).toHaveClass(/closedDrawer/);
+        await expect(page.locator('#right-nav-panel')).toHaveClass(/pinnedOpen/);
     });
 
     test('isolates a missing child-slot failure without adding shell status copy', async ({ page }) => {
@@ -166,7 +169,7 @@ test.describe('workspace shell panel navigation', () => {
         await expect.poll(async () => page.locator('#world_editor_select option').count(), { timeout: 10_000 }).toBeGreaterThan(1);
 
         await openShellPanel(page, 'Extensions');
-        await expect.poll(async () => page.locator('#extensions_settings, #extensions_settings2, #regex_container, #extensionsMenu').count(), { timeout: 10_000 }).toBe(4);
+        await expect.poll(async () => page.locator('#extensions_settings, #extensions_settings2').count(), { timeout: 10_000 }).toBe(2);
 
         await openShellPanel(page, 'Character Library');
         await expect.poll(async () => page.evaluate(() => ({
@@ -174,6 +177,19 @@ test.describe('workspace shell panel navigation', () => {
         })), { timeout: 10_000 }).toEqual({
             active: 'Character Library',
         });
+    });
+
+    test('opens the standalone Regex workspace drawer with the mounted feature panel', async ({ page }) => {
+        await testSetup.awaitST({ page });
+
+        await openShellPanel(page, 'Regex');
+        await expect(page.locator('#RegexPanel.openDrawer')).toBeVisible({ timeout: 10_000 });
+        await expect(page.locator('#RegexPanel .regex_settings')).toHaveCount(1);
+        await expect(page.locator('#regex_container')).toHaveCount(0);
+
+        // The settings inline drawer starts collapsed; expanding reveals the feature controls.
+        await page.locator('#RegexPanel .regex_settings .inline-drawer-toggle').click();
+        await expect(page.locator('#RegexPanel .regex_settings #open_regex_editor')).toBeVisible({ timeout: 10_000 });
     });
     test('opens Settings shell entry as in-workspace overlay instead of leaving chat', async ({ page }) => {
         test.setTimeout(120_000);
@@ -264,6 +280,48 @@ test.describe('workspace shell panel navigation', () => {
         await aiConfigButton.focus();
         await page.keyboard.press('Tab');
         await expect(page.locator('[data-settings-overlay="true"] :focus')).toBeVisible();
+    });
+
+    test('opens legacy-owned workspace drawers from the settings overlay links', async ({ page }) => {
+        await testSetup.awaitST({ page });
+
+        const aiConfigButton = page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: 'AI Config' });
+        await aiConfigButton.click({ timeout: 10_000 });
+        await expect(page.locator('[data-settings-overlay="true"]')).toBeVisible({ timeout: 15_000 });
+        await expect(page.locator('[data-settings-overlay="true"] .settings-tab[data-active="true"]')).toHaveText(/Providers/i);
+
+        const aiConfigLink = page.locator('[data-settings-overlay="true"] button').filter({ hasText: 'Open AI Response Configuration' });
+        const apiConnectionsLink = page.locator('[data-settings-overlay="true"] button').filter({ hasText: 'Open API Connections' });
+        await expect(aiConfigLink).toBeVisible();
+        await expect(apiConnectionsLink).toBeVisible();
+
+        await aiConfigLink.click();
+        await expect(page.locator('[data-settings-overlay="true"]')).toHaveCount(0, { timeout: 10_000 });
+        await expect(page.locator('#left-nav-panel.openDrawer')).toBeVisible({ timeout: 10_000 });
+        await expect(page.locator('#left-nav-panel #completion_prompt_manager_list')).toBeVisible({ timeout: 10_000 });
+
+        const formattingButton = page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: 'Formatting' });
+        await formattingButton.click({ timeout: 10_000 });
+        await expect(page.locator('[data-settings-overlay="true"] .settings-tab[data-active="true"]')).toHaveText(/Advanced/i);
+        await page.locator('[data-settings-overlay="true"] button').filter({ hasText: 'Open Advanced Formatting' }).click();
+        await expect(page.locator('[data-settings-overlay="true"]')).toHaveCount(0, { timeout: 10_000 });
+        await expect(page.locator('#AdvancedFormatting.openDrawer')).toBeVisible({ timeout: 10_000 });
+    });
+
+    test('opens the AI Response Configuration drawer from the Presets shell entry', async ({ page }) => {
+        await testSetup.awaitST({ page });
+
+        const presetsButton = page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: 'Presets' });
+        await expect(presetsButton).toBeVisible({ timeout: 15_000 });
+        await presetsButton.click({ timeout: 10_000 });
+
+        await expect(page.locator('#left-nav-panel.openDrawer')).toBeVisible({ timeout: 10_000 });
+        await expect(page.locator('#left-nav-panel #settings_preset_openai')).toBeVisible({ timeout: 10_000 });
+        await expect(page.locator('#left-nav-panel #completion_prompt_manager_list')).toBeVisible({ timeout: 10_000 });
+
+        // Second click toggles the drawer closed, matching the other slot entries.
+        await presetsButton.click({ timeout: 10_000 });
+        await expect(page.locator('#left-nav-panel.openDrawer')).toHaveCount(0, { timeout: 10_000 });
     });
 
     test('keeps a reopened Settings overlay mounted when a deferred close is superseded', async ({ page }) => {

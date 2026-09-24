@@ -257,6 +257,7 @@ describe('world info card rendering', () => {
             'WI-SP-button',
             'user-settings-button',
             'extensions-settings-button',
+            'regex-panel-button',
             'persona-management-button',
             'rightNavHolder',
         ]);

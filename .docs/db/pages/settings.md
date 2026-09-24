@@ -26,6 +26,7 @@ Authenticated users complete supported settings work on `/settings` instead of w
 6. **Advanced tab**: system-prompt/reasoning templates, tokenizer, custom stopping strings, Start Reply With, auto-swipe/continue, streaming, and STscript controls previously edited under Advanced Formatting. Retired instruct-mode and context-template fields are absent; stored `power_user.instruct`/`power_user.context` keys remain inert historical data.
 7. **Diagnostics sidebar**: optional ownership ledger and payload summary for debugging.
 8. **Save bar**: submits a compatibility payload derived from the loaded document while rewriting only the React-bound fields the user changed; save stays disabled until the form is dirty.
+9. **Workspace panels section (overlay only)**: the in-workspace overlay ends the Providers, User Interface, and Advanced tabs with links that close the overlay and open the matching legacy drawer for surfaces outside React coverage — AI Response Configuration (preset actions, sampling sliders, Prompt Manager), API Connections (connect and connection-profile capture/apply), User Settings, Persona Management, and Advanced Formatting (system-prompt/reasoning preset actions and master import/export).
 
 ## Page-Level Semantic IDs
 

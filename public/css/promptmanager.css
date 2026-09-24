@@ -336,6 +336,143 @@
     margin: 0 2px;
 }
 
+#completion_prompt_manager .completion_prompt_manager_footer .pm-footer-menu {
+    position: relative;
+    display: inline-flex;
+}
+
+#completion_prompt_manager .pm-overflow-menu {
+    display: none;
+    position: absolute;
+    top: calc(100% + 4px);
+    right: 0;
+    min-width: 150px;
+    flex-direction: column;
+    padding: 4px;
+    gap: 2px;
+    border-radius: 8px;
+    border: 1px solid var(--SmartThemeBorderColor);
+    background-color: var(--SmartThemeBlurTintColor);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+    z-index: 10;
+}
+
+#completion_prompt_manager .pm-overflow-menu.show {
+    display: flex;
+}
+
+#completion_prompt_manager .pm-overflow-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: calc(var(--mainFontSize) * 0.95);
+    color: var(--SmartThemeBodyColor);
+    white-space: nowrap;
+}
+
+#completion_prompt_manager .pm-overflow-item:hover {
+    background: var(--white10a);
+}
+
+#completion_prompt_manager .pm-overflow-item i {
+    margin: 0;
+}
+
+#completion_prompt_manager .completion_prompt_manager_footer .pm-primary-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    height: calc(var(--mainFontSize) * 1.7);
+    padding: 0 10px;
+    border-radius: 6px;
+    border: 1px solid var(--SmartThemeQuoteColor);
+    color: var(--SmartThemeQuoteColor);
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+#completion_prompt_manager .completion_prompt_manager_footer .pm-primary-btn:hover {
+    background: var(--SmartThemeQuoteColor);
+    color: var(--SmartThemeBlurTintColor);
+}
+
+#completion_prompt_manager .completion_prompt_manager_footer .pm-primary-btn i {
+    margin: 0;
+}
+
+#completion_prompt_manager .completion_prompt_manager_footer .pm-danger-ghost {
+    border: 1px solid var(--fullred);
+    border-radius: 6px;
+    color: var(--fullred);
+}
+
+#completion_prompt_manager .completion_prompt_manager_footer .pm-danger-ghost:hover {
+    background: var(--fullred);
+    color: var(--white);
+}
+
+#completion_prompt_manager .completion_prompt_manager_header .pm-header-meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+#completion_prompt_manager .completion_prompt_manager_header .pm-count-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.8em;
+    opacity: 0.6;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: var(--white20a);
+    font-variant-numeric: tabular-nums;
+}
+
+#completion_prompt_manager .completion_prompt_manager_header .pm-count-badge i {
+    font-size: 0.85em;
+}
+
+#completion_prompt_manager #completion_prompt_manager_list li.completion_prompt_manager_prompt {
+    transition: background var(--animation-duration-2x) ease-in-out;
+}
+
+#completion_prompt_manager #completion_prompt_manager_list li.completion_prompt_manager_prompt:hover,
+#completion_prompt_manager #completion_prompt_manager_list li.completion_prompt_manager_prompt:focus-within {
+    background: var(--white10a);
+}
+
+#completion_prompt_manager_popup .completion_prompt_manager_popup_entry_form_control.pm-field-dirty :is(input.text_pole, select.text_pole, textarea.text_pole) {
+    border-left: 2px solid var(--SmartThemeQuoteColor);
+}
+
+#completion_prompt_manager_popup .completion_prompt_manager_popup_entry_form_control.pm-field-dirty > label::after {
+    content: ' ●';
+    color: var(--SmartThemeQuoteColor);
+    font-size: 0.8em;
+}
+
+#completion_prompt_manager_popup .completion_prompt_manager_popup_entry_form_control.pm-field-dirty .select2-container .select2-selection {
+    border-left: 2px solid var(--SmartThemeQuoteColor);
+}
+
+#completion_prompt_manager_popup .pm-prompt-label-row {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+}
+
+#completion_prompt_manager_popup .pm-prompt-meta {
+    font-size: 0.8em;
+    opacity: 0.5;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
 #completion_prompt_manager .completion_prompt_manager_important a {
     font-weight: 600;
 }

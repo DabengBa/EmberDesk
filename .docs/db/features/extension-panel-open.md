@@ -13,14 +13,14 @@ related: [page.chat_workspace, term.shared_browser_library]
 
 ## Purpose
 
-Let workspace users open Extensions, watch local loading and recovery, manage installed extensions, configure Extras, and keep third-party extension content reachable without blocking chat.
+Let workspace users open Extensions, watch local loading and recovery, manage installed extensions, and configure Extras without blocking chat. Third-party extension support is retired (see `.docs/tech/extension-system-retirement-plan.md`); the remaining host surface is scheduled for removal in E-cut-2.
 
 ## User-Visible Contract
 
 - Opening Extensions from [Chat Workspace](page.chat_workspace) shows a local loading, ready, or error/retry state inside the panel while the main workspace stays usable.
 - React is the sole owner of the visible Extensions Host: notify updates, Manage, Install, Extras API URL/key/autoconnect/connect, loader status, and local retry.
 - Framework-neutral extension host services own deferred discovery, dependency ordering, activation/deactivation, script/style injection, Manage/Install/update/delete/move/branch operations, and Extras connect behavior. The public `public/scripts/extensions.js` module remains a thin compatibility barrel for documented imports and helpers, not a second visible host.
-- Protected compatibility slots (`#extensions_settings`, `#extensions_settings2`, `#regex_container`, and the wand menu nodes) remain stable mount points under React lifecycle ownership. Third-party content may keep its own frameworks and DOM; React does not re-render extension interiors.
+- Protected compatibility slots (`#extensions_settings`, `#extensions_settings2`) remain stable mount points under React lifecycle ownership. The former `#regex_container` slot and the wand menu nodes are retired; Regex lives in its own workspace drawer. React does not re-render extension interiors.
 - Extension operations must keep structured failure feedback (retryable, user-action-required, forbidden, invalid) and must not automatically reset or clean a user worktree.
 - The panel should not surface internal migration verdict vocabulary. User-facing feedback stays on load, manage, install, update, Extras connection, and local retry results.
 - When the workspace-panels build is missing, the surface fails closed with a visible build error rather than restoring a dual-owner legacy host. Rollback is deployment of a prior application version.
@@ -42,7 +42,7 @@ React is the sole runtime owner of the Extensions Host surface. Product flags an
 - As a user whose deferred extension load fails, from the React host use retry; EmberDesk must re-run deferred load and present a recovered ready or explicit failure state, and failure is a dead control or a success-looking panel that still has no extension content.
 - As a user managing extensions, from the React host open Manage or Install and complete or fail an install/update/delete path; EmberDesk must preserve structured operation feedback and dirty/detached/collision protections, and failure is a silent no-op, automatic worktree reset, or protected mount loss.
 - As a user configuring Extras, from the React host set URL/key/autoconnect and connect; EmberDesk must keep secret handling and connection status scoped to the Extensions surface, and failure is a workspace-wide block or lost connection feedback.
-- As a user with supported third-party extensions such as JS-Slash-Runner or Regex Manager, from Extensions open and use representative mount, event, slash, and regex paths; EmberDesk must keep documented aliases, globals, and placements working, and failure is a missing mount, broken slash/regex path, or required reinstall only because the host was modernized.
+- Third-party extension support is retired. The former JS-Slash-Runner acceptance workflow no longer applies; built-in Connection Profiles and Regex are directly initialized product features, and Regex is reachable from its own workspace entry.
 - As a user on a release where the workspace-panels build is missing, open Extensions from the same workspace entry; EmberDesk must show a visible React build error and must not re-enable a dual-owner legacy host as a product fallback.
 
 ## Feature-Specific Evidence

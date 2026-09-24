@@ -214,7 +214,19 @@ export function DataMaidDialog({ onRequestClose }: { onRequestClose?: () => void
         .filter(category => category.items.length > 0);
 
     return createPortal(
-        <div {...stylex.props(styles.overlay)} onClick={() => void close()} data-data-maid-overlay="true">
+        <div
+            {...stylex.props(styles.overlay)}
+            onClick={event => { event.stopPropagation(); void close(); }}
+            onMouseDown={event => event.stopPropagation()}
+            onMouseUp={event => event.stopPropagation()}
+            onKeyDown={event => {
+                if (event.key === 'Escape') {
+                    event.stopPropagation();
+                    void close();
+                }
+            }}
+            data-data-maid-overlay="true"
+        >
             <div
                 role="dialog"
                 aria-modal="true"
@@ -322,7 +334,18 @@ export function DataMaidDialog({ onRequestClose }: { onRequestClose?: () => void
                 )}
             </div>
             {viewing !== null && createPortal(
-                <div {...stylex.props(styles.overlay)} onClick={() => setViewing(null)}>
+                <div
+                    {...stylex.props(styles.overlay)}
+                    onClick={event => { event.stopPropagation(); setViewing(null); }}
+                    onMouseDown={event => event.stopPropagation()}
+                    onMouseUp={event => event.stopPropagation()}
+                    onKeyDown={event => {
+                        if (event.key === 'Escape') {
+                            event.stopPropagation();
+                            setViewing(null);
+                        }
+                    }}
+                >
                     <div role="dialog" aria-modal="true" {...stylex.props(styles.viewerDialog)} onClick={event => event.stopPropagation()}>
                         {viewing.kind === 'media'
                             ? (viewing.isVideo
@@ -337,7 +360,18 @@ export function DataMaidDialog({ onRequestClose }: { onRequestClose?: () => void
                 document.body,
             )}
             {confirm !== null && createPortal(
-                <div {...stylex.props(styles.overlay)} onClick={() => setConfirm(null)}>
+                <div
+                    {...stylex.props(styles.overlay)}
+                    onClick={event => { event.stopPropagation(); setConfirm(null); }}
+                    onMouseDown={event => event.stopPropagation()}
+                    onMouseUp={event => event.stopPropagation()}
+                    onKeyDown={event => {
+                        if (event.key === 'Escape') {
+                            event.stopPropagation();
+                            setConfirm(null);
+                        }
+                    }}
+                >
                     <div role="alertdialog" aria-modal="true" {...stylex.props(styles.confirmDialog)} onClick={event => event.stopPropagation()}>
                         <p {...stylex.props(styles.dialogText)}>{t('Are you sure?')}{'\n'}{confirm.text}</p>
                         <div {...stylex.props(styles.dialogActions)}>
