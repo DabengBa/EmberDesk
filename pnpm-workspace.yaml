@@ -1,6 +1,11 @@
 allowBuilds:
   '@astryxdesign/core': false
   protobufjs: false
+overrides:
+  protobufjs: 7.6.5
+  lodash-es: 4.18.1
+  nanoid: 3.3.18
+  qs: 6.16.0
 minimumReleaseAge: 10080
 minimumReleaseAgeExclude:
   - '@stylexjs/babel-plugin@0.19.1'
