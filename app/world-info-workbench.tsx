@@ -273,6 +273,7 @@ function KeywordField({
             <div
                 {...stylex.props(s.pillBox)}
                 ref={boxRef}
+                role="presentation"
                 onClick={() => boxRef.current?.querySelector('input')?.focus()}
             >
                 {values.map((keyword, index) => (
@@ -427,7 +428,7 @@ function BookActionsMenu({
     };
 
     return (
-        <div ref={rootRef} {...stylex.props(s.menuWrap)} onKeyDown={onMenuKeyDown}>
+        <div ref={rootRef} {...stylex.props(s.menuWrap)} role="presentation" onKeyDown={onMenuKeyDown}>
             <button
                 type="button"
                 className={buttonClass(s.button, s.buttonGhost, s.buttonIcon)}
@@ -440,8 +441,10 @@ function BookActionsMenu({
             >
                 <i className={iconClass('fa-ellipsis', s.buttonIconSlot)} aria-hidden="true" />
             </button>
+            {/* Menu items close the menu themselves via run(); the container only
+                needs programmatic focus for the wrapper's Escape handling. */}
             {open ? (
-                <div {...stylex.props(s.menu)} role="menu" onClick={() => setOpen(false)}>
+                <div {...stylex.props(s.menu)} role="menu" tabIndex={-1}>
                     <button
                         type="button"
                         {...stylex.props(s.menuItem)}
@@ -576,6 +579,15 @@ function EntryEditor({
         return () => cancelAnimationFrame(frame);
     }, [entryUid, focusTitleOnOpen]);
 
+    useEffect(() => {
+        if (!contentModalOpen) {
+            return undefined;
+        }
+
+        const frame = requestAnimationFrame(() => modalContentRef.current?.focus());
+        return () => cancelAnimationFrame(frame);
+    }, [contentModalOpen]);
+
     if (!entry || !draft) {
         return (
             <div {...stylex.props(s.editor, s.editorEmpty)} data-world-info-react-editor="empty">
@@ -640,7 +652,6 @@ function EntryEditor({
                     <input
                         className="text_pole"
                         ref={titleInputRef}
-                        autoFocus={focusTitleOnOpen}
                         value={draft.comment}
                         data-world-info-react-field="comment"
                         onChange={event => setDraft({ ...draft, comment: event.target.value })}
@@ -950,6 +961,7 @@ function EntryEditor({
             <div
                 {...stylex.props(s.modalOverlay)}
                 data-world-info-react-modal="content"
+                role="presentation"
                 onMouseDown={event => {
                     event.stopPropagation();
                     if (event.target === event.currentTarget) {
@@ -960,7 +972,7 @@ function EntryEditor({
                 onClick={event => event.stopPropagation()}
                 onKeyDown={onModalKeyDown}
             >
-                <div {...stylex.props(s.modalPanel)} role="dialog" aria-modal="true" aria-label="放大编辑注入内容">
+                <dialog open {...stylex.props(s.modalPanel)} aria-modal="true" aria-label="放大编辑注入内容">
                     <header {...stylex.props(s.modalHead)}>
                         <span {...stylex.props(s.modalTitle)}>注入内容</span>
                         <div {...stylex.props(s.macroBar)}>
@@ -988,13 +1000,12 @@ function EntryEditor({
                     <textarea
                         {...stylex.props(s.modalTextarea)}
                         ref={modalContentRef}
-                        autoFocus
                         aria-label="注入内容（放大编辑）"
                         value={draft.content}
                         onChange={event => setDraft({ ...draft, content: event.target.value })}
                     />
                     <footer {...stylex.props(s.modalFoot)}>Esc 或点击遮罩关闭并保存 · Ctrl/⌘+S 保存并关闭</footer>
-                </div>
+                </dialog>
             </div>,
             document.body,
         ) : null}
@@ -1014,7 +1025,10 @@ export function WorldInfoWorkbenchPanel({
         children: ReactNode;
     }) => ReactNode;
 }) {
-    const bridgeState = (state && typeof state === 'object' ? state : {}) as WorldInfoWorkspacePanelState;
+    const bridgeState = useMemo(
+        () => (state && typeof state === 'object' ? state : {}) as WorldInfoWorkspacePanelState,
+        [state],
+    );
     const status = getWorldInfoPanelStatus(bridgeState);
     const formDefaults = useMemo(() => buildWorldInfoPanelFormDefaults(bridgeState), [bridgeState]);
     const worldInfoForm = useForm({

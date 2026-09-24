@@ -3,12 +3,13 @@ import { useForm, useStore } from '@tanstack/react-form';
 
 // Zod `z.coerce.*` fields widen the StandardSchema `input` to `unknown`, which TS 7
 // strictly rejects against the form's number-typed default values. The runtime coercion
-// is correct, so at the call site we assert the schema into the validator slot. The
+// is correct, so at the call site we bridge the schema into the validator slot. The
 // package only exposes the async `FormValidateOrFn` (not the sync `FormValidateFn` the
-// `validators` slot expects), hence the structural `unknown` bridge.
+// `validators` slot expects), hence the structural bridge.
 type SettingsFormValidator = (props: { value: typeof defaultSettingsFormValues }) => any;
+const toSettingsFormValidator = (schema: unknown): SettingsFormValidator => schema as SettingsFormValidator;
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { startTransition, useEffect, useMemo, useState } from 'react';
+import { startTransition, useCallback, useEffect, useMemo, useState } from 'react';
 import { z } from 'zod';
 import { hasFallbackProviderSettings } from '../../../public/scripts/chat-generation-auto-recovery.js';
 import {
@@ -309,22 +310,19 @@ export function SettingsSurface({
     const [providerSecretInput, setProviderSecretInput] = useState('');
     const [fallbackSecretInput, setFallbackSecretInput] = useState('');
 
-    function openSettingsTab(tabId: string) {
-        if (tabId === activeTab) {
-            return;
-        }
+    const openSettingsTab = useCallback((tabId: string) => {
         // Dense tab bodies are non-urgent; leave the shell responsive while they mount.
         startTransition(() => {
-            setActiveTab(tabId);
+            setActiveTab(current => (current === tabId ? current : tabId));
         });
-    }
+    }, []);
 
     useEffect(() => {
         if (!isOverlay) {
             return;
         }
         openSettingsTab(resolveInitialSettingsTab(initialTab));
-    }, [initialTab, isOverlay]);
+    }, [initialTab, isOverlay, openSettingsTab]);
 
     const csrfTokenQuery = useQuery({
         queryKey: ['settings', 'csrf-token'],
@@ -413,14 +411,17 @@ export function SettingsSurface({
         refetch: refetchSecrets,
     } = secretsQuery;
 
-    const parsedPayload = settingsData ? parseSettingsPayload(settingsData) : null;
+    const parsedPayload = useMemo(
+        () => (settingsData ? parseSettingsPayload(settingsData) : null),
+        [settingsData],
+    );
 
     const settingsForm = useForm({
         canSubmitWhenInvalid: true,
         defaultValues: defaultSettingsFormValues,
         validators: {
-            onChange: settingsSchema as unknown as SettingsFormValidator,
-            onSubmit: settingsSchema as unknown as SettingsFormValidator,
+            onChange: toSettingsFormValidator(settingsSchema),
+            onSubmit: toSettingsFormValidator(settingsSchema),
         },
         onSubmitInvalid: ({ value }) => {
             setSaveStatus(null);
@@ -623,7 +624,7 @@ export function SettingsSurface({
         settingsForm.reset(nextDefaults, { keepDefaultValues: true });
         setPageError('');
         setIsSettingsFormReady(true);
-    }, [hasRevisionConflict, parsedPayload?.rawSettings]);
+    }, [hasRevisionConflict, parsedPayload, settingsForm]);
 
     useEffect(() => {
         if (!saveStatus) {
@@ -650,7 +651,7 @@ export function SettingsSurface({
     const isBusy = saveMutation.isPending || secretsQuery.isPending || providerSecretMutation.isPending;
     const connectionProfileOptions = useMemo(
         () => getConnectionProfileOptions(parsedPayload?.settings ?? {}),
-        [parsedPayload?.rawSettings],
+        [parsedPayload?.settings],
     );
 
     function clearTransientState() {

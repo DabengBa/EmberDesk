@@ -72,14 +72,14 @@ function MacroItem({ macro, selected, filtered, onSelect, formatSignature }: {
     if (selected) classes.push('selected');
     if (filtered) classes.push('isFiltered');
     return (
-        <div className={classes.join(' ')} data-macro-name={macro.name} onClick={onSelect}>
+        <button type="button" className={classes.join(' ')} data-macro-name={macro.name} onClick={onSelect}>
             <code className="macro-signature">{formatSignature(macro)}</code>
             <span className="macro-desc-preview">{macro.description || '<no description>'}</span>
             {macro.aliasOf && (
                 <span className="macro-alias-indicator fa-solid fa-arrow-turn-up" title={`Alias of {{${macro.aliasOf}}}`} />
             )}
             <SourceIndicator macro={macro} />
-        </div>
+        </button>
     );
 }
 
@@ -161,6 +161,18 @@ export function MacroBrowserPanel({ macros, searchCorpus, helpers, categoryConfi
 
     return (
         <div className="macroBrowser">
+            {/* macro-item rows are native <button> elements; the .macro-item
+                class supplies layout/hover styles but not a background, so
+                reset the UA button background/border at class specificity to
+                keep .macroBrowser .macro-item:hover/.selected winning. */}
+            <style>{`
+button.macro-item {
+    background-color: transparent;
+    border: none;
+    text-align: left;
+    color: inherit;
+}
+`}</style>
             <div className="macro-toolbar">
                 <label className="macro-search-label">
                     {'Search: '}

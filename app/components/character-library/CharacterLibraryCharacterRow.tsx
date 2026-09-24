@@ -30,15 +30,13 @@ export function CharacterLibraryCharacterRow({
     ].filter(Boolean).join(' ');
 
     return (
-        <div
+        <button
+            type="button"
             className={className}
             data-chid={String(model.id)}
             {...{ chid: String(model.id) }}
             id={buildCharacterRowDomId(model.id)}
-            role={bulkMode ? 'checkbox' : 'button'}
-            tabIndex={0}
-            aria-pressed={!bulkMode ? selected : undefined}
-            aria-checked={bulkMode ? selected : undefined}
+            aria-pressed={selected}
             onClick={(event) => {
                 event.preventDefault();
                 event.stopPropagation();
@@ -107,6 +105,6 @@ export function CharacterLibraryCharacterRow({
                     ) : null}
                 </div>
             </div>
-        </div>
+        </button>
     );
 }

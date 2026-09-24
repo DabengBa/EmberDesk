@@ -36,7 +36,7 @@ function SelectChatRow({ item, avatarImg, isCurrent }: { item: SelectChatListIte
                 {...{ file_name: item.fileName }}
                 {...(isCurrent ? { highlight: 'true' } : {})}
             >
-                <div className="avatar"><img src={avatarImg} loading="lazy" decoding="async" /></div>
+                <div className="avatar"><img src={avatarImg} alt="" loading="lazy" decoding="async" /></div>
                 <div id="select_chat_name_wrapper" className="flex-container alignitemscenter justifySpaceBetween wide100p">
                     <div className="flex-container alignItemsCenter">
                         <small className="select_chat_block_filename select_chat_block_filename_item">{item.fileName}</small>
@@ -64,14 +64,14 @@ function SelectChatRow({ item, avatarImg, isCurrent }: { item: SelectChatListIte
 export function SelectChatList({ state, bridge }: { state: SelectChatListState; bridge: SelectChatListBridge }) {
     if (state.items.length === 0) {
         return (
-            <div id="select_chat_empty" className="select_chat_empty" role="status">
-                <div>{state.searchQuery ? translate('No chats match your search.') : translate('No saved chats yet.')}</div>
+            <output id="select_chat_empty" className="select_chat_empty">
+                <span>{state.searchQuery ? translate('No chats match your search.') : translate('No saved chats yet.')}</span>
                 {state.searchQuery ? (
                     <button type="button" className="menu_button" onClick={() => bridge.clearSearch?.()}>
                         {translate('Clear search')}
                     </button>
                 ) : null}
-            </div>
+            </output>
         );
     }
 

@@ -39,12 +39,11 @@ export function CharacterLibraryHiddenBlock({ hiddenCount }: { hiddenCount: numb
 
 export function CharacterLibraryBackBlock({ onBack }: { onBack?: () => void }) {
     return (
-        <div
+        <button
+            type="button"
             className="bogus_folder_select bogus_folder_select_back flex-container wide100p alignitemsflexstart"
             id="BogusFolderBack"
             {...{ tagid: 'back' }}
-            role="button"
-            tabIndex={0}
             onClick={(event) => {
                 event.preventDefault();
                 event.stopPropagation();
@@ -64,6 +63,6 @@ export function CharacterLibraryBackBlock({ onBack }: { onBack?: () => void }) {
             <div className="bogus_folder_back_placeholder flex alignitemscenter textAlignCenter">
                 Back
             </div>
-        </div>
+        </button>
     );
 }

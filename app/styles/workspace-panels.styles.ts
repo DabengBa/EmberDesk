@@ -456,6 +456,12 @@ export const authoringStyles = stylex.create({
         backgroundColor: 'color-mix(in srgb, black 55%, transparent)',
     },
     modalCard: {
+        // Neutralize UA <dialog> centering/sizing: the overlay owns placement.
+        position: 'static',
+        margin: 0,
+        maxWidth: 'none',
+        maxHeight: 'none',
+        color: 'inherit',
         display: 'flex',
         flexDirection: 'column',
         gap: '8px',

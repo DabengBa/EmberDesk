@@ -1,8 +1,7 @@
 import { Fragment, StrictMode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ChangeEvent, type ReactElement, type ReactNode, type TextareaHTMLAttributes } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { flushSync } from 'react-dom';
-import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
-import { useMutation } from '@tanstack/react-query';
+import { createPortal, flushSync } from 'react-dom';
+import { QueryClient, QueryClientProvider, useMutation, useQuery } from '@tanstack/react-query';
 import { useForm } from '@tanstack/react-form';
 import { z } from 'zod';
 
@@ -85,7 +84,6 @@ import { OnboardingActions } from './components/onboarding/OnboardingActions';
 import { ExportFormatPopup } from './components/export-format/ExportFormatPopup';
 import * as stylex from '@stylexjs/stylex';
 import type { StyleXStyles } from '@stylexjs/stylex';
-import { createPortal } from 'react-dom';
 import { authoringStyles, workspacePanelStyles, workspaceShellStyles } from './styles/workspace-panels.styles.js';
 import { Theme } from '@astryxdesign/core';
 import { emberDeskTheme } from './lib/theme-tokens';
@@ -696,7 +694,7 @@ function AuthoringWorkspacePanel({
             .catch(() => {
                 // Mutation state carries the failed status; keep the dirty draft intact for retry.
             });
-    }, [authoringCommandMutation, authoringSession, bridgeState.mode, kind]);
+    }, [authoringCommandMutation, authoringSession, bridgeState.mode]);
 
     const submitDraftRef = useRef(submitDraft);
     useEffect(() => {
@@ -814,6 +812,7 @@ function AuthoringWorkspacePanel({
         >
             <section
                 {...stylex.props(authoringStyles.panel)}
+                role="presentation"
                 data-doc-id="feature.character_library_panel term.character_card page.chat_workspace"
                 data-react-authoring-owner={kind}
                 data-react-authoring-mode={bridgeState.mode ?? 'create'}
@@ -829,9 +828,9 @@ function AuthoringWorkspacePanel({
                     <div {...stylex.props(authoringStyles.panelKicker)}>{bridgeState.mode === 'edit' ? 'Editing' : 'Creating'}</div>
                 </header>
                 {unsupportedFields.length > 0 ? (
-                    <div {...stylex.props(authoringStyles.panelWarning)} role="status">
+                    <output {...stylex.props(authoringStyles.panelWarning)}>
                         Extension data preserved on save but not editable here: {unsupportedFields.join(', ')}
-                    </div>
+                    </output>
                 ) : null}
                 <fieldset
                     {...stylex.props(authoringStyles.fields)}
@@ -948,7 +947,7 @@ function AuthoringWorkspacePanel({
                     </div>
                     <div {...stylex.props(authoringStyles.section)} data-react-authoring-section="content">
                         <h4 {...stylex.props(authoringStyles.subsectionLabel)}>Card content</h4>
-                        <label {...stylex.props(authoringStyles.field)} data-react-authoring-field="description">
+                        <label {...stylex.props(authoringStyles.field)} htmlFor="authoring-description" data-react-authoring-field="description">
                             <AuthoringFieldLabel
                                 text="Description"
                                 dirty={isFieldDirty('description')}
@@ -956,6 +955,7 @@ function AuthoringWorkspacePanel({
                                 onExpand={() => setExpandedField({ key: 'description', label: 'Description' })}
                             />
                             <AuthoringTextarea
+                                id="authoring-description"
                                 rows={4}
                                 value={descriptionValue}
                                 xstyle={authoringStyles.textareaPreview}
@@ -963,7 +963,7 @@ function AuthoringWorkspacePanel({
                                 onChange={(event) => updateDraft({ description: event.target.value })}
                             />
                         </label>
-                        <label {...stylex.props(authoringStyles.field)} data-react-authoring-field="firstMessage">
+                        <label {...stylex.props(authoringStyles.field)} htmlFor="authoring-first-message" data-react-authoring-field="firstMessage">
                             <AuthoringFieldLabel
                                 text="First message"
                                 dirty={isFieldDirty('firstMessage')}
@@ -971,6 +971,7 @@ function AuthoringWorkspacePanel({
                                 onExpand={() => setExpandedField({ key: 'firstMessage', label: 'First message' })}
                             />
                             <AuthoringTextarea
+                                id="authoring-first-message"
                                 rows={3}
                                 value={firstMessageValue}
                                 xstyle={authoringStyles.textareaPreview}
@@ -1052,18 +1053,20 @@ function AuthoringWorkspacePanel({
                             >
                                 <div {...stylex.props(authoringStyles.advancedSubgroup)}>
                                     <h4 {...stylex.props(authoringStyles.subsectionLabel)}>Prompt overrides</h4>
-                                    <label {...stylex.props(authoringStyles.field)} data-react-authoring-field="systemPrompt">
+                                    <label {...stylex.props(authoringStyles.field)} htmlFor="authoring-system-prompt" data-react-authoring-field="systemPrompt">
                                         <AuthoringFieldLabel text="System prompt" dirty={isFieldDirty('systemPrompt')} meta={stringDraft('systemPrompt').trim() ? `${stringDraft('systemPrompt').length} chars` : undefined} onExpand={() => setExpandedField({ key: 'systemPrompt', label: 'System prompt' })} />
                                         <AuthoringTextarea
+                                            id="authoring-system-prompt"
                                             rows={2}
                                             value={stringDraft('systemPrompt')}
                                             placeholder="Replaces the default main prompt. Use {{original}} to include it."
                                             onChange={(event) => updateDraft({ systemPrompt: event.target.value })}
                                         />
                                     </label>
-                                    <label {...stylex.props(authoringStyles.field)} data-react-authoring-field="postHistoryInstructions">
+                                    <label {...stylex.props(authoringStyles.field)} htmlFor="authoring-post-history-instructions" data-react-authoring-field="postHistoryInstructions">
                                         <AuthoringFieldLabel text="Post-history instructions" dirty={isFieldDirty('postHistoryInstructions')} meta={stringDraft('postHistoryInstructions').trim() ? `${stringDraft('postHistoryInstructions').length} chars` : undefined} onExpand={() => setExpandedField({ key: 'postHistoryInstructions', label: 'Post-history instructions' })} />
                                         <AuthoringTextarea
+                                            id="authoring-post-history-instructions"
                                             rows={2}
                                             value={stringDraft('postHistoryInstructions')}
                                             placeholder="Replaces the default post-history instructions. Use {{original}} to include it."
@@ -1073,25 +1076,28 @@ function AuthoringWorkspacePanel({
                                 </div>
                                 <div {...stylex.props(authoringStyles.advancedSubgroup)}>
                                     <h4 {...stylex.props(authoringStyles.subsectionLabel)}>Definition</h4>
-                                    <label {...stylex.props(authoringStyles.field)} data-react-authoring-field="personality">
+                                    <label {...stylex.props(authoringStyles.field)} htmlFor="authoring-personality" data-react-authoring-field="personality">
                                         <AuthoringFieldLabel text="Personality" dirty={isFieldDirty('personality')} meta={stringDraft('personality').trim() ? `${stringDraft('personality').length} chars` : undefined} onExpand={() => setExpandedField({ key: 'personality', label: 'Personality' })} />
                                         <AuthoringTextarea
+                                            id="authoring-personality"
                                             rows={2}
                                             value={stringDraft('personality')}
                                             onChange={(event) => updateDraft({ personality: event.target.value })}
                                         />
                                     </label>
-                                    <label {...stylex.props(authoringStyles.field)} data-react-authoring-field="scenario">
+                                    <label {...stylex.props(authoringStyles.field)} htmlFor="authoring-scenario" data-react-authoring-field="scenario">
                                         <AuthoringFieldLabel text="Scenario" dirty={isFieldDirty('scenario')} meta={stringDraft('scenario').trim() ? `${stringDraft('scenario').length} chars` : undefined} onExpand={() => setExpandedField({ key: 'scenario', label: 'Scenario' })} />
                                         <AuthoringTextarea
+                                            id="authoring-scenario"
                                             rows={2}
                                             value={stringDraft('scenario')}
                                             onChange={(event) => updateDraft({ scenario: event.target.value })}
                                         />
                                     </label>
-                                    <label {...stylex.props(authoringStyles.field)} data-react-authoring-field="exampleMessages">
+                                    <label {...stylex.props(authoringStyles.field)} htmlFor="authoring-example-messages" data-react-authoring-field="exampleMessages">
                                         <AuthoringFieldLabel text="Example messages" dirty={isFieldDirty('exampleMessages')} meta={stringDraft('exampleMessages').trim() ? `${stringDraft('exampleMessages').length} chars` : undefined} onExpand={() => setExpandedField({ key: 'exampleMessages', label: 'Example messages' })} />
                                         <AuthoringTextarea
+                                            id="authoring-example-messages"
                                             rows={3}
                                             value={stringDraft('exampleMessages')}
                                             placeholder="Example dialogue. Begin each example with <START> on a new line."
@@ -1101,9 +1107,10 @@ function AuthoringWorkspacePanel({
                                 </div>
                                 <div {...stylex.props(authoringStyles.advancedSubgroup)}>
                                     <h4 {...stylex.props(authoringStyles.subsectionLabel)}>Character&apos;s note</h4>
-                                    <label {...stylex.props(authoringStyles.field)} data-react-authoring-field="depthPrompt.prompt">
+                                    <label {...stylex.props(authoringStyles.field)} htmlFor="authoring-depth-prompt" data-react-authoring-field="depthPrompt.prompt">
                                         <AuthoringFieldLabel text="Depth prompt" dirty={isFieldDirty('depthPrompt')} meta={depthPrompt.prompt?.trim() ? `${depthPrompt.prompt.length} chars` : undefined} onExpand={() => setExpandedField({ key: 'depthPrompt.prompt', label: 'Depth prompt' })} />
                                         <AuthoringTextarea
+                                            id="authoring-depth-prompt"
                                             rows={2}
                                             value={depthPrompt.prompt ?? ''}
                                             placeholder="Inserted in-chat at the chosen depth and role."
@@ -1176,9 +1183,10 @@ function AuthoringWorkspacePanel({
                                             </label>
                                         </div>
                                     </div>
-                                    <label {...stylex.props(authoringStyles.field)} data-react-authoring-field="creatorNotes">
+                                    <label {...stylex.props(authoringStyles.field)} htmlFor="authoring-creator-notes" data-react-authoring-field="creatorNotes">
                                         <AuthoringFieldLabel text="Creator notes" dirty={isFieldDirty('creatorNotes')} meta={stringDraft('creatorNotes').trim() ? `${stringDraft('creatorNotes').length} chars` : undefined} onExpand={() => setExpandedField({ key: 'creatorNotes', label: 'Creator notes' })} />
                                         <AuthoringTextarea
+                                            id="authoring-creator-notes"
                                             rows={2}
                                             value={stringDraft('creatorNotes')}
                                             placeholder="Shown in the character list. Not sent to the model."
@@ -1265,9 +1273,7 @@ function AuthoringWorkspacePanel({
                 {expandedField ? createPortal(
                     <div
                         {...stylex.props(authoringStyles.modalOverlay)}
-                        role="dialog"
-                        aria-modal="true"
-                        aria-label={expandedField.label}
+                        role="presentation"
                         onMouseDown={(event) => {
                             event.stopPropagation();
                             if (event.target === event.currentTarget) {
@@ -1287,7 +1293,7 @@ function AuthoringWorkspacePanel({
                             }
                         }}
                     >
-                        <div {...stylex.props(authoringStyles.modalCard)}>
+                        <dialog open aria-modal="true" aria-label={expandedField.label} {...stylex.props(authoringStyles.modalCard)}>
                             <div {...stylex.props(authoringStyles.modalHead)}>
                                 <span {...stylex.props(authoringStyles.modalTitle)}>{expandedField.label}</span>
                                 <span {...stylex.props(authoringStyles.fieldMeta)}>
@@ -1312,7 +1318,7 @@ function AuthoringWorkspacePanel({
                             <p {...stylex.props(authoringStyles.modalHint)}>
                                 Esc to close{bridgeState.mode === 'edit' ? ' — changes autosave' : ''}. Ctrl+S saves now.
                             </p>
-                        </div>
+                        </dialog>
                     </div>,
                     document.body,
                 ) : null}
@@ -1638,6 +1644,9 @@ function MainChatMessageListWorkspacePanel({
                                             : ''}
                             </output>
                         ) : null}
+                        {/* Audited: detailsHtml is serialized DOM produced by first-party
+                            SlashCommand.renderDetails() builders (public/scripts/slash-commands.js),
+                            mirroring the legacy `.append()` path. Not raw user input. */}
                         {shouldShowSlashDetails ? (
                             <div dangerouslySetInnerHTML={{ __html: slash.detailsHtml }} />
                         ) : null}

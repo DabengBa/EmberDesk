@@ -22,7 +22,7 @@ export function SelectChatPopup() {
                 </div>
                 <div id="selectChatPopupHeaderText" className="TxtLrgBoldCenter">
                     <span id="ChatHistoryCharName"></span><span data-i18n="Chat History">Chat History</span>
-                    <a href="usage/core-concepts/chatfilemanagement/" className="notes-link" target="_blank"><span className="fa-solid fa-circle-question note-link-span"></span></a>
+                    <a href="usage/core-concepts/chatfilemanagement/" className="notes-link" target="_blank" rel="noreferrer" aria-label="Chat file management documentation"><span className="fa-solid fa-circle-question note-link-span" aria-hidden="true"></span></a>
                 </div>
                 <ContractButton id="newChatFromManageScreenButton" className="menu_button menu_button_icon" variant="ghost" label="New Chat" icon={<i className="fa-solid fa-plus" aria-hidden="true" />} />
                 <ContractButton id="chat_import_button" className="menu_button menu_button_icon" variant="ghost" label="Import Chat" icon={<i className="fa-solid fa-file-import" aria-hidden="true" />} />

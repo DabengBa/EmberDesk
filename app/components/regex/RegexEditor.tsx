@@ -5,7 +5,7 @@ export function RegexEditor() {
     <div className="regex_editor">
         <h3 className="flex-container justifyCenter alignItemsBaseline">
             <strong data-i18n="Regex Editor">Regex Editor</strong>
-            <a href="#" className="notes-link" target="_blank" rel="noopener noreferrer">
+            <a href="extensions/regex/" className="notes-link" target="_blank" rel="noopener noreferrer" aria-label="Regex documentation">
                 <span className="note-link-span">?</span>
             </a>
             <ContractButton id="regex_test_mode_toggle" className="menu_button menu_button_icon" label="Test Mode" icon={<i className="fa-solid fa-bug fa-sm" aria-hidden="true" />} />
@@ -18,7 +18,7 @@ export function RegexEditor() {
 
         <div id="regex_info_block_wrapper">
             <div id="regex_info_block" className="info-block"></div>
-            <a id="regex_info_block_flags_hint" href="#" target="_blank" rel="noopener noreferrer">
+            <a id="regex_info_block_flags_hint" href="extensions/regex/#flags" target="_blank" rel="noopener noreferrer" aria-label="Regex flags documentation">
                 <i className="fa-solid fa-circle-info" data-i18n="[title]ext_regex_flags_help" title="Click here to learn more about regex flags." />
             </a>
         </div>
@@ -134,7 +134,7 @@ export function RegexEditor() {
                     <input type="checkbox" name="run_on_edit" />
                     <span data-i18n="Run On Edit">Run On Edit</span>
                 </label>
-                <label className="checkbox flex-container flexNoGap marginBot5" data-i18n="[title]ext_regex_substitute_regex_desc" title={"Substitute {{macros}} in Find Regex before running it"}>
+                <label className="checkbox flex-container flexNoGap marginBot5" data-i18n="[title]ext_regex_substitute_regex_desc" title={"Substitute {{macros}} in Find Regex before running it"} aria-label="Macros in Find Regex">
                     <span>
                         <small data-i18n="Macro in Find Regex">Macros in Find Regex</small>
                         <span className="fa-solid fa-circle-question note-link-span"></span>

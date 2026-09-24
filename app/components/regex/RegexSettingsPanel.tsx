@@ -44,7 +44,7 @@ export function RegexSettingsPanel() {
                     Save and switch between groups of enabled regex scripts.
                 </small>
                 <div className="flex-container marginTop5">
-                    <select id="regex_presets" className="text_pole flex1"></select>
+                    <select id="regex_presets" className="text_pole flex1" aria-label="Regex presets"></select>
                     <ContractIconButton id="regex_preset_create" className="menu_button" label="Create a new regex preset" nativeTitle title="Create a new regex preset" icon={<i className="fa-solid fa-file-circle-plus" aria-hidden="true" />} />
                     <ContractIconButton id="regex_preset_update" className="menu_button" label="Update existing regex preset" nativeTitle title="Update existing regex preset" icon={<i className="fa-solid fa-save" aria-hidden="true" />} />
                     <ContractIconButton id="regex_preset_apply" className="menu_button" label="Re-apply current preset" nativeTitle title="Re-apply current preset" icon={<i className="fa-solid fa-recycle" aria-hidden="true" />} />
@@ -67,6 +67,7 @@ export function RegexSettingsPanel() {
                     <strong className="flex1" data-i18n="ext_regex_preset_scripts">Preset Scripts</strong>
                     <label id="toggle_preset_regex" className="checkbox flex-container" htmlFor="regex_preset_toggle">
                         <input type="checkbox" id="regex_preset_toggle" className="enable_scoped" />
+                        <span className="sr-only">Toggle preset regex scripts</span>
                         <span className="regex-toggle-on fa-solid fa-toggle-on fa-lg" data-i18n="[title]ext_regex_disallow_preset" title="Disallow using preset regex"></span>
                         <span className="regex-toggle-off fa-solid fa-toggle-off fa-lg" data-i18n="[title]ext_regex_allow_preset" title="Allow using preset regex"></span>
                     </label>
@@ -82,6 +83,7 @@ export function RegexSettingsPanel() {
                     <strong className="flex1" data-i18n="ext_regex_scoped_scripts">Scoped Scripts</strong>
                     <label id="toggle_scoped_regex" className="checkbox flex-container" htmlFor="regex_scoped_toggle">
                         <input type="checkbox" id="regex_scoped_toggle" className="enable_scoped" />
+                        <span className="sr-only">Toggle scoped regex scripts</span>
                         <span className="regex-toggle-on fa-solid fa-toggle-on fa-lg" data-i18n="[title]ext_regex_disallow_scoped" title="Disallow using scoped regex"></span>
                         <span className="regex-toggle-off fa-solid fa-toggle-off fa-lg" data-i18n="[title]ext_regex_allow_scoped" title="Allow using scoped regex"></span>
                     </label>

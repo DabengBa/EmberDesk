@@ -70,7 +70,7 @@ export function DataMaidDialog({ onRequestClose }: { onRequestClose?: () => void
         { key: 'personaThumbnails', name: t('Persona Thumbnails'), description: t('Thumbnails for missing or deleted personas.') },
         { key: 'chatBackups', name: t('Chat Backups'), description: t('Automatically generated chat backups.') },
         { key: 'settingsBackups', name: t('Settings Backups'), description: t('Automatically generated settings backups.') },
-    ] as { key: DataMaidCategoryKey; name: string; description: string }[]), [t]);
+    ] as { key: DataMaidCategoryKey; name: string; description: string }[]), []);
 
     const [isScanning, setIsScanning] = useState(false);
     const [hasScanned, setHasScanned] = useState(false);
@@ -103,7 +103,7 @@ export function DataMaidDialog({ onRequestClose }: { onRequestClose?: () => void
         } finally {
             setIsScanning(false);
         }
-    }, [isScanning, t]);
+    }, [isScanning]);
 
     const getViewUrl = useCallback((hash: string) => (
         `/api/data-maid/view?hash=${encodeURIComponent(hash)}&token=${encodeURIComponent(tokenRef.current ?? '')}`
@@ -135,7 +135,7 @@ export function DataMaidDialog({ onRequestClose }: { onRequestClose?: () => void
                 }
             },
         });
-    }, [deleteHashes, t]);
+    }, [deleteHashes]);
 
     const deleteCategory = useCallback((categoryKey: DataMaidCategoryKey, items: DataMaidRecord[]) => {
         setConfirm({
@@ -147,7 +147,7 @@ export function DataMaidDialog({ onRequestClose }: { onRequestClose?: () => void
                 }
             },
         });
-    }, [deleteHashes, t]);
+    }, [deleteHashes]);
 
     const download = useCallback((item: DataMaidRecord) => {
         const url = getViewUrl(item.hash);
@@ -176,7 +176,7 @@ export function DataMaidDialog({ onRequestClose }: { onRequestClose?: () => void
             console.error('Error viewing item:', error);
             getToastr().error?.(t('An error has occurred. Check the console for details.'));
         }
-    }, [getViewUrl, t]);
+    }, [getViewUrl]);
 
     const toggleCategory = useCallback((key: string) => {
         setOpenCategories(current => {
@@ -216,7 +216,13 @@ export function DataMaidDialog({ onRequestClose }: { onRequestClose?: () => void
     return createPortal(
         <div
             {...stylex.props(styles.overlay)}
-            onClick={event => { event.stopPropagation(); void close(); }}
+            role="presentation"
+            onClick={event => {
+                event.stopPropagation();
+                if (event.target === event.currentTarget) {
+                    void close();
+                }
+            }}
             onMouseDown={event => event.stopPropagation()}
             onMouseUp={event => event.stopPropagation()}
             onKeyDown={event => {
@@ -227,11 +233,10 @@ export function DataMaidDialog({ onRequestClose }: { onRequestClose?: () => void
             }}
             data-data-maid-overlay="true"
         >
-            <div
-                role="dialog"
+            <dialog
+                open
                 aria-modal="true"
                 {...stylex.props(styles.dialog)}
-                onClick={event => event.stopPropagation()}
             >
                 <div {...stylex.props(styles.dialogHeader)}>
                     <div className={`info-block warning margin0 ${stylex.props(styles.headerInfo).className ?? ''}`}>
@@ -263,8 +268,13 @@ export function DataMaidDialog({ onRequestClose }: { onRequestClose?: () => void
                             const isOpen = openCategories.has(category.key);
                             return (
                                 <div key={category.key} {...stylex.props(styles.category)}>
-                                    <div {...stylex.props(styles.categoryToggle)} onClick={() => toggleCategory(category.key)}>
-                                        <div {...stylex.props(styles.categoryHeader)}>
+                                    <div {...stylex.props(styles.categoryToggle)}>
+                                        <button
+                                            type="button"
+                                            {...stylex.props(styles.categoryToggleButton)}
+                                            aria-expanded={isOpen}
+                                            onClick={() => toggleCategory(category.key)}
+                                        >
                                             <div {...stylex.props(styles.categoryDetails)}>
                                                 <div {...stylex.props(styles.categoryName)}>{category.name}</div>
                                                 <small>{category.description}</small>
@@ -278,17 +288,16 @@ export function DataMaidDialog({ onRequestClose }: { onRequestClose?: () => void
                                                     </small>
                                                 </div>
                                             </div>
-                                            <div
-                                                className="right_menu_button"
-                                                title={t('Delete all items in this category')}
-                                                role="button"
-                                                tabIndex={0}
-                                                onClick={event => { event.stopPropagation(); deleteCategory(category.key, category.items); }}
-                                                onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.stopPropagation(); deleteCategory(category.key, category.items); } }}
-                                            >
-                                                <i className="fa-solid fa-fw fa-broom" />
-                                            </div>
-                                        </div>
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className={`right_menu_button ${stylex.props(styles.categoryDeleteButton).className ?? ''}`}
+                                            title={t('Delete all items in this category')}
+                                            aria-label={t('Delete all items in this category')}
+                                            onClick={event => { event.stopPropagation(); deleteCategory(category.key, category.items); }}
+                                        >
+                                            <i className="fa-solid fa-fw fa-broom" aria-hidden="true" />
+                                        </button>
                                         <div className={`fa-solid ${isOpen ? 'fa-circle-chevron-up' : 'fa-circle-chevron-down'} inline-drawer-icon`} />
                                     </div>
                                     {isOpen && (
@@ -302,14 +311,14 @@ export function DataMaidDialog({ onRequestClose }: { onRequestClose?: () => void
                                                                 <b>{item.name}</b>
                                                             </div>
                                                             <div {...stylex.props(styles.itemActions)}>
-                                                                <button type="button" className={`menu_button menu_button_icon margin0 ${stylex.props(styles.itemActionButton).className ?? ''}`} title={t('View item content')} onClick={() => void view(category.key, item)}>
-                                                                    <i className="fa-solid fa-fw fa-eye" />
+                                                                <button type="button" className={`menu_button menu_button_icon margin0 ${stylex.props(styles.itemActionButton).className ?? ''}`} title={t('View item content')} aria-label={t('View item content')} onClick={() => void view(category.key, item)}>
+                                                                    <i className="fa-solid fa-fw fa-eye" aria-hidden="true" />
                                                                 </button>
-                                                                <button type="button" className={`menu_button menu_button_icon margin0 ${stylex.props(styles.itemActionButton).className ?? ''}`} title={t('Download item')} onClick={() => download(item)}>
-                                                                    <i className="fa-solid fa-fw fa-download" />
+                                                                <button type="button" className={`menu_button menu_button_icon margin0 ${stylex.props(styles.itemActionButton).className ?? ''}`} title={t('Download item')} aria-label={t('Download item')} onClick={() => download(item)}>
+                                                                    <i className="fa-solid fa-fw fa-download" aria-hidden="true" />
                                                                 </button>
-                                                                <button type="button" className={`menu_button menu_button_icon margin0 ${stylex.props(styles.itemActionButton).className ?? ''}`} title={t('Delete this item')} onClick={() => deleteItem(category.key, item.hash)}>
-                                                                    <i className="fa-solid fa-fw fa-trash-alt" />
+                                                                <button type="button" className={`menu_button menu_button_icon margin0 ${stylex.props(styles.itemActionButton).className ?? ''}`} title={t('Delete this item')} aria-label={t('Delete this item')} onClick={() => deleteItem(category.key, item.hash)}>
+                                                                    <i className="fa-solid fa-fw fa-trash-alt" aria-hidden="true" />
                                                                 </button>
                                                             </div>
                                                         </div>
@@ -332,11 +341,17 @@ export function DataMaidDialog({ onRequestClose }: { onRequestClose?: () => void
                         })}
                     </div>
                 )}
-            </div>
+            </dialog>
             {viewing !== null && createPortal(
                 <div
                     {...stylex.props(styles.overlay)}
-                    onClick={event => { event.stopPropagation(); setViewing(null); }}
+                    role="presentation"
+                    onClick={event => {
+                        event.stopPropagation();
+                        if (event.target === event.currentTarget) {
+                            setViewing(null);
+                        }
+                    }}
                     onMouseDown={event => event.stopPropagation()}
                     onMouseUp={event => event.stopPropagation()}
                     onKeyDown={event => {
@@ -346,23 +361,32 @@ export function DataMaidDialog({ onRequestClose }: { onRequestClose?: () => void
                         }
                     }}
                 >
-                    <div role="dialog" aria-modal="true" {...stylex.props(styles.viewerDialog)} onClick={event => event.stopPropagation()}>
+                    <dialog open aria-modal="true" {...stylex.props(styles.viewerDialog)}>
                         {viewing.kind === 'media'
                             ? (viewing.isVideo
-                                ? <video controls src={viewing.url} {...stylex.props(styles.imageView)} />
+                                ? <video controls src={viewing.url} {...stylex.props(styles.imageView)}>
+                                    {/* User media files ship without captions; an inert track satisfies the a11y contract. */}
+                                    <track kind="captions" />
+                                </video>
                                 : <img src={viewing.url} alt={viewing.name} {...stylex.props(styles.imageView)} />)
-                            : <textarea readOnly {...stylex.props(styles.textView)} value={viewing.text ?? ''} />}
+                            : <textarea readOnly aria-label={t('Item content')} {...stylex.props(styles.textView)} value={viewing.text ?? ''} />}
                         <div {...stylex.props(styles.dialogActions)}>
                             <button type="button" className="menu_button" onClick={() => setViewing(null)}>{t('Close')}</button>
                         </div>
-                    </div>
+                    </dialog>
                 </div>,
                 document.body,
             )}
             {confirm !== null && createPortal(
                 <div
                     {...stylex.props(styles.overlay)}
-                    onClick={event => { event.stopPropagation(); setConfirm(null); }}
+                    role="presentation"
+                    onClick={event => {
+                        event.stopPropagation();
+                        if (event.target === event.currentTarget) {
+                            setConfirm(null);
+                        }
+                    }}
                     onMouseDown={event => event.stopPropagation()}
                     onMouseUp={event => event.stopPropagation()}
                     onKeyDown={event => {
@@ -372,13 +396,13 @@ export function DataMaidDialog({ onRequestClose }: { onRequestClose?: () => void
                         }
                     }}
                 >
-                    <div role="alertdialog" aria-modal="true" {...stylex.props(styles.confirmDialog)} onClick={event => event.stopPropagation()}>
+                    <dialog open role="alertdialog" aria-modal="true" {...stylex.props(styles.confirmDialog)}>
                         <p {...stylex.props(styles.dialogText)}>{t('Are you sure?')}{'\n'}{confirm.text}</p>
                         <div {...stylex.props(styles.dialogActions)}>
                             <button type="button" className="menu_button" onClick={() => setConfirm(null)}>{t('Cancel')}</button>
                             <button type="button" className="menu_button" onClick={() => { const action = confirm.action; setConfirm(null); void action(); }}>{t('Confirm')}</button>
                         </div>
-                    </div>
+                    </dialog>
                 </div>,
                 document.body,
             )}

@@ -12,6 +12,7 @@ export function AiConfigPanel() {
                 <div id="lm_button_panel_pin_div" title="Locked = AI Configuration panel will stay open" data-i18n="[title]AI Configuration panel will stay open">
                     <input type="checkbox" id="lm_button_panel_pin" />
                     <label htmlFor="lm_button_panel_pin">
+                        <span className="sr-only" data-i18n="AI Configuration panel will stay open">AI Configuration panel will stay open</span>
                         <div className="unchecked fa-solid fa-unlock right_menu_button"></div>
                         <div className="checked fa-solid fa-lock right_menu_button"></div>
                     </label>
