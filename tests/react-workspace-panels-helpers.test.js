@@ -1123,15 +1123,28 @@ test('renders an Extensions Host workflow through React-owned controls and expli
         const compatSource = read('app/compat/frontend-frames.ts');
         const frameModuleSource = read('public/scripts/frontend-frame.js');
 
-        expect(rowSource).toContain('useFrontendFrames(mesTextRef, message)');
-        expect(rowSource).toContain('ref={mesTextRef}');
-        // Non-finalized rows (streaming partial docs, editing, error) must never mount frames
-        expect(compatSource).toContain("message.state !== 'finalized'");
+        expect(rowSource).toContain('useFrontendFrames(rowRef, message)');
+        expect(rowSource).toContain('ref={rowRef}');
+        // Non-finalized rows (editing, error) must never mount frames inline
+        expect(compatSource).toContain("message.state === 'finalized'");
+        // Streaming rows mount only closed-fence docs in a sibling stream host
+        expect(compatSource).toContain("message.state === 'streaming'");
+        expect(compatSource).toContain('mountStreamingFrames(rowEl');
+        expect(compatSource).toContain('message.content');
         // Depth eligibility is computed before any iframe exists
         expect(compatSource).toContain('computeDepthEligible');
+        // EmberDeskFrame event bridge resolves through the shell eventSource
+        expect(compatSource).toContain('getContextSnapshot');
+        expect(compatSource).toContain('eventSource');
         // Frame scripts may only run for trusted, finalized message bodies
         expect(frameModuleSource).toContain('FRONTEND_FRAME_MARKERS');
         expect(frameModuleSource).toContain('iframe.srcdoc');
+        // Bridge lifecycle is host-owned: whitelisted events, disposed on unmount
+        expect(frameModuleSource).toContain('FRONTEND_FRAME_ALLOWED_EVENTS');
+        expect(frameModuleSource).toContain('createFrameBridge');
+        expect(frameModuleSource).toContain('disposeFrameBridge');
+        expect(frameModuleSource).toContain('unmountStreamingFrames');
+        expect(frameModuleSource).toContain('findClosedFrontendDocuments');
     });
 
     test('expands only the React window when loading earlier messages', () => {

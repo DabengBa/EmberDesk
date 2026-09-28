@@ -308,8 +308,8 @@ export function MainChatMessageRow({
     const hasReasoning = render.reasoningHtml !== '' || message.reasoningEditing;
     const metaStripRef = useRef<HTMLDivElement>(null);
     const reasoningHeaderRef = useRef<HTMLDivElement>(null);
-    const mesTextRef = useRef<HTMLDivElement>(null);
-    useFrontendFrames(mesTextRef, message);
+    const rowRef = useRef<HTMLDivElement>(null);
+    useFrontendFrames(rowRef, message);
     const [avatarFailed, setAvatarFailed] = useState(false);
     useEffect(() => {
         setAvatarFailed(false);
@@ -349,6 +349,7 @@ export function MainChatMessageRow({
 
     return (
         <div
+            ref={rowRef}
             {...roleAttributes}
             className={normalizeClassNames(message, isLast)}
             data-main-chat-message-row-owner="react"
@@ -639,7 +640,6 @@ export function MainChatMessageRow({
                     />
                 ) : (
                     <div
-                        ref={mesTextRef}
                         className={message.inlineMediaText ? 'mes_text inline_media' : 'mes_text'}
                         dangerouslySetInnerHTML={{ __html: render.messageHtml }}
                     />

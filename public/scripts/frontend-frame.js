@@ -21,6 +21,41 @@ export const FRONTEND_FRAME_IFRAME_CLASS = 'ed-frontend-frame__iframe';
 export const FRONTEND_FRAME_TOGGLE_CLASS = 'ed-frontend-frame__toggle';
 export const FRONTEND_CODE_TOGGLE_CLASS = 'ed-code-collapse-toggle';
 export const FRONTEND_CODE_COLLAPSED_ATTR = 'data-ed-code-collapsed';
+export const FRONTEND_STREAM_HOST_CLASS = 'ed-frontend-stream';
+export const FRONTEND_FRAME_DOC_ATTR = 'data-frontend-doc';
+
+/** Host window key exposing the frame bridge to same-origin frame scripts. */
+const HOST_FRAME_API_KEY = '__ED_FRAME_API__';
+
+/**
+ * Host `event_types` a frame may subscribe to via `EmberDeskFrame.on()`.
+ * Literal names, not imports — this module must stay import-free so the
+ * workspace bundle does not inline a second `events.js` instance. This is a
+ * convenience/compat surface, NOT a security boundary: same-origin frames can
+ * always reach `window.parent` directly.
+ */
+export const FRONTEND_FRAME_ALLOWED_EVENTS = Object.freeze([
+    'message_sent',
+    'message_received',
+    'message_updated',
+    'message_edited',
+    'message_deleted',
+    'message_swiped',
+    'message_swipe_deleted',
+    'message_reasoning_edited',
+    'generation_started',
+    'generation_stopped',
+    'generation_ended',
+    'chatLoaded',
+    'chat_id_changed',
+    'chat_deleted',
+    'settings_updated',
+    'character_edited',
+    'user_message_rendered',
+    'character_message_rendered',
+    'frontend_frame_render_started',
+    'frontend_frame_render_ended',
+]);
 
 export const FRONTEND_FRAME_EVENTS = Object.freeze({
     started: 'frontend_frame_render_started',
@@ -66,6 +101,132 @@ export function normalizeFrontendFramesSettings(value) {
         use_blob_url: boolOr('use_blob_url'),
         skip_highlight: boolOr('skip_highlight'),
         allow_streaming: boolOr('allow_streaming'),
+    };
+}
+
+/**
+ * Host-side frame bridge registry. Every mounted frameId owns one bridge
+ * holding the frame's `EmberDeskFrame.on()` subscriptions and its
+ * `getContext()` snapshot factory. Subscriptions are torn down host-side via
+ * `disposeFrameBridge` on unmount — never by the frame's `pagehide`, which is
+ * unreliable when an iframe is detached by a DOM rewrite.
+ * @type {Map<string, ReturnType<typeof createFrameBridge>>}
+ */
+const frameBridges = new Map();
+
+/**
+ * Creates the per-frame bridge between `EmberDeskFrame` calls and the host
+ * `eventSource`. Framework-free and DOM-free for unit tests.
+ * @param {object} [options]
+ * @param {{on?:Function, removeListener?:Function}|null} [options.eventSource]
+ * @param {()=>object|null} [options.getContextSnapshot]
+ */
+export function createFrameBridge({ eventSource = null, getContextSnapshot = null } = {}) {
+    /** @type {Array<{name:string, handler:Function, wrapped:Function}>} */
+    const subscriptions = [];
+    const remove = (sub) => {
+        try {
+            eventSource?.removeListener?.(sub.name, sub.wrapped);
+        } catch { /* best-effort */ }
+    };
+    return {
+        on(eventName, handler) {
+            const name = String(eventName ?? '');
+            if (!eventSource || typeof eventSource.on !== 'function' || typeof handler !== 'function') {
+                return false;
+            }
+            if (!FRONTEND_FRAME_ALLOWED_EVENTS.includes(name)) {
+                return false;
+            }
+            const wrapped = (...args) => handler(...args);
+            eventSource.on(name, wrapped);
+            subscriptions.push({ name, handler, wrapped });
+            return true;
+        },
+        off(eventName, handler) {
+            const name = String(eventName ?? '');
+            let removed = false;
+            for (let index = subscriptions.length - 1; index >= 0; index -= 1) {
+                const sub = subscriptions[index];
+                if (sub.name === name && (handler === undefined || sub.handler === handler)) {
+                    remove(sub);
+                    subscriptions.splice(index, 1);
+                    removed = true;
+                }
+            }
+            return removed;
+        },
+        getContext() {
+            try {
+                const snapshot = getContextSnapshot?.() ?? null;
+                return snapshot && typeof snapshot === 'object' ? Object.freeze(snapshot) : snapshot;
+            } catch {
+                return null;
+            }
+        },
+        dispose() {
+            for (const sub of subscriptions.splice(0)) {
+                remove(sub);
+            }
+        },
+        get subscriptionCount() {
+            return subscriptions.length;
+        },
+    };
+}
+
+function registerFrameBridge(frameId, ctx = {}) {
+    disposeFrameBridge(frameId);
+    if (!ctx.eventSource && typeof ctx.getContextSnapshot !== 'function') {
+        return;
+    }
+    frameBridges.set(String(frameId), createFrameBridge({
+        eventSource: ctx.eventSource,
+        getContextSnapshot: typeof ctx.getContextSnapshot === 'function'
+            ? () => ctx.getContextSnapshot(frameId)
+            : null,
+    }));
+}
+
+/**
+ * Tears down one frame's host-side bridge (unsubscribes all frame handlers).
+ * Safe to call for ids that were never bridged.
+ * @param {string} frameId
+ */
+export function disposeFrameBridge(frameId) {
+    const bridge = frameBridges.get(String(frameId));
+    if (bridge) {
+        bridge.dispose();
+        frameBridges.delete(String(frameId));
+    }
+}
+
+/**
+ * Drops bridges whose slot vanished without `unmountFrontendSlot` — React
+ * `innerHTML` rewrites destroy iframe DOM directly, so the registry must be
+ * reconciled against the live document on each scan.
+ */
+function pruneFrameBridges() {
+    if (typeof document === 'undefined' || frameBridges.size === 0) {
+        return;
+    }
+    for (const frameId of Array.from(frameBridges.keys())) {
+        if (!document.querySelector(`[${FRONTEND_FRAME_SLOT_ATTR}="${frameId}"]`)) {
+            disposeFrameBridge(frameId);
+        }
+    }
+}
+
+/** Installs `window.__ED_FRAME_API__` so same-origin frame scripts can reach
+ * their bridge. Idempotent; no-op outside browsers. */
+function installHostFrameApi() {
+    if (typeof window === 'undefined' || !window || window[HOST_FRAME_API_KEY]) {
+        return;
+    }
+    window[HOST_FRAME_API_KEY] = {
+        on: (frameId, eventName, handler) => frameBridges.get(String(frameId))?.on(eventName, handler) ?? false,
+        off: (frameId, eventName, handler) => frameBridges.get(String(frameId))?.off(eventName, handler) ?? false,
+        getContext: (frameId) => frameBridges.get(String(frameId))?.getContext() ?? null,
     };
 }
 
@@ -174,9 +335,33 @@ const FRAME_PREDEFINE_SCRIPT = `(function () {
             }
         });
     } catch (e) { /* same-origin copy is best-effort */ }
+    var frameHostApi = function () {
+        try {
+            return (window.parent && window.parent.__ED_FRAME_API__) || null;
+        } catch (e) { return null; }
+    };
     window.EmberDeskFrame = Object.freeze({
         frameId: typeof meta.frameId === 'string' ? meta.frameId : '',
         messageId: typeof meta.messageId === 'string' ? meta.messageId : '',
+        allowedEvents: Array.isArray(meta.allowedEvents) ? meta.allowedEvents.slice() : [],
+        on: function (eventName, handler) {
+            try {
+                var api = frameHostApi();
+                return !!(api && api.on(window.EmberDeskFrame.frameId, eventName, handler));
+            } catch (e) { return false; }
+        },
+        off: function (eventName, handler) {
+            try {
+                var api = frameHostApi();
+                return !!(api && api.off(window.EmberDeskFrame.frameId, eventName, handler));
+            } catch (e) { return false; }
+        },
+        getContext: function () {
+            try {
+                var api = frameHostApi();
+                return api ? api.getContext(window.EmberDeskFrame.frameId) : null;
+            } catch (e) { return null; }
+        },
     });
     var updateViewportVars = function () {
         try {
@@ -264,7 +449,11 @@ export function buildFrontendFrameDocument(code, {
     baseHref = '',
 } = {}) {
     const content = rewriteVhExpressions(code);
-    const metaJson = JSON.stringify({ frameId: String(frameId), messageId: String(messageId) });
+    const metaJson = JSON.stringify({
+        frameId: String(frameId),
+        messageId: String(messageId),
+        allowedEvents: FRONTEND_FRAME_ALLOWED_EVENTS,
+    });
     const userAvatar = escapeCssUrl(userAvatarUrl);
     const charAvatar = escapeCssUrl(charAvatarUrl);
     const baseTag = useBlobUrl && baseHref ? `<base href="${escapeCssUrl(baseHref)}">` : '';
@@ -303,6 +492,43 @@ export function findFrontendBlocks(rootEl) {
     }
     return Array.from(rootEl.querySelectorAll('pre'))
         .filter(pre => !pre.closest(`.${FRONTEND_FRAME_SLOT_CLASS}`) && isFrontendContent(pre.textContent));
+}
+
+/**
+ * Streaming-time detection on RAW message text: returns the source of every
+ * CLOSED fenced code block (` ``` ` or `~~~` pairs) whose content qualifies as
+ * a frontend document. Fences still open at the tail of a streaming message are
+ * never matched — a document only mounts once its fence is complete.
+ * @param {unknown} text Raw message source
+ * @returns {string[]}
+ */
+export function findClosedFrontendDocuments(text) {
+    const source = String(text ?? '');
+    const docs = [];
+    const fencePattern = /(^|\n)(`{3,}|~{3,})[^\n]*\r?\n([\s\S]*?)\r?\n\2[^\n]*(?=\r?\n|$)/g;
+    let match;
+    while ((match = fencePattern.exec(source)) !== null) {
+        if (isFrontendContent(match[3])) {
+            docs.push(match[3]);
+        }
+    }
+    return docs;
+}
+
+/**
+ * Cheap content fingerprint for streaming-frame reuse: lets `mountStreamingFrames`
+ * detect when an already-mounted document's source changed (swipe/edit) without
+ * storing the full text on the slot.
+ * @param {string} text
+ * @returns {string}
+ */
+function docSignature(text) {
+    const source = String(text ?? '');
+    let hash = 0;
+    for (let index = 0; index < source.length; index++) {
+        hash = ((hash << 5) - hash + source.charCodeAt(index)) | 0;
+    }
+    return `${source.length}:${hash}`;
 }
 
 /**
@@ -357,15 +583,25 @@ export function computeDepthEligible({ messageId, renderedIds, isSystemById = {}
  * @property {string} [baseHref] Base href for blob-URL mode
  * @property {(eventName:string, frameId:string)=>void} [emit] Host event emitter
  * @property {(text:string)=>string} [translate] Optional label translator
+ * @property {{on?:Function, removeListener?:Function}} [eventSource] Host event bus bridged to `EmberDeskFrame.on`
+ * @property {(frameId:string)=>object} [getContextSnapshot] `EmberDeskFrame.getContext()` snapshot factory
  */
 
 /**
  * Removes one mounted frame slot: the hidden source `<pre>` is restored to the
- * slot's position and the iframe subtree is destroyed. Blob URLs are revoked.
+ * slot's position and the iframe subtree is destroyed. Blob URLs are revoked
+ * and the frame's host-side bridge (event subscriptions) is disposed.
  * @param {Element} slot `.ed-frontend-frame` element
  */
 export function unmountFrontendSlot(slot) {
-    if (!slot || !slot.parentNode) {
+    if (!slot) {
+        return;
+    }
+    const frameId = slot.getAttribute(FRONTEND_FRAME_SLOT_ATTR);
+    if (frameId) {
+        disposeFrameBridge(frameId);
+    }
+    if (!slot.parentNode) {
         return;
     }
     const iframe = slot.querySelector('iframe');
@@ -446,6 +682,30 @@ function decoratePlainCodeBlock(pre, expandKey, translate) {
 }
 
 /**
+ * Creates the frame iframe (srcdoc or blob URL) with lifecycle event emission.
+ * @param {string} frameId
+ * @param {string} frameDocument Assembled frame document
+ * @param {boolean} useBlobUrl
+ * @param {(eventName:string, frameId:string)=>void|null} [emit]
+ * @returns {HTMLIFrameElement}
+ */
+function createFrameIframe(frameId, frameDocument, useBlobUrl, emit) {
+    const iframe = document.createElement('iframe');
+    iframe.className = FRONTEND_FRAME_IFRAME_CLASS;
+    iframe.title = frameId;
+    iframe.setAttribute('loading', 'lazy');
+    iframe.addEventListener('load', () => emit?.(FRONTEND_FRAME_EVENTS.ended, frameId));
+    if (useBlobUrl) {
+        const blob = new Blob([frameDocument], { type: 'text/html' });
+        iframe.src = URL.createObjectURL(blob);
+    } else {
+        iframe.srcdoc = frameDocument;
+    }
+    emit?.(FRONTEND_FRAME_EVENTS.started, frameId);
+    return iframe;
+}
+
+/**
  * Mounts one frame slot around a qualifying `<pre>`.
  * @param {HTMLPreElement} pre
  * @param {object} options
@@ -455,8 +715,9 @@ function decoratePlainCodeBlock(pre, expandKey, translate) {
  * @param {boolean} options.showToggle
  * @param {(text:string)=>string} options.translate
  * @param {(eventName:string, frameId:string)=>void|null} [options.emit]
+ * @param {FrontendFrameContext} [options.bridgeCtx] Bridge inputs (eventSource/getContextSnapshot)
  */
-function mountFrontendSlot(pre, { frameId, document: frameDocument, useBlobUrl, showToggle, translate, emit }) {
+function mountFrontendSlot(pre, { frameId, document: frameDocument, useBlobUrl, showToggle, translate, emit, bridgeCtx }) {
     const slot = document.createElement('div');
     slot.className = FRONTEND_FRAME_SLOT_CLASS;
     slot.setAttribute(FRONTEND_FRAME_SLOT_ATTR, frameId);
@@ -479,28 +740,100 @@ function mountFrontendSlot(pre, { frameId, document: frameDocument, useBlobUrl, 
     toggle.textContent = expanded ? translate('Hide frontend code block') : translate('Show frontend code block');
     toggle.setAttribute('aria-expanded', String(expanded));
 
-    const iframe = document.createElement('iframe');
-    iframe.className = FRONTEND_FRAME_IFRAME_CLASS;
-    iframe.title = frameId;
-    iframe.setAttribute('loading', 'lazy');
-    iframe.addEventListener('load', () => emit?.(FRONTEND_FRAME_EVENTS.ended, frameId));
-
     pre.replaceWith(slot);
     if (showToggle) {
         slot.appendChild(toggle);
     }
     pre.style.display = showToggle && !expanded ? 'none' : '';
     slot.appendChild(pre);
-    slot.appendChild(iframe);
+    registerFrameBridge(frameId, bridgeCtx);
+    slot.appendChild(createFrameIframe(frameId, frameDocument, useBlobUrl, emit));
+}
 
-    if (useBlobUrl) {
-        const blob = new Blob([frameDocument], { type: 'text/html' });
-        iframe.src = URL.createObjectURL(blob);
-    } else {
-        iframe.srcdoc = frameDocument;
+/**
+ * Removes the streaming preview host(s) under a row root, including all frames
+ * inside them (bridges disposed via `unmountFrontendSlot`).
+ * @param {Element|null|undefined} rowRootEl `.mes` row element
+ */
+export function unmountStreamingFrames(rowRootEl) {
+    if (!rowRootEl || typeof rowRootEl.querySelectorAll !== 'function') {
+        return;
     }
+    rowRootEl.querySelectorAll(`.${FRONTEND_STREAM_HOST_CLASS}`).forEach(host => {
+        host.querySelectorAll(`.${FRONTEND_FRAME_SLOT_CLASS}`).forEach(slot => unmountFrontendSlot(slot));
+        host.remove();
+    });
+}
 
-    emit?.(FRONTEND_FRAME_EVENTS.started, frameId);
+/**
+ * Streaming-time frame mounting. Frames live in a sibling
+ * `.ed-frontend-stream` host right after `.mes_text` — NOT inside it — because
+ * React rewrites the `.mes_text` innerHTML on every streamed token and would
+ * destroy any iframe mounted within. Idempotent: already-mounted docs (same
+ * frameId + doc signature) are reused across commits, so frames persist while
+ * later tokens stream in. The still-visible `<pre>` inside `.mes_text` doubles
+ * as the streaming source view.
+ * @param {Element|null|undefined} rowRootEl `.mes` row element
+ * @param {FrontendFrameContext & {text?:unknown}} [ctx]
+ * @returns {number} Number of new frames mounted this call
+ */
+export function mountStreamingFrames(rowRootEl, ctx = {}) {
+    if (!rowRootEl || typeof rowRootEl.querySelector !== 'function') {
+        return 0;
+    }
+    const settings = normalizeFrontendFramesSettings(ctx.settings);
+    const docs = settings.enabled && settings.allow_streaming && ctx.eligible !== false
+        ? findClosedFrontendDocuments(ctx.text)
+        : [];
+    const mesTextEl = rowRootEl.querySelector('.mes_text');
+    if (docs.length === 0 || !mesTextEl) {
+        unmountStreamingFrames(rowRootEl);
+        return 0;
+    }
+    installHostFrameApi();
+    let host = rowRootEl.querySelector(`.${FRONTEND_STREAM_HOST_CLASS}`);
+    if (!host) {
+        host = document.createElement('div');
+        host.className = FRONTEND_STREAM_HOST_CLASS;
+        mesTextEl.insertAdjacentElement('afterend', host);
+    }
+    const messageId = String(ctx.messageId ?? rowRootEl.getAttribute?.('mesid') ?? '');
+    const wanted = new Set();
+    let mounted = 0;
+    docs.forEach((doc, index) => {
+        const frameId = `ed-frame--${messageId}--${index}`;
+        wanted.add(frameId);
+        const signature = docSignature(doc);
+        const existing = host.querySelector(`[${FRONTEND_FRAME_SLOT_ATTR}="${frameId}"]`);
+        if (existing && existing.getAttribute(FRONTEND_FRAME_DOC_ATTR) === signature) {
+            return;
+        }
+        if (existing) {
+            unmountFrontendSlot(existing);
+        }
+        const slot = document.createElement('div');
+        slot.className = FRONTEND_FRAME_SLOT_CLASS;
+        slot.setAttribute(FRONTEND_FRAME_SLOT_ATTR, frameId);
+        slot.setAttribute(FRONTEND_FRAME_DOC_ATTR, signature);
+        registerFrameBridge(frameId, ctx);
+        slot.appendChild(createFrameIframe(frameId, buildFrontendFrameDocument(doc, {
+            frameId,
+            messageId,
+            userAvatarUrl: ctx.userAvatarUrl,
+            charAvatarUrl: ctx.charAvatarUrl,
+            useBlobUrl: settings.use_blob_url,
+            baseHref: ctx.baseHref,
+        }), settings.use_blob_url, ctx.emit));
+        host.appendChild(slot);
+        mounted += 1;
+    });
+    host.querySelectorAll(`.${FRONTEND_FRAME_SLOT_CLASS}`).forEach(slot => {
+        if (!wanted.has(slot.getAttribute(FRONTEND_FRAME_SLOT_ATTR))) {
+            unmountFrontendSlot(slot);
+        }
+    });
+    pruneFrameBridges();
+    return mounted;
 }
 
 /**
@@ -517,6 +850,8 @@ export function mountFrontendFrames(mesTextEl, ctx = {}) {
     }
     const settings = normalizeFrontendFramesSettings(ctx.settings);
     const translate = typeof ctx.translate === 'function' ? ctx.translate : (text) => text;
+    installHostFrameApi();
+    pruneFrameBridges();
 
     if (!settings.enabled || ctx.eligible === false) {
         unmountFrontendFrames(mesTextEl);
@@ -555,6 +890,7 @@ export function mountFrontendFrames(mesTextEl, ctx = {}) {
             showToggle: settings.collapse_code_block !== 'none',
             translate,
             emit: ctx.emit,
+            bridgeCtx: ctx,
         });
     });
     return blocks.length;

@@ -4,6 +4,7 @@ import {
     DEFAULT_FRONTEND_FRAME_SETTINGS,
     FRONTEND_CODE_COLLAPSED_ATTR,
     FRONTEND_CODE_TOGGLE_CLASS,
+    FRONTEND_FRAME_ALLOWED_EVENTS,
     FRONTEND_FRAME_EVENTS,
     FRONTEND_FRAME_IFRAME_CLASS,
     FRONTEND_FRAME_MARKERS,
@@ -11,8 +12,11 @@ import {
     FRONTEND_FRAME_SLOT_CLASS,
     FRONTEND_FRAME_TOGGLE_CLASS,
     FRONTEND_FRAMES_CHANGED_EVENT,
+    FRONTEND_STREAM_HOST_CLASS,
     buildFrontendFrameDocument,
     computeDepthEligible,
+    createFrameBridge,
+    findClosedFrontendDocuments,
     findFrontendBlocks,
     isFrontendContent,
     mountFrontendFrames,
@@ -69,8 +73,8 @@ describe('rewriteVhExpressions', () => {
     });
 
     test('rewrites JS style.minHeight assignments and setProperty', () => {
-        const assigned = rewriteVhExpressions("el.style.minHeight = '30vh';");
-        expect(assigned).toContain("calc(var(--ed-viewport-height) * 0.3)");
+        const assigned = rewriteVhExpressions('el.style.minHeight = \'30vh\';');
+        expect(assigned).toContain('calc(var(--ed-viewport-height) * 0.3)');
         const viaSetProperty = rewriteVhExpressions('el.style.setProperty("min-height", "40vh");');
         expect(viaSetProperty).toContain('calc(var(--ed-viewport-height) * 0.4)');
     });
@@ -92,8 +96,8 @@ describe('buildFrontendFrameDocument', () => {
     test('injects reset styles, viewport meta, and avatar helper classes', () => {
         expect(documentHtml).toContain('content="width=device-width, initial-scale=1.0"');
         expect(documentHtml).toContain('margin:0!important');
-        expect(documentHtml).toContain("url('/thumbnail?type=persona&file=u.png')");
-        expect(documentHtml).toContain("url('/thumbnail?type=avatar&file=c.png')");
+        expect(documentHtml).toContain('url(\'/thumbnail?type=persona&file=u.png\')');
+        expect(documentHtml).toContain('url(\'/thumbnail?type=avatar&file=c.png\')');
     });
 
     test('exposes frame identity via EmberDeskFrame meta and predefine', () => {
@@ -103,9 +107,9 @@ describe('buildFrontendFrameDocument', () => {
     });
 
     test('defines both viewport variables and copies shared globals', () => {
-        expect(documentHtml).toContain("'--ed-viewport-height'");
-        expect(documentHtml).toContain("'--TH-viewport-height'");
-        expect(documentHtml).toContain("'_', '$', 'jQuery', 'showdown', 'DOMPurify', 'hljs', 'moment', 'SVGInject'");
+        expect(documentHtml).toContain('\'--ed-viewport-height\'');
+        expect(documentHtml).toContain('\'--TH-viewport-height\'');
+        expect(documentHtml).toContain('\'_\', \'$\', \'jQuery\', \'showdown\', \'DOMPurify\', \'hljs\', \'moment\', \'SVGInject\'');
     });
 
     test('places user content after the injected scripts inside body', () => {
@@ -215,11 +219,128 @@ describe('first-party frame markers', () => {
         expect(FRONTEND_FRAME_TOGGLE_CLASS).toBe('ed-frontend-frame__toggle');
         expect(FRONTEND_CODE_TOGGLE_CLASS).toBe('ed-code-collapse-toggle');
         expect(FRONTEND_CODE_COLLAPSED_ATTR).toBe('data-ed-code-collapsed');
+        expect(FRONTEND_STREAM_HOST_CLASS).toBe('ed-frontend-stream');
         expect(FRONTEND_FRAME_MARKERS).toEqual(['html>', '<head>', '<body']);
         expect(FRONTEND_FRAME_EVENTS).toEqual({
             started: 'frontend_frame_render_started',
             ended: 'frontend_frame_render_ended',
         });
         expect(FRONTEND_FRAMES_CHANGED_EVENT).toBe('ed:frontend-frames-changed');
+    });
+});
+
+describe('findClosedFrontendDocuments', () => {
+    const doc = '<!DOCTYPE html><html><body>card</body></html>';
+
+    test('extracts closed fenced frontend documents', () => {
+        const text = `intro\n\`\`\`html\n${doc}\n\`\`\`\noutro`;
+        expect(findClosedFrontendDocuments(text)).toEqual([doc]);
+    });
+
+    test('skips fences still open while streaming', () => {
+        const openTail = `\`\`\`html\n${doc.slice(0, 20)}`;
+        const closedThenOpen = `\`\`\`html\n${doc}\n\`\`\`\n\`\`\`html\n${doc.slice(0, 10)}`;
+        expect(findClosedFrontendDocuments(openTail)).toEqual([]);
+        expect(findClosedFrontendDocuments(closedThenOpen)).toEqual([doc]);
+    });
+
+    test('skips non-frontend fenced blocks and plain text', () => {
+        const text = '```js\nconst x = 1;\n```\nno fence here';
+        expect(findClosedFrontendDocuments(text)).toEqual([]);
+        expect(findClosedFrontendDocuments('')).toEqual([]);
+        expect(findClosedFrontendDocuments(null)).toEqual([]);
+    });
+
+    test('supports tilde fences and multiple documents in order', () => {
+        const docTwo = '<html><head></head><body>second</body></html>';
+        const text = `~~~html\n${doc}\n~~~\nmid\n\`\`\`\n${docTwo}\n\`\`\``;
+        expect(findClosedFrontendDocuments(text)).toEqual([doc, docTwo]);
+    });
+});
+
+describe('createFrameBridge', () => {
+    function makeEventSource() {
+        const listeners = new Map();
+        return {
+            fired: [],
+            on(name, fn) {
+                listeners.set(name, [...(listeners.get(name) ?? []), fn]);
+            },
+            removeListener(name, fn) {
+                listeners.set(name, (listeners.get(name) ?? []).filter(entry => entry !== fn));
+            },
+            emit(name, payload) {
+                for (const fn of listeners.get(name) ?? []) {
+                    fn(payload);
+                }
+            },
+            count(name) {
+                return (listeners.get(name) ?? []).length;
+            },
+        };
+    }
+
+    test('bridges whitelisted events and wraps handlers', () => {
+        const eventSource = makeEventSource();
+        const bridge = createFrameBridge({ eventSource });
+        const seen = [];
+        expect(bridge.on('message_received', payload => seen.push(payload))).toBe(true);
+        expect(eventSource.count('message_received')).toBe(1);
+        eventSource.emit('message_received', { id: 7 });
+        expect(seen).toEqual([{ id: 7 }]);
+    });
+
+    test('rejects non-whitelisted events and non-function handlers', () => {
+        const eventSource = makeEventSource();
+        const bridge = createFrameBridge({ eventSource });
+        expect(bridge.on('api_request_started', () => {})).toBe(false);
+        expect(bridge.on('message_received', 'not-a-function')).toBe(false);
+        expect(eventSource.count('api_request_started')).toBe(0);
+        expect(FRONTEND_FRAME_ALLOWED_EVENTS).toContain('message_received');
+        expect(FRONTEND_FRAME_ALLOWED_EVENTS).not.toContain('api_request_started');
+    });
+
+    test('off removes matching subscriptions; dispose removes all', () => {
+        const eventSource = makeEventSource();
+        const bridge = createFrameBridge({ eventSource });
+        const a = () => {};
+        const b = () => {};
+        bridge.on('message_received', a);
+        bridge.on('message_received', b);
+        bridge.on('generation_ended', a);
+        expect(bridge.off('message_received', a)).toBe(true);
+        expect(eventSource.count('message_received')).toBe(1);
+        expect(eventSource.count('generation_ended')).toBe(1);
+        bridge.dispose();
+        expect(bridge.subscriptionCount).toBe(0);
+        expect(eventSource.count('message_received')).toBe(0);
+        expect(eventSource.count('generation_ended')).toBe(0);
+    });
+
+    test('getContext returns a frozen snapshot and survives factory errors', () => {
+        const bridge = createFrameBridge({
+            getContextSnapshot: () => ({ frameId: 'f1', nested: { x: 1 } }),
+        });
+        const snapshot = bridge.getContext();
+        expect(snapshot).toEqual({ frameId: 'f1', nested: { x: 1 } });
+        expect(Object.isFrozen(snapshot)).toBe(true);
+        expect(createFrameBridge({ getContextSnapshot: () => { throw new Error('boom'); } }).getContext()).toBe(null);
+        expect(createFrameBridge({}).getContext()).toBe(null);
+    });
+
+    test('bridges without eventSource still serve getContext', () => {
+        const bridge = createFrameBridge({ getContextSnapshot: () => ({ messageId: '3' }) });
+        expect(bridge.on('message_received', () => {})).toBe(false);
+        expect(bridge.getContext()).toEqual({ messageId: '3' });
+    });
+});
+
+describe('frame document bridge payload', () => {
+    test('injects allowedEvents and EmberDeskFrame bridge calls into the document', () => {
+        const doc = buildFrontendFrameDocument('<html><body>x</body></html>', { frameId: 'f9', messageId: '3' });
+        expect(doc).toContain('"allowedEvents"');
+        expect(doc).toContain('"message_received"');
+        expect(doc).toContain('__ED_FRAME_API__');
+        expect(doc).toContain('frameId: typeof meta.frameId');
     });
 });

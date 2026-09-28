@@ -6,13 +6,22 @@
  * SillyTavern.getContext() — React code outside app/compat may not touch the
  * global directly — and owns the row-level lifecycle effect:
  *
- *   state !== 'finalized'  → never mount (streaming partial docs must not run)
- *   depth ineligible       → never mount (pre-insertion eligibility, not
- *                            mount-then-remove)
- *   every commit           → self-healing re-scan (React may rewrite the
- *                            dangerouslySetInnerHTML subtree on any commit)
+ *   finalized non-streaming row → inline frames inside `.mes_text`
+ *   streaming row               → closed-fence frames in a sibling
+ *                                 `.ed-frontend-stream` host (`.mes_text`
+ *                                 innerHTML is rewritten per token, so iframes
+ *                                 must live outside it); gated by
+ *                                 `allow_streaming`. NOTE: streaming rows keep
+ *                                 `state === 'finalized'` — the real signal is
+ *                                 `snapshot.streaming.activeMessageId`, not
+ *                                 the message state field.
+ *   depth ineligible            → never mount (pre-insertion eligibility, not
+ *                                 mount-then-remove)
+ *   editing / error / etc       → nothing mounts; leftovers removed
+ *   every commit                → self-healing re-scan (React may rewrite the
+ *                                 dangerouslySetInnerHTML subtree on any commit)
  *   FRONTEND_FRAMES_CHANGED_EVENT → re-render so every mounted row re-scans
- *                           when the shell controller invalidates frames
+ *                              when the shell controller invalidates frames
  */
 
 import { useEffect, useReducer, type RefObject } from 'react';
@@ -20,16 +29,28 @@ import {
     FRONTEND_FRAMES_CHANGED_EVENT,
     computeDepthEligible,
     mountFrontendFrames,
+    mountStreamingFrames,
     normalizeFrontendFramesSettings,
     unmountFrontendFrames,
+    unmountStreamingFrames,
 } from '../../public/scripts/frontend-frame.js';
 import { translate } from './i18n.js';
 import { getMainChatSnapshot } from '../stores/main-chat-store';
 import type { MainChatMessageRecord } from '../stores/main-chat-store';
 
+interface ShellEventSource {
+    emit?: (eventName: string, payload?: unknown) => void;
+    on?: (eventName: string, listener: (...args: unknown[]) => void) => void;
+    removeListener?: (eventName: string, listener: (...args: unknown[]) => void) => void;
+}
+
 interface ShellFrameContext {
-    powerUserSettings?: { frontend_frames?: unknown };
-    eventSource?: { emit?: (eventName: string, payload?: unknown) => void };
+    powerUserSettings?: { frontend_frames?: unknown } & Record<string, unknown>;
+    eventSource?: ShellEventSource;
+    name1?: string;
+    name2?: string;
+    characterId?: number | string;
+    chatId?: string;
     getUserAvatarUrl?: () => string;
     getCharacterAvatarUrl?: () => string;
 }
@@ -58,6 +79,7 @@ function buildFrameContext(messageId: string) {
     for (const id of renderedIds) {
         isSystemById[id] = snapshot.messagesById[id]?.role === 'system';
     }
+    const streaming = snapshot.streaming;
     return {
         settings,
         eligible: computeDepthEligible({
@@ -67,10 +89,30 @@ function buildFrameContext(messageId: string) {
             depth: settings.depth,
             depthIgnoreHidden: settings.depth_ignore_hidden,
         }),
+        // The row being written by the live streaming transport. Row `state`
+        // stays 'finalized' while tokens arrive — this is the authoritative
+        // per-row streaming signal.
+        isStreamingRow: streaming.activeMessageId === String(messageId)
+            && (streaming.phase === 'connecting' || streaming.phase === 'streaming'),
         messageId,
         userAvatarUrl: shell?.getUserAvatarUrl?.() ?? '',
         charAvatarUrl: shell?.getCharacterAvatarUrl?.() ?? '',
         baseHref: typeof globalThis.location?.origin === 'string' ? globalThis.location.origin : '',
+        eventSource: shell?.eventSource,
+        // Convenience snapshot for EmberDeskFrame.getContext() — frozen by the
+        // bridge per call. NOT a security boundary: same-origin frames can
+        // always reach window.parent for the live context.
+        getContextSnapshot: (frameId: string) => ({
+            frameId,
+            messageId,
+            userName: shell?.name1 ?? '',
+            characterName: shell?.name2 ?? '',
+            characterId: shell?.characterId ?? null,
+            chatId: shell?.chatId ?? '',
+            userAvatarUrl: shell?.getUserAvatarUrl?.() ?? '',
+            charAvatarUrl: shell?.getCharacterAvatarUrl?.() ?? '',
+            settings: shell?.powerUserSettings ? { ...shell.powerUserSettings } : undefined,
+        }),
         emit: (eventName: string, frameId: string) => {
             try {
                 shell?.eventSource?.emit?.(eventName, frameId);
@@ -83,12 +125,13 @@ function buildFrameContext(messageId: string) {
 }
 
 /**
- * Mounts/unmounts frontend frames inside the row's `.mes_text` host element.
- * @param mesTextRef Ref to the rendered rich-body container
- * @param message Owning message record (drives the finalized guard)
+ * Mounts/unmounts frontend frames for one React main-chat row.
+ * @param rowRef Ref to the row root (`.mes`) element — frames may live either
+ *               inside `.mes_text` (finalized) or in a sibling stream host
+ * @param message Owning message record (drives the state guard)
  */
 export function useFrontendFrames(
-    mesTextRef: RefObject<HTMLDivElement | null>,
+    rowRef: RefObject<HTMLDivElement | null>,
     message: MainChatMessageRecord,
 ) {
     const [, bumpEpoch] = useReducer((value: number) => value + 1, 0);
@@ -100,21 +143,31 @@ export function useFrontendFrames(
     }, []);
 
     useEffect(() => {
-        const host = mesTextRef.current;
-        if (!host) {
+        const rowEl = rowRef.current;
+        if (!rowEl) {
             return;
         }
-        if (message.state !== 'finalized' || message.editing) {
-            unmountFrontendFrames(host);
+        const ctx = buildFrameContext(message.id);
+        const mesTextEl = rowEl.querySelector('.mes_text');
+        const streamingRow = ctx.isStreamingRow || message.state === 'streaming';
+        if (streamingRow && !message.editing && message.state !== 'error') {
+            if (mesTextEl instanceof HTMLElement) {
+                unmountFrontendFrames(mesTextEl);
+            }
+            mountStreamingFrames(rowEl, { ...ctx, text: message.content });
             return;
         }
-        // No dep array and no cleanup return: React may rewrite the
-        // dangerouslySetInnerHTML subtree on any commit (including renders
-        // where the string value is observably equal), so the scan must be
-        // self-healing after every commit, not only on dep changes.
-        // mountFrontendFrames is idempotent for already-mounted slots and
-        // self-unmounts when the row became ineligible, so epoch bumps and
-        // unrelated re-renders never tear down healthy frames.
-        mountFrontendFrames(host, buildFrameContext(message.id));
+        if (message.state === 'finalized' && !message.editing) {
+            unmountStreamingFrames(rowEl);
+            if (mesTextEl instanceof HTMLElement) {
+                mountFrontendFrames(mesTextEl, ctx);
+            }
+            return;
+        }
+        // editing / error / extension-mutated: mount nothing, clean leftovers.
+        if (mesTextEl instanceof HTMLElement) {
+            unmountFrontendFrames(mesTextEl);
+        }
+        unmountStreamingFrames(rowEl);
     });
 }

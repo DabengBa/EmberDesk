@@ -258,4 +258,214 @@ test.describe('chat message frontend frames', () => {
         await expect(page.locator('.ed-frontend-frame')).toHaveCount(1, { timeout: 15_000 });
         await expect(page.locator('.mes[mesid="1"] .ed-frontend-frame')).toHaveCount(1);
     });
+
+    test('bridges whitelisted events and a frozen getContext snapshot into frames', async ({ page }) => {
+        await testSetup.awaitST({ page });
+        await selectCharacterByName(page, characterName);
+        await openFrontendChat(page);
+        await expect(page.locator('.mes[mesid="1"] .ed-frontend-frame iframe')).toHaveCount(1, { timeout: 15_000 });
+
+        const snapshot = await page.evaluate(() => {
+            const frameWindow = document.querySelector('.mes[mesid="1"] iframe')?.contentWindow;
+            const ctx = frameWindow?.EmberDeskFrame?.getContext?.();
+            return ctx ? {
+                frameId: ctx.frameId,
+                messageId: ctx.messageId,
+                userName: ctx.userName,
+                characterName: ctx.characterName,
+                frozen: Object.isFrozen(ctx),
+            } : null;
+        });
+        expect(snapshot?.frameId).toBe('ed-frame--1--0');
+        expect(snapshot?.messageId).toBe('1');
+        expect(typeof snapshot?.userName).toBe('string');
+        expect(snapshot?.frozen).toBe(true);
+
+        // Whitelisted subscription delivers; non-whitelisted refused; off()
+        // unsubscribes. Run in one evaluate — the frame's contentWindow object
+        // identity can drift between evaluates when the row re-commits.
+        const bridged = await page.evaluate(async () => {
+            window.__bridgeDeliveries = [];
+            const handler = payload => window.__bridgeDeliveries.push(payload);
+            const emit = (payload) => window.SillyTavern.getContext().eventSource.emit('message_received', payload);
+            const frameWindow = document.querySelector('.mes[mesid="1"] iframe').contentWindow;
+            const accepted = frameWindow.EmberDeskFrame.on('message_received', handler);
+            const rejected = frameWindow.EmberDeskFrame.on('not_a_real_event', () => {});
+            await emit({ e2e: 1 });
+            const afterOn = window.__bridgeDeliveries.length;
+            frameWindow.EmberDeskFrame.off('message_received', handler);
+            await emit({ e2e: 2 });
+            const afterOff = window.__bridgeDeliveries.length;
+            // Host-side re-subscribe through the same registry the frame uses.
+            window.__ED_FRAME_API__.on('ed-frame--1--0', 'message_received', handler);
+            await emit({ e2e: 3 });
+            return { accepted, rejected, afterOn, afterOff, afterRe: window.__bridgeDeliveries.length };
+        });
+        expect(bridged).toEqual({ accepted: true, rejected: false, afterOn: 1, afterOff: 1, afterRe: 2 });
+
+        // Host-side dispose on unmount: disable → emit → no further delivery.
+        await setFrontendFramesSettings(page, { enabled: false });
+        await expect(page.locator('.ed-frontend-frame')).toHaveCount(0, { timeout: 15_000 });
+        await page.evaluate(() => window.SillyTavern.getContext().eventSource.emit('message_received', { e2e: 4 }));
+        await page.waitForTimeout(300);
+        expect(await page.evaluate(() => window.__bridgeDeliveries.length)).toBe(2);
+    });
+});
+
+const STREAMING_FRAME_DOC = [
+    '<!DOCTYPE html>',
+    '<html>',
+    '<body>',
+    '<div id="stream-live">STREAM LIVE</div>',
+    '</body>',
+    '</html>',
+].join('\n');
+
+async function enableOpenAiStreaming(page) {
+    await page.evaluate(() => {
+        const context = window.SillyTavern.getContext();
+        context.powerUserSettings.stream_fade_in = false;
+        context.powerUserSettings.streaming_fps = 60;
+        context.chatCompletionSettings.chat_completion_source = 'openai';
+        context.chatCompletionSettings.openai_model = 'gpt-4o-mini';
+        context.chatCompletionSettings.stream_openai = true;
+        context.chatCompletionSettings.n = 1;
+        context.chatCompletionSettings.send_if_empty = '';
+    });
+    await page.evaluate(async () => {
+        const script = await import('/script.js');
+        script.changeMainAPI('openai');
+        script.setOnlineStatus('Valid');
+        script.activateSendButtons();
+    });
+}
+
+async function installStreamingFetchStub(page, { chunks, delayMs = 150 }) {
+    await page.evaluate(({ streamChunks, streamDelayMs }) => {
+        window.__edStreamGeneration = null;
+        window.__edStreamOriginalFetch ??= window.fetch.bind(window);
+        window.fetch = async (input, init = {}) => {
+            const url = typeof input === 'string' ? input : input.url;
+            if (!String(url).endsWith('/api/backends/chat-completions/generate')) {
+                return window.__edStreamOriginalFetch(input, init);
+            }
+            const encoder = new TextEncoder();
+            const body = new ReadableStream({
+                async start(controller) {
+                    try {
+                        for (const chunk of streamChunks) {
+                            controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+                                choices: [{ index: 0, delta: { content: chunk }, finish_reason: null }],
+                            })}\n\n`));
+                            await new Promise(resolve => setTimeout(resolve, streamDelayMs));
+                        }
+                        // Keep the stream open: the row stays in `streaming`
+                        // state until the test aborts the generation.
+                        await new Promise(resolve => {
+                            if (init.signal?.aborted) {
+                                resolve();
+                                return;
+                            }
+                            init.signal?.addEventListener('abort', resolve, { once: true });
+                        });
+                    } finally {
+                        try { controller.close(); } catch { /* already closed */ }
+                    }
+                },
+            });
+            return new Response(body, { status: 200, headers: { 'Content-Type': 'text/event-stream' } });
+        };
+    }, { streamChunks: chunks, streamDelayMs: delayMs });
+}
+
+async function startGeneration(page, prompt) {
+    await page.evaluate((messageText) => {
+        const textarea = document.querySelector('#send_textarea');
+        textarea.value = messageText;
+        textarea.dispatchEvent(new Event('input', { bubbles: true }));
+        const context = window.SillyTavern.getContext();
+        window.__edStreamGeneration = context.generate('normal', { automatic_trigger: false })
+            .catch(() => 'aborted');
+    }, prompt);
+}
+
+async function stopAndFinalize(page) {
+    await page.getByRole('button', { name: 'Abort request' }).click({ timeout: 10_000 });
+    await expect.poll(() => page.evaluate(() => window.SillyTavern.getContext().streamingProcessor === null), { timeout: 15_000 }).toBe(true);
+    // Bounded wait — the generate() promise may already be settled.
+    await page.evaluate(() => Promise.race([
+        window.__edStreamGeneration,
+        new Promise(resolve => setTimeout(() => resolve('timeout-ok'), 3000)),
+    ]));
+}
+
+test.describe('chat message frontend frames — streaming', () => {
+    test('mounts closed-fence frames mid-stream and hands off to inline mount on finalize', async ({ page }) => {
+        await testSetup.awaitST({ page });
+        await selectCharacterByName(page, characterName);
+        await page.evaluate(async () => {
+            const script = await import('/script.js');
+            await script.doNewChat({ deleteCurrentChat: false });
+            await script.eventSource.emit(script.event_types.CHAT_LOADED, { detail: { source: 'e2e-fresh-chat' } });
+        });
+        await enableOpenAiStreaming(page);
+        await setFrontendFramesSettings(page, { allow_streaming: true });
+        await installStreamingFetchStub(page, {
+            chunks: [
+                'Here is the card.\n\n',
+                '```html\n' + STREAMING_FRAME_DOC,
+                '\n```',
+                '\n\nAfter one.',
+                ' After two.',
+            ],
+            delayMs: 250,
+        });
+        await startGeneration(page, 'render a frame');
+
+        // While streaming: frame lives in the sibling stream host, NOT in .mes_text.
+        const streamFrame = page.locator('#chat .mes .ed-frontend-stream iframe.ed-frontend-frame__iframe');
+        await expect(streamFrame).toHaveCount(1, { timeout: 15_000 });
+        await expect.poll(() => page.evaluate(() =>
+            document.querySelector('.ed-frontend-stream iframe')?.contentWindow?.document?.querySelector('#stream-live')?.textContent,
+        ), { timeout: 15_000 }).toBe('STREAM LIVE');
+        await expect(page.locator('#chat .mes .mes_text .ed-frontend-frame')).toHaveCount(0);
+
+        // The iframe survives later token commits (no flicker remount).
+        await page.evaluate(() => {
+            document.querySelector('.ed-frontend-stream iframe').contentWindow.__persist = 'kept';
+        });
+        await page.waitForTimeout(600);
+        expect(await page.evaluate(() =>
+            document.querySelector('.ed-frontend-stream iframe')?.contentWindow?.__persist,
+        )).toBe('kept');
+
+        // Abort → row finalizes → stream host removed, inline mount takes over.
+        await stopAndFinalize(page);
+        await expect(page.locator('.ed-frontend-stream')).toHaveCount(0, { timeout: 15_000 });
+        await expect(page.locator('#chat .mes .mes_text .ed-frontend-frame iframe')).toHaveCount(1, { timeout: 15_000 });
+    });
+
+    test('allow_streaming=false keeps streaming text as plain code until finalize', async ({ page }) => {
+        await testSetup.awaitST({ page });
+        await selectCharacterByName(page, characterName);
+        await page.evaluate(async () => {
+            const script = await import('/script.js');
+            await script.doNewChat({ deleteCurrentChat: false });
+            await script.eventSource.emit(script.event_types.CHAT_LOADED, { detail: { source: 'e2e-fresh-chat' } });
+        });
+        await enableOpenAiStreaming(page);
+        await setFrontendFramesSettings(page, { allow_streaming: false });
+        await installStreamingFetchStub(page, {
+            chunks: ['```html\n' + STREAMING_FRAME_DOC, '\n```', '\n\nDone.'],
+            delayMs: 250,
+        });
+        await startGeneration(page, 'render a frame');
+
+        await page.waitForTimeout(900);
+        await expect(page.locator('.ed-frontend-stream')).toHaveCount(0);
+        await expect(page.locator('#chat .mes .mes_text iframe')).toHaveCount(0);
+
+        await stopAndFinalize(page);
+        await expect(page.locator('#chat .mes .mes_text .ed-frontend-frame iframe')).toHaveCount(1, { timeout: 15_000 });
+    });
 });

@@ -15,6 +15,7 @@ import { power_user } from './power-user.js';
 import {
     FRONTEND_FRAME_SLOT_CLASS,
     FRONTEND_FRAMES_CHANGED_EVENT,
+    FRONTEND_STREAM_HOST_CLASS,
     computeDepthEligible,
     normalizeFrontendFramesSettings,
     unmountFrontendSlot,
@@ -44,16 +45,24 @@ export function auditFrontendFrames(chatRoot = document.getElementById('chat')) 
     const settings = normalizeFrontendFramesSettings(power_user.frontend_frames);
     const { renderedIds, isSystemById } = getRenderedFloorFacts();
     chatRoot.querySelectorAll(`.${FRONTEND_FRAME_SLOT_CLASS}`).forEach(slot => {
+        const inStreamHost = !!slot.closest(`.${FRONTEND_STREAM_HOST_CLASS}`);
         const messageId = slot.closest('.mes')?.getAttribute('mesid');
-        const eligible = settings.enabled && computeDepthEligible({
-            messageId,
-            renderedIds,
-            isSystemById,
-            depth: settings.depth,
-            depthIgnoreHidden: settings.depth_ignore_hidden,
-        });
+        const eligible = settings.enabled
+            && (!inStreamHost || settings.allow_streaming)
+            && computeDepthEligible({
+                messageId,
+                renderedIds,
+                isSystemById,
+                depth: settings.depth,
+                depthIgnoreHidden: settings.depth_ignore_hidden,
+            });
         if (!eligible) {
             unmountFrontendSlot(slot);
+        }
+    });
+    chatRoot.querySelectorAll(`.${FRONTEND_STREAM_HOST_CLASS}`).forEach(host => {
+        if (!host.querySelector(`.${FRONTEND_FRAME_SLOT_CLASS}`)) {
+            host.remove();
         }
     });
 }

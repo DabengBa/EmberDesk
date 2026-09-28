@@ -693,9 +693,9 @@ The new engine is designed to cleanly replace the old regex-based macro system.`
                                         <input id="frontend_frames_use_blob_url" type="checkbox" />
                                         <small data-i18n="Use blob URLs (debug)">Use blob URLs (debug)</small>
                                     </label>
-                                    <label className="checkbox_label" htmlFor="frontend_frames_allow_streaming" title="Render frames while a message is still streaming. Disabled until a future phase." data-i18n="[title]Render frames while a message is still streaming. Disabled until a future phase.">
-                                        <input id="frontend_frames_allow_streaming" type="checkbox" disabled />
-                                        <small data-i18n="Render while streaming (soon)">Render while streaming (soon)</small>
+                                    <label className="checkbox_label" htmlFor="frontend_frames_allow_streaming" title="Render frames while a message is still streaming. Only documents in already-closed code fences mount." data-i18n="[title]Render frames while a message is still streaming. Only documents in already-closed code fences mount.">
+                                        <input id="frontend_frames_allow_streaming" type="checkbox" />
+                                        <small data-i18n="Render while streaming">Render while streaming</small>
                                     </label>
                                 </div>
                             </div>

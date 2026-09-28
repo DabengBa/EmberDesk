@@ -487,6 +487,13 @@ label[for="trim_spaces"]:not(:has(input:checked)) small {
     margin: 0.5em 0;
 }
 
+/* Streaming host: holds live frames outside `.mes_text`, whose innerHTML is
+ * rewritten on every streamed token. */
+.ed-frontend-stream {
+    display: block;
+    margin: 0.5em 0;
+}
+
 .ed-frontend-frame__iframe {
     display: block;
     width: 100%;
