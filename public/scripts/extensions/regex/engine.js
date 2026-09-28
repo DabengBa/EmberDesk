@@ -96,7 +96,7 @@ export class RegexProvider {
  * @returns {RegexScript[]} An array of regex scripts, where each script is an object containing the necessary information.
  */
 export function getRegexScripts(options = DEFAULT_GET_REGEX_SCRIPTS_OPTIONS) {
-    return [...Object.values(SCRIPT_TYPES).flatMap(type => getScriptsByType(type, options))];
+    return Object.values(SCRIPT_TYPES).flatMap(type => getScriptsByType(type, options));
 }
 
 /**

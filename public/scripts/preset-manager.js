@@ -165,7 +165,7 @@ class PresetManager {
      * @param {string} fileName File name
      * @returns {Promise<void>}
      */
-    static async performMasterImport(data, fileName) {
+    static async performMasterImport(data, _fileName) {
         if (!data || typeof data !== 'object') {
             toastr.error(t`Invalid data provided for master import`);
             return;
@@ -740,7 +740,7 @@ class PresetManager {
         if (settings && selectedName === presetName) {
             // Set the value at the specified path
             settings.extensions = ensurePlainObject(settings.extensions || {});
-            path ? lodash.set(settings.extensions, path, value) : (settings.extensions = value);
+            if (path) lodash.set(settings.extensions, path, value); else settings.extensions = value;
             await saveSettings();
         }
 
@@ -752,7 +752,7 @@ class PresetManager {
 
         // Set the value at the specified path
         preset.extensions = ensurePlainObject(preset.extensions || {});
-        path ? lodash.set(preset.extensions, path, value) : (preset.extensions = value);
+        if (path) lodash.set(preset.extensions, path, value); else preset.extensions = value;
 
         // Save the updated preset
         await this.savePreset(presetName, preset, { skipUpdate: true });
@@ -797,7 +797,7 @@ async function presetCommandCallback(_, name) {
 
             if (presetValue) {
                 presetManager.selectPreset(presetValue);
-                shouldReconnect && await waitForConnection();
+                if (shouldReconnect) await waitForConnection();
             }
         }
 
@@ -820,7 +820,7 @@ async function presetCommandCallback(_, name) {
 
             if (currentPreset !== fuzzyPresetName) {
                 presetManager.selectPreset(fuzzyPresetValue);
-                shouldReconnect && await waitForConnection();
+                if (shouldReconnect) await waitForConnection();
             }
         }
 

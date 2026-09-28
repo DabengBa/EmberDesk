@@ -887,7 +887,7 @@ async function populateDialogueExamples(prompts, chatCompletion, messageExamples
     chatCompletion.add(new MessageCollection('dialogueExamples'), prompts.index('dialogueExamples'));
     if (Array.isArray(messageExamples) && messageExamples.length) {
         const newExampleChat = await Message.createAsync('system', substituteParams(oai_settings.new_example_chat_prompt), 'newChat');
-        for (const dialogue of [...messageExamples]) {
+        for (const dialogue of messageExamples) {
             const dialogueIndex = messageExamples.indexOf(dialogue);
             const chatMessages = [];
 
@@ -963,7 +963,7 @@ export function getPromptRole(role) {
  * @param {object[]} options.messageExamples - Array containing all message examples.
  * @returns {Promise<void>}
  */
-async function populateChatCompletion(prompts, chatCompletion, { bias, quietPrompt, quietImage, type, cyclePrompt, messages, messageExamples }) {
+async function populateChatCompletion(prompts, chatCompletion, { bias, quietPrompt: _quietPrompt, quietImage, type, cyclePrompt, messages, messageExamples }) {
     // Helper function for preparing a prompt, that already exists within the prompt collection, for completion
     const addToChatCompletion = async (source, target = null) => {
         // We need the prompts array to determine a position for the source.
@@ -1102,7 +1102,7 @@ async function populateChatCompletion(prompts, chatCompletion, { bias, quietProm
         const namesInCompletion = oai_settings.names_behavior === character_names_behavior.COMPLETION;
         const messageContent = chatMessage.content;
         const continueMessage = await Message.createAsync(chatMessage.role, messageContent, 'continuePrefill');
-        chatMessage.name && namesInCompletion && await continueMessage.setName(promptManager.sanitizeName(chatMessage.name));
+        if (chatMessage.name && namesInCompletion) await continueMessage.setName(promptManager.sanitizeName(chatMessage.name));
         controlPrompts.add(continueMessage);
         chatCompletion.reserveBudget(continueMessage);
     }
@@ -1141,7 +1141,7 @@ async function populateChatCompletion(prompts, chatCompletion, { bias, quietProm
  * @param {string} options.type - The type of generation that triggered the prompt
  * @returns {Promise<Object>} prompts - The prepared and merged system and user-defined prompts.
  */
-async function preparePromptsForChatCompletion({ scenario, charPersonality, name2, worldInfoBefore, worldInfoAfter, charDescription, quietPrompt, bias, extensionPrompts, systemPromptOverride, jailbreakPromptOverride, type }) {
+async function preparePromptsForChatCompletion({ scenario, charPersonality, name2: _name2, worldInfoBefore, worldInfoAfter, charDescription, quietPrompt, bias, extensionPrompts, systemPromptOverride, jailbreakPromptOverride, type }) {
     const scenarioText = scenario && oai_settings.scenario_format ? substituteParams(oai_settings.scenario_format) : (scenario || '');
     const charPersonalityText = charPersonality && oai_settings.personality_format ? substituteParams(oai_settings.personality_format) : (charPersonality || '');
     const impersonationPrompt = oai_settings.impersonation_prompt ? substituteParams(oai_settings.impersonation_prompt) : '';
@@ -1420,17 +1420,17 @@ export function tryParseStreamingError(response, decoded, { quiet = false } = {}
         // if trying to fix "[object Object]" displayed to users, start here
 
         if (data.error) {
-            !quiet && toastr.error(data.error.message || response.statusText, 'Chat Completion API');
+            if (!quiet) toastr.error(data.error.message || response.statusText, 'Chat Completion API');
             throw new Error(data);
         }
 
         if (data.message) {
-            !quiet && toastr.error(data.message, 'Chat Completion API');
+            if (!quiet) toastr.error(data.message, 'Chat Completion API');
             throw new Error(data);
         }
 
         if (data.detail) {
-            !quiet && toastr.error(data.detail?.error?.message || response.statusText, 'Chat Completion API');
+            if (!quiet) toastr.error(data.detail?.error?.message || response.statusText, 'Chat Completion API');
             throw new Error(data);
         }
     } catch {
@@ -1452,7 +1452,7 @@ function checkQuotaError(data, { quiet = false } = {}) {
     }
 
     if (data.quota_error) {
-        !quiet && renderTemplateAsync('quotaError').then((html) => Popup.show.text('Quota Error', html));
+        if (!quiet) renderTemplateAsync('quotaError').then((html) => Popup.show.text('Quota Error', html));
 
         // this does not throw correctly (equiv to Error("[object Object]"))
         // if trying to fix "[object Object]" displayed to users, start here
@@ -1769,7 +1769,7 @@ async function sendOpenAIRequest(type, messages, signal, { jsonSchema = null, fa
  * @param {boolean?} [options.overrideShowThoughts] Override show thoughts
  * @returns {string} The reply extracted from the response data
  */
-export function getStreamingReply(data, state, { chatCompletionSource = null, overrideShowThoughts = null } = {}) {
+export function getStreamingReply(data, _state, { chatCompletionSource: _chatCompletionSource = null, overrideShowThoughts: _overrideShowThoughts = null } = {}) {
     return data.choices?.[0]?.delta?.content ?? data.choices?.[0]?.message?.content ?? data.choices?.[0]?.text ?? '';
 }
 
@@ -2902,7 +2902,7 @@ async function onPresetImportFileChange(e) {
 
     try {
         presetBody = JSON.parse(importedFile);
-    } catch (err) {
+    } catch {
         toastr.error(t`Invalid file`);
         return;
     }
@@ -3193,7 +3193,7 @@ function onReverseProxyInput() {
     saveSettingsDebounced();
 }
 
-function getPendingProviderCredentialValue(secretKey = resolveSecretKey()) {
+function getPendingProviderCredentialValue(_secretKey = resolveSecretKey()) {
     return String($('#api_key_unified').val() || '').trim();
 }
 
@@ -3284,7 +3284,7 @@ async function testApiConnection() {
         ]);
         console.log(reply);
         toastr.success(t`API connection successful!`);
-    } catch (err) {
+    } catch {
         toastr.error(t`Could not get a reply from API. Check your connection settings / API key and try again.`);
     } finally {
         clearTimeout(timeout);

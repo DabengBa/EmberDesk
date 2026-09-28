@@ -351,7 +351,7 @@ export async function saveChat({ chatName, withMetadata, mesId, force = false, c
         [chatName, withMetadata, mesId, force] = arguments;
     }
 
-    const metadata = { ...state.chat_metadata, ...(withMetadata || {}) };
+    const metadata = { ...state.chat_metadata, ...withMetadata };
     const fileName = chatName ?? state.characters[state.this_chid]?.chat;
 
     if (!fileName && state.name2 === state.neutralCharacterName) {

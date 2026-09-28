@@ -31,7 +31,7 @@ function canUseNegativeLookbehind() {
     try {
         new RegExp('(?<!_)');
         return true;
-    } catch (e) {
+    } catch {
         return false;
     }
 }

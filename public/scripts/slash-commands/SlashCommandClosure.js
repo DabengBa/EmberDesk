@@ -429,10 +429,10 @@ export class SlashCommandClosure {
                 // then yield for "before exec"
                 yield executor;
                 // followed by command execution
-                executor.onProgress = (subDone, subTotal) => this.onProgress?.(done + subDone, this.commandCount);
+                executor.onProgress = (subDone, _subTotal) => this.onProgress?.(done + subDone, this.commandCount);
                 const isStepping = this.debugController?.testStepping(this);
                 if (this.debugController) {
-                    this.debugController.isStepping = false || this.debugController.isSteppingInto;
+                    this.debugController.isStepping = this.debugController.isSteppingInto;
                 }
                 try {
                     this.scope.pipe = await executor.command.callback(args, value ?? '');
@@ -520,7 +520,7 @@ export class SlashCommandClosure {
                     args[name] = [value];
                 }
             } else {
-                args[name] !== undefined && console.debug(`Named argument assigned multiple times: ${name}`);
+                if (args[name] !== undefined) console.debug(`Named argument assigned multiple times: ${name}`);
                 args[name] = value;
             }
         };

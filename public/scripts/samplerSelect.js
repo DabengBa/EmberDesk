@@ -184,7 +184,7 @@ function isElementVisibleInDOM(element) {
 
 
 async function listSamplers(main_api, arrayOnly = false) {
-    let availableSamplers;
+    let availableSamplers = [];
 
     if (arrayOnly) {
         console.debug('returning full samplers array');

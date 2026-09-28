@@ -1,5 +1,4 @@
-import { eventSource } from './events.js';
-import { event_types } from './events.js';
+import { eventSource, event_types } from './events.js';
 import { getRequestHeaders } from './request-context.js';
 import { saveSettings, saveSettingsDebounced, CLIENT_VERSION } from '../script.js';
 import { POPUP_RESULT, POPUP_TYPE, Popup } from './popup.js';
@@ -2146,7 +2145,7 @@ async function checkForUpdatesManual(sortFn, abortSignal) {
                             originLink.target = '_blank';
                             originLink.rel = 'noopener noreferrer';
                         } catch (error) {
-                            console.log('Error setting origin link', originLink, error);
+                            console.warn('Error setting origin link', originLink, error);
                         }
                     }
 

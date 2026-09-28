@@ -471,7 +471,7 @@ export function parseRegexFromString(input) {
 
     try {
         return new RegExp(pattern, flags);
-    } catch (e) {
+    } catch {
         return null;
     }
 }

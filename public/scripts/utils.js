@@ -52,7 +52,7 @@ export function canUseNegativeLookbehind() {
         try {
             new RegExp('(?<!_)');
             result = true;
-        } catch (e) {
+        } catch {
             result = false;
         }
         fn.result = result;
@@ -1025,7 +1025,7 @@ export function parseStringArray(value) {
             throw new Error('Not an array');
         }
         return parsedValue.map(x => String(x));
-    } catch (e) {
+    } catch {
         return value.split(',').map(x => x.trim()).filter(x => x);
     }
 }
@@ -1714,9 +1714,11 @@ export function loadFileToDocument(url, type) {
         element.onload = resolve;
         element.onerror = reject;
 
-        type === 'css'
-            ? document.head.appendChild(element)
-            : document.body.appendChild(element);
+        if (type === 'css') {
+            document.head.appendChild(element);
+        } else {
+            document.body.appendChild(element);
+        }
     });
 }
 
@@ -2038,7 +2040,7 @@ export async function extractTextFromOffice(blob) {
             });
 
             return result.ok;
-        } catch (error) {
+        } catch {
             return false;
         }
     }
@@ -2263,7 +2265,7 @@ export function dynamicSelect2DataViaAjax(dataProvider) {
                 return includesIgnoreCaseAndAccents(item.text, params.data.q);
             });
         }
-        var promise = new Promise(function (resolve, reject) {
+        var promise = new Promise(function (resolve, _reject) {
             resolve({ results: items });
         });
         promise.then(success);
@@ -2348,7 +2350,7 @@ export function highlightRegex(regexStr) {
                 flags: new RegExp('(?<=\\/)([gimsuy]*)$', 'g'),  // Match trailing flags
                 delimiters: new RegExp('^\\/|(?<![\\\\<])\\/', 'g'),  // Match leading or trailing delimiters
             };
-        } catch (error) {
+        } catch {
             return {
                 brackets: new RegExp('(\\\\)?\\[.*?\\]', 'g'),  // Non-escaped square brackets
                 quantifiers: new RegExp('(\\\\)?[*+?{}]', 'g'),  // Non-escaped quantifiers
@@ -2507,9 +2509,7 @@ export async function fetchFaFile(name) {
 }
 
 export async function fetchFa() {
-    return [...new Set((await Promise.all([
-        fetchFaFile('fontawesome.min.css'),
-    ])).flat())];
+    return [...new Set(await fetchFaFile('fontawesome.min.css'))];
 }
 /**
  * Opens a popup with all the available Font Awesome icons and returns the selected icon's name.
@@ -2807,7 +2807,7 @@ export function logSlashCommandWarn(message, args, valueObj = null) {
     } else {
         console.warn(message, stripInternalArgs(args));
     }
-    return;
+
     function stripInternalArgs(args) {
         // strip all args/properties that start with an underscore
         const result = {};

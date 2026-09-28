@@ -281,7 +281,7 @@ async function createConnectionProfile(forceName = null) {
             profile.exclude.push(keyName);
         } else {
             const index = profile.exclude.indexOf(keyName);
-            index !== -1 && profile.exclude.splice(index, 1);
+            if (index !== -1) profile.exclude.splice(index, 1);
         }
     });
     const isNameTaken = (n) => extension_settings.connectionManager.profiles.some(p => p.name === n);

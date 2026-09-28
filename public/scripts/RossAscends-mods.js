@@ -320,7 +320,7 @@ function RA_checkOnlineStatus() {
 }
 //Auto-connect to API (when set to kobold, API URL exists, and auto_connect is true)
 
-function RA_autoconnect(PrevApi) {
+function RA_autoconnect(_PrevApi) {
     // secrets.js or script.js not loaded
     if (SECRET_KEYS === undefined || online_status === undefined) {
         setTimeout(RA_autoconnect, 100);

@@ -583,7 +583,7 @@ export class Popup {
 
                         // If the the main popup closes while the force-close popup is still being displayed, we gracefully cancel that.
                         const originalOnClose = this.onClose;
-                        this.onClose = async (x) => {
+                        this.onClose = async (_x) => {
                             if (originalOnClose) await originalOnClose;
                             await confirmPopup.completeCancelled();
                         };

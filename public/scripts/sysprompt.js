@@ -112,7 +112,7 @@ function selectSystemPromptCallback(args, name) {
         const result = fuse.search(name);
 
         if (result.length === 0) {
-            !quiet && toastr.warning(`System prompt "${name}" not found`);
+            if (!quiet) toastr.warning(`System prompt "${name}" not found`);
             return '';
         }
 
@@ -120,7 +120,7 @@ function selectSystemPromptCallback(args, name) {
     }
 
     $select.val(foundName).trigger('change');
-    !quiet && toastr.success(`System prompt "${foundName}" selected`);
+    if (!quiet) toastr.success(`System prompt "${foundName}" selected`);
     return foundName;
 }
 

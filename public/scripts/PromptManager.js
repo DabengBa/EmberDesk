@@ -565,7 +565,7 @@ class PromptManager {
         };
 
         // Append prompt to selected character
-        this.handleAppendPrompt = (event) => {
+        this.handleAppendPrompt = (_event) => {
             const appendPromptFooter = /** @type {HTMLSelectElement} */(document.getElementById(this.configuration.prefix + 'prompt_manager_footer_append_prompt'));
             const promptID = appendPromptFooter.value;
             const prompt = this.getPromptById(promptID);
@@ -578,7 +578,7 @@ class PromptManager {
         };
 
         // Delete selected prompt from list form and close edit form
-        this.handleDeletePrompt = async (event) => {
+        this.handleDeletePrompt = async (_event) => {
             Popup.show.confirm(t`Are you sure you want to delete this prompt?`, null).then((userChoice) => {
                 if (!userChoice) return;
                 const appendPromptFooter = /** @type {HTMLSelectElement} */(document.getElementById(this.configuration.prefix + 'prompt_manager_footer_append_prompt'));
@@ -600,7 +600,7 @@ class PromptManager {
         };
 
         // Create new prompt, then save it to settings and close form.
-        this.handleNewPrompt = (event) => {
+        this.handleNewPrompt = (_event) => {
             const prompt = {
                 identifier: this.getUuidv4(),
                 name: '',
@@ -740,7 +740,7 @@ class PromptManager {
             if (this.activeCharacter) this.renderDebounced();
         });
 
-        document.getElementById('openai_max_tokens').addEventListener('change', (event) => {
+        document.getElementById('openai_max_tokens').addEventListener('change', (_event) => {
             if (this.activeCharacter) this.renderDebounced();
         });
 
@@ -1019,9 +1019,11 @@ class PromptManager {
         }
 
         // Check whether the referenced prompts are present.
-        this.serviceSettings.prompts.length === 0
-            ? this.setPrompts(chatCompletionDefaultPrompts.prompts)
-            : this.checkForMissingPrompts(this.serviceSettings.prompts);
+        if (this.serviceSettings.prompts.length === 0) {
+            this.setPrompts(chatCompletionDefaultPrompts.prompts);
+        } else {
+            this.checkForMissingPrompts(this.serviceSettings.prompts);
+        }
 
         // Add identifiers if there are none assigned to a prompt
         this.serviceSettings.prompts.forEach(prompt => prompt && (prompt.identifier = prompt.identifier ?? this.getUuidv4()));
@@ -1065,7 +1067,7 @@ class PromptManager {
      * @param {Prompt} prompt - The prompt to check.
      * @returns {boolean} True if the prompt is a marker, false otherwise.
      */
-    isPromptInspectionAllowed(prompt) {
+    isPromptInspectionAllowed(_prompt) {
         return true;
     }
 
@@ -1329,8 +1331,8 @@ class PromptManager {
             resetPromptButton.style.display = 'none';
         }
 
-        injectionPositionField.removeEventListener('change', (e) => this.handleInjectionPositionChange(e));
-        injectionPositionField.addEventListener('change', (e) => this.handleInjectionPositionChange(e));
+        injectionPositionField.removeEventListener('change', this.handleInjectionPositionChange);
+        injectionPositionField.addEventListener('change', this.handleInjectionPositionChange);
 
         const savePromptButton = document.getElementById(this.configuration.prefix + 'prompt_manager_popup_entry_form_save');
         savePromptButton.dataset.pmPrompt = prompt.identifier;
@@ -1338,7 +1340,7 @@ class PromptManager {
         this.#clearDirtyFormMarks();
     }
 
-    handleInjectionPositionChange(event) {
+    handleInjectionPositionChange = (event) => {
         const injectionDepthBlock = document.getElementById(this.configuration.prefix + 'prompt_manager_depth_block');
         const injectionOrderBlock = document.getElementById(this.configuration.prefix + 'prompt_manager_order_block');
         const injectionPosition = Number(event.target.value);
@@ -1349,7 +1351,7 @@ class PromptManager {
             injectionDepthBlock.style.visibility = 'hidden';
             injectionOrderBlock.style.visibility = 'hidden';
         }
-    }
+    };
 
     /**
      * Loads a given prompt into the inspect form
@@ -1856,7 +1858,7 @@ class PromptManager {
             delay: this.configuration.sortableDelay,
             handle: isMobile() ? '.drag-handle' : null,
             items: `.${this.configuration.prefix}prompt_manager_prompt_draggable`,
-            update: (event, ui) => {
+            update: (_event, _ui) => {
                 const promptOrder = this.getPromptOrderForCharacter(this.activeCharacter);
                 const promptListElement = $(`#${this.configuration.prefix}prompt_manager_list`).sortable('toArray', { attribute: 'data-pm-identifier' });
                 const idToObjectMap = new Map(promptOrder.map(prompt => [prompt.identifier, prompt]));

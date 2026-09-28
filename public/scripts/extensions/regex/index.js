@@ -283,7 +283,7 @@ class RegexPresetManager {
                         return foundId;
                     }
 
-                    !quiet && toastr.warning(`Regex preset "${name}" not found`);
+                    if (!quiet) toastr.warning(`Regex preset "${name}" not found`);
                     return '';
                 }
 
@@ -1487,9 +1487,9 @@ async function toggleRegexCallback(args, scriptName) {
 
     await saveRegexScript(script, index, scriptType);
     if (script.disabled) {
-        !quiet && toastr.success(t`Regex script '${scriptName}' has been disabled.`);
+        if (!quiet) toastr.success(t`Regex script '${scriptName}' has been disabled.`);
     } else {
-        !quiet && toastr.success(t`Regex script '${scriptName}' has been enabled.`);
+        if (!quiet) toastr.success(t`Regex script '${scriptName}' has been enabled.`);
     }
 
     return script.scriptName || '';

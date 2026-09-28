@@ -930,9 +930,9 @@ export function updateMessageElement(mes, { messageId = state.chat.length - 1, m
     messageElement.find('.ch_name .name_text').text(rowPopulation.displayName);
     messageElement.find('.timestamp').text(rowPopulation.timestampText).attr('title', rowPopulation.timestampTitle);
     messageElement.find('.mesIDDisplay').text(rowPopulation.messageIdText);
-    rowPopulation.tokenCountText && messageElement.find('.tokenCounterDisplay').text(rowPopulation.tokenCountText);
-    rowPopulation.messageTitle && messageElement.attr('title', rowPopulation.messageTitle);
-    rowPopulation.timer.value && messageElement.find('.mes_timer').attr('title', rowPopulation.timer.title).text(rowPopulation.timer.value);
+    if (rowPopulation.tokenCountText) messageElement.find('.tokenCounterDisplay').text(rowPopulation.tokenCountText);
+    if (rowPopulation.messageTitle) messageElement.attr('title', rowPopulation.messageTitle);
+    if (rowPopulation.timer.value) messageElement.find('.mes_timer').attr('title', rowPopulation.timer.title).text(rowPopulation.timer.value);
 
     if (richBody.biasHtml) {
         messageElement.find('.mes_bias').html(richBody.biasHtml);
@@ -1289,9 +1289,9 @@ export async function saveReply({ type, getMessage, fromStreaming = false, title
                 lastMessage.extra.token_count = await getTokenCountAsync(tokenCountText, 0);
             }
             const chat_id = (state.chat.length - 1);
-            !fromStreaming && await eventSource.emit(event_types.MESSAGE_RECEIVED, chat_id, type);
+            if (!fromStreaming) await eventSource.emit(event_types.MESSAGE_RECEIVED, chat_id, type);
             addOneMessage(state.chat[chat_id], { type: 'swipe' });
-            !fromStreaming && await eventSource.emit(event_types.CHARACTER_MESSAGE_RENDERED, chat_id, type);
+            if (!fromStreaming) await eventSource.emit(event_types.CHARACTER_MESSAGE_RENDERED, chat_id, type);
         } else {
             lastMessage.mes = getMessage;
         }
@@ -1313,9 +1313,9 @@ export async function saveReply({ type, getMessage, fromStreaming = false, title
             lastMessage.extra.token_count = await getTokenCountAsync(tokenCountText, 0);
         }
         const chat_id = (state.chat.length - 1);
-        !fromStreaming && await eventSource.emit(event_types.MESSAGE_RECEIVED, chat_id, type);
+        if (!fromStreaming) await eventSource.emit(event_types.MESSAGE_RECEIVED, chat_id, type);
         addOneMessage(state.chat[chat_id], { type: 'swipe' });
-        !fromStreaming && await eventSource.emit(event_types.CHARACTER_MESSAGE_RENDERED, chat_id, type);
+        if (!fromStreaming) await eventSource.emit(event_types.CHARACTER_MESSAGE_RENDERED, chat_id, type);
     } else if (type === 'appendFinal') {
         console.debug('Trying to appendFinal.');
         lastMessage.title = title;
@@ -1334,9 +1334,9 @@ export async function saveReply({ type, getMessage, fromStreaming = false, title
             lastMessage.extra.token_count = await getTokenCountAsync(tokenCountText, 0);
         }
         const chat_id = (state.chat.length - 1);
-        !fromStreaming && await eventSource.emit(event_types.MESSAGE_RECEIVED, chat_id, type);
+        if (!fromStreaming) await eventSource.emit(event_types.MESSAGE_RECEIVED, chat_id, type);
         addOneMessage(state.chat[chat_id], { type: 'swipe' });
-        !fromStreaming && await eventSource.emit(event_types.CHARACTER_MESSAGE_RENDERED, chat_id, type);
+        if (!fromStreaming) await eventSource.emit(event_types.CHARACTER_MESSAGE_RENDERED, chat_id, type);
     } else {
         console.debug('entering chat update routine for non-swipe post');
         const newMessage = {};
@@ -1366,9 +1366,9 @@ export async function saveReply({ type, getMessage, fromStreaming = false, title
         await processImageAttachment(newMessage, { imageUrls });
         const chat_id = (state.chat.length - 1);
 
-        !fromStreaming && await eventSource.emit(event_types.MESSAGE_RECEIVED, chat_id, type);
+        if (!fromStreaming) await eventSource.emit(event_types.MESSAGE_RECEIVED, chat_id, type);
         addOneMessage(state.chat[chat_id]);
-        !fromStreaming && await eventSource.emit(event_types.CHARACTER_MESSAGE_RENDERED, chat_id, type);
+        if (!fromStreaming) await eventSource.emit(event_types.CHARACTER_MESSAGE_RENDERED, chat_id, type);
     }
 
     const item = state.chat[state.chat.length - 1];

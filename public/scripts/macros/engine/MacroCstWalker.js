@@ -1137,7 +1137,7 @@ class MacroCstWalker {
      * @param {string} text - The original document text.
      * @returns {Array<DocumentItem>} - The processed items with scoped macros merged.
      */
-    #processScopedMacros(items, text) {
+    #processScopedMacros(items, _text) {
         // Build a list of scoped macro info for each macro item
         /** @type {Array<{ index: number, item: DocumentItemMacro, name: string, isClosing: boolean, matched: boolean }>} */
         const macroInfos = [];
