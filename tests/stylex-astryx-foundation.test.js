@@ -30,8 +30,9 @@ describe('StyleX/Astryx foundation (Phase 0)', () => {
     test('pins deterministic panel stylesheet assets so bridges can link them', () => {
         const viteConfig = readRepoFile('vite.config.ts');
 
-        expect(viteConfig).toContain("cssFileName: 'workspace-panels'");
-        expect(viteConfig).toContain("cssFileName: 'character-library-panel'");
+        expect(viteConfig).toContain('cssFileName: name');
+        expect(viteConfig).toContain("reactPanelConfig('workspace-panels')");
+        expect(viteConfig).toContain("reactPanelConfig('character-library-panel')");
         expect(viteConfig).toContain("assetFileNames: 'assets/[name][extname]'");
     });
 
