@@ -35,7 +35,6 @@ const DIRECTORIES_CACHE = new Map();
  * @property {string} textGen_Settings - The directory where the TextGen settings are stored
  * @property {string} themes - The directory where the themes are stored
  * @property {string} movingUI - The directory where the moving UI data is stored
- * @property {string} extensions - The directory where the extensions are stored
  * @property {string} instruct - The directory where the instruct templates is stored
  * @property {string} context - The directory where the context templates is stored
  * @property {string} quickreplies - The directory where the quick replies are stored
@@ -85,11 +84,7 @@ export async function getUserDirectoriesList() {
  * @returns {Promise<import('./user-directories.js').UserDirectoryList[]>} - The list of user directories
  */
 export async function ensurePublicDirectoriesExist() {
-    for (const [key, dir] of Object.entries(PUBLIC_DIRECTORIES)) {
-        // Third-party extensions are retired; never auto-recreate their directory.
-        if (key === 'globalExtensions') {
-            continue;
-        }
+    for (const dir of Object.values(PUBLIC_DIRECTORIES)) {
         if (!fs.existsSync(dir)) {
             fs.mkdirSync(dir, { recursive: true });
         }

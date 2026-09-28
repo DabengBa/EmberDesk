@@ -25,7 +25,6 @@ export const FIRST_PARTY_SCRIPT_JS_IMPORT_CONTRACT = Object.freeze([
     contractEntry('chat-backups.js', '/script.js', ['displayPastChats', 'importCharacterChat']),
     contractEntry('chats.js', '../script.js', ['addCopyToCodeBlocks', 'appendMediaToMessage', 'characters', 'chat', 'getCurrentChatId', 'name2', 'reloadCurrentChat', 'saveSettingsDebounced', 'this_chid', 'saveChatConditional', 'chat_metadata', 'neutralCharacterName', 'updateChatMetadata', 'system_message_types', 'converter', 'substituteParams', 'getSystemMessageByType', 'printMessages', 'clearChat', 'refreshSwipeButtons', 'getMediaIndex', 'getMediaDisplay', 'chatElement']),
     contractEntry('custom-request.js', '../script.js', ['extractJsonFromData', 'extractMessageFromData']),
-    contractEntry('extensions.js', '../script.js', ['saveSettings', 'saveSettingsDebounced', 'CLIENT_VERSION']),
     contractEntry('extensions/connection-manager/index.js', '../../../script.js', ['activateSendButtons', 'deactivateSendButtons', 'main_api', 'online_status', 'saveSettingsDebounced']),
     contractEntry('extensions/regex/engine.js', '../../../script.js', ['characters', 'saveSettingsDebounced', 'substituteParams', 'substituteParamsExtended', 'this_chid']),
     contractEntry('extensions/regex/index.js', '../../../script.js', ['characters', 'getCurrentChatId', 'messageFormatting', 'reloadCurrentChat', 'saveSettingsDebounced', 'this_chid']),

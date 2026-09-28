@@ -73,9 +73,6 @@ import { eventSource, event_types } from './events.js';
 import { getRequestHeaders } from './request-context.js';
 import {
     extension_settings,
-    getExtensionManifest,
-    ModuleWorkerWrapper,
-    openThirdPartyExtensionMenu,
     renderExtensionTemplate,
     renderExtensionTemplateAsync,
     saveMetadataDebounced,
@@ -92,7 +89,6 @@ import { callGenericPopup, Popup, POPUP_RESULT, POPUP_TYPE } from './popup.js';
 import { power_user, registerDebugFunction } from './power-user.js';
 import { getPresetManager } from './preset-manager.js';
 import { humanizedDateTime, isMobile, shouldSendOnEnter } from './RossAscends-mods.js';
-import { ScraperManager } from './scrapers.js';
 import { executeSlashCommands, executeSlashCommandsWithOptions, registerSlashCommand } from './slash-commands.js';
 import { SlashCommand } from './slash-commands/SlashCommand.js';
 import { ARGUMENT_TYPE, SlashCommandArgument, SlashCommandNamedArgument } from './slash-commands/SlashCommandArgument.js';
@@ -196,7 +192,6 @@ export function getContext() {
         /** @deprecated Use renderExtensionTemplateAsync instead. */
         renderExtensionTemplate,
         renderExtensionTemplateAsync,
-        registerDataBankScraper: ScraperManager.registerDataBankScraper.bind(ScraperManager),
         /** @deprecated Use callGenericPopup or Popup instead. */
         callPopup,
         callGenericPopup,
@@ -206,7 +201,6 @@ export function getContext() {
         hideLoader,
         mainApi: main_api,
         extensionSettings: extension_settings,
-        ModuleWorkerWrapper,
         getTokenizerModel,
         generateQuietPrompt,
         generateRaw,
@@ -302,8 +296,6 @@ export function getContext() {
         getReasoningTemplateByName,
         unshallowCharacter,
         unshallowGroupMembers: rejectRetiredGroupChatOperation,
-        getExtensionManifest,
-        openThirdPartyExtensionMenu,
         symbols: {
             ignore: IGNORE_SYMBOL,
         },

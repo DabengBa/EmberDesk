@@ -2,7 +2,6 @@ import { createStore } from 'zustand/vanilla';
 
 export const WORKSPACE_PANEL_KINDS = Object.freeze([
     'worldInfo',
-    'extensionsHost',
     'mainChatMessageList',
     'characterAuthoring',
 ]);
@@ -12,7 +11,6 @@ export const WORKSPACE_PANEL_DOCK_KINDS = Object.freeze([
     'advancedFormatting',
     'characterLibrary',
     'worldInfo',
-    'extensionsHost',
     'settings',
     'characterAuthoring',
     'aiConfigDrawer',
@@ -36,12 +34,6 @@ export const WORKSPACE_SHELL_CHILD_SLOTS = Object.freeze({
         allowedCapabilities: Object.freeze(['refreshWorldInfo', 'openWorldEditor']),
         contentOwner: 'world-info-workbench',
         mountTarget: '#WorldInfo',
-    }),
-    extensionsHost: Object.freeze({
-        accessibleName: 'Extensions',
-        allowedCapabilities: Object.freeze(['manageExtensions', 'refreshExtensions']),
-        contentOwner: 'extensions-host',
-        mountTarget: '#rm_extensions_block',
     }),
     characterAuthoring: Object.freeze({
         accessibleName: 'Character Authoring',

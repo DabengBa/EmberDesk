@@ -29,7 +29,6 @@ describe('React state stores', () => {
     test('declares every primary workspace shell panel as a dock kind', () => {
         expect(WORKSPACE_PANEL_KINDS).toEqual([
             'worldInfo',
-            'extensionsHost',
             'mainChatMessageList',
             'characterAuthoring',
         ]);
@@ -39,7 +38,6 @@ describe('React state stores', () => {
             'advancedFormatting',
             'characterLibrary',
             'worldInfo',
-            'extensionsHost',
             'settings',
             'characterAuthoring',
             'aiConfigDrawer',
@@ -66,10 +64,7 @@ describe('React state stores', () => {
             }),
         }));
 
-        expect(getWorkspaceShellChildSlot('extensionsHost')).toEqual(expect.objectContaining({
-            accessibleName: 'Extensions',
-            contentOwner: 'extensions-host',
-        }));
+        expect(() => getWorkspaceShellChildSlot('extensionsHost')).toThrow('Unsupported workspace shell child slot');
         expect(getWorkspaceShellChildSlot('aiConfigDrawer')).toEqual(expect.objectContaining({
             accessibleName: 'AI Response Configuration',
             contentOwner: 'ai-config',

@@ -106,21 +106,19 @@ export function buildChatMessageRowPopulation(descriptor, {
 
 /**
  * Classifies the current renderer ownership contract for a message row.
- * React owns finalized, editing, streaming, and extension-mutated rows when structure is present.
+ * React owns finalized, editing, and streaming rows when structure is present.
  * Live content for non-finalized families is preserved rather than overwritten.
  *
  * @param {object} options DOM-derived row safety facts
  * @param {'finalized'|'editing'|'streaming'|'unsafe'} [options.rowState='finalized'] Current row lifecycle state
  * @param {boolean} [options.hasMesText=false] Whether the row exposes the protected .mes_text body
  * @param {boolean} [options.hasProtectedReasoning=false] Whether protected reasoning wrappers are present
- * @param {boolean} [options.extensionMutated=false] Whether extension-owned mutation was detected
  * @returns {object} Current renderer ownership classification
  */
 export function classifyChatMessageRendererContract({
     rowState = 'finalized',
     hasMesText = false,
     hasProtectedReasoning = false,
-    extensionMutated = false,
 } = {}) {
     if (!hasMesText) {
         return createRendererContract('unsupported-with-reason', MAIN_CHAT_RICH_BODY_RENDERER_REASONS.MISSING_MES_TEXT);
@@ -128,22 +126,6 @@ export function classifyChatMessageRendererContract({
 
     if (rowState === 'unsafe') {
         return createRendererContract('unsupported-with-reason', MAIN_CHAT_RICH_BODY_RENDERER_REASONS.UNSAFE_ROW);
-    }
-
-    // Extension-mutated rows remain React-owned shells with preserved live body content.
-    // Mutation-zone survival is enforced by not overwriting protected hosts (Task 3).
-    if (extensionMutated) {
-        return {
-            rendererOwner: 'react',
-            phase7Candidate: 'react-rich-body-owner',
-            fallback: 'preserve-extension-mutation-zone',
-            reason: MAIN_CHAT_RICH_BODY_RENDERER_REASONS.EXTENSION_MUTATED_ROW,
-            protectedSurfaces: {
-                mesText: true,
-                reasoning: Boolean(hasProtectedReasoning),
-            },
-            preserveLiveContent: true,
-        };
     }
 
     if (rowState === 'editing') {
@@ -195,14 +177,12 @@ export function classifyChatMessageRendererContract({
  * @param {boolean} [options.hasEditingRows=false] Whether editing rows are currently present
  * @param {boolean} [options.hasStreamingRows=false] Whether active streaming rows are currently present
  * @param {boolean} [options.hasUnsafeRows=false] Whether structurally unsafe rows are currently present
- * @param {boolean} [options.hasExtensionMutatedRows=false] Whether extension-mutated rows are currently present
  * @returns {object} Row lifecycle ownership policy
  */
 export function buildMainChatRowLifecycleContract({
     hasEditingRows = false,
     hasStreamingRows = false,
     hasUnsafeRows = false,
-    hasExtensionMutatedRows = false,
 } = {}) {
     return {
         lifecycleOwner: 'react-message-list-controller',
@@ -211,11 +191,9 @@ export function buildMainChatRowLifecycleContract({
         editingOwner: 'react',
         streamingOwner: 'react',
         unsafeOwner: hasUnsafeRows ? 'unsupported' : 'not-needed',
-        extensionMutatedOwner: 'react',
         hasEditingRows: Boolean(hasEditingRows),
         hasStreamingRows: Boolean(hasStreamingRows),
         hasUnsafeRows: Boolean(hasUnsafeRows),
-        hasExtensionMutatedRows: Boolean(hasExtensionMutatedRows),
         reason: 'react-row-lifecycle-sole-owner',
     };
 }

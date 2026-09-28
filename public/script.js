@@ -139,27 +139,7 @@ import {
     cancelDebouncedMetadataSave,
     extension_settings,
     initCoreFeatureExtensions,
-    initExtensions,
-    runGenerationInterceptors,
-    setDeferredExtensionLoader,
-    toggleExtensionsHostNotifyUpdates,
-    openExtensionsHostManager,
-    openExtensionsHostInstaller,
-    retryDeferredExtensionsHostLoad,
-    updateExtensionsHostApiUrl,
-    updateExtensionsHostApiKey,
-    connectExtensionsHostApi,
-    setExtensionsHostAutoconnectEnabled,
-    getExtensionHostSession,
-    getDeferredExtensionLoaderState,
-    ensureExtensionCompatibilitySlots,
-    getExtrasConnectionStatus,
-    hasExtensionLoadErrors,
 } from './scripts/extensions.js';
-import {
-    EXTENSION_COMPATIBILITY_SLOTS,
-    getExtensionCompatibilitySlotManager,
-} from './scripts/extension-compatibility-slots.js';
 import { COMMENT_NAME_DEFAULT, CONNECT_API_MAP, executeSlashCommandsOnChatInput, getMainChatSlashCommandAutoCompleteState, initDefaultSlashCommands, initSlashCommandAutoComplete, isExecutingCommandsFromChatInput, pauseScriptExecution, selectMainChatSlashCommandOption, setMainChatSlashCommandReactOwnerEnabled, stopScriptExecution, UNIQUE_APIS } from './scripts/slash-commands.js';
 import { initMacroAutoComplete } from './scripts/autocomplete/MacroAutoComplete.js';
 import { initFrontendFrameController } from './scripts/frontend-frame-controller.js';
@@ -239,7 +219,6 @@ import { initDynamicStyles } from './scripts/dynamic-styles.js';
 import { initInputMarkdown } from './scripts/input-md-formatting.js';
 import { AbortReason } from './scripts/util/AbortReason.js';
 import { initSystemPrompts } from './scripts/sysprompt.js';
-import { registerExtensionSlashCommands as initExtensionSlashCommands } from './scripts/extensions-slashcommands.js';
 import {
     buildMainChatRowLifecycleContract,
     buildMainChatWindowingContract,
@@ -281,7 +260,7 @@ import {
     createCharacterAuthoringDraftFromCreateState,
     getCharacterAuthoringDirtyFields,
 } from './scripts/character-authoring.js';
-import { mountWorkspacePanelHost, createWorkspacePanelCommandPort, createWorkspacePanelStateChangeHandler, initWorkspacePanelDrawerBridge } from './scripts/workspace-panel-host-controller.js';
+import { mountWorkspacePanelHost, createWorkspacePanelCommandPort } from './scripts/workspace-panel-host-controller.js';
 import { registerWorldInfoShellContext } from './scripts/world-info-shell-context.js';
 import {
     executeGenerationRequestInShell,
@@ -519,7 +498,6 @@ export function getWorkspaceReactFeatures() {
         reactPanels: {
             mainChatMessageList: true,
             worldInfo: true,
-            extensionsHost: true,
             characterAuthoring: true,
         },
     };
@@ -694,7 +672,7 @@ registerGenerationShellContext({
     playMessageSound: (...args) => playMessageSound(...args),
     prepareOpenAIMessages: (...args) => prepareOpenAIMessages(...args),
     renderStoryString: (...args) => renderStoryString(...args),
-    runGenerationInterceptors: (...args) => runGenerationInterceptors(...args),
+
     setOpenAIMessageExamples: (...args) => setOpenAIMessageExamples(...args),
     setOpenAIMessages: (...args) => setOpenAIMessages(...args),
     shiftDownByOne: (...args) => shiftDownByOne(...args),
@@ -1131,7 +1109,6 @@ export function isReactCharacterLibraryPanelEnabled() {
 }
 
 const WORLD_INFO_REACT_HOST_ID = 'emberdesk-react-world-info-panel-host';
-const EXTENSIONS_HOST_REACT_HOST_ID = 'emberdesk-react-extensions-host-panel-host';
 const CHARACTER_AUTHORING_REACT_HOST_ID = 'emberdesk-react-character-authoring-panel-host';
 const WORKSPACE_SHELL_CHROME_HOST_ID = 'emberdesk-react-workspace-shell-chrome-host';
 const MAIN_CHAT_SCROLL_RESTORE_THRESHOLD_PX = 12;
@@ -1318,7 +1295,6 @@ function getWorkspaceChildSlotHostId(slotKey) {
     return {
         characterLibrary: 'right-nav-panel',
         worldInfo: 'WorldInfo',
-        extensionsHost: 'rm_extensions_block',
         characterAuthoring: 'right-nav-panel',
         aiConfigDrawer: 'left-nav-panel',
         regex: 'RegexPanel',
@@ -1376,8 +1352,6 @@ async function activateWorkspaceShellSlot(slotKey) {
             return openWorkspaceShellCharacterLibrary();
         case 'worldInfo':
             return openWorkspaceShellWorldInfo();
-        case 'extensionsHost':
-            return openWorkspaceShellExtensions();
         case 'characterAuthoring':
             return openWorkspaceShellCharacterAuthoring();
         case 'aiConfigDrawer':
@@ -1393,7 +1367,6 @@ function deactivateWorkspaceShellSlot(slotKey) {
     const kind = {
         characterLibrary: 'characterLibrary',
         worldInfo: 'worldInfo',
-        extensionsHost: 'extensionsHost',
         characterAuthoring: 'characterAuthoring',
         aiConfigDrawer: 'aiConfigDrawer',
         regex: 'regex',
@@ -1476,13 +1449,6 @@ export async function openWorkspaceShellWorldInfo() {
     return createWorkspaceShellPanelResult('worldInfo', worldInfoMount);
 }
 
-async function openWorkspaceShellExtensions() {
-    await waitForWorkspaceShellPanelOpenTask();
-    await openWorkspaceChildSlotHost('rm_extensions_block');
-    await waitForWorkspaceShellPanelOpenTask();
-    return createWorkspaceShellPanelResult('extensionsHost', await mountReactExtensionsHostPanel());
-}
-
 async function openWorkspaceShellRegex() {
     await waitForWorkspaceShellPanelOpenTask();
     // React-owned regex workbench mounts at startup via the regex feature init;
@@ -1533,7 +1499,6 @@ function getWorkspaceShellCommands() {
         openFormatting: () => openWorkspaceSettingsOverlay({ tab: 'advanced', panelKind: 'advancedFormatting' }),
         openCharacterLibrary: openWorkspaceShellCharacterLibrary,
         openWorldInfo: openWorkspaceShellWorldInfo,
-        openExtensions: openWorkspaceShellExtensions,
         openSettings: () => openWorkspaceSettingsOverlay({ tab: null, panelKind: 'settings' }),
         closeWorkspacePanel,
         openCharacterAuthoring: openWorkspaceShellCharacterAuthoring,
@@ -3320,7 +3285,6 @@ function getMainChatMessageListReactBridgeState() {
             hasEditingRows: mainChatSnapshot.orderedMessageIds.some(messageId => mainChatSnapshot.messagesById[messageId]?.state === 'editing'),
             hasStreamingRows: mainChatSnapshot.orderedMessageIds.some(messageId => mainChatSnapshot.messagesById[messageId]?.state === 'streaming'),
             hasUnsafeRows: false,
-            hasExtensionMutatedRows: mainChatSnapshot.orderedMessageIds.some(messageId => mainChatSnapshot.messagesById[messageId]?.state === 'extension-mutated'),
         }),
         mainChatSnapshot,
     };
@@ -3428,149 +3392,6 @@ async function mountReactMainChatMessageListPanel() {
         scheduleMainChatMessageListScrollRestore();
     }
     return result;
-}
-
-function ensureExtensionsHostReactHost() {
-    const extensionsPanel = document.getElementById('rm_extensions_block');
-    if (!extensionsPanel) {
-        return null;
-    }
-
-    let host = document.getElementById(EXTENSIONS_HOST_REACT_HOST_ID);
-    if (host) {
-        return host;
-    }
-
-    host = document.createElement('div');
-    host.id = EXTENSIONS_HOST_REACT_HOST_ID;
-    host.className = 'emberdesk-react-extensions-host-panel-host';
-
-    const extensionsBlock = extensionsPanel.querySelector(':scope > .extensions_block');
-    if (extensionsBlock?.parentElement === extensionsPanel) {
-        extensionsPanel.insertBefore(host, extensionsBlock);
-    } else {
-        extensionsPanel.prepend(host);
-    }
-
-    return host;
-}
-
-function getExtensionsHostReactBridgeState(stateOverrides = {}) {
-    const extensionsSettings = document.getElementById('extensions_settings');
-    const extensionsSettings2 = document.getElementById('extensions_settings2');
-    const deferredPlaceholder = document.getElementById('extensions_startup_loading');
-    const session = typeof getExtensionHostSession === 'function' ? getExtensionHostSession() : null;
-    const sessionSnapshot = session && typeof session.getHostStateSnapshot === 'function'
-        ? session.getHostStateSnapshot()
-        : null;
-    const deferredState = stateOverrides.deferredState
-        ?? sessionSnapshot?.deferredState
-        ?? (typeof getDeferredExtensionLoaderState === 'function' ? getDeferredExtensionLoaderState() : 'idle');
-    const extrasStatus = typeof getExtrasConnectionStatus === 'function'
-        ? getExtrasConnectionStatus()
-        : { text: '', className: '' };
-
-    return {
-        extensionsSettingsPresent: Boolean(extensionsSettings),
-        extensionsSettings2Present: Boolean(extensionsSettings2),
-        // Extras controls are React-owned; the service layer is always reachable.
-        extrasApiControlsPresent: true,
-        manageButtonPresent: true,
-        installButtonPresent: true,
-        extensionsUiDisabled: extensionsHostControlsDisabled,
-        hasExtensionLoadErrors: hasExtensionLoadErrors(),
-        notifyUpdatesEnabled: extension_settings.notifyUpdates === true,
-        extrasApiUrl: extension_settings.apiUrl ?? '',
-        extrasApiKeySet: Boolean(extension_settings.apiKey),
-        autoconnectEnabled: extension_settings.autoConnect === true,
-        extrasStatusText: extrasStatus.text || '',
-        extrasStatusClassName: extrasStatus.className || '',
-        mountPointStatuses: getExtensionsHostReactMountPointStatuses(),
-        deferredState,
-        deferredPlaceholderPresent: Boolean(deferredPlaceholder),
-        // Session snapshot remains available for lifecycle-owned fields above.
-        sessionDeferredState: sessionSnapshot?.deferredState ?? null,
-        slotGeneration: getExtensionCompatibilitySlotManager()?.getGeneration?.() ?? 0,
-    };
-}
-
-function getExtensionsHostReactMountPointStatuses() {
-    const manager = getExtensionCompatibilitySlotManager();
-    if (manager) {
-        return manager.getStatus().map(status => ({
-            id: status.id,
-            label: status.label,
-            ready: status.ready,
-        }));
-    }
-    return EXTENSION_COMPATIBILITY_SLOTS.map(slot => ({
-        id: slot.id,
-        label: slot.label,
-        ready: Boolean(document.getElementById(slot.id)),
-    }));
-}
-
-function getExtensionsHostReactCommands() {
-    return createWorkspacePanelCommandPort({
-        commands: {
-            toggleNotifyUpdates: () => toggleExtensionsHostNotifyUpdates(),
-            openManageExtensions: () => openExtensionsHostManager(),
-            openInstallExtension: () => openExtensionsHostInstaller(),
-            updateExtrasApiUrl: url => {
-                updateExtensionsHostApiUrl(url);
-                return false;
-            },
-            updateExtrasApiKey: apiKey => {
-                updateExtensionsHostApiKey(apiKey);
-                return false;
-            },
-            connectExtrasApi: () => connectExtensionsHostApi(),
-            toggleAutoconnect: enabled => setExtensionsHostAutoconnectEnabled(
-                enabled ?? !extension_settings.autoConnect,
-            ),
-            ensureExtensionCompatibilitySlots: owner => ensureExtensionCompatibilitySlots({ owner }),
-            retryDeferredExtensions: () => retryDeferredExtensionsHostLoad(),
-        },
-        shouldRemount(actionResult, commandName) {
-            // The React layout effect maintains compatibility slots on every mount.
-            // Remounting that maintenance action would create an endless mount loop.
-            return commandName !== 'ensureExtensionCompatibilitySlots' && actionResult !== false;
-        },
-        remount: () => {
-            void mountReactExtensionsHostPanel();
-        },
-    });
-}
-
-async function mountReactExtensionsHostPanel(stateOverrides = {}) {
-    const result = await mountWorkspacePanelHost({
-        kind: 'extensionsHost',
-        ensureContainer: ensureExtensionsHostReactHost,
-        getState: overrides => getExtensionsHostReactBridgeState(overrides ?? stateOverrides),
-        commands: getExtensionsHostReactCommands(),
-        runtime: reactRuntimePort,
-        features: getWorkspaceReactFeatures(),
-        stateOverrides,
-    });
-    if (result?.mounted) {
-        ensureExtensionCompatibilitySlots({ owner: 'react-extensions-host' });
-    }
-    return result;
-}
-const handleReactExtensionsHostStateChange = createWorkspacePanelStateChangeHandler((stateOverrides) => {
-    void mountReactExtensionsHostPanel(stateOverrides);
-});
-
-function initReactExtensionsHostBridge() {
-    initWorkspacePanelDrawerBridge({
-        removeEventTarget: document,
-        addEventTarget: document,
-        eventName: 'emberdesk:extensions-host-state-change',
-        stateChangeHandler: handleReactExtensionsHostStateChange,
-        remount(stateOverrides) {
-            void mountReactExtensionsHostPanel(stateOverrides);
-        },
-    });
 }
 
 function getCharacterLibrarySortOptionValue(option, index) {
@@ -4248,7 +4069,7 @@ let firstRun = false;
 export let settingsReady = false;
 let currentVersion = '0.0.0';
 export let displayVersion = 'EmberDesk';
-let deferredExtensionTask = null;
+let deferredCoreFeatureTask = null;
 const deferredVersionTask = createSingleFlightTask(() => measureStartupStage('deferred.getClientVersion', () => getClientVersion()));
 
 let generation_started = new Date();
@@ -4440,40 +4261,28 @@ async function getClientVersion() {
 }
 
 function configureDeferredStartupTasks() {
-    deferredExtensionTask = null;
-    setDeferredExtensionLoader(null);
-
-    deferredExtensionTask = createSingleFlightTask(async () => {
+    deferredCoreFeatureTask = createSingleFlightTask(async () => {
         try {
             await deferredVersionTask.ensure();
 
             await measureStartupStage('deferred.coreFeatureInit', async () => {
                 await initCoreFeatureExtensions();
             });
-
-            setDeferredExtensionLoader(null);
         } catch (error) {
-            if (error && typeof error === 'object') {
-                error.__emberDeskDeferredExtensionToastShown = true;
-            }
-
-            setDeferredExtensionLoader(() => deferredExtensionTask.ensure(), { state: 'failed' });
             toastr.error(
-                t`Extensions could not be loaded right now. Open the extensions panel to retry.`,
-                t`Extensions failed to load`,
+                t`Built-in features could not be loaded right now.`,
+                t`Startup failed`,
             );
             throw error;
         }
     });
-
-    setDeferredExtensionLoader(() => deferredExtensionTask.ensure());
 }
 
 function startDeferredStartupTasks() {
     void deferredVersionTask.ensure().catch(error => console.error('Deferred client version startup failed.', error));
 
-    if (deferredExtensionTask) {
-        void deferredExtensionTask.ensure().catch(error => console.error('Deferred extension startup failed.', error));
+    if (deferredCoreFeatureTask) {
+        void deferredCoreFeatureTask.ensure().catch(error => console.error('Deferred core feature startup failed.', error));
     }
 
     // Idle warmup for deferred panels after APP_READY
@@ -4758,10 +4567,7 @@ async function bootstrapWorkspace() {
         initOpenAI();
         initSystemPrompts();
     }));
-    await measureStartupStage('initExtensions', () => initExtensions());
-    initReactExtensionsHostBridge();
     await measureStartupStage('registerExtensionSlashCommands', () => Promise.resolve().then(() => {
-        initExtensionSlashCommands();
         ToolManager.initToolSlashCommands();
     }));
     await measureStartupStage('initPresetManager', () => initPresetManager());
@@ -8125,13 +7931,6 @@ async function fetchStartupSettings() {
     return response.json();
 }
 
-let extensionsHostControlsDisabled = false;
-
-function applyDeferredExtensionBootstrapState({ disableUi }) {
-    extensionsHostControlsDisabled = Boolean(disableUi);
-    document.dispatchEvent(new CustomEvent('emberdesk:extensions-host-state-change'));
-}
-
 async function applyStartupSettingsCore(data, initLoaderHandle = null) {
     const settingsPlan = resolveStartupSettingsPlan({ data });
 
@@ -8214,9 +8013,6 @@ async function applyStartupSettingsCore(data, initLoaderHandle = null) {
         initMacros();
 
         Object.assign(extension_settings, (settings.extension_settings ?? {}));
-        applyDeferredExtensionBootstrapState({
-            disableUi: settingsPlan.extensionPlan.disableUi,
-        });
 
         firstRun = !!settings.firstRun;
 

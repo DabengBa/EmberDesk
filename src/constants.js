@@ -3,7 +3,6 @@ export const PUBLIC_DIRECTORIES = {
     backups: 'backups/',
     sounds: 'public/sounds',
     extensions: 'public/scripts/extensions',
-    globalExtensions: 'public/scripts/extensions/third-party',
 };
 
 export const SETTINGS_FILE = 'settings.json';
@@ -33,7 +32,6 @@ export const USER_DIRECTORY_TEMPLATE = Object.freeze({
     textGen_Settings: 'TextGen Settings',
     themes: 'themes',
     movingUI: 'movingUI',
-    extensions: 'extensions',
     instruct: 'instruct',
     context: 'context',
     quickreplies: 'QuickReplies',

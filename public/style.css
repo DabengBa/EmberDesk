@@ -2980,10 +2980,6 @@ input[type="file"] {
     height: 100%;
 }
 
-#rm_extensions_block {
-    overflow-y: auto;
-}
-
 #rm_button_bar {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
@@ -5880,8 +5876,6 @@ body:not(.caption) .mes_img_caption {
     display: inline-flex;
 }
 
-#extensions_settings .inline-drawer-toggle.inline-drawer-header,
-#extensions_settings2 .inline-drawer-toggle.inline-drawer-header,
 #user-settings-block h4,
 .standoutHeader {
     background-image: linear-gradient(348deg, var(--white30a)2%, var(--grey30a)10%, var(--black70a)95%, var(--SmartThemeQuoteColor)100%);
@@ -5920,8 +5914,6 @@ body:not(.caption) .mes_img_caption {
     width: 8em;
 }
 
-#extensions_settings .inline-drawer-toggle.inline-drawer-header:hover,
-#extensions_settings2 .inline-drawer-toggle.inline-drawer-header:hover,
 .standoutHeader.inline-drawer-header:hover {
     filter: brightness(150%);
 }

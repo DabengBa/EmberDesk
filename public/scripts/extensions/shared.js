@@ -1,5 +1,4 @@
 import { CONNECT_API_MAP, createModelIcon } from '../../script.js';
-import { openThirdPartyExtensionMenu } from '../extensions.js';
 import { t } from '../i18n.js';
 import { getTokenCountAsync } from '../tokenizers.js';
 
@@ -21,14 +20,15 @@ export function isWebLlmSupported() {
         return false;
     }
 
+    // The WebLLM provider depended on a third-party extension that can no
+    // longer be installed; the backend is unavailable.
     if (!('llm' in SillyTavern)) {
         const warningKey = 'webllm_extension_warning_shown';
         if (!sessionStorage.getItem(warningKey)) {
-            toastr.error('WebLLM extension is not installed. Click here to install it.', 'WebLLM', {
+            toastr.error('The WebLLM backend is unavailable in this build.', 'WebLLM', {
                 timeOut: 0,
                 extendedTimeOut: 0,
                 preventDuplicates: true,
-                onclick: () => openThirdPartyExtensionMenu('https://github.com/SillyTavern/Extension-WebLLM'),
             });
             sessionStorage.setItem(warningKey, '1');
         }

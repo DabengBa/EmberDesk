@@ -97,7 +97,6 @@ import { hasReactLoginBuild, sendReactLoginIndex } from './middleware/react-logi
  * @property {string} textGen_Settings - The directory where the TextGen settings are stored
  * @property {string} themes - The directory where the themes are stored
  * @property {string} movingUI - The directory where the moving UI data is stored
- * @property {string} extensions - The directory where the extensions are stored
  * @property {string} instruct - The directory where the instruct templates is stored
  * @property {string} context - The directory where the context templates is stored
  * @property {string} quickreplies - The directory where the quick replies are stored

@@ -96,3 +96,74 @@ describe('third-party extension retirement (E-cut-1)', () => {
         expect(scriptSource).toContain('getExtensionContext: () => getContext()');
     });
 });
+
+describe('third-party extension retirement (E-cut-3)', () => {
+    test('/api/extensions is a stable 410 tombstone with no install/update/discovery routes', () => {
+        const routerSource = readRepoFile('src/endpoints/extensions.js');
+        expect(routerSource).toContain('response.status(410)');
+        expect(routerSource).toContain('extensions_retired');
+        expect(routerSource).not.toContain('router.post');
+        expect(routerSource).not.toContain('router.get');
+        expect(routerSource).not.toContain('simple-git');
+        expect(routerSource).not.toContain('manifest.json');
+
+        const startupSource = readRepoFile('src/server-startup.js');
+        expect(startupSource).toContain("app.use('/api/extensions', extensionsRouter)");
+    });
+
+    test('extension operation modules and host-service files are deleted', () => {
+        for (const gone of [
+            'src/extension-operation-safety.js',
+            'src/extension-repo-update-state.js',
+            'src/git/client.js',
+            'public/scripts/extension-host-service.js',
+            'public/scripts/extension-host-domain.js',
+            'public/scripts/extension-compatibility-slots.js',
+            'public/css/extensions-panel.css',
+        ]) {
+            expect(fs.existsSync(path.join(repoRoot, gone))).toBe(false);
+        }
+    });
+
+    test('retired extension config keys are never written and are stripped from legacy configs', () => {
+        const configInitSource = readRepoFile('src/config-init.js');
+        const extMigrations = configInitSource.match(/\{\s*oldKey: '[^']+',\s*newKey: 'extensions\.[^']+'[\s\S]*?\}/g) ?? [];
+        expect(extMigrations.length).toBeGreaterThan(0);
+        for (const migration of extMigrations) {
+            expect(migration).toContain('migrate: () => void 0');
+            expect(migration).toContain('remove: true');
+        }
+
+        const defaultConfig = readRepoFile('default/config.yaml');
+        expect(defaultConfig).not.toMatch(/^extensions:/m);
+        expect(defaultConfig).not.toContain('extensionsHost');
+
+        const settingsSource = readRepoFile('src/endpoints/settings.js');
+        expect(settingsSource).not.toContain('enable_extensions');
+        expect(settingsSource).not.toContain('enableExtensionsAutoUpdate');
+    });
+
+    test('extensions drawer, shell panel, and nav entry are gone', () => {
+        const indexHtml = readPublicFile('index.html');
+        expect(indexHtml).not.toContain('rm_extensions_block');
+        expect(indexHtml).not.toContain('extensions-settings-button');
+        expect(indexHtml).not.toContain('extensions_settings');
+
+        const scriptSource = readPublicFile('script.js');
+        expect(scriptSource).not.toContain('extensionsHost');
+        expect(scriptSource).not.toContain('openExtensions');
+        expect(scriptSource).not.toContain('rm_extensions_block');
+        expect(scriptSource).not.toContain('extension-host-service');
+    });
+
+    test('user extension directories are no longer created or migrated', () => {
+        const constantsSource = readRepoFile('src/constants.js');
+        expect(constantsSource).not.toContain('globalExtensions');
+        const templateBody = constantsSource.match(/USER_DIRECTORY_TEMPLATE = Object\.freeze\(\{[\s\S]*?\}\)/)?.[0] ?? '';
+        expect(templateBody).not.toContain('extensions');
+
+        const migrationsSource = readRepoFile('src/user-migrations.js');
+        expect(migrationsSource).not.toContain('userDirectories.extensions');
+        expect(migrationsSource).not.toContain('extensions/third-party');
+    });
+});

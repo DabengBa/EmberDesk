@@ -36,7 +36,6 @@ describe('React workspace panels bridge helpers', () => {
             reactPanels: {
                 mainChatMessageList: true,
                 worldInfo: true,
-                extensionsHost: true,
                 characterAuthoring: true,
             },
             reactPages: {
@@ -68,13 +67,12 @@ describe('React workspace panels bridge helpers', () => {
             reactPanels: {
                 mainChatMessageList: true,
                 worldInfo: true,
-                extensionsHost: true,
             },
         };
 
         expect(isReactWorkspacePanelEnabled('worldInfo', features)).toBe(true);
         expect(isReactWorkspacePanelEnabled('mainChatMessageList', features)).toBe(true);
-        expect(isReactWorkspacePanelEnabled('extensionsHost', features)).toBe(true);
+        expect(isReactWorkspacePanelEnabled('extensionsHost', features)).toBe(false);
     });
 
     test('keeps internal workspace panel mount result constants and helpers aligned', () => {
@@ -148,7 +146,7 @@ describe('React workspace panels bridge helpers', () => {
         expect(workspacePanelSource).not.toContain('No chat selected');
         expect(workspacePanelSource).toContain('World Info');
         expect(workspacePanelSource).not.toContain('Backgrounds');
-        expect(workspacePanelSource).toContain('Extensions');
+        expect(workspacePanelSource).not.toContain('openExtensions');
         expect(workspacePanelSource).toContain('Settings');
         expect(scriptSource).toContain("openAIConfig: () => openWorkspaceSettingsOverlay({ tab: 'providers', panelKind: 'aiConfig' })");
         expect(scriptSource).toContain("openWorkspaceSettingsOverlay");
@@ -226,7 +224,6 @@ describe('React workspace panels bridge helpers', () => {
         expect(scriptSource.indexOf("const worldInfoMount = await mountReactWorldInfoPanel();")).toBeLessThan(scriptSource.indexOf("void ensureWorkspaceShellDeferredPanel('world-info-body');"));
         expect(scriptSource.indexOf("await openWorkspaceChildSlotHost('WorldInfo');")).toBeLessThan(scriptSource.indexOf("const worldInfoMount = await mountReactWorldInfoPanel();"));
         expect(scriptSource.indexOf("const worldInfoMount = await mountReactWorldInfoPanel();")).toBeLessThan(scriptSource.indexOf("return createWorkspaceShellPanelResult('worldInfo', worldInfoMount);"));
-        expect(scriptSource.indexOf("await openWorkspaceChildSlotHost('rm_extensions_block');")).toBeLessThan(scriptSource.indexOf("return createWorkspaceShellPanelResult('extensionsHost', await mountReactExtensionsHostPanel());"));
         expect(scriptSource).toContain('function openWorkspaceChildSlotHostImmediate(hostId)');
         expect(scriptSource).toContain("drawer.style.opacity = '1';");
         expect(scriptSource).toContain('function closeWorkspaceChildSlotHost(hostId, { force = false } = {})');
@@ -244,8 +241,6 @@ describe('React workspace panels bridge helpers', () => {
         expect(scriptSource).toContain('openCharacterLibrary: openWorkspaceShellCharacterLibrary,');
         expect(scriptSource).toContain('openCharacterLibrary: async () => {');
         expect(workspacePanelSource).toContain("panelKind: 'worldInfo'");
-        expect(scriptSource).toContain('openExtensions: openWorkspaceShellExtensions,');
-        expect(workspacePanelSource).toContain("panelKind: 'extensionsHost'");
         expect(scriptSource).toContain('async function openWorkspaceShellAiConfigDrawer()');
         expect(scriptSource).toContain("await openWorkspaceChildSlotHost('left-nav-panel');");
         expect(scriptSource).toContain('openAIConfigDrawer: openWorkspaceShellAiConfigDrawer,');
@@ -257,7 +252,6 @@ describe('React workspace panels bridge helpers', () => {
         expect(scriptSource).not.toContain('pinned: dockState.pinned,');
         expect(scriptSource).toContain("return createWorkspaceShellPanelResult('characterLibrary',");
         expect(scriptSource).toContain("return createWorkspaceShellPanelResult('worldInfo', worldInfoMount);");
-        expect(scriptSource).toContain("return createWorkspaceShellPanelResult('extensionsHost', await mountReactExtensionsHostPanel());");
         expect(scriptSource).toContain("openAIConfig: () => openWorkspaceSettingsOverlay({ tab: 'providers', panelKind: 'aiConfig' })");
         expect(scriptSource).toContain("openWorkspaceSettingsOverlay");
         expect(scriptSource).toContain("openFormatting: () => openWorkspaceSettingsOverlay({ tab: 'advanced', panelKind: 'advancedFormatting' })");
@@ -329,7 +323,7 @@ describe('React workspace panels bridge helpers', () => {
         expect(bridgeSource).toContain('mainChatMessageList: true');
         expect(bridgeSource).toContain('characterAuthoring: true');
         expect(bridgeSource).not.toContain('groupAuthoring');
-        expect(workspacePanelSource).toContain("export type WorkspacePanelKind = 'worldInfo' | 'extensionsHost' | 'mainChatMessageList' | 'characterAuthoring';");
+        expect(workspacePanelSource).toContain("export type WorkspacePanelKind = 'worldInfo' | 'mainChatMessageList' | 'characterAuthoring';");
         expect(scriptSource).toContain('mainChatMessageList: true');
         expect(scriptSource).toContain('characterAuthoring: true');
         expect(scriptSource).not.toContain('groupAuthoring: true');
@@ -569,17 +563,17 @@ describe('React workspace panels bridge helpers', () => {
         expect(onError).toHaveBeenCalledWith(expect.any(Error), 'worldInfo', WORKSPACE_PANEL_MOUNT_FALLBACK_REASONS.BUNDLE_LOAD_FAILED);
 
         await expect(mountReactWorkspacePanel({
-            kind: 'extensionsHost',
+            kind: 'characterAuthoring',
             container,
-            features: { reactPanels: { extensionsHost: true } },
+            features: { reactPanels: { characterAuthoring: true } },
             loadModule: async () => ({
                 mountWorkspacePanel() {
                     throw new Error('mount exploded');
                 },
             }),
             onError,
-        })).resolves.toEqual(createWorkspacePanelFallbackResult('extensionsHost', WORKSPACE_PANEL_MOUNT_FALLBACK_REASONS.MOUNT_FAILED));
-        expect(onError).toHaveBeenCalledWith(expect.any(Error), 'extensionsHost', WORKSPACE_PANEL_MOUNT_FALLBACK_REASONS.MOUNT_FAILED);
+        })).resolves.toEqual(createWorkspacePanelFallbackResult('characterAuthoring', WORKSPACE_PANEL_MOUNT_FALLBACK_REASONS.MOUNT_FAILED));
+        expect(onError).toHaveBeenCalledWith(expect.any(Error), 'characterAuthoring', WORKSPACE_PANEL_MOUNT_FALLBACK_REASONS.MOUNT_FAILED);
 
         await expect(mountReactWorkspacePanel({
             kind: 'worldInfo',
@@ -699,10 +693,8 @@ describe('React workspace panels bridge helpers', () => {
         expect(scriptSource).toContain("from './scripts/workspace-panel-host-controller.js'");
         expect(scriptSource).toContain('mountWorkspacePanelHost({');
         expect(scriptSource).toContain('createWorkspacePanelCommandPort({');
-        expect(scriptSource).toContain('createWorkspacePanelStateChangeHandler(');
-        expect(scriptSource).toContain('initWorkspacePanelDrawerBridge({');
         expect(scriptSource).toContain("kind: 'worldInfo'");
-        expect(scriptSource).toContain("kind: 'extensionsHost'");
+        expect(scriptSource).not.toContain("kind: 'extensionsHost'");
         expect(scriptSource).toContain("kind: 'mainChatMessageList'");
         expect(scriptSource).toContain("kind: 'characterAuthoring'");
         expect(scriptSource).not.toContain('openWorkspaceShellGroupChats');
@@ -733,7 +725,7 @@ describe('React workspace panels bridge helpers', () => {
         expect(workspacePanelSource).toContain('panelShellStyles.diagnostics');
         expect(workspacePanelSource).toContain('Diagnostics</summary>');
         expect(workspacePanelSource).toContain('data-workspace-legacy-slot={slot.id}');
-        expect(workspacePanelSource).toContain('slot.id === \'extensions-settings\'');
+        expect(workspacePanelSource).not.toContain('extensions-settings');
         expect(workspacePanelSource).not.toContain('React workspace panel host');
         expect(workspacePanelSource).not.toContain('is ready for its legacy bridge');
         expect(workspacePanelSource).not.toContain('id="extensions_settings"');
@@ -833,8 +825,8 @@ describe('React workspace panels bridge helpers', () => {
         expect(worldInfoSource).toContain('export async function duplicateCurrentWorldInfo()');
         expect(worldInfoSource).toContain('export async function deleteCurrentWorldInfo()');
 
-        expect(workspacePanelSource).toContain('import { useForm } from \'@tanstack/react-form\';');
-        expect(workspacePanelSource).toContain('import { z } from \'zod\';');
+        expect(read('app/world-info-workbench.tsx')).toContain('import { useForm } from \'@tanstack/react-form\';');
+        expect(read('app/world-info-workbench.tsx')).toContain('import { z } from \'zod\';');
         expect(read('app/world-info-workbench.tsx')).toContain('const worldInfoPanelFormSchema = z.object(');
         const worldInfoWorkbenchHelpersSource = read('app/lib/world-info-workbench-helpers.ts');
         expect(worldInfoWorkbenchHelpersSource).toContain('export function buildWorldInfoPanelFormDefaults');
@@ -903,153 +895,44 @@ describe('React workspace panels bridge helpers', () => {
         expect(workbenchSource).toContain('data-world-info-react-regex-hint');
     });
 
-    test('wires Extensions Host to an independent React host without replacing protected mount points', () => {
+    test('retires the Extensions Host panel, drawer, and third-party extension surface', () => {
+        const indexHtmlSource = read('public/index.html');
         const scriptSource = read('public/script.js');
         const extensionsSource = read('public/scripts/extensions.js');
         const workspacePanelSource = read('app/workspace-panels.tsx');
+        const workspacePanelStoreSource = read('app/stores/workspace-panel-store.js');
+        const workspaceCommandsSource = read('app/compat/workspace-commands.ts');
+        const compatibilityBridgeSource = read('app/compat/global-compatibility-bridge.js');
+        const bridgeSource = read('public/scripts/workspace-panels-react-bridge.js');
+        const featureSource = read('src/workspace-react-features.js');
 
-        expect(scriptSource).toContain('const EXTENSIONS_HOST_REACT_HOST_ID = \'emberdesk-react-extensions-host-panel-host\';');
-        expect(scriptSource).toContain('function ensureExtensionsHostReactHost()');
-        expect(scriptSource).toContain('function getExtensionsHostReactBridgeState(');
-        expect(scriptSource).toContain('extensionsSettingsPresent: Boolean(extensionsSettings)');
-        expect(scriptSource).toContain('extensionsSettings2Present: Boolean(extensionsSettings2)');
-        // Regex lives in its own workspace panel; the wand menu is retired.
-        expect(scriptSource).not.toContain('regexContainerPresent');
-        expect(scriptSource).not.toContain('extensionsMenuButtonPresent');
-        expect(scriptSource).not.toContain('extensionsMenuPresent');
-        // Legacy extensions controls are retired; the React host is the sole owner
-        // and reads Extras state from extension_settings/service state.
-        expect(scriptSource).toContain('extrasApiControlsPresent: true');
-        expect(scriptSource).toContain('extensionsUiDisabled: extensionsHostControlsDisabled');
-        expect(scriptSource).toContain('hasExtensionLoadErrors: hasExtensionLoadErrors()');
-        expect(scriptSource).toContain('async function mountReactExtensionsHostPanel(');
-        expect(scriptSource).not.toContain('function hideLegacyExtensionsHostControls(');
-        expect(scriptSource).not.toContain('extensionsHostVisibleOwner');
-        expect(scriptSource).not.toContain('hideLegacyExtensionsHostControls(true)');
-        expect(scriptSource).toContain('const result = await mountWorkspacePanelHost({');
-        expect(scriptSource).toContain('kind: \'extensionsHost\'');
-        expect(scriptSource).toContain('getState: overrides => getExtensionsHostReactBridgeState(overrides ?? stateOverrides)');
-        expect(scriptSource).toContain('const handleReactExtensionsHostStateChange = createWorkspacePanelStateChangeHandler(');
-        expect(scriptSource).toContain('initWorkspacePanelDrawerBridge({');
-        expect(scriptSource).toContain('void mountReactExtensionsHostPanel();');
-        expect(scriptSource).not.toContain('container: document.getElementById(\'extensions_settings\')');
-        expect(scriptSource).not.toContain('container: document.getElementById(\'extensions_settings2\')');
-        expect(scriptSource).not.toContain('container: document.getElementById(\'regex_container\')');
+        expect(indexHtmlSource).not.toContain('id="rm_extensions_block"');
+        expect(indexHtmlSource).not.toContain('id="extensions-settings-button"');
+        expect(indexHtmlSource).not.toContain('id="extensions_settings"');
+        expect(indexHtmlSource).not.toContain('id="extensions_settings2"');
+        expect(indexHtmlSource).not.toContain('extensions-panel.css');
 
-        expect(extensionsSource).toContain('function dispatchExtensionsHostStateChange(detail = {})');
-        expect(extensionsSource).toContain('document.dispatchEvent(new CustomEvent(\'emberdesk:extensions-host-state-change\'');
-        expect(extensionsSource).toContain('dispatchExtensionsHostStateChange({ deferredState: deferredExtensionLoaderState });');
+        expect(scriptSource).not.toContain('extension-host-service');
+        expect(scriptSource).not.toContain('extension-host-domain');
+        expect(scriptSource).not.toContain('extension-compatibility-slots');
+        expect(scriptSource).not.toContain('extensionsHost');
+        expect(scriptSource).not.toContain('openExtensions');
 
-        expect(workspacePanelSource).toContain('interface ExtensionsHostWorkspacePanelState');
-        expect(workspacePanelSource).toContain('function ExtensionsHostWorkspacePanel');
-        expect(workspacePanelSource).toContain('kind="extensionsHost"');
-        expect(workspacePanelSource).toContain("{ id: 'extensions-settings', label: 'Settings column', ready: bridgeState.extensionsSettingsPresent }");
-        expect(workspacePanelSource).toContain("{ id: 'extensions-settings2', label: 'Settings column 2', ready: bridgeState.extensionsSettings2Present }");
-        expect(workspacePanelSource).not.toContain('regex-container');
-        expect(workspacePanelSource).not.toContain('extensions-menu-button');
-        expect(workspacePanelSource).not.toContain('extensions-menu');
-        expect(workspacePanelSource).toContain("{ id: 'extras-api', label: 'Extras API', ready: bridgeState.extrasApiControlsPresent }");
-        expect(workspacePanelSource).not.toContain('data-extensions-host-bridge-state={stateId}');
-        expect(workspacePanelSource).toContain('legacyBoundary="react-owned-slots-lifecycle"');
-        // Lifecycle marker only; protected mount nodes stay outside React JSX.
-        expect(workspacePanelSource).toContain('data-extensions-host-react-workflow="compatibility-slots"');
-        expect(workspacePanelSource).toContain('data-extensions-host-compat-owner="react-lifecycle"');
-        expect(workspacePanelSource).not.toContain('data-extensions-host-compat-slot="extensions_settings"');
-        expect(workspacePanelSource).toContain('ensureExtensionCompatibilitySlots');
-        expect(workspacePanelSource).not.toContain('id="extensions_settings"');
-    });
+        expect(extensionsSource).not.toContain('dispatchExtensionsHostStateChange');
+        expect(extensionsSource).not.toContain('emberdesk:extensions-host-state-change');
+        expect(extensionsSource).not.toContain('manifest.json');
+        expect(extensionsSource).not.toContain('/api/extensions/');
+        expect(extensionsSource).not.toContain('runGenerationInterceptors');
 
-    
-    test('extension operation failure feedback distinguishes retryable, user-action, and forbidden classes', () => {
-        const extensionsSource = read('public/scripts/extensions.js');
-        expect(extensionsSource).toContain('async function readExtensionOperationError(response)');
-        expect(extensionsSource).toContain('function notifyExtensionOperationFailure(error, title)');
-        expect(extensionsSource).toContain("failureClass === 'user_action_required'");
-        expect(extensionsSource).toContain("failureClass === 'forbidden'");
-        expect(extensionsSource).toContain("failureClass === 'retryable'");
-        expect(extensionsSource).toContain('notifyExtensionOperationFailure(error, t`Extension update failed`)');
-        expect(extensionsSource).toContain('if (!quiet) {');
-        expect(extensionsSource).toContain('// Auto-update runs in quiet mode');
-        expect(extensionsSource).toContain('await callExtensionHook(fullExtensionName, \'update\');\n            if (!quiet) {\n                toastr.success');
-        expect(extensionsSource).toContain('const actionHintMessages = {');
-        expect(extensionsSource).toContain('commit_or_stash_local_changes: t`Commit or stash your local changes.`');
-        expect(extensionsSource).toContain("error.actionHints.map(hint => actionHintMessages[hint]).filter(Boolean)");
-        expect(extensionsSource).not.toContain("error.actionHints.join(', ')");
-        expect(extensionsSource).toContain('notifyExtensionOperationFailure(error, t`Extension installation failed`)');
-        expect(extensionsSource).toContain('notifyExtensionOperationFailure(error, t`Extension delete failed`)');
-        expect(extensionsSource).toContain('notifyExtensionOperationFailure(error, t`Extension move failed`)');
-        expect(extensionsSource).toContain('notifyExtensionOperationFailure(error, t`Extension branch switch failed`)');
-        // Protected mount points remain established; the wand menu is retired.
-        expect(extensionsSource).toContain("$('#extensions_settings')");
-        expect(extensionsSource).not.toContain("$('#extensionsMenuButton')");
-        expect(extensionsSource).not.toContain("$('#extensionsMenu')");
-    });
-
-test('renders an Extensions Host workflow through React-owned controls and explicit extensions helpers', () => {
-        const scriptSource = read('public/script.js');
-        const extensionsSource = read('public/scripts/extensions.js');
-        const workspacePanelSource = read('app/workspace-panels.tsx');
-
-        expect(scriptSource).toContain('function getExtensionsHostReactCommands()');
-        expect(scriptSource).toContain('notifyUpdatesEnabled: extension_settings.notifyUpdates === true');
-        expect(scriptSource).toContain('extrasApiUrl: extension_settings.apiUrl ?? \'\'');
-        expect(scriptSource).toContain('extrasApiKeySet: Boolean(extension_settings.apiKey)');
-        expect(scriptSource).toContain('autoconnectEnabled: extension_settings.autoConnect === true');
-        expect(scriptSource).toContain('extrasStatusText: extrasStatus.text || \'\'');
-        expect(scriptSource).toContain('mountPointStatuses: getExtensionsHostReactMountPointStatuses()');
-        expect(scriptSource).toContain('toggleExtensionsHostNotifyUpdates');
-        expect(scriptSource).toContain('openExtensionsHostManager');
-        expect(scriptSource).toContain('openExtensionsHostInstaller');
-        expect(scriptSource).toContain('updateExtensionsHostApiUrl');
-        expect(scriptSource).toContain('updateExtensionsHostApiKey');
-        expect(scriptSource).toContain('connectExtensionsHostApi');
-        expect(scriptSource).toContain('setExtensionsHostAutoconnectEnabled');
-        expect(scriptSource).toContain('toggleNotifyUpdates: () => toggleExtensionsHostNotifyUpdates()');
-        expect(scriptSource).toContain('openManageExtensions: () => openExtensionsHostManager()');
-        expect(scriptSource).toContain('openInstallExtension: () => openExtensionsHostInstaller()');
-        expect(scriptSource).toContain('updateExtrasApiUrl: url => {');
-        expect(scriptSource).toContain('updateExtrasApiKey: apiKey => {');
-        expect(scriptSource).toContain('connectExtrasApi: () => connectExtensionsHostApi()');
-        expect(scriptSource).toContain('toggleAutoconnect: enabled =>');
-        const extensionsHostCommandsSource = scriptSource.match(/function getExtensionsHostReactCommands\(\) \{[\s\S]*?\n\}/)?.[0] ?? '';
-        expect(extensionsHostCommandsSource).toContain('shouldRemount(actionResult, commandName) {');
-        expect(extensionsHostCommandsSource).toContain("return commandName !== 'ensureExtensionCompatibilitySlots' && actionResult !== false;");
-        expect(scriptSource).toContain('commands: getExtensionsHostReactCommands()');
-        expect(scriptSource).not.toContain('document.getElementById(\'extensions_notify_updates\')?.click();');
-        expect(scriptSource).not.toContain('document.getElementById(\'extensions_details\')?.click();');
-        expect(scriptSource).not.toContain('document.getElementById(\'third_party_extension_button\')?.click();');
-        expect(scriptSource).not.toContain('$(\'#extensions_url\').val(String(payload?.url ?? \'\')).trigger(\'input\');');
-        expect(scriptSource).not.toContain('$(\'#extensions_api_key\').val(String(payload?.apiKey ?? \'\')).trigger(\'input\');');
-        expect(scriptSource).not.toContain('document.getElementById(\'extensions_connect\')?.click();');
-        expect(scriptSource).not.toContain('document.getElementById(\'extensions_autoconnect\')?.click();');
-
-        expect(extensionsSource).toContain('function syncExtensionsHostReactState(detail = {})');
-        expect(extensionsSource).toContain('export function toggleExtensionsHostNotifyUpdates()');
-        expect(extensionsSource).toContain('export async function openExtensionsHostManager()');
-        expect(extensionsSource).toContain('export async function openExtensionsHostInstaller()');
-        expect(extensionsSource).toContain('export function updateExtensionsHostApiUrl(url)');
-        expect(extensionsSource).toContain('export function updateExtensionsHostApiKey(apiKey)');
-        expect(extensionsSource).toContain('export async function connectExtensionsHostApi()');
-        expect(extensionsSource).toContain('export function setExtensionsHostAutoconnectEnabled(enabled)');
-        expect(extensionsSource).toContain('void connectExtensionsHostApi();');
-        expect(extensionsSource).toContain('syncExtensionsHostReactState();');
-
-        expect(workspacePanelSource).toContain('const extensionsHostPanelFormSchema = z.object(');
-        expect(workspacePanelSource).toContain('function buildExtensionsHostPanelFormDefaults');
-        expect(workspacePanelSource).toContain('const extensionsHostCommandMutation = useMutation({');
-        expect(workspacePanelSource).toContain('data-extensions-host-react-control="notify-updates"');
-        expect(workspacePanelSource).toContain('data-extensions-host-react-action="manage"');
-        expect(workspacePanelSource).toContain('data-extensions-host-react-action="install"');
-        expect(workspacePanelSource).toContain('data-extensions-host-react-control="extras-url"');
-        expect(workspacePanelSource).toContain('data-extensions-host-react-control="extras-api-key"');
-        expect(workspacePanelSource).toContain('data-extensions-host-react-control="autoconnect"');
-        expect(workspacePanelSource).toContain('data-extensions-host-react-action="connect"');
-        expect(workspacePanelSource).toContain('data-workspace-legacy-slot={slot.id}');
-        expect(workspacePanelSource).not.toContain('data-extensions-host-react-mount-point={mountPoint.id}');
-        expect(workspacePanelSource).toContain('commands?.toggleNotifyUpdates()');
-        expect(workspacePanelSource).toContain('commands?.openManageExtensions()');
-        expect(workspacePanelSource).toContain('commands?.openInstallExtension()');
-        expect(workspacePanelSource).toContain('commands?.connectExtrasApi()');
+        expect(workspacePanelSource).not.toContain('extensionsHost');
+        expect(workspacePanelSource).not.toContain('ExtensionsHost');
+        expect(workspacePanelSource).not.toContain('extensions-settings');
+        expect(workspacePanelSource).not.toContain('openExtensions');
+        expect(workspacePanelStoreSource).not.toContain('extensionsHost');
+        expect(workspaceCommandsSource).not.toContain('extensionsHost');
+        expect(compatibilityBridgeSource).not.toContain('extensionsHost');
+        expect(bridgeSource).not.toContain('extensionsHost');
+        expect(featureSource).not.toContain('extensionsHost');
     });
 
     test('mounts the React main-chat owner directly into #chat', () => {

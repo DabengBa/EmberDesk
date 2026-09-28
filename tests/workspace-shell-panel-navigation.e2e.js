@@ -38,7 +38,6 @@ test.describe('workspace shell panel navigation', () => {
         const registryEntries = [
             { label: 'Character Library', visibleSelector: '#right-nav-panel.openDrawer #rm_characters_block' },
             { label: 'World Info', visibleSelector: '#WorldInfo.openDrawer' },
-            { label: 'Extensions', visibleSelector: '#rm_extensions_block.openDrawer' },
         ];
 
         for (const entry of registryEntries) {
@@ -167,9 +166,6 @@ test.describe('workspace shell panel navigation', () => {
 
         await openShellPanel(page, 'World Info');
         await expect.poll(async () => page.locator('#world_editor_select option').count(), { timeout: 10_000 }).toBeGreaterThan(1);
-
-        await openShellPanel(page, 'Extensions');
-        await expect.poll(async () => page.locator('#extensions_settings, #extensions_settings2').count(), { timeout: 10_000 }).toBe(2);
 
         await openShellPanel(page, 'Character Library');
         await expect.poll(async () => page.evaluate(() => ({

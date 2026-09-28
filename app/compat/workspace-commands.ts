@@ -3,7 +3,6 @@ export type CommandResult = Promise<unknown> | unknown;
 export type WorkspaceShellSlotKey =
     | 'characterLibrary'
     | 'worldInfo'
-    | 'extensionsHost'
     | 'characterAuthoring'
     | 'aiConfigDrawer'
     | 'regex';
@@ -13,7 +12,6 @@ export type WorkspaceDockPanelKind =
     | 'advancedFormatting'
     | 'characterLibrary'
     | 'worldInfo'
-    | 'extensionsHost'
     | 'settings'
     | 'characterAuthoring'
     | 'aiConfigDrawer'
@@ -24,7 +22,6 @@ export interface WorkspaceShellCommands {
     openFormatting(): CommandResult;
     openCharacterLibrary(): CommandResult;
     openWorldInfo(): CommandResult;
-    openExtensions(): CommandResult;
     openSettings(): CommandResult;
     openCharacterAuthoring(): CommandResult;
     openAIConfigDrawer(): CommandResult;
@@ -99,18 +96,6 @@ export interface WorldInfoCommands {
     moveOrCopyEntry(uid: string): CommandResult;
 }
 
-export interface ExtensionsHostCommands {
-    toggleNotifyUpdates(): CommandResult;
-    openManageExtensions(): CommandResult;
-    openInstallExtension(): CommandResult;
-    updateExtrasApiUrl(url: string): CommandResult;
-    updateExtrasApiKey(apiKey: string): CommandResult;
-    connectExtrasApi(): CommandResult;
-    toggleAutoconnect(enabled?: boolean): CommandResult;
-    ensureExtensionCompatibilitySlots(owner: string): CommandResult;
-    retryDeferredExtensions(): CommandResult;
-}
-
 export type AuthoringKind = 'characterAuthoring';
 
 export interface AuthoringCommands {
@@ -128,5 +113,4 @@ export type WorkspacePanelCommands =
     | WorkspaceShellCommands
     | MainChatCommands
     | WorldInfoCommands
-    | ExtensionsHostCommands
     | AuthoringCommands;

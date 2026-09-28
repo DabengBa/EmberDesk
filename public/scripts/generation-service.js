@@ -99,7 +99,6 @@ const generatedTextFiltered = (...args) => shell().generatedTextFiltered(...args
 const playMessageSound = (...args) => shell().playMessageSound(...args);
 const prepareOpenAIMessages = (...args) => shell().prepareOpenAIMessages(...args);
 const renderStoryString = (...args) => shell().renderStoryString(...args);
-const runGenerationInterceptors = (...args) => shell().runGenerationInterceptors(...args);
 const setOpenAIMessageExamples = (...args) => shell().setOpenAIMessageExamples(...args);
 const setOpenAIMessages = (...args) => shell().setOpenAIMessages(...args);
 const shiftDownByOne = (...args) => shell().shiftDownByOne(...args);
@@ -768,18 +767,6 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
     // Determine token limit
     let this_max_context = getMaxPromptTokens();
 
-    if (!dryRun) {
-        console.debug('Running extension interceptors');
-        const aborted = await runGenerationInterceptors(coreChat, this_max_context, type);
-
-        if (aborted) {
-            console.debug('Generation aborted by extension interceptors');
-            unblockGeneration(type);
-            return Promise.resolve();
-        }
-    } else {
-        console.debug('Skipping extension interceptors for dry run');
-    }
 
     console.log(`Core/all messages: ${coreChat.length}/${state.chat.length}`);
 

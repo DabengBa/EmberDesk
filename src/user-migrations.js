@@ -129,11 +129,6 @@ export async function migrateUserData() {
             file: false,
         },
         {
-            old: path.join(publicDirectory, 'scripts/extensions/third-party'),
-            new: userDirectories.extensions,
-            file: false,
-        },
-        {
             old: path.join(process.cwd(), 'thumbnails'),
             new: userDirectories.thumbnails,
             file: false,

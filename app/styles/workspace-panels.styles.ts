@@ -47,9 +47,6 @@ export const workspacePanelStyles = stylex.create({
         justifyContent: 'space-between',
         gap: '8px',
     },
-    legacySlotProtected: {
-        opacity: 0.82,
-    },
     recovery: {
         display: 'flex',
         alignItems: 'center',

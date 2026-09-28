@@ -1,7 +1,7 @@
 import { createStore, type StoreApi } from 'zustand/vanilla';
 
 export type MainChatMessageRole = 'user' | 'character' | 'system';
-export type MainChatMessageState = 'finalized' | 'editing' | 'streaming' | 'extension-mutated' | 'error';
+export type MainChatMessageState = 'finalized' | 'editing' | 'streaming' | 'error';
 export type MainChatRecoveryStage = 'primary' | 'fallback';
 export type MainChatContext = 'character' | 'assistant' | 'none';
 export type MainChatGenerationPhase = 'idle' | 'connecting' | 'streaming' | 'recovering' | 'recoveringPrimary' | 'recoveringFallback' | 'stopped' | 'completed' | 'error';
@@ -180,7 +180,6 @@ function normalizeMessageRole(value: unknown): MainChatMessageRole {
 function normalizeMessageState(value: unknown): MainChatMessageState {
     return value === 'editing'
         || value === 'streaming'
-        || value === 'extension-mutated'
         || value === 'error'
         ? value
         : 'finalized';

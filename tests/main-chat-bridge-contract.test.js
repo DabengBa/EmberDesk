@@ -47,7 +47,6 @@ describe('main chat bridge contract', () => {
         expect(MAIN_CHAT_RICH_BODY_RENDERER_REASONS).toEqual({
             SAFE_FINALIZED_ROW: 'safe-finalized-row',
             MISSING_MES_TEXT: 'missing-mes-text',
-            EXTENSION_MUTATED_ROW: 'extension-mutated-row',
             EDITING_ROW: 'editing-row',
             STREAMING_ROW: 'streaming-row',
             UNSAFE_ROW: 'unsafe-row',

@@ -3,7 +3,7 @@ import { describe, expect, test } from '@jest/globals';
 import { resolvePersistedCurrentVersion, resolveStartupSettingsPlan } from '../public/scripts/startup-helpers.js';
 
 describe('resolveStartupSettingsPlan', () => {
-    test('should keep extension loading deferred while preserving startup flags', () => {
+    test('preserves startup flags without an extension loading plan', () => {
         const plan = resolveStartupSettingsPlan({
             data: {
                 settings: JSON.stringify({
@@ -13,8 +13,6 @@ describe('resolveStartupSettingsPlan', () => {
                     },
                     firstRun: false,
                 }),
-                enable_extensions: true,
-                enable_extensions_auto_update: true,
             },
             currentVersion: '1.1.0',
         });
@@ -24,37 +22,22 @@ describe('resolveStartupSettingsPlan', () => {
             firstRun: false,
         }));
         expect(plan.firstRun).toBe(false);
-        expect(plan.extensionPlan).toEqual(expect.objectContaining({
-            shouldLoadDeferred: true,
-            enableAutoUpdate: true,
-            isVersionChanged: true,
-            disableUi: false,
-        }));
+        expect(plan.extensionPlan).toBeUndefined();
     });
 
-    test('should mark extensions disabled without scheduling deferred activation', () => {
+    test('firstRun is reported independently of legacy extension flags', () => {
         const plan = resolveStartupSettingsPlan({
             data: {
                 settings: JSON.stringify({
                     currentVersion: '1.0.0',
-                    extension_settings: {
-                        disabledExtensions: ['third-party/foo'],
-                    },
                     firstRun: true,
                 }),
-                enable_extensions: false,
-                enable_extensions_auto_update: true,
             },
             currentVersion: '1.0.0',
         });
 
         expect(plan.firstRun).toBe(true);
-        expect(plan.extensionPlan).toEqual(expect.objectContaining({
-            shouldLoadDeferred: false,
-            enableAutoUpdate: false,
-            isVersionChanged: false,
-            disableUi: true,
-        }));
+        expect(plan.extensionPlan).toBeUndefined();
     });
 
     test('should reuse the last saved version when the current version is still unresolved', () => {

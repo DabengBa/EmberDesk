@@ -124,22 +124,6 @@ function sanitizeWorkspacePanelState(kind, state) {
         });
     }
 
-    if (kind === 'extensionsHost') {
-        return cloneJsonSafe({
-            extensionsSettingsPresent: state.extensionsSettingsPresent,
-            extensionsSettings2Present: state.extensionsSettings2Present,
-            extrasApiControlsPresent: state.extrasApiControlsPresent,
-            manageButtonPresent: state.manageButtonPresent,
-            installButtonPresent: state.installButtonPresent,
-            notifyUpdatesEnabled: state.notifyUpdatesEnabled,
-            extrasApiKeySet: state.extrasApiKeySet,
-            extrasStatusText: state.extrasStatusText,
-            mountPointStatuses: state.mountPointStatuses,
-            deferredState: state.deferredState,
-            deferredPlaceholderPresent: state.deferredPlaceholderPresent,
-        });
-    }
-
     if (kind === 'mainChatMessageList') {
         return cloneJsonSafe({
             chatId: state.chatId,

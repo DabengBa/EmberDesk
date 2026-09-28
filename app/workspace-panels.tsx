@@ -2,8 +2,6 @@ import { Fragment, StrictMode, useCallback, useEffect, useLayoutEffect, useMemo,
 import { createRoot, type Root } from 'react-dom/client';
 import { createPortal, flushSync } from 'react-dom';
 import { QueryClient, QueryClientProvider, useMutation, useQuery } from '@tanstack/react-query';
-import { useForm } from '@tanstack/react-form';
-import { z } from 'zod';
 
 import {
     attachGlobalCompatibilityBridge,
@@ -12,7 +10,6 @@ import {
 import type { RuntimePort } from './compat/runtime-port';
 import type {
     AuthoringCommands,
-    ExtensionsHostCommands,
     MainChatCommands,
     WorkspaceDockPanelKind,
     WorkspacePanelCommands,
@@ -90,7 +87,7 @@ import { emberDeskTheme } from './lib/theme-tokens';
 import { settingsStyles } from './styles/settings-surface.styles';
 import '@astryxdesign/core/astryx.css';
 
-export type WorkspacePanelKind = 'worldInfo' | 'extensionsHost' | 'mainChatMessageList' | 'characterAuthoring';
+export type WorkspacePanelKind = 'worldInfo' | 'mainChatMessageList' | 'characterAuthoring';
 interface WorkspacePanelMount {
     root: Root;
     container: HTMLElement;
@@ -172,31 +169,6 @@ interface WorkspaceShellNavigationEntry {
 
 type WorldInfoWorkspacePanelState = WorldInfoWorkbenchPanelState;
 
-interface ExtensionsHostWorkspacePanelState {
-    extensionsSettingsPresent?: boolean;
-    extensionsSettings2Present?: boolean;
-    extrasApiControlsPresent?: boolean;
-    manageButtonPresent?: boolean;
-    installButtonPresent?: boolean;
-    hasExtensionLoadErrors?: boolean;
-    extensionsUiDisabled?: boolean;
-    notifyUpdatesEnabled?: boolean;
-    extrasApiUrl?: string;
-    extrasApiKeySet?: boolean;
-    autoconnectEnabled?: boolean;
-    extrasStatusText?: string;
-    extrasStatusClassName?: string;
-    mountPointStatuses?: ExtensionsHostReactMountPointStatus[];
-    deferredState?: 'idle' | 'loading' | 'failed';
-    deferredPlaceholderPresent?: boolean;
-}
-
-interface ExtensionsHostReactMountPointStatus {
-    id: string;
-    label: string;
-    ready?: boolean;
-}
-
 interface MainChatMessageListWorkspacePanelState {
     mainChatSnapshot?: MainChatSnapshot;
 }
@@ -277,18 +249,6 @@ interface SettingsOverlayMount {
 }
 
 let mountedSettingsOverlay: SettingsOverlayMount | null = null;
-
-const extensionsHostPanelFormSchema = z.object({
-    extrasApiUrl: z.string(),
-    extrasApiKey: z.string(),
-});
-
-function buildExtensionsHostPanelFormDefaults(state: ExtensionsHostWorkspacePanelState) {
-    return {
-        extrasApiUrl: state.extrasApiUrl ?? '',
-        extrasApiKey: '',
-    };
-}
 
 function asMainChatMessageListState(state: unknown): MainChatMessageListWorkspacePanelState {
     if (!state || typeof state !== 'object') {
@@ -399,13 +359,10 @@ function WorkspacePanelShell({
                             {slots.length > 0 ? (
                                 <div className="flex-container flexFlowColumn gap4" data-workspace-legacy-slots={kind}>
                                     {slots.map(slot => {
-                                        const protectedSlot = slot.id === 'extensions-settings'
-                                            || slot.id === 'extensions-settings2';
-
                                         return (
                                             <div
                                                 key={slot.id}
-                                                {...stylex.props(workspacePanelStyles.legacySlot, protectedSlot ? workspacePanelStyles.legacySlotProtected : null)}
+                                                {...stylex.props(workspacePanelStyles.legacySlot)}
                                                 data-workspace-legacy-slot={slot.id}
                                                 data-workspace-legacy-slot-ready={slot.ready ? 'true' : 'false'}
                                             >
@@ -454,12 +411,33 @@ function asWorldInfoState(state: unknown): WorldInfoWorkspacePanelState {
     return state as WorldInfoWorkspacePanelState;
 }
 
-function asExtensionsHostState(state: unknown): ExtensionsHostWorkspacePanelState {
-    if (!state || typeof state !== 'object') {
-        return {};
-    }
-
-    return state as ExtensionsHostWorkspacePanelState;
+function WorldInfoWorkspacePanel({ state, commands }: { state?: unknown; commands: WorldInfoCommands }) {
+    const bridgeState = asWorldInfoState(state);
+    return (
+        <WorldInfoWorkbenchPanel
+            state={state}
+            commands={commands}
+            shell={({ status, recoveryActions, children }) => (
+                <WorkspacePanelShell
+                    kind="worldInfo"
+                    title="世界书"
+                    status={status}
+                    actions={recoveryActions}
+                    legacyBoundary="activation-import-regex-prompt-delete"
+                    hideDiagnostics={true}
+                    hideTitle={true}
+                    slots={[
+                        { id: 'global-selector', label: 'Global selector', ready: bridgeState.globalSelectorPresent },
+                        { id: 'editor-selector', label: 'Editor selector', ready: Boolean(bridgeState.editorSelectorPresent && bridgeState.selectorsSeparated) },
+                        { id: 'import-controls', label: 'Import controls', ready: bridgeState.importMenuPresent },
+                        { id: 'legacy-editor', label: 'Legacy editor', ready: bridgeState.dropTargetPresent },
+                    ]}
+                >
+                    {children}
+                </WorkspacePanelShell>
+            )}
+        />
+    );
 }
 
 function asAuthoringState(state: unknown): AuthoringWorkspacePanelState {
@@ -1327,230 +1305,6 @@ function AuthoringWorkspacePanel({
     );
 }
 
-function getExtensionsHostPanelStatus(bridgeState: ExtensionsHostWorkspacePanelState): WorkspacePanelStatus {
-    if (bridgeState.deferredState === 'loading') {
-        return 'loading';
-    }
-
-    if (bridgeState.deferredState === 'failed') {
-        return 'error';
-    }
-
-    if (
-        bridgeState.extensionsSettingsPresent
-        || bridgeState.extensionsSettings2Present
-        || bridgeState.extrasApiControlsPresent
-    ) {
-        return 'success';
-    }
-
-    return 'empty';
-}
-
-function WorldInfoWorkspacePanel({ state, commands }: { state?: unknown; commands: WorldInfoCommands }) {
-    const bridgeState = asWorldInfoState(state);
-    return (
-        <WorldInfoWorkbenchPanel
-            state={state}
-            commands={commands}
-            shell={({ status, recoveryActions, children }) => (
-                <WorkspacePanelShell
-                    kind="worldInfo"
-                    title="世界书"
-                    status={status}
-                    actions={recoveryActions}
-                    legacyBoundary="activation-import-regex-prompt-delete"
-                    hideDiagnostics={true}
-                    hideTitle={true}
-                    slots={[
-                        { id: 'global-selector', label: 'Global selector', ready: bridgeState.globalSelectorPresent },
-                        { id: 'editor-selector', label: 'Editor selector', ready: Boolean(bridgeState.editorSelectorPresent && bridgeState.selectorsSeparated) },
-                        { id: 'import-controls', label: 'Import controls', ready: bridgeState.importMenuPresent },
-                        { id: 'legacy-editor', label: 'Legacy editor', ready: bridgeState.dropTargetPresent },
-                    ]}
-                >
-                    {children}
-                </WorkspacePanelShell>
-            )}
-        />
-    );
-}
-
-function ExtensionsHostWorkspacePanel({ state, commands }: { state?: unknown; commands?: ExtensionsHostCommands }) {
-    const bridgeState = asExtensionsHostState(state);
-    const status = getExtensionsHostPanelStatus(bridgeState);
-    const formDefaults = useMemo(() => buildExtensionsHostPanelFormDefaults(bridgeState), [bridgeState]);
-    const extensionsHostForm = useForm({
-        defaultValues: formDefaults,
-        validators: {
-            onChange: extensionsHostPanelFormSchema,
-        },
-    });
-    const extensionsHostCommandMutation = useMutation({
-        mutationFn: async (command: () => Promise<unknown> | unknown) => {
-            await command();
-        },
-        retry: false,
-    });
-    useEffect(() => {
-        extensionsHostForm.reset(formDefaults);
-    }, [extensionsHostForm, formDefaults]);
-    // Claim stable compatibility slots outside the React tree so unmount does not
-    // destroy extension content. Re-entry keeps the same DOM nodes and children.
-    useLayoutEffect(() => {
-        void commands?.ensureExtensionCompatibilitySlots('react-extensions-host');
-    }, [commands]);
-    const recoveryActions: WorkspacePanelRecoveryAction[] = [];
-
-    if (status === 'empty') {
-        recoveryActions.push({
-            id: 'install-extension',
-            label: 'Install extension',
-            disabled: !bridgeState.installButtonPresent,
-            onClick: () => extensionsHostCommandMutation.mutate(() => commands?.openInstallExtension()),
-        });
-    }
-
-    if (status === 'empty' || status === 'error') {
-        recoveryActions.push({
-            id: 'open-manage-extensions',
-            label: 'Open manage',
-            disabled: !bridgeState.manageButtonPresent,
-            onClick: () => extensionsHostCommandMutation.mutate(() => commands?.openManageExtensions()),
-        });
-    }
-
-    if (status === 'error' || bridgeState.deferredState === 'failed') {
-        recoveryActions.push({
-            id: 'retry-deferred-extensions',
-            label: 'Retry extensions',
-            onClick: () => extensionsHostCommandMutation.mutate(() => commands?.retryDeferredExtensions()),
-        });
-        recoveryActions.push({
-            id: 'connect-extras-api',
-            label: 'Retry connection',
-            disabled: !bridgeState.extrasApiControlsPresent,
-            onClick: () => extensionsHostCommandMutation.mutate(() => commands?.connectExtrasApi()),
-        });
-    }
-
-    return (
-        <WorkspacePanelShell
-            kind="extensionsHost"
-            title="Extensions"
-            status={status}
-            actions={recoveryActions}
-            legacyBoundary="react-owned-slots-lifecycle"
-            slots={[
-                { id: 'extensions-settings', label: 'Settings column', ready: bridgeState.extensionsSettingsPresent },
-                { id: 'extensions-settings2', label: 'Settings column 2', ready: bridgeState.extensionsSettings2Present },
-                { id: 'extras-api', label: 'Extras API', ready: bridgeState.extrasApiControlsPresent },
-            ]}
-        >
-            <div className="flex-container flexFlowColumn gap8" data-extensions-host-react-workflow="host-actions">
-                <div className="flex-container flexwrap gap8 alignitemscenter">
-                    <label className="checkbox_label flexNoGap">
-                        <input
-                            type="checkbox"
-                            data-extensions-host-react-control="notify-updates"
-                            checked={Boolean(bridgeState.notifyUpdatesEnabled)}
-                            disabled={Boolean(bridgeState.extensionsUiDisabled)}
-                            onChange={() => extensionsHostCommandMutation.mutate(() => commands?.toggleNotifyUpdates())}
-                        />
-                            Notify updates
-                    </label>
-                    <button
-                        type="button"
-                        className={bridgeState.hasExtensionLoadErrors ? 'menu_button warning' : 'menu_button'}
-                        data-extensions-host-react-action="manage"
-                        onClick={() => extensionsHostCommandMutation.mutate(() => commands?.openManageExtensions())}
-                        disabled={!bridgeState.manageButtonPresent || bridgeState.extensionsUiDisabled}
-                    >
-                            Manage
-                    </button>
-                    <button
-                        type="button"
-                        className="menu_button"
-                        data-extensions-host-react-action="install"
-                        onClick={() => extensionsHostCommandMutation.mutate(() => commands?.openInstallExtension())}
-                        disabled={!bridgeState.installButtonPresent || bridgeState.extensionsUiDisabled}
-                    >
-                            Install
-                    </button>
-                </div>
-                <div className="flex-container flexwrap gap8 alignitemscenter">
-                    <extensionsHostForm.Field name="extrasApiUrl">
-                        {field => (
-                            <input
-                                className="text_pole textarea_compact"
-                                type="url"
-                                data-extensions-host-react-control="extras-url"
-                                aria-label="Extras API URL"
-                                disabled={Boolean(bridgeState.extensionsUiDisabled)}
-                                value={field.state.value}
-                                onChange={event => {
-                                    const url = event.target.value;
-                                    field.handleChange(url);
-                                    extensionsHostCommandMutation.mutate(() => commands?.updateExtrasApiUrl(url));
-                                }}
-                            />
-                        )}
-                    </extensionsHostForm.Field>
-                    <extensionsHostForm.Field name="extrasApiKey">
-                        {field => (
-                            <input
-                                className="text_pole textarea_compact"
-                                type="password"
-                                data-extensions-host-react-control="extras-api-key"
-                                aria-label="Extras API key"
-                                disabled={Boolean(bridgeState.extensionsUiDisabled)}
-                                placeholder={bridgeState.extrasApiKeySet ? 'Saved key' : 'Extras API key'}
-                                value={field.state.value}
-                                onChange={event => {
-                                    const apiKey = event.target.value;
-                                    field.handleChange(apiKey);
-                                    extensionsHostCommandMutation.mutate(() => commands?.updateExtrasApiKey(apiKey));
-                                }}
-                            />
-                        )}
-                    </extensionsHostForm.Field>
-                </div>
-                <div className="flex-container flexwrap gap8 alignitemscenter">
-                    <label className="checkbox_label flexNoGap">
-                        <input
-                            type="checkbox"
-                            data-extensions-host-react-control="autoconnect"
-                            checked={Boolean(bridgeState.autoconnectEnabled)}
-                            onChange={() => extensionsHostCommandMutation.mutate(() => commands?.toggleAutoconnect())}
-                            disabled={!bridgeState.extrasApiControlsPresent || bridgeState.extensionsUiDisabled}
-                        />
-                            Auto-connect
-                    </label>
-                    <button
-                        type="button"
-                        className="menu_button"
-                        data-extensions-host-react-action="connect"
-                        onClick={() => extensionsHostCommandMutation.mutate(() => commands?.connectExtrasApi())}
-                        disabled={!bridgeState.extrasApiControlsPresent || bridgeState.extensionsUiDisabled}
-                    >
-                            Connect
-                    </button>
-                    <output className={bridgeState.extrasStatusClassName || undefined}>{bridgeState.extrasStatusText || 'Not connected...'}</output>
-                </div>
-                {/* Protected mount IDs remain in established drawer DOM under React lifecycle
-                    (ensureExtensionCompatibilitySlots). Do not render empty React placeholders
-                    for those IDs — reparenting into React would destroy extension content on unmount. */}
-                <div
-                    className="flex-container flexFlowColumn gap8"
-                    data-extensions-host-react-workflow="compatibility-slots"
-                    data-extensions-host-compat-owner="react-lifecycle"
-                    aria-hidden="true"
-                />
-            </div>
-        </WorkspacePanelShell>
-    );
-}
-
 function MainChatMessageListWorkspacePanel({
     commands,
 }: {
@@ -1673,8 +1427,6 @@ function renderPanel(
     switch (kind) {
         case 'worldInfo':
             return <WorldInfoWorkspacePanel state={state} commands={commands as WorldInfoCommands} />;
-        case 'extensionsHost':
-            return <ExtensionsHostWorkspacePanel state={state} commands={commands as ExtensionsHostCommands | undefined} />;
         case 'mainChatMessageList':
             return <MainChatMessageListWorkspacePanel commands={commands as MainChatCommands | undefined} />;
         case 'characterAuthoring':
@@ -1707,7 +1459,6 @@ const workspaceShellNavigationEntries: WorkspaceShellNavigationEntry[] = [
     { command: 'openFormatting', icon: 'fa-font', label: 'Formatting', panelKind: 'advancedFormatting' },
     { command: 'openCharacterLibrary', icon: 'fa-address-book', label: 'Character Library', panelKind: 'characterLibrary', slotKey: 'characterLibrary' },
     { command: 'openWorldInfo', icon: 'fa-book-atlas', label: 'World Info', panelKind: 'worldInfo', slotKey: 'worldInfo' },
-    { command: 'openExtensions', icon: 'fa-cubes', label: 'Extensions', panelKind: 'extensionsHost', slotKey: 'extensionsHost' },
     { command: 'openRegex', icon: 'fa-code', label: 'Regex', panelKind: 'regex', slotKey: 'regex' },
     { command: 'openSettings', icon: 'fa-gear', label: 'Settings', panelKind: 'settings' },
 ];
@@ -1798,8 +1549,6 @@ function executeWorkspaceShellNavigationCommand(
             return commands.openCharacterLibrary();
         case 'openWorldInfo':
             return commands.openWorldInfo();
-        case 'openExtensions':
-            return commands.openExtensions();
         case 'openSettings':
             return commands.openSettings();
         case 'openCharacterAuthoring':

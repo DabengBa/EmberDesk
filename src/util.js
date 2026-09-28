@@ -37,7 +37,7 @@ let CONFIG_PATH = null;
  * Converts a configuration key to an environment variable key.
  * @param {string} key Configuration key
  * @returns {string} Environment variable key
- * @example keyToEnv('extensions.models.speechToText') // 'EMBERDESK_EXTENSIONS_MODELS_SPEECHTOTEXT'
+ * @example keyToEnv('backups.chat.maxTotalBackups') // 'EMBERDESK_BACKUPS_CHAT_MAXTOTALBACKUPS'
  */
 export const keyToEnv = (key) => 'EMBERDESK_' + String(key).toUpperCase().replace(/\./g, '_');
 

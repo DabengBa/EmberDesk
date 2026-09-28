@@ -123,7 +123,6 @@ features:
     pages:
     panels:
       # mainChatMessageList product flag retired (React sole-owner; always enabled in workspace bootstrap)
-      extensionsHost: true
 
 # -- SSO LOGIN CONFIGURATION --
 sso:
@@ -307,28 +306,6 @@ whitelistImportDomains:
 ##   headers:
 ##     User-Agent: "Googlebot/2.1 (+http://www.google.com/bot.html)"
 requestOverrides: []
-
-# EXTENSIONS CONFIGURATION
-extensions:
-  # Enable UI extensions
-  enabled: true
-  # Automatically update extensions when a release version changes
-  autoUpdate: true
-  models:
-    # Enables automatic model download from HuggingFace
-    autoDownload: true
-    # Additional models for extensions. Expects model IDs from HuggingFace model hub in ONNX format
-    classification: Cohee/distilbert-base-uncased-go-emotions-onnx
-    captioning: Xenova/vit-gpt2-image-captioning
-    speechToText: Xenova/whisper-small
-    textToSpeech: Xenova/speecht5_tts
-
-# Git backend for plugin/extension repository operations.
-# - Use "auto" to prefer system git, falling back to the integrated backend
-# - Use "system" to force system backend
-# - Use "builtin" to force integrated backend
-git:
-  backend: auto
 
 # Additional model tokenizers can be downloaded on demand.
 # Disabling will fallback to another locally available tokenizer.

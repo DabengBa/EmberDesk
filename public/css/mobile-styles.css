@@ -33,12 +33,6 @@
         display: none;
     }
 
-    #extensions_settings,
-    #extensions_settings2 {
-        width: 100% !important;
-        min-width: 100% !important;
-    }
-
     .zoomed_avatar {
         min-width: 100px;
         min-height: 100px;

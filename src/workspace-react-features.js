@@ -8,11 +8,6 @@ export function isReactMainChatMessageListPanelEnabled() {
     return true;
 }
 
-export function isReactExtensionsHostPanelEnabled() {
-    // Extensions Host is React sole-owner for visible host controls; product flag is retired.
-    return true;
-}
-
 export function isReactCharacterAuthoringPanelEnabled() {
     // Character Authoring is React sole-owner; product flag is retired.
     return true;

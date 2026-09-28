@@ -100,19 +100,19 @@ describe('global compatibility bridge', () => {
         const legacyScope = createLegacyScope();
 
         const controller = attachGlobalCompatibilityBridge({ legacyScope });
-        recordWorkspacePanelDockResult('extensionsHost', {
+        recordWorkspacePanelDockResult('worldInfo', {
             fallbackReason: 'bundle-load-failed',
             pinned: true,
             status: 'error',
         });
 
         expect(controller.bridge.getSnapshot().workspacePanelDock).toMatchObject({
-            activePanelKind: 'extensionsHost',
+            activePanelKind: 'worldInfo',
             activePanelStatus: 'error',
             fallbackReason: 'bundle-load-failed',
             lockedPanelKinds: [],
-            openPanelKinds: ['extensionsHost'],
-            pinnedPanelKinds: ['extensionsHost'],
+            openPanelKinds: ['worldInfo'],
+            pinnedPanelKinds: ['worldInfo'],
         });
 
         controller.detach();
@@ -217,20 +217,27 @@ describe('global compatibility bridge', () => {
         const legacyScope = createLegacyScope();
 
         const controller = attachGlobalCompatibilityBridge({ legacyScope });
-        recordWorkspacePanelUpdate('extensionsHost', {
-            extrasApiControlsPresent: true,
-            extrasApiUrl: 'http://127.0.0.1:5100',
-            extrasApiKey: 'secret-key',
-            extrasApiKeySet: true,
-            extrasStatusText: 'Connected',
-            mountPointStatuses: [{ id: 'regex', label: 'Regex', ready: true }],
+        recordWorkspacePanelUpdate('worldInfo', {
+            entryCount: 3,
+            entrySummaries: [{ uid: 1 }],
+            searchQuery: 'lore',
+            sortValue: 'priority',
+            sortOptions: ['priority'],
+            canCreateEntry: true,
+            exportMenuPresent: true,
+            secretField: 'must-be-dropped',
         });
 
-        expect(controller.bridge.getSnapshot().workspacePanels.extensionsHost.state).toEqual({
-            extrasApiControlsPresent: true,
-            extrasApiKeySet: true,
-            extrasStatusText: 'Connected',
-            mountPointStatuses: [{ id: 'regex', label: 'Regex', ready: true }],
+        expect(controller.bridge.getSnapshot().workspacePanels.worldInfo.state).toEqual({
+            entryCount: 3,
+            entrySummaries: [{ uid: 1 }],
+            searchQuery: 'lore',
+            sortValue: 'priority',
+            sortOptions: ['priority'],
+            canCreateEntry: true,
+            exportMenuPresent: true,
+            createWorldMenuPresent: undefined,
+            refreshMenuPresent: undefined,
         });
 
         controller.detach();

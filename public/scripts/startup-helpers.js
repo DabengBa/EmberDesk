@@ -1,20 +1,11 @@
 export function resolveStartupSettingsPlan({ data, currentVersion = null }) {
     const hasSettings = data?.result != 'file not find' && !!data?.settings;
     const settings = hasSettings ? normalizeSettingsPayload(data.settings) : null;
-    const savedVersion = settings?.currentVersion ?? null;
-    const extensionsEnabled = Boolean(hasSettings && data?.enable_extensions);
 
     return {
         hasSettings,
         settings,
         firstRun: Boolean(settings?.firstRun),
-        extensionPlan: {
-            shouldLoadDeferred: extensionsEnabled,
-            enableAutoUpdate: Boolean(extensionsEnabled && data?.enable_extensions_auto_update),
-            isVersionChanged: savedVersion !== null && currentVersion !== null ? savedVersion !== currentVersion : false,
-            savedVersion,
-            disableUi: Boolean(hasSettings && !extensionsEnabled),
-        },
     };
 }
 

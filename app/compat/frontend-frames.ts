@@ -164,7 +164,7 @@ export function useFrontendFrames(
             }
             return;
         }
-        // editing / error / extension-mutated: mount nothing, clean leftovers.
+        // editing / error: mount nothing, clean leftovers.
         if (mesTextEl instanceof HTMLElement) {
             unmountFrontendFrames(mesTextEl);
         }

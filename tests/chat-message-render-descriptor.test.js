@@ -223,7 +223,6 @@ describe('chat message render descriptor', () => {
             rowState: 'finalized',
             hasMesText: true,
             hasProtectedReasoning: true,
-            extensionMutated: false,
         })).toEqual(expect.objectContaining({
             rendererOwner: 'react',
             phase7Candidate: 'react-rich-body-owner',
@@ -268,23 +267,10 @@ describe('chat message render descriptor', () => {
             reason: 'missing-mes-text',
         }));
 
-        expect(classifyChatMessageRendererContract({
-            rowState: 'finalized',
-            hasMesText: true,
-            extensionMutated: true,
-        })).toEqual(expect.objectContaining({
-            rendererOwner: 'react',
-            phase7Candidate: 'react-rich-body-owner',
-            fallback: 'preserve-extension-mutation-zone',
-            reason: 'extension-mutated-row',
-            preserveLiveContent: true,
-        }));
-
         expect(buildMainChatRowLifecycleContract({
             hasEditingRows: true,
             hasStreamingRows: true,
             hasUnsafeRows: true,
-            hasExtensionMutatedRows: true,
         })).toEqual({
             lifecycleOwner: 'react-message-list-controller',
             phase7Candidate: 'react-row-lifecycle-owner',
@@ -292,11 +278,9 @@ describe('chat message render descriptor', () => {
             editingOwner: 'react',
             streamingOwner: 'react',
             unsafeOwner: 'unsupported',
-            extensionMutatedOwner: 'react',
             hasEditingRows: true,
             hasStreamingRows: true,
             hasUnsafeRows: true,
-            hasExtensionMutatedRows: true,
             reason: 'react-row-lifecycle-sole-owner',
         });
     });

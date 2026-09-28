@@ -32,8 +32,7 @@ import {
     upsertCanonicalSettingsDocument,
 } from './settings-store.js';
 
-const ENABLE_EXTENSIONS = !!getConfigValue('extensions.enabled', true, 'boolean');
-const ENABLE_EXTENSIONS_AUTO_UPDATE = !!getConfigValue('extensions.autoUpdate', true, 'boolean');
+
 const ENABLE_ACCOUNTS = !!getConfigValue('enableUserAccounts', false, 'boolean');
 const ENABLE_REQUEST_COMPRESSION = !!getConfigValue('performance.requestCompression.enabled', false, 'boolean');
 const REQUEST_COMPRESSION_MIN = bytes.parse(getConfigValue('performance.requestCompression.minPayloadSize', '256kb'));
@@ -569,8 +568,6 @@ router.post('/get', async (request, response) => {
         quickReplyPresets,
         sysprompt,
         reasoning,
-        enable_extensions: ENABLE_EXTENSIONS,
-        enable_extensions_auto_update: ENABLE_EXTENSIONS_AUTO_UPDATE,
         enable_accounts: ENABLE_ACCOUNTS,
         request_compression: {
             enabled: ENABLE_REQUEST_COMPRESSION,
