@@ -222,8 +222,6 @@ class WebTokenizer {
 }
 
 const spp_llama = new SentencePieceTokenizer('src/tokenizers/llama.model');
-const spp_nerd = new SentencePieceTokenizer(`${REMOTE_TOKENIZER_BASE_URL}/nerdstash.model`);
-const spp_nerd_v2 = new SentencePieceTokenizer(`${REMOTE_TOKENIZER_BASE_URL}/nerdstash_v2.model`);
 const spp_mistral = new SentencePieceTokenizer(`${REMOTE_TOKENIZER_BASE_URL}/mistral.model`);
 const spp_yi = new SentencePieceTokenizer(`${REMOTE_TOKENIZER_BASE_URL}/yi.model`);
 const spp_gemma = new SentencePieceTokenizer(`${REMOTE_TOKENIZER_BASE_URL}/gemma.model`);
@@ -238,8 +236,6 @@ const deepseekTokenizer = new WebTokenizer(`${REMOTE_EXTRA_TOKENIZER_BASE_URL}/d
 
 export const sentencepieceTokenizers = [
     'llama',
-    'nerdstash',
-    'nerdstash_v2',
     'mistral',
     'yi',
     'gemma',
@@ -266,16 +262,8 @@ export function getSentencepiceTokenizer(model) {
         return spp_llama;
     }
 
-    if (model.includes('nerdstash')) {
-        return spp_nerd;
-    }
-
     if (model.includes('mistral')) {
         return spp_mistral;
-    }
-
-    if (model.includes('nerdstash_v2')) {
-        return spp_nerd_v2;
     }
 
     if (model.includes('yi')) {
@@ -707,8 +695,6 @@ function createWebTokenizerDecodingHandler(tokenizer) {
 export const router = express.Router();
 
 router.post('/llama/encode', createSentencepieceEncodingHandler(spp_llama));
-router.post('/nerdstash/encode', createSentencepieceEncodingHandler(spp_nerd));
-router.post('/nerdstash_v2/encode', createSentencepieceEncodingHandler(spp_nerd_v2));
 router.post('/mistral/encode', createSentencepieceEncodingHandler(spp_mistral));
 router.post('/yi/encode', createSentencepieceEncodingHandler(spp_yi));
 router.post('/gemma/encode', createSentencepieceEncodingHandler(spp_gemma));
@@ -722,8 +708,6 @@ router.post('/command-a/encode', createWebTokenizerEncodingHandler(commandAToken
 router.post('/nemo/encode', createWebTokenizerEncodingHandler(nemoTokenizer));
 router.post('/deepseek/encode', createWebTokenizerEncodingHandler(deepseekTokenizer));
 router.post('/llama/decode', createSentencepieceDecodingHandler(spp_llama));
-router.post('/nerdstash/decode', createSentencepieceDecodingHandler(spp_nerd));
-router.post('/nerdstash_v2/decode', createSentencepieceDecodingHandler(spp_nerd_v2));
 router.post('/mistral/decode', createSentencepieceDecodingHandler(spp_mistral));
 router.post('/yi/decode', createSentencepieceDecodingHandler(spp_yi));
 router.post('/gemma/decode', createSentencepieceDecodingHandler(spp_gemma));
@@ -1001,40 +985,5 @@ router.post('/openai/count', async function (req, res) {
         const jsonBody = JSON.stringify(req.body);
         const num_tokens = guesstimate(jsonBody);
         res.send({ 'token_count': num_tokens });
-    }
-});
-
-router.post('/remote/kobold/count', async function (request, response) {
-    if (!request.body) {
-        return response.sendStatus(400);
-    }
-    const text = String(request.body.text) || '';
-    const baseUrl = String(request.body.url);
-
-    try {
-        const args = {
-            method: 'POST',
-            body: JSON.stringify({ 'prompt': text }),
-            headers: { 'Content-Type': 'application/json' },
-        };
-
-        let url = String(baseUrl).replace(/\/$/, '');
-        url += '/extra/tokencount';
-
-        const result = await fetch(url, args);
-
-        if (!result.ok) {
-            console.warn(`API returned error: ${result.status} ${result.statusText}`);
-            return response.send({ error: true });
-        }
-
-        /** @type {any} */
-        const data = await result.json();
-        const count = data.value;
-        const ids = data.ids ?? [];
-        return response.send({ count, ids });
-    } catch (error) {
-        console.error(error);
-        return response.send({ error: true });
     }
 });

@@ -234,7 +234,6 @@ import { createChatMessageActionsController } from './scripts/chat-message-actio
 import { ToolManager } from './scripts/tool-calling.js';
 import { addShowdownPatch } from './scripts/util/showdown-patch.js';
 import { applyBrowserFixes } from './scripts/browser-fixes.js';
-import { initServerHistory } from './scripts/server-history.js';
 import { initSettingsSearch } from './scripts/setting-search.js';
 import { initBulkEdit } from './scripts/bulk-edit.js';
 import { getContext } from './scripts/st-context.js';
@@ -4599,7 +4598,6 @@ async function bootstrapWorkspace() {
         initWorldInfo();
         initRossMods();
         initInputMarkdown();
-        initServerHistory();
         initSettingsSearch();
         initBulkEdit();
         initReasoning();

@@ -230,14 +230,6 @@ export const power_user = {
         story_string_depth: 1,
     },
 
-    instruct_derived: false,
-    context_derived: false,
-    context_size_derived: false,
-    /** User-defined model identifier / chat template hash to instruct/context template mappings */
-    model_templates_mappings: {},
-    /** The chat template hash of the currently loaded model, if any; used when deriving mappings */
-    chat_template_hash: '',
-
     sysprompt: {
         enabled: true,
         name: 'Neutral - Chat',
@@ -1154,8 +1146,9 @@ export async function loadPowerUserSettings(settings, data) {
         power_user.chat_width = 50;
     }
 
-    if (power_user.tokenizer === tokenizers.LEGACY) {
-        power_user.tokenizer = tokenizers.GPT2;
+    // Retired remote/proprietary tokenizers (NERD/NERD2/API_CURRENT/API_KOBOLD/LEGACY) fold back to best-match
+    if (!Object.values(tokenizers).includes(power_user.tokenizer)) {
+        power_user.tokenizer = tokenizers.BEST_MATCH;
     }
 
     // Clean up old/legacy settings
@@ -1164,8 +1157,7 @@ export async function loadPowerUserSettings(settings, data) {
         delete power_user.import_card_tags;
     }
 
-    if (power_user?.instruct?.derived === true) {
-        power_user.instruct_derived = true;
+    if (power_user?.instruct?.derived !== undefined) {
         delete power_user.instruct.derived;
     }
 

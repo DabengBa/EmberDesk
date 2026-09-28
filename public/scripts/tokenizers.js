@@ -1,24 +1,19 @@
 import { localforage } from '../lib.js';
 import { characters, main_api, this_chid } from '../script.js';
 import { power_user, registerDebugFunction } from './power-user.js';
-import { chat_completion_sources, oai_settings } from './openai.js';
+import { oai_settings } from './openai.js';
 import { getStringHash } from './utils.js';
 export { BYTES_PER_TOKEN as CHARACTERS_PER_TOKEN_RATIO };
 
 export const BYTES_PER_TOKEN = 3.35;
-export const TOKENIZER_WARNING_KEY = 'tokenizationWarningShown';
 
 export const tokenizers = {
     NONE: 0,
     GPT2: 1,
     OPENAI: 2,
     LLAMA: 3,
-    NERD: 4,
-    NERD2: 5,
-    API_CURRENT: 6,
     MISTRAL: 7,
     YI: 8,
-    API_KOBOLD: 10,
     CLAUDE: 11,
     LLAMA3: 12,
     GEMMA: 13,
@@ -44,9 +39,6 @@ export const ENCODE_TOKENIZERS = [
     tokenizers.COMMAND_A,
     tokenizers.NEMO,
     tokenizers.DEEPSEEK,
-    // uncomment when NovelAI releases Kayra and Clio weights, lol
-    //tokenizers.NERD,
-    //tokenizers.NERD2,
 ];
 
 const TOKENIZER_URLS = {
@@ -64,20 +56,6 @@ const TOKENIZER_URLS = {
         encode: '/api/tokenizers/llama/encode',
         decode: '/api/tokenizers/llama/decode',
         count: '/api/tokenizers/llama/encode',
-    },
-    [tokenizers.NERD]: {
-        encode: '/api/tokenizers/nerdstash/encode',
-        decode: '/api/tokenizers/nerdstash/decode',
-        count: '/api/tokenizers/nerdstash/encode',
-    },
-    [tokenizers.NERD2]: {
-        encode: '/api/tokenizers/nerdstash_v2/encode',
-        decode: '/api/tokenizers/nerdstash_v2/decode',
-        count: '/api/tokenizers/nerdstash_v2/encode',
-    },
-    [tokenizers.API_KOBOLD]: {
-        count: '/api/tokenizers/remote/kobold/count',
-        encode: '/api/tokenizers/remote/kobold/count',
     },
     [tokenizers.MISTRAL]: {
         encode: '/api/tokenizers/mistral/encode',
@@ -232,16 +210,8 @@ export function getFriendlyTokenizerName(forApi) {
     let tokenizerName = tokenizerOption.text();
 
     if (forApi !== 'openai' && tokenizerId === tokenizers.BEST_MATCH) {
-        tokenizerId = getTokenizerBestMatch(forApi);
-
-        switch (tokenizerId) {
-            case tokenizers.API_KOBOLD:
-                tokenizerName = 'API (KoboldAI Classic)';
-                break;
-            default:
-                tokenizerName = $(`#tokenizer option[value="${tokenizerId}"]`).text();
-                break;
-        }
+        tokenizerId = tokenizers.NONE;
+        tokenizerName = $(`#tokenizer option[value="${tokenizerId}"]`).text();
     }
 
     tokenizerName = forApi == 'openai'
@@ -258,27 +228,6 @@ export function getFriendlyTokenizerName(forApi) {
 }
 
 /**
- * Gets the best tokenizer for the current API.
- * @param {string} forApi API to get the tokenizer for. Defaults to the main API.
- * @returns {number} Tokenizer type.
- */
-export function getTokenizerBestMatch(forApi) {
-    if (!forApi) {
-        forApi = main_api;
-    }
-
-    return tokenizers.NONE;
-}
-
-// Get the current remote tokenizer API based on the current text generation API.
-function currentRemoteTokenizerAPI() {
-    switch (main_api) {
-        default:
-            return tokenizers.NONE;
-    }
-}
-
-/**
  * Calls the underlying tokenizer model to the token count for a string.
  * @param {number} type Tokenizer type.
  * @param {string} str String to tokenize.
@@ -288,10 +237,6 @@ function callTokenizer(type, str) {
     if (type === tokenizers.NONE) return guesstimate(str);
 
     switch (type) {
-        case tokenizers.API_CURRENT:
-            return callTokenizer(currentRemoteTokenizerAPI(), str);
-        case tokenizers.API_KOBOLD:
-            return countTokensFromKoboldAPI(str);
         default: {
             const endpointUrl = TOKENIZER_URLS[type]?.count;
             if (!endpointUrl) {
@@ -316,10 +261,6 @@ function callTokenizerAsync(type, str) {
         }
 
         switch (type) {
-            case tokenizers.API_CURRENT:
-                return callTokenizerAsync(currentRemoteTokenizerAPI(), str).then(resolve);
-            case tokenizers.API_KOBOLD:
-                return countTokensFromKoboldAPI(str, resolve);
             default: {
                 const endpointUrl = TOKENIZER_URLS[type]?.count;
                 if (!endpointUrl) {
@@ -356,7 +297,7 @@ export async function getTokenCountAsync(str, padding = undefined) {
     }
 
     if (tokenizerType === tokenizers.BEST_MATCH) {
-        tokenizerType = getTokenizerBestMatch(main_api);
+        tokenizerType = tokenizers.NONE;
     }
 
     if (padding === undefined) {
@@ -407,7 +348,7 @@ export function getTokenCount(str, padding = undefined) {
     }
 
     if (tokenizerType === tokenizers.BEST_MATCH) {
-        tokenizerType = getTokenizerBestMatch(main_api);
+        tokenizerType = tokenizers.NONE;
     }
 
     if (padding === undefined) {
@@ -455,169 +396,7 @@ function counterWrapperOpenAIAsync(text) {
 }
 
 export function getTokenizerModel() {
-    // OpenAI models always provide their own tokenizer
-    if (oai_settings.chat_completion_source == chat_completion_sources.OPENAI) {
-        return oai_settings.openai_model;
-    }
-
-    const turboTokenizer = 'gpt-3.5-turbo';
-    const gpt4Tokenizer = 'gpt-4';
-    const gpt4oTokenizer = 'gpt-4o';
-    const claudeTokenizer = 'claude';
-    const llamaTokenizer = 'llama';
-    const llama3Tokenizer = 'llama3';
-    const mistralTokenizer = 'mistral';
-    const yiTokenizer = 'yi';
-    const gemmaTokenizer = 'gemma';
-    const jambaTokenizer = 'jamba';
-    const qwen2Tokenizer = 'qwen2';
-    const commandRTokenizer = 'command-r';
-    const commandATokenizer = 'command-a';
-    const nemoTokenizer = 'nemo';
-    const deepseekTokenizer = 'deepseek';
-
-    if (oai_settings.chat_completion_source == chat_completion_sources.AZURE_OPENAI) {
-        return oai_settings.azure_openai_model || turboTokenizer;
-    }
-
-    if (oai_settings.chat_completion_source == chat_completion_sources.DEEPSEEK) {
-        return deepseekTokenizer;
-    }
-
-    if (oai_settings.chat_completion_source == chat_completion_sources.ELECTRONHUB && oai_settings.electronhub_model) {
-        if (oai_settings.electronhub_model.includes('gpt-4o') || oai_settings.electronhub_model.includes('gpt-5')) {
-            return gpt4oTokenizer;
-        } else if (oai_settings.electronhub_model.includes('gpt-4.1') || oai_settings.electronhub_model.includes('gpt-4.5')) {
-            return gpt4oTokenizer;
-        } else if (oai_settings.electronhub_model.includes('gpt-4')) {
-            return gpt4Tokenizer;
-        } else if (oai_settings.electronhub_model.includes('gpt-3.5-turbo')) {
-            return turboTokenizer;
-        } else if (oai_settings.electronhub_model.includes('claude')) {
-            return claudeTokenizer;
-        } else if (oai_settings.electronhub_model.includes('jamba')) {
-            return jambaTokenizer;
-        } else if (oai_settings.electronhub_model.includes('deepseek') || oai_settings.electronhub_model.includes('sonar-reasoning') || oai_settings.electronhub_model.includes('r1')) {
-            return deepseekTokenizer;
-        } else if (oai_settings.electronhub_model.includes('qwen')) {
-            return qwen2Tokenizer;
-        } else if (oai_settings.electronhub_model.includes('gemma')) {
-            return gemmaTokenizer;
-        } else if (oai_settings.electronhub_model.includes('mistral')) {
-            return mistralTokenizer;
-        } else if (oai_settings.electronhub_model.includes('yi')) {
-            return yiTokenizer;
-        } else if (oai_settings.electronhub_model.includes('llama3') || oai_settings.electronhub_model.includes('llama-3') || oai_settings.electronhub_model.startsWith('l3')) {
-            return llama3Tokenizer;
-        } else if (oai_settings.electronhub_model.includes('llama')) {
-            return llamaTokenizer;
-        } else if (oai_settings.electronhub_model.includes('command-a')) {
-            return commandATokenizer;
-        } else if (oai_settings.electronhub_model.includes('command-r')) {
-            return commandRTokenizer;
-        } else if (oai_settings.electronhub_model.includes('nemo')) {
-            return nemoTokenizer;
-        }
-    }
-
-    if (oai_settings.chat_completion_source == chat_completion_sources.CHUTES && oai_settings.chutes_model) {
-        const model = oai_settings.chutes_model.toLowerCase();
-
-        if (model.includes('deepseek') || model.includes('mai-ds')) {
-            return deepseekTokenizer;
-        } else if (model.includes('qwen') || model.includes('qwq') || model.includes('tongyi') || model.includes('kimi')) {
-            return qwen2Tokenizer;
-        } else if (model.includes('llama') || model.includes('longcat') || model.includes('hermes')) {
-            return llama3Tokenizer;
-        } else if (model.includes('gemma')) {
-            return gemmaTokenizer;
-        } else if (model.includes('nemo')) {
-            return nemoTokenizer;
-        } else if (model.includes('mistral')) {
-            return mistralTokenizer;
-        } else if (model.includes('gpt-oss')) {
-            return gpt4oTokenizer;
-        }
-    }
-
-    if (oai_settings.chat_completion_source == chat_completion_sources.MINIMAX) {
-        // MiniMax uses a proprietary tokenizer; fall back to a coarse OpenAI estimation.
-        return 'gpt-3.5-turbo';
-    }
-
-    if (oai_settings.chat_completion_source == chat_completion_sources.WORKERS_AI && oai_settings.workers_ai_model) {
-        const model = oai_settings.workers_ai_model.toLowerCase();
-
-        if (model.includes('deepseek')) {
-            return deepseekTokenizer;
-        } else if (model.includes('qwen') || model.includes('qwq') || model.includes('kimi')) {
-            return qwen2Tokenizer;
-        } else if (model.includes('llama-3') || model.includes('llama-4')) {
-            return llama3Tokenizer;
-        } else if (model.includes('llama')) {
-            return llamaTokenizer;
-        } else if (model.includes('gemma')) {
-            return gemmaTokenizer;
-        } else if (model.includes('mistral')) {
-            return mistralTokenizer;
-        } else if (model.includes('phi')) {
-            return turboTokenizer;
-        } else if (model.includes('gpt-oss')) {
-            return gpt4oTokenizer;
-        }
-    }
-
-    if (oai_settings.chat_completion_source == chat_completion_sources.COHERE) {
-        if (oai_settings.cohere_model.includes('command-a')) {
-            return commandATokenizer;
-        }
-        return commandRTokenizer;
-    }
-
-    if (oai_settings.chat_completion_source == chat_completion_sources.AI21) {
-        return jambaTokenizer;
-    }
-
-    if (oai_settings.chat_completion_source == chat_completion_sources.MISTRALAI) {
-        if (oai_settings.mistralai_model.includes('nemo') || oai_settings.mistralai_model.includes('pixtral')) {
-            return nemoTokenizer;
-        }
-        return mistralTokenizer;
-    }
-
-
-    if (oai_settings.chat_completion_source === chat_completion_sources.PERPLEXITY) {
-        if (oai_settings.perplexity_model.includes('sonar-reasoning') || oai_settings.perplexity_model.includes('r1-1776')) {
-            return deepseekTokenizer;
-        }
-        if (oai_settings.perplexity_model.includes('llama-3') || oai_settings.perplexity_model.includes('llama3')) {
-            return llama3Tokenizer;
-        }
-        if (oai_settings.perplexity_model.includes('llama')) {
-            return llamaTokenizer;
-        }
-        if (oai_settings.perplexity_model.includes('mistral') || oai_settings.perplexity_model.includes('mixtral')) {
-            return mistralTokenizer;
-        }
-    }
-
-    if (oai_settings.chat_completion_source === chat_completion_sources.GROQ) {
-        if (oai_settings.groq_model.includes('qwen')) {
-            return qwen2Tokenizer;
-        }
-        if (oai_settings.groq_model.includes('llama-3') || oai_settings.groq_model.includes('llama3')) {
-            return llama3Tokenizer;
-        }
-        if (oai_settings.groq_model.includes('mistral') || oai_settings.groq_model.includes('mixtral')) {
-            return mistralTokenizer;
-        }
-        if (oai_settings.groq_model.includes('gemma')) {
-            return gemmaTokenizer;
-        }
-    }
-
-    // Default to Turbo 3.5
-    return turboTokenizer;
+    return oai_settings.openai_model || 'gpt-3.5-turbo';
 }
 
 /**
@@ -772,61 +551,6 @@ function countTokensFromServer(endpoint, str, resolve) {
 }
 
 /**
- * Count tokens using the AI provider's API.
- * @param {string} str String to tokenize.
- * @param {function} [resolve] Promise resolve function.
- * @returns {number} Token count.
- */
-function countTokensFromKoboldAPI(str, resolve) {
-    const isAsync = typeof resolve === 'function';
-    let tokenCount = 0;
-
-    jQuery.ajax({
-        async: isAsync,
-        type: 'POST',
-        url: TOKENIZER_URLS[tokenizers.API_KOBOLD].count,
-        data: JSON.stringify({
-            text: str,
-            url: '',
-        }),
-        dataType: 'json',
-        contentType: 'application/json',
-        success: function (data) {
-            if (typeof data.count === 'number') {
-                tokenCount = data.count;
-            } else {
-                tokenCount = apiFailureTokenCount(str);
-            }
-
-            if (isAsync) resolve(tokenCount);
-        },
-    });
-
-    return tokenCount;
-}
-
-function apiFailureTokenCount(str) {
-    console.error('Error counting tokens');
-    let shouldTryAgain = false;
-
-    if (!sessionStorage.getItem(TOKENIZER_WARNING_KEY)) {
-        const bestMatchBefore = getTokenizerBestMatch(main_api);
-        sessionStorage.setItem(TOKENIZER_WARNING_KEY, String(true));
-        const bestMatchAfter = getTokenizerBestMatch(main_api);
-        if (bestMatchBefore === tokenizers.API_KOBOLD && bestMatchBefore !== bestMatchAfter) {
-            shouldTryAgain = true;
-        }
-    }
-
-    // Only try again if we guarantee not to be looped by the same error
-    if (shouldTryAgain && power_user.tokenizer === tokenizers.BEST_MATCH) {
-        return getTokenCount(str);
-    }
-
-    return guesstimate(str);
-}
-
-/**
  * Calls the underlying tokenizer model to encode a string to tokens.
  * @param {string} endpoint API endpoint.
  * @param {string} str String to tokenize.
@@ -858,62 +582,6 @@ function getTextTokensFromServer(endpoint, str, resolve) {
 }
 
 /**
- * Calls the AI provider's tokenize API to encode a string to tokens.
- * @param {string} str String to tokenize.
- * @param {function} [resolve] Promise resolve function.
- * @returns {number[]} Array of token ids.
- */
-function getTextTokensFromKoboldAPI(str, resolve) {
-    const isAsync = typeof resolve === 'function';
-    let ids = [];
-
-    jQuery.ajax({
-        async: isAsync,
-        type: 'POST',
-        url: TOKENIZER_URLS[tokenizers.API_KOBOLD].encode,
-        data: JSON.stringify({
-            text: str,
-            url: '',
-        }),
-        dataType: 'json',
-        contentType: 'application/json',
-        success: function (data) {
-            ids = data.ids;
-            if (isAsync) resolve(ids);
-        },
-    });
-
-    return ids;
-}
-
-/**
- * Calls the underlying tokenizer model to decode token ids to text.
- * @param {string} endpoint API endpoint.
- * @param {number[]} ids Array of token ids
- * @param {function} [resolve] Promise resolve function.
- * @returns {({ text: string, chunks?: string[] })} Decoded token text as a single string and individual chunks (if available).
- */
-function decodeTextTokensFromServer(endpoint, ids, resolve) {
-    const isAsync = typeof resolve === 'function';
-    let text = '';
-    let chunks = [];
-    jQuery.ajax({
-        async: isAsync,
-        type: 'POST',
-        url: endpoint,
-        data: JSON.stringify({ ids: ids }),
-        dataType: 'json',
-        contentType: 'application/json',
-        success: function (data) {
-            text = data.text;
-            chunks = data.chunks;
-            if (isAsync) resolve({ text, chunks });
-        },
-    });
-    return { text, chunks };
-}
-
-/**
  * Encodes a string to tokens using the server API.
  * @param {number} tokenizerType Tokenizer type.
  * @param {string} str String to tokenize.
@@ -921,10 +589,6 @@ function decodeTextTokensFromServer(endpoint, ids, resolve) {
  */
 export function getTextTokens(tokenizerType, str) {
     switch (tokenizerType) {
-        case tokenizers.API_CURRENT:
-            return getTextTokens(currentRemoteTokenizerAPI(), str);
-        case tokenizers.API_KOBOLD:
-            return getTextTokensFromKoboldAPI(str);
         default: {
             const tokenizerEndpoints = TOKENIZER_URLS[tokenizerType];
             if (!tokenizerEndpoints) {
@@ -953,10 +617,6 @@ export function getTextTokens(tokenizerType, str) {
  * @returns {({ text: string, chunks?: string[] })} Decoded token text as a single string and individual chunks (if available).
  */
 export function decodeTextTokens(tokenizerType, ids) {
-    // Currently, neither remote API can decode, but this may change in the future. Put this guard here to be safe
-    if (tokenizerType === tokenizers.API_CURRENT) {
-        return decodeTextTokens(tokenizers.NONE, ids);
-    }
     const tokenizerEndpoints = TOKENIZER_URLS[tokenizerType];
     if (!tokenizerEndpoints) {
         console.warn('Unknown tokenizer type', tokenizerType);
@@ -973,8 +633,39 @@ export function decodeTextTokens(tokenizerType, ids) {
     return decodeTextTokensFromServer(endpointUrl, ids);
 }
 
+function apiFailureTokenCount(str) {
+    console.error('Error counting tokens');
+    return guesstimate(str);
+}
+
+/**
+ * Calls the server API to decode token ids to text.
+ * @param {string} endpoint API endpoint.
+ * @param {number[]} ids Array of token ids.
+ * @param {function} [resolve] Promise resolve function.
+ * @returns {({ text: string, chunks?: string[] })} Decoded token text.
+ */
+function decodeTextTokensFromServer(endpoint, ids, resolve) {
+    const isAsync = typeof resolve === 'function';
+    let text = '';
+    let chunks = [];
+    jQuery.ajax({
+        async: isAsync,
+        type: 'POST',
+        url: endpoint,
+        data: JSON.stringify({ ids: ids }),
+        dataType: 'json',
+        contentType: 'application/json',
+        success: function (data) {
+            text = data.text;
+            chunks = data.chunks;
+            if (isAsync) resolve({ text, chunks });
+        },
+    });
+    return { text, chunks };
+}
+
 export async function initTokenizers() {
     await loadTokenCache();
     registerDebugFunction('resetTokenCache', 'Reset token cache', 'Purges the calculated token counts. Use this if you want to force a full re-tokenization of all chats or suspect the token counts are wrong.', resetTokenCache);
 }
-

@@ -144,14 +144,11 @@ export function AdvancedFormattingPanel() {
                                     <option value="15">Qwen2</option>
                                     <option value="16">Command-R</option>
                                     <option value="19">Command-A</option>
-                                    <option value="4">NerdStash (NovelAI Clio)</option>
-                                    <option value="5">NerdStash v2 (NovelAI Kayra)</option>
                                     <option value="7">Mistral V1</option>
                                     <option value="17">Mistral Nemo</option>
                                     <option value="8">Yi</option>
                                     <option value="11">Claude 1/2</option>
                                     <option value="18">DeepSeek V3</option>
-                                    <option value="6">API (WebUI / koboldcpp)</option>
                                 </select>
                             </div>
                             <div className="range-block flex-container flexnowrap" name="tokenPaddingBlock">
