@@ -435,7 +435,7 @@ describe('React workspace panels bridge helpers', () => {
         expect(workspacePanelSource).toContain('authoringStyles.footerStatus');
         expect(workspacePanelSource).toContain('authoringStyles.toolAction');
         expect(workspacePanelSource).toContain('authoringStyles.dangerButton');
-        expect(workspacePanelSource).toContain('{...stylex.props(authoringStyles.panelWarning)} role="status"');
+        expect(workspacePanelSource).toContain('<output {...stylex.props(authoringStyles.panelWarning)}>');
         expect(workspacePanelSource).toContain('disabled={isActionPending}');
         expect(workspacePanelSource).toContain('{!isCreateMode ? (');
         expect(scriptSource).toContain('function getCharacterAuthoringReactCommands()');
@@ -719,7 +719,7 @@ describe('React workspace panels bridge helpers', () => {
     test('uses a shared Query-backed workspace panel shell with safe legacy slot markers', () => {
         const workspacePanelSource = read('app/workspace-panels.tsx');
 
-        expect(workspacePanelSource).toContain('import { QueryClient, QueryClientProvider, useQuery } from \'@tanstack/react-query\';');
+        expect(workspacePanelSource).toContain('import { QueryClient, QueryClientProvider, useMutation, useQuery } from \'@tanstack/react-query\';');
         expect(workspacePanelSource).toContain('function workspacePanelStateQueryKey(kind: WorkspacePanelKind)');
         expect(workspacePanelSource).toContain('queryKey: workspacePanelStateQueryKey(kind)');
         expect(workspacePanelSource).toContain('queryClient.setQueryData(workspacePanelStateQueryKey(mount.kind), mount.state ?? null);');

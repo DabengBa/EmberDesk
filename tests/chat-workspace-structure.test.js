@@ -351,7 +351,7 @@ describe('chat workspace structure', () => {
         expect(scriptSource).toContain("$('[data-source]').each(function () {");
         expect(indexHtml).toMatch(/<div className="base-url-field wide100p"[^>]*data-source="openai">[\s\S]*<label className="chat-completion-field wide100p"[^>]*htmlFor="openai_reverse_proxy"/);
         expect(indexHtml).toMatch(/id="openai_reverse_proxy"[^>]*\baria-describedby="base_url_status"/);
-        expect(indexHtml).toMatch(/id="base_url_status"[^>]*\brole="status"[^>]*\baria-live="polite"[^>]*\bdata-mode="direct"/);
+        expect(indexHtml).toMatch(/<output id="base_url_status"[^>]*\baria-live="polite"[^>]*\bdata-mode="direct"/);
         expect(scriptSource).toContain('function updateBaseUrlStatus()');
         expect(scriptSource).toContain(".attr('data-mode', hasCustomEndpoint ? 'custom' : 'direct')");
         expect(scriptSource).toContain('Custom endpoint active. API key field stores proxy password.');
