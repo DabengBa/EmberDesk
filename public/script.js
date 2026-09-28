@@ -1821,7 +1821,7 @@ function setMainChatMessageUiFlag(flag, enabled, messageId = null) {
         const key = String(normalizedMessageId);
         const state = mainChatMessageUiState.get(key);
         if (!state || state[flag] !== true) {
-            mainChatMessageUiState.set(key, { ...(state ?? {}), [flag]: true });
+            mainChatMessageUiState.set(key, { ...state, [flag]: true });
             changed = true;
         }
     }
@@ -2490,7 +2490,7 @@ function setAuthoringInputValue(selector, value) {
     element.trigger('input');
 }
 
-function applyCharacterAuthoringSaveModel(saveModel = {}, { submit = true } = {}) {
+function applyCharacterAuthoringSaveModel(saveModel = {}, { submit: _submit = true } = {}) {
     const fields = saveModel.fields || {};
     const extensions = saveModel.extensions || {};
     setAuthoringInputValue('#character_name_pole', fields.name);
@@ -4919,7 +4919,9 @@ export async function selectCharacterById(id, { switchMenu = true } = {}) {
         }
     } else {
         //if clicked on character that was already selected
-        switchMenu && (selected_button = 'character_edit');
+        if (switchMenu) {
+            selected_button = 'character_edit';
+        }
         await unshallowCharacter(this_chid);
         select_selected_character(this_chid, { switchMenu });
     }
@@ -6203,12 +6205,12 @@ export function substituteParams(content, options = {}) {
 
 /**
  * Gets stopping sequences for the prompt.
- * @param {boolean} isImpersonate A request is made to impersonate a user
- * @param {boolean} isContinue A request is made to continue the message
- * @param {string} [api] Optional API name to get API-specific stopping sequences for
+ * @param {boolean} _isImpersonate A request is made to impersonate a user
+ * @param {boolean} _isContinue A request is made to continue the message
+ * @param {string} [_api] Optional API name to get API-specific stopping sequences for
  * @returns {string[]} Array of stopping strings
  */
-export function getStoppingStrings(isImpersonate, isContinue, api = main_api) {
+export function getStoppingStrings(_isImpersonate, _isContinue, _api = main_api) {
     return getCustomStoppingStrings();
 }
 
@@ -7478,7 +7480,7 @@ export async function sendStreamingRequest(type, data, options = {}) {
     }
 }
 
-function extractTitleFromData(data) {
+function extractTitleFromData(_data) {
     return undefined;
 }
 
@@ -7490,7 +7492,7 @@ function extractTitleFromData(data) {
  * @param {string} [options.chatCompletionSource] Chat completion source
  * @returns {string[]} Extracted images or empty array
  */
-function extractImagesFromData(data, { mainApi = null, chatCompletionSource = null } = {}) {
+function extractImagesFromData(data, { mainApi = null, chatCompletionSource: _chatCompletionSource = null } = {}) {
     switch (mainApi ?? main_api) {
         case 'openai': {
             // Data-shape-driven: OpenAI-compatible endpoints may return Gemini-style
@@ -7662,7 +7664,7 @@ export function getGeneratingApi() {
     }
 }
 
-export function getGeneratingModel(mes) {
+export function getGeneratingModel(_mes) {
     let model = '';
     switch (main_api) {
         case 'openai':
@@ -9162,7 +9164,9 @@ export function select_rm_info(type, charId, previousCharId = null) {
  * @param {boolean} [options.switchMenu=true] Whether to switch the menu
  */
 function select_rm_create({ switchMenu = true } = {}) {
-    switchMenu && setMenuType('create');
+    if (switchMenu) {
+        setMenuType('create');
+    }
 
     //console.log('select_rm_Create() -- selected button: '+selected_button);
     if (selected_button == 'create' && create_save.avatar) {
@@ -9171,7 +9175,9 @@ function select_rm_create({ switchMenu = true } = {}) {
         read_avatar_load(addAvatarInput);
     }
 
-    switchMenu && selectRightMenuWithAnimation('rm_ch_create_block');
+    if (switchMenu) {
+        selectRightMenuWithAnimation('rm_ch_create_block');
+    }
 
     $('#set_chat_character_settings').hide();
     $('#delete_button_div').css('display', 'none');
@@ -9376,7 +9382,7 @@ export async function setCharacterSettingsOverrides() {
  * @returns {Promise<any>} A promise that resolves when the popup is closed.
  * @deprecated Use `callGenericPopup` instead.
  */
-export function callPopup(text, type, inputValue = '', { okButton, rows, wide, wider, large, allowHorizontalScrolling, allowVerticalScrolling, cropAspect } = {}) {
+export function callPopup(text, type, inputValue = '', { okButton, rows, wide, wider, large, allowHorizontalScrolling, allowVerticalScrolling, cropAspect: _cropAspect } = {}) {
     function getOkButtonText() {
         if (['text', 'char_not_selected'].includes(popup_type)) {
             $dialoguePopupCancel.css('display', 'none');
@@ -10069,7 +10075,7 @@ async function removeCharacterFromUI(deletedAvatars = [], { deleteContext = null
  * @param {boolean} [params.temporary=false] Deprecated: retained for caller compatibility; assistant chats are always temporary
  * @returns {Promise<void>} - A promise that resolves when the new assistant chat is created
  */
-export async function newAssistantChat({ temporary = false } = {}) {
+export async function newAssistantChat({ temporary: _temporary = false } = {}) {
     await clearChat();
     chat.splice(0, chat.length);
     chat_metadata = {};
