@@ -22,7 +22,7 @@ export interface ServerEventMap {
 }
 
 declare global {
-    declare namespace NodeJS {
+    namespace NodeJS {
         export interface Process {
             /**
              * A global instance of the server events emitter.
@@ -31,7 +31,7 @@ declare global {
         }
     }
 
-    declare namespace CookieSessionInterfaces {
+    namespace CookieSessionInterfaces {
         export interface CookieSessionObject {
             /**
              * The CSRF token for the session.

@@ -17,14 +17,20 @@ def audit_world_info(files, db_rows):
     for name, payload in files.items():
         row = db_rows.get(name)
         if row is None or row.get("deleted"):
-            entries.append({"world": name, "status": "drift", "drift": ["missing_db_world_info"]})
+            entries.append(
+                {"world": name, "status": "drift", "drift": ["missing_db_world_info"]}
+            )
             continue
         if row["payload"] != payload:
-            entries.append({"world": name, "status": "drift", "drift": ["payload_mismatch"]})
+            entries.append(
+                {"world": name, "status": "drift", "drift": ["payload_mismatch"]}
+            )
 
     for name, row in db_rows.items():
         if not row.get("deleted") and name not in files:
-            entries.append({"world": name, "status": "drift", "drift": ["missing_projection_file"]})
+            entries.append(
+                {"world": name, "status": "drift", "drift": ["missing_projection_file"]}
+            )
 
     return {
         "ok": len(entries) == 0,
@@ -69,7 +75,13 @@ def repair_projection(db_rows, files, repairs, repair_key):
     row = db_rows[repair["world"]]
     files[repair["world"]] = row["payload"].copy()
     repair["resolved"] = True
-    return {"audit": {"scope": "world_info", "blocking": True, "reason": "audit_stale_after_world_info_projection_repair"}}
+    return {
+        "audit": {
+            "scope": "world_info",
+            "blocking": True,
+            "reason": "audit_stale_after_world_info_projection_repair",
+        }
+    }
 
 
 def canonical_delete(db_rows, files, repairs, name, projection_ok):
@@ -87,14 +99,18 @@ def repair_delete_projection(files, repairs, repair_key):
     repair = repairs[repair_key]
     files.pop(repair["world"], None)
     repair["resolved"] = True
-    return {"audit": {"scope": "world_info", "blocking": True, "reason": "audit_stale_after_world_info_projection_repair"}}
+    return {
+        "audit": {
+            "scope": "world_info",
+            "blocking": True,
+            "reason": "audit_stale_after_world_info_projection_repair",
+        }
+    }
 
 
 def rollback_blockers(repairs):
     open_world_info_repairs = [
-        repair_key
-        for repair_key, repair in repairs.items()
-        if not repair["resolved"]
+        repair_key for repair_key, repair in repairs.items() if not repair["resolved"]
     ]
     return {
         "ok": len(open_world_info_repairs) == 0,
@@ -108,7 +124,12 @@ def main():
     }
     db_rows = run_shadow_import(files)
     clean_audit = audit_world_info(files, db_rows)
-    assert clean_audit == {"ok": True, "scope": "world_info", "blocking": False, "entries": []}
+    assert clean_audit == {
+        "ok": True,
+        "scope": "world_info",
+        "blocking": False,
+        "entries": [],
+    }
 
     assert can_db_first_read(
         {"enabled": True, "reads": True, "strict": False},
@@ -152,11 +173,18 @@ def main():
         projection_ok=False,
     )
     assert edit == {"ok": False, "repair": "world_info:Lorebook:edit"}
-    assert db_rows["Lorebook"]["payload"]["entries"]["one"]["content"] == "canonical edit"
+    assert (
+        db_rows["Lorebook"]["payload"]["entries"]["one"]["content"] == "canonical edit"
+    )
     assert files["Lorebook"]["entries"]["one"]["content"] == "changed outside db"
-    assert rollback_blockers(repairs) == {"ok": False, "blockers": ["world_info:Lorebook:edit"]}
+    assert rollback_blockers(repairs) == {
+        "ok": False,
+        "blockers": ["world_info:Lorebook:edit"],
+    }
 
-    repair_result = repair_projection(db_rows, files, repairs, "world_info:Lorebook:edit")
+    repair_result = repair_projection(
+        db_rows, files, repairs, "world_info:Lorebook:edit"
+    )
     assert repairs["world_info:Lorebook:edit"]["resolved"] is True
     assert files["Lorebook"] == db_rows["Lorebook"]["payload"]
     assert repair_result == {
@@ -171,9 +199,14 @@ def main():
     assert delete == {"ok": False, "repair": "world_info:Lorebook:delete"}
     assert db_rows["Lorebook"]["deleted"] is True
     assert files["Lorebook"] == {"entries": {"one": {"content": "canonical edit"}}}
-    assert rollback_blockers(repairs) == {"ok": False, "blockers": ["world_info:Lorebook:delete"]}
+    assert rollback_blockers(repairs) == {
+        "ok": False,
+        "blockers": ["world_info:Lorebook:delete"],
+    }
 
-    delete_repair_result = repair_delete_projection(files, repairs, "world_info:Lorebook:delete")
+    delete_repair_result = repair_delete_projection(
+        files, repairs, "world_info:Lorebook:delete"
+    )
     assert repairs["world_info:Lorebook:delete"]["resolved"] is True
     assert "Lorebook" not in files
     assert delete_repair_result == {

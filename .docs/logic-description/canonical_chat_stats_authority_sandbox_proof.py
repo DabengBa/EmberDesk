@@ -11,7 +11,9 @@ class CanonicalChatStatsSyncError(RuntimeError):
         self.reason = reason
 
 
-def sync_chat_stats_after_mutation(*, avatar, feature_flags, canonical_update=None, storage_available=True):
+def sync_chat_stats_after_mutation(
+    *, avatar, feature_flags, canonical_update=None, storage_available=True
+):
     result = {
         "fileBackedChatStatsFallback": {
             "available": True,
@@ -50,9 +52,23 @@ def sync_chat_stats_after_mutation(*, avatar, feature_flags, canonical_update=No
     return result
 
 
-def canonical_read_state(*, feature_flags, storage_supported=True, migration_blocked=False, db_available=True, audit_blocking=False):
+def canonical_read_state(
+    *,
+    feature_flags,
+    storage_supported=True,
+    migration_blocked=False,
+    db_available=True,
+    audit_blocking=False,
+):
     reads_enabled = bool(feature_flags.get("enabled") and feature_flags.get("reads"))
-    include_chat_stats = bool(reads_enabled and feature_flags.get("chatStats") and storage_supported and not migration_blocked and db_available and not audit_blocking)
+    include_chat_stats = bool(
+        reads_enabled
+        and feature_flags.get("chatStats")
+        and storage_supported
+        and not migration_blocked
+        and db_available
+        and not audit_blocking
+    )
     return {
         "readsEnabled": reads_enabled,
         "chatStatsEnabled": bool(feature_flags.get("chatStats")),
@@ -84,7 +100,10 @@ def test_missing_avatar_is_noop():
         feature_flags={"enabled": True, "chatStats": True},
         canonical_update=lambda: {"ok": True},
     )
-    assert result["fileBackedChatStatsFallback"] == {"available": False, "source": "jsonl"}
+    assert result["fileBackedChatStatsFallback"] == {
+        "available": False,
+        "source": "jsonl",
+    }
     assert result["canonicalChatStatsUpsert"] is None
     assert result["canonicalAuditInvalidation"] == {"performed": False, "reason": None}
 
@@ -95,7 +114,10 @@ def test_file_backed_fallback_stays_fresh_before_canonical_reads():
         feature_flags={"enabled": True, "chatStats": True},
         canonical_update=lambda: {"ok": True, "chatCount": 1},
     )
-    assert result["fileBackedChatStatsFallback"] == {"available": True, "source": "jsonl"}
+    assert result["fileBackedChatStatsFallback"] == {
+        "available": True,
+        "source": "jsonl",
+    }
     assert result["canonicalChatStatsUpsert"]["chatCount"] == 1
     assert result["canonicalAuditInvalidation"] == {"performed": False, "reason": None}
 
@@ -113,7 +135,10 @@ def test_enabled_storage_without_chatstats_invalidates_audit():
         canonical_update=None,
         storage_available=True,
     )
-    assert result["fileBackedChatStatsFallback"] == {"available": True, "source": "jsonl"}
+    assert result["fileBackedChatStatsFallback"] == {
+        "available": True,
+        "source": "jsonl",
+    }
     assert result["canonicalAuditInvalidation"] == {
         "performed": True,
         "reason": "audit_stale_after_chat_stats_change",
@@ -124,9 +149,14 @@ def test_canonical_sync_failure_stales_audit_and_keeps_file_backed_success():
     result = sync_chat_stats_after_mutation(
         avatar="alpha.png",
         feature_flags={"enabled": True, "chatStats": True},
-        canonical_update=lambda: (_ for _ in ()).throw(CanonicalChatStatsSyncError("canonical_character_missing")),
+        canonical_update=lambda: (_ for _ in ()).throw(
+            CanonicalChatStatsSyncError("canonical_character_missing")
+        ),
     )
-    assert result["fileBackedChatStatsFallback"] == {"available": True, "source": "jsonl"}
+    assert result["fileBackedChatStatsFallback"] == {
+        "available": True,
+        "source": "jsonl",
+    }
     assert result["canonicalAuditInvalidation"] == {
         "performed": True,
         "reason": "audit_stale_after_chat_stats_sync_failure",
@@ -149,13 +179,31 @@ def test_read_authority_requires_reads_chatstats_and_clean_audit():
 
 
 def test_rebuild_invalidates_audit_after_recomputing_rows():
-    rebuilt = rebuild_chat_stats(rows=[
-        {"avatarFilename": "alpha.png", "chatCount": 1, "chatSizeBytes": 123, "dateLastChatMs": 1700000000000},
-        {"avatarFilename": "beta.png", "chatCount": 0, "chatSizeBytes": 0, "dateLastChatMs": 0},
-    ], requested_avatars=["alpha.png"])
+    rebuilt = rebuild_chat_stats(
+        rows=[
+            {
+                "avatarFilename": "alpha.png",
+                "chatCount": 1,
+                "chatSizeBytes": 123,
+                "dateLastChatMs": 1700000000000,
+            },
+            {
+                "avatarFilename": "beta.png",
+                "chatCount": 0,
+                "chatSizeBytes": 0,
+                "dateLastChatMs": 0,
+            },
+        ],
+        requested_avatars=["alpha.png"],
+    )
     assert rebuilt["ok"] is True
     assert rebuilt["rebuilt"] == [
-        {"avatarFilename": "alpha.png", "chatCount": 1, "chatSizeBytes": 123, "dateLastChatMs": 1700000000000},
+        {
+            "avatarFilename": "alpha.png",
+            "chatCount": 1,
+            "chatSizeBytes": 123,
+            "dateLastChatMs": 1700000000000,
+        },
     ]
     assert rebuilt["auditInvalidation"] == {
         "performed": True,

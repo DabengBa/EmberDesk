@@ -1,8 +1,48 @@
-import { defineConfig } from 'vite';
+import { defineConfig, type UserConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { TanStackRouterVite } from '@tanstack/router-vite-plugin';
 import stylex from '@stylexjs/unplugin/vite';
 import path from 'node:path';
+
+/**
+ * Shared Vite config for guarded React panel bundles (library-mode builds
+ * emitted into app/dist). `name` is the panel basename used for the entry
+ * (app/<name>.tsx), output file (assets/<name>.js), and CSS file.
+ */
+function reactPanelConfig(name: string): UserConfig {
+    return {
+        publicDir: false,
+        define: {
+            'process.env.NODE_ENV': JSON.stringify('production'),
+        },
+        plugins: [
+            react(),
+            stylex(),
+        ],
+        resolve: {
+            alias: {
+                '@': path.resolve(process.cwd(), 'app'),
+                '@sillytavern': path.resolve(process.cwd(), 'public/scripts'),
+            },
+        },
+        build: {
+            lib: {
+                entry: path.resolve(process.cwd(), `app/${name}.tsx`),
+                formats: ['es'] as const,
+                fileName: () => `assets/${name}.js`,
+                cssFileName: name,
+            },
+            outDir: 'app/dist',
+            emptyOutDir: false,
+            rollupOptions: {
+                external: [],
+                output: {
+                    assetFileNames: 'assets/[name][extname]',
+                },
+            },
+        },
+    };
+}
 
 export default defineConfig(({ mode }) => {
     const isLibBuild = mode === 'lib';
@@ -34,73 +74,11 @@ export default defineConfig(({ mode }) => {
     }
 
     if (isCharacterLibraryPanelBuild) {
-        return {
-            publicDir: false,
-            define: {
-                'process.env.NODE_ENV': JSON.stringify('production'),
-            },
-            plugins: [
-                react(),
-                stylex(),
-            ],
-            resolve: {
-                alias: {
-                    '@': path.resolve(process.cwd(), 'app'),
-                    '@sillytavern': path.resolve(process.cwd(), 'public/scripts'),
-                },
-            },
-            build: {
-                lib: {
-                    entry: path.resolve(process.cwd(), 'app/character-library-panel.tsx'),
-                    formats: ['es'] as const,
-                    fileName: () => 'assets/character-library-panel.js',
-                    cssFileName: 'character-library-panel',
-                },
-                outDir: 'app/dist',
-                emptyOutDir: false,
-                rollupOptions: {
-                    external: [],
-                    output: {
-                        assetFileNames: 'assets/[name][extname]',
-                    },
-                },
-            },
-        };
+        return reactPanelConfig('character-library-panel');
     }
 
     if (isWorkspacePanelsBuild) {
-        return {
-            publicDir: false,
-            define: {
-                'process.env.NODE_ENV': JSON.stringify('production'),
-            },
-            plugins: [
-                react(),
-                stylex(),
-            ],
-            resolve: {
-                alias: {
-                    '@': path.resolve(process.cwd(), 'app'),
-                    '@sillytavern': path.resolve(process.cwd(), 'public/scripts'),
-                },
-            },
-            build: {
-                lib: {
-                    entry: path.resolve(process.cwd(), 'app/workspace-panels.tsx'),
-                    formats: ['es'] as const,
-                    fileName: () => 'assets/workspace-panels.js',
-                    cssFileName: 'workspace-panels',
-                },
-                outDir: 'app/dist',
-                emptyOutDir: false,
-                rollupOptions: {
-                    external: [],
-                    output: {
-                        assetFileNames: 'assets/[name][extname]',
-                    },
-                },
-            },
-        };
+        return reactPanelConfig('workspace-panels');
     }
 
     // React application mode

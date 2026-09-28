@@ -21,7 +21,14 @@ def get_character_delete_candidates(characters, avatars):
     for avatar in avatars:
         if not isinstance(avatar, str) or not avatar:
             continue
-        index = next((idx for idx, character in enumerate(characters) if character.get("avatar") == avatar), -1)
+        index = next(
+            (
+                idx
+                for idx, character in enumerate(characters)
+                if character.get("avatar") == avatar
+            ),
+            -1,
+        )
         candidates.append(
             {
                 "avatar": avatar,
@@ -45,10 +52,16 @@ def remove_characters_from_state(characters, avatars):
 
 
 def should_refresh_character_after_edit(characters, avatar):
-    return isinstance(avatar, str) and bool(avatar) and any(character.get("avatar") == avatar for character in characters)
+    return (
+        isinstance(avatar, str)
+        and bool(avatar)
+        and any(character.get("avatar") == avatar for character in characters)
+    )
 
 
-def should_suppress_character_delete_list_reprint(is_reconcile_in_progress, started_at_generation, current_generation):
+def should_suppress_character_delete_list_reprint(
+    is_reconcile_in_progress, started_at_generation, current_generation
+):
     return is_reconcile_in_progress or started_at_generation < current_generation
 
 
@@ -81,11 +94,15 @@ def create_character_list_entity_snapshot(entities):
     }
 
 
-def get_character_list_pagination_range_label(current_page, total_number, page_size, fallback_total=0):
+def get_character_list_pagination_range_label(
+    current_page, total_number, page_size, fallback_total=0
+):
     actual_total = total_number or fallback_total
     current_page_size = page_size or 1
     safe_current_page = current_page or 1
-    range_start = ((safe_current_page - 1) * current_page_size + 1) if actual_total > 0 else 0
+    range_start = (
+        ((safe_current_page - 1) * current_page_size + 1) if actual_total > 0 else 0
+    )
     range_end = min(safe_current_page * current_page_size, actual_total)
     return f"{range_start}-{range_end} / {actual_total}"
 
@@ -97,7 +114,9 @@ def create_character_list_page_render_plan(
     total_groups=0,
     has_active_filter=False,
 ):
-    display_count = sum(1 for entity in page_entities if entity.get("type") in {"character", "group"})
+    display_count = sum(
+        1 for entity in page_entities if entity.get("type") in {"character", "group"}
+    )
     hidden_count = (total_characters + total_groups) - display_count
 
     return {
@@ -126,14 +145,28 @@ def create_character_list_page_reconcile_plan(
 
     if include_back_block:
         return fallback("back-block")
-    if not isinstance(before_page_entities, list) or not isinstance(page_entities, list) or after_snapshot is None:
+    if (
+        not isinstance(before_page_entities, list)
+        or not isinstance(page_entities, list)
+        or after_snapshot is None
+    ):
         return fallback("missing-entity-data")
 
-    before_keys = [entity.get("renderKey") or get_character_list_entity_key(entity) for entity in before_page_entities]
+    before_keys = [
+        entity.get("renderKey") or get_character_list_entity_key(entity)
+        for entity in before_page_entities
+    ]
     after_keys = after_snapshot.get("keys", [])
-    ordered_keys = [entity.get("renderKey") or get_character_list_entity_key(entity) for entity in page_entities]
+    ordered_keys = [
+        entity.get("renderKey") or get_character_list_entity_key(entity)
+        for entity in page_entities
+    ]
 
-    if len(set(before_keys)) != len(before_keys) or len(set(after_keys)) != len(after_keys) or len(set(ordered_keys)) != len(ordered_keys):
+    if (
+        len(set(before_keys)) != len(before_keys)
+        or len(set(after_keys)) != len(after_keys)
+        or len(set(ordered_keys)) != len(ordered_keys)
+    ):
         return fallback("duplicate-entity-key")
 
     before_key_set = set(before_keys)
@@ -197,7 +230,9 @@ def create_character_delete_reconcile_plan(
         return fallback("still-present-after-delete")
 
     safe_page_size = page_size or 1
-    total_pages = max((after_snapshot.get("total", 0) + safe_page_size - 1) // safe_page_size, 1)
+    total_pages = max(
+        (after_snapshot.get("total", 0) + safe_page_size - 1) // safe_page_size, 1
+    )
     safe_current_page = min(max(current_page or 1, 1), total_pages)
     page_start = (safe_current_page - 1) * safe_page_size
     page_entities = after_snapshot["entities"][page_start : page_start + safe_page_size]
@@ -244,7 +279,9 @@ def create_character_bulk_delete_page_plan(
         return fallback("duplicate-entity-key")
 
     safe_page_size = page_size or 1
-    total_pages = max((after_snapshot.get("total", 0) + safe_page_size - 1) // safe_page_size, 1)
+    total_pages = max(
+        (after_snapshot.get("total", 0) + safe_page_size - 1) // safe_page_size, 1
+    )
     safe_current_page = min(max(current_page or 1, 1), total_pages)
     page_start = (safe_current_page - 1) * safe_page_size
     page_entities = after_snapshot["entities"][page_start : page_start + safe_page_size]
@@ -362,7 +399,9 @@ class FakeContainer:
         return []
 
 
-def update_bulk_delete_button_state(delete_button, has_selection, fallback_focus_element=None, active_element=None):
+def update_bulk_delete_button_state(
+    delete_button, has_selection, fallback_focus_element=None, active_element=None
+):
     if delete_button is None:
         return
 
@@ -447,8 +486,14 @@ def main():
         "gamma.png",
     ]
 
-    assert get_character_delete_candidates(characters, ["beta.png", "", None, "missing.png"]) == [
-        {"avatar": "beta.png", "character": {"avatar": "beta.png", "name": "Beta"}, "index": 1},
+    assert get_character_delete_candidates(
+        characters, ["beta.png", "", None, "missing.png"]
+    ) == [
+        {
+            "avatar": "beta.png",
+            "character": {"avatar": "beta.png", "name": "Beta"},
+            "index": 1,
+        },
         {"avatar": "missing.png", "character": None, "index": -1},
     ]
 
@@ -457,7 +502,11 @@ def main():
         {"avatar": "beta.png", "name": "Beta"},
         {"avatar": "gamma.png", "name": "Gamma"},
     ]
-    assert [character.get("avatar") for character in characters] == ["alpha.png", "", None]
+    assert [character.get("avatar") for character in characters] == [
+        "alpha.png",
+        "",
+        None,
+    ]
 
     assert should_refresh_character_after_edit(characters, "alpha.png") is True
     assert should_refresh_character_after_edit(characters, "beta.png") is False
@@ -494,7 +543,9 @@ def main():
         "selectedCharacterFound": False,
         "openedEditor": False,
     }
-    assert resolve_selected_character_navigation(1, [{"name": "Alpha"}], switch_menu=False) == {
+    assert resolve_selected_character_navigation(
+        1, [{"name": "Alpha"}], switch_menu=False
+    ) == {
         "mode": "no-op",
         "selectedCharacterFound": False,
         "openedEditor": False,
@@ -529,7 +580,10 @@ def main():
         "character:alpha.png",
         "character:delta.png",
     ]
-    assert page_reconcile_plan["reusedKeys"] == ["character:gamma.png", "character:alpha.png"]
+    assert page_reconcile_plan["reusedKeys"] == [
+        "character:gamma.png",
+        "character:alpha.png",
+    ]
     assert page_reconcile_plan["insertedKeys"] == ["character:delta.png"]
     assert page_reconcile_plan["removedKeys"] == ["character:beta.png"]
     assert page_reconcile_plan["renderPlan"]["showEmptyBlock"] is False
@@ -703,21 +757,29 @@ def main():
 
     delete_button = FakeElement()
     fallback = FakeElement()
-    update_bulk_delete_button_state(delete_button, False, fallback, active_element=delete_button)
+    update_bulk_delete_button_state(
+        delete_button, False, fallback, active_element=delete_button
+    )
     assert delete_button.class_list.contains("disabled") is True
     assert delete_button.get_attribute("aria-disabled") == "true"
     assert delete_button.get_attribute("tabindex") == "-1"
     assert delete_button.blurred is True
     assert fallback.focused is True
 
-    update_bulk_delete_button_state(delete_button, True, fallback, active_element=delete_button)
+    update_bulk_delete_button_state(
+        delete_button, True, fallback, active_element=delete_button
+    )
     assert delete_button.class_list.contains("disabled") is False
     assert delete_button.get_attribute("aria-disabled") == "false"
     assert delete_button.get_attribute("tabindex") == "0"
 
     selected_count = FakeElement()
     update_bulk_selection_count_state(
-        {"selected_count": selected_count, "delete_button": delete_button, "fallback_focus_element": fallback},
+        {
+            "selected_count": selected_count,
+            "delete_button": delete_button,
+            "fallback_focus_element": fallback,
+        },
         2,
         locale="en",
     )

@@ -4,7 +4,6 @@ Run with:
     uv run python .docs/logic-description/workspace_composition_root_sandbox_proof.py
 """
 
-
 APP_INITIALIZED = "APP_INITIALIZED"
 APP_READY = "APP_READY"
 
@@ -72,22 +71,52 @@ def bootstrap_workspace(request_context):
 
 def test_direct_owner_contract():
     direct_imports = {
-        ("public/script.js", "public/scripts/events.js", ("eventSource", "event_types")),
-        ("public/script.js", "public/scripts/request-context.js", ("getRequestHeaders",)),
-        ("public/script.js", "public/scripts/public-api.js", ("installPublicBrowserApi",)),
+        (
+            "public/script.js",
+            "public/scripts/events.js",
+            ("eventSource", "event_types"),
+        ),
+        (
+            "public/script.js",
+            "public/scripts/request-context.js",
+            ("getRequestHeaders",),
+        ),
+        (
+            "public/script.js",
+            "public/scripts/public-api.js",
+            ("installPublicBrowserApi",),
+        ),
     }
-    assert ("public/script.js", "public/scripts/events.js", ("eventSource", "event_types")) in direct_imports
-    assert ("public/script.js", "public/scripts/request-context.js", ("getRequestHeaders",)) in direct_imports
-    assert ("public/script.js", "public/scripts/public-api.js", ("installPublicBrowserApi",)) in direct_imports
+    assert (
+        "public/script.js",
+        "public/scripts/events.js",
+        ("eventSource", "event_types"),
+    ) in direct_imports
+    assert (
+        "public/script.js",
+        "public/scripts/request-context.js",
+        ("getRequestHeaders",),
+    ) in direct_imports
+    assert (
+        "public/script.js",
+        "public/scripts/public-api.js",
+        ("installPublicBrowserApi",),
+    ) in direct_imports
 
 
 def test_forbidden_reverse_imports_are_detected():
     records = [
         {"file": "events.js", "specifier": "../events.js", "names": ["eventSource"]},
         {"file": "legacy.js", "specifier": "../script.js", "names": ["chat"]},
-        {"file": "new-module.js", "specifier": "../script.js", "names": ["getRequestHeaders"]},
+        {
+            "file": "new-module.js",
+            "specifier": "../script.js",
+            "names": ["getRequestHeaders"],
+        },
     ]
-    assert collect_forbidden_reverse_imports(records, {"eventSource", "event_types", "getRequestHeaders"}) == [
+    assert collect_forbidden_reverse_imports(
+        records, {"eventSource", "event_types", "getRequestHeaders"}
+    ) == [
         records[2],
     ]
 
