@@ -10,8 +10,8 @@ export function AdvancedFormattingPanel() {
                             Advanced Formatting
                         </span>
 
-                        <a href="usage/core-concepts/advancedformatting/" className="notes-link" target="_blank">
-                            <span className="fa-solid fa-circle-question note-link-span"></span>
+                        <a href="usage/core-concepts/advancedformatting/" className="notes-link" target="_blank" rel="noreferrer" aria-label="Advanced Formatting documentation">
+                            <span className="fa-solid fa-circle-question note-link-span" aria-hidden="true"></span>
                         </a>
                     </h3>
                     <div className="flex-container">
@@ -69,12 +69,13 @@ export function AdvancedFormattingPanel() {
                                 <label id="sysprompt_enabled_label" htmlFor="sysprompt_enabled" className="checkbox_label flex1" title="Enable System Prompt" data-i18n="[title]sysprompt_enabled">
                                     <input id="sysprompt_enabled" type="checkbox" style={{ "display": "none" }} />
                                     <small><i className="fa-solid fa-power-off menu_button togglable margin0" /></small>
+                                    <span className="sr-only">Enable System Prompt</span>
                                 </label>
                             </div>
                         </h4>
                         <div id="SystemPromptBlock" className="marginBot10">
                             <div className="flex-container" title="Select your current System Prompt" data-i18n="[title]Select your current System Prompt">
-                                <select id="sysprompt_select" data-preset-manager-for="sysprompt" className="flex1 text_pole"></select>
+                                <select id="sysprompt_select" data-preset-manager-for="sysprompt" className="flex1 text_pole" aria-label="System Prompt"></select>
                                 <div className="flex-container margin0 justifyCenter gap3px">
                                     <input type="file" hidden data-preset-manager-file="sysprompt" accept=".json, .settings" />
                                     <PresetManagerActionsMenu apiId="sysprompt" noun="prompt" />
@@ -103,8 +104,8 @@ export function AdvancedFormattingPanel() {
                                 <span data-i18n="Custom Stopping Strings">
                                     Custom Stopping Strings
                                 </span>
-                                <a href="usage/core-concepts/advancedformatting/#custom-stopping-strings" className="notes-link" target="_blank">
-                                    <span className="fa-solid fa-circle-question note-link-span"></span>
+                                <a href="usage/core-concepts/advancedformatting/#custom-stopping-strings" className="notes-link" target="_blank" rel="noreferrer" aria-label="Custom stopping strings documentation">
+                                    <span className="fa-solid fa-circle-question note-link-span" aria-hidden="true"></span>
                                 </a>
                             </h4>
                             <div>
@@ -127,8 +128,8 @@ export function AdvancedFormattingPanel() {
                         <div name="tokenizerSettingsBlock">
                             <div name="tokenizerSelectorBlock">
                                 <h4 className="standoutHeader"><span data-i18n="Tokenizer">Tokenizer</span>
-                                    <a href="usage/prompts/tokenizer/" className="notes-link" target="_blank">
-                                        <span className="fa-solid fa-circle-question note-link-span"></span>
+                                    <a href="usage/prompts/tokenizer/" className="notes-link" target="_blank" rel="noreferrer" aria-label="Tokenizer documentation">
+                                        <span className="fa-solid fa-circle-question note-link-span" aria-hidden="true"></span>
                                     </a>
                                 </h4>
                                 <select id="tokenizer">
@@ -204,7 +205,7 @@ export function AdvancedFormattingPanel() {
                                         Reasoning Formatting
                                     </summary>
                                     <div className="flex-container" title="Select your current Reasoning Template" data-i18n="[title]Select your current Reasoning Template">
-                                        <select id="reasoning_select" data-preset-manager-for="reasoning" className="flex1 text_pole"></select>
+                                        <select id="reasoning_select" data-preset-manager-for="reasoning" className="flex1 text_pole" aria-label="Reasoning Template"></select>
                                         <div className="flex-container margin0 justifyCenter gap3px">
                                             <input type="file" hidden data-preset-manager-file="reasoning" accept=".json, .settings" />
                                             <PresetManagerActionsMenu apiId="reasoning" noun="template" />

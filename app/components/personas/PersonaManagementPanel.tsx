@@ -16,8 +16,8 @@ export function PersonaManagementPanel() {
                 <div className="flex1 flex-container alignItemsBaseline">
                     <h3 className="margin0">
                         <span data-i18n="Persona Management">Persona Management</span>
-                        <a href="usage/core-concepts/personas/" target="_blank" rel="noreferrer">
-                            <span className="fa-solid fa-circle-question note-link-span" />
+                        <a href="usage/core-concepts/personas/" target="_blank" rel="noreferrer" aria-label="Persona documentation">
+                            <span className="fa-solid fa-circle-question note-link-span" aria-hidden="true" />
                         </a>
                     </h3>
                 </div>
@@ -61,6 +61,7 @@ export function PersonaManagementPanel() {
                                 <ContractIconButton id="persona_delete_button" className="menu_button red_button" label="Delete Persona" nativeTitle title="Delete Persona" icon={<i className="fa-solid fa-skull" aria-hidden="true" />} />
                             </div>
                             <label className="flex1 height100p" htmlFor="persona-management-dropdown">
+                                <span className="sr-only">Persona actions</span>
                                 <select id="persona-management-dropdown" className="text_pole" defaultValue="default">
                                     <option value="default" disabled data-i18n="More...">More...</option>
                                     <option id="persona_lorebook_link" data-i18n="Link to Persona Lorebook">Link to Persona Lorebook</option>

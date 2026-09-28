@@ -11,7 +11,10 @@ export function CharacterPopup() {
     return (
         <>
             <div id="character_popup_text">
-                <h3 id="character_popup-button-h3" className="margin0"></h3> <span data-i18n="Advanced Definitions">- Advanced
+                {/* Legacy script fills this heading with the character name
+                    before the popup is shown; the fallback text keeps the
+                    heading non-empty for assistive tech. */}
+                <h3 id="character_popup-button-h3" className="margin0">Character</h3> <span data-i18n="Advanced Definitions">- Advanced
                     Definitions</span>
             </div>
             <hr className="margin-bot-10px" />
@@ -92,7 +95,7 @@ export function CharacterPopup() {
                 <h4 className="flex-container alignItemsBaseline">
                     <span data-i18n="Personality summary">Personality summary</span>
                     <ContractIconButton className="editor_maximize right_menu_button" data-for="personality_textarea" label="Expand the editor" nativeTitle title="Expand the editor" icon={<i className="fa-solid fa-maximize" aria-hidden="true" />} />
-                    <a href="usage/core-concepts/characterdesign/#personality-summary" className="notes-link" target="_blank"><span className="fa-solid fa-circle-question note-link-span"></span></a>
+                    <a href="usage/core-concepts/characterdesign/#personality-summary" className="notes-link" target="_blank" rel="noreferrer" aria-label="Personality summary documentation"><span className="fa-solid fa-circle-question note-link-span" aria-hidden="true"></span></a>
                 </h4>
                 <textarea id="personality_textarea" name="personality" data-macros data-i18n="[placeholder](A brief description of the personality)" placeholder="(A brief description of the personality)" form="form_create" className="text_pole" autoComplete="off" rows={4}></textarea>
                 <div className="extension_token_counter">
@@ -103,8 +106,8 @@ export function CharacterPopup() {
                 <h4 className="flex-container alignItemsBaseline">
                     <span data-i18n="Scenario">Scenario</span>
                     <ContractIconButton className="editor_maximize right_menu_button" data-for="scenario_pole" label="Expand the editor" nativeTitle title="Expand the editor" icon={<i className="fa-solid fa-maximize" aria-hidden="true" />} />
-                    <a href="usage/core-concepts/characterdesign/#scenario" className="notes-link" target="_blank">
-                        <span className="fa-solid fa-circle-question note-link-span"></span>
+                    <a href="usage/core-concepts/characterdesign/#scenario" className="notes-link" target="_blank" rel="noreferrer" aria-label="Scenario documentation">
+                        <span className="fa-solid fa-circle-question note-link-span" aria-hidden="true"></span>
                     </a>
                 </h4>
                 <textarea id="scenario_pole" name="scenario" data-macros data-i18n="[placeholder](Circumstances and context of the interaction)" placeholder="(Circumstances and context of the interaction)" className="text_pole" defaultValue="" autoComplete="off" form="form_create" rows={4}></textarea>
@@ -153,8 +156,8 @@ export function CharacterPopup() {
                     </h4>
                     <h5>
                         <span data-i18n="Important to set the character's writing style.">Important to set the character's writing style.</span>
-                        <a href="usage/core-concepts/characterdesign/#examples-of-dialogue" className="notes-link" target="_blank">
-                            <span className="fa-solid fa-circle-question note-link-span"></span>
+                        <a href="usage/core-concepts/characterdesign/#examples-of-dialogue" className="notes-link" target="_blank" rel="noreferrer" aria-label="Examples of dialogue documentation">
+                            <span className="fa-solid fa-circle-question note-link-span" aria-hidden="true"></span>
                         </a>
                     </h5>
                 </div>

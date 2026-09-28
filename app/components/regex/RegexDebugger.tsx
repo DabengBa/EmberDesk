@@ -160,6 +160,7 @@ export function RegexDebugger() {
     <li className="regex-debugger-rule" draggable={true}>
         <i className="fa-solid fa-grip-vertical handle" />
         <label className="checkbox">
+            <span className="sr-only">Rule enabled</span>
             <input type="checkbox" className="rule-enabled" defaultChecked />
         </label>
         <div className="rule-details">

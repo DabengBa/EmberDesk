@@ -25,13 +25,12 @@ export function CharacterLibraryFolderRow({
     const className = `bogus_folder_select entity_block flex-container wide100p alignitemsflexstart${isUseless ? ' useless' : ''}`;
 
     return (
-        <div
+        <button
+            type="button"
             className={className}
             id={`BogusFolder${id}`}
             data-tagid={String(id)}
             {...{ tagid: String(id) }}
-            role="button"
-            tabIndex={0}
             onClick={(event) => {
                 event.preventDefault();
                 event.stopPropagation();
@@ -65,6 +64,6 @@ export function CharacterLibraryFolderRow({
                 </small>
                 <div className="bogus_folder_avatars_block avatars_inline avatars_inline_small tags tags_inline" />
             </div>
-        </div>
+        </button>
     );
 }

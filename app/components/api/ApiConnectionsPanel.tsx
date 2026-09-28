@@ -23,7 +23,7 @@ export function ApiConnectionsPanel() {
                                     <div id="openai_form" className="chat-completion-field model-field" data-source="openai">
                                         <label className="field-label" htmlFor="model_openai_select" data-i18n="Model">Model</label>
                                         <input id="model_openai_select" list="model_openai_list" className="text_pole" placeholder="Select or type a model" />
-                                        <datalist id="model_openai_list"></datalist>
+                                        <datalist id="model_openai_list" aria-label="Model suggestions"></datalist>
                                     </div>
                                 </div>
                                 <div id="api_key_section">
@@ -39,9 +39,9 @@ export function ApiConnectionsPanel() {
                                     <span className="field-label" data-i18n="Base URL">Base URL</span>
                                     <input id="openai_reverse_proxy" type="text" className="text_pole" aria-label="Base URL" aria-describedby="base_url_status" placeholder="Optional endpoint" />
                                 </label>
-                                <small id="base_url_status" className="base-url-status" role="status" aria-live="polite" data-mode="direct" data-i18n="Direct provider endpoint. API key stays in the API Key field.">
+                                <output id="base_url_status" className="base-url-status" aria-live="polite" data-mode="direct" data-i18n="Direct provider endpoint. API key stays in the API Key field.">
                                     Direct provider endpoint. API key stays in the API Key field.
-                                </small>
+                                </output>
                             </div>
                         </div>
                         <section id="fallback_provider_section" className="fallback-provider-section" data-doc-id="feature.fallback_provider" data-source="openai">
@@ -50,7 +50,7 @@ export function ApiConnectionsPanel() {
                                     <input id="fallback_provider_enabled" type="checkbox" />
                                     <span data-i18n="Fallback provider">Fallback provider</span>
                                 </label>
-                                <span id="fallback_provider_status" className="fallback-provider-status" role="status" aria-live="polite" data-i18n="Disabled">Disabled</span>
+                                <output id="fallback_provider_status" className="fallback-provider-status" aria-live="polite" data-i18n="Disabled">Disabled</output>
                             </div>
                             <div className="fallback-provider-details">
                                 <div className="fallback-provider-fields">
@@ -78,8 +78,8 @@ export function ApiConnectionsPanel() {
                             <div className="inline-drawer-toggle inline-drawer-header">
                                 <b data-i18n="Prompt Post-Processing">Prompt Post-Processing</b>
                                 <div className="flex-container gap3px alignItemsCenter">
-                                    <a href="usage/api-connections/openai/#prompt-post-processing" className="notes-link" target="_blank">
-                                        <span className="fa-solid fa-circle-question note-link-span"></span>
+                                    <a href="usage/api-connections/openai/#prompt-post-processing" className="notes-link" target="_blank" rel="noreferrer" aria-label="Prompt post-processing documentation">
+                                        <span className="fa-solid fa-circle-question note-link-span" aria-hidden="true"></span>
                                     </a>
                                     <div className="fa-solid fa-circle-chevron-down inline-drawer-icon down"></div>
                                 </div>

@@ -73,6 +73,53 @@ export interface CharacterLibraryPanelBridge {
     setCharacterListPageSize?(pageSize: number): void;
 }
 
+function PaginationNavItem({
+    className,
+    disabled,
+    page,
+    title,
+    glyph,
+    onNavigate,
+}: {
+    className: string;
+    disabled: boolean;
+    page: number;
+    title: string;
+    glyph: string;
+    onNavigate: (page: number) => void;
+}) {
+    return (
+        <li
+            className={className}
+            data-num={disabled ? undefined : page}
+            title={disabled ? undefined : title}
+        >
+            <a
+                href={`#page-${page}`}
+                aria-disabled={disabled || undefined}
+                tabIndex={disabled ? -1 : undefined}
+                onClick={(event) => {
+                    event.preventDefault();
+                    if (!disabled) {
+                        onNavigate(page);
+                    }
+                }}
+                onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        if (!disabled) {
+                            onNavigate(page);
+                        }
+                    }
+                }}
+            >
+                {glyph}
+            </a>
+        </li>
+    );
+}
+
 /**
  * React-owned pagination control rendered inside the legacy
  * #rm_print_characters_pagination host. Mirrors the paginationjs DOM shape
@@ -103,38 +150,38 @@ function CharacterLibraryPagination({
             <div className="paginationjs-nav J-paginationjs-nav">{pagination.label}</div>
             <div className="paginationjs-pages">
                 <ul>
-                    <li
+                    <PaginationNavItem
                         className={`paginationjs-first${isFirstPage ? ' disabled' : ' J-paginationjs-first'}`}
-                        data-num={isFirstPage ? undefined : 1}
-                        title={isFirstPage ? undefined : 'First page'}
-                        onClick={isFirstPage ? undefined : () => goToPage(1)}
-                    >
-                        <a>{'\u00AB'}</a>
-                    </li>
-                    <li
+                        disabled={isFirstPage}
+                        page={1}
+                        title="First page"
+                        glyph={'\u00AB'}
+                        onNavigate={goToPage}
+                    />
+                    <PaginationNavItem
                         className={`paginationjs-prev${isFirstPage ? ' disabled' : ' J-paginationjs-previous'}`}
-                        data-num={isFirstPage ? undefined : currentPage - 1}
-                        title={isFirstPage ? undefined : 'Previous page'}
-                        onClick={isFirstPage ? undefined : () => goToPage(currentPage - 1)}
-                    >
-                        <a>{'<'}</a>
-                    </li>
-                    <li
+                        disabled={isFirstPage}
+                        page={currentPage - 1}
+                        title="Previous page"
+                        glyph={'<'}
+                        onNavigate={goToPage}
+                    />
+                    <PaginationNavItem
                         className={`paginationjs-next${isLastPage ? ' disabled' : ' J-paginationjs-next'}`}
-                        data-num={isLastPage ? undefined : currentPage + 1}
-                        title={isLastPage ? undefined : 'Next page'}
-                        onClick={isLastPage ? undefined : () => goToPage(currentPage + 1)}
-                    >
-                        <a>{'>'}</a>
-                    </li>
-                    <li
+                        disabled={isLastPage}
+                        page={currentPage + 1}
+                        title="Next page"
+                        glyph={'>'}
+                        onNavigate={goToPage}
+                    />
+                    <PaginationNavItem
                         className={`paginationjs-last${isLastPage ? ' disabled' : ' J-paginationjs-last'}`}
-                        data-num={isLastPage ? undefined : totalPages}
-                        title={isLastPage ? undefined : 'Last page'}
-                        onClick={isLastPage ? undefined : () => goToPage(totalPages)}
-                    >
-                        <a>{'\u00BB'}</a>
-                    </li>
+                        disabled={isLastPage}
+                        page={totalPages}
+                        title="Last page"
+                        glyph={'\u00BB'}
+                        onNavigate={goToPage}
+                    />
                 </ul>
             </div>
             <div className="paginationjs-size-changer">
@@ -286,6 +333,20 @@ export function CharacterLibraryPanel({ bridge, state }: { bridge: CharacterLibr
 
     return (
         <>
+            {/* The character/folder rows render as native <button> elements so
+                keyboard activation stays intact without ARIA roles. The legacy
+                .character_select/.bogus_folder_select classes provide every
+                visual except the UA button background, so reset just that here
+                at class specificity to keep state rules (hover/active/selected)
+                winning over it. */}
+            <style>{`
+button.character_select,
+button.bogus_folder_select {
+    background-color: transparent;
+    text-align: left;
+    color: inherit;
+}
+`}</style>
             {state.renderPlan.includeBackBlock
                 ? <CharacterLibraryBackBlock onBack={() => bridge.onBackFolder?.()} />
                 : null}

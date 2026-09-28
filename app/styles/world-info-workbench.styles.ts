@@ -1074,6 +1074,10 @@ export const worldInfoWorkbenchStyles = stylex.create({
         animationDuration: { default: null, [motionOk]: '0.16s' },
     },
     modalPanel: {
+        // Neutralize UA <dialog> centering/sizing: the overlay owns placement.
+        position: 'static',
+        margin: 0,
+        color: 'inherit',
         width: 'min(92vw, 720px)',
         maxHeight: '86vh',
         display: 'flex',

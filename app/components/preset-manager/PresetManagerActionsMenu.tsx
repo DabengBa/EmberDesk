@@ -50,14 +50,27 @@ export function PresetManagerActionsMenu({ apiId, noun }: { apiId: string; noun:
                 type="button"
                 className="preset-menu-trigger margin0 menu_button menu_button_icon"
                 title="More preset actions"
-                data-i18n="[title]More preset actions"
+                data-i18n="[title]More preset actions;[aria-label]More preset actions"
+                aria-label="More preset actions"
                 aria-haspopup="menu"
                 aria-expanded={open}
                 onClick={() => setOpen(value => !value)}
             >
                 <i className="fa-fw fa-solid fa-ellipsis-vertical" aria-hidden="true" />
             </button>
-            <div className={open ? 'preset-popup-menu show' : 'preset-popup-menu'} role="menu" onClick={() => setOpen(false)}>
+            <div
+                className={open ? 'preset-popup-menu show' : 'preset-popup-menu'}
+                role="menu"
+                tabIndex={-1}
+                onClick={() => setOpen(false)}
+                onKeyDown={(event) => {
+                    if (event.key === 'Escape') {
+                        event.stopPropagation();
+                        setOpen(false);
+                        rootRef.current?.querySelector<HTMLElement>('.preset-menu-trigger')?.focus();
+                    }
+                }}
+            >
                 <ContractButton data-preset-manager-update={apiId} className="preset-popup-menu-item" variant="ghost" label="Update" nativeTitle title={`Update current ${noun}`} icon={<i className="fa-fw fa-solid fa-save" aria-hidden="true" />} />
                 <ContractButton data-preset-manager-new={apiId} className="preset-popup-menu-item" variant="ghost" label="Save As" nativeTitle title={`Save ${noun} as`} icon={<i className="fa-fw fa-solid fa-file-circle-plus" aria-hidden="true" />} />
                 <ContractButton data-preset-manager-rename={apiId} className="preset-popup-menu-item" variant="ghost" label="Rename" nativeTitle title={`Rename current ${noun}`} icon={<i className="fa-fw fa-solid fa-pencil" aria-hidden="true" />} />

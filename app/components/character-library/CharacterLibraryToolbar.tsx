@@ -103,24 +103,51 @@ function CharacterTagFilterChip({
         isShowTagListChip && hasActiveTagFilters ? 'indicator' : null,
     ].filter(Boolean).join(' ');
     const iconTitle = chip.icon ? `${translate(chip.name)} ${chip.title ?? ''}`.trim() : undefined;
-    return (
-        <span
-            id={chip.id}
-            className={className}
-            style={{
-                backgroundColor: chip.color || undefined,
-                color: chip.color2 || undefined,
-                display: !chip.actionable ? (showTagFilters ? 'flex' : 'none') : undefined,
-            }}
-            data-toggle-state={chip.filterState ?? undefined}
-            title={chip.icon ? undefined : (chip.title || undefined)}
-            onClick={onActivate}
-        >
+    const chipChildren = (
+        <>
             <span className={chip.icon ? `tag_name ${chip.icon}` : 'tag_name'} title={iconTitle}>
                 {chip.icon ? '' : chip.name}
             </span>
             <i className="fa-solid fa-circle-xmark tag_remove" style={chip.removable ? undefined : { display: 'none' }} />
-        </span>
+        </>
+    );
+    const chipStyle = {
+        backgroundColor: chip.color || undefined,
+        color: chip.color2 || undefined,
+        display: !chip.actionable ? (showTagFilters ? 'flex' : 'none') : undefined,
+    };
+    if (!onActivate) {
+        return (
+            <span
+                id={chip.id}
+                className={className}
+                style={chipStyle}
+                data-toggle-state={chip.filterState ?? undefined}
+                title={chip.icon ? undefined : (chip.title || undefined)}
+            >
+                {chipChildren}
+            </span>
+        );
+    }
+    return (
+        <button
+            type="button"
+            id={chip.id}
+            className={className}
+            style={chipStyle}
+            data-toggle-state={chip.filterState ?? undefined}
+            title={chip.icon ? undefined : (chip.title || undefined)}
+            onClick={onActivate}
+            onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    onActivate();
+                }
+            }}
+        >
+            {chipChildren}
+        </button>
     );
 }
 
@@ -153,14 +180,22 @@ function CharacterTagFilterChips({
                 />
             ))}
             {showTagFilters && filters.skippedTagCount > 0 ? (
-                <span
+                <button
+                    type="button"
                     className="tag placeholder-expander interactable clickable-action"
                     title={`${filters.skippedTagCount} tags not displayed.\n\nClick to expand remaining tags.`}
                     onClick={() => bridge.expandTagFilterList?.()}
+                    onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            bridge.expandTagFilterList?.();
+                        }
+                    }}
                 >
                     <span className="tag_name">...</span>
                     <i className="fa-solid fa-circle-xmark tag_remove" style={{ display: 'none' }} />
-                </span>
+                </button>
             ) : null}
         </>,
         container,

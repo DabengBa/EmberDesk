@@ -6,14 +6,15 @@ export function WorldInfoPanel() {
                     <div id="WI_panel_pin_div" title="Locked = World Editor will stay open" data-i18n="[title]Locked = World Editor will stay open">
                         <input type="checkbox" id="WI_panel_pin" />
                         <label htmlFor="WI_panel_pin">
+                            <span className="sr-only" data-i18n="Locked = World Editor will stay open">Locked = World Editor will stay open</span>
                             <div className="unchecked fa-solid fa-unlock "></div>
                             <div className="checked fa-solid fa-lock "></div>
                         </label>
                     </div>
                     <h3 className="margin0">
                         <span data-i18n="Worlds/Lorebooks">Worlds/Lorebooks</span>
-                        <a href="usage/core-concepts/worldinfo/" className="notes-link" target="_blank">
-                            <span className="fa-solid fa-circle-question note-link-span"></span>
+                        <a href="usage/core-concepts/worldinfo/" className="notes-link" target="_blank" rel="noreferrer" aria-label="World Info documentation">
+                            <span className="fa-solid fa-circle-question note-link-span" aria-hidden="true"></span>
                         </a>
                     </h3>
                 </div>

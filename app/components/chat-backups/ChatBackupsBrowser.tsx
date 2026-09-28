@@ -107,7 +107,7 @@ export function ChatBackupsBrowser({ buttonContainer, listContainer, commands, r
             console.error('Failed to parse chat backup content:', error);
             getToastr().error?.(t('Failed to parse backup content.'));
         }
-    }, [t]);
+    }, []);
 
     const restoreBackup = useCallback(async (name: string) => {
         await commands.restoreChatBackup(name);
@@ -124,7 +124,7 @@ export function ChatBackupsBrowser({ buttonContainer, listContainer, commands, r
 
         getToastr().success?.(t('Backup deleted successfully.'));
         setBackups(current => current?.filter(backup => backup.file_name !== name) ?? current);
-    }, [t]);
+    }, []);
 
     const toggleOpen = useCallback(() => {
         setIsOpen(open => !open);
@@ -155,29 +155,26 @@ export function ChatBackupsBrowser({ buttonContainer, listContainer, commands, r
                                 {`${formatTimestamp(backup.last_mes)} (${backup.file_size}, ${backup.chat_items} 💬)`}
                             </div>
                             <div {...stylex.props(styles.itemActions)}>
-                                <div
+                                <button
+                                    type="button"
                                     className={`right_menu_button fa-solid fa-eye ${stylex.props(styles.itemActionButton).className ?? ''}`}
                                     title={t('View backup')}
-                                    role="button"
-                                    tabIndex={0}
+                                    aria-label={t('View backup')}
                                     onClick={() => void viewBackup(backup.file_name)}
-                                    onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') void viewBackup(backup.file_name); }}
                                 />
-                                <div
+                                <button
+                                    type="button"
                                     className={`right_menu_button fa-solid fa-rotate-left ${stylex.props(styles.itemActionButton).className ?? ''}`}
                                     title={t('Restore backup')}
-                                    role="button"
-                                    tabIndex={0}
+                                    aria-label={t('Restore backup')}
                                     onClick={() => void restoreBackup(backup.file_name)}
-                                    onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') void restoreBackup(backup.file_name); }}
                                 />
-                                <div
+                                <button
+                                    type="button"
                                     className={`right_menu_button fa-solid fa-trash ${stylex.props(styles.itemActionButton).className ?? ''}`}
                                     title={t('Delete backup')}
-                                    role="button"
-                                    tabIndex={0}
+                                    aria-label={t('Delete backup')}
                                     onClick={() => setConfirmingDelete(backup.file_name)}
-                                    onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') setConfirmingDelete(backup.file_name); }}
                                 />
                             </div>
                         </div>
@@ -188,7 +185,13 @@ export function ChatBackupsBrowser({ buttonContainer, listContainer, commands, r
             {viewing !== null && createPortal(
                 <div
                     {...stylex.props(styles.dialogOverlay)}
-                    onClick={event => { event.stopPropagation(); setViewing(null); }}
+                    role="presentation"
+                    onClick={event => {
+                        event.stopPropagation();
+                        if (event.target === event.currentTarget) {
+                            setViewing(null);
+                        }
+                    }}
                     onMouseDown={event => event.stopPropagation()}
                     onMouseUp={event => event.stopPropagation()}
                     onKeyDown={event => {
@@ -198,29 +201,35 @@ export function ChatBackupsBrowser({ buttonContainer, listContainer, commands, r
                         }
                     }}
                 >
-                    <div
-                        role="dialog"
+                    <dialog
+                        open
                         aria-modal="true"
                         {...stylex.props(styles.dialog)}
-                        onClick={event => event.stopPropagation()}
                     >
                         <h4 {...stylex.props(styles.dialogTitle)}>{viewing.name}</h4>
                         <textarea
                             className={`text_pole monospace ${stylex.props(styles.dialogTextarea).className ?? ''}`}
                             readOnly
                             value={viewing.content}
+                            aria-label={t('Backup content')}
                         />
                         <div {...stylex.props(styles.dialogActions)}>
                             <button type="button" className="menu_button" onClick={() => setViewing(null)}>{t('Close')}</button>
                         </div>
-                    </div>
+                    </dialog>
                 </div>,
                 document.body,
             )}
             {confirmingDelete !== null && createPortal(
                 <div
                     {...stylex.props(styles.dialogOverlay)}
-                    onClick={event => { event.stopPropagation(); setConfirmingDelete(null); }}
+                    role="presentation"
+                    onClick={event => {
+                        event.stopPropagation();
+                        if (event.target === event.currentTarget) {
+                            setConfirmingDelete(null);
+                        }
+                    }}
                     onMouseDown={event => event.stopPropagation()}
                     onMouseUp={event => event.stopPropagation()}
                     onKeyDown={event => {
@@ -230,18 +239,18 @@ export function ChatBackupsBrowser({ buttonContainer, listContainer, commands, r
                         }
                     }}
                 >
-                    <div
+                    <dialog
+                        open
                         role="alertdialog"
                         aria-modal="true"
                         {...stylex.props(styles.dialog, styles.dialogCompact)}
-                        onClick={event => event.stopPropagation()}
                     >
                         <p {...stylex.props(styles.dialogText)}>{t('Are you sure?')}</p>
                         <div {...stylex.props(styles.dialogActions)}>
                             <button type="button" className="menu_button" onClick={() => setConfirmingDelete(null)}>{t('Cancel')}</button>
                             <button type="button" className="menu_button" onClick={() => void deleteBackup(confirmingDelete)}>{t('Confirm')}</button>
                         </div>
-                    </div>
+                    </dialog>
                 </div>,
                 document.body,
             )}

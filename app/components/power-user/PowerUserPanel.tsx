@@ -10,8 +10,8 @@ export function PowerUserPanel() {
                                 <h3 className="margin0">
                                     <span data-i18n="User Settings">User Settings</span>
 
-                                    <a href="usage/user-settings/" className="notes-link" target="_blank">
-                                        <span className="fa-solid fa-circle-question note-link-span"></span>
+                                    <a href="usage/user-settings/" className="notes-link" target="_blank" rel="noreferrer" aria-label="User settings documentation">
+                                        <span className="fa-solid fa-circle-question note-link-span" aria-hidden="true"></span>
                                     </a>
                                 </h3>
                             </div>
@@ -305,11 +305,9 @@ export function PowerUserPanel() {
                             </div>
                             <label id="smooth_streaming_control" className="checkbox_label" htmlFor="smooth_streaming">
                                 <input id="smooth_streaming" type="checkbox" />
-                                <div className="flex-container alignItemsBaseline">
-                                    <small data-i18n="Smooth Streaming">
-                                        Smooth Streaming
-                                    </small>
-                                </div>
+                                <small className="flex-container alignItemsBaseline" data-i18n="Smooth Streaming">
+                                    Smooth Streaming
+                                </small>
                             </label>
                             <label id="smooth_streaming_no_think_control" className="checkbox_label" htmlFor="smooth_streaming_no_think" title="Bypass smooth streaming in reasoning blocks." data-i18n="[title]Bypass smooth streaming in reasoning blocks.">
                                 <input id="smooth_streaming_no_think" type="checkbox" />
@@ -333,10 +331,9 @@ export function PowerUserPanel() {
 
                             <label htmlFor="play_message_sound" className="checkbox_label" title="Play a sound when a message generation finishes." data-i18n="[title]Play a sound when a message generation finishes">
                                 <input id="play_message_sound" type="checkbox" />
-                                <audio id="audio_message_sound" src="sounds/message.mp3" hidden></audio>
-                                <span>
-                                    <small data-i18n="Message Sound">Message Sound</small>
-                                </span>
+                                {/* Sound-effect preview; no caption track exists for it. */}
+                                <audio id="audio_message_sound" src="sounds/message.mp3" hidden aria-label="Message sound"><track kind="captions" /></audio>
+                                <small data-i18n="Message Sound">Message Sound</small>
                             </label>
                             <label htmlFor="play_sound_unfocused" className="checkbox_label" title="Only play a sound when ST's browser tab is unfocused." data-i18n="[title]Only play a sound when ST's browser tab is unfocused">
                                 <input id="play_sound_unfocused" type="checkbox" />
@@ -356,10 +353,8 @@ export function PowerUserPanel() {
                             </label>
                             <label className="checkbox_label alignItemsCenter" htmlFor="enable_md_hotkeys" data-i18n="[title]markdown_hotkeys_desc" title="Enable hotkeys for inserting markdown format characters in certain text input boxes. See '/help hotkeys'.">
                                 <input id="enable_md_hotkeys" type="checkbox" />
-                                <small>
-                                    <span data-i18n="Markdown Hotkeys">Markdown Hotkeys</span>
-                                    <i className="fa-brands fa-markdown"  />
-                                </small>
+                                <small data-i18n="Markdown Hotkeys">Markdown Hotkeys</small>
+                                <i className="fa-brands fa-markdown" aria-hidden="true" />
                             </label>
                             <label className="checkbox_label" htmlFor="restore_user_input" title="Restore unsaved user input on page refresh." data-i18n="[title]Restore unsaved user input on page refresh">
                                 <input id="restore_user_input" type="checkbox" />
@@ -526,13 +521,13 @@ The new engine is designed to cleanly replace the old regex-based macro system.`
                                             <input id="auto_swipe" type="checkbox" />
                                             <small data-i18n="Enabled">Enabled</small>
                                         </label>
-                                        <small data-i18n="Minimum generated message length">Minimum generated message length</small>
-                                        <input id="auto_swipe_minimum_length" name="auto_swipe_minimum_length" type="number" min="0" step="1" defaultValue="0" className="text_pole" title="If the generated message is shorter than these many characters, trigger an auto-swipe." data-i18n="[title]If the generated message is shorter than these many characters, trigger an auto-swipe" />
-                                        <small data-i18n="Blacklisted words">Blacklisted words</small>
+                                        <label htmlFor="auto_swipe_minimum_length"><small data-i18n="Minimum generated message length">Minimum generated message length</small></label>
+                                        <input id="auto_swipe_minimum_length" name="auto_swipe_minimum_length" type="number" min="0" step="1" defaultValue="0" className="text_pole" title="If the generated message is shorter than these many characters, trigger an auto-swipe." data-i18n="[title]If the generated message is shorter than these many characters, trigger an auto-swipe" aria-label="Minimum generated message length" />
+                                        <label htmlFor="auto_swipe_blacklist"><small data-i18n="Blacklisted words">Blacklisted words</small></label>
                                         <div className="auto_swipe">
-                                            <textarea id="auto_swipe_blacklist" name="auto_swipe_blacklist" data-i18n="[placeholder]words you dont want generated separated by comma ','" placeholder="words you don't want generated separated by comma ','" className="text_pole textarea_compact" defaultValue="" autoComplete="off" rows={3}></textarea>
-                                            <small data-i18n="Blacklisted word count to swipe">Blacklisted word count to swipe</small>
-                                            <input id="auto_swipe_blacklist_threshold" name="auto_swipe_blacklist_threshold" type="number" min="0" step="1" defaultValue="1" className="text_pole" title="Minimum number of blacklisted words detected to trigger an auto-swipe." data-i18n="[title]Minimum number of blacklisted words detected to trigger an auto-swipe" />
+                                            <textarea id="auto_swipe_blacklist" name="auto_swipe_blacklist" data-i18n="[placeholder]words you dont want generated separated by comma ','" placeholder="words you don't want generated separated by comma ','" className="text_pole textarea_compact" defaultValue="" autoComplete="off" rows={3} aria-label="Blacklisted words"></textarea>
+                                            <label htmlFor="auto_swipe_blacklist_threshold"><small data-i18n="Blacklisted word count to swipe">Blacklisted word count to swipe</small></label>
+                                            <input id="auto_swipe_blacklist_threshold" name="auto_swipe_blacklist_threshold" type="number" min="0" step="1" defaultValue="1" className="text_pole" title="Minimum number of blacklisted words detected to trigger an auto-swipe." data-i18n="[title]Minimum number of blacklisted words detected to trigger an auto-swipe" aria-label="Blacklisted word count to swipe" />
                                         </div>
                                     </div>
                                 </div>
@@ -544,13 +539,13 @@ The new engine is designed to cleanly replace the old regex-based macro system.`
                                     <div className="inline-drawer-content">
                                         <div className="flex-container">
                                             <label className="checkbox_label" htmlFor="auto_continue_enabled">
-                                                <input id="auto_continue_enabled" type="checkbox" />
+                                                <input id="auto_continue_enabled" type="checkbox" aria-label="Enabled" />
                                                 <small data-i18n="Enabled">
                                                     Enabled
                                                 </small>
                                             </label>
                                             <label className="checkbox_label" htmlFor="auto_continue_allow_chat_completions">
-                                                <input id="auto_continue_allow_chat_completions" type="checkbox" />
+                                                <input id="auto_continue_allow_chat_completions" type="checkbox" aria-label="Allow for Chat Completion APIs" />
                                                 <small data-i18n="Allow for Chat Completion APIs">
                                                     Allow for Chat Completion APIs
                                                 </small>
@@ -559,7 +554,7 @@ The new engine is designed to cleanly replace the old regex-based macro system.`
                                         <div className="auto_continue_settings_block">
                                             <label htmlFor="auto_continue_target_length">
                                                 <small data-i18n="Target length (tokens)">Target length (tokens)</small>
-                                                <input id="auto_continue_target_length" type="number" className="text_pole textarea_compact" min="0" max="1024" />
+                                                <input id="auto_continue_target_length" type="number" className="text_pole textarea_compact" min="0" max="1024" aria-label="Target length (tokens)" />
                                             </label>
                                         </div>
                                     </div>
@@ -584,13 +579,13 @@ The new engine is designed to cleanly replace the old regex-based macro system.`
                                         </select>
                                     </div>
                                     <label className="checkbox_label" htmlFor="stscript_autocomplete_autoHide">
-                                        <input id="stscript_autocomplete_autoHide" type="checkbox" />
+                                        <input id="stscript_autocomplete_autoHide" type="checkbox" aria-label="Automatically hide details" />
                                         <small data-i18n="Automatically hide details">
                                             Automatically hide details
                                         </small>
                                     </label>
                                     <label className="checkbox_label" htmlFor="stscript_autocomplete_showInAllMacroFields" title="Show macro autocomplete in all macro-enabled fields. When off, autocomplete only shows in expanded editors or when pressing Ctrl+Space." data-i18n="[title]Show macro autocomplete in all macro-enabled fields. When off, autocomplete only shows in expanded editors or when pressing Ctrl+Space.">
-                                        <input id="stscript_autocomplete_showInAllMacroFields" type="checkbox" />
+                                        <input id="stscript_autocomplete_showInAllMacroFields" type="checkbox" aria-label="Show in all macro fields" />
                                         <small data-i18n="Show in all macro fields">
                                             Show in all macro fields
                                         </small>
@@ -621,7 +616,7 @@ The new engine is designed to cleanly replace the old regex-based macro system.`
                                         </div>
                                     </div>
                                     <div title="Determines which keys select an item from the AutoComplete suggestions">
-                                        <label>
+                                        <label htmlFor="stscript_autocomplete_select">
                                             <small data-i18n="Keyboard">Keyboard:</small>
                                         </label>
                                         <select id="stscript_autocomplete_select">
@@ -632,8 +627,8 @@ The new engine is designed to cleanly replace the old regex-based macro system.`
                                     </div>
                                     <div className="flex-container flexFlowColumn gap0" title="Sets the font size of the autocomplete." data-i18n="[title]Sets the font size of the autocomplete.">
                                         <label htmlFor="stscript_autocomplete_font_scale"><small>Font Scale</small></label>
-                                        <input className="neo-range-slider" type="range" id="stscript_autocomplete_font_scale" min="0.5" max="2" step="0.01" />
-                                        <input className="neo-range-input" type="number" min="0.5" max="2" step="0.01" data-for="stscript_autocomplete_font_scale" id="stscript_autocomplete_font_scale_counter" />
+                                        <input className="neo-range-slider" type="range" id="stscript_autocomplete_font_scale" min="0.5" max="2" step="0.01" aria-label="Font Scale" />
+                                        <input className="neo-range-input" type="number" min="0.5" max="2" step="0.01" data-for="stscript_autocomplete_font_scale" id="stscript_autocomplete_font_scale_counter" aria-label="Font Scale value" />
                                     </div>
                                     <div title="Sets the width of the autocomplete." data-i18n="[title]Sets the width of the autocomplete.">
                                         <label htmlFor="stscript_autocomplete_width">
@@ -641,19 +636,19 @@ The new engine is designed to cleanly replace the old regex-based macro system.`
                                         </label>
                                         <div className="doubleRangeContainer">
                                             <div className="doubleRangeInputContainer">
-                                                <input type="range" id="stscript_autocomplete_width_left" min="0" max="2" step="1" />
+                                                <input type="range" id="stscript_autocomplete_width_left" min="0" max="2" step="1" aria-label="Autocomplete width left bound" />
                                                 <datalist id="stscript_autocomplete_width_left_values">
-                                                    <option value="0" label="input" title="chat input box" data-i18n="[title]chat input box"></option>
-                                                    <option value="1" label="chat" title="entire chat width" data-i18n="[title]entire chat width"></option>
-                                                    <option value="2" label="full" title="full window width" data-i18n="[title]full window width"></option>
+                                                    <option value="0" label="input" title="chat input box" data-i18n="[title]chat input box">input</option>
+                                                    <option value="1" label="chat" title="entire chat width" data-i18n="[title]entire chat width">chat</option>
+                                                    <option value="2" label="full" title="full window width" data-i18n="[title]full window width">full</option>
                                                 </datalist>
                                             </div>
                                             <div className="doubleRangeInputContainer">
-                                                <input type="range" id="stscript_autocomplete_width_right" min="0" max="2" step="1" />
+                                                <input type="range" id="stscript_autocomplete_width_right" min="0" max="2" step="1" aria-label="Autocomplete width right bound" />
                                                 <datalist id="stscript_autocomplete_width_right_values">
-                                                    <option value="0" label="input" title="chat input box" data-i18n="[title]chat input box"></option>
-                                                    <option value="1" label="chat" title="entire chat width" data-i18n="[title]entire chat width"></option>
-                                                    <option value="2" label="full" title="full window width" data-i18n="[title]full window width"></option>
+                                                    <option value="0" label="input" title="chat input box" data-i18n="[title]chat input box">input</option>
+                                                    <option value="1" label="chat" title="entire chat width" data-i18n="[title]entire chat width">chat</option>
+                                                    <option value="2" label="full" title="full window width" data-i18n="[title]full window width">full</option>
                                                 </datalist>
                                             </div>
                                         </div>
@@ -707,26 +702,22 @@ The new engine is designed to cleanly replace the old regex-based macro system.`
                             <div name="STscriptToggles">
                                 <h4 data-i18n="STscript Settings">STscript Settings</h4>
                                 <div title="Sets default flags for the STscript parser." data-i18n="[title]Sets default flags for the STscript parser.">
-                                    <label><small data-i18n="Parser Flags">Parser Flags</small></label>
+                                    <label htmlFor="stscript_parser_flag_strict_escaping"><small data-i18n="Parser Flags">Parser Flags</small></label>
                                     <label className="checkbox_label" title="Switch to stricter escaping, allowing all delimiting characters to be escaped with a backslash, and backslashes to be escaped as well." data-i18n="[title]Switch to stricter escaping, allowing all delimiting characters to be escaped with a backslash, and backslashes to be escaped as well.">
-                                        <input id="stscript_parser_flag_strict_escaping" type="checkbox" />
-                                        <span>
-                                            <small data-i18n="STRICT_ESCAPING">STRICT_ESCAPING</small>
-                                        </span>
-                                        <a href="usage/st-script/#strict-escaping" target="_blank" className="notes-link">
-                                            <span className="fa-solid fa-circle-question note-link-span"></span>
+                                        <input id="stscript_parser_flag_strict_escaping" type="checkbox" aria-label="STRICT_ESCAPING" />
+                                        <small data-i18n="STRICT_ESCAPING">STRICT_ESCAPING</small>
+                                        <a href="usage/st-script/#strict-escaping" target="_blank" className="notes-link" rel="noreferrer" aria-label="Strict escaping documentation">
+                                            <span className="fa-solid fa-circle-question note-link-span" aria-hidden="true"></span>
                                         </a>
                                     </label>
                                     <label className="checkbox_label" title={`Prevents {{getvar::}} {{getglobalvar::}} macros from having literal macro-like values auto-evaluated.
 e.g. "{{newline}}" remains as literal string "{{newline}}"
 
 (This is done by internally replacing {{getvar::}} {{getglobalvar::}} macros with scoped variables.)`} data-i18n="[title]stscript_parser_flag_replace_getvar_label">
-                                        <input id="stscript_parser_flag_replace_getvar" type="checkbox" />
-                                        <span>
-                                            <small data-i18n="REPLACE_GETVAR">REPLACE_GETVAR</small>
-                                        </span>
-                                        <a href="usage/st-script/#replace-variable-macros" target="_blank" className="notes-link">
-                                            <span className="fa-solid fa-circle-question note-link-span"></span>
+                                        <input id="stscript_parser_flag_replace_getvar" type="checkbox" aria-label="REPLACE_GETVAR" />
+                                        <small data-i18n="REPLACE_GETVAR">REPLACE_GETVAR</small>
+                                        <a href="usage/st-script/#replace-variable-macros" target="_blank" className="notes-link" rel="noreferrer" aria-label="Replace variable macros documentation">
+                                            <span className="fa-solid fa-circle-question note-link-span" aria-hidden="true"></span>
                                         </a>
                                     </label>
                                 </div>

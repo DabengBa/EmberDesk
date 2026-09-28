@@ -47,6 +47,8 @@ export const chatBackupsStyles = stylex.create({
     },
     itemActionButton: {
         fontSize: 'var(--mainFontSize)',
+        backgroundColor: 'transparent',
+        borderWidth: 0,
     },
     dialogOverlay: {
         position: 'fixed',
@@ -59,6 +61,12 @@ export const chatBackupsStyles = stylex.create({
         padding: 20,
     },
     dialog: {
+        // Neutralize UA <dialog> centering/sizing: the overlay owns placement.
+        position: 'static',
+        margin: 0,
+        maxWidth: 'none',
+        maxHeight: 'none',
+        color: 'inherit',
         display: 'flex',
         flexDirection: 'column',
         gap: 10,

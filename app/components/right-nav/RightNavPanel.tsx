@@ -17,6 +17,7 @@ export function RightNavPanel() {
                         <div id="rm_button_panel_pin_div" className="alignitemsflexstart" title="Locked = Character Management panel will stay open" data-i18n="[title]Locked = Character Management panel will stay open">
                             <input type="checkbox" id="rm_button_panel_pin" />
                             <label htmlFor="rm_button_panel_pin">
+                                <span className="sr-only" data-i18n="Locked = Character Management panel will stay open">Locked = Character Management panel will stay open</span>
                                 <div className="fa-solid unchecked fa-unlock right_menu_button"></div>
                                 <div className="fa-solid checked fa-lock right_menu_button"></div>
                             </label>
@@ -33,7 +34,10 @@ export function RightNavPanel() {
                 <div id="rm_PinAndTabs">
                     <div id="right-nav-panel-tabs" className="">
                         <div id="rm_button_selected_ch">
-                            <h2 className="interactable"></h2>
+                            {/* Legacy fills this heading with the selected
+                                character name; fallback text keeps it
+                                non-empty for assistive tech. */}
+                            <h2 className="interactable">Character</h2>
                             <span id="temporary_chat_status" className="temporary-chat-status" data-i18n="Temporary chat" aria-live="polite" aria-hidden="true" hidden>Temporary chat</span>
                         </div>
                         <div id="result_info" className="flex-container" style={{ "display": "none" }}>
@@ -47,7 +51,7 @@ export function RightNavPanel() {
                                     </small>
                                 </div>
                             </div>
-                            <a id="chartokenwarning" className="right_menu_button fa-solid fa-triangle-exclamation" href="usage/core-concepts/characterdesign/#character-tokens" target="_blank" title="About Token 'Limits'" data-i18n="[title]About Token 'Limits'"></a>
+                            <a id="chartokenwarning" className="right_menu_button fa-solid fa-triangle-exclamation" href="usage/core-concepts/characterdesign/#character-tokens" target="_blank" rel="noreferrer" title="About Token 'Limits'" aria-label="About Token 'Limits'" data-i18n="[title]About Token 'Limits';[aria-label]About Token 'Limits'"></a>
                             <ContractIconButton id="hideCharPanelAvatarButton" className="right_menu_button" label="Toggle character info panel" nativeTitle title="Toggle character info panel" icon={<i className="fa-solid fa-eye" aria-hidden="true" />} />
                         </div>
                     </div>
@@ -81,9 +85,11 @@ export function RightNavPanel() {
                                                 </div>
                                                 <input type="hidden" id="fav_checkbox" name="fav" />
                                                 <label htmlFor="create_button" id="create_button_label" className="menu_button fa-solid fa-user-check" title="Create Character" data-i18n="[title]Create Character">
+                                                    <span className="sr-only" data-i18n="Create Character">Create Character</span>
                                                     <input type="submit" id="create_button" name="create_button" />
                                                 </label>
                                                 <label className="character-detail-more" htmlFor="char-management-dropdown">
+                                                    <span className="sr-only">Character actions</span>
                                                     <select id="char-management-dropdown" className="text_pole" defaultValue="default">
                                                         <option value="default" disabled data-i18n="More...">More...</option>
                                                         <option id="character_action_advanced" data-i18n="Advanced Definition">
@@ -175,8 +181,8 @@ export function RightNavPanel() {
                                     <div className="flex-container alignitemscenter">
                                         <span data-i18n="Character Description" className="mdhotkey_location">Description</span>
                                         <ContractIconButton className="editor_maximize right_menu_button" data-for="description_textarea" label="Expand the editor" title="Expand the editor" nativeTitle icon={<i className="fa-solid fa-maximize" aria-hidden="true" />} />
-                                        <a href="usage/core-concepts/characterdesign/#character-description" className="notes-link" target="_blank">
-                                            <span className="fa-solid fa-circle-question note-link-span"></span>
+                                        <a href="usage/core-concepts/characterdesign/#character-description" className="notes-link" target="_blank" rel="noreferrer" aria-label="Character description documentation">
+                                            <span className="fa-solid fa-circle-question note-link-span" aria-hidden="true"></span>
                                         </a>
                                     </div>
                                     <div id="character_open_media_overrides" className="menu_button menu_button_icon open_media_overrides" title="Click to allow/forbid the use of external media for this character." aria-label="External media" data-i18n="[title]Click to allow/forbid the use of external media for this character.">
@@ -197,8 +203,8 @@ export function RightNavPanel() {
                                     <div className="flex-container alignitemscenter flex1">
                                         <span data-i18n="First message" className="mdhotkey_location">First message</span>
                                         <ContractIconButton className="editor_maximize right_menu_button" data-for="firstmessage_textarea" label="Expand the editor" title="Expand the editor" nativeTitle icon={<i className="fa-solid fa-maximize" aria-hidden="true" />} />
-                                        <a href="usage/core-concepts/characterdesign/#first-message" className="notes-link" target="_blank">
-                                            <span className="fa-solid fa-circle-question note-link-span"></span>
+                                        <a href="usage/core-concepts/characterdesign/#first-message" className="notes-link" target="_blank" rel="noreferrer" aria-label="First message documentation">
+                                            <span className="fa-solid fa-circle-question note-link-span" aria-hidden="true"></span>
                                         </a>
                                     </div>
                                     <ContractButton className="menu_button menu_button_icon open_alternate_greetings margin0" label="Alt. Greetings" ariaLabel="Alternate greetings" title="Click to set additional greeting messages" nativeTitle icon={<i className="fa-solid fa-message" aria-hidden="true" />} />
@@ -262,7 +268,7 @@ export function RightNavPanel() {
                                 </div>
                                 <div className="character-list-tool-group character-list-bulk-actions" aria-live="polite">
                                     <span id="bulkSelectionHint" className="bulkEditOptionElement character-list-bulk-hint" data-i18n="Click character cards to select" style={{ "display": "none" }}>Click character cards to select</span>
-                                    <div id="bulkSelectedCount" className="bulkEditOptionElement paginationjs-nav" style={{ "display": "none" }} role="status"></div>
+                                    <output id="bulkSelectedCount" className="bulkEditOptionElement paginationjs-nav" style={{ "display": "none" }}></output>
                                     <ContractButton id="bulkSelectAllButton" className="menu_button bulkEditOptionElement bulkSelectAllButton character-list-action" label="All" labelKey="Character Toolbar All" labelClassName="character-list-action-label" ariaLabel="Bulk select all characters" title="Bulk select all characters" nativeTitle style={{ "display": "none" }} icon={<i className="fa-solid fa-check-double" aria-hidden="true" />} />
                                     <ContractButton id="bulkDeleteButton" className="menu_button bulkEditOptionElement bulkDeleteButton character-list-action" label="Del" labelKey="Character Toolbar Delete" labelClassName="character-list-action-label" ariaLabel="Bulk delete characters" title="Bulk delete characters" nativeTitle style={{ "display": "none" }} icon={<i className="fa-solid fa-trash" aria-hidden="true" />} />
                                 </div>

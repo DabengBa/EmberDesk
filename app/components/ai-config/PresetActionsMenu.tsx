@@ -54,14 +54,27 @@ export function PresetActionsMenu() {
                 type="button"
                 className="preset-menu-trigger margin0 menu_button menu_button_icon"
                 title="More preset actions"
-                data-i18n="[title]More preset actions"
+                data-i18n="[title]More preset actions;[aria-label]More preset actions"
+                aria-label="More preset actions"
                 aria-haspopup="menu"
                 aria-expanded={open}
                 onClick={() => setOpen(value => !value)}
             >
                 <i className="fa-fw fa-solid fa-ellipsis-vertical" aria-hidden="true" />
             </button>
-            <div className={open ? 'preset-popup-menu show' : 'preset-popup-menu'} role="menu" onClick={close}>
+            <div
+                className={open ? 'preset-popup-menu show' : 'preset-popup-menu'}
+                role="menu"
+                tabIndex={-1}
+                onClick={close}
+                onKeyDown={(event) => {
+                    if (event.key === 'Escape') {
+                        event.stopPropagation();
+                        close();
+                        rootRef.current?.querySelector<HTMLElement>('.preset-menu-trigger')?.focus();
+                    }
+                }}
+            >
                 <ContractButton id="update_oai_preset" className="preset-popup-menu-item" variant="ghost" label="Save" nativeTitle title="Update current preset" icon={<i className="fa-fw fa-solid fa-save" aria-hidden="true" />} />
                 <ContractButton id="new_oai_preset" className="preset-popup-menu-item" variant="ghost" label="Save As" nativeTitle title="Save preset as" icon={<i className="fa-fw fa-solid fa-file-circle-plus" aria-hidden="true" />} />
                 <ContractButton data-preset-manager-rename="openai" className="preset-popup-menu-item" variant="ghost" label="Rename" nativeTitle title="Rename current preset" icon={<i className="fa-fw fa-solid fa-pencil" aria-hidden="true" />} />

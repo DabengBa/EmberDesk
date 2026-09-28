@@ -12,6 +12,12 @@ export const dataMaidStyles = stylex.create({
         padding: 20,
     },
     dialog: {
+        // Neutralize UA <dialog> centering/sizing: the overlay owns placement.
+        position: 'static',
+        margin: 0,
+        maxWidth: 'none',
+        maxHeight: 'none',
+        color: 'inherit',
         display: 'flex',
         flexDirection: 'column',
         gap: 5,
@@ -71,6 +77,22 @@ export const dataMaidStyles = stylex.create({
         justifyContent: 'space-between',
         cursor: 'pointer',
         userSelect: 'none',
+    },
+    categoryToggleButton: {
+        display: 'flex',
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginRight: 5,
+        padding: '0 5px',
+        textAlign: 'left',
+        backgroundColor: 'transparent',
+        borderWidth: 0,
+        cursor: 'pointer',
+    },
+    categoryDeleteButton: {
+        backgroundColor: 'transparent',
+        borderWidth: 0,
     },
     categoryHeader: {
         width: '100%',
@@ -165,6 +187,12 @@ export const dataMaidStyles = stylex.create({
         minHeight: 0,
     },
     viewerDialog: {
+        // Neutralize UA <dialog> centering/sizing: the overlay owns placement.
+        position: 'static',
+        margin: 0,
+        maxWidth: 'none',
+        maxHeight: 'none',
+        color: 'inherit',
         display: 'flex',
         flexDirection: 'column',
         gap: 10,
@@ -180,6 +208,11 @@ export const dataMaidStyles = stylex.create({
         overflow: 'hidden',
     },
     confirmDialog: {
+        // Neutralize UA <dialog> centering/sizing: the overlay owns placement.
+        position: 'static',
+        margin: 0,
+        maxHeight: 'none',
+        color: 'inherit',
         display: 'flex',
         flexDirection: 'column',
         gap: 10,
