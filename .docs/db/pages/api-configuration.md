@@ -61,4 +61,4 @@ This page exists so a user can configure how EmberDesk connects to an LLM API pr
 
 ## Superseded Product Entry
 
-The workspace AI Config shell entry no longer opens this drawer as the product path. Prefer [Settings](page.settings) Providers tab. Protected extension mount points and non-settings specialized surfaces remain unchanged.
+The workspace AI Config shell entry no longer opens this drawer as the product path. Prefer [Settings](page.settings) Providers tab. Non-settings specialized surfaces remain unchanged.

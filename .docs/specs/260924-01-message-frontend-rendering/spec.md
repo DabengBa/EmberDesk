@@ -163,7 +163,7 @@
 
 - **`messageFormatting` 不动**：前端代码块经 markdown → `pre>code` → DOMPurify 后仍是被转义的文本，渲染发生在 DOM 侧，消毒语义不变
 - **`addCopyToCodeBlocks`**:React 行目前不走该函数（所有调用点都被 `isReactMainChatOwner` 门控）,`skip_highlight` 只影响遗留回退路径——在 `addCopyToCodeBlocks` 内部对判定为前端的 `pre` 跳过高亮与复制按钮（折叠按钮承担 view-source)
-- **`classifyChatMessageRendererContract` 的 `extensionMutated`**：该入参目前只被契约测试驱动，运行时 `normalizeMessageState` 尚不产出 `extension-mutated` 态。本条为**前向约束**：后续任何 DOM mutation 检测落地时，自有槽位标记 `.ed-frontend-frame` / `data-frontend-slot` 必须列入一方产物白名单而非外来 mutation；遗留 `.TH-render`/`.TH-streaming` 标记的归类随扩展退役轨道另行处理，本设计不为其改名
+- **行态契约**：`extension-mutated` 行态与 `.TH-render`/`.TH-streaming` 标记已随第三方扩展退役删除（无生产者）。自有槽位标记 `.ed-frontend-frame` / `data-frontend-slot` / `.ed-frontend-stream` 为一方产物，不纳入外来 mutation 检测语义
 - **`encode_tags`** 开启时 `<` 被转义，fenced 代码块内容不受影响，检测规则仍成立
 - **`uses_system_ui` 消息**与系统消息：默认参与渲染（上游行为），`depth_ignore_hidden` 仅按 `is_system` 过滤
 

@@ -10,7 +10,7 @@ related: [page.api_configuration, page.chat_workspace, feature.chat_completion_s
 
 ## ID 解释
 
-`page.settings` represents the sole React owner for authenticated general, provider/API, UI, formatting, and power-user settings at `/settings`. It covers the four tabs, secret workflows, connection-profile selection, revision-aware save, and diagnostics. It does not host World Info, Backgrounds, Extensions, or Persona Management workflows.
+`page.settings` represents the sole React owner for authenticated general, provider/API, UI, formatting, and power-user settings at `/settings`. It covers the four tabs, secret workflows, connection-profile selection, revision-aware save, and diagnostics. It does not host World Info, Backgrounds, or Persona Management workflows.
 
 ## Page Purpose
 
@@ -55,7 +55,7 @@ Authenticated users complete supported settings work on `/settings` instead of w
 - **Retired provider state**: legacy `vertexai`/`makersuite`/`palm`/`claude` sources load as OpenAI and save back as `openai`; retired provider model keys remain stored but inert.
 - **Retired template state**: instruct-mode and context-template presets are retired; `/api/settings/get` no longer returns `instruct`/`context` preset lists and `/api/presets/*` no longer accepts `instruct`/`context` API IDs. Stored `power_user.instruct`/`power_user.context` keys and per-user preset directories are preserved as inert historical data.
 - **Retired sampler state**: logit-bias presets and token-probability (logprobs) requests are retired; `oai_settings.bias_presets`/`bias_preset_selected` and `power_user.request_token_probabilities` remain stored but inert, and `/api/backends/chat-completions/bias` is removed.
-- **Specialized surfaces**: World Info, Extensions, Personas, tags, and complex managers remain outside this page even if related values appear in the settings document.
+- **Specialized surfaces**: World Info, Personas, tags, and complex managers remain outside this page even if related values appear in the settings document. Feature-specific values live under the `feature_settings` document bag.
 
 ## Navigation
 
@@ -77,4 +77,4 @@ values retain the global behavior.
 - **Projection**: After a successful DB commit, the server projects `settings.json`. Projection failure keeps the DB revision, records `settings_projection_repairs`, and returns 500 with a repair key.
 - **Snapshots**: `/api/settings/make-snapshot` stores a canonical snapshot from the current revision and may also keep a file backup. Restore creates a **new** revision; the revision counter never rewinds. Open projection repairs block write rollback.
 - **Flags off**: Existing atomic `settings.json` read/write continue to work; file writes invalidate the settings audit until re-audited.
-- **Not in this authority**: secrets, and later persona/extension/media normalizations that still live nested in the document for compatibility.
+- **Not in this authority**: secrets, and later persona/feature/media normalizations that still live nested in the document for compatibility.

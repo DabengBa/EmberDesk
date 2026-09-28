@@ -193,3 +193,10 @@ Scope: EmberDesk is a self-hosted browser-based LLM workspace derived from Silly
 - React now always owns root-workspace navigation, active/open/close/refocus/pin state, shell layout markers, and local recovery status.
 - Retired shell takeover/strict flags, inline workspace feature bootstrap, takeover diagnostics, same-version fallback, and the takeover contract.
 - Retained only declared child-slot DOM and public extension compatibility providers; fresh runtime proof covered extension contracts, panel navigation, pinning, failure isolation, and Settings routing.
+
+## 2026-09-28 - Third-Party Extension System Retirement
+
+- Third-party extension support retired end-to-end (`5a3c46484`, `772c1a8d3` + E-cut-4 docs/tests): `/api/extensions/*` now answers JSON `410`; Extensions Host panel, drawer, wand menus, host services, compat slots, manifest pipeline, deferred loader, third-party static serving, and `directories.extensions` are deleted.
+- `extension_settings` renamed to `feature_settings` with lazy migration (old keys read, never purged); `extensions.js` renamed to `feature-settings.js` and slimmed to first-party feature support.
+- Built-in Connection Manager and Regex survive as fixed first-party features via `initCoreFeatures()`; message-card rendering continues through first-party frontend frames (shape-compatible, API-incompatible with Tavern Helper).
+- `globalThis.SillyTavern` / `eventSource` / `event_types` / `/lib.js` reclassified as internal contracts; `@sillytavern/*` aliases removed; compat suite repurposed as internal-contract gate.

@@ -25,7 +25,7 @@ Let users act on an already rendered chat message through discoverable row contr
 - Danger actions keep clear accessible names and must not visually outrank normal copy/edit actions.
 - A failed generation row may expose a retry action only after [Chat Generation Auto Recovery](feature.chat_generation_auto_recovery) has exhausted automatic attempts; using it must not resubmit the already-rendered user message as a duplicate row.
 - React owns the visible message-action shell on message rows; user-facing controls, mobile reachability, and compatibility hooks remain the same while editing or live content is preserved on the same row.
-- Save, regenerate, retry, and swipe results persist as one complete chat result without changing action availability, row controls, or extension hooks. Regenerate, retry, and swipe use the same generation command path as composer actions. Storage compatibility repair and rollback remain maintainer workflows rather than visible message actions.
+- Save, regenerate, retry, and swipe results persist as one complete chat result without changing action availability, row controls, or feature hooks. Regenerate, retry, and swipe use the same generation command path as composer actions. Storage compatibility repair and rollback remain maintainer workflows rather than visible message actions.
 - The main-chat React shell may coordinate composer/action-rail placement on the existing `#send_form` and `#nonQRFormItems` containers, but row action semantics, valid-action decisions, and compatibility hooks remain governed by the message-action surface.
 
 ## Generation Action Boundary
@@ -71,4 +71,4 @@ Visible message actions dispatch commands only. The shared generation service ow
 - Message body rendering belongs to [Chat Message Rendering](feature.chat_message_rendering).
 - Automatic generation recovery belongs to [Chat Generation Auto Recovery](feature.chat_generation_auto_recovery).
 - The chat workspace layout belongs to [Chat Workspace](page.chat_workspace).
-- Streaming token timing, slash-command parsing, event timing, extension mount points, and message storage are outside this feature.
+- Streaming token timing, slash-command parsing, event timing, feature mount points, and message storage are outside this feature.

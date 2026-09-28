@@ -51,7 +51,7 @@ Modernization must follow the existing project boundaries:
 - `src/command-line.js` owns config resolution.
 - `src/server-startup.js` owns transport and listen behavior.
 - `src/users.js` remains a compatibility barrel while storage, directories, migrations, and auth stay split into focused modules.
-- `public/script.js`, `eventSource`, `event_types`, `globalThis.SillyTavern`, and `@sillytavern/*` browser imports are compatibility surfaces.
+- `public/script.js`, `eventSource`, `event_types`, and `globalThis.SillyTavern` are internal first-party contracts (`@sillytavern/*` aliases retired 2026-09-28).
 - `public/lib.js` keeps the dual source-import and bundled `/lib.js` boundary.
 - Character-list row identity selectors and attributes remain stable unless a migration updates code, docs, and compatibility tests together.
 
@@ -135,7 +135,7 @@ Phase 1 result:
    - Regex extension internals.
    - Slash-command parser and registration.
    - World-info regex editing.
-   - Extension mount points and `@sillytavern/*` imports.
+   - First-party feature mount points and `/lib.js` imports.
 
 4. Keep UI modernization framework-free for this phase.
    - Use ES modules, pure helpers, delegated local controllers, and native browser APIs.
@@ -205,6 +205,8 @@ Phase 1 result:
    - Avoid broad dependency churn during behavior-changing slices.
 
 ### Phase 6: Compatibility Hardening
+
+> Superseded 2026-09-28: third-party extension compatibility is retired (`/api/extensions/*` → 410, aliases/mounts removed). The items below remain as historical phase record; regex placement, `eventSource`/`event_types`, slash surfaces, and DOM selectors persist as internal contracts.
 
 1. Treat third-party extension compatibility as a release boundary.
    - Protect extension mount points.
@@ -391,7 +393,6 @@ Stability-sensitive binding points:
 - `eventSource`
 - `event_types`
 - `globalThis.SillyTavern`
-- `@sillytavern/*`
 - `POST /api/characters/all`
 - `POST /api/characters/get`
 - `POST /api/chats/save`

@@ -1,437 +1,109 @@
-# Third-Party Extension Compatibility
+# Third-Party Extension Compatibility (Retired)
 
-This document records the compatibility boundary that protects EmberDesk's current regex feature and the bundled Tavern Helper extension during frontend modernization. The workspace composition root and the extracted contract owners are part of this boundary, but they are not interchangeable with the shared `/lib.js` library boundary.
+> **Status: RETIRED (2026-09-28).** Third-party extension compatibility is no longer a supported boundary. This document is now (1) a retirement record describing what was removed, and (2) the surviving **internal** contract reference for regex, slash commands, message-row DOM, character-list DOM, events, and module surfaces that first-party EmberDesk code still depends on.
 
-Terminology: in this document, **Tavern Helper** / **酒馆助手** specifically means the upstream [N0VI028/JS-Slash-Runner](https://github.com/N0VI028/JS-Slash-Runner) extension and EmberDesk's bundled local copy of that extension. It is not a generic label for all SillyTavern-style helper plugins.
+## What Was Retired
 
-## Scope
+The third-party extension system was removed in three batches (see `.docs/tech/extension-system-retirement-plan.md` and `.docs/tech/legacy-cutover-ledger.md`):
 
-The boundary covers:
+| Batch | Commit | Removed |
+|---|---|---|
+| E-cut-1 (2026-09-24) | — | `public/scripts/extensions/third-party/` vendored JS-Slash-Runner, static serving, manifest loading, token-counter/quick-reply/wand menu stubs |
+| E-cut-3 (2026-09-28) | `5a3c46484` | `/api/extensions/*` (now a JSON `410` tombstone), extension-host service/domain/compat-slot modules, `ExtensionsHostWorkspacePanel`, `extensionsHost` workspace state/bridge/commands, Extensions drawer DOM (`#rm_extensions_block`, `#extensions_settings`, `#extensions_settings2`, wand menu buttons), `directories.extensions` creation/migration, `extensions.*`/`git.backend` config keys, deferred extension bootstrap, `src/git/client.js` |
+| E-cut-2 (2026-09-28) | `772c1a8d3` | `extension_settings` renamed to `feature_settings` (lazy migration), `extensions.js` renamed to `feature-settings.js`, manifest pipeline, `disabledExtensions`, `runGenerationInterceptors`, generation-interceptor hook in generation-service, Extras/scrapers/st-context third-party exports |
+| E-cut-4 (2026-09-28) | — | `st-context` third-party-only exports, `extension-mutated` message-row contract, compat suite reclassified as internal-contract tests, documentation |
 
-- the built-in regex extension under `public/scripts/extensions/regex/`
-- the extension panel mount points in `public/index.html`
-- the extension wand menu templates under `public/scripts/templates/`
-- the bundled local copy of `N0VI028/JS-Slash-Runner` under `public/scripts/extensions/third-party/JS-Slash-Runner/`
+Concretely, the following are **gone** and must not be reintroduced:
 
-`public/scripts/extensions/third-party/` is gitignored, so isolated worktrees and fresh clones do not carry the bundled copy. To install the pinned compatibility fixture reproducibly, run:
+- Loading, discovering, installing, updating, or serving third-party extension code. `/api/extensions/*` answers `410` with `{ error: "extensions_retired" }`.
+- `public/scripts/extensions/third-party/` and the fixture fetch script.
+- Extension manifests (`manifest.json`) as an initialization mechanism — built-in features initialize directly via `initCoreFeatures()`.
+- `@sillytavern/*` browser import aliases as a supported contract.
+- `window.TavernHelper` / JS-Slash-Runner / Tavern Helper as supported integrations.
+- Extension mount points (`#extensions_settings`, `#extensions_settings2`, `#regex_container`, `#extensionsMenuButton`, `#extensionsMenu`) — deleted from `index.html` and templates.
+- `extension_settings` as the active settings key — replaced by `feature_settings` (lazy migration: `/api/settings/get` normalizes the old key on the wire; `data-maid` dual-reads unmigrated files; on-disk `extension_settings` keys in existing `settings.json` are never purged).
+- `runGenerationInterceptors` and the extension generation-interceptor contract.
+- The `extension-mutated` message-row contract (`.TH-streaming` / `.TH-render` markers, `hasExtensionMutatedRows`) — no producer remains.
 
-```bash
-node scripts/fetch-third-party-extension-fixtures.mjs
-```
+## What Replaced It
 
-The script fetches the pinned upstream commit recorded in `FIXTURES` into the gitignored directory. It refuses to overwrite a manually installed (non-git) extension directory.
-- the `@sillytavern/*` browser import aliases used by Tavern Helper
-- the event and data shapes that Tavern Helper reads from SillyTavern modules
-- the character list DOM identity contract that frontend slices must preserve for first-party modules and extension-adjacent scripts
+- **Built-in features promoted to first-party**: Connection Manager and Regex remain as fixed product features under `public/scripts/extensions/connection-manager/` and `public/scripts/extensions/regex/` (the directory name is retained; these are directly imported modules, not a plugin system). They initialize via `initCoreFeatures()` in `public/scripts/feature-settings.js`.
+- **`feature_settings` data bag**: owns `connectionManager` profiles, `regex`/`regex_presets`, `note`, `variables.global`, `character_allowed_regex`, `preset_allowed_regex`. New writes use `feature_settings`; legacy `extension_settings` data is preserved through lazy migration.
+- **Message cards**: first-party frontend frames (`frontend-frame.js` / `frontend-frame-controller.js` / `EmberDeskFrame`) render fenced complete HTML documents as same-origin iframes — **shape-compatible** with the fenced-document card format, **API-incompatible** with Tavern Helper (no TH variables, no `{{get_*_variable}}` macros, no arbitrary extension APIs). See `.docs/specs/260924-01-message-frontend-rendering/spec.md`.
+- **Character-card metadata**: `data.extensions.*` fields (`regex_scripts`, `world`, etc.) are feature data, unrelated to the retired extension system — they remain valid and must not be deleted.
 
-This is a compatibility contract, not a request to refactor the extension or regex engine.
+## Surviving Internal Contracts
 
-## Executable Contract Baseline
+The following remain as **internal** contracts consumed by EmberDesk's own modules. They are no longer third-party extension commitments — breaking them is an internal refactor concern, not an external compatibility violation.
 
-As of 2026-07-16, the compatibility boundary is also expressed as a **provider-neutral executable contract** used by retirement packages:
+### Internal runtime surface
 
-- Manifest: `tests/helpers/frontend-compatibility-contract.js`
-- Static gate: `pnpm run test:compat` (`tests/third-party-extension-compatibility.test.js`)
-- Runtime gate: `pnpm --dir tests run test:e2e -- third-party-extension-runtime.e2e.js --workers=1`
-- Bridge non-public gate: `pnpm --dir tests run test:unit -- global-compatibility-bridge.test.js --runInBand`
+- `globalThis.SillyTavern` (`public/scripts/public-api.js`, installed by `script.js`) — internal API for first-party modules and debugging; `getContext()` exposes feature settings, slash commands, variables, world info, and rendering helpers to first-party code.
+- `eventSource` / `event_types` (`public/scripts/events.js`) — internal event emitter/table; also consumed by frontend frames through a whitelisted `EmberDeskFrame.on`/`off` bridge.
+- `/lib.js` (`public/lib.js`) — shared browser utility surface for first-party modules.
+- `__emberDeskReactCompatibilityBridge` — internal-only React/legacy adapter; never a public API.
 
-Contract families: `globals`, `events`, `aliases`, `slash`, `regex`, `mounts`, `selectors`, `message-mutation`, `internal-bridge`.
+### Message row DOM contract
 
-Rules:
+The main chat message list is a shared surface for first-party message actions, rendering tests, and frontend frames. Keep these selectors and identity attributes stable:
 
-1. Behavior and public name/value/selector shape are the contract. Legacy file paths are current providers, not permanent APIs.
-2. Each subsequent React legacy-retirement package must declare current provider, replacement provider, proof command, and deletion readiness against this manifest before deleting an old owner.
-3. Failure output is family-scoped (`[compat:<family>] ...`) so a broken globals/events/aliases/slash/regex/mount/selector surface is localizable.
-4. `__emberDeskReactCompatibilityBridge` and related internal names are exclusions only; they must never become third-party replacement APIs.
-5. This baseline is a behavior gate for retirement readiness, not a freeze of the current jQuery implementation.
+- `#chat > .mes`, `.mes_text`, `.mes[mesid]`, `.last_mes`, `is_user`, `is_system`
+- `.mes_reasoning_details`, `.mes_reasoning`, `.mes_media_wrapper`, `.mes_file_wrapper`
+- `.swipe_left`, `.swipe_right`
+- `.extraMesButtonsHint` before `.extraMesButtons`; the hidden `data-main-chat-message-actions-owner="react"` marker stays appended after protected controls.
 
-## Compatibility Replacement Direction
+Generation-recovery status (`.generation_auto_recovery_status`) stays outside `.mes_text`. Frontend-frame iframe hosts (`data-frontend-frame`, `.ed-frontend-stream`) are owned by the frame controller.
 
+### Character list DOM contract
 
-Phase 4 adds internal React/Zustand observation through `app/stores/*` and `app/compat/global-compatibility-bridge.js`. This bridge is an EmberDesk runtime adapter, not a new third-party extension API.
+Preserve these selectors and identity attributes (also mandated by `AGENTS.md`):
 
-[ADR-0012](../adr/0012-react-migrated-surface-legacy-retirement.md) changes the destination for already migrated React surfaces: the external behavior below remains supported, but the current legacy providers, protected fallback nodes, and flag/build fallback paths must be replaced before those providers are removed. A release rolls back by deploying a prior version; it does not retain the old runtime in the released version. `/lib.js` remains the preferred shared browser utility surface for new ES-module extensions, and `__emberDeskReactCompatibilityBridge` remains internal-only.
+- `#rm_characters_block`, `#rm_print_characters_block`, `.character_select`, `.bogus_folder_select`
+- `.character_select[data-chid]`, `.character_select[chid]`, `id="CharID${chid}"`
+- `.character_selected`, `.bulk_select_checkbox`, `.tags_inline`, `.ch_fav`
 
-| Surface | Supported behavior | Current provider and replacement condition | Completion rule |
-|---|---|---|---|
-| `globalThis.SillyTavern` | Public object shape and supported lookup behavior for upstream-style helpers and extension-adjacent context | `public/scripts/public-api.js` explicitly installs the object during `public/script.js` composition; a React-era provider must preserve the supported object behavior before this provider is retired. | The bridge must never become a substitute public API. |
-| `eventSource` / `event_types` | Emitter methods, event names, values, and established timing semantics | `public/scripts/events.js` owns the emitter/table; `public/script.js` remains the public compatibility entry and re-export path. | No rename, narrowing, or timing regression without a replacement contract and focused proof. |
-| `@sillytavern/*` browser aliases | Alias resolution and protected export shapes for ecosystems such as Tavern Helper / JS-Slash-Runner | Current browser-module mapping; new ES-module utility imports should prefer `/lib.js`. | Replace the provider only after compatible aliases and exports are browser-proven. |
-| Extension mount points (`#extensions_settings`, `#extensions_settings2`, `#regex_container`, wand menu) | Reachable extension content and documented mount lifecycle | Current protected DOM nodes and templates; React must supply equivalent mount contracts before these nodes disappear. | Do not delete a node until affected extensions mount and operate through its replacement. |
-| Regex engine exports and `regex_placement` values | Existing exports, numeric placement values, and transformation behavior | Current regex module; React-era services may replace internals but not narrow the supported result. | Preserve numeric values and behavior with compatibility proof. |
-| Slash parser / registry / executor exports | Existing parser, registry, executor, autocomplete, and public export behavior | Current slash module; React may replace visible UI and eventually execution internals through a compatible provider. | Preserve extension execution and public exports before the legacy provider is deleted. |
-| Phase 4 React/Zustand bridge snapshots | Internal-only first-party diagnostics | First-party bridge only. | No third-party dependency or public migration target. |
+`data-chid` is the standard row identity; the legacy `chid` attribute remains for existing selectors. `.group_select` is retired with group chat removal.
 
-Evidence collection must cover Tavern Helper / JS-Slash-Runner, Regex Manager behavior, Quick Reply-style event usage, Extensions Manager install/update/delete flows, alias resolution, event contracts, and protected mount-point lifecycle. A retirement candidate must prove its React-era replacement without data loss or extension API shrinkage.
+### Slash command surface
 
-## Phase 6 Priority Rule
+`public/scripts/slash-commands.js` exports used internally include `executeSlashCommands`, `executeSlashCommandsWithOptions`, `getSlashCommandsHelp`, `registerSlashCommand`, `parser`, `CONNECT_API_MAP`, `UNIQUE_APIS`, `initDefaultSlashCommands`, `processChatSlashCommands`, `generateSystemMessage`, `validateArrayArg*`, `sendMessageAs`, `sendNarratorMessage`, `promptQuietForLoudResponse`, `executeSlashCommandsOnChatInput`, `commandsFromChatInputAbortController`, `pauseScriptExecution`, `stopScriptExecution`, `setSlashCommandAutoComplete`, and autocomplete helpers. Do not remove, rename, or narrow these exports as incidental cleanup.
 
-Phase 6 uses `JS-Slash-Runner` as the primary compatibility gate.
+### Regex data contract
 
-- Any change that would break `JS-Slash-Runner` import resolution, mount lifecycle, event usage, slash-command integration, regex integration, or required public globals is a high-priority compatibility risk.
-- Secondary extension evidence such as Quick Reply-style flows, Regex Manager-specific UI behavior, or Extensions Manager protocol checks only enters the same delivery wave when it covers a risk that `JS-Slash-Runner` does not already cover.
-- A retirement candidate that would break `JS-Slash-Runner` without a replacement contract, migration note, and prior-version rollback plan is not eligible for deletion. The honest result is to delay the candidate, not retain a permanent same-version legacy fallback.
+The regex feature is stateful across global settings, character cards, and presets:
 
-## Phase 6 Contract Ledger
-
-Use the following `JS-Slash-Runner criticality` values when reviewing or extending this compatibility boundary:
-
-- `primary`: direct runtime dependency for `JS-Slash-Runner`
-- `secondary`: not the main plugin integration path, but still a nearby compatibility risk
-- `internal-only`: first-party bridge surface, not supported for third-party extension use
-
-| Surface family | JS-Slash-Runner criticality | Current provider | Required replacement proof | Primary proof | Retirement consumer | Current gap |
-|---|---|---|---|---|---|---|
-| `@sillytavern/*` browser aliases | `primary` | browser module mapping under `public/` | compatible alias mapping and source-relative bundle output | `pnpm run test:compat` | Extensions Host / shell-global retirement | Static resolution is covered; behavior-specific alias consumers still rely on focused runtime checks. |
-| `#extensions_settings`, `#extensions_settings2`, `#regex_container`, `#extensionsMenuButton`, `#extensionsMenu` | `primary` | React lifecycle-owned protected mount slots under the sole-owner Extensions Host; public helpers remain on `public/scripts/extensions.js` | keep documented node IDs and mount protocol; do not require dual-owner legacy host chrome | `pnpm run test:compat`; `pnpm --dir tests run test:e2e -- extensions-host.e2e.js third-party-extension-runtime.e2e.js --workers=1` | Extensions Host | Static presence and sole-owner host E2E cover slots; node IDs remain freeze-supported even after legacy host chrome retirement. |
-| `eventSource` / `event_types` | `primary` | `public/scripts/events.js`, assembled and re-exported by `public/script.js` | emitter object and event-name table with matching runtime semantics | `pnpm run test:compat` | shell-global retirement | Export/value stability is covered; not every runtime timing path is browser-proven. |
-| slash-command public exports from `public/scripts/slash-commands.js` | `primary` | slash parser / registry / executor | compatible autocomplete and command execution provider | `pnpm run test:compat` | Extensions Host / Main Chat | Plugin-specific end-to-end execution remains a runtime evidence concern. |
-| regex exports and `regex_placement` values | `primary` | `public/scripts/extensions/regex/engine.js` | compatible regex provider and stable numeric placements | `pnpm run test:compat` | Extensions Host / World Info | Plugin-specific transformation flows still need runtime evidence notes. |
-| `globalThis.SillyTavern` | `secondary` | `public/scripts/public-api.js`, installed by `public/script.js` | supported global object behavior supplied without the legacy shell | `pnpm run test:compat` | shell-global retirement | Current repo evidence treats it as a compatibility surface, but `JS-Slash-Runner` primarily consumes module imports and extension context helpers instead of this global. |
-| message-row DOM contract | `secondary` | main-chat rendering path | protected row structure supplied by React main-chat owner | `pnpm --dir tests run test:unit -- chat-workspace-structure.test.js third-party-extension-compatibility.test.js --runInBand`; `pnpm --dir tests run test:e2e -- chat-message-layout.e2e.js`; `pnpm --dir tests run test:e2e -- chat-message-rendering.e2e.js` | Main Chat | Core row structure is covered; plugin-specific rich DOM mutations remain a later renderer cutover concern. |
-| character-list DOM contract | `secondary` | character-list shell and guarded React row compatibility | React-owned list with protected row identity behavior | `pnpm run test:compat`; `pnpm --dir tests run test:unit -- character-list-structure.test.js --runInBand` | Character Library | Static row identity is covered; not a primary `JS-Slash-Runner` gate. |
-| character route payload shape | `secondary` | browser-facing route payload contract | unchanged legacy-shaped payloads from the React-era consumer path | `pnpm --dir tests run test:unit -- character-read-service.test.js interaction-performance-index.test.js character-list-structure.test.js --runInBand` | Character Library | Internal service envelope leakage is guarded, but not a primary plugin gate. |
-| Phase 4 React compatibility bridge snapshots | `internal-only` | `app/compat/global-compatibility-bridge.js` | no public extension use is introduced | `pnpm --dir tests run test:unit -- global-compatibility-bridge.test.js --runInBand` | all retirement waves | Snapshot safety is covered; the bridge is intentionally unsupported for third-party extension code. |
-
-## Phase 6 JS-Slash-Runner Runtime Evidence
-
-`JS-Slash-Runner` is the only mandatory primary sample for Phase 6 runtime compatibility work. Phase 6 proof is considered incomplete if the repo can only show static export stability but cannot explain how the plugin still mounts, consumes events, and reuses the protected slash/regex surfaces.
-
-External dependency paths in this section were checked on 2026-06-23 against `JS-Slash-Runner` commit `b65f48a4856da9f0947224404d4c08910a8f350f` (`https://gitlab.com/novi028/JS-Slash-Runner/-/tree/b65f48a4856da9f0947224404d4c08910a8f350f`).
-
-### Mandatory primary evidence surfaces
-
-| Surface | Current plugin dependency path | Baseline proof | Remaining runtime evidence note | Phase 7 blocker when broken |
-|---|---|---|---|---|
-| Mount lifecycle | `src/index.ts` appends `#tavern_helper` to `#extensions_settings` | `pnpm run test:compat`; `pnpm --dir tests run test:e2e -- third-party-extension-runtime.e2e.js --workers=1` | Runtime proof loads `#tavern_helper`; flag-off / bundle-import-failure still leave protected mount nodes intact for non-retired hosts. | Yes |
-| Alias resolution | `src/**` imports `@sillytavern/*` paths resolved into `public/` browser modules | `pnpm run test:compat` | Static alias presence passes in the 2026-06-23 proof set; Phase 6 still treats alias narrowing or path churn as a hard blocker until a migration path exists. | Yes |
-| Event contract | `src/function/generate/*.ts`, `PromptViewer.vue`, `variable_manager/*.vue`, `tavern_regex.ts`, and render helpers consume `eventSource` / `event_types` | `pnpm run test:compat` | Event values and emitter methods are frozen, but Phase 6 still records that event timing semantics are not exhaustively browser-proven. | Yes |
-| Slash-command integration | `src/function/slash.ts` imports `executeSlashCommandsWithOptions`; multiple panels rely on the protected slash surface | `pnpm run test:compat` | Public export stability is covered; Phase 6 still records that plugin-specific end-to-end slash execution remains a runtime compatibility concern, not a solved cutover path. | Yes |
-| Regex integration | `src/function/generate/utils.ts` and `src/function/tavern_regex.ts` consume `getRegexedString` and `regex_placement.*` | `pnpm run test:compat` | Numeric placement stability is covered; Phase 6 still treats behavior drift in regex application order as a blocker until separately disproven. | Yes |
-| Public globals vs. internal bridge | Type declarations and extension-adjacent helpers still assume public legacy globals exist, while React bridge snapshots remain first-party only | `pnpm run test:compat`; `pnpm --dir tests run test:unit -- global-compatibility-bridge.test.js --runInBand` | Phase 6 must keep the rule that a failed bridge attach leaves public globals untouched and does not create a new plugin API. | Yes |
-
-### Secondary evidence surfaces
-
-These are useful only when they cover risk not already captured by the primary sample:
-
-- Quick Reply-style slash or event flows
-- Regex Manager-specific UI and workflow checks
-- Extensions Manager install/update/delete protocol walkthroughs
-- Protected mount-point lifecycle notes for extension hosts that do not directly belong to `JS-Slash-Runner`
-
-If a secondary surface conflicts with the primary sample, the compatibility-preserving choice is the one that keeps `JS-Slash-Runner` working.
-
-### Runtime blocker rules
-
-- During the current staged implementation, missing or cleared protected mount nodes in flag-off, import-failure, or fallback states are blockers. At retirement completion, the replacement mount protocol must make those legacy states unnecessary.
-- Narrowing `@sillytavern/*`, slash exports, regex exports, event names, or event emitter methods without migration notes is a blocker.
-- Treating `__emberDeskReactCompatibilityBridge` as a public replacement API is a blocker.
-- Any deletion candidate that breaks `JS-Slash-Runner` or lacks a compatible replacement and prior-version rollback plan is a blocker.
-
-## Protected Mount Points
-
-Keep these DOM surfaces stable unless a migration plan updates both first-party code and third-party compatibility proof:
-
-- `#extensions_settings`
-- `#extensions_settings2`
-- `#regex_container`
-- `#extensionsMenuButton`
-- `#extensionsMenu`
-- `#chat > .mes`
-- `.mes_text`
-- `.mes[mesid]`
-- `.last_mes`
-
-`#extensionsMenuButton` and `#extensionsMenu` are rendered from `wandButton.html` and `wandMenu.html`, not from static `index.html`.
-
-Tavern Helper currently mounts its Vue panel by appending `#tavern_helper` to `#extensions_settings`.
-
-## Message Row DOM Contract
-
-The main chat message list is a shared surface for first-party message actions, rendering tests, slash-command injected messages, and extension-adjacent scripts.
-
-Keep these message-row selectors and identity attributes stable unless a migration plan updates first-party code and compatibility proof together:
-
-- `#chat > .mes`
-- `.mes_text`
-- `.mes[mesid]`
-- `.last_mes`
-- `is_user`
-- `is_system`
-- `.mes_reasoning_details`
-- `.mes_reasoning`
-- `.mes_media_wrapper`
-- `.mes_file_wrapper`
-- `.swipe_left`
-- `.swipe_right`
-
-Message-row actions should remain discoverable by role/name when visible, while stored-message rendering remains owned by the message rendering path and its browser proof. Focusable action buttons must keep keyboard reachability, and visible action affordances must not cover `.mes_text` in a way that prevents reading or touch interaction.
-
-Automatic generation recovery may add `.generation_auto_recovery_status` beside a message row, but that status must stay outside `.mes_text`. Recovery status text is a control/status surface, not part of the rendered message body that extensions and first-party actions read.
-
-When `features.react.panels.mainChatMessageList` is enabled, the guarded React bridge may append a hidden `data-main-chat-message-actions-owner="react"` marker inside `.mes_buttons` for rows that already expose the protected action shell. That marker is additive only: it must not wrap, replace, or reorder `.extraMesButtonsHint`, `.extraMesButtons`, copy/edit/delete buttons, swipe controls, reasoning controls, or retry affordances. In particular, `.extraMesButtonsHint` must remain before `.extraMesButtons`, and any hidden action-owner marker must be appended after those protected controls rather than inserted between them.
-
-## Character List DOM Contract
-
-The character library panel is a shared DOM surface for selection, tags, keyboard navigation, bulk edit, and extension-adjacent scripts.
-
-Keep these selectors and identity attributes stable unless a migration plan updates first-party code and compatibility proof together:
-
-- `#rm_characters_block`
-- `#rm_print_characters_block`
-- `.character_select`
-- ~~`.group_select`~~ (retired with group chat product removal)
-- `.bogus_folder_select`
-- `.character_select[data-chid]`
-- `.character_select[chid]`
-- `id="CharID${chid}"`
-- `.character_selected`
-- `.bulk_select_checkbox`
-- `.tags_inline`
-- `.ch_fav`
-
-`data-chid` is the standard row identity for new code. The legacy `chid` attribute remains a compatibility affordance because existing selectors still use `.character_select[chid="..."]`. New code should not prefer `chid` over `data-chid`.
-
-The guarded React character-library panel island is inside this same compatibility boundary. Current code may host the toolbar and virtualized list window while legacy tag controls and `entitiesFilter` semantics remain active. The Character Library retirement wave must make React the owner of those interactions while continuing to generate the protected selectors above. The current build-missing and flag-off route is a staged-code fact, not the completed product design.
-
-The shared workspace-panel React scaffold for World Info and Extensions Host is not a compatibility exemption. The former Background Library scaffold is historical and the global gallery is retired. Extensions Host is now the sole visible owner for notify/manage/install/Extras and deferred lifecycle presentation; framework-neutral host services and the `public/scripts/extensions.js` barrel own activation, operations, and public exports. Protected extension settings columns, regex container, and wand menu nodes remain freeze-supported compatibility slots under React lifecycle ownership. Third-party extension protocols and content frameworks stay in place: retirement removes dual-owner legacy host chrome, not the documented mount IDs or extension internals.
-
-## Protected Module Surface
-
-Tavern Helper source imports use the `@sillytavern/*` alias. Its build resolves those imports to browser files below `public/`.
-
-High-risk import surfaces include:
-
-- `@sillytavern/script`
-- `@sillytavern/scripts/extensions`
-- `@sillytavern/scripts/extensions/regex/engine`
-- `@sillytavern/scripts/openai`
-- `@sillytavern/scripts/preset-manager`
-- `@sillytavern/scripts/world-info`
-- `@sillytavern/scripts/slash-commands`
-- `@sillytavern/scripts/utils`
-
-Do not rename, move, or narrow these exported browser modules as incidental cleanup during jQuery slice migration.
-
-## Slash Command Public Surface
-
-`public/scripts/slash-commands.js` is a public browser module surface for compatible scripts and helper extensions. The protected exports include:
-
-- `executeSlashCommands`
-- `executeSlashCommandsWithOptions`
-- `getSlashCommandsHelp`
-- `registerSlashCommand`
-- `parser`
-- `CONNECT_API_MAP`
-- `UNIQUE_APIS`
-- `initDefaultSlashCommands`
-- `COMMENT_NAME_DEFAULT`
-- `processChatSlashCommands`
-- `generateSystemMessage`
-- `validateArrayArgString`
-- `validateArrayArg`
-- `getNameAndAvatarForMessage`
-- `sendMessageAs`
-- `sendNarratorMessage`
-- `promptQuietForLoudResponse`
-- `isExecutingCommandsFromChatInput`
-- `commandsFromChatInputAbortController`
-- `activateScriptButtons`
-- `deactivateScriptButtons`
-- `pauseScriptExecution`
-- `stopScriptExecution`
-- `executeSlashCommandsOnChatInput`
-- `setSlashCommandAutoComplete`
-- `initSlashCommandAutoComplete`
-
-Do not remove, rename, or narrow these exports as incidental cleanup. Parser, command-registration, and execution semantics require focused compatibility proof before behavior changes.
-
-When `features.react.panels.mainChatMessageList` is enabled, the guarded React main-chat island may observe slash-command state through a hidden `slashCommand` bridge marker. That marker is additive only: it can report active state, query length, autocomplete visibility, executing, paused, aborted, and error label, but it must not copy full command text or arguments, import parser internals, register commands, execute commands, replace the autocomplete DOM, or change the exports listed above. `executeSlashCommandsOnChatInput()`, `commandsFromChatInputAbortController`, `pauseScriptExecution()`, `stopScriptExecution()`, `setSlashCommandAutoComplete()`, and parser/registry semantics remain owned by `public/scripts/slash-commands.js`.
-
-## Regex Data Contract
-
-The current regex feature is stateful across global settings, character cards, and presets:
-
-- global scripts: `extension_settings.regex`
+- global scripts: `feature_settings.regex`
 - character scripts: `character.data.extensions.regex_scripts`
 - preset scripts: `oai_settings.extensions.regex_scripts`
-- character allow-list: `extension_settings.character_allowed_regex`
-- preset allow-list: `extension_settings.preset_allowed_regex`
+- character allow-list: `feature_settings.character_allowed_regex`
+- preset allow-list: `feature_settings.preset_allowed_regex`
 
-The regex engine exports that third-party code depends on include:
+Engine exports consumed internally: `getRegexedString`, `regex_placement.USER_INPUT` / `AI_OUTPUT` / `SLASH_COMMAND` / `WORLD_INFO` / `REASONING`. Changing `regex_placement` numeric values is a breaking change.
 
-- `getRegexedString`
-- `regex_placement.USER_INPUT`
-- `regex_placement.AI_OUTPUT`
-- `regex_placement.SLASH_COMMAND`
-- `regex_placement.WORLD_INFO`
-- `regex_placement.REASONING`
+### Event contract
 
-Changing the numeric values of `regex_placement` is a breaking change.
+Stable event names consumed by first-party modules and the frontend-frame whitelist include `APP_READY`, `CHAT_CHANGED`, `CHAT_COMPLETION_SETTINGS_READY`, `CHARACTER_DELETED`, `CHARACTER_MESSAGE_RENDERED`, `CHARACTER_RENAMED`, `GENERATE_AFTER_DATA`, `MESSAGE_RECEIVED`, `OAI_PRESET_CHANGED_AFTER`, `PRESET_DELETED`, `PRESET_RENAMED_BEFORE`, `SETTINGS_UPDATED`, `USER_MESSAGE_RENDERED`. `eventSource` must keep `on`, `once`, `emit`, `emitAndWait`, `makeFirst`, `makeLast`, `removeListener`.
 
-## Event Contract
-
-Tavern Helper and compatible scripts depend on `eventSource` and `event_types` from `public/script.js` and `public/scripts/events.js`.
-
-Stable event names include:
-
-- `APP_READY`
-- `CHAT_CHANGED`
-- `CHAT_COMPLETION_SETTINGS_READY`
-- `CHARACTER_DELETED`
-- `CHARACTER_MESSAGE_RENDERED`
-- `CHARACTER_RENAMED`
-- `GENERATE_AFTER_DATA`
-- `MESSAGE_RECEIVED`
-- `OAI_PRESET_CHANGED_AFTER`
-- `PRESET_DELETED`
-- `PRESET_RENAMED_BEFORE`
-- `SETTINGS_UPDATED`
-- `USER_MESSAGE_RENDERED`
-
-`eventSource` must keep `on`, `once`, `emit`, `emitAndWait`, `makeFirst`, `makeLast`, and `removeListener`.
-
-## Phase 6 Global Export And Bridge Evidence
-
-Phase 6 treats `globalThis.SillyTavern`, `eventSource`, and `event_types` as public compatibility surfaces, while the React compatibility bridge remains internal-only.
-
-| Surface | Public or internal | Current `JS-Slash-Runner` consumer path | Failure rule | Proof |
-|---|---|---|---|---|
-| `globalThis.SillyTavern` | public compatibility surface | Adjacent and type-level compatibility surface; current plugin source primarily uses module imports and extension context helpers instead of this global | Do not replace or stub the existing object when React bridge attach fails | `pnpm run test:compat` |
-| `eventSource` | public compatibility surface | Direct runtime consumer in `src/function/generate/*.ts`, `PromptViewer.vue`, `use_collapse_code_block.ts`, `variable_manager/*.vue`, and `tavern_regex.ts` | Keep emitter methods stable; bridge attach failure must leave the legacy object untouched | `pnpm run test:compat` |
-| `event_types` | public compatibility surface | Direct runtime consumer across the same generate, prompt, render, and variable-manager paths listed above | Keep event names and values stable; React-owned slices cannot silently rename or narrow them | `pnpm run test:compat` |
-| `__emberDeskReactCompatibilityBridge` | internal-only first-party adapter | No supported third-party consumer; Phase 4 uses it only for sanitized React-owned snapshots | Bridge detach removes only the internal bridge surface; it must not mutate or replace public globals | `pnpm --dir tests run test:unit -- global-compatibility-bridge.test.js --runInBand` |
-
-The internal bridge is not a migration target for third-party extensions. Retirement work may replace public-global providers only after proving the supported contract through a public replacement; it may never treat the bridge as an undocumented substitute.
-
-## Composition-Root Ownership
-
-The current browser ownership is explicit:
+### Composition-root ownership
 
 - `public/scripts/events.js` owns `eventSource` and `event_types`.
 - `public/scripts/request-context.js` owns CSRF loading, request headers, and the jQuery Ajax prefilter.
-- `public/scripts/public-api.js` explicitly installs `globalThis.SillyTavern`.
-- `public/script.js` assembles these contracts, registers the World Info shell context, preserves approved compatibility exports, and calls `bootstrapWorkspace()`.
+- `public/scripts/public-api.js` installs `globalThis.SillyTavern`.
+- `public/script.js` assembles these contracts and calls `bootstrapWorkspace()`.
 
-The first-party reverse-import gate in `tests/helpers/script-js-reverse-import-contract.js` records the current legacy coupling as an exact 70-entry snapshot. Existing allowlisted imports are compatibility facts, not a design target and not proof that reverse imports are already zero. New first-party entries are blocked; extracted names `eventSource`, `event_types`, and `getRequestHeaders` are forbidden from being imported from `script.js`.
+The first-party reverse-import gate in `tests/helpers/script-js-reverse-import-contract.js` records current legacy coupling as an exact snapshot. New first-party reverse imports are blocked; `eventSource`, `event_types`, and `getRequestHeaders` must not be imported from `script.js`.
 
-See [Workspace Composition Root](workspace-composition-root.md) for the implementation boundary and [Workspace Composition Root Processing Flow](../logic-description/workspace_composition_root_processing_flow.md) for current ordering and failure behavior.
+### Character route compatibility
 
-## Character Route Compatibility
-
-Character read internals may use service envelopes such as `result.mode`, `latencyHint`, `interactionPath`, filter context, or pagination context. Those are route-service implementation details, not browser or extension payload contracts.
-
-The public character routes must continue to send legacy-shaped payloads:
-
-- `/api/characters/all` returns an array of character payloads.
-- `/api/characters/list` returns an array of shallow character summaries.
-- `/api/characters/get` returns the character payload object or a legacy HTTP status such as 404.
-
-Do not expose the internal read-service envelope fields to browser callers without a separate migration design.
-
-## Frontend Migration Rules
-
-Before each frontend jQuery slice, classify whether the slice touches this compatibility boundary.
-
-Safe first targets are page-local surfaces that do not touch:
-
-- regex extension code
-- extension loading or extension panel rendering
-- character import confirmation for regex or Tavern Helper scripts
-- generation request assembly
-- message rendering, message streaming, or markdown refresh
-- world-info keyword and regex editing
-- slash-command registration or parser internals
-
-If a slice must touch one of those areas, add focused regression proof before changing behavior.
+Internal read-service envelopes (`result.mode`, `latencyHint`, `interactionPath`, filter/pagination context) must not leak to browser callers. `/api/characters/all`, `/api/characters/list`, `/api/characters/get` keep legacy-shaped payloads.
 
 ## Validation
 
-Run this focused compatibility proof before and after frontend migration work:
-
 ```bash
-pnpm run test:compat
+pnpm run test:compat          # internal-contract gate (was: third-party extension gate)
+pnpm --dir tests run test:unit -- extension-retirement.test.js --runInBand
+pnpm --dir tests run test:unit -- chat-workspace-structure.test.js --runInBand
+pnpm --dir tests run test:e2e -- chat-message-frontend-frames.e2e.js --workers=1
 ```
 
-The direct tests-package command remains equivalent when debugging from `tests/`:
-
-```bash
-(cd tests && pnpm run test:unit -- third-party-extension-compatibility.test.js --runInBand)
-```
-
-This test verifies mount points, Tavern Helper manifest and distributable files, `@sillytavern/*` import resolution, key module exports, slash-command public exports, event values, and regex placement values.
-It also verifies the generated character-list row identity contract used by character library slices.
-
-Structure tests may share assertions through `tests/helpers/frontend-structure-contract.js`, but the shared helper is a test-only contract boundary. It must not replace runtime compatibility proof for protected extension surfaces.
-
-When message row rendering, message actions, or main chat workspace structure changes, also run the focused message proof that matches the touched surface:
-
-```bash
-pnpm --dir tests run test:unit -- chat-workspace-structure.test.js third-party-extension-compatibility.test.js --runInBand
-pnpm --dir tests run test:e2e -- chat-message-layout.e2e.js
-pnpm --dir tests run test:e2e -- chat-message-rendering.e2e.js
-```
-
-When character read-service or character route work changes `/api/characters/all`, `/api/characters/list`, or `/api/characters/get`, also run:
-
-```bash
-pnpm --dir tests run test:unit -- character-read-service.test.js interaction-performance-index.test.js character-list-structure.test.js --runInBand
-```
-
-That focused route proof verifies the internal read-service envelope stays internal and the legacy browser-facing payload shape remains stable.
-
-## Retirement Input Package
-
-Use the following package when a legacy-retirement candidate touches extension compatibility:
-
-### Breaking-change review template
-
-- `candidate surface`
-- `current public contract`
-- `known consumers`
-- `current provider / replacement provider`
-- `JS-Slash-Runner impact`
-- `evidence summary`
-- `user impact`
-- `prior-version rollback trigger`
-- `recommended next action`
-
-### Deprecation window minimum
-
-- Warn in the owner doc and any user-visible compatibility note before deletion or narrowing.
-- Point the warning to the matching migration guidance.
-- Keep the warning active until the replacement path and prior-version rollback plan are both documented.
-- If evidence remains incomplete, delay deletion instead of forcing a removal date.
-
-### Rollback minimum
-
-- State the released version and replacement provider that are being retired.
-- State the prior version operators deploy if the release must be rolled back.
-- State how operators or reviewers confirm rollback success without restoring a same-version legacy runtime.
-- Do not widen user-data risk or extension API shrinkage as part of rollback.
-
-### Retirement consumer split
-
-| Consumer | Required input from Phase 6 |
-|---|---|
-| Extensions Host retirement | `JS-Slash-Runner` primary gate status, mount lifecycle notes, alias stability notes, regex/slash export stability, extension-host blocker list |
-| Workspace shell and global-contract retirement | public global evidence, internal-bridge boundary, deprecation-window minimum, prior-version rollback template, breaking-change review template |
-
-### Hard gate
-
-If a candidate would break `JS-Slash-Runner` and no replacement contract, migration note, and prior-version rollback plan exist, the candidate must stay delayed. This document does not authorize feature loss or permanent same-version legacy fallback.
-
-## Extension mutation operation safety
-
-Filesystem/Git discovery remains the runtime authority for installed extensions.
-`extension_settings` remains owned by the canonical settings document.
-
-Install, update, branch switch, move, and delete share a preflight/result contract
-(`src/extension-operation-safety.js`) that:
-
-- Distinguishes global vs user scope and blocks non-admin global mutations
-- Blocks dirty, detached, no-upstream, missing, invalid-manifest, and collision states before every mutation
-- Returns structured failure envelopes (`reason`, `failureClass`, `actionHints`) without local path leakage
-- Keeps legacy success response shapes for compatible clients
-
-Protected mount points, `@sillytavern/*`, `/lib.js`, events, slash commands, and regex surfaces are unchanged by this contract.
+`tests/helpers/frontend-compatibility-contract.js` is the internal contract manifest; `tests/extension-retirement.test.js` is the retirement-absence gate.

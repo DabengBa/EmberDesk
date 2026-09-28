@@ -56,4 +56,4 @@ Replace the chain of post-character-import popups with one immediate decision di
 - Character browsing and selection belong to [Character Library Panel](feature.character_library_panel).
 - Character-card identity belongs to [Character Card](term.character_card).
 - World Info editing and manual lorebook import belong to [World Info Panel](feature.world_info_panel).
-- Extension-specific regex settings are outside this feature except for the import-time decision prompt.
+- Feature-specific regex settings are outside this feature except for the import-time decision prompt.

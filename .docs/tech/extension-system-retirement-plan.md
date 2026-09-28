@@ -54,7 +54,7 @@
 - 测试翻转：删 `third-party-extension-compatibility.test.js`、`third-party-extension-runtime.e2e.js`、`extensions-host.e2e.js`、`frontend-compatibility-contract.js` 中 globals/aliases/message-mutation/mounts 第三方条目；`test:compat` 清单同步。
 - **本批容忍的过渡态**：Extensions 抽屉与 React 面板仍在但所有挂载点 unready（E-cut-3 删除）；`loadExtensionSettings` 等成为不可达死代码（E-cut-2 删除）。
 
-### E-cut-2：extensions.js 拆解 + `feature_settings` 改名
+### E-cut-2：extensions.js 拆解 + `feature_settings` 改名 ✅ 已完成（2026-09-28，commit `772c1a8d3`）
 
 - `extension_settings` → `feature_settings`：持久化键 `extension_settings` → `feature_settings` 惰性迁移（load 时读旧键写新键）；全库引用改写（~10 个消费者文件）。
 - **`extension_settings` 键清单（E-cut-1 实测）**——持久化路径：`settings.json` 顶层 `extension_settings`；前端 defaults 在 `public/scripts/extensions.js`（`export const extension_settings`），`script.js` `applyStartupSettingsCore` 以 `Object.assign(extension_settings, settings.extension_settings ?? {})` 合并，经 `saveSettingsDebounced` 回写。
@@ -71,20 +71,23 @@
 - `saveMetadataDebounced`/`cancelDebouncedMetadataSave` → 迁往 metadata/数据模块；`writeExtensionField`/`writeExtensionFieldBulk`/`UNSET_VALUE` → 迁往 `char-data.js`；`renderExtensionTemplate(Async)` → 迁往 `templates.js`（或保留在 feature 模块内）。
 - 删：manifest/loader/enable-disable/update-check/manage-install popup 族/Extras 全部/`openThirdPartyExtensionMenu`/`extensions-slashcommands.js`/`{{extension}}` state-macro/`runGenerationInterceptors` + generation-service:773 调用点/`findExtension`/`getExtensionManifest`/`extensionNames`/`extensionTypes`/`activeExtensions`/`modules`/`isOfficialExtension`/`getAuthorFromUrl`/`EXTENSIONS_FIRST_LOAD`。
 - 目标：`public/scripts/extensions.js` 整文件消灭，仅余 `extensions/connection-manager/`、`extensions/regex/`（可考虑移出 `extensions/` 目录，或下批收尾）。
+- **落地备注**：`extensions.js` 更名为 `feature-settings.js`（保留 `feature_settings` 数据袋 + `initCoreFeatures`/`saveMetadataDebounced`/`cancelDebouncedMetadataSave`/`writeExtensionField`/`writeExtensionFieldBulk`/`UNSET_VALUE`/`renderFeatureTemplate*` 八个 load-bearing 导出）；`runGenerationInterceptors`/extras/scrapers 随批删除；Extras 前缀宏移交 `expressions.js`；两份 manifest.json 删除；`/api/settings/get` 边界做 `extension_settings`→`feature_settings` 归一化（客户端 `power_user.js` 加载点同样双读）；`data-maid` 对未迁移磁盘文件双读。
 
-### E-cut-3：服务端墓碑 + React 桥接/抽屉删除
+### E-cut-3：服务端墓碑 + React 桥接/抽屉删除 ✅ 已完成（2026-09-28，commit `5a3c46484`）
 
 - `src/endpoints/extensions.js` → 410 tombstone router（8 条路由均曾被外部直接调用）。
 - 删 `extensions.enabled`/`extensions.autoUpdate`/`extensions.models.autoDownload` 配置键 + config-init 迁移条目 + `settings.js` `enable_extensions`/`enable_extensions_auto_update` 输出 + `settingsPlan.extensionPlan`/`applyDeferredExtensionBootstrapState`/`extensionsHostControlsDisabled`/deferredExtensionTask 全链。
 - 删 `extension-host-service.js`/`extension-host-domain.js`/`extension-compatibility-slots.js`、`ExtensionsHostWorkspacePanel`、script.js 全部 extensionsHost 桥接、`global-compatibility-bridge.js` `extensionsHost` kind。
 - 删 index.html `#extensions-settings-button`/`#rm_extensions_block`/`#extensions_settings`/`#extensions_settings2` 抽屉标记（`#regex_container` 已随 E-cut-1 提前删除——regex 改挂 `#RegexPanel`）。
 - `user-directories`/`users.js` 中 `directories.extensions` 停止创建与服务（存量目录惰性保留）。
+- **落地备注**：deferred init 与 initRetry/warm-up 管线整链删除（无存活消费者）；`initCoreFeatures()` 经 `deferred(200)` 注册由 `executeDefferedStartupTasks` 执行；`src/util.js` 的 `getGitClient`/`src/git/client.js`/`git.backend` 配置随唯一消费者删除；`config-init` 中 `extensions.*`→`performance.*` 键迁移条目保留为"删除旧键不写新键"的惰性清理；connection-manager 顶部探针、`WAND_MENU_EXTRAS` 事件常量、内置扩展尾部三段 Extras 控制 UI 随批删除；`applyStartupSettingsCore` 改用 `settings.feature_settings`（经 `/get` 归一化保证）。
 
-### E-cut-4：st-context 瘦身 + 测试/文档收官
+### E-cut-4：st-context 瘦身 + 测试/文档收官 ✅ 已完成（2026-09-28）
 
 - `getContext()` 去掉只为第三方暴露的导出（`ScraperManager`、`openThirdPartyExtensionMenu`、`getExtensionManifest`、`renderExtensionTemplate*`、`ModuleWorkerWrapper`、extension helpers）；`window.SillyTavern.getContext` 全局保留为内部 API。
 - compat suite 重定义：保留仍被内部依赖的 selectors/events/regex/slash 结构断言（改写为内部契约定性）。
 - `.docs/tech/third-party-extension-compatibility.md` 改写为退役记录；`.docs/db` 相关 page/feature/term 文档同步；台账补录。
+- **落地备注**：`st-context.js` 同步删除 `EXTENSION_PROMPT_ROLES`/`getContext` 残留第三方导出；compat contract 已含 `extensions.js` 缺席断言；行级 `extension-mutated` 死契约（`hasExtensionMutatedRows`/`extension-mutated` row state/bridge 标记）随批清除——第三方退役后无生产者。
 
 ## 4. 每批门禁（缺一不可）
 
@@ -106,7 +109,7 @@ pnpm run docs:build           # 改了 .docs/db 后必跑
 - 410 tombstone 仅用于 `/api/extensions/*` 外部可达路由。
 - 提交信息沿用 `feat(retirement): ...` / `test(retirement): ...` / `docs(retirement): ...` 前缀。
 
-## 6. 完成定义
+## 6. 完成定义 ✅ 全部达成（2026-09-28）
 
 - 浏览器与服务端均无任何第三方扩展加载/发现/服务路径；`public/scripts/extensions/` 只剩被直挂的功能模块（或全部迁出）。
 - `extensions.js` 文件消灭；`feature_settings` 归位；`/api/extensions/*` 全部 410。

@@ -29,13 +29,13 @@ Let users browse, search, filter, sort, bulk-select, and choose [character cards
 - Character rows show current card metadata, avatars, tags, favorite state, last-chat summaries, and character/folder identity without changing the user's list definition during search, sort, filtering, or pagination.
 - The visible library contract stays the same during normal browsing and maintenance recovery; users should not have to rebuild or understand hidden cache/index state to browse current cards, and the retired character-index sidecar is not a user-visible maintenance step.
 - Search, sort, tag filters, page size changes, and pagination should update the visible list without unnecessary clear-and-rebuild churn when the next page is unambiguous; ambiguous states may fall back to a full refresh for correctness.
-- Character row identity remains stable for browsing, active-card state, bulk selection, and compatible extension selectors.
+- Character row identity remains stable for browsing, active-card state, bulk selection, and protected row-identity selectors.
 - Bulk-select mode provides visible selection hints, synchronized selected styling and checked state, selected count, select-all controls, and disabled-until-selection destructive actions.
 - After delete flows, the panel keeps safe pagination context, prevents late snapshots from reintroducing deleted cards, and still falls back to full refresh for complex states when that is the clearer recovery path.
 
 ## Approved Retirement Direction
 
-The React library is the sole runtime owner for browsing, filters, tags, bulk, selection, and compatible row identity. Extension-facing selectors are produced by React-owned rows; previous-version deploy is the rollback path.
+The React library is the sole runtime owner for browsing, filters, tags, bulk, selection, and stable row identity. Protected selectors are produced by React-owned rows; previous-version deploy is the rollback path.
 
 ## Semantic Interaction IDs
 

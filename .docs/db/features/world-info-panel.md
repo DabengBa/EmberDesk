@@ -17,7 +17,7 @@ Keep World Info/lorebook activation and editing available inside the chat worksp
 
 ## Approved Retirement Direction
 
-World Info is a completed third-wave React sole-owner surface. The React workbench owns the visible editor workflow; framework-neutral domain and workbench services own projection, selection, and entry field updates. `public/scripts/world-info.js` remains a compatibility barrel for prompt/scan, import/export, delete cascade, slash commands, and supported extension exports. Product flag-off and legacy visible editor fallbacks are retired; missing-build failures stay fail-closed and prior-version deploy is the rollback path.
+World Info is a completed third-wave React sole-owner surface. The React workbench owns the visible editor workflow; framework-neutral domain and workbench services own projection, selection, and entry field updates. `public/scripts/world-info.js` remains a compatibility barrel for prompt/scan, import/export, delete cascade, slash commands, and internal module exports. Product flag-off and legacy visible editor fallbacks are retired; missing-build failures stay fail-closed and prior-version deploy is the rollback path.
 
 ## User-Visible Contract
 
