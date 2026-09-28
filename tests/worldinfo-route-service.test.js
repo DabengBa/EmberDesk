@@ -243,11 +243,24 @@ describe('world info canonical route service', () => {
         fs.writeFileSync(path.join(directories.worlds, 'Lorebook.json'), JSON.stringify({
             entries: { one: { content: 'file' } },
         }));
-        seedCanonicalWorldInfo(directories, { auditClean: false });
+        // audit_not_run now self-heals through lazy init, so strict fail-closed
+        // coverage uses a real blocking drift verdict that init must preserve.
+        const db = seedCanonicalWorldInfo(directories, { auditClean: true });
+        persistCanonicalAuditStatus(db, {
+            ok: false,
+            handle: 'alice',
+            hasDrift: true,
+            blocking: true,
+            reason: 'audit_drift_blocked',
+            entries: [{ status: 'drift' }],
+        }, {
+            scope: 'world_info',
+            auditedAtMs: 1735689602000,
+        });
         setCanonicalEnv({ enabled: true, shadowImport: true, reads: true, strict: true });
 
         await expect(invokeRoute('/get', { name: 'Lorebook' }, directories))
-            .rejects.toThrow('Canonical World Info reads blocked: audit_not_run');
+            .rejects.toThrow('Canonical World Info reads blocked: audit_drift_blocked');
     });
 
     test('writes edits to canonical sqlite first and projects the compatibility JSON file', async () => {

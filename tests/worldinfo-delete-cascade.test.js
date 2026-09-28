@@ -10,6 +10,7 @@ const invalidateDirectoryMock = jest.fn();
 jest.unstable_mockModule('../src/character-card-parser.js', () => ({
     read: readCharacterCardMock,
     write: writeCharacterCardMock,
+    parse: jest.fn(),
 }));
 
 jest.unstable_mockModule('../src/endpoints/settings-cache.js', () => ({

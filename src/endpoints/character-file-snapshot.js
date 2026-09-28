@@ -192,6 +192,36 @@ export async function buildCharacterFileSnapshotRow({
         throw new Error(`Could not build character file snapshot row for ${avatar}`);
     }
 
+    // Canonical snapshots must stay deterministic and free of derived content:
+    // every rebuild feeds import/audit drift-compares against stored card_json.
+    let rawCard = null;
+    try {
+        rawCard = JSON.parse(fullPayload.json_data);
+    } catch {
+        rawCard = null;
+    }
+
+    // A card that never stored `chat` gets a wall-clock default from the V2
+    // normalizer. Derive it from the file-backed create_date instead so two
+    // snapshots of an unchanged file stay byte-identical.
+    if (rawCard?.chat === undefined && rawCard?.data?.chat === undefined) {
+        fullPayload.chat = `${fullPayload.name} - ${fullPayload.create_date}`;
+    }
+
+    // `data.character_book` filled from the linked World Info file is a
+    // derived, volatile copy — storing it would freeze stale lorebook content
+    // in card_json. Persist only the card-native embedded book; canonical
+    // reads re-resolve the linked book at serve time.
+    const linkedWorld = String(fullPayload.data?.extensions?.world ?? fullPayload.world ?? '').trim();
+    if (linkedWorld && fullPayload.data && typeof fullPayload.data === 'object') {
+        const cardNativeBook = rawCard?.data?.character_book;
+        if (cardNativeBook === undefined) {
+            delete fullPayload.data.character_book;
+        } else {
+            fullPayload.data.character_book = cardNativeBook;
+        }
+    }
+
     const filePath = path.join(directories.characters, avatar);
     const stat = statCharacterSnapshotFile(filePath);
     const worldMetadata = getCharacterSnapshotWorldMetadata(directories, fullPayload);

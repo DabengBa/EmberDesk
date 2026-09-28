@@ -31,6 +31,10 @@ import {
     runCanonicalChatShadowImport,
 } from '../src/canonical-chat-shadow-import.js';
 import { parse as parseCharacterCard, write as writeCharacterCardPngData } from '../src/character-card-parser.js';
+import {
+    markCanonicalWorldInfoBookDeleted,
+    upsertCanonicalWorldInfoBook,
+} from '../src/endpoints/world-info-store.js';
 import encodePngChunks from '../src/png/encode.js';
 import { setConfigFilePath } from '../src/util.js';
 import { buildCharacterFileSnapshotRow } from '../src/endpoints/character-file-snapshot.js';
@@ -1456,6 +1460,8 @@ describe('character index', () => {
     test('rebuilds legacy world-linked cards when the referenced world info file changes', async () => {
         const directories = makeDirectories('emberdesk-character-index-route-');
         tempRoots.push(directories.root);
+        // File-backed contract: out-of-band lorebook edits propagate to reads.
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_ENABLED = 'false';
         writeLegacyCharacterCardFile(directories, 'legacy.png', 'Legacy Hero', 'lorebook');
         writeWorldInfoFile(directories, 'lorebook', {
             entries: {
@@ -1498,6 +1504,7 @@ describe('character index', () => {
     test('refreshes file-backed /api/characters/all full rows when legacy world info changes', async () => {
         const directories = makeDirectories('emberdesk-character-index-route-');
         tempRoots.push(directories.root);
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_ENABLED = 'false';
         writeLegacyCharacterCardFile(directories, 'legacy.png', 'Legacy Hero', 'lorebook');
         writeWorldInfoFile(directories, 'lorebook', {
             entries: {
@@ -1710,6 +1717,18 @@ describe('character index', () => {
             expect(saveResponse.statusCode).toBe(200);
             expect(saveResponse.body).toEqual({ ok: true });
 
+            // The write-side invalidation mark is recorded at save time...
+            expect(getPersistedCanonicalAuditStatus(db)).toEqual(expect.objectContaining({
+                ok: false,
+                blocking: true,
+                status: 'drift',
+                reason: 'audit_stale_after_chat_stats_sync_failure',
+                details: expect.objectContaining({
+                    handle: `chat-test-${path.basename(directories.root)}`,
+                }),
+            }));
+
+            // ...and the next canonical read heals it through lazy re-import+audit.
             const refreshedListResponse = await invokeCharactersAll(directories);
             expect(refreshedListResponse.statusCode).toBe(200);
             expect(refreshedListResponse.body).toEqual([
@@ -1722,15 +1741,7 @@ describe('character index', () => {
             expect(refreshedListResponse.body[0].chat_size).toBeGreaterThan(0);
             expect(refreshedListResponse.body[0].date_last_chat).toBeGreaterThan(0);
 
-            expect(getPersistedCanonicalAuditStatus(db)).toEqual(expect.objectContaining({
-                ok: false,
-                blocking: true,
-                status: 'drift',
-                reason: 'audit_stale_after_chat_stats_sync_failure',
-                details: expect.objectContaining({
-                    handle: `chat-test-${path.basename(directories.root)}`,
-                }),
-            }));
+            expect(getPersistedCanonicalAuditStatus(db).blocking).toBe(false);
         } finally {
             manager.dispose();
         }
@@ -2052,11 +2063,12 @@ describe('character index', () => {
         }
     });
 
-    test('invalidates a previously clean canonical audit after file-backed character edits so later reads fall back', async () => {
+    test('invalidates a previously clean canonical audit after file-backed character edits so later reads re-import', async () => {
         const directories = makeDirectories('emberdesk-character-canonical-route-');
         tempRoots.push(directories.root);
         process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_ENABLED = 'true';
         process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_READS = 'true';
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_WRITES = 'false';
 
         writeCharacterCardFile(directories, 'alpha.png', 'Live Alpha');
 
@@ -2107,6 +2119,7 @@ describe('character index', () => {
         tempRoots.push(directories.root);
         process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_ENABLED = 'true';
         process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_READS = 'true';
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_WRITES = 'false';
 
         writeCharacterCardFile(directories, 'alpha.png', 'Live Alpha');
 
@@ -2632,6 +2645,7 @@ describe('character index', () => {
     test('reflects legacy world-linked card changes from files when the referenced world info file is deleted and restored', async () => {
         const directories = makeDirectories('emberdesk-character-index-route-');
         tempRoots.push(directories.root);
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_ENABLED = 'false';
         writeLegacyCharacterCardFile(directories, 'legacy.png', 'Legacy Hero', 'lorebook');
         writeWorldInfoFile(directories, 'lorebook', {
             entries: {
@@ -2675,6 +2689,66 @@ describe('character index', () => {
         expect(restoredWorldResponse.statusCode).toBe(200);
         expect(restoredWorldResponse.body.data.character_book.entries[0].content).toBe('restored lore');
         expectNoCharacterIndexSidecar(directories);
+    });
+
+    test('serves linked world-linked character_book from the canonical world info store', async () => {
+        const directories = makeDirectories('emberdesk-character-index-route-');
+        tempRoots.push(directories.root);
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_ENABLED = 'true';
+        writeLegacyCharacterCardFile(directories, 'legacy.png', 'Legacy Hero', 'lorebook');
+        writeWorldInfoFile(directories, 'lorebook', {
+            entries: {
+                1: {
+                    uid: 1,
+                    key: 'first',
+                    content: 'file lore',
+                    order: 0,
+                    position: 0,
+                    disable: false,
+                    selective: false,
+                },
+            },
+        });
+
+        const { manager, db } = openCanonicalDbForTests(directories);
+        try {
+            // First read lazily imports both slices and resolves the linked
+            // book from the canonical world_info store.
+            const initialResponse = await invokeCharacterGet(directories, 'legacy.png');
+            expect(initialResponse.statusCode).toBe(200);
+            expect(initialResponse.body.data.character_book.entries[0].content).toBe('file lore');
+
+            // An authority-side book update refreshes the served payload even
+            // though the stored card_json never embeds the derived copy.
+            upsertCanonicalWorldInfoBook(db, {
+                name: 'lorebook',
+                payload: {
+                    entries: {
+                        1: {
+                            uid: 1,
+                            key: 'first',
+                            content: 'canonical lore',
+                            order: 0,
+                            position: 0,
+                            disable: false,
+                            selective: false,
+                        },
+                    },
+                },
+            });
+
+            const refreshedResponse = await invokeCharacterGet(directories, 'legacy.png');
+            expect(refreshedResponse.statusCode).toBe(200);
+            expect(refreshedResponse.body.data.character_book.entries[0].content).toBe('canonical lore');
+
+            markCanonicalWorldInfoBookDeleted(db, { name: 'lorebook' });
+
+            const deletedResponse = await invokeCharacterGet(directories, 'legacy.png');
+            expect(deletedResponse.statusCode).toBe(200);
+            expect(deletedResponse.body.data.character_book).toBeUndefined();
+        } finally {
+            manager.dispose();
+        }
     });
 
     test('ignores a broken retired sidecar during /api/characters/get', async () => {
@@ -2753,6 +2827,8 @@ describe('character index', () => {
     test('keeps /api/characters/get file-backed even when a retired sidecar exists', async () => {
         const directories = makeDirectories('emberdesk-character-index-route-');
         tempRoots.push(directories.root);
+        // Asserts the legacy filesystem interaction path stays untouched.
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_ENABLED = 'false';
         writeCharacterCardFile(directories, 'alpha.png', 'Alpha Live');
 
         await listIndexedCharacterPayloads({

@@ -195,6 +195,8 @@ describe('canonical storage slice registry', () => {
             writes: true,
             strict: false,
         });
+        // Without a per-slice block, managed media now inherits the global
+        // canonical-on defaults like every other slice.
         expect(media.getFeatureFlags({
             enabled: true,
             shadowImport: true,
@@ -202,10 +204,10 @@ describe('canonical storage slice registry', () => {
             writes: true,
             strict: false,
         })).toEqual({
-            enabled: false,
-            shadowImport: false,
-            reads: false,
-            writes: false,
+            enabled: true,
+            shadowImport: true,
+            reads: true,
+            writes: true,
             strict: false,
         });
         expect(media.listOpenRepairs(db)).toEqual([]);

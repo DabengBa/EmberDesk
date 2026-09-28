@@ -296,16 +296,15 @@ smaller than the superseded persona/extension/chat/vector plans so each risk has
 | 1 | Canonical chat foundation | Delivered: chat schema, stable session/message IDs, lossless JSONL shadow import and audit; `shadow_only`, with no runtime cutover | Delivered slice-gate maintenance; delivered managed media |
 | 2 | Canonical chat authority cutover | DB-first full-payload get/save/rename/delete/import/export with JSONL projection repair | Order 1 clean audit |
 | 3 | Canonical chat query recovery | Search/recent indexes, attachment integrity, backup/restore, operator repair, Node 26 proof | Order 2 |
-| 4 | Extension operation safety | Safe Git preflight and structured failures while filesystem/Git remains authority | Existing extension compatibility contracts; independent of chat |
-| 5 | Derived vector index hardening | Stable source refs, atomic derived generations, last-complete fallback and rebuild | Order 3; stable World Info/media IDs |
+| 4 | Extension operation safety | Superseded: third-party extension compatibility is retired, so the filesystem/Git extension registry it protected no longer exists | — |
+| 5 | Derived vector index hardening | Superseded: the first-party vector runtime is retired; no derived vector index remains to harden | — |
 
-Persona records, defaults and connections remain inside the revisioned canonical settings
-document; persona avatars remain managed media; persona/background chat locks move with
-`chat_metadata`. No separate persona implementation package is currently justified.
+The persona system is retired; there are no persona records, avatars, or chat locks to
+sequence into canonical storage.
 
-Extension discovery and worktrees remain filesystem/Git-owned because global extensions are
-server-wide while canonical SQLite is per-user. `extension_settings` remains in canonical
-settings. A future server-wide extension registry requires a separate ADR.
+Third-party extension compatibility is retired wholesale, so there is no remaining
+extension discovery/worktree authority question and no `extension_settings` document;
+feature settings live inside the revisioned canonical settings document.
 
 Chat server pagination is explicitly deferred. Current `/get` returns a complete chat and
 `showMoreMessages()` slices the already-loaded browser array, so pagination is a separate
@@ -472,20 +471,32 @@ canonical source IDs but do not become a second text authority.
 
 ## Feature Flag And Rollback Contract
 
-The delivered character/World Info foundation retains its current compatibility flags:
+All six slices are now activated by default for existing and new installations:
+compatibility files (PNG cards, World Info JSON, `settings.json`, `secrets.json`,
+managed-media paths, chat JSONL) are projections/export formats, not runtime authority.
 
 - `features.storage.canonicalSqlite.enabled`
-  - master gate; default `false` until Phase 1 is proven.
+  - master gate; default `true`.
 - `features.storage.canonicalSqlite.shadowImport`
-  - allows migration/import/audit without runtime read/write ownership.
+  - allows migration/import/audit without runtime read/write ownership; default `true`.
 - `features.storage.canonicalSqlite.reads`
-  - enables DB-first character reads after audit passes.
+  - enables DB-first reads after audit passes; default `true`.
 - `features.storage.canonicalSqlite.writes`
-  - enables DB-first character mutation routes plus compatibility projection.
+  - enables DB-first mutation routes plus compatibility projection; default `true`.
 - `features.storage.canonicalSqlite.chatStats`
-  - enables DB-maintained chat stats.
+  - enables DB-maintained chat stats; default `true`.
 - `features.storage.canonicalSqlite.strict`
-  - test/development gate that turns fallback into failures for proof.
+  - test/development gate that turns fallback into failures for proof; remains `false`.
+
+`src/canonical-backend.js` (`ensureCanonicalSliceBackend`) performs lazy per-user slice
+activation on the first canonical touch: open, migrate, then a three-state persisted-audit
+decision — missing audit runs shadow import plus audit; file-side stale markers
+(`*_file_write`, `compatibility_media_mutation`, `chat_stats_*`) re-import then audit;
+projection-side stale markers (`*_projection_failure`, `*_repair`) re-audit only so a lagging
+compatibility file can never roll back newer canonical rows; a completed audit (clean or
+blocking) is respected as-is, so a clean slice never re-imports out-of-band file edits.
+`src/config-init.js` strips the legacy all-`false` `canonicalSqlite` template block from
+existing `config.yaml` files so upgraded installs inherit the new defaults.
 
 The control plane resolves each descriptor's effective flags. For `characters`, `worldInfo`,
 `settings`, and `secrets`, an omitted
@@ -502,9 +513,10 @@ The contract must satisfy these rules:
 - vector build/index flags remain separate from canonical source authority
 - existing global-only installations retain compatible flag interpretation during migration
 
-Managed media uses the independent
+Managed media uses the
 `features.storage.canonicalSqlite.slices.managedMedia.{enabled,shadowImport,reads,writes,strict}`
-flags. Global canonical flags do not enable this slice. Background and asset reads use the
+flags with global-flag fallback, so it now activates with the same defaults as the other
+slices. Background and asset reads use the
 catalog only after its persisted audit is clean; disabled, blocked, or non-strict failed reads
 continue through existing compatible file paths. Managed writes stage content under
 `storage/managed-media/.staging`, register hash-addressed content in the database, and then
@@ -570,6 +582,8 @@ Code binding points:
 - `getUserDirectories(handle)` remains the source for per-user data roots.
 - `character-read-service.js` owns character read coordination.
 - `character-write-service.js` owns core character write sequencing.
+- `canonical-backend.js` owns lazy per-user slice activation (open/migrate/import/audit decision) shared by all slice gates.
+- `character-card-v2.js` owns the shared character-card V2 normalization chain so runtime routes and operator/CLI tooling produce byte-equivalent canonical snapshots; canonical rows store the card's native payload while linked World Info `character_book` content is re-injected from the canonical World Info store on canonical reads.
 - `chats.js` owns chat save/rename/delete/import route side effects.
 - `character-index.js` is retired from normal runtime and remains only as a historical/helper-level proof surface.
 - `settings.js`, `secrets.js`, `assets.js`, and `extensions.js` remain their HTTP/facade owners while domain stores move behind them.

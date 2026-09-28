@@ -21,7 +21,7 @@ A character card is the reusable persona package a user browses, selects, edits,
 - **Avatar image**: the visual identity shown in the list and active workspace context.
 - **Summary metadata**: visible fields such as favorite state, tags, chat label, creation/added timing where surfaced, and latest chat-related summary data.
 - **Chat context role**: the card becomes the active persona when selected in the workspace.
-- **Authoring fields**: the card exposes editable identity and descriptive fields through the workspace authoring surface while continuing to persist through the same file-backed storage path underneath.
+- **Authoring fields**: the card exposes editable identity and descriptive fields through the workspace authoring surface while persisting into per-user canonical SQLite underneath, with the PNG card kept as a compatibility projection.
 
 ## Lifecycle And States
 

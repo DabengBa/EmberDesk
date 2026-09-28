@@ -514,6 +514,7 @@ export class SecretManager {
         fs.cpSync(this.filePath, backupFilePath);
 
         this._writeSecretsFile(migratedSecrets);
+        invalidateCanonicalSecretsAfterFileWrite(this.directories, 'migrate-flat-secrets');
         console.info(color.green('Secrets migrated successfully, old secrets backed up to:'), backupFilePath);
     }
 
@@ -540,6 +541,7 @@ export class SecretManager {
             secrets[openaiKey] = customSecrets;
             delete secrets[customKey];
             this._writeSecretsFile(secrets);
+            invalidateCanonicalSecretsAfterFileWrite(this.directories, 'migrate-custom-openai');
             console.info(color.green('Migrated CUSTOM API key to OPENAI key.'));
         }
     }

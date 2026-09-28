@@ -35,6 +35,7 @@ import {
     searchChatPayload,
 } from './chat-route-service.js';
 import { getCanonicalStorageSlice } from '../canonical-storage-slice-registry.js';
+import { ensureCanonicalSliceBackend } from '../canonical-backend.js';
 import { getCanonicalStorageStatus, openCanonicalDatabase, withCanonicalTransaction } from '../canonical-sqlite.js';
 import { runCanonicalMigrations } from '../canonical-sqlite-migrations.js';
 import {
@@ -73,12 +74,13 @@ function getRequestHandle(request) {
     return request.user?.profile?.handle ?? request.user?.handle ?? 'default-user';
 }
 
-function getCanonicalChatReadState(request) {
+async function getCanonicalChatReadState(request) {
     const chatSlice = getCanonicalStorageSlice('chats');
     const featureFlags = chatSlice.getFeatureFlags();
     if (!featureFlags.enabled) {
         return { ok: false, reason: 'canonical_storage_disabled', featureFlags };
     }
+    await ensureCanonicalSliceBackend('chats', request.user.directories, getRequestHandle(request));
     if (!featureFlags.reads) {
         return { ok: false, reason: 'canonical_reads_disabled', featureFlags };
     }
@@ -132,7 +134,7 @@ function getCanonicalChatReadState(request) {
     return { ok: true, db, featureFlags, auditStatus };
 }
 
-function getCanonicalChatWriteState(request) {
+async function getCanonicalChatWriteState(request) {
     const chatSlice = getCanonicalStorageSlice('chats');
     const featureFlags = chatSlice.getFeatureFlags();
     if (!featureFlags.enabled || !featureFlags.writes) {
@@ -152,7 +154,7 @@ function getCanonicalChatWriteState(request) {
         };
     }
 
-    const readState = getCanonicalChatReadState(request);
+    const readState = await getCanonicalChatReadState(request);
     if (!readState.ok) {
         return { ...readState, blocked: true };
     }
@@ -197,8 +199,8 @@ function getCanonicalChatLocator(directories, { ownerType, ownerId, filePath }) 
     };
 }
 
-function readCanonicalChatRoutePayload(request, locator) {
-    const readState = getCanonicalChatReadState(request);
+async function readCanonicalChatRoutePayload(request, locator) {
+    const readState = await getCanonicalChatReadState(request);
     if (!readState.ok) {
         return { active: false, payload: null };
     }
@@ -210,8 +212,8 @@ function readCanonicalChatRoutePayload(request, locator) {
     };
 }
 
-function serializeCanonicalChatRoutePayload(request, locator) {
-    const readState = getCanonicalChatReadState(request);
+async function serializeCanonicalChatRoutePayload(request, locator) {
+    const readState = await getCanonicalChatReadState(request);
     if (!readState.ok) {
         return { active: false, jsonl: null };
     }
@@ -629,7 +631,7 @@ router.post('/save', rejectGroupChatRequest, validateAvatarUrlMiddleware, async 
         }
 
         if (Array.isArray(chatData)) {
-            const writeState = getCanonicalChatWriteState(request);
+            const writeState = await getCanonicalChatWriteState(request);
             if (writeState.blocked) {
                 return sendCanonicalChatWriteBlocked(response, writeState);
             }
@@ -713,7 +715,7 @@ export function getChatData(chatFilePath) {
     return chatData;
 }
 
-router.post('/get', rejectGroupChatRequest, validateAvatarUrlMiddleware, function (request, response) {
+router.post('/get', rejectGroupChatRequest, validateAvatarUrlMiddleware, async function (request, response) {
     try {
         const dirName = String(request.body.avatar_url).replace('.png', '');
         const directoryPath = path.join(request.user.directories.chats, dirName);
@@ -729,7 +731,7 @@ router.post('/get', rejectGroupChatRequest, validateAvatarUrlMiddleware, functio
 
         const chatFileName = `${String(request.body.file_name)}.jsonl`;
         const chatFilePath = path.join(directoryPath, sanitize(chatFileName));
-        const canonical = readCanonicalChatRoutePayload(request, getCanonicalChatLocator(request.user.directories, {
+        const canonical = await readCanonicalChatRoutePayload(request, getCanonicalChatLocator(request.user.directories, {
             ownerType: 'character',
             ownerId: dirName,
             filePath: chatFilePath,
@@ -772,7 +774,7 @@ router.post('/rename', rejectGroupChatRequest, validateAvatarUrlMiddleware, asyn
             return response.status(400).send({ error: true });
         }
 
-        const writeState = getCanonicalChatWriteState(request);
+        const writeState = await getCanonicalChatWriteState(request);
         if (writeState.blocked) {
             return sendCanonicalChatWriteBlocked(response, writeState);
         }
@@ -829,7 +831,7 @@ router.post('/rename', rejectGroupChatRequest, validateAvatarUrlMiddleware, asyn
     }
 });
 
-router.post('/delete', rejectGroupChatRequest, validateAvatarUrlMiddleware, function (request, response) {
+router.post('/delete', rejectGroupChatRequest, validateAvatarUrlMiddleware, async function (request, response) {
     try {
         if (!path.extname(request.body.chatfile)) {
             request.body.chatfile += '.jsonl';
@@ -841,7 +843,7 @@ router.post('/delete', rejectGroupChatRequest, validateAvatarUrlMiddleware, func
         if (!isPathUnderParent(request.user.directories.chats, chatFilePath)) {
             return response.sendStatus(400);
         }
-        const writeState = getCanonicalChatWriteState(request);
+        const writeState = await getCanonicalChatWriteState(request);
         if (writeState.blocked) {
             return sendCanonicalChatWriteBlocked(response, writeState);
         }
@@ -907,7 +909,7 @@ router.post('/export', rejectGroupChatRequest, validateAvatarUrlMiddleware, asyn
         return response.sendStatus(400);
     }
     let exportfilename = request.body.exportfilename;
-    const canonical = serializeCanonicalChatRoutePayload(request, getCanonicalChatLocator(request.user.directories, {
+    const canonical = await serializeCanonicalChatRoutePayload(request, getCanonicalChatLocator(request.user.directories, {
         ownerType: 'character',
         ownerId: String(request.body.avatar_url).replace('.png', ''),
         filePath: filename,
@@ -971,7 +973,7 @@ router.post('/export', rejectGroupChatRequest, validateAvatarUrlMiddleware, asyn
     }
 });
 
-router.post('/import', validateAvatarUrlMiddleware, function (request, response) {
+router.post('/import', validateAvatarUrlMiddleware, async function (request, response) {
     if (!request.body) return response.sendStatus(400);
 
     const format = request.body.file_type;
@@ -1013,7 +1015,7 @@ router.post('/import', validateAvatarUrlMiddleware, function (request, response)
             return response.send({ error: true });
         }
 
-        const writeState = getCanonicalChatWriteState(request);
+        const writeState = await getCanonicalChatWriteState(request);
         if (writeState.blocked) {
             return sendCanonicalChatWriteBlocked(response, writeState);
         }
@@ -1092,7 +1094,7 @@ router.post('/search', validateAvatarUrlMiddleware, async function (request, res
             getChatInfo,
             warn: console.warn,
         };
-        const readState = getCanonicalChatReadState(request);
+        const readState = await getCanonicalChatReadState(request);
         const payload = readState.ok
             ? await searchCanonicalChatPayload({
                 db: readState.db,
@@ -1120,7 +1122,7 @@ router.post('/recent', async function (request, response) {
             path,
             getChatInfo,
         };
-        const readState = getCanonicalChatReadState(request);
+        const readState = await getCanonicalChatReadState(request);
         const payload = readState.ok
             ? await readCanonicalRecentChatPayload({
                 db: readState.db,

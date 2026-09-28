@@ -581,12 +581,15 @@ describe('canonical settings route integration', () => {
         };
         setCanonicalEnv({ enabled: true, shadowImport: true, reads: true, writes: false });
         const router = await loadSettingsRouter();
-        await seedSettingsDocument(directories, canonicalPayload);
+        // First get lazily imports the file payload (rev 1); seeding on top keeps
+        // DB authority divergent from the file for this test.
+        await invokeRoute(router, '/get', { directories });
+        await seedSettingsDocument(directories, canonicalPayload, { expectedRevision: 1 });
         const response = await invokeRoute(router, '/get', { directories });
 
         expect(response.statusCode).toBe(200);
         expect(JSON.parse(response.body.settings)).toEqual(canonicalPayload);
-        expect(response.body.settings_revision).toBe(1);
+        expect(response.body.settings_revision).toBe(2);
         // File still has the old payload; DB is authority for settings string.
         expect(JSON.parse(fs.readFileSync(path.join(directories.root, SETTINGS_FILE), 'utf8'))).toEqual(filePayload);
     });
@@ -598,7 +601,7 @@ describe('canonical settings route integration', () => {
         writeSettingsFile(directories, filePayload);
 
         setCanonicalEnv({ enabled: true, reads: false });
-        let router = await loadSettingsRouter();
+        const router = await loadSettingsRouter();
         const { db } = await seedSettingsDocument(directories, { firstRun: false, source: 'db' }, { auditClean: false });
         let response = await invokeRoute(router, '/get', { directories });
         expect(JSON.parse(response.body.settings)).toEqual(filePayload);
@@ -617,7 +620,6 @@ describe('canonical settings route integration', () => {
             auditedAtMs: 3000,
         });
         setCanonicalEnv({ enabled: true, reads: true });
-        router = await loadSettingsRouter();
         response = await invokeRoute(router, '/get', { directories });
         expect(JSON.parse(response.body.settings)).toEqual(filePayload);
     });
@@ -629,8 +631,8 @@ describe('canonical settings route integration', () => {
 
         setCanonicalEnv({ enabled: true, shadowImport: true, reads: true, writes: true });
         const router = await loadSettingsRouter();
-        const { db } = await seedSettingsDocument(directories, { firstRun: false, v: 1 });
 
+        // First save lazily imports settings.json (rev 1) before the DB write.
         const firstSave = await invokeRoute(router, '/save', {
             directories,
             body: {
@@ -638,6 +640,12 @@ describe('canonical settings route integration', () => {
                 v: 2,
                 settings_revision: 1,
             },
+        });
+        const { canonicalSqliteManager } = await import('../src/canonical-sqlite.js');
+        const db = canonicalSqliteManager.open({
+            handle: 'alice',
+            directories,
+            featureFlags: { enabled: true, strict: false },
         });
         expect(firstSave.statusCode).toBe(200);
         expect(firstSave.body).toEqual(expect.objectContaining({
@@ -684,7 +692,14 @@ describe('canonical settings route integration', () => {
 
         setCanonicalEnv({ enabled: true, reads: true, writes: true });
         const router = await loadSettingsRouter();
-        const { db } = await seedSettingsDocument(directories, { firstRun: false, v: 1 });
+        // Initialize the slice backend (import + clean audit) before sabotage.
+        await invokeRoute(router, '/get', { directories });
+        const { canonicalSqliteManager } = await import('../src/canonical-sqlite.js');
+        const db = canonicalSqliteManager.open({
+            handle: 'alice',
+            directories,
+            featureFlags: { enabled: true, strict: false },
+        });
 
         // Make projection fail: replace settings.json path with a directory.
         const settingsPath = path.join(directories.root, SETTINGS_FILE);
@@ -717,7 +732,7 @@ describe('canonical settings route integration', () => {
         writeSettingsFile(directories, { firstRun: true });
         setCanonicalEnv({ enabled: true, reads: true, writes: true });
         const router = await loadSettingsRouter();
-        await seedSettingsDocument(directories, { firstRun: false, v: 1 });
+        // First canonical access lazily imports the file (rev 1); no seed needed.
 
         // A body field named revision must not act as optimistic concurrency token.
         const byDocumentRevision = await invokeRoute(router, '/save', {
@@ -866,6 +881,9 @@ describe('canonical settings snapshots and rollback', () => {
         setCanonicalEnv({ enabled: true, reads: true, writes: true });
         const router = await loadSettingsRouter();
 
+        // Lazy init imports the file (rev 1) before we seed divergent state.
+        await invokeRoute(router, '/get', { directories });
+
         const { canonicalSqliteManager } = await import('../src/canonical-sqlite.js');
         const { persistCanonicalAuditStatus } = await import('../src/canonical-sqlite-shadow-import.js');
         const db = canonicalSqliteManager.open({
@@ -877,7 +895,7 @@ describe('canonical settings snapshots and rollback', () => {
         upsertCanonicalSettingsDocument(db, {
             userId: 'alice',
             payload: { firstRun: false, v: 1 },
-            expectedRevision: 0,
+            expectedRevision: 1,
             nowMs: 2000,
         });
         persistCanonicalAuditStatus(db, {
@@ -906,10 +924,10 @@ describe('canonical settings snapshots and rollback', () => {
         upsertCanonicalSettingsDocument(db, {
             userId: 'alice',
             payload: { firstRun: false, v: 2 },
-            expectedRevision: 1,
+            expectedRevision: 2,
             nowMs: 4000,
         });
-        expect(getCanonicalSettingsRevision(db, { userId: 'alice' })).toBe(2);
+        expect(getCanonicalSettingsRevision(db, { userId: 'alice' })).toBe(3);
 
         const restore = await invokeRoute(router, '/restore-snapshot', {
             directories,
@@ -918,7 +936,7 @@ describe('canonical settings snapshots and rollback', () => {
         expect(restore.statusCode).toBe(204);
         const restored = getCanonicalSettingsDocument(db, { userId: 'alice' });
         expect(restored.payload).toEqual({ firstRun: false, v: 1 });
-        expect(restored.revision).toBe(3); // new revision, not rewind
+        expect(restored.revision).toBe(4); // new revision, not rewind
         expect(JSON.parse(fs.readFileSync(path.join(directories.root, SETTINGS_FILE), 'utf8'))).toEqual({
             firstRun: false,
             v: 1,

@@ -15,6 +15,7 @@ import {
     runCanonicalSecretsShadowImport,
 } from './canonical-secrets-shadow-import.js';
 import { getCanonicalStorageSlice } from './canonical-storage-slice-registry.js';
+import { decideCanonicalBackendInitAction } from './canonical-backend.js';
 import {
     listOpenSecretProjectionRepairs,
     recordSecretProjectionRepair,
@@ -26,6 +27,12 @@ function getHandle(directories) {
     return directories?.handle ?? path.basename(path.resolve(directories?.root ?? 'default-user'));
 }
 
+/**
+ * Secrets keeps its own synchronous initializer (SecretManager callers are
+ * synchronous), but follows the same audit-driven rules as the generic
+ * initializer: a completed clean audit is trusted, file-side stale marks heal
+ * via re-import, projection marks re-audit only, and real drift stays blocking.
+ */
 function initializeCanonicalSecrets(directories) {
     const featureFlags = getCanonicalStorageSlice('secrets').getFeatureFlags();
     if (!featureFlags.enabled) {
@@ -35,10 +42,16 @@ function initializeCanonicalSecrets(directories) {
     const stateKey = path.resolve(directories.root);
     const initialized = initializedBackends.get(stateKey);
     if (initialized) {
-        return {
-            ...initialized,
-            featureFlags,
-        };
+        const persistedAudit = getPersistedCanonicalAuditStatus(initialized.db, {
+            scope: CANONICAL_SECRETS_AUDIT_SCOPE,
+        });
+        if (decideCanonicalBackendInitAction(persistedAudit) === 'skip') {
+            return {
+                ...initialized,
+                featureFlags,
+            };
+        }
+        initializedBackends.delete(stateKey);
     }
 
     const handle = getHandle(directories);
@@ -69,12 +82,31 @@ function initializeCanonicalSecrets(directories) {
         };
     }
 
-    const importResult = runCanonicalSecretsShadowImport({
-        handle,
-        directories,
-        featureFlags,
-        manager: canonicalSqliteManager,
+    const persistedAudit = getPersistedCanonicalAuditStatus(db, {
+        scope: CANONICAL_SECRETS_AUDIT_SCOPE,
     });
+    const action = decideCanonicalBackendInitAction(persistedAudit);
+    if (action === 'skip') {
+        const state = {
+            ok: true,
+            db,
+            handle,
+            featureFlags,
+            migrationStatus,
+            auditResult: persistedAudit,
+        };
+        initializedBackends.set(stateKey, state);
+        return state;
+    }
+
+    const importResult = action === 'import'
+        ? runCanonicalSecretsShadowImport({
+            handle,
+            directories,
+            featureFlags,
+            manager: canonicalSqliteManager,
+        })
+        : null;
     const auditResult = auditCanonicalSecretsShadowImport({
         handle,
         directories,

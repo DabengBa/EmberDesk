@@ -19,6 +19,7 @@ import {
     invalidateCanonicalManagedMediaAudit,
     writeCanonicalManagedMedia,
 } from './canonical-managed-media-write-service.js';
+import { ensureCanonicalSliceBackend } from '../canonical-backend.js';
 
 const VALID_CATEGORIES = ['bgm', 'ambient', 'blip', 'live2d', 'vrm', 'character', 'temp'];
 
@@ -131,6 +132,7 @@ router.post('/get', async (request, response) => {
     let output = {};
 
     try {
+        await ensureCanonicalSliceBackend('managed_media', request.user.directories, getRequestHandle(request));
         const canonicalReadState = getCanonicalManagedMediaReadState({
             handle: getRequestHandle(request),
             directories: request.user.directories,
@@ -295,6 +297,7 @@ router.post('/download', async (request, response) => {
         // Move into asset place
         console.info('Download finished, moving file from', temp_path, 'to', file_path);
         const compatibilityPath = path.posix.join('assets', category, request.body.filename);
+        await ensureCanonicalSliceBackend('managed_media', request.user.directories, getRequestHandle(request));
         const canonicalResult = await writeCanonicalManagedMedia({
             handle: getRequestHandle(request),
             directories: request.user.directories,
@@ -358,6 +361,7 @@ router.post('/delete', async (request, response) => {
         }
 
         const compatibilityPath = path.posix.join('assets', category, request.body.filename);
+        await ensureCanonicalSliceBackend('managed_media', request.user.directories, getRequestHandle(request));
         const canonicalResult = await deleteCanonicalManagedMediaReference({
             handle: getRequestHandle(request),
             directories: request.user.directories,

@@ -61,14 +61,15 @@ import {
     calculateCharacterChatStats,
     getCharacterChatDirectory,
 } from './endpoints/character-file-snapshot.js';
-import { write as writeCharacterCard } from './character-card-parser.js';
+import { getCharaCardV2 } from './endpoints/character-card-v2.js';
+import { parse as parseCharacterCard, write as writeCharacterCard } from './character-card-parser.js';
 
 function createSnapshotBuilder() {
     return (avatar, directories) => buildCharacterFileSnapshotRow({
         avatar,
         directories,
-        readCharacterData: async filePath => fs.readFileSync(filePath, 'utf8'),
-        getCharaCardV2: jsonObject => jsonObject,
+        readCharacterData: filePath => parseCharacterCard(filePath, 'png'),
+        getCharaCardV2,
     });
 }
 

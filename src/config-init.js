@@ -132,6 +132,35 @@ const keyMigrationMap = [
     },
 ];
 
+const LEGACY_CANONICAL_SQLITE_FLAG_KEYS = ['enabled', 'shadowImport', 'reads', 'writes', 'chatStats', 'strict'];
+const LEGACY_CANONICAL_SQLITE_MANAGED_MEDIA_BLOCK = {
+    enabled: false,
+    shadowImport: false,
+    reads: false,
+    writes: false,
+    strict: false,
+};
+
+/**
+ * Returns true when the block matches the shipped rollout template where every
+ * gate was disabled, including the managedMedia slice example. Blocks that a
+ * user actually edited are left untouched.
+ * @param {unknown} block Value of features.storage.canonicalSqlite
+ * @returns {boolean}
+ */
+function isLegacyCanonicalSqliteBlock(block) {
+    if (block == null || typeof block !== 'object' || Array.isArray(block)) {
+        return false;
+    }
+    const { slices, ...rest } = block;
+    const expectedTopLevel = Object.fromEntries(LEGACY_CANONICAL_SQLITE_FLAG_KEYS.map(key => [key, false]));
+    if (!_.isEqual(rest, expectedTopLevel)) {
+        return false;
+    }
+    return slices === undefined
+        || _.isEqual(slices, { managedMedia: LEGACY_CANONICAL_SQLITE_MANAGED_MEDIA_BLOCK });
+}
+
 /**
  * Gets all keys from an object recursively.
  * @param {object} obj Object to get all keys from
@@ -206,6 +235,20 @@ export function addMissingConfigValues(configPath) {
                     newValue,
                 });
             }
+        }
+
+        // The canonical SQLite rollout block shipped disabled by default. An
+        // untouched copy of that template must not keep existing installs on
+        // the file-backed path now that canonical storage is the default
+        // authority; stripping it lets defaultsDeep apply the new values.
+        const canonicalSqliteBlock = _.get(config, 'features.storage.canonicalSqlite');
+        if (isLegacyCanonicalSqliteBlock(canonicalSqliteBlock)) {
+            _.unset(config, 'features.storage.canonicalSqlite');
+            migratedKeys.push({
+                oldKey: 'features.storage.canonicalSqlite',
+                newKey: 'features.storage.canonicalSqlite',
+                newValue: 'default-on template',
+            });
         }
 
         // Get all keys from the original config

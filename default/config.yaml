@@ -105,20 +105,17 @@ enableUserAccounts: true
 enableDiscreetLogin: false
 features:
   storage:
+    # Canonical per-user SQLite storage is the default authority. Shadow import
+    # and audit run lazily per user before DB-first reads/writes activate; a
+    # dirty audit keeps the compatibility files authoritative until repaired.
+    # Set enabled: false to force the file-backed fallback everywhere.
     canonicalSqlite:
-      enabled: false
-      shadowImport: false
-      reads: false
-      writes: false
-      chatStats: false
+      enabled: true
+      shadowImport: true
+      reads: true
+      writes: true
+      chatStats: true
       strict: false
-      slices:
-        managedMedia:
-          enabled: false
-          shadowImport: false
-          reads: false
-          writes: false
-          strict: false
   react:
     pages:
     panels:

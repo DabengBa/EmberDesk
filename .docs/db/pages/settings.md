@@ -66,10 +66,10 @@ Authenticated users complete supported settings work on `/settings` instead of w
 
 ## Canonical Settings Document Authority
 
-When the effective Settings storage flags enable reads/writes and the `settings` audit scope is
+Canonical SQLite storage is enabled by default for all slices. With the `settings` audit scope
 clean, the full settings JSON document is authoritative in per-user
 `storage/emberdesk.sqlite` (`settings_documents`) with a monotonic `revision`. Operators may keep
-the existing global storage flags or explicitly enable this settings slice; absent settings-slice
+the existing global storage flags or explicitly override this settings slice; absent settings-slice
 values retain the global behavior.
 
 - **Get**: `/api/settings/get` may include `settings_revision` when serving from canonical SQLite. The `settings` field remains a JSON string. Directory-derived payload fields (presets, world names, etc.) stay file/directory aggregates and are not part of the settings document.

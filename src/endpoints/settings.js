@@ -19,6 +19,7 @@ import {
 import { canonicalSqliteManager } from '../canonical-sqlite.js';
 import { runCanonicalMigrations } from '../canonical-sqlite-migrations.js';
 import { getPersistedCanonicalAuditStatus, invalidateCanonicalAuditStatus } from '../canonical-sqlite-shadow-import.js';
+import { ensureCanonicalSliceBackend } from '../canonical-backend.js';
 import { SETTINGS_AUDIT_SCOPE } from '../canonical-settings-shadow-import.js';
 import { getCanonicalStorageSlice } from '../canonical-storage-slice-registry.js';
 import {
@@ -188,7 +189,7 @@ function canReadCanonicalFeatureFlags() {
     return Object.keys(process.env).some(key => key.startsWith('EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_'));
 }
 
-function getCanonicalSettingsReadState(request) {
+async function getCanonicalSettingsReadState(request) {
     if (!canReadCanonicalFeatureFlags()) {
         return { ok: false, reason: 'canonical_flags_unavailable' };
     }
@@ -198,6 +199,8 @@ function getCanonicalSettingsReadState(request) {
     if (!featureFlags.enabled) {
         return { ok: false, reason: 'canonical_storage_disabled', featureFlags };
     }
+    // Populate the shadow import and persisted audit before consulting them.
+    await ensureCanonicalSliceBackend('settings', request.user.directories, getRequestHandle(request));
     if (!featureFlags.reads) {
         return { ok: false, reason: 'canonical_reads_disabled', featureFlags };
     }
@@ -264,7 +267,7 @@ function getCanonicalSettingsReadState(request) {
     };
 }
 
-function getCanonicalSettingsWriteState(request) {
+async function getCanonicalSettingsWriteState(request) {
     if (!canReadCanonicalFeatureFlags()) {
         return { ok: false, reason: 'canonical_flags_unavailable' };
     }
@@ -274,6 +277,7 @@ function getCanonicalSettingsWriteState(request) {
     if (!featureFlags.enabled) {
         return { ok: false, reason: 'canonical_storage_disabled', featureFlags };
     }
+    await ensureCanonicalSliceBackend('settings', request.user.directories, getRequestHandle(request));
     if (!featureFlags.writes) {
         return { ok: false, reason: 'canonical_writes_disabled', featureFlags };
     }
@@ -431,9 +435,9 @@ function invalidateSettingsAuditAfterFileWrite(request, operation) {
 
 export const router = express.Router();
 
-router.post('/save', function (request, response) {
+router.post('/save', async function (request, response) {
     try {
-        const writeState = getCanonicalSettingsWriteState(request);
+        const writeState = await getCanonicalSettingsWriteState(request);
         if (writeState.ok) {
             const handle = writeState.handle;
             const payload = stripSettingsRevisionFields(request.body);
@@ -516,7 +520,7 @@ router.post('/get', async (request, response) => {
     /** @type {number|undefined} */
     let settingsRevision;
     try {
-        const readState = getCanonicalSettingsReadState(request);
+        const readState = await getCanonicalSettingsReadState(request);
         if (readState.ok) {
             settings = readState.document.payloadJson;
             settingsRevision = readState.document.revision;
@@ -607,7 +611,7 @@ router.post('/get-snapshots', async (request, response) => {
 
         // Listing is a read operation: do not require the write gate (open repairs
         // or writes-off must not hide readable canonical snapshots).
-        const readState = getCanonicalSettingsReadState(request);
+        const readState = await getCanonicalSettingsReadState(request);
         if (readState.ok) {
             const dbSnaps = listSettingsSnapshots(readState.db, { userId: handle }).map(snap => ({
                 date: snap.createdAtMs,
@@ -636,7 +640,7 @@ router.post('/load-snapshot', getFileNameValidationFunction('name'), async (requ
 
         if (String(name).startsWith('canonical:')) {
             const snapshotId = String(name).slice('canonical:'.length);
-            const readState = getCanonicalSettingsReadState(request);
+            const readState = await getCanonicalSettingsReadState(request);
             if (!readState.ok) {
                 return response.sendStatus(404);
             }
@@ -667,7 +671,7 @@ router.post('/load-snapshot', getFileNameValidationFunction('name'), async (requ
 
 router.post('/make-snapshot', async (request, response) => {
     try {
-        const writeState = getCanonicalSettingsWriteState(request);
+        const writeState = await getCanonicalSettingsWriteState(request);
         if (writeState.ok) {
             createSettingsSnapshot(writeState.db, {
                 userId: writeState.handle,
@@ -703,7 +707,7 @@ router.post('/restore-snapshot', getFileNameValidationFunction('name'), async (r
         }
 
         if (String(name).startsWith('canonical:')) {
-            const writeState = getCanonicalSettingsWriteState(request);
+            const writeState = await getCanonicalSettingsWriteState(request);
             if (!writeState.ok) {
                 return response.status(409).send({
                     error: 'canonical_settings_restore_unavailable',
@@ -763,7 +767,7 @@ router.post('/restore-snapshot', getFileNameValidationFunction('name'), async (r
             return response.sendStatus(404);
         }
 
-        const writeState = getCanonicalSettingsWriteState(request);
+        const writeState = await getCanonicalSettingsWriteState(request);
         if (writeState.ok) {
             const content = fs.readFileSync(snapshotPath, 'utf8');
             let payload;

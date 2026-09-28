@@ -15,8 +15,8 @@ function getStorageFlagNames(supportsChatStats) {
         : BASE_STORAGE_FLAG_NAMES;
 }
 
-function getStorageFlag(flagName) {
-    return getConfigValue(`${STORAGE_FLAG_PREFIX}.${flagName}`, false, 'boolean');
+function getStorageFlag(flagName, defaultValue = true) {
+    return getConfigValue(`${STORAGE_FLAG_PREFIX}.${flagName}`, defaultValue, 'boolean');
 }
 
 export function getCanonicalSqliteFeatureFlags() {
@@ -27,7 +27,7 @@ export function getCanonicalSqliteFeatureFlags() {
         reads: enabled && getStorageFlag('reads'),
         writes: enabled && getStorageFlag('writes'),
         chatStats: enabled && getStorageFlag('chatStats'),
-        strict: enabled && getStorageFlag('strict'),
+        strict: enabled && getStorageFlag('strict', false),
     };
 }
 
@@ -254,6 +254,5 @@ export function getCanonicalStorageSliceFeatureFlagSnapshot(options) {
 export function getCanonicalManagedMediaFeatureFlags() {
     return getCanonicalStorageSliceFeatureFlagSnapshot({
         flagKey: 'managedMedia',
-        fallbackToGlobal: false,
     }).featureFlags;
 }

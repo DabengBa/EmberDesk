@@ -58,7 +58,7 @@ async function readCharactersFromFiles(directories, shallow, dependencies) {
     return (await Promise.all(processingPromises)).filter(character => character.name);
 }
 
-function getCanonicalReadState(handle, directories, dependencies) {
+async function getCanonicalReadState(handle, directories, dependencies) {
     const featureFlags = dependencies.getCanonicalSqliteFeatureFlags?.() ?? {
         enabled: false,
         reads: false,
@@ -73,6 +73,9 @@ function getCanonicalReadState(handle, directories, dependencies) {
             fallbackReason: 'canonical_storage_disabled',
         };
     }
+
+    // Run the per-user shadow import and audit so persisted audit status is fresh.
+    await dependencies.ensureCanonicalBackend?.(directories, handle);
 
     if (!featureFlags.reads) {
         return {
@@ -190,12 +193,19 @@ export async function readCharacterListPayload({
     pagination: _pagination,
     dependencies,
 }) {
-    const canonicalState = getCanonicalReadState(handle, directories, dependencies);
+    const canonicalState = await getCanonicalReadState(handle, directories, dependencies);
     if (canonicalState.enabled) {
         const data = await dependencies.listCanonicalCharacters(canonicalState.db, {
             useShallowPayload: shallow,
             includeChatStats: canonicalState.includeChatStats,
         });
+        if (!shallow) {
+            await dependencies.resolveCanonicalCharacterBooks?.(data, {
+                db: canonicalState.db,
+                directories,
+                handle,
+            });
+        }
 
         return wrapSnapshot(data, {
             interactionPath: 'characters_all:canonical',
@@ -234,7 +244,7 @@ export async function readCharacterSummaryPayload({
     pagination: _pagination,
     dependencies,
 }) {
-    const canonicalState = getCanonicalReadState(handle, directories, dependencies);
+    const canonicalState = await getCanonicalReadState(handle, directories, dependencies);
     if (canonicalState.enabled) {
         const data = await dependencies.listCanonicalCharacters(canonicalState.db, {
             useShallowPayload: true,
@@ -272,13 +282,18 @@ export async function readCharacterFullPayload({
     avatarUrl,
     dependencies,
 }) {
-    const canonicalState = getCanonicalReadState(handle, directories, dependencies);
+    const canonicalState = await getCanonicalReadState(handle, directories, dependencies);
     let fallbackReason = canonicalState.fallbackReason;
     if (canonicalState.enabled) {
         const data = await dependencies.getCanonicalCharacter(canonicalState.db, avatarUrl, {
             includeChatStats: canonicalState.includeChatStats,
         });
         if (data) {
+            await dependencies.resolveCanonicalCharacterBooks?.(data, {
+                db: canonicalState.db,
+                directories,
+                handle,
+            });
             return {
                 status: 'found',
                 result: { mode: 'snapshot', data },

@@ -70,7 +70,7 @@ Use Node.js 24.16.0 for server release proof by default. pnpm is the package man
 - `src/server-startup.js` owns HTTP/HTTPS server creation, IPv4/IPv6 behavior, SSL validation, and listen failures.
 - `src/command-line.js` owns config resolution. Keep argv parsing, filesystem prep, and config merge separable and testable.
 - `src/users.js` is a compatibility barrel plus middleware/routes. Storage, directories, migrations, and auth live in `src/user-storage.js`, `src/user-directories.js`, `src/user-migrations.js`, and `src/user-auth.js`.
-- Canonical user data is file-backed under `dataRoot`. `DiskCache` and `_cache/character-index.sqlite` are derived caches only.
+- Canonical user data lives in per-user `storage/emberdesk.sqlite` under `dataRoot`; PNG/JSON/JSONL compatibility files are projections and import/export surfaces, not runtime authority. `DiskCache` and `_cache/character-index.sqlite` are derived caches only.
 - `public/script.js` is the legacy browser shell and compatibility surface for not-yet-migrated surfaces. Treat `eventSource`, `event_types`, `globalThis.SillyTavern`, and startup ordering as shared contracts there. Migrated surfaces are owned by the TypeScript React app under `app/` (see ADR-0012).
 - `public/lib.js` is both source-import and bundled `/lib.js` compatibility boundary. Normalize package interop inside that file.
 

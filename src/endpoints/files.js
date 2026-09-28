@@ -12,6 +12,7 @@ import {
     invalidateCanonicalManagedMediaAudit,
     writeCanonicalManagedMedia,
 } from './canonical-managed-media-write-service.js';
+import { ensureCanonicalSliceBackend } from '../canonical-backend.js';
 
 export const router = express.Router();
 
@@ -59,6 +60,7 @@ router.post('/upload', async (request, response) => {
 
         const pathToUpload = path.join(request.user.directories.files, request.body.name);
         const url = clientRelativePath(request.user.directories.root, pathToUpload);
+        await ensureCanonicalSliceBackend('managed_media', request.user.directories, getRequestHandle(request));
         const canonicalResult = await writeCanonicalManagedMedia({
             handle: getRequestHandle(request),
             directories: request.user.directories,
@@ -100,6 +102,7 @@ router.post('/delete', async (request, response) => {
         }
 
         const compatibilityPath = clientRelativePath(request.user.directories.root, pathToDelete).split(path.sep).join(path.posix.sep);
+        await ensureCanonicalSliceBackend('managed_media', request.user.directories, getRequestHandle(request));
         const canonicalResult = await deleteCanonicalManagedMediaReference({
             handle: getRequestHandle(request),
             directories: request.user.directories,

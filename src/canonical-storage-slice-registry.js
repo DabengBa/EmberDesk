@@ -248,7 +248,6 @@ function createSecretsSlice() {
 function createManagedMediaSlice() {
     const flags = createSliceFlagCapabilities({
         flagKey: 'managedMedia',
-        fallbackToGlobal: false,
     });
     return {
         key: 'managed_media',

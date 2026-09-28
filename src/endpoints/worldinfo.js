@@ -13,6 +13,7 @@ import { runCanonicalMigrations } from '../canonical-sqlite-migrations.js';
 import { getPersistedCanonicalAuditStatus, invalidateCanonicalAuditStatus } from '../canonical-sqlite-shadow-import.js';
 import { WORLD_INFO_AUDIT_SCOPE } from '../canonical-world-info-shadow-import.js';
 import { getCanonicalStorageSlice } from '../canonical-storage-slice-registry.js';
+import { ensureCanonicalSliceBackend } from '../canonical-backend.js';
 import {
     getCanonicalWorldInfoBook,
     listCanonicalWorldInfoBooks,
@@ -26,12 +27,13 @@ function getRequestHandle(request) {
     return request.user?.profile?.handle ?? request.user?.handle ?? 'default-user';
 }
 
-function getCanonicalWorldInfoReadState(request) {
+async function getCanonicalWorldInfoReadState(request) {
     const worldInfoSlice = getCanonicalStorageSlice('world_info');
     const featureFlags = worldInfoSlice.getFeatureFlags();
     if (!featureFlags.enabled) {
         return { ok: false, reason: 'canonical_storage_disabled', featureFlags };
     }
+    await ensureCanonicalSliceBackend('world_info', request.user.directories, getRequestHandle(request));
     if (!featureFlags.reads) {
         return { ok: false, reason: 'canonical_reads_disabled', featureFlags };
     }
@@ -91,8 +93,8 @@ function getCanonicalWorldInfoReadState(request) {
     };
 }
 
-function getCanonicalWorldInfoWriteState(request) {
-    const readState = getCanonicalWorldInfoReadState(request);
+async function getCanonicalWorldInfoWriteState(request) {
+    const readState = await getCanonicalWorldInfoReadState(request);
     if (!readState.ok) {
         return readState;
     }
@@ -309,7 +311,7 @@ export const router = express.Router();
 
 router.post('/list', async (request, response) => {
     try {
-        const canonicalReadState = getCanonicalWorldInfoReadState(request);
+        const canonicalReadState = await getCanonicalWorldInfoReadState(request);
         if (canonicalReadState.ok) {
             return response.send(listCanonicalWorldInfoBooks(canonicalReadState.db));
         }
@@ -344,12 +346,12 @@ router.post('/list', async (request, response) => {
     }
 });
 
-router.post('/get', (request, response) => {
+router.post('/get', async (request, response) => {
     if (!request.body?.name) {
         return response.sendStatus(400);
     }
 
-    const canonicalReadState = getCanonicalWorldInfoReadState(request);
+    const canonicalReadState = await getCanonicalWorldInfoReadState(request);
     if (canonicalReadState.ok) {
         const canonicalBook = getCanonicalWorldInfoBook(canonicalReadState.db, request.body.name);
         if (canonicalBook) {
@@ -401,7 +403,7 @@ router.post('/delete-preflight', (request, response) => {
     }
 });
 
-router.post('/delete', (request, response) => {
+router.post('/delete', async (request, response) => {
     if (!request.body?.name) {
         return response.sendStatus(400);
     }
@@ -410,7 +412,7 @@ router.post('/delete', (request, response) => {
     const filename = sanitize(`${worldInfoName}.json`);
     const pathToWorldInfo = path.join(request.user.directories.worlds, filename);
 
-    const canonicalWriteState = getCanonicalWorldInfoWriteState(request);
+    const canonicalWriteState = await getCanonicalWorldInfoWriteState(request);
     if (canonicalWriteState.ok) {
         markCanonicalWorldInfoBookDeleted(canonicalWriteState.db, {
             name: worldInfoName,
@@ -446,7 +448,7 @@ router.post('/delete', (request, response) => {
     return response.sendStatus(200);
 });
 
-router.post('/import', (request, response) => {
+router.post('/import', async (request, response) => {
     if (!request.file) return response.sendStatus(400);
 
     const filename = `${path.parse(sanitize(request.file.originalname)).name}.json`;
@@ -477,7 +479,7 @@ router.post('/import', (request, response) => {
         return response.status(400).send('World file must have a name');
     }
 
-    const canonicalWriteState = getCanonicalWorldInfoWriteState(request);
+    const canonicalWriteState = await getCanonicalWorldInfoWriteState(request);
     if (canonicalWriteState.ok) {
         const payload = JSON.parse(fileContents);
         upsertCanonicalWorldInfoBook(canonicalWriteState.db, {
@@ -507,7 +509,7 @@ router.post('/import', (request, response) => {
     return response.send({ name: worldName });
 });
 
-router.post('/edit', (request, response) => {
+router.post('/edit', async (request, response) => {
     if (!request.body) {
         return response.sendStatus(400);
     }
@@ -532,7 +534,7 @@ router.post('/edit', (request, response) => {
     const filename = `${worldName}.json`;
     const pathToFile = path.join(request.user.directories.worlds, filename);
 
-    const canonicalWriteState = getCanonicalWorldInfoWriteState(request);
+    const canonicalWriteState = await getCanonicalWorldInfoWriteState(request);
     if (canonicalWriteState.ok) {
         upsertCanonicalWorldInfoBook(canonicalWriteState.db, {
             name: worldName,
