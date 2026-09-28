@@ -30,7 +30,7 @@ describe('retired legacy background and expressions surfaces', () => {
         const script = read('public/script.js');
         const powerUser = read('public/scripts/power-user.js');
         const slashCommands = read('public/scripts/slash-commands.js');
-        const extensions = read('public/scripts/extensions.js');
+        const extensions = read('public/scripts/feature-settings.js');
         const index = read('public/index.html');
 
         expect(script).not.toMatch(/backgroundLibrary|background-domain|backgrounds\.js|openBackgrounds|initBackgrounds|deferredBackgroundTask/);
@@ -58,7 +58,7 @@ describe('retired legacy background and expressions surfaces', () => {
             'public/script.js',
             'public/scripts/power-user.js',
             'public/scripts/slash-commands.js',
-            'public/scripts/extensions.js',
+            'public/scripts/feature-settings.js',
             'public/index.html',
         ];
 

@@ -1,11 +1,11 @@
 /**
- * First-party survivors of the retired third-party extension system.
+ * First-party feature runtime support.
  *
- * What remains here is NOT extension machinery: `extension_settings` is a
- * feature data bag, the template helpers render built-in feature templates,
- * and `writeExtensionField*` maintains `data.extensions.*` character-card
- * metadata. The manifest pipeline, extension management UI, Extras API host
- * session, and deferred loader were removed with the retirement batches.
+ * `feature_settings` is the settings.json data bag shared by built-in
+ * features (note/regex/connection-manager/variables). The template helpers
+ * render built-in feature templates from public/scripts/extensions/, and
+ * `writeExtensionField*` maintains `data.extensions.*` character-card
+ * metadata (spec-v2 card field, unrelated to the retired extension system).
  */
 
 import { getRequestHeaders } from './request-context.js';
@@ -53,10 +53,10 @@ export function saveMetadataDebounced() {
  * @param {object} templateData Additional data to pass to the template
  * @returns {string} Rendered HTML
  *
- * @deprecated Use renderExtensionTemplateAsync instead.
+ * @deprecated Use renderFeatureTemplateAsync instead.
  */
-export function renderExtensionTemplate(extensionName, templateId, templateData = {}, sanitize = true, localize = true) {
-    return renderTemplate(`scripts/extensions/${extensionName}/${templateId}.html`, templateData, sanitize, localize, true);
+export function renderFeatureTemplate(featureName, templateId, templateData = {}, sanitize = true, localize = true) {
+    return renderTemplate(`scripts/extensions/${featureName}/${templateId}.html`, templateData, sanitize, localize, true);
 }
 
 /**
@@ -67,15 +67,15 @@ export function renderExtensionTemplate(extensionName, templateId, templateData 
  * @param {object} templateData Additional data to pass to the template
  * @returns {Promise<string>} Rendered HTML
  */
-export async function renderExtensionTemplateAsync(extensionName, templateId, templateData = {}, sanitize = true, localize = true) {
-    return renderTemplateAsync(`scripts/extensions/${extensionName}/${templateId}.html`, templateData, sanitize, localize, true);
+export async function renderFeatureTemplateAsync(featureName, templateId, templateData = {}, sanitize = true, localize = true) {
+    return renderTemplateAsync(`scripts/extensions/${featureName}/${templateId}.html`, templateData, sanitize, localize, true);
 }
 
 /**
- * Feature data bag persisted inside settings.json under `extension_settings`.
+ * Feature data bag persisted inside settings.json under `feature_settings`.
  * Only keys owned by surviving first-party features are kept here.
  */
-export const extension_settings = {
+export const feature_settings = {
     note: {
         default: '',
         chara: [],
@@ -291,12 +291,11 @@ function initCoreFeatureOnce(key, loader) {
 }
 
 /**
- * Initializes the built-in features that were previously activated through the
- * extension manifest pipeline. These are fixed product features, not
+ * Initializes the built-in features. These are fixed product features, not
  * user-installable extensions; third-party extension loading has been removed.
  * @returns {Promise<void>}
  */
-export async function initCoreFeatureExtensions() {
+export async function initCoreFeatures() {
     await Promise.all([
         initCoreFeatureOnce('connection-manager', async () => {
             const { init } = await import('./extensions/connection-manager/index.js');

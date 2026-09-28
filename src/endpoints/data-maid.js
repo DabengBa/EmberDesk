@@ -271,15 +271,18 @@ export class DataMaidService {
                 try {
                     const settingsContent = await fs.promises.readFile(pathToSettings, 'utf-8');
                     const settings = tryParse(settingsContent);
-                    if (Array.isArray(settings?.extension_settings?.attachments)) {
-                        for (const file of settings.extension_settings.attachments) {
+                    // feature_settings replaced extension_settings; the old key
+                    // remains in settings.json files not yet saved post-upgrade.
+                    const featureSettings = settings?.feature_settings ?? settings?.extension_settings;
+                    if (Array.isArray(featureSettings?.attachments)) {
+                        for (const file of featureSettings.attachments) {
                             if (file?.url) {
                                 knownFiles.add(file.url);
                             }
                         }
                     }
-                    if (typeof settings?.extension_settings?.character_attachments === 'object') {
-                        for (const files of Object.values(settings.extension_settings.character_attachments)) {
+                    if (typeof featureSettings?.character_attachments === 'object') {
+                        for (const files of Object.values(featureSettings.character_attachments)) {
                             if (!Array.isArray(files)) {
                                 continue;
                             }

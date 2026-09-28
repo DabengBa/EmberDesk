@@ -239,7 +239,7 @@ export async function renameCharacter(name = null, { silent = false, renameChats
             }
 
             // Char-bound Author's Notes
-            const charNote = state.extension_settings.note.chara?.find(x => x.name == oldName);
+            const charNote = state.feature_settings.note.chara?.find(x => x.name == oldName);
             if (charNote) {
                 charNote.name = newName;
                 saveSettingsDebounced();

@@ -8,7 +8,7 @@ describe('resolveStartupSettingsPlan', () => {
             data: {
                 settings: JSON.stringify({
                     currentVersion: '1.0.0',
-                    extension_settings: {
+                    feature_settings: {
                         apiUrl: 'http://localhost:5100',
                     },
                     firstRun: false,

@@ -216,7 +216,7 @@ describe('settings React route flag', () => {
         expect(helperModule.settingsCoverage.reactOwned.advanced).toContain('power_user.auto_swipe');
         expect(helperModule.settingsCoverage.reactOwned.advanced).toContain('power_user.stscript.autocomplete.state');
         expect(helperModule.settingsCoverage.legacyOwned).toContain('world_info_settings');
-        expect(helperModule.settingsCoverage.legacyOwned).toContain('extension_settings');
+        expect(helperModule.settingsCoverage.legacyOwned).toContain('feature_settings');
         expect(helperModule.settingsCoverage.legacyOwned).toContain('preset_settings');
         expect(helperModule.getFieldErrorMessage([{ message: 'Theme 不能为空' }])).toBe('Theme 不能为空');
         expect(helperModule.getFieldErrorMessage(['Context 必须大于 0'])).toBe('Context 必须大于 0');
@@ -524,12 +524,12 @@ describe('settings React route flag', () => {
         await expect(helperModule.saveSettingsToRuntime({
                 oai_settings: { temp_openai: 0.37 },
                 power_user: { fast_ui_mode: false },
-                extension_settings: { stale: false },
+                feature_settings: { stale: false },
             }, runtime)).resolves.toBe(true);
         expect(savedSettings).toEqual([{
             oai_settings: { temp_openai: 0.37 },
             power_user: { fast_ui_mode: false },
-            extension_settings: { stale: false },
+            feature_settings: { stale: false },
         }]);
         expect(routeSource).toContain('await saveSettingsToRuntime(payload, runtime);');
     });
@@ -561,7 +561,7 @@ describe('settings React route flag', () => {
         expect(helperModule.settingsOwnerInventory.drawers.advancedFormatting).toBe('#AdvancedFormatting');
         expect(helperModule.settingsOwnerInventory.specializedSurfaces).toEqual(expect.arrayContaining([
             'world_info_settings',
-            'extension_settings',
+            'feature_settings',
             'power_user.personas',
             'tags',
             'tag_map',
@@ -591,7 +591,7 @@ describe('settings React route flag', () => {
             unknown_root: 'preserve-me',
             preset_settings: 'LegacyTextGenPreset',
             world_info_settings: { depth: 2 },
-            extension_settings: { disabled: [] },
+            feature_settings: { disabled: [] },
             oai_settings: {
                 chat_completion_source: 'openai',
                 reasoning_effort: 'xhigh',
@@ -653,7 +653,7 @@ describe('settings React route flag', () => {
         expect(saved.unknown_root).toBe('preserve-me');
         expect(saved.preset_settings).toBe('LegacyTextGenPreset');
         expect(saved.world_info_settings).toEqual({ depth: 2 });
-        expect(saved.extension_settings).toEqual({ disabled: [] });
+        expect(saved.feature_settings).toEqual({ disabled: [] });
         expect(saved.tags).toEqual([{ id: 1 }]);
         expect(saved.tag_map).toEqual({ a: ['b'] });
         expect(saved.oai_settings.tool_reasoning_mode).toBe('active_chain');
@@ -808,7 +808,7 @@ describe('settings React route flag', () => {
             oai_settings: {
                 chat_completion_source: 'openai',
             },
-            extension_settings: {
+            feature_settings: {
                 connectionManager: {
                     selectedProfile: 'profile-1',
                     profiles: [
@@ -825,14 +825,14 @@ describe('settings React route flag', () => {
         const next = structuredClone(defaults);
         next.providers.connectionProfileId = 'profile-2';
         const saved = helperModule.buildSettingsSavePayload(fixture, next);
-        expect(saved.extension_settings.connectionManager.selectedProfile).toBe('profile-2');
-        expect(saved.extension_settings.connectionManager.profiles).toEqual([
+        expect(saved.feature_settings.connectionManager.selectedProfile).toBe('profile-2');
+        expect(saved.feature_settings.connectionManager.profiles).toEqual([
             { id: 'profile-1', name: 'Home' },
             { id: 'profile-2', name: 'Work' },
         ]);
         expect(JSON.stringify(saved)).not.toContain('BEGIN PRIVATE KEY');
         expect(JSON.stringify(saved)).not.toContain('vertexai_service_account_json');
-        expect(helperModule.settingsCoverage.reactOwned.providers).toContain('extension_settings.connectionManager.selectedProfile');
+        expect(helperModule.settingsCoverage.reactOwned.providers).toContain('feature_settings.connectionManager.selectedProfile');
     });
 
     test('offers named connection profiles plus a safe stale selection and defers profile application to the workspace', async () => {
@@ -841,7 +841,7 @@ describe('settings React route flag', () => {
         const connectionManagerSource = fs.readFileSync(path.join(repoRoot, 'public', 'scripts', 'extensions', 'connection-manager', 'index.js'), 'utf8');
         const helperModule = await import(`../app/lib/settings-helpers.js?settingsProfiles=${Date.now()}-${Math.random()}`);
         const options = helperModule.getConnectionProfileOptions({
-            extension_settings: {
+            feature_settings: {
                 connectionManager: {
                     selectedProfile: 'removed-profile',
                     profiles: [

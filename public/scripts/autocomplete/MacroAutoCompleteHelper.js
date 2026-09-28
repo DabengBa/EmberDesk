@@ -27,7 +27,7 @@ import { MacroParser } from '../macros/engine/MacroParser.js';
 import { MacroCstWalker } from '../macros/engine/MacroCstWalker.js';
 import { onboardingExperimentalMacroEngine } from '../macros/engine/MacroDiagnostics.js';
 import { chat_metadata } from '/script.js';
-import { extension_settings } from '../extensions.js';
+import { feature_settings } from '../feature-settings.js';
 
 /** @typedef {import('./EnhancedMacroAutoCompleteOption.js').MacroAutoCompleteContext} MacroAutoCompleteContext */
 /** @typedef {import('./EnhancedMacroAutoCompleteOption.js').EnhancedMacroAutoCompleteOptions} EnhancedMacroAutoCompleteOptions */
@@ -880,14 +880,14 @@ export function findMacroAtCursor(text, cursorPos) {
  */
 export function getVariableNames(scope) {
     try {
-        // Import chat_metadata and extension_settings dynamically to avoid circular deps
+        // Import chat_metadata and feature_settings dynamically to avoid circular deps
         // These are the same sources used by commonEnumProviders.variables
         if (scope === 'local') {
             // Local variables are in chat_metadata.variables
             return Object.keys(chat_metadata?.variables ?? {});
         } else {
-            // Global variables are in extension_settings.variables.global
-            return Object.keys(extension_settings?.variables?.global ?? {});
+            // Global variables are in feature_settings.variables.global
+            return Object.keys(feature_settings?.variables?.global ?? {});
         }
     } catch {
         return [];

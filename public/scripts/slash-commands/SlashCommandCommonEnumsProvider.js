@@ -1,5 +1,5 @@
 import { chat_metadata, characters, substituteParams, chat, extension_prompt_roles, extension_prompt_types, name2, neutralCharacterName } from '../../script.js';
-import { extension_settings } from '../extensions.js';
+import { feature_settings } from '../feature-settings.js';
 import { power_user } from '../power-user.js';
 import { searchCharByName, getTagsList, tags, tag_map } from '../tags.js';
 import { onlyUniqueJson, sortIgnoreCaseAndAccents } from '../utils.js';
@@ -152,7 +152,7 @@ export const commonEnumProviders = {
         return [
             ...isAll || types.includes('scope') ? scope.allVariableNames.map(name => new SlashCommandEnumValue(name, null, enumTypes.variable, enumIcons.scopeVariable)) : [],
             ...isAll || types.includes('local') ? Object.keys(chat_metadata.variables ?? []).map(name => new SlashCommandEnumValue(name, null, enumTypes.name, enumIcons.localVariable)) : [],
-            ...isAll || types.includes('global') ? Object.keys(extension_settings.variables.global ?? []).map(name => new SlashCommandEnumValue(name, null, enumTypes.macro, enumIcons.globalVariable)) : [],
+            ...isAll || types.includes('global') ? Object.keys(feature_settings.variables.global ?? []).map(name => new SlashCommandEnumValue(name, null, enumTypes.macro, enumIcons.globalVariable)) : [],
         ].filter((item, idx, list) => idx == list.findIndex(it => it.value == item.value));
     },
 
@@ -330,7 +330,7 @@ export const commonEnumProviders = {
 
     connectionProfiles: ({ includeNone = false } = {}) => () => [
         ...includeNone ? [new SlashCommandEnumValue('<None>')] : [],
-        ...extension_settings.connectionManager.profiles.map(p => new SlashCommandEnumValue(p.name, null, enumTypes.name, enumIcons.server)),
+        ...feature_settings.connectionManager.profiles.map(p => new SlashCommandEnumValue(p.name, null, enumTypes.name, enumIcons.server)),
     ],
 };
 

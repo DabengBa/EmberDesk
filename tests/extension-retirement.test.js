@@ -34,19 +34,19 @@ describe('third-party extension retirement (E-cut-1)', () => {
     });
 
     test('built-in features init directly instead of through the extension manifest pipeline', () => {
-        const extensionsSource = readRepoFile('public/scripts/extensions.js');
-        expect(extensionsSource).toContain('export async function initCoreFeatureExtensions()');
+        const extensionsSource = readRepoFile('public/scripts/feature-settings.js');
+        expect(extensionsSource).toContain('export async function initCoreFeatures()');
         expect(extensionsSource).toContain("import('./extensions/connection-manager/index.js')");
         expect(extensionsSource).toContain("import('./extensions/regex/index.js')");
 
         const scriptSource = readPublicFile('script.js');
-        expect(scriptSource).toContain('initCoreFeatureExtensions');
+        expect(scriptSource).toContain('initCoreFeatures');
         expect(scriptSource).not.toContain('loadExtensionSettings');
         expect(scriptSource).not.toContain('doDailyExtensionUpdatesCheck');
     });
 
     test('core feature init is retry-safe: successful inits are cached and only failures re-run', () => {
-        const extensionsSource = readRepoFile('public/scripts/extensions.js');
+        const extensionsSource = readRepoFile('public/scripts/feature-settings.js');
         expect(extensionsSource).toContain('coreFeatureInitPromises');
         expect(extensionsSource).toContain('initCoreFeatureOnce');
         expect(extensionsSource).toContain('coreFeatureInitPromises.delete(key)');
@@ -67,7 +67,7 @@ describe('third-party extension retirement (E-cut-1)', () => {
     });
 
     test('wand extension menu artifacts are removed', () => {
-        const extensionsSource = readRepoFile('public/scripts/extensions.js');
+        const extensionsSource = readRepoFile('public/scripts/feature-settings.js');
         expect(extensionsSource).not.toContain('addExtensionsButtonAndMenu');
         expect(extensionsSource).not.toContain('showHideExtensionsMenu');
         expect(extensionsSource).not.toContain("$('#extensionsMenuButton')");
@@ -165,5 +165,52 @@ describe('third-party extension retirement (E-cut-3)', () => {
         const migrationsSource = readRepoFile('src/user-migrations.js');
         expect(migrationsSource).not.toContain('userDirectories.extensions');
         expect(migrationsSource).not.toContain('extensions/third-party');
+    });
+});
+
+describe('third-party extension retirement (E-cut-2)', () => {
+    test('extensions.js is gone; first-party survivors live in feature-settings.js', () => {
+        expect(fs.existsSync(path.join(repoRoot, 'public', 'scripts', 'extensions.js'))).toBe(false);
+
+        const featureSource = readRepoFile('public/scripts/feature-settings.js');
+        expect(featureSource).toContain('export const feature_settings');
+        expect(featureSource).toContain('export async function initCoreFeatures()');
+        expect(featureSource).toContain("import('./extensions/connection-manager/index.js')");
+        expect(featureSource).toContain("import('./extensions/regex/index.js')");
+        expect(featureSource).toContain('export async function writeExtensionField(');
+        expect(featureSource).toContain('export async function writeExtensionFieldBulk(');
+        expect(featureSource).toContain('export function saveMetadataDebounced()');
+        expect(featureSource).not.toContain('manifest.json');
+        expect(featureSource).not.toContain('/api/extensions/');
+    });
+
+    test('settings payload writes feature_settings and lazily migrates extension_settings', () => {
+        const scriptSource = readPublicFile('script.js');
+        expect(scriptSource).toContain('feature_settings: feature_settings');
+        expect(scriptSource).toContain('settings.feature_settings ?? settings.extension_settings');
+
+        const settingsSource = readRepoFile('src/endpoints/settings.js');
+        expect(settingsSource).toContain('parsedSettings.feature_settings = parsedSettings.extension_settings');
+        expect(settingsSource).toContain('delete parsedSettings.extension_settings');
+
+        const dataMaidSource = readRepoFile('src/endpoints/data-maid.js');
+        expect(dataMaidSource).toContain('settings?.feature_settings ?? settings?.extension_settings');
+    });
+
+    test('no consumer keeps the retired extension_settings name or disabledExtensions gate', () => {
+        for (const file of [
+            'public/scripts/feature-settings.js',
+            'public/scripts/st-context.js',
+            'public/scripts/variables.js',
+            'public/scripts/extensions/regex/index.js',
+            'public/scripts/extensions/regex/engine.js',
+            'public/scripts/extensions/connection-manager/index.js',
+            'public/scripts/extensions/shared.js',
+        ]) {
+            const source = readRepoFile(file);
+            expect(source).not.toContain('extension_settings');
+            expect(source).not.toContain('extensionSettings');
+            expect(source).not.toContain('disabledExtensions');
+        }
     });
 });

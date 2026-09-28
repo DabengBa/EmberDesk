@@ -363,12 +363,12 @@ const fieldBindings = [
     {
         tab: 'providers',
         formPath: 'providers.connectionProfileId',
-        settingsPath: 'extension_settings.connectionManager.selectedProfile',
+        settingsPath: 'feature_settings.connectionManager.selectedProfile',
         toForm: (value) => (value == null ? '' : String(value)),
         toFormWhenMissing: true,
         toSettings: (value, _formValues, baseSettings) => {
             const normalized = value == null ? '' : String(value);
-            const hasConnectionManager = getValueAtPath(baseSettings, 'extension_settings.connectionManager') !== undefined;
+            const hasConnectionManager = getValueAtPath(baseSettings, 'feature_settings.connectionManager') !== undefined;
             if (!normalized && !hasConnectionManager) {
                 return undefined;
             }
@@ -534,7 +534,7 @@ export const settingsOwnerInventory = {
     },
     specializedSurfaces: [
         'world_info_settings',
-        'extension_settings',
+        'feature_settings',
         'power_user.personas',
         'power_user.persona_description',
         'power_user.persona_descriptions',
@@ -573,7 +573,7 @@ export const settingsCoverage = {
         'max_context',
         'amount_gen',
         'world_info_settings',
-        'extension_settings',
+        'feature_settings',
         // Complex managers / runtime-only / persona surfaces
         'oai_settings.prompts',
         'oai_settings.prompt_order',
@@ -676,8 +676,8 @@ export function buildSettingsFormDefaults(settings) {
 }
 
 export function getConnectionProfileOptions(settings) {
-    const profiles = getValueAtPath(settings, 'extension_settings.connectionManager.profiles', []);
-    const selectedProfile = getValueAtPath(settings, 'extension_settings.connectionManager.selectedProfile', null);
+    const profiles = getValueAtPath(settings, 'feature_settings.connectionManager.profiles', []);
+    const selectedProfile = getValueAtPath(settings, 'feature_settings.connectionManager.selectedProfile', null);
     const profileOptions = [];
     const profileIds = new Set();
 

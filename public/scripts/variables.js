@@ -1,5 +1,5 @@
 import { chat_metadata, getCurrentChatId, saveSettingsDebounced } from '../script.js';
-import { extension_settings, saveMetadataDebounced } from './extensions.js';
+import { feature_settings, saveMetadataDebounced } from './feature-settings.js';
 import { executeSlashCommandsWithOptions } from './slash-commands.js';
 import { SlashCommand } from './slash-commands/SlashCommand.js';
 import { SlashCommandAbortController } from './slash-commands/SlashCommandAbortController.js';
@@ -81,7 +81,7 @@ export function setLocalVariable(name, value, args = {}) {
 }
 
 export function getGlobalVariable(name, args = {}) {
-    let globalVariable = extension_settings.variables.global[args.key ?? name];
+    let globalVariable = feature_settings.variables.global[args.key ?? name];
     if (args.index !== undefined) {
         try {
             globalVariable = JSON.parse(globalVariable);
@@ -109,7 +109,7 @@ export function setGlobalVariable(name, value, args = {}) {
 
     if (args.index !== undefined) {
         try {
-            let globalVariable = JSON.parse(extension_settings.variables.global[name] ?? 'null');
+            let globalVariable = JSON.parse(feature_settings.variables.global[name] ?? 'null');
             const numIndex = Number(args.index);
             if (Number.isNaN(numIndex)) {
                 if (globalVariable === null) {
@@ -122,12 +122,12 @@ export function setGlobalVariable(name, value, args = {}) {
                 }
                 globalVariable[numIndex] = convertValueType(value, args.as);
             }
-            extension_settings.variables.global[name] = JSON.stringify(globalVariable);
+            feature_settings.variables.global[name] = JSON.stringify(globalVariable);
         } catch {
             // that didn't work
         }
     } else {
-        extension_settings.variables.global[name] = value;
+        feature_settings.variables.global[name] = value;
     }
     saveSettingsDebounced();
     return value;
@@ -274,7 +274,7 @@ async function listVariablesCallback(args) {
     const includeGlobalVariables = scope === 'all' || scope === 'global';
 
     const localVariables = includeLocalVariables ? Object.entries(chat_metadata.variables).map(([name, value]) => `${name}: ${value}`) : [];
-    const globalVariables = includeGlobalVariables ? Object.entries(extension_settings.variables.global).map(([name, value]) => `${name}: ${value}`) : [];
+    const globalVariables = includeGlobalVariables ? Object.entries(feature_settings.variables.global).map(([name, value]) => `${name}: ${value}`) : [];
 
     const buildTextValue = (_) => {
         const localVariablesString = localVariables.length > 0 ? localVariables.join('\n\n') : 'No local variables';
@@ -290,7 +290,7 @@ async function listVariablesCallback(args) {
 
     const jsonVariables = [
         ...Object.entries(chat_metadata.variables).map(x => ({ key: x[0], value: x[1], scope: 'local' })),
-        ...Object.entries(extension_settings.variables.global).map(x => ({ key: x[0], value: x[1], scope: 'global' })),
+        ...Object.entries(feature_settings.variables.global).map(x => ({ key: x[0], value: x[1], scope: 'global' })),
     ];
 
     return await slashCommandReturnHelper.doReturn(returnType ?? 'popup-html', jsonVariables, { objectToStringFunc: buildTextValue });
@@ -429,7 +429,7 @@ export function existsLocalVariable(name) {
  * @returns {boolean} True if the global variable exists, false otherwise
  */
 export function existsGlobalVariable(name) {
-    return extension_settings.variables.global && extension_settings.variables.global[name] !== undefined;
+    return feature_settings.variables.global && feature_settings.variables.global[name] !== undefined;
 }
 
 /**
@@ -611,7 +611,7 @@ export function deleteGlobalVariable(name) {
         return '';
     }
 
-    delete extension_settings.variables.global[name];
+    delete feature_settings.variables.global[name];
     saveSettingsDebounced();
     return '';
 }

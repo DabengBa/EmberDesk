@@ -137,9 +137,9 @@ import { debounce_timeout, IGNORE_SYMBOL, inject_ids, MEDIA_SOURCE, MEDIA_TYPE, 
 
 import {
     cancelDebouncedMetadataSave,
-    extension_settings,
-    initCoreFeatureExtensions,
-} from './scripts/extensions.js';
+    feature_settings,
+    initCoreFeatures,
+} from './scripts/feature-settings.js';
 import { COMMENT_NAME_DEFAULT, CONNECT_API_MAP, executeSlashCommandsOnChatInput, getMainChatSlashCommandAutoCompleteState, initDefaultSlashCommands, initSlashCommandAutoComplete, isExecutingCommandsFromChatInput, pauseScriptExecution, selectMainChatSlashCommandOption, setMainChatSlashCommandReactOwnerEnabled, stopScriptExecution, UNIQUE_APIS } from './scripts/slash-commands.js';
 import { initMacroAutoComplete } from './scripts/autocomplete/MacroAutoComplete.js';
 import { initFrontendFrameController } from './scripts/frontend-frame-controller.js';
@@ -448,7 +448,7 @@ const reactRuntimePort = createReactRuntimeProvider({
             const mappings = [
                 ['chatCompletionSettings', 'oai_settings'],
                 ['powerUserSettings', 'power_user'],
-                ['extensionSettings', 'extension_settings'],
+                ['featureSettings', 'feature_settings'],
             ];
 
             for (const [runtimeKey, settingsKey] of mappings) {
@@ -530,7 +530,7 @@ registerWorldInfoShellContext({
     regexPlacement: regex_placement,
     getExtensionContext: () => getContext(),
     get powerUserSettings() { return power_user; },
-    extensionSettings: extension_settings,
+    featureSettings: feature_settings,
     toastr,
     authorsNoteModuleName: NOTE_MODULE_NAME,
     authorsNoteMetadataKeys: metadata_keys,
@@ -559,7 +559,7 @@ registerGenerationShellContext({
         get power_user() { return power_user; },
         get oai_settings() { return oai_settings; },
         get openai_messages_count() { return openai_messages_count; },
-        get extension_settings() { return extension_settings; },
+        get feature_settings() { return feature_settings; },
         get itemizedPrompts() { return itemizedPrompts; },
         get secret_state() { return secret_state; },
         get persona_description_positions() { return persona_description_positions; },
@@ -800,7 +800,7 @@ registerCharacterLifecycleShellContext({
         get settingsReady() { return settingsReady; },
         get this_chid() { return this_chid; },
         get accountStorage() { return accountStorage; },
-        get extension_settings() { return extension_settings; },
+        get feature_settings() { return feature_settings; },
         get favsToHotswap() { return favsToHotswap; },
         get tag_map() { return tag_map; },
         get tags() { return tags; },
@@ -4266,7 +4266,7 @@ function configureDeferredStartupTasks() {
             await deferredVersionTask.ensure();
 
             await measureStartupStage('deferred.coreFeatureInit', async () => {
-                await initCoreFeatureExtensions();
+                await initCoreFeatures();
             });
         } catch (error) {
             toastr.error(
@@ -6166,7 +6166,7 @@ function addPersonaDescriptionExtensionPrompt() {
             ? `${power_user.persona_description}\n${originalAN}`
             : `${originalAN}\n${power_user.persona_description}`;
 
-        setExtensionPrompt(NOTE_MODULE_NAME, ANWithDesc, chat_metadata[metadata_keys.position] ?? extension_prompt_types.IN_CHAT, chat_metadata[metadata_keys.depth] ?? 4, extension_settings.note?.allowWIScan ?? false, chat_metadata[metadata_keys.role] ?? extension_prompt_roles.SYSTEM);
+        setExtensionPrompt(NOTE_MODULE_NAME, ANWithDesc, chat_metadata[metadata_keys.position] ?? extension_prompt_types.IN_CHAT, chat_metadata[metadata_keys.depth] ?? 4, feature_settings.note?.allowWIScan ?? false, chat_metadata[metadata_keys.role] ?? extension_prompt_roles.SYSTEM);
     }
 
     if (power_user.persona_description_position === persona_description_positions.AT_DEPTH) {
@@ -8012,7 +8012,9 @@ async function applyStartupSettingsCore(data, initLoaderHandle = null) {
         // power_user.experimental_macro_engine
         initMacros();
 
-        Object.assign(extension_settings, (settings.extension_settings ?? {}));
+        // Lazy migration: feature_settings replaced extension_settings; the old
+        // key is accepted on load and simply not written back on next save.
+        Object.assign(feature_settings, (settings.feature_settings ?? settings.extension_settings ?? {}));
 
         firstRun = !!settings.firstRun;
 
@@ -8083,7 +8085,7 @@ export async function saveSettings(loopCounter = 0) {
         world_info_settings: getWorldInfoSettings(),
         swipes: swipes,
         power_user: power_user,
-        extension_settings: extension_settings,
+        feature_settings: feature_settings,
         tags: tags,
         tag_map: tag_map,
         oai_settings: oai_settings,

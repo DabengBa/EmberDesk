@@ -136,7 +136,7 @@ describe('canonical settings store', () => {
                 persona_descriptions: { Me: 'hello' },
                 custom_unknown: { nested: true, arr: [1, 2] },
             },
-            extension_settings: {
+            feature_settings: {
                 third_party: { enabled: true, secret_ish: 'not-a-secret-store' },
             },
             background: { name: 'bg.png', url: '/bg.png' },
@@ -254,7 +254,7 @@ describe('canonical settings store', () => {
         const payload = {
             firstRun: false,
             power_user: { personas: { default: 'Me' }, mystery: 42 },
-            extension_settings: { demo: { on: true } },
+            feature_settings: { demo: { on: true } },
             background: { name: 'x.png' },
         };
         writeSettingsFile(directories, payload);
@@ -574,7 +574,7 @@ describe('canonical settings route integration', () => {
         const canonicalPayload = {
             firstRun: false,
             power_user: { personas: { default: 'DB' }, persona_descriptions: { DB: 'hi' } },
-            extension_settings: { demo: { on: true } },
+            feature_settings: { demo: { on: true } },
             background: { name: 'bg.png' },
             oai_settings: { stream_openai: false },
             mystery: 9,

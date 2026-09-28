@@ -696,7 +696,7 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
     const depthPromptText = charDepthPrompt || '';
     const depthPromptDepth = state.characters[state.this_chid]?.data?.extensions?.depth_prompt?.depth ?? state.depth_prompt_depth_default;
     const depthPromptRole = getExtensionPromptRoleByName(state.characters[state.this_chid]?.data?.extensions?.depth_prompt?.role ?? state.depth_prompt_role_default);
-    setExtensionPrompt(inject_ids.DEPTH_PROMPT, depthPromptText, state.extension_prompt_types.IN_CHAT, depthPromptDepth, state.extension_settings.note?.allowWIScan, depthPromptRole);
+    setExtensionPrompt(inject_ids.DEPTH_PROMPT, depthPromptText, state.extension_prompt_types.IN_CHAT, depthPromptDepth, state.feature_settings.note?.allowWIScan, depthPromptRole);
 
     // First message in fresh 1-on-1 chat reacts to user/character settings changes
     if (state.chat.length) {

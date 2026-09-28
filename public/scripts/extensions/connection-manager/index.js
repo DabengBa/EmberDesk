@@ -2,7 +2,7 @@ import { DOMPurify, Fuse } from '../../../lib.js';
 
 import { activateSendButtons, deactivateSendButtons, main_api, online_status, saveSettingsDebounced } from '../../../script.js';
 import { eventSource, event_types } from '../../events.js';
-import { extension_settings, getContext, renderExtensionTemplateAsync } from '../../extensions.js';
+import { feature_settings, getContext, renderFeatureTemplateAsync } from '../../feature-settings.js';
 import { callGenericPopup, Popup, POPUP_RESULT, POPUP_TYPE } from '../../popup.js';
 import { SlashCommand } from '../../slash-commands/SlashCommand.js';
 import { SlashCommandAbortController } from '../../slash-commands/SlashCommandAbortController.js';
@@ -151,7 +151,7 @@ function getNamedArguments(args = {}) {
 /** @type {() => SlashCommandEnumValue[]} */
 const profilesProvider = () => [
     new SlashCommandEnumValue(NONE),
-    ...extension_settings.connectionManager.profiles.map(p => new SlashCommandEnumValue(p.name, null, enumTypes.name, enumIcons.server)),
+    ...feature_settings.connectionManager.profiles.map(p => new SlashCommandEnumValue(p.name, null, enumTypes.name, enumIcons.server)),
 ];
 
 /**
@@ -183,14 +183,14 @@ const profilesProvider = () => [
  */
 function findProfileByName(value) {
     // Try to find exact match
-    const profile = extension_settings.connectionManager.profiles.find(p => p.name === value);
+    const profile = feature_settings.connectionManager.profiles.find(p => p.name === value);
 
     if (profile) {
         return profile;
     }
 
     // Try to find fuzzy match
-    const fuse = new Fuse(extension_settings.connectionManager.profiles, { keys: ['name'] });
+    const fuse = new Fuse(feature_settings.connectionManager.profiles, { keys: ['name'] });
     const results = fuse.search(value);
 
     if (results.length === 0) {
@@ -263,7 +263,7 @@ async function createConnectionProfile(forceName = null) {
     await readProfileFromCommands(mode, profile);
 
     const profileForDisplay = makeFancyProfile(profile);
-    const template = $(await renderExtensionTemplateAsync(MODULE_NAME, 'profile', { profile: profileForDisplay }));
+    const template = $(await renderFeatureTemplateAsync(MODULE_NAME, 'profile', { profile: profileForDisplay }));
     template.find('input[name="exclude"]').on('input', function () {
         const fancyName = String($(this).val());
         const keyName = Object.entries(FANCY_NAMES).find(x => x[1] === fancyName)?.[0];
@@ -284,7 +284,7 @@ async function createConnectionProfile(forceName = null) {
             if (index !== -1) profile.exclude.splice(index, 1);
         }
     });
-    const isNameTaken = (n) => extension_settings.connectionManager.profiles.some(p => p.name === n);
+    const isNameTaken = (n) => feature_settings.connectionManager.profiles.some(p => p.name === n);
     const suggestedName = getUniqueName(collapseSpaces(`${profile.api ?? ''} ${profile.model ?? ''} - ${profile.preset ?? ''}`), isNameTaken);
     let name = forceName ?? await callGenericPopup(template, POPUP_TYPE.INPUT, suggestedName);
     // If it's cancelled, it will be false
@@ -317,17 +317,17 @@ async function createConnectionProfile(forceName = null) {
  * @returns {Promise<void>}
  */
 async function deleteConnectionProfile() {
-    const selectedProfile = extension_settings.connectionManager.selectedProfile;
+    const selectedProfile = feature_settings.connectionManager.selectedProfile;
     if (!selectedProfile) {
         return;
     }
 
-    const index = extension_settings.connectionManager.profiles.findIndex(p => p.id === selectedProfile);
+    const index = feature_settings.connectionManager.profiles.findIndex(p => p.id === selectedProfile);
     if (index === -1) {
         return;
     }
 
-    const profile = extension_settings.connectionManager.profiles[index];
+    const profile = feature_settings.connectionManager.profiles[index];
     const name = profile.name;
     const confirm = await Popup.show.confirm(t`Are you sure you want to delete the selected profile?`, name);
 
@@ -335,8 +335,8 @@ async function deleteConnectionProfile() {
         return;
     }
 
-    extension_settings.connectionManager.profiles.splice(index, 1);
-    extension_settings.connectionManager.selectedProfile = null;
+    feature_settings.connectionManager.profiles.splice(index, 1);
+    feature_settings.connectionManager.selectedProfile = null;
     saveSettingsDebounced();
 
     await eventSource.emit(event_types.CONNECTION_PROFILE_DELETED, profile);
@@ -367,7 +367,7 @@ function makeFancyProfile(profile) {
         }
 
         if (key === 'regex-preset') {
-            const label = extension_settings.regex_presets?.find(p => p.id === profile[key])?.name;
+            const label = feature_settings.regex_presets?.find(p => p.id === profile[key])?.name;
             if (label) {
                 acc[value] = label;
                 return acc;
@@ -438,14 +438,14 @@ function renderConnectionProfiles(profiles) {
 
     noneOption.value = '';
     noneOption.textContent = NONE;
-    noneOption.selected = !extension_settings.connectionManager.selectedProfile;
+    noneOption.selected = !feature_settings.connectionManager.selectedProfile;
     profiles.appendChild(noneOption);
 
-    for (const profile of extension_settings.connectionManager.profiles.sort((a, b) => a.name.localeCompare(b.name))) {
+    for (const profile of feature_settings.connectionManager.profiles.sort((a, b) => a.name.localeCompare(b.name))) {
         const option = document.createElement('option');
         option.value = profile.id;
         option.textContent = profile.name;
-        option.selected = profile.id === extension_settings.connectionManager.selectedProfile;
+        option.selected = profile.id === feature_settings.connectionManager.selectedProfile;
         profiles.appendChild(option);
     }
 }
@@ -459,15 +459,15 @@ async function renderDetailsContent(detailsContent) {
     if (detailsContent.classList.contains('hidden')) {
         return;
     }
-    const selectedProfile = extension_settings.connectionManager.selectedProfile;
-    const profile = extension_settings.connectionManager.profiles.find(p => p.id === selectedProfile);
+    const selectedProfile = feature_settings.connectionManager.selectedProfile;
+    const profile = feature_settings.connectionManager.profiles.find(p => p.id === selectedProfile);
     if (profile) {
         const profileForDisplay = makeFancyProfile(profile);
         const templateParams = { profile: profileForDisplay };
         if (Array.isArray(profile.exclude) && profile.exclude.length > 0) {
             templateParams.omitted = profile.exclude.map(e => FANCY_NAMES[e]).join(', ');
         }
-        const template = await renderExtensionTemplateAsync(MODULE_NAME, 'view', templateParams);
+        const template = await renderFeatureTemplateAsync(MODULE_NAME, 'view', templateParams);
         detailsContent.innerHTML = template;
     } else {
         detailsContent.textContent = t`No profile selected`;
@@ -484,13 +484,6 @@ async function renderDetailsContent(detailsContent) {
 async function generateStreamCallback(args, value) {
     if (!value) {
         console.warn('WARN: No argument provided for /profile-genstream command');
-        return '';
-    }
-
-    // Check if Connection Manager is available
-    const context = getContext();
-    if (context.extensionSettings.disabledExtensions.includes('connection-manager')) {
-        toastr.error(t`Connection Manager is required for /profile-genstream. Use /gen or /genraw instead.`);
         return '';
     }
 
@@ -544,9 +537,10 @@ async function generateStreamCallback(args, value) {
 
         // Determine which profile to use
         // Use the currently selected profile if no profile specified
-        let effectiveProfileId = context.extensionSettings.connectionManager.selectedProfile;
+        const context = getContext();
+        let effectiveProfileId = context.featureSettings.connectionManager.selectedProfile;
 
-        const profiles = context.extensionSettings.connectionManager.profiles;
+        const profiles = context.featureSettings.connectionManager.profiles;
 
         if (profileIdOrName) {
             // Use try to find profile by id first, then fuse search
@@ -691,16 +685,16 @@ async function generateStreamCallback(args, value) {
 }
 
 export async function init() {
-    extension_settings.connectionManager = extension_settings.connectionManager || structuredClone(DEFAULT_SETTINGS);
+    feature_settings.connectionManager = feature_settings.connectionManager || structuredClone(DEFAULT_SETTINGS);
 
     for (const key of Object.keys(DEFAULT_SETTINGS)) {
-        if (extension_settings.connectionManager[key] === undefined) {
-            extension_settings.connectionManager[key] = DEFAULT_SETTINGS[key];
+        if (feature_settings.connectionManager[key] === undefined) {
+            feature_settings.connectionManager[key] = DEFAULT_SETTINGS[key];
         }
     }
 
     const container = document.getElementById('rm_api_block');
-    const settings = await renderExtensionTemplateAsync(MODULE_NAME, 'settings');
+    const settings = await renderFeatureTemplateAsync(MODULE_NAME, 'settings');
     container.insertAdjacentHTML('afterbegin', settings);
 
     /** @type {HTMLSelectElement} */
@@ -709,7 +703,7 @@ export async function init() {
     renderConnectionProfiles(profiles);
 
     function toggleProfileSpecificButtons() {
-        const profileId = extension_settings.connectionManager.selectedProfile;
+        const profileId = feature_settings.connectionManager.selectedProfile;
         const profileSpecificButtons = ['update_connection_profile', 'reload_connection_profile', 'delete_connection_profile'];
         profileSpecificButtons.forEach(id => document.getElementById(id).classList.toggle('disabled', !profileId));
     }
@@ -719,7 +713,7 @@ export async function init() {
 
     async function selectConnectionProfile(profileId) {
         const normalizedProfileId = profileId == null ? '' : String(profileId);
-        extension_settings.connectionManager.selectedProfile = normalizedProfileId;
+        feature_settings.connectionManager.selectedProfile = normalizedProfileId;
         saveSettingsDebounced();
         await renderDetailsContent(detailsContent);
         toggleProfileSpecificButtons();
@@ -729,7 +723,7 @@ export async function init() {
             return;
         }
 
-        const profile = extension_settings.connectionManager.profiles.find(p => p.id === normalizedProfileId);
+        const profile = feature_settings.connectionManager.profiles.find(p => p.id === normalizedProfileId);
 
         if (!profile) {
             console.log(`Profile not found: ${normalizedProfileId}`);
@@ -760,8 +754,8 @@ export async function init() {
 
     const reloadButton = document.getElementById('reload_connection_profile');
     reloadButton.addEventListener('click', async () => {
-        const selectedProfile = extension_settings.connectionManager.selectedProfile;
-        const profile = extension_settings.connectionManager.profiles.find(p => p.id === selectedProfile);
+        const selectedProfile = feature_settings.connectionManager.selectedProfile;
+        const profile = feature_settings.connectionManager.profiles.find(p => p.id === selectedProfile);
         if (!profile) {
             console.log('No profile selected');
             return;
@@ -778,8 +772,8 @@ export async function init() {
         if (!profile) {
             return;
         }
-        extension_settings.connectionManager.profiles.push(profile);
-        extension_settings.connectionManager.selectedProfile = profile.id;
+        feature_settings.connectionManager.profiles.push(profile);
+        feature_settings.connectionManager.selectedProfile = profile.id;
         saveSettingsDebounced();
         renderConnectionProfiles(profiles);
         await renderDetailsContent(detailsContent);
@@ -789,8 +783,8 @@ export async function init() {
 
     const updateButton = document.getElementById('update_connection_profile');
     updateButton.addEventListener('click', async () => {
-        const selectedProfile = extension_settings.connectionManager.selectedProfile;
-        const profile = extension_settings.connectionManager.profiles.find(p => p.id === selectedProfile);
+        const selectedProfile = feature_settings.connectionManager.selectedProfile;
+        const profile = feature_settings.connectionManager.profiles.find(p => p.id === selectedProfile);
         if (!profile) {
             console.log('No profile selected');
             return;
@@ -814,8 +808,8 @@ export async function init() {
 
     const editButton = document.getElementById('edit_connection_profile');
     editButton.addEventListener('click', async () => {
-        const selectedProfile = extension_settings.connectionManager.selectedProfile;
-        const profile = extension_settings.connectionManager.profiles.find(p => p.id === selectedProfile);
+        const selectedProfile = feature_settings.connectionManager.selectedProfile;
+        const profile = feature_settings.connectionManager.profiles.find(p => p.id === selectedProfile);
         if (!profile) {
             console.log('No profile selected');
             return;
@@ -832,7 +826,7 @@ export async function init() {
             acc[fancyName] = !profile.exclude.includes(command);
             return acc;
         }, {});
-        const template = $(await renderExtensionTemplateAsync(MODULE_NAME, 'edit', { name: profile.name, settings }));
+        const template = $(await renderFeatureTemplateAsync(MODULE_NAME, 'edit', { name: profile.name, settings }));
         let newName = await callGenericPopup(template, POPUP_TYPE.INPUT, profile.name, {
             customButtons: [{
                 text: t`Save and Update`,
@@ -854,7 +848,7 @@ export async function init() {
             return;
         }
 
-        if (profile.name !== newName && extension_settings.connectionManager.profiles.some(p => p.name === newName)) {
+        if (profile.name !== newName && feature_settings.connectionManager.profiles.some(p => p.name === newName)) {
             toastr.error('A profile with the same name already exists.');
             return;
         }
@@ -925,8 +919,8 @@ export async function init() {
         ],
         callback: async (args, value) => {
             if (!value || typeof value !== 'string') {
-                const selectedProfile = extension_settings.connectionManager.selectedProfile;
-                const profile = extension_settings.connectionManager.profiles.find(p => p.id === selectedProfile);
+                const selectedProfile = feature_settings.connectionManager.selectedProfile;
+                const profile = feature_settings.connectionManager.profiles.find(p => p.id === selectedProfile);
                 if (!profile) {
                     return NONE;
                 }
@@ -970,7 +964,7 @@ export async function init() {
         name: 'profile-list',
         helpString: 'List all connection profile names.',
         returns: 'list of profile names',
-        callback: () => JSON.stringify(extension_settings.connectionManager.profiles.map(p => p.name)),
+        callback: () => JSON.stringify(feature_settings.connectionManager.profiles.map(p => p.name)),
     }));
 
     SlashCommandParser.addCommandObject(SlashCommand.fromProps({
@@ -993,8 +987,8 @@ export async function init() {
             if (!profile) {
                 return '';
             }
-            extension_settings.connectionManager.profiles.push(profile);
-            extension_settings.connectionManager.selectedProfile = profile.id;
+            feature_settings.connectionManager.profiles.push(profile);
+            feature_settings.connectionManager.selectedProfile = profile.id;
             saveSettingsDebounced();
             renderConnectionProfiles(profiles);
             await renderDetailsContent(detailsContent);
@@ -1007,8 +1001,8 @@ export async function init() {
         name: 'profile-update',
         helpString: 'Update the selected connection profile.',
         callback: async () => {
-            const selectedProfile = extension_settings.connectionManager.selectedProfile;
-            const profile = extension_settings.connectionManager.profiles.find(p => p.id === selectedProfile);
+            const selectedProfile = feature_settings.connectionManager.selectedProfile;
+            const profile = feature_settings.connectionManager.profiles.find(p => p.id === selectedProfile);
             if (!profile) {
                 toastr.warning('No profile selected.');
                 return '';
@@ -1035,8 +1029,8 @@ export async function init() {
         ],
         callback: async (_args, value) => {
             if (!value || typeof value !== 'string') {
-                const selectedProfile = extension_settings.connectionManager.selectedProfile;
-                const profile = extension_settings.connectionManager.profiles.find(p => p.id === selectedProfile);
+                const selectedProfile = feature_settings.connectionManager.selectedProfile;
+                const profile = feature_settings.connectionManager.profiles.find(p => p.id === selectedProfile);
                 if (!profile) {
                     return '';
                 }

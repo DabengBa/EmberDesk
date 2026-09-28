@@ -89,9 +89,9 @@ const power_user = new Proxy({}, {
     },
 });
 
-const extension_settings = new Proxy({}, {
+const feature_settings = new Proxy({}, {
     get(_target, property) {
-        return getWorldInfoShell().extensionSettings[property];
+        return getWorldInfoShell().featureSettings[property];
     },
 });
 
@@ -1662,7 +1662,7 @@ export async function checkWorldInfo(chat, maxContext, isDryRun, globalScanData 
         const noteKeys = getWorldInfoShell().authorsNoteMetadataKeys;
         const originalAN = context.extensionPrompts[noteModule]?.value ?? '';
         const ANWithWI = `${ANTopEntries.join('\n')}\n${originalAN}\n${ANBottomEntries.join('\n')}`.replace(/(^\n)|(\n$)/g, '');
-        context.setExtensionPrompt(noteModule, ANWithWI, chat_metadata[noteKeys.position] ?? 1, chat_metadata[noteKeys.depth] ?? 4, extension_settings.note?.allowWIScan ?? false, chat_metadata[noteKeys.role] ?? extension_prompt_roles.SYSTEM);
+        context.setExtensionPrompt(noteModule, ANWithWI, chat_metadata[noteKeys.position] ?? 1, chat_metadata[noteKeys.depth] ?? 4, feature_settings.note?.allowWIScan ?? false, chat_metadata[noteKeys.role] ?? extension_prompt_roles.SYSTEM);
     }
 
     timedEffects.setTimedEffects(Array.from(allActivatedEntries.values()));

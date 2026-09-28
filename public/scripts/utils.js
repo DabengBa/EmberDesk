@@ -6,7 +6,7 @@ import {
     lodash,
 } from '../lib.js';
 
-import { getContext } from './extensions.js';
+import { getContext } from './feature-settings.js';
 import { characters, processDroppedFiles, this_chid, user_avatar } from '../script.js';
 import { getRequestHeaders } from './request-context.js';
 import { isMobile } from './RossAscends-mods.js';

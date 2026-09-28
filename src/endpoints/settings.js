@@ -7,7 +7,7 @@ import { sync as writeFileAtomicSync } from 'write-file-atomic';
 import bytes from 'bytes';
 
 import { SETTINGS_FILE } from '../constants.js';
-import { getConfigValue, generateTimestamp, removeOldBackups } from '../util.js';
+import { getConfigValue, generateTimestamp, removeOldBackups, tryParse } from '../util.js';
 import { getAllUserHandles, getUserDirectories } from '../users.js';
 import { getFileNameValidationFunction } from '../middleware/validateFileName.js';
 import {
@@ -526,6 +526,18 @@ router.post('/get', async (request, response) => {
         }
     } catch {
         return response.sendStatus(500);
+    }
+
+    // Lazy migration boundary: feature_settings replaced extension_settings.
+    // Normalize the wire payload so every reader sees only the new key; the
+    // next client save drops the old key from the stored document.
+    const parsedSettings = tryParse(settings);
+    if (parsedSettings && typeof parsedSettings === 'object' && parsedSettings.extension_settings !== undefined) {
+        if (parsedSettings.feature_settings === undefined) {
+            parsedSettings.feature_settings = parsedSettings.extension_settings;
+        }
+        delete parsedSettings.extension_settings;
+        settings = JSON.stringify(parsedSettings);
     }
 
     const dirs = request.user.directories;

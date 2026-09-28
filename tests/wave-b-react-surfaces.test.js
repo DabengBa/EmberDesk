@@ -102,10 +102,10 @@ describe('Wave B React surfaces', () => {
         expect(indexJs).toContain('workspacePanels.mountRegexSettings(regexSettingsHost.get(0))');
         expect(indexJs).toContain('workspacePanels.mountRegexDebugger(debuggerHost)');
         expect(indexJs).toContain('workspacePanels.mountRegexImportTarget(template.get(0))');
-        expect(indexJs).not.toContain("renderExtensionTemplateAsync('regex', 'editor')");
-        expect(indexJs).not.toContain("renderExtensionTemplateAsync('regex', 'dropdown')");
-        expect(indexJs).not.toContain("renderExtensionTemplateAsync('regex', 'debugger')");
-        expect(indexJs).not.toContain("renderExtensionTemplateAsync('regex', 'importTarget')");
+        expect(indexJs).not.toContain("renderFeatureTemplateAsync('regex', 'editor')");
+        expect(indexJs).not.toContain("renderFeatureTemplateAsync('regex', 'dropdown')");
+        expect(indexJs).not.toContain("renderFeatureTemplateAsync('regex', 'debugger')");
+        expect(indexJs).not.toContain("renderFeatureTemplateAsync('regex', 'importTarget')");
 
         // Migrated templates are deleted; dynamic row templates remain.
         for (const gone of ['editor.html', 'dropdown.html', 'debugger.html', 'importTarget.html']) {

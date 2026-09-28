@@ -1,6 +1,6 @@
 import { characters, getCurrentChatId, messageFormatting, reloadCurrentChat, saveSettingsDebounced, this_chid } from '../../../script.js';
 import { eventSource, event_types } from '../../events.js';
-import { extension_settings, renderExtensionTemplateAsync } from '../../extensions.js';
+import { feature_settings, renderFeatureTemplateAsync } from '../../feature-settings.js';
 import { loadWorkspacePanelsModule } from '../../workspace-panels-react-bridge.js';
 import { callGenericPopup, Popup, POPUP_TYPE } from '../../popup.js';
 import { SlashCommand } from '../../slash-commands/SlashCommand.js';
@@ -131,7 +131,7 @@ class RegexPresetManager {
             return true; // No changes detected
         }
 
-        const currentPreset = extension_settings.regex_presets.find(p => p.id === this.currentPresetId);
+        const currentPreset = feature_settings.regex_presets.find(p => p.id === this.currentPresetId);
         const presetName = currentPreset ? currentPreset.name : t`Unknown Preset`;
 
         const choice = await Popup.show.confirm(
@@ -175,7 +175,7 @@ class RegexPresetManager {
                 if (!canProceed) {
                     // Revert the selection
                     event.preventDefault();
-                    const currentPreset = extension_settings.regex_presets.find(p => p.id === this.currentPresetId);
+                    const currentPreset = feature_settings.regex_presets.find(p => p.id === this.currentPresetId);
                     if (currentPreset) {
                         this.presetSelect.value = currentPreset.id;
                     }
@@ -184,7 +184,7 @@ class RegexPresetManager {
             }
 
             await this.applyPreset(selectedPresetId);
-            extension_settings.regex_presets.forEach(p => { p.isSelected = p.id === selectedPresetId; });
+            feature_settings.regex_presets.forEach(p => { p.isSelected = p.id === selectedPresetId; });
             saveSettingsDebounced();
             this.updateStoredState(selectedPresetId);
         });
@@ -238,7 +238,7 @@ class RegexPresetManager {
             await this.deletePreset(selectedPresetId);
             this.renderPresetList();
 
-            const newSelectedPresetId = extension_settings.regex_presets.find(p => p.isSelected)?.id;
+            const newSelectedPresetId = feature_settings.regex_presets.find(p => p.isSelected)?.id;
             if (newSelectedPresetId) {
                 await this.applyPreset(newSelectedPresetId);
                 this.presetSelect.value = newSelectedPresetId;
@@ -252,7 +252,7 @@ class RegexPresetManager {
         this.renderPresetList();
 
         // Initialize the stored state with the currently selected preset
-        const selectedPreset = extension_settings.regex_presets?.find(p => p.isSelected);
+        const selectedPreset = feature_settings.regex_presets?.find(p => p.isSelected);
         if (selectedPreset) {
             this.updateStoredState(selectedPreset.id);
         }
@@ -275,7 +275,7 @@ class RegexPresetManager {
 
                 if (name) {
                     const quiet = isTrueBoolean(args?.quiet?.toString());
-                    const foundId = extension_settings.regex_presets.find(p => equalsIgnoreCaseAndAccents(p.id, name) || equalsIgnoreCaseAndAccents(p.name, name))?.id;
+                    const foundId = feature_settings.regex_presets.find(p => equalsIgnoreCaseAndAccents(p.id, name) || equalsIgnoreCaseAndAccents(p.name, name))?.id;
 
                     if (foundId) {
                         this.presetSelect.value = foundId;
@@ -303,7 +303,7 @@ class RegexPresetManager {
                 SlashCommandArgument.fromProps({
                     description: 'regex preset name or ID',
                     typeList: [ARGUMENT_TYPE.STRING],
-                    enumProvider: () => extension_settings.regex_presets.map(x => new SlashCommandEnumValue(x.id, x.name, enumTypes.enum, enumIcons.preset)),
+                    enumProvider: () => feature_settings.regex_presets.map(x => new SlashCommandEnumValue(x.id, x.name, enumTypes.enum, enumIcons.preset)),
                 }),
             ],
         }));
@@ -320,14 +320,14 @@ class RegexPresetManager {
 
         this.presetSelect.innerHTML = '';
 
-        if (!Array.isArray(extension_settings.regex_presets) || extension_settings.regex_presets.length === 0) {
+        if (!Array.isArray(feature_settings.regex_presets) || feature_settings.regex_presets.length === 0) {
             const fallbackOption = new Option(t`[No presets saved]`, '', true, true);
             this.presetSelect.appendChild(fallbackOption);
             this.presetSelect.disabled = true;
             return;
         }
 
-        extension_settings.regex_presets.forEach(preset => {
+        feature_settings.regex_presets.forEach(preset => {
             const option = new Option(preset.name, preset.id, preset.isSelected, preset.isSelected);
             this.presetSelect.appendChild(option);
         });
@@ -368,7 +368,7 @@ class RegexPresetManager {
      * @returns {Promise<void>}
      */
     async applyPreset(presetId) {
-        const preset = extension_settings.regex_presets.find(p => p.id === presetId);
+        const preset = feature_settings.regex_presets.find(p => p.id === presetId);
         if (!preset) {
             toastr.error(t`Could not find the selected preset.`);
             return;
@@ -413,7 +413,7 @@ class RegexPresetManager {
      * @returns {Promise<void>}
      */
     async savePreset(presetId, isUpdate) {
-        const existingPreset = isUpdate ? extension_settings.regex_presets.find(p => p.id === presetId) : null;
+        const existingPreset = isUpdate ? feature_settings.regex_presets.find(p => p.id === presetId) : null;
 
         if (isUpdate && !existingPreset) {
             toastr.error(t`Could not find the preset to update.`);
@@ -439,10 +439,10 @@ class RegexPresetManager {
         if (isUpdate) {
             Object.assign(existingPreset, preset);
         } else {
-            extension_settings.regex_presets.push(preset);
+            feature_settings.regex_presets.push(preset);
         }
 
-        extension_settings.regex_presets.forEach(p => { p.isSelected = p.id === id; });
+        feature_settings.regex_presets.forEach(p => { p.isSelected = p.id === id; });
         saveSettingsDebounced();
 
         toastr.success(isUpdate ? t`Regex preset updated` : t`Regex preset saved`);
@@ -454,22 +454,22 @@ class RegexPresetManager {
      * @returns {Promise<void>}
      */
     async deletePreset(presetId) {
-        const presetIndex = extension_settings.regex_presets.findIndex(p => p.id === presetId);
+        const presetIndex = feature_settings.regex_presets.findIndex(p => p.id === presetId);
         if (presetIndex === -1) {
             toastr.error(t`Could not find the preset to delete.`);
             return;
         }
 
-        const presetName = extension_settings.regex_presets[presetIndex].name;
+        const presetName = feature_settings.regex_presets[presetIndex].name;
         const confirm = await Popup.show.confirm(t`Are you sure you want to delete this regex preset?`, presetName);
         if (!confirm) {
             return;
         }
 
-        extension_settings.regex_presets.splice(presetIndex, 1);
+        feature_settings.regex_presets.splice(presetIndex, 1);
 
         // Select the first preset if any exist
-        extension_settings.regex_presets.forEach((p, i) => { p.isSelected = i === 0; });
+        feature_settings.regex_presets.forEach((p, i) => { p.isSelected = i === 0; });
         saveSettingsDebounced();
 
         toastr.success(t`Regex preset deleted`);
@@ -631,7 +631,7 @@ async function loadRegexScripts() {
     $('#saved_preset_scripts').empty();
     setToggleAllIcon(false);
 
-    const scriptTemplate = $(await renderExtensionTemplateAsync('regex', 'scriptTemplate'));
+    const scriptTemplate = $(await renderFeatureTemplateAsync('regex', 'scriptTemplate'));
 
     /**
      * Renders a script to the UI.
@@ -1269,7 +1269,7 @@ async function onRegexDebuggerOpenClick() {
         const newScopedScripts = $('#regex_debugger_rules_scoped').children('li').map((_, el) => allKnownScripts.find(s => s.id === $(el).data('id'))).get().filter(Boolean);
         const newPresetScripts = $('#regex_debugger_rules_preset').children('li').map((_, el) => allKnownScripts.find(s => s.id === $(el).data('id'))).get().filter(Boolean);
 
-        extension_settings.regex = newGlobalScripts;
+        feature_settings.regex = newGlobalScripts;
         if (this_chid !== undefined) {
             await saveScriptsByType(newScopedScripts, SCRIPT_TYPES.SCOPED);
         }
@@ -1379,7 +1379,7 @@ function migrateSettings() {
     let performSave = false;
 
     // Current: If MD Display is present in placement, remove it and add new placements/MD option
-    extension_settings.regex.forEach((script) => {
+    feature_settings.regex.forEach((script) => {
         if (!script.id) {
             script.id = uuidv4();
             performSave = true;
@@ -1619,7 +1619,7 @@ async function checkCharEmbeddedRegexScripts() {
                 const checkKey = `AlertRegex_${character.avatar}`;
                 if (!accountStorage.getItem(checkKey)) {
                     accountStorage.setItem(checkKey, 'true');
-                    const template = await renderExtensionTemplateAsync('regex', 'embeddedScripts', {});
+                    const template = await renderFeatureTemplateAsync('regex', 'embeddedScripts', {});
                     const result = await callGenericPopup(template, POPUP_TYPE.CONFIRM, '');
 
                     if (result) {
@@ -1662,7 +1662,7 @@ async function checkPresetEmbeddedRegexScripts() {
 
             if (!accountStorage.getItem(checkKey)) {
                 accountStorage.setItem(checkKey, 'true');
-                const template = await renderExtensionTemplateAsync('regex', 'presetEmbeddedScripts', {});
+                const template = await renderFeatureTemplateAsync('regex', 'presetEmbeddedScripts', {});
                 const result = await callGenericPopup(template, POPUP_TYPE.CONFIRM, '');
 
                 if (result) {
@@ -1714,12 +1714,12 @@ function onPresetRenamed({ apiId, oldName, newName }) {
 // Workaround for loading in sequence with other extensions
 // NOTE: Always puts extension at the top of the list, but this is fine since it's static
 export async function init() {
-    if (!Array.isArray(extension_settings.regex)) {
-        extension_settings.regex = [];
+    if (!Array.isArray(feature_settings.regex)) {
+        feature_settings.regex = [];
     }
 
-    if (!Array.isArray(extension_settings.regex_presets)) {
-        extension_settings.regex_presets = [];
+    if (!Array.isArray(feature_settings.regex_presets)) {
+        feature_settings.regex_presets = [];
     }
 
     migrateSettings();

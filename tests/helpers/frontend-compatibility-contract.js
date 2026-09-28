@@ -208,7 +208,7 @@ export const frontendCompatibilityContract = Object.freeze({
         indexHtmlPath: path.join(publicRoot, 'index.html'),
         scriptPath: path.join(publicRoot, 'script.js'),
         eventsPath: path.join(publicRoot, 'scripts', 'events.js'),
-        extensionsPath: path.join(publicRoot, 'scripts', 'extensions.js'),
+        extensionsPath: path.join(publicRoot, 'scripts', 'feature-settings.js'),
         slashCommandsPath: path.join(publicRoot, 'scripts', 'slash-commands.js'),
         regexEnginePath: path.join(publicRoot, 'scripts', 'extensions', 'regex', 'engine.js'),
         libJsPath: path.join(publicRoot, 'lib.js'),

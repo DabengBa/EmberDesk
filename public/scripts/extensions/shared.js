@@ -129,10 +129,6 @@ export class ConnectionManagerRequestService {
         const { stream, signal, extractData, includePreset } = { ...this.defaultSendRequestParams, ...custom };
 
         const context = SillyTavern.getContext();
-        if (context.extensionSettings.disabledExtensions.includes('connection-manager')) {
-            throw new Error('Connection Manager is not available');
-        }
-
         const profile = this.getProfile(profileId);
         const selectedApiMap = this.validateProfile(profile);
 
@@ -202,11 +198,7 @@ export class ConnectionManagerRequestService {
      */
     static getSupportedProfiles() {
         const context = SillyTavern.getContext();
-        if (context.extensionSettings.disabledExtensions.includes('connection-manager')) {
-            throw new Error('Connection Manager is not available');
-        }
-
-        const profiles = context.extensionSettings.connectionManager.profiles;
+        const profiles = context.featureSettings.connectionManager.profiles;
         return profiles.filter((p) => this.isProfileSupported(p));
     }
 
@@ -217,7 +209,7 @@ export class ConnectionManagerRequestService {
      * @throws {Error}
      */
     static getProfile(profileId) {
-        const profile = SillyTavern.getContext().extensionSettings.connectionManager.profiles.find((p) => p.id === profileId);
+        const profile = SillyTavern.getContext().featureSettings.connectionManager.profiles.find((p) => p.id === profileId);
         if (!profile) throw new Error(`Profile not found (ID: ${profileId})`);
         return profile;
     }
@@ -229,11 +221,7 @@ export class ConnectionManagerRequestService {
      * @returns {HTMLImageElement | null}
      */
     static getProfileIcon(profileId) {
-        if ((SillyTavern.getContext()).extensionSettings.disabledExtensions.includes('connection-manager')) {
-            return null;
-        }
-
-        const id = profileId ?? (SillyTavern.getContext()).extensionSettings.connectionManager.selectedProfile;
+        const id = profileId ?? (SillyTavern.getContext()).featureSettings.connectionManager.selectedProfile;
         if (!id) return null;
 
         try {
@@ -311,10 +299,6 @@ export class ConnectionManagerRequestService {
         onDelete = () => { },
     ) {
         const context = SillyTavern.getContext();
-        if (context.extensionSettings.disabledExtensions.includes('connection-manager')) {
-            throw new Error('Connection Manager is not available');
-        }
-
         /**
          * @type {JQuery<HTMLSelectElement>}
          */
@@ -333,7 +317,7 @@ export class ConnectionManagerRequestService {
         defaultOption.dataset.i18n = 'Select a Connection Profile';
         dropdown.append(defaultOption);
 
-        const profiles = context.extensionSettings.connectionManager.profiles;
+        const profiles = context.featureSettings.connectionManager.profiles;
 
         // Create optgroups using document.createElement
         const groups = {};
@@ -452,7 +436,7 @@ export class ConnectionManagerRequestService {
 
         dropdown.on('change', async () => {
             const profileId = dropdown.val();
-            const profile = context.extensionSettings.connectionManager.profiles.find((p) => p.id === profileId);
+            const profile = context.featureSettings.connectionManager.profiles.find((p) => p.id === profileId);
             await onChange(profile);
         });
     }

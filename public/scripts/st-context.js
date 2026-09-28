@@ -72,14 +72,14 @@ import {
 import { eventSource, event_types } from './events.js';
 import { getRequestHeaders } from './request-context.js';
 import {
-    extension_settings,
-    renderExtensionTemplate,
-    renderExtensionTemplateAsync,
+    feature_settings,
+    renderFeatureTemplate,
+    renderFeatureTemplateAsync,
     saveMetadataDebounced,
     UNSET_VALUE,
     writeExtensionField,
     writeExtensionFieldBulk,
-} from './extensions.js';
+} from './feature-settings.js';
 import { addLocaleData, getCurrentLocale, t, translate } from './i18n.js';
 import { hideLoader, showLoader } from './loader.js';
 import { loader } from './action-loader.js';
@@ -189,9 +189,9 @@ export function getContext() {
         canPerformToolCalls: ToolManager.canPerformToolCalls.bind(ToolManager),
         ToolManager,
         registerDebugFunction,
-        /** @deprecated Use renderExtensionTemplateAsync instead. */
-        renderExtensionTemplate,
-        renderExtensionTemplateAsync,
+        /** @deprecated Use renderFeatureTemplateAsync instead. */
+        renderFeatureTemplate,
+        renderFeatureTemplateAsync,
         /** @deprecated Use callGenericPopup or Popup instead. */
         callPopup,
         callGenericPopup,
@@ -200,7 +200,7 @@ export function getContext() {
         /** @deprecated Use loader.hide instead. */
         hideLoader,
         mainApi: main_api,
-        extensionSettings: extension_settings,
+        featureSettings: feature_settings,
         getTokenizerModel,
         generateQuietPrompt,
         generateRaw,
