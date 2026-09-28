@@ -89,14 +89,14 @@ describe('buildFrontendFrameDocument', () => {
     const documentHtml = buildFrontendFrameDocument('<html><body><div id="app"></div></body></html>', {
         frameId: 'ed-frame--3--0',
         messageId: '3',
-        userAvatarUrl: '/thumbnail?type=persona&file=u.png',
+        userAvatarUrl: '/img/user-default.png',
         charAvatarUrl: '/thumbnail?type=avatar&file=c.png',
     });
 
     test('injects reset styles, viewport meta, and avatar helper classes', () => {
         expect(documentHtml).toContain('content="width=device-width, initial-scale=1.0"');
         expect(documentHtml).toContain('margin:0!important');
-        expect(documentHtml).toContain('url(\'/thumbnail?type=persona&file=u.png\')');
+        expect(documentHtml).toContain('url(\'/img/user-default.png\')');
         expect(documentHtml).toContain('url(\'/thumbnail?type=avatar&file=c.png\')');
     });
 

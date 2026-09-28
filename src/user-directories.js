@@ -1,8 +1,6 @@
 import path from 'node:path';
 import fs from 'node:fs';
-import mime from 'mime-types';
-import sanitize from 'sanitize-filename';
-import { USER_DIRECTORY_TEMPLATE, PUBLIC_DIRECTORIES, SETTINGS_FILE, UPLOADS_DIRECTORY } from './constants.js';
+import { USER_DIRECTORY_TEMPLATE, PUBLIC_DIRECTORIES, UPLOADS_DIRECTORY } from './constants.js';
 import { getAllUserHandles, toAvatarKey } from './user-storage.js';
 import storage from 'node-persist';
 
@@ -19,7 +17,6 @@ const DIRECTORIES_CACHE = new Map();
  * @property {string} root - The root directory for the user
  * @property {string} thumbnails - The directory where the thumbnails are stored
  * @property {string} thumbnailsAvatar - The directory where the avatar thumbnails are stored
- * @property {string} thumbnailsPersona - The directory where the persona thumbnails are stored
  * @property {string} worlds - The directory where the WI are stored
  * @property {string} user - The directory where the user's public data is stored
  * @property {string} avatars - The directory where the avatars are stored
@@ -138,21 +135,7 @@ export async function getUserAvatar(handle) {
             return avatar;
         }
 
-        // Fallback to reading from files if custom avatar is not set
-        const directory = getUserDirectories(handle);
-        const pathToSettings = path.join(directory.root, SETTINGS_FILE);
-        const settings = fs.existsSync(pathToSettings) ? JSON.parse(fs.readFileSync(pathToSettings, 'utf8')) : {};
-        const avatarFile = settings?.power_user?.default_persona || settings?.user_avatar;
-        if (!avatarFile) {
-            return PUBLIC_USER_AVATAR;
-        }
-        const avatarPath = path.join(directory.avatars, sanitize(avatarFile));
-        if (!fs.existsSync(avatarPath)) {
-            return PUBLIC_USER_AVATAR;
-        }
-        const mimeType = mime.lookup(avatarPath);
-        const base64Content = fs.readFileSync(avatarPath, 'base64');
-        return `data:${mimeType};base64,${base64Content}`;
+        return PUBLIC_USER_AVATAR;
     } catch {
         // Ignore errors
         return PUBLIC_USER_AVATAR;

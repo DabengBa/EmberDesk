@@ -370,7 +370,7 @@ function createCanonicalWriteBlockedError(reason) {
 /**
  * Starts thumbnail pregeneration without blocking the caller.
  * @param {import('../users.js').UserDirectoryList} directories
- * @param {'avatar' | 'persona'} type
+ * @param {'avatar'} type
  * @param {string} file
  * @param {boolean|null} isKnownAnimated
  * @param {boolean} shouldRegenerateThumbnail
@@ -954,7 +954,6 @@ function convertWorldInfoToCharacterBook(name, entries) {
                 sticky: entry.sticky ?? null,
                 cooldown: entry.cooldown ?? null,
                 delay: entry.delay ?? null,
-                match_persona_description: entry.matchPersonaDescription ?? false,
                 match_character_description: entry.matchCharacterDescription ?? false,
                 match_character_personality: entry.matchCharacterPersonality ?? false,
                 match_character_depth_prompt: entry.matchCharacterDepthPrompt ?? false,

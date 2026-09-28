@@ -1,6 +1,5 @@
 import { chat_metadata, characters, substituteParams, chat, extension_prompt_roles, extension_prompt_types, name2, neutralCharacterName } from '../../script.js';
 import { feature_settings } from '../feature-settings.js';
-import { power_user } from '../power-user.js';
 import { searchCharByName, getTagsList, tags, tag_map } from '../tags.js';
 import { onlyUniqueJson, sortIgnoreCaseAndAccents } from '../utils.js';
 import { world_names } from '../world-info.js';
@@ -24,7 +23,6 @@ export const enumIcons = {
 
     // Common types
     character: '👤',
-    persona: '🧙‍♂️',
     qr: 'QR',
     closure: '𝑓',
     macro: '{{',
@@ -196,17 +194,6 @@ export const commonEnumProviders = {
             ...(name2 === neutralCharacterName) ? [new SlashCommandEnumValue(neutralCharacterName, null, enumTypes.name, '🥸')] : [],
         ];
     },
-
-    /**
-     * All possible personas
-     *
-     * @returns {() => SlashCommandEnumValue[]}
-     */
-    personas: ({ allowPersonaKey = false } = {}) => () => Object.entries(power_user.personas).map(([personaKey, personaName]) => {
-        const existsMultiple = Object.values(power_user.personas).filter(p => p === personaName).length > 1;
-        const returnValue = allowPersonaKey && existsMultiple ? personaKey : personaName;
-        return new SlashCommandEnumValue(returnValue, allowPersonaKey && existsMultiple ? personaName : null, enumTypes.name, enumIcons.persona);
-    }),
 
     /**
      * All possible tags, or only those that have been assigned

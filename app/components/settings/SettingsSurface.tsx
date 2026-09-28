@@ -275,7 +275,7 @@ function resolveInitialSettingsTab(initialTab?: string | null) {
 }
 
 // Overlay-only navigation into workspace drawers. Preset CRUD, the Prompt
-// Manager, connection-profile capture/apply, persona management, and the
+// Manager, connection-profile capture/apply, and the
 // user-settings extras still live in drawer surfaces the shell no longer opens.
 // Each target is the drawer's .drawer-content host id opened through the
 // openWorkspaceDrawer runtime command; the link also runs onRequestClose so the
@@ -287,7 +287,6 @@ const WORKSPACE_DRAWER_LINKS: Record<string, Array<{ target: string; label: stri
     ],
     userInterface: [
         { target: 'user-settings-block', label: 'Open User Settings', hint: '主题色、字体缩放、模糊与杂项开关。' },
-        { target: 'PersonaManagement', label: 'Open Persona Management', hint: 'Persona 网格、描述与锁定。' },
     ],
     advanced: [
         { target: 'AdvancedFormatting', label: 'Open Advanced Formatting', hint: 'System prompt / reasoning 预设操作与 master 导入导出。' },

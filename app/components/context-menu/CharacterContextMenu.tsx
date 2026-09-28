@@ -9,7 +9,6 @@ export function CharacterContextMenu() {
             <li><button id="character_context_menu_favorite" data-i18n="Favorite">Favorite</button></li>
             <li><button id="character_context_menu_tag" data-i18n="Tag">Tag</button></li>
             <li><button id="character_context_menu_duplicate" data-i18n="Duplicate">Duplicate</button></li>
-            <li><button id="character_context_menu_persona" data-i18n="Persona">Persona</button></li>
             <li><button id="character_context_menu_delete" data-i18n="Delete">Delete</button></li>
         </ul>
     );

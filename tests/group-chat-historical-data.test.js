@@ -72,7 +72,6 @@ function makeDirectories() {
         userImages: path.join(root, 'user images'),
         thumbnailsAvatar: path.join(root, 'thumbnails', 'avatar'),
         thumbnailsBg: path.join(root, 'thumbnails', 'bg'),
-        thumbnailsPersona: path.join(root, 'thumbnails', 'persona'),
     };
     for (const directory of Object.values(directories)) {
         fs.mkdirSync(directory, { recursive: true });

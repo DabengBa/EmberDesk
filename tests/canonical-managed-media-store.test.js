@@ -34,7 +34,6 @@ function createDirectories(root) {
         storage: path.join(root, 'storage'),
         backgrounds: path.join(root, 'backgrounds'),
         assets: path.join(root, 'assets'),
-        avatars: path.join(root, 'User Avatars'),
         files: path.join(root, 'user', 'files'),
         userImages: path.join(root, 'user', 'images'),
     };
@@ -82,7 +81,6 @@ describe('canonical managed media catalog', () => {
         const backgroundPath = writeCompatibilityFile(directories, 'backgrounds/sky.png', 'shared-media');
         const attachmentPath = writeCompatibilityFile(directories, 'user/files/copy.png', 'shared-media');
         writeCompatibilityFile(directories, 'assets/bgm/loop.ogg', 'music');
-        writeCompatibilityFile(directories, 'User Avatars/persona.png', 'persona');
         writeCompatibilityFile(directories, 'user/images/scene/generated.webp', 'upload');
         fs.writeFileSync(path.join(root, 'image-metadata.json'), JSON.stringify({
             version: 1,
@@ -121,13 +119,13 @@ describe('canonical managed media catalog', () => {
 
         expect(first).toEqual(expect.objectContaining({
             ok: true,
-            importedCount: 4,
+            importedCount: 3,
             unchangedCount: 0,
         }));
         expect(second).toEqual(expect.objectContaining({
             ok: true,
             importedCount: 0,
-            unchangedCount: 4,
+            unchangedCount: 3,
         }));
         expect(fs.readFileSync(backgroundPath, 'utf8')).toBe('shared-media');
         expect(fs.readFileSync(attachmentPath, 'utf8')).toBe('shared-media');
@@ -158,7 +156,6 @@ describe('canonical managed media catalog', () => {
         const directories = createDirectories(root);
         const manager = createManager();
         writeCompatibilityFile(directories, 'backgrounds/changed.png', 'original');
-        writeCompatibilityFile(directories, 'User Avatars/missing.png', 'will disappear');
 
         await runCanonicalManagedMediaShadowImport({
             handle: 'alice',
@@ -185,7 +182,6 @@ describe('canonical managed media catalog', () => {
             nowMs: 1735689600000,
         });
         fs.writeFileSync(path.join(directories.backgrounds, 'changed.png'), 'changed');
-        fs.rmSync(path.join(directories.avatars, 'missing.png'));
         writeCompatibilityFile(directories, 'user/files/orphan.txt', 'orphan');
         db.prepare(`
             INSERT INTO managed_blobs (
@@ -234,7 +230,6 @@ describe('canonical managed media catalog', () => {
             expect.objectContaining({ compatibility_path: 'backgrounds/changed.png' }),
         ]));
         expect(audit.entries).toEqual(expect.arrayContaining([
-            expect.objectContaining({ compatibility_path: 'User Avatars/missing.png', drift_types: ['missing'] }),
             expect.objectContaining({ compatibility_path: 'user/files/orphan.txt', drift_types: ['orphan'] }),
             expect.objectContaining({ compatibility_path: '../unsafe', drift_types: ['unsafe_path'] }),
             expect.objectContaining({ compatibility_path: 'backgrounds/wrong-owner.png', drift_types: ['unsafe_path'] }),

@@ -107,12 +107,6 @@ export function RightNavPanel() {
                                                         <option id="set_chat_character_settings" data-i18n="Character Settings Overrides">
                                                             Character Settings Overrides
                                                         </option>
-                                                        <option id="character_action_connected_personas" className="character-detail-edit-action" data-i18n="Connected Personas">
-                                                            Connected Personas
-                                                        </option>
-                                                        <option id="convert_to_persona" data-i18n="Convert to Persona">
-                                                            Convert to Persona
-                                                        </option>
                                                         <option id="renameCharButton" data-i18n="Rename">
                                                             Rename
                                                         </option>
@@ -140,7 +134,6 @@ export function RightNavPanel() {
                                             <div className="character-detail-hidden-actions" aria-hidden="true">
                                                 <ContractIconButton id="advanced_div" className="menu_button" label="Advanced Definitions" nativeTitle title="Advanced Definitions" titleKey="Advanced Definition" icon={<i className="fa-solid fa-book" aria-hidden="true" />} />
                                                 <ContractIconButton className="chat_lorebook_button menu_button" label="Chat Lore" nativeTitle title={"Chat Lore\n\nClick to load\nShift/Alt-click or long-press to open 'Link to Chat Lorebook' popup"} titleKey="chat_lorebook_button_title" icon={<i className="fa-solid fa-passport" aria-hidden="true" />} />
-                                                <ContractIconButton id="char_connections_button" className="menu_button" label="Connected Personas" nativeTitle title="Connected Personas" icon={<i className="fa-solid fa-face-smile" aria-hidden="true" />} />
                                                 <ContractIconButton id="export_button" className="menu_button" label="Export and Download" nativeTitle title="Export and Download" icon={<i className="fa-solid fa-file-export" aria-hidden="true" />} />
                                                 {/* <ContractIconButton id="set_chat_character_settings" className="menu_button" label="Set a chat scenario override" nativeTitle title="Set a chat scenario override" icon={<i className="fa-solid fa-scroll" aria-hidden="true" />} /> */}
                                                 {/* <ContractIconButton id="set_character_world" className="menu_button" label="Set a character World Info / Lorebook" nativeTitle title="Set a character World Info / Lorebook" icon={<i className="fa-solid fa-globe" aria-hidden="true" />} /> */}

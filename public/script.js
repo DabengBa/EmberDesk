@@ -59,7 +59,6 @@ import {
     playMessageSound,
     fixMarkdown,
     power_user,
-    persona_description_positions,
     loadMovingUIState,
     getCustomStoppingStrings,
     renderStoryString,
@@ -188,18 +187,6 @@ import { getRegexedString, regex_placement } from './scripts/extensions/regex/en
 import { FILTER_STATES, FILTER_TYPES, FilterHelper, isFilterState } from './scripts/filters.js';
 import { initLocales, t, translate } from './scripts/i18n.js';
 import { getFriendlyTokenizerName, getTokenCount, getTokenCountAsync, initTokenizers, saveTokenCache } from './scripts/tokenizers.js';
-import {
-    user_avatar,
-    getUserAvatars,
-    getUserAvatar,
-    setUserAvatar,
-    initPersonas,
-    mountPersonaManagementPanel,
-    setPersonaDescription,
-    initUserAvatar,
-    updatePersonaConnectionsAvatarList,
-    isPersonaPanelOpen,
-} from './scripts/personas.js';
 import { loader } from './scripts/action-loader.js';
 import { createSingleFlightTask, resolvePersistedCurrentVersion, resolveStartupSettingsPlan } from './scripts/startup-helpers.js';
 import { ensurePanel, registerPanelHook } from './scripts/deferred-panels.js';
@@ -208,7 +195,7 @@ import { BulkEditOverlay } from './scripts/BulkEditOverlay.js';
 import { appendFileContent, hasPendingFileAttachment, populateFileAttachment, decodeStyleTags, encodeStyleTags, isExternalMediaAllowed, preserveNeutralChat, restoreNeutralChat, formatCreatorNotes, initChatUtilities, addDOMPurifyHooks } from './scripts/chats.js';
 import { getPresetManager, initPresetManager } from './scripts/preset-manager.js';
 import { evaluateMacros, getLastMessageId, initMacros } from './scripts/macros.js';
-import { currentUser, setUserControls } from './scripts/user.js';
+import { setUserControls } from './scripts/user.js';
 import { POPUP_RESULT, POPUP_TYPE, Popup, callGenericPopup, fixToastrForDialogs } from './scripts/popup.js';
 import { renderTemplate, renderTemplateAsync } from './scripts/templates.js';
 import { initCustomSelectedSamplers, validateDisabledSamplers } from './scripts/samplerSelect.js';
@@ -404,7 +391,7 @@ import { installPublicBrowserApi } from './scripts/public-api.js';
 import { createReactRuntimeProvider } from './scripts/react-runtime-provider.js';
 
 // Retired Author's Note slot key. The feature is gone, but the slot remains the
-// injection vehicle for World Info AN-position entries and persona TOP_AN/BOTTOM_AN.
+// injection vehicle for World Info AN-position entries.
 const NOTE_MODULE_NAME = '2_floating_prompt';
 const metadata_keys = {
     prompt: 'note_prompt',
@@ -561,7 +548,6 @@ registerGenerationShellContext({
         get feature_settings() { return feature_settings; },
         get itemizedPrompts() { return itemizedPrompts; },
         get secret_state() { return secret_state; },
-        get persona_description_positions() { return persona_description_positions; },
         get regex_placement() { return regex_placement; },
         get system_message_types() { return system_message_types; },
         get SECRET_KEYS() { return SECRET_KEYS; },
@@ -593,7 +579,6 @@ registerGenerationShellContext({
         get this_edit_mes_id() { return this_edit_mes_id; },
     },
     addChatsSeparator: (...args) => addChatsSeparator(...args),
-    addPersonaDescriptionExtensionPrompt: (...args) => addPersonaDescriptionExtensionPrompt(...args),
     baseChatReplace: (...args) => baseChatReplace(...args),
     cleanUpMessage: (...args) => cleanUpMessage(...args),
     clearGenerationAttemptMessage: (...args) => clearGenerationAttemptMessage(...args),
@@ -872,6 +857,7 @@ registerMessageShellContext({
         get chatElement() { return chatElement; },
         get converter() { return converter; },
         get default_avatar() { return default_avatar; },
+        get default_user_avatar() { return default_user_avatar; },
         get generation_started() { return generation_started; },
         get main_api() { return main_api; },
         get mesForShowdownParse() { return mesForShowdownParse; },
@@ -884,7 +870,6 @@ registerMessageShellContext({
         get system_avatar() { return system_avatar; },
         get this_chid() { return this_chid; },
         get itemizedPrompts() { return itemizedPrompts; },
-        get user_avatar() { return user_avatar; },
         get power_user() { return power_user; },
         get COMMENT_NAME_DEFAULT() { return COMMENT_NAME_DEFAULT; },
         get PromptReasoning() { return PromptReasoning; },
@@ -1023,7 +1008,6 @@ registerDomHandlersShellContext({
     getCharacterSource: (...args) => getCharacterSource(...args),
     getOptionsPopper: (...args) => getOptionsPopper(...args),
     getRequestHeaders: (...args) => getRequestHeaders(...args),
-    getUserAvatar: (...args) => getUserAvatar(...args),
     handleUnifiedImport: (...args) => handleUnifiedImport(...args),
     hideSwipeButtons: (...args) => hideSwipeButtons(...args),
     importCharacter: (...args) => importCharacter(...args),
@@ -1200,7 +1184,6 @@ const WORKSPACE_DRAWER_COMMAND_HOST_IDS = new Set([
     'rm_api_block',
     'AdvancedFormatting',
     'user-settings-block',
-    'PersonaManagement',
     'RegexPanel',
 ]);
 
@@ -3183,11 +3166,11 @@ function getMainChatMessageListReactBridgeState() {
             return momentDate.isValid() ? momentDate.format('LL LT') : '';
         },
         avatarUrlForMessage: message => {
+            if (message?.is_user) {
+                return default_user_avatar;
+            }
             if (message?.force_avatar) {
                 return message.force_avatar;
-            }
-            if (message?.is_user) {
-                return getThumbnailUrl('persona', user_avatar);
             }
             if (this_chid === undefined) {
                 return system_avatar;
@@ -3953,10 +3936,6 @@ async function measureStartupStage(name, fn) {
 }
 
 export {
-    user_avatar,
-    setUserAvatar,
-    getUserAvatars,
-    getUserAvatar,
     isOdd,
     countOccurrences,
     renderTemplate,
@@ -4052,7 +4031,7 @@ export let converter;
 export const systemUserName = 'EmberDesk System';
 export const neutralCharacterName = 'Assistant';
 let default_user_name = 'User';
-export let name1 = default_user_name;
+export const name1 = default_user_name;
 export let name2 = systemUserName;
 /** @type {ChatMessage[]} */
 export let chat = [];
@@ -4571,7 +4550,6 @@ async function bootstrapWorkspace() {
     }));
     await measureStartupStage('initPresetManager', () => initPresetManager());
     await measureStartupStage('initSystemMessages', () => initSystemMessages());
-    await measureStartupStage('mountPersonaManagement', () => mountPersonaManagementPanel());
     await measureStartupStage('mountPowerUserPanel', () => mountPowerUserPanel());
     await measureStartupStage('mountConfigDrawers', () => Promise.all([
         mountAdvancedFormattingPanel(),
@@ -4585,11 +4563,9 @@ async function bootstrapWorkspace() {
         initTags();
         initBranchUI();
     }));
-    await measureStartupStage('getUserAvatars', () => getUserAvatars(true, user_avatar));
     await measureStartupStage('getCharacters', () => getCharacters());
     await measureStartupStage('initTokenizers', () => initTokenizers());
     await measureStartupStage('hydrateFeatureModules', async () => {
-        await initPersonas();
         await initSlashCommandAutoComplete();
         bindMainChatMessageListBridgeObservers();
         initMacroAutoComplete();
@@ -4781,7 +4757,6 @@ export function updateCharacterRow(chid, patch) {
     }
 
     favsToHotswap();
-    updatePersonaConnectionsAvatarList();
     return true;
 }
 
@@ -4804,7 +4779,7 @@ export async function printCharacters(fullRefresh = false, { allowDuringCharacte
         await delay(1);
     }
 
-    // Before printing the personas, we check if we should enable/disable search sorting
+    // Before printing the characters, we check if we should enable/disable search sorting
     verifyCharactersSearchSortRule();
 
     // We are actually always reprinting filters, as it "doesn't hurt", and this way they are always up to date
@@ -4822,7 +4797,6 @@ export async function printCharacters(fullRefresh = false, { allowDuringCharacte
     });
 
     favsToHotswap();
-    updatePersonaConnectionsAvatarList();
     // React owns the tag chips; printTagFilters above is guarded off, so refresh
     // the toolbar projection here to keep chips in sync on every reprint.
     void syncReactCharacterLibraryToolbarState();
@@ -4955,7 +4929,6 @@ async function reconcileCharacterListAfterDelete(options) {
             return false;
         }
         favsToHotswap();
-        updatePersonaConnectionsAvatarList();
         return true;
     } catch (error) {
         console.warn('Character delete incremental reconcile failed; falling back to full refresh.', error);
@@ -5925,7 +5898,6 @@ export function substituteParamsLegacy(content, _name1, _name2, _original, _grou
         environment.description = fields.description || '';
         environment.personality = fields.personality || '';
         environment.scenario = fields.scenario || '';
-        environment.persona = fields.persona || '';
         environment.mesExamples = () => {
             const mesExamplesArray = parseMesExamples(fields.mesExamples);
             return mesExamplesArray.join('');
@@ -6148,29 +6120,6 @@ export function extractMessageBias(message) {
     }
 }
 
-function addPersonaDescriptionExtensionPrompt() {
-    const INJECT_TAG = 'PERSONA_DESCRIPTION';
-    setExtensionPrompt(INJECT_TAG, '', extension_prompt_types.IN_PROMPT, 0);
-
-    if (!power_user.persona_description || power_user.persona_description_position === persona_description_positions.NONE) {
-        return;
-    }
-
-    const promptPositions = [persona_description_positions.BOTTOM_AN, persona_description_positions.TOP_AN];
-
-    if (promptPositions.includes(power_user.persona_description_position)) {
-        const originalAN = extension_prompts[NOTE_MODULE_NAME]?.value ?? '';
-        const ANWithDesc = power_user.persona_description_position === persona_description_positions.TOP_AN
-            ? `${power_user.persona_description}\n${originalAN}`
-            : `${originalAN}\n${power_user.persona_description}`;
-
-        setExtensionPrompt(NOTE_MODULE_NAME, ANWithDesc, chat_metadata[metadata_keys.position] ?? extension_prompt_types.IN_CHAT, chat_metadata[metadata_keys.depth] ?? 4, feature_settings.note?.allowWIScan ?? false, chat_metadata[metadata_keys.role] ?? extension_prompt_roles.SYSTEM);
-    }
-
-    if (power_user.persona_description_position === persona_description_positions.AT_DEPTH) {
-        setExtensionPrompt(INJECT_TAG, power_user.persona_description, extension_prompt_types.IN_CHAT, power_user.persona_description_depth, true, power_user.persona_description_role);
-    }
-}
 
 /**
  * Returns all extension prompts combined.
@@ -6305,7 +6254,6 @@ export function baseChatReplace(value, name1Override = null, name2Override = nul
  * @property {string} mesExamples Message examples
  * @property {string} description Description
  * @property {string} personality Personality
- * @property {string} persona Persona
  * @property {string} scenario Scenario
  * @property {string} jailbreak Jailbreak instructions
  * @property {string} version Character version
@@ -6352,7 +6300,6 @@ export function getCharacterCardFieldsLazy({ chid = undefined } = {}) {
     const character = characters[currentChid];
 
     const resolvers = {
-        persona: () => baseChatReplace(power_user.persona_description?.trim()),
         system: () => {
             if (!character) return '';
             const systemPrompt = chat_metadata.system_prompt || character.data?.system_prompt || '';
@@ -6420,7 +6367,6 @@ export function getCharacterCardFields({ chid = undefined } = {}) {
         mesExamples: lazy.mesExamples,
         description: lazy.description,
         personality: lazy.personality,
-        persona: lazy.persona,
         scenario: lazy.scenario,
         jailbreak: lazy.jailbreak,
         version: lazy.version,
@@ -7061,7 +7007,7 @@ export function removeMacros(str) {
  * @param {string} [avatar] Avatar of the user sending the message. Defaults to user_avatar.
  * @returns {Promise<any>} A promise that resolves to the message when it is inserted.
  */
-export async function sendMessageAsUser(messageText, messageBias, insertAt = null, compact = false, name = name1, avatar = user_avatar) {
+export async function sendMessageAsUser(messageText, messageBias, insertAt = null, compact = false, name = name1) {
     messageText = getRegexedString(messageText, regex_placement.USER_INPUT);
 
     const message = {
@@ -7077,11 +7023,6 @@ export async function sendMessageAsUser(messageText, messageBias, insertAt = nul
 
     if (power_user.message_token_count_enabled) {
         message.extra.token_count = await getTokenCountAsync(message.mes, 0);
-    }
-
-    // Lock user avatar to a persona.
-    if (avatar in power_user.personas) {
-        message.force_avatar = getThumbnailUrl('persona', avatar);
     }
 
     if (messageBias) {
@@ -7702,12 +7643,6 @@ export function buildAvatarList(block, entities, { templateId = 'inline_avatar_t
             avatarTemplate.find('.ch_fav').val(entity.item.fav);
         }
 
-        if (entity.type === 'persona') {
-            avatarTemplate.attr({ 'data-pid': id, 'data-chid': null });
-            avatarTemplate.find('img').attr('src', getThumbnailUrl('persona', entity.item.avatar));
-            avatarTemplate.attr('title', `[Persona] ${entity.item.name}\nFile: ${entity.item.avatar}`);
-        }
-
         if (interactable) {
             avatarTemplate.addClass(INTERACTABLE_CONTROL_CLASS);
             avatarTemplate.toggleClass('character_select', entity.type === 'character');
@@ -7859,45 +7794,9 @@ export function changeMainAPI(api = null) {
     forceCharacterEditorTokenize();
 }
 
-export function setUserName(value, { toastPersonaNameChange = true } = {}) {
-    name1 = value;
-    if (name1 === undefined || name1 == '')
-        name1 = default_user_name;
-    console.log(`User name changed to ${name1}`);
-    $('#your_name').text(name1);
-    if (toastPersonaNameChange && power_user.persona_show_notifications && !isPersonaPanelOpen()) {
-        toastr.success(t`Your messages will now be sent as ${name1}`, t`Persona Changed`);
-    }
-    saveSettingsDebounced();
-}
-
-async function doOnboarding(avatarId) {
-    const userName = currentUser?.name
-        ? String(currentUser.name).replace('\n', ' ')
-        : null;
-
-    if (userName) {
-        setUserName(userName);
-        power_user.personas[avatarId] = userName;
-        power_user.persona_descriptions[avatarId] = {
-            description: '',
-            position: persona_description_positions.IN_PROMPT,
-        };
-        return;
-    }
-
+async function doOnboarding() {
     const template = $('#onboarding_template .onboarding');
-    let inputName = await callGenericPopup(template, POPUP_TYPE.INPUT, name1, { wider: true, cancelButton: false });
-
-    if (inputName) {
-        inputName = String(inputName).replace('\n', ' ');
-        setUserName(inputName);
-        power_user.personas[avatarId] = inputName;
-        power_user.persona_descriptions[avatarId] = {
-            description: '',
-            position: persona_description_positions.IN_PROMPT,
-        };
-    }
+    await callGenericPopup(template, POPUP_TYPE.TEXT, '', { wider: true, cancelButton: false });
 }
 
 function reloadLoop() {
@@ -7936,10 +7835,6 @@ async function applyStartupSettingsCore(data, initLoaderHandle = null) {
         settings = settingsPlan.settings;
         if (Number.isFinite(Number(data?.settings_revision))) {
             settingsDocumentRevision = Number(data.settings_revision);
-        }
-        if (settings.username !== undefined && settings.username !== '') {
-            name1 = settings.username;
-            $('#your_name').text(name1);
         }
 
         accountStorage.init(settings?.accountStorage);
@@ -7995,10 +7890,6 @@ async function applyStartupSettingsCore(data, initLoaderHandle = null) {
         main_api = settings.main_api;
         changeMainAPI('openai');
 
-        //Load User's Name and Avatar
-        initUserAvatar(settings.user_avatar);
-        setPersonaDescription();
-
         // Load the active character
         active_character = settings.active_character;
 
@@ -8018,7 +7909,7 @@ async function applyStartupSettingsCore(data, initLoaderHandle = null) {
 
         if (firstRun) {
             await initLoaderHandle?.hide();
-            await doOnboarding(user_avatar);
+            await doOnboarding();
             firstRun = false;
         }
     }
@@ -8074,9 +7965,7 @@ export async function saveSettings(loopCounter = 0) {
         firstRun: firstRun,
         accountStorage: accountStorage.getState(),
         currentVersion: persistedCurrentVersion ?? undefined,
-        username: name1,
         active_character: active_character,
-        user_avatar: user_avatar,
         amount_gen: amount_gen,
         max_context: max_context,
         main_api: main_api,
@@ -8983,7 +8872,6 @@ function select_rm_create({ switchMenu = true } = {}) {
     $('#create_button_label').css('display', '');
     $('#create_button').attr('value', 'Create');
     $('#dupe_button').hide();
-    $('#char_connections_button').hide();
     $('.character-detail-edit-action').hide();
 
     //create text poles

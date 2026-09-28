@@ -48,7 +48,6 @@ import { accountStorage } from './util/AccountStorage.js';
 import { DEFAULT_REASONING_TEMPLATE, loadReasoningTemplates } from './reasoning.js';
 import { IMAGE_OVERSWIPE, MEDIA_DISPLAY } from './constants.js';
 import { t } from './i18n.js';
-import { persona_description_positions as _persona_description_positions } from './personas.js';
 import { loadWorkspacePanelsModule } from './workspace-panels-react-bridge.js';
 import { DEFAULT_FRONTEND_FRAME_SETTINGS, normalizeFrontendFramesSettings } from './frontend-frame.js';
 
@@ -68,7 +67,7 @@ const MAX_RESPONSE_UNLOCKED = 64 * 1024;
 const unlockedMaxContextStep = 512;
 const maxContextMin = 512;
 
-const defaultStoryString = '{{#if system}}{{system}}\n{{/if}}{{#if description}}{{description}}\n{{/if}}{{#if personality}}{{char}}\'s personality: {{personality}}\n{{/if}}{{#if scenario}}Scenario: {{scenario}}\n{{/if}}{{#if persona}}{{persona}}\n{{/if}}';
+const defaultStoryString = '{{#if system}}{{system}}\n{{/if}}{{#if description}}{{description}}\n{{/if}}{{#if personality}}{{char}}\'s personality: {{personality}}\n{{/if}}{{#if scenario}}Scenario: {{scenario}}\n{{/if}}';
 const defaultExampleSeparator = '***';
 const defaultChatStart = '***';
 const defaultToastPosition = 'toast-top-center';
@@ -92,7 +91,6 @@ export const send_on_enter_options = {
     ENABLED: 1,
 };
 
-export const persona_description_positions = _persona_description_positions;
 
 export const power_user = {
     charListGrid: false,
@@ -248,18 +246,6 @@ export const power_user = {
         separator: '\n',
         max_additions: 1,
     },
-
-    personas: {},
-    default_persona: null,
-    persona_descriptions: {},
-
-    persona_description: '',
-    persona_description_position: persona_description_positions.IN_PROMPT,
-    persona_description_role: 0,
-    persona_description_depth: 2,
-    persona_description_lorebook: '',
-    persona_show_notifications: true,
-    persona_sort_order: 'asc',
 
     custom_stopping_strings: '',
     custom_stopping_strings_macro: true,
@@ -1161,6 +1147,14 @@ export async function loadPowerUserSettings(settings, data) {
         delete power_user.instruct.derived;
     }
 
+    // Persona system was retired; drop legacy per-persona settings.
+    for (const key of ['personas', 'default_persona', 'persona_descriptions', 'persona_description',
+        'persona_description_position', 'persona_description_role', 'persona_description_depth',
+        'persona_description_lorebook', 'persona_show_notifications', 'persona_sort_order',
+        'persona_allow_multi_connections', 'persona_auto_lock']) {
+        delete power_user[key];
+    }
+
     $('#single_line').prop('checked', power_user.single_line);
     $('#relaxed_api_urls').prop('checked', power_user.relaxed_api_urls);
     $('#world_import_dialog').prop('checked', power_user.world_import_dialog);
@@ -1180,9 +1174,6 @@ export async function loadPowerUserSettings(settings, data) {
     $('#custom_stopping_strings').text(power_user.custom_stopping_strings);
     $('#custom_stopping_strings_macro').prop('checked', power_user.custom_stopping_strings_macro);
     $('#fuzzy_search_checkbox').prop('checked', power_user.fuzzy_search);
-    $('#persona_show_notifications').prop('checked', power_user.persona_show_notifications);
-    $('#persona_allow_multi_connections').prop('checked', power_user.persona_allow_multi_connections);
-    $('#persona_auto_lock').prop('checked', power_user.persona_auto_lock);
     $('#encode_tags').prop('checked', power_user.encode_tags);
     $('#experimental_macro_engine').prop('checked', power_user.experimental_macro_engine);
     $('#example_messages_behavior').val(getExampleMessagesBehavior());
@@ -1450,28 +1441,6 @@ export function fuzzySearchWorldInfo(data, searchValue, fuzzySearchCaches = null
 }
 
 /**
- * Fuzzy search persona entries by a search term
- * @param {*[]} data - persona data array
- * @param {string} searchValue - The search term
- * @param {Object.<string, { resultMap: Map<string, any> }>} [fuzzySearchCaches=null] - Optional fuzzy search caches
- * @returns {import('fuse.js').FuseResult<any>[]} Results as items with their score
- */
-export function fuzzySearchPersonas(data, searchValue, fuzzySearchCaches = null) {
-    const mappedData = data.map(x => ({
-        key: x,
-        name: power_user.personas[x] ?? '',
-        description: power_user.persona_descriptions[x]?.description ?? '',
-    }));
-
-    const keys = [
-        { name: 'name', weight: 20 },
-        { name: 'description', weight: 3 },
-    ];
-
-    return performFuzzySearch(fuzzySearchCategories.personas, mappedData, keys, searchValue, fuzzySearchCaches);
-}
-
-/**
  * Fuzzy search tags by a search term
  * @param {string} searchValue - The search term
  * @param {Object.<string, { resultMap: Map<string, any> }>} [fuzzySearchCaches=null] - Optional fuzzy search caches
@@ -1562,7 +1531,6 @@ function validateStoryString(storyString, params) {
 
     validateMissingField('description');
     validateMissingField('personality');
-    validateMissingField('persona');
     validateMissingField('scenario');
     // validateMissingField('system');
     validateMissingField('wiBefore', 'loreBefore');
@@ -2496,21 +2464,6 @@ jQuery(() => {
 
     $('#fuzzy_search_checkbox').on('input', function () {
         power_user.fuzzy_search = !!$(this).prop('checked');
-        saveSettingsDebounced();
-    });
-
-    $('#persona_show_notifications').on('input', function () {
-        power_user.persona_show_notifications = !!$(this).prop('checked');
-        saveSettingsDebounced();
-    });
-
-    $('#persona_allow_multi_connections').on('input', function () {
-        power_user.persona_allow_multi_connections = !!$(this).prop('checked');
-        saveSettingsDebounced();
-    });
-
-    $('#persona_auto_lock').on('input', function () {
-        power_user.persona_auto_lock = !!$(this).prop('checked');
         saveSettingsDebounced();
     });
 

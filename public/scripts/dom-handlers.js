@@ -51,7 +51,6 @@ const getCharacterSource = (...args) => shell().getCharacterSource(...args);
 const getCharacters = (...args) => shell().getCharacters(...args);
 const getOptionsPopper = (...args) => shell().getOptionsPopper(...args);
 const getRequestHeaders = (...args) => shell().getRequestHeaders(...args);
-const getUserAvatar = (...args) => shell().getUserAvatar(...args);
 const handleUnifiedImport = (...args) => shell().handleUnifiedImport(...args);
 const hideSwipeButtons = (...args) => shell().hideSwipeButtons(...args);
 const importCharacter = (...args) => shell().importCharacter(...args);
@@ -1314,15 +1313,8 @@ export async function bindLegacyShellHandlers() {
             const zoomedAvatarImgElement = $(`.zoomed_avatar[forChar="${charname}"] img`);
             if (messageElement.attr('is_user') == 'true' || (messageElement.attr('is_system') == 'true' && !isValidCharacter)) {
                 //handle user and system avatars
-                const isValidPersona = decodeURIComponent(targetAvatarImg) in state.power_user.personas;
-                if (isValidPersona) {
-                    const personaSrc = getUserAvatar(targetAvatarImg);
-                    zoomedAvatarImgElement.attr('src', personaSrc);
-                    zoomedAvatarImgElement.attr('data-izoomify-url', personaSrc);
-                } else {
-                    zoomedAvatarImgElement.attr('src', thumbURL);
-                    zoomedAvatarImgElement.attr('data-izoomify-url', thumbURL);
-                }
+                zoomedAvatarImgElement.attr('src', thumbURL);
+                zoomedAvatarImgElement.attr('data-izoomify-url', thumbURL);
             } else if (messageElement.attr('is_user') == 'false') { //handle char avatars
                 zoomedAvatarImgElement.attr('src', avatarSrc);
                 zoomedAvatarImgElement.attr('data-izoomify-url', avatarSrc);
@@ -1414,9 +1406,6 @@ export async function bindLegacyShellHandlers() {
                 break;
             case 'set_chat_character_settings':
                 await setCharacterSettingsOverrides();
-                break;
-            case 'character_action_connected_personas':
-                $('#char_connections_button').trigger('click');
                 break;
             case 'renameCharButton':
                 await renameCharacter();

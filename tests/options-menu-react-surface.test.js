@@ -41,7 +41,7 @@ describe('options menu + character context menu React surfaces', () => {
         expect(indexHtml).not.toContain('id="character_context_menu_favorite"');
         const ids = [
             'character_context_menu_favorite', 'character_context_menu_tag',
-            'character_context_menu_duplicate', 'character_context_menu_persona',
+            'character_context_menu_duplicate',
             'character_context_menu_delete',
         ];
         for (const id of ids) {

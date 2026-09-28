@@ -39,7 +39,7 @@ export function PowerUserPanel() {
                         <div name="themeElements" className="flex-container flexFlowColumn flexNoGap">
                             {/* <h4><span data-i18n="UI Colors">Theme Settings</span></h4> */}
                             <div name="AvatarAndChatDisplay" className="flex-container flexFlowColumn">
-                                <div className="flex-container alignItemsBaseline" title="This style applies to all avatars globaly, including your Persona, Character Management, Account selection, etc." data-i18n="[title]This style applies to all avatars globaly, including your Persona, Character Management, Account selection, etc.">
+                                <div className="flex-container alignItemsBaseline" title="This style applies to all avatars globaly, including Character Management, Account selection, etc." data-i18n="[title]This style applies to all avatars globaly, including Character Management, Account selection, etc.">
                                     <span data-i18n="Avatar Style:">Avatars:</span>
                                     <select id="avatar_style" className="widthNatural flex1 margin0 text_pole">
                                         <option value="0" data-i18n="Circle">Circle</option>

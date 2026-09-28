@@ -88,6 +88,6 @@ The shell is a final-wave surface. It may remove its legacy chrome and drawer-co
 ## Boundaries
 
 - Startup readiness and initial overlay behavior belong to [Workspace Startup Bootstrap](feature.startup_bootstrap).
-- AI Config, Formatting, Character Library, World Info, Settings, and Character Authoring retain their own feature contracts after the shell opens them. Active chat backgrounds and avatar/persona media remain workspace capabilities; the global Background Library is retired.
+- AI Config, Formatting, Character Library, World Info, Settings, and Character Authoring retain their own feature contracts after the shell opens them. Active chat backgrounds and avatar media remain workspace capabilities; the global Background Library is retired.
 - Message rendering, composer behavior, slash parser, regex engine, and provider transport are not owned by this feature.
 - Main-chat shell ownership is limited to outer layout/status placement; row rendering, row actions, slash command execution, and provider transport remain governed by their feature contracts.

@@ -16,8 +16,6 @@ const MIGRATABLE_KEYS = [
     /^mediaWarningShown:/,
     /^NavLockOn$/,
     /^NavOpened$/,
-    /^Personas_PerPage$/,
-    /^Personas_GridView$/,
     /^Proxy_SkipConfirm_/,
     /^qr--executeShortcut$/,
     /^qr--syntax$/,

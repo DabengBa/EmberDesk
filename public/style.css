@@ -3374,23 +3374,6 @@ select option[disabled]:not(:checked) {
     margin: 0 2px;
 }
 
-#persona_search_bar {
-    min-width: 80px;
-}
-
-#persona_sort_order {
-    max-width: 4em;
-}
-
-#persona-management-block .paginationjs-nav {
-    width: max-content;
-}
-
-#persona-management-block .avatar_container_states .menu_button {
-    padding: 3px 5px;
-    pointer-events: initial;
-}
-
 
 input[type=search]::-webkit-search-cancel-button {
     -webkit-appearance: none;
@@ -4458,44 +4441,6 @@ input[type='checkbox'].del_checkbox {
 
 .avatar-container.selected {
     border: var(--avatar-base-border-radius) solid rgba(255, 255, 255, 0.7);
-}
-
-.avatar-container.default_persona .avatar {
-    outline: var(--avatar-base-border-radius) solid var(--golden);
-}
-
-.avatar-container .avatar_state .fa-lock {
-    color: var(--active);
-}
-
-.avatar-container:not(.locked_to_chat) .locked_to_chat_label {
-    display: none;
-}
-
-.avatar-container:not(.locked_to_character) .locked_to_character_label {
-    display: none;
-}
-
-#lock_persona_default.locked i.icon {
-    color: var(--golden);
-}
-
-#lock_user_name.locked .icon,
-.avatar-container.locked_to_chat .locked_to_chat_label .icon {
-    color: var(--SmartThemeQuoteColor);
-}
-
-#lock_persona_to_char.locked .icon,
-.avatar-container.locked_to_character .locked_to_character_label .icon {
-    color: var(--active);
-}
-
-#lock_user_name.locked {
-    border-color: color-mix(in srgb, var(--SmartThemeQuoteColor) 50%, var(--SmartThemeBorderColor));
-}
-
-#lock_persona_to_char.locked {
-    border-color: color-mix(in srgb, var(--active) 50%, var(--SmartThemeBorderColor));
 }
 
 #form_upload_avatar {

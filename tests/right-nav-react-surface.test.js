@@ -37,7 +37,7 @@ describe('right navigation panel React surface', () => {
             'avatar_div', 'avatar_load_preview', 'add_avatar_button',
             'rm_button_back', 'favorite_button', 'world_button', 'delete_button',
             'fav_checkbox', 'create_button', 'create_button_label',
-            'char-management-dropdown', 'advanced_div', 'char_connections_button',
+            'char-management-dropdown', 'advanced_div',
             'export_button', 'dupe_button', 'tags_div', 'tagInput', 'tagList',
             'spoiler_free_desc', 'creator_notes_spoiler', 'creator_notes_empty',
             'creators_note_desc_hidden', 'descriptionWrapper', 'description_textarea',

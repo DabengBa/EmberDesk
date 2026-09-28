@@ -9,7 +9,6 @@ import { router as usersPrivateRouter } from './endpoints/users-private.js';
 import { router as usersAdminRouter } from './endpoints/users-admin.js';
 import { router as movingUIRouter } from './endpoints/moving-ui.js';
 import { router as imagesRouter } from './endpoints/images.js';
-import { router as avatarsRouter } from './endpoints/avatars.js';
 import { router as openAiRouter } from './endpoints/openai.js';
 import { router as tokenizersRouter } from './endpoints/tokenizers.js';
 import { router as presetsRouter } from './endpoints/presets.js';
@@ -97,9 +96,6 @@ export function redirectDeprecatedEndpoints(app) {
     redirect('/recreatestats', '/api/stats/recreate');
     redirect('/updatestats', '/api/stats/update');
     redirect('/savetheme', '/api/themes/save');
-    redirect('/getuseravatars', '/api/avatars/get');
-    redirect('/deleteuseravatar', '/api/avatars/delete');
-    redirect('/uploaduseravatar', '/api/avatars/upload');
     redirect('/deletequickreply', '/api/quick-replies/delete');
     redirect('/savequickreply', '/api/quick-replies/save');
     redirect('/uploadimage', '/api/images/upload');
@@ -130,7 +126,6 @@ export function setupPrivateEndpoints(app) {
     app.use('/api/moving-ui', movingUIRouter);
     app.use('/api/images', imagesRouter);
     app.use('/api/quick-replies', utilityFeatureRetirementRouter);
-    app.use('/api/avatars', avatarsRouter);
     app.use('/api/themes', utilityFeatureRetirementRouter);
     app.use('/api/openai', openAiRouter);
     app.use('/api/tokenizers', tokenizersRouter);

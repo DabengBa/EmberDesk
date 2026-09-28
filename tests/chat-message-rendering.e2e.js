@@ -84,7 +84,7 @@ function getUnexpectedConsoleErrors(errors) {
     return errors.filter((error) => {
         const url = error.location?.url ?? '';
         const isSeedPersonaThumbnail404 = error.text.includes('Failed to load resource')
-            && url.includes('/thumbnail?type=persona&file=user-default.png');
+            && url.includes('img/user-default.png');
         // __transparent.png is a built-in background option whose asset only exists in
         // production installs; seeded fixtures surface a 404, not an app error.
         const isSeedTransparentBackground404 = error.text.includes('Failed to load resource')

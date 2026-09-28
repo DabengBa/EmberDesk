@@ -20,7 +20,6 @@ import { eventSource, event_types } from './events.js';
 import { getRequestHeaders } from './request-context.js';
 import { favsToHotswap } from './RossAscends-mods.js';
 import { loader } from './action-loader.js';
-import { convertCharacterToPersona } from './personas.js';
 import { POPUP_TYPE, POPUP_RESULT, Popup } from './popup.js';
 import { buildCascadeSectionHtml, captureCascadeChoices } from './world-cascade-dialog.js';
 import { waitUntilCondition } from './utils.js';
@@ -105,15 +104,6 @@ class CharacterContextMenu {
     };
 
     /**
-     * Convert one or more characters to persona,
-     * may open a popup for one or more characters.
-     *
-     * @param {number} characterId
-     * @returns {Promise<void>}
-     */
-    static persona = async (characterId) => void (await convertCharacterToPersona(characterId));
-
-    /**
      * Delete one or more characters,
      * opens a popup.
      *
@@ -165,7 +155,6 @@ class CharacterContextMenu {
             { id: 'character_context_menu_favorite', callback: characterGroupOverlay.handleContextMenuFavorite },
             { id: 'character_context_menu_duplicate', callback: characterGroupOverlay.handleContextMenuDuplicate },
             { id: 'character_context_menu_delete', callback: characterGroupOverlay.handleContextMenuDelete },
-            { id: 'character_context_menu_persona', callback: characterGroupOverlay.handleContextMenuPersona },
             { id: 'character_context_menu_tag', callback: characterGroupOverlay.handleContextMenuTag },
         ];
 
@@ -831,19 +820,6 @@ class BulkEditOverlay {
     handleContextMenuDuplicate = () => Promise.all(this.selectedCharacters.map(async characterId => CharacterContextMenu.duplicate(characterId)))
         .then(() => getCharacters())
         .then(() => this.browseState());
-
-    /**
-     * Sequentially handle all character-to-persona conversions.
-     *
-     * @returns {Promise<void>}
-     */
-    handleContextMenuPersona = async () => {
-        for (const characterId of this.selectedCharacters) {
-            await CharacterContextMenu.persona(characterId);
-        }
-
-        this.browseState();
-    };
 
     /**
      * Builds the unified delete confirmation dialog HTML.

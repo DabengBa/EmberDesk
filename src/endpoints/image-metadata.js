@@ -2,19 +2,18 @@
  * Shared thumbnail geometry and animation-format helpers.
  *
  * The image metadata HTTP service was retired; these pure helpers remain here
- * for avatar and persona thumbnail generation.
+ * for avatar thumbnail generation.
  */
 
 import { getConfigValue } from '../util.js';
 
 /**
- * @typedef {'avatar' | 'persona'} ThumbnailType
+ * @typedef {'avatar'} ThumbnailType
  */
 
 /** @type {Record<string, number[]>} */
 export const thumbnailDimensions = {
     avatar: getConfigValue('thumbnails.dimensions.avatar', [96, 144]),
-    persona: getConfigValue('thumbnails.dimensions.persona', [96, 144]),
 };
 
 /**

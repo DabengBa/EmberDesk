@@ -42,7 +42,7 @@ function applyThumbnailCacheHeaders(request, response) {
 }
 
 /**
- * @typedef {'avatar' | 'persona'} ThumbnailType
+ * @typedef {'avatar'} ThumbnailType
  */
 
 
@@ -58,9 +58,6 @@ function getThumbnailFolder(directories, type) {
     switch (type) {
         case 'avatar':
             thumbnailFolder = directories.thumbnailsAvatar;
-            break;
-        case 'persona':
-            thumbnailFolder = directories.thumbnailsPersona;
             break;
     }
 
@@ -79,9 +76,6 @@ function getOriginalFolder(directories, type) {
     switch (type) {
         case 'avatar':
             originalFolder = directories.characters;
-            break;
-        case 'persona':
-            originalFolder = directories.avatars;
             break;
     }
 
@@ -108,7 +102,7 @@ export function invalidateThumbnail(directories, type, file) {
 /**
  * Generates or retrieves a thumbnail for a given file.
  * @param {import('../users.js').UserDirectoryList} directories - User's directory configuration.
- * @param {ThumbnailType} type - Type of thumbnail ('avatar', 'persona').
+ * @param {ThumbnailType} type - Type of thumbnail ('avatar').
  * @param {string} file - The filename of the image.
  * @param {boolean} [forceGenerate=false] - Whether to force generation even if a thumbnail exists.
  * @param {boolean|null} [isKnownAnimated=null] - If true, skips generation. If false, assumes static. If null, checks.
@@ -225,7 +219,7 @@ async function processSingleImage(file, originalFolder, thumbnailFolder, type) {
         const thumbImage = image.clone();
         const thumbnailResolution = getThumbnailResolution(type);
 
-        if (type === 'avatar' || type === 'persona') {
+        if (type === 'avatar') {
             // Crop and resize to fixed dimensions
             const [configWidth, configHeight] = dimensions[type];
             thumbImage.cover({ w: configWidth, h: configHeight });
@@ -253,7 +247,7 @@ publicRouter.get('/', async function (request, response) {
     try {
         const { file: rawFile, type, animated } = request.query;
         if (typeof rawFile !== 'string' || typeof type !== 'string') return response.sendStatus(400);
-        if (type !== 'avatar' && type !== 'persona') return response.sendStatus(400);
+        if (type !== 'avatar') return response.sendStatus(400);
 
         const file = sanitize(rawFile);
         if (file !== rawFile) return response.sendStatus(403);

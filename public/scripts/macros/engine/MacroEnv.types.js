@@ -31,7 +31,6 @@
  * @property {string} [description]
  * @property {string} [personality]
  * @property {string} [scenario]
- * @property {string} [persona]
  * @property {string} [charPrompt]
  * @property {string} [charInstruction]
  * @property {string} [mesExamplesRaw]

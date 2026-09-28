@@ -1,9 +1,7 @@
 {
     "firstRun": true,
-    "username": "User",
     "api_server": "http://127.0.0.1:5000/api",
     "preset_settings": "RecoveredRuins",
-    "user_avatar": "user-default.png",
     "amount_gen": 350,
     "max_context": 8192,
     "main_api": "koboldhorde",
@@ -123,12 +121,6 @@
             "example_separator": "***",
             "use_stop_strings": true
         },
-        "personas": {},
-        "default_persona": null,
-        "persona_descriptions": {},
-        "persona_description": "",
-        "persona_description_position": 0,
-        "persona_show_notifications": true,
         "custom_stopping_strings": "",
         "custom_stopping_strings_macro": true,
         "fuzzy_search": true,

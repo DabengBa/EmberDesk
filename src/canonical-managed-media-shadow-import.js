@@ -16,7 +16,6 @@ export const MANAGED_MEDIA_AUDIT_SCOPE = 'managed_media';
 
 const MEDIA_DOMAINS = Object.freeze([
     { key: 'assets', ownerType: 'asset', role: 'asset', recursive: true },
-    { key: 'avatars', ownerType: 'persona_avatar', role: 'persona_avatar', recursive: false },
     { key: 'files', ownerType: 'attachment', role: 'attachment', recursive: true },
     { key: 'userImages', ownerType: 'user_image', role: 'user_image', recursive: true },
 ]);

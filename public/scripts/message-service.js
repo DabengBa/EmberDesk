@@ -888,7 +888,7 @@ export function addOneMessage(mes, { type = undefined, insertAfter = null, scrol
  * @returns {JQuery<HTMLElement>} Rendered HTMLElement.
  */
 export function updateMessageElement(mes, { messageId = state.chat.length - 1, messageElement = state.messageTemplate.clone(), adjustMediaScroll = SCROLL_BEHAVIOR.NONE } = {}) {
-    let avatarImg = getThumbnailUrl('persona', state.user_avatar);
+    let avatarImg = state.default_user_avatar;
 
     //for non-user messages
     if (!mes.is_user) {
@@ -901,13 +901,6 @@ export function updateMessageElement(mes, { messageId = state.chat.length - 1, m
         } else {
             avatarImg = state.default_avatar;
         }
-        //old processing:
-        //if message is from system, use the name provided in the message JSONL to proceed,
-        //if not system message, use name2 (char's name) to proceed
-        //characterName = mes.is_system || mes.force_avatar ? mes.name : name2;
-    } else if (mes.is_user && mes.force_avatar) {
-        // Special case for persona images.
-        avatarImg = mes.force_avatar;
     }
     const momentDate = timestampToMoment(mes.send_date);
     const timestamp = momentDate.isValid() ? momentDate.format('LL LT') : '';

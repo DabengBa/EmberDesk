@@ -40,7 +40,7 @@ import {
     promptManagerDefaultPromptOrders,
 } from './PromptManager.js';
 
-import { forceCharacterEditorTokenize, getCustomStoppingStrings, persona_description_positions, power_user } from './power-user.js';
+import { forceCharacterEditorTokenize, getCustomStoppingStrings, power_user } from './power-user.js';
 import { SECRET_KEYS, secret_state, writeSecret, deleteSecret, resolveSecretKey } from './secrets.js';
 
 import { getEventSourceStream } from './sse-stream.js';
@@ -1204,18 +1204,12 @@ async function preparePromptsForChatCompletion({ scenario, charPersonality, name
         position: getPromptPosition(smartContext.position),
     });
 
-    // Persona Description
-    if (power_user.persona_description && power_user.persona_description_position === persona_description_positions.IN_PROMPT) {
-        systemPrompts.push({ role: 'system', content: power_user.persona_description, identifier: 'personaDescription' });
-    }
-
     const knownExtensionPrompts = [
         '1_memory',
         '2_floating_prompt',
         '3_vectors',
         '4_vectors_data_bank',
         'chromadb',
-        'PERSONA_DESCRIPTION',
         'QUIET_PROMPT',
         'DEPTH_PROMPT',
     ];

@@ -22,7 +22,6 @@ function makeUserDirectories(prefix) {
         chats: path.join(root, 'chats'),
         avatars: path.join(root, 'User Avatars'),
         thumbnailsAvatar: path.join(root, 'thumbnails', 'avatar'),
-        thumbnailsPersona: path.join(root, 'thumbnails', 'persona'),
     };
 
     for (const dir of Object.values(directories)) {
@@ -195,73 +194,6 @@ async function importCharacterRoutes({ generateThumbnailImpl, thumbnailsEnabled 
             invalidateThumbnail: mockInvalidateThumbnail,
             refreshCharacterIndexEntrySafe: mockRefreshCharacterIndexEntrySafe,
             write: mockWrite,
-        },
-    };
-}
-
-async function importAvatarRoutes({ generateThumbnailImpl, thumbnailsEnabled = true } = {}) {
-    jest.resetModules();
-
-    const mockGenerateThumbnail = jest.fn(generateThumbnailImpl ?? (() => Promise.resolve({ path: 'thumb.png', aspectRatio: 1, resolution: 1 })));
-    const mockInvalidateThumbnail = jest.fn();
-    const mockBust = jest.fn();
-
-    jest.unstable_mockModule('../src/jimp.js', () => ({
-        Jimp: class FakeJimp {
-            static async read() {
-                return {
-                    bitmap: { width: 64, height: 64 },
-                    crop() {},
-                    cover() {},
-                    resize() {},
-                    async getBufferAsync() {
-                        return Buffer.from('persona-image');
-                    },
-                };
-            }
-        },
-    }));
-
-    jest.unstable_mockModule('../src/util.js', () => ({
-        getImages: () => [],
-        tryParse: () => undefined,
-    }));
-
-    jest.unstable_mockModule('../src/middleware/validateFileName.js', () => ({
-        getFileNameValidationFunction: () => (_request, _response, next) => next(),
-    }));
-
-    jest.unstable_mockModule('../src/endpoints/characters.js', () => ({
-        applyAvatarCropResize: async () => Buffer.from('persona-image'),
-    }));
-
-    jest.unstable_mockModule('../src/endpoints/thumbnails.js', () => ({
-        areThumbnailsEnabled: () => thumbnailsEnabled,
-        invalidateThumbnail: mockInvalidateThumbnail,
-        generateThumbnail: mockGenerateThumbnail,
-    }));
-
-    jest.unstable_mockModule('../src/middleware/cacheBuster.js', () => ({
-        default: { bust: mockBust },
-    }));
-
-    jest.unstable_mockModule('../src/endpoints/canonical-managed-media-write-service.js', () => ({
-        deleteCanonicalManagedMediaReference: async () => ({ authorityCommitted: false }),
-        invalidateCanonicalManagedMediaAudit: () => false,
-        writeCanonicalManagedMedia: async () => ({ authorityCommitted: false }),
-    }));
-
-    jest.unstable_mockModule('write-file-atomic', () => ({
-        sync: (targetPath, data) => fs.writeFileSync(targetPath, data),
-    }));
-
-    const module = await import('../src/endpoints/avatars.js');
-    return {
-        router: module.router,
-        mocks: {
-            generateThumbnail: mockGenerateThumbnail,
-            invalidateThumbnail: mockInvalidateThumbnail,
-            bust: mockBust,
         },
     };
 }
@@ -685,50 +617,4 @@ describe('thumbnail write-time pregeneration hooks', () => {
         expect(mocks.generateThumbnail).not.toHaveBeenCalled();
     });
 
-    test('persona upload kicks off persona pregeneration after canonical write', async () => {
-        const directories = makeUserDirectories('emberdesk-pregen-persona-');
-        let sawWrittenPersona = false;
-        const { router, mocks } = await importAvatarRoutes({
-            generateThumbnailImpl: () => {
-                sawWrittenPersona = fs.existsSync(path.join(directories.avatars, 'persona.png'));
-                return Promise.resolve({ path: 'thumb.png', aspectRatio: 1, resolution: 1 });
-            },
-        });
-        const tempUploadPath = path.join(directories.root, 'upload.tmp');
-        fs.writeFileSync(tempUploadPath, Buffer.from('upload'));
-        const request = {
-            body: { overwrite_name: 'persona.png' },
-            file: { destination: directories.root, filename: 'upload.tmp' },
-            query: {},
-            user: { directories },
-        };
-
-        const response = await invokeRoute(router, 'post', '/upload', request);
-
-        expect(response.body).toEqual({ path: 'persona.png' });
-        expect(sawWrittenPersona).toBe(true);
-        expect(mocks.invalidateThumbnail).toHaveBeenCalledWith(directories, 'persona', 'persona.png');
-        expect(mocks.generateThumbnail).toHaveBeenCalledWith(directories, 'persona', 'persona.png', true, null);
-        expect(mocks.invalidateThumbnail.mock.invocationCallOrder[0]).toBeLessThan(mocks.generateThumbnail.mock.invocationCallOrder[0]);
-    });
-
-    test('persona upload skips pregeneration when thumbnails are disabled', async () => {
-        const directories = makeUserDirectories('emberdesk-pregen-disabled-persona-');
-        const { router, mocks } = await importAvatarRoutes({
-            thumbnailsEnabled: false,
-        });
-        const tempUploadPath = path.join(directories.root, 'upload.tmp');
-        fs.writeFileSync(tempUploadPath, Buffer.from('upload'));
-        const request = {
-            body: { overwrite_name: 'persona.png' },
-            file: { destination: directories.root, filename: 'upload.tmp' },
-            query: {},
-            user: { directories },
-        };
-
-        const response = await invokeRoute(router, 'post', '/upload', request);
-
-        expect(response.body).toEqual({ path: 'persona.png' });
-        expect(mocks.generateThumbnail).not.toHaveBeenCalled();
-    });
 });

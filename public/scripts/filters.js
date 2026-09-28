@@ -1,16 +1,16 @@
-import { fuzzySearchCharacters, fuzzySearchPersonas, fuzzySearchTags, fuzzySearchWorldInfo, power_user } from './power-user.js';
+import { fuzzySearchCharacters, fuzzySearchTags, fuzzySearchWorldInfo, power_user } from './power-user.js';
 import { tag_map } from './tags.js';
 import { includesIgnoreCaseAndAccents } from './utils.js';
 
 
 /**
  * @typedef FilterType The filter type possible for this filter helper
- * @type {'search'|'tag'|'folder'|'fav'|'world_info_search'|'persona_search'}
+ * @type {'search'|'tag'|'folder'|'fav'|'world_info_search'}
  */
 
 /**
  * The filter types
- * @type {{ SEARCH: 'search', TAG: 'tag', FOLDER: 'folder', FAV: 'fav', WORLD_INFO_SEARCH: 'world_info_search', PERSONA_SEARCH: 'persona_search'}}
+ * @type {{ SEARCH: 'search', TAG: 'tag', FOLDER: 'folder', FAV: 'fav', WORLD_INFO_SEARCH: 'world_info_search'}}
  */
 export const FILTER_TYPES = {
     SEARCH: 'search',
@@ -18,7 +18,6 @@ export const FILTER_TYPES = {
     FOLDER: 'folder',
     FAV: 'fav',
     WORLD_INFO_SEARCH: 'world_info_search',
-    PERSONA_SEARCH: 'persona_search',
 };
 
 /**
@@ -56,12 +55,11 @@ export function isFilterState(a, b) {
 
 /**
  * The fuzzy search categories
- * @type {{ characters: string, worldInfo: string, personas: string, tags: string }}
+ * @type {{ characters: string, worldInfo: string, tags: string }}
  */
 export const fuzzySearchCategories = Object.freeze({
     characters: 'characters',
     worldInfo: 'worldInfo',
-    personas: 'personas',
     tags: 'tags',
 });
 
@@ -98,7 +96,6 @@ export class FilterHelper {
         this.fuzzySearchCaches = {
             [fuzzySearchCategories.characters]: { resultMap: new Map() },
             [fuzzySearchCategories.worldInfo]: { resultMap: new Map() },
-            [fuzzySearchCategories.personas]: { resultMap: new Map() },
             [fuzzySearchCategories.tags]: { resultMap: new Map() },
         };
     }
@@ -143,7 +140,6 @@ export class FilterHelper {
         [FILTER_TYPES.FOLDER]: this.folderFilter.bind(this),
         [FILTER_TYPES.TAG]: this.tagFilter.bind(this),
         [FILTER_TYPES.WORLD_INFO_SEARCH]: this.wiSearchFilter.bind(this),
-        [FILTER_TYPES.PERSONA_SEARCH]: this.personaSearchFilter.bind(this),
     };
 
     /**
@@ -156,7 +152,6 @@ export class FilterHelper {
         [FILTER_TYPES.FOLDER]: false,
         [FILTER_TYPES.TAG]: { excluded: [], selected: [] },
         [FILTER_TYPES.WORLD_INFO_SEARCH]: '',
-        [FILTER_TYPES.PERSONA_SEARCH]: '',
     };
 
     /**
@@ -175,25 +170,6 @@ export class FilterHelper {
         this.cacheScores(FILTER_TYPES.WORLD_INFO_SEARCH, new Map(fuzzySearchResults.map(i => [i.item?.uid, i.score])));
 
         const filteredData = data.filter(entity => fuzzySearchResults.find(x => x.item === entity));
-        return filteredData;
-    }
-
-    /**
-     * Applies a search filter to Persona data.
-     * @param {string[]} data The data to filter.
-     * @returns {string[]} The filtered data.
-     */
-    personaSearchFilter(data) {
-        const term = this.filterData[FILTER_TYPES.PERSONA_SEARCH];
-
-        if (!term) {
-            return data;
-        }
-
-        const fuzzySearchResults = fuzzySearchPersonas(data, term, this.fuzzySearchCaches);
-        this.cacheScores(FILTER_TYPES.PERSONA_SEARCH, new Map(fuzzySearchResults.map(i => [i.item.key, i.score])));
-
-        const filteredData = data.filter(name => fuzzySearchResults.find(x => x.item.key === name));
         return filteredData;
     }
 

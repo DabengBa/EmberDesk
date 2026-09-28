@@ -18,7 +18,6 @@ import { loadWorkspacePanelsModule } from './workspace-panels-react-bridge.js';
 import { renderTemplateAsync } from './templates.js';
 import { t, translate } from './i18n.js';
 import { accountStorage } from './util/AccountStorage.js';
-import { getOrCreatePersonaDescriptor, setPersonaDescription, user_avatar } from './personas.js';
 import { buildWorldInfoReplayState } from './deferred-panel-replays.js';
 import { buildCascadeSectionHtml, captureCascadeChoices } from './world-cascade-dialog.js';
 import { convertAgnaiMemoryBook, convertCharacterBook, convertNovelLorebook, convertRisuLorebook } from './world-info-converters.js';
@@ -152,10 +151,6 @@ function getCurrentShellCharacterId() {
 
 function getCurrentShellMenuType() {
     return getWorldInfoShell().getMenuType();
-}
-
-function getCurrentShellName1() {
-    return getWorldInfoShell().getName1();
 }
 
 function saveCharacterDebounced() {
@@ -693,7 +688,6 @@ const MAX_COMMENT_LENGTH = 100;
 /**
  * @typedef {object} WIGlobalScanData The chat-independent data to be scanned. Each of
  *     these fields can be enabled for scanning per entry.
- * @property {string} personaDescription User persona description
  * @property {string} characterDescription Character description
  * @property {string} characterPersonality Character personality
  * @property {string} characterDepthPrompt Character depth prompt (sometimes referred to as character notes)
@@ -1603,28 +1597,6 @@ function registerWorldInfoSlashCommands() {
         return entries;
     }
 
-    /**
-     * Gets the name of the persona-bound lorebook.
-     * @param {import('./slash-commands/SlashCommand.js').NamedArguments} args Named arguments
-     * @param {string} _unnamedArg not used
-     * @returns {Promise<string>} The name of the persona-bound lorebook
-     */
-    async function getPersonaBookCallback({ name, create }, _unnamedArg) {
-        let bookName = power_user.persona_description_lorebook || '';
-        if (bookName) {
-            return bookName;
-        }
-
-        if (isTrueBoolean(String(create))) {
-            const newName = await createWorldWithName(name, `Persona Book ${getCurrentShellName1()}`.replace(/[^a-z0-9 -]/gi, '_').replace(/_{2,}/g, '_').substring(0, 64));
-            power_user.persona_description_lorebook = newName;
-            setPersonaDescription();
-            saveSettingsDebounced();
-            return newName;
-        }
-
-        return '';
-    }
 
     /**
      * Gets the name of the character-bound lorebook.
@@ -2190,32 +2162,6 @@ function registerWorldInfoSlashCommands() {
         aliases: ['getgloballore', 'getglobalwi'],
     }));
     SlashCommandParser.addCommandObject(SlashCommand.fromProps({
-        name: 'getpersonabook',
-        callback: getPersonaBookCallback,
-        returns: 'lorebook name',
-
-        namedArgumentList: [
-            SlashCommandNamedArgument.fromProps({
-                name: 'name',
-                description: 'lorebook name if creating a new one, will be auto-generated otherwise',
-                typeList: [ARGUMENT_TYPE.STRING],
-                isRequired: false,
-                acceptsMultiple: false,
-            }),
-            SlashCommandNamedArgument.fromProps({
-                name: 'create',
-                description: 'create a new lorebook if it doesn\'t exist',
-                typeList: [ARGUMENT_TYPE.BOOLEAN],
-                isRequired: false,
-                acceptsMultiple: false,
-                enumList: commonEnumProviders.boolean('trueFalse')(),
-                defaultValue: 'false',
-            }),
-        ],
-        helpString: 'Get a name of the current persona-bound lorebook and pass it down the pipe. Returns empty string if persona lorebook is not set.',
-        aliases: ['getpersonalore', 'getpersonawi'],
-    }));
-    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
         name: 'getcharbook',
         callback: getCharBookCallback,
         returns: 'lorebook name or a list of lorebook names',
@@ -2615,16 +2561,6 @@ export async function flushDeletedWorldsFromUI(worldNames) {
         if (getCurrentShellMenuType() !== 'create') {
             saveCharacterDebounced();
         }
-    }
-
-    if (names.has(power_user.persona_description_lorebook)) {
-        power_user.persona_description_lorebook = '';
-        if (power_user.personas[user_avatar]) {
-            const object = getOrCreatePersonaDescriptor();
-            object.lorebook = '';
-        }
-        $('#persona_lore_button').toggleClass('world_set', false);
-        needsSave = true;
     }
 
     if (needsSave) {
@@ -4056,7 +3992,6 @@ function setupEditFormBindings(editTemplate, outlet, name, data, entry) {
     handleBooleanSelectHelper({ selectElem: editTemplate.find('select[name="useGroupScoring"]'), entry, entryKey: 'useGroupScoring', data, name });
 
     // Match checkboxes
-    handleMatchCheckboxHelper({ template: editTemplate, entry, fieldName: 'matchPersonaDescription', data, name });
     handleMatchCheckboxHelper({ template: editTemplate, entry, fieldName: 'matchCharacterDescription', data, name });
     handleMatchCheckboxHelper({ template: editTemplate, entry, fieldName: 'matchCharacterPersonality', data, name });
     handleMatchCheckboxHelper({ template: editTemplate, entry, fieldName: 'matchCharacterDepthPrompt', data, name });
@@ -4351,7 +4286,6 @@ export const newWorldInfoEntryDefinition = {
     ignoreBudget: { default: false, type: 'boolean' },
     excludeRecursion: { default: false, type: 'boolean' },
     preventRecursion: { default: false, type: 'boolean' },
-    matchPersonaDescription: { default: false, type: 'boolean' },
     matchCharacterDescription: { default: false, type: 'boolean' },
     matchCharacterPersonality: { default: false, type: 'boolean' },
     matchCharacterDepthPrompt: { default: false, type: 'boolean' },

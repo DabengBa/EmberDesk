@@ -2,7 +2,7 @@
 // The active feature (floating prompt UI, /note commands, authorsNote macros)
 // is removed; this module keeps only the symbols first-party code still imports.
 // '2_floating_prompt' remains the extension-prompt slot used as the injection
-// vehicle for World Info AN-position entries and persona TOP_AN/BOTTOM_AN.
+// vehicle for World Info AN-position entries.
 
 export const NOTE_MODULE_NAME = '2_floating_prompt'; // <= Deliberate, for sorting lower than memory
 

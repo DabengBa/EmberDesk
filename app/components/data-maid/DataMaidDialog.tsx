@@ -20,7 +20,6 @@ type DataMaidCategoryKey =
     | 'chats'
     | 'groupChats'
     | 'avatarThumbnails'
-    | 'personaThumbnails'
     | 'chatBackups'
     | 'settingsBackups';
 
@@ -67,7 +66,6 @@ export function DataMaidDialog({ onRequestClose }: { onRequestClose?: () => void
         { key: 'chats', name: t('Chats'), description: t('Chat files associated with deleted characters.') },
         { key: 'groupChats', name: t('Group Chats'), description: t('Chat files associated with deleted groups.') },
         { key: 'avatarThumbnails', name: t('Avatar Thumbnails'), description: t('Thumbnails for avatars of missing or deleted characters.') },
-        { key: 'personaThumbnails', name: t('Persona Thumbnails'), description: t('Thumbnails for missing or deleted personas.') },
         { key: 'chatBackups', name: t('Chat Backups'), description: t('Automatically generated chat backups.') },
         { key: 'settingsBackups', name: t('Settings Backups'), description: t('Automatically generated settings backups.') },
     ] as { key: DataMaidCategoryKey; name: string; description: string }[]), []);

@@ -133,7 +133,7 @@ function getUnexpectedConsoleErrors(errors) {
     return errors.filter((error) => {
         const url = error.location?.url ?? '';
         const isSeedPersonaThumbnail404 = error.text.includes('Failed to load resource')
-            && url.includes('/thumbnail?type=persona&file=user-default.png');
+            && url.includes('img/user-default.png');
         // __transparent.png is a built-in background option whose asset only exists in
         // provisioned user data dirs; fresh e2e data roots do not seed it.
         const isTransparentBackgroundSeed404 = error.text.includes('Failed to load resource')

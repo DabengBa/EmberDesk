@@ -535,11 +535,6 @@ export const settingsOwnerInventory = {
     specializedSurfaces: [
         'world_info_settings',
         'feature_settings',
-        'power_user.personas',
-        'power_user.persona_description',
-        'power_user.persona_descriptions',
-        'power_user.persona_show_notifications',
-        'power_user.default_persona',
         'tags',
         'tag_map',
     ],
@@ -574,15 +569,10 @@ export const settingsCoverage = {
         'amount_gen',
         'world_info_settings',
         'feature_settings',
-        // Complex managers / runtime-only / persona surfaces
+        // Complex managers / runtime-only surfaces
         'oai_settings.prompts',
         'oai_settings.prompt_order',
         'oai_settings.extensions',
-        'power_user.personas',
-        'power_user.persona_description',
-        'power_user.persona_descriptions',
-        'power_user.persona_show_notifications',
-        'power_user.default_persona',
         'power_user.servers',
         'tags',
         'tag_map',

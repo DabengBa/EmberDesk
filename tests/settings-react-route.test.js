@@ -562,7 +562,6 @@ describe('settings React route flag', () => {
         expect(helperModule.settingsOwnerInventory.specializedSurfaces).toEqual(expect.arrayContaining([
             'world_info_settings',
             'feature_settings',
-            'power_user.personas',
             'tags',
             'tag_map',
         ]));
@@ -886,7 +885,7 @@ describe('settings React route flag', () => {
         const scriptSource = fs.readFileSync(path.join(repoRoot, 'public', 'script.js'), 'utf8');
 
         // Legacy-owned surfaces (preset CRUD, Prompt Manager, connection-profile
-        // capture/apply, persona management, user-settings extras) still render
+        // capture/apply, user-settings extras) still render
         // inside workspace drawers that the shell no longer opens. Overlay links
         // reach them through the openWorkspaceDrawer runtime command, which
         // resolves to openWorkspaceChildSlotHostImmediate on the drawer host id.
@@ -895,7 +894,6 @@ describe('settings React route flag', () => {
             'rm_api_block',
             'AdvancedFormatting',
             'user-settings-block',
-            'PersonaManagement',
         ]) {
             expect(routeSource).toContain(`'${target}'`);
             expect(indexHtml).toContain(`id="${target}" class="drawer-content`);
@@ -918,7 +916,6 @@ describe('settings React route flag', () => {
             'rm_api_block',
             'AdvancedFormatting',
             'user-settings-block',
-            'PersonaManagement',
         ]) {
             expect(scriptSource).toContain(`'${target}'`);
         }

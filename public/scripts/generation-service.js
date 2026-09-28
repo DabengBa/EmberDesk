@@ -28,7 +28,6 @@ const state = new Proxy({}, {
 });
 
 const addChatsSeparator = (...args) => shell().addChatsSeparator(...args);
-const addPersonaDescriptionExtensionPrompt = (...args) => shell().addPersonaDescriptionExtensionPrompt(...args);
 const baseChatReplace = (...args) => shell().baseChatReplace(...args);
 const cleanUpMessage = (...args) => shell().cleanUpMessage(...args);
 const clearGenerationAttemptMessage = (...args) => shell().clearGenerationAttemptMessage(...args);
@@ -682,7 +681,6 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
     let {
         description,
         personality,
-        persona,
         scenario,
         mesExamples,
         system,
@@ -786,7 +784,6 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
     const chatForWI = coreChat.map(x => world_info_include_names ? `${x.name}: ${x.mes}` : x.mes).reverse();
     /** @type {import('./world-info.js').WIGlobalScanData} */
     const globalScanData = {
-        personaDescription: persona,
         characterDescription: description,
         characterPersonality: personality,
         characterDepthPrompt: charDepthPrompt,
@@ -838,9 +835,6 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
         console.log('skipping WIAN');
     }
 
-    // Add persona description to prompt
-    addPersonaDescriptionExtensionPrompt();
-
     // Prepare the system prompt for Text Completion APIs
     if (state.main_api !== 'openai') {
         if (state.power_user.sysprompt.enabled) {
@@ -860,7 +854,6 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
     const storyStringParams = {
         description: description,
         personality: personality,
-        persona: state.power_user.persona_description_position == state.persona_description_positions.IN_PROMPT ? persona : '',
         scenario: scenario,
         system: system,
         char: state.name2,
@@ -1263,7 +1256,6 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
             combinedPrompt: null,
             description,
             personality,
-            persona,
             scenario,
             char: state.name2,
             user: state.name1,

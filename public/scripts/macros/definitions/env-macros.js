@@ -13,8 +13,8 @@ export function registerEnvMacros() {
     // Names and participant macros (from MacroEnv.names)
     MacroRegistry.registerMacro('user', {
         category: MacroCategory.NAMES,
-        description: 'Your current Persona username.',
-        returns: 'Persona username.',
+        description: 'Your username.',
+        returns: 'Username.',
         handler: ({ env }) => env.names.user,
     });
 
@@ -84,13 +84,6 @@ export function registerEnvMacros() {
         description: 'The character\'s scenario.',
         returns: 'Character scenario.',
         handler: ({ env }) => env.character.scenario ?? '',
-    });
-
-    MacroRegistry.registerMacro('persona', {
-        category: MacroCategory.CHARACTER,
-        description: 'Your current Persona description.',
-        returns: 'Persona description.',
-        handler: ({ env }) => env.character.persona ?? '',
     });
 
     MacroRegistry.registerMacro('mesExamplesRaw', {

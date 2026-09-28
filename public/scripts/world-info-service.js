@@ -83,11 +83,6 @@ const regex_placement = new Proxy({}, {
     },
 });
 
-const power_user = new Proxy({}, {
-    get(_target, property) {
-        return getWorldInfoShell().powerUserSettings[property];
-    },
-});
 
 const feature_settings = new Proxy({}, {
     get(_target, property) {
@@ -171,7 +166,6 @@ const extension_prompt_roles = new Proxy({}, {
  * @property {boolean} [caseSensitive] If the scan is case sensitive
  * @property {boolean} [matchWholeWords] If the scan should match whole words
  * @property {boolean} [useGroupScoring] If the scan should use group scoring
- * @property {boolean} [matchPersonaDescription] If the scan should match against the persona description
  * @property {boolean} [matchCharacterDescription] If the scan should match against the character description
  * @property {boolean} [matchCharacterPersonality] If the scan should match against the character personality
  * @property {boolean} [matchCharacterDepthPrompt] If the scan should match against the character depth prompt
@@ -238,7 +232,6 @@ const extension_prompt_roles = new Proxy({}, {
 /** @type {Readonly<WIGlobalScanData>} */
 const defaultGlobalScanData = Object.freeze({
     trigger: 'normal',
-    personaDescription: '',
     characterDescription: '',
     characterPersonality: '',
     characterDepthPrompt: '',
@@ -256,7 +249,7 @@ export class WorldInfoBuffer {
     static externalActivations = new Map();
 
     /**
-     * @type {WIGlobalScanData} Chat independent data to be scanned, such as persona and character descriptions
+     * @type {WIGlobalScanData} Chat independent data to be scanned, such as character descriptions
      */
     #globalScanData = null;
 
@@ -349,9 +342,6 @@ export class WorldInfoBuffer {
         const JOINER = '\n' + MATCHER;
         let result = MATCHER + this.#depthBuffer.slice(this.#startDepth, depth).join(JOINER);
 
-        if (entry.matchPersonaDescription && this.#globalScanData.personaDescription) {
-            result += JOINER + this.#globalScanData.personaDescription;
-        }
         if (entry.matchCharacterDescription && this.#globalScanData.characterDescription) {
             result += JOINER + this.#globalScanData.characterDescription;
         }
@@ -904,10 +894,6 @@ async function getCharacterLore() {
             continue;
         }
 
-        if (power_user.persona_description_lorebook === worldName) {
-            console.debug(`[WI] Character ${name}'s world ${worldName} is already activated in persona lore! Skipping...`);
-            continue;
-        }
 
         const data = await loadWorldInfo(worldName);
         const newEntries = data ? Object.keys(data.entries).map((x) => data.entries[x]).map(({ uid, ...rest }) => ({ uid, world: worldName, ...rest })) : [];
@@ -959,47 +945,19 @@ async function getChatLore() {
     return entries;
 }
 
-async function getPersonaLore() {
-    const chatWorld = chat_metadata[METADATA_KEY];
-    const personaWorld = power_user.persona_description_lorebook;
-
-    if (!personaWorld) {
-        return [];
-    }
-
-    if (chatWorld === personaWorld) {
-        console.debug(`[WI] Persona world ${personaWorld} is already activated in chat world! Skipping...`);
-        return [];
-    }
-
-    if (selected_world_info.includes(personaWorld)) {
-        console.debug(`[WI] Persona world ${personaWorld} is already activated in global world info! Skipping...`);
-        return [];
-    }
-
-    const data = await loadWorldInfo(personaWorld);
-    const entries = data ? Object.keys(data.entries).map((x) => data.entries[x]).map(({ uid, ...rest }) => ({ uid, world: personaWorld, ...rest })) : [];
-
-    console.debug(`[WI] Persona lore has ${entries.length} entries`, [personaWorld]);
-
-    return entries;
-}
-
 export async function getSortedEntries() {
     try {
         const [
             globalLore,
             characterLore,
             chatLore,
-            personaLore,
         ] = await Promise.all([
             getGlobalLore(),
             getCharacterLore(),
             getChatLore(),
-            getPersonaLore(),
         ]);
 
-        await eventSource.emit(event_types.WORLDINFO_ENTRIES_LOADED, { globalLore, characterLore, chatLore, personaLore });
+        await eventSource.emit(event_types.WORLDINFO_ENTRIES_LOADED, { globalLore, characterLore, chatLore });
 
         let entries;
 
@@ -1019,8 +977,8 @@ export async function getSortedEntries() {
                 break;
         }
 
-        // Chat lore always goes first, then persona lore, then the rest
-        entries = [...chatLore.sort(sortFn), ...personaLore.sort(sortFn), ...entries];
+        // Chat lore always goes first, then the rest
+        entries = [...chatLore.sort(sortFn), ...entries];
 
         // Calculate hash and parse decorators. Split maps to preserve old hashes.
         entries = entries.map((entry) => {

@@ -1,5 +1,5 @@
 import { Fuse, DOMPurify } from '../lib.js';
-import { canUseNegativeLookbehind, copyText, debounce, delay, findChar, findPersona, flashHighlight, getCharIndex, isFalseBoolean, isTrueBoolean, onlyUnique, regexFromString, resolveAvatarData, showFontAwesomePicker, stringToRange, trimToEndSentence, trimToStartSentence, waitUntilCondition } from './utils.js';
+import { canUseNegativeLookbehind, copyText, debounce, delay, findChar, flashHighlight, getCharIndex, isFalseBoolean, isTrueBoolean, onlyUnique, regexFromString, resolveAvatarData, showFontAwesomePicker, stringToRange, trimToEndSentence, trimToStartSentence, waitUntilCondition } from './utils.js';
 
 import {
     Generate,
@@ -69,7 +69,6 @@ import { getContext, saveMetadataDebounced } from './feature-settings.js';
 import { getRegexedString, regex_placement } from './extensions/regex/engine.js';
 
 import { chat_completion_sources, MINIMAX_ENDPOINT, oai_settings, promptManager, SILICONFLOW_ENDPOINT, ZAI_ENDPOINT } from './openai.js';
-import { user_avatar } from './personas.js';
 import { addEphemeralStoppingString, chat_styles, flushEphemeralStoppingStrings, playMessageSound, power_user } from './power-user.js';
 import { decodeTextTokens, getAvailableTokenizers, getFriendlyTokenizerName, getTextTokens, getTokenCountAsync, selectTokenizer } from './tokenizers.js';
 import { registerVariableCommands, resolveVariable } from './variables.js';
@@ -1041,7 +1040,7 @@ export function initDefaultSlashCommands() {
         ],
         unnamedArgumentList: [
             SlashCommandArgument.fromProps({
-                description: 'Persona name, character name, or unique character identifier (avatar key)',
+                description: 'Character name or unique character identifier (avatar key)',
                 typeList: [ARGUMENT_TYPE.STRING],
                 isRequired: false,
                 enumProvider: (executor) => {
@@ -1050,7 +1049,7 @@ export function initDefaultSlashCommands() {
                         modifyAt = chat.length + modifyAt;
                     }
                     return chat[modifyAt]?.is_user
-                        ? commonEnumProviders.personas()()
+                        ? [new SlashCommandEnumValue(name1, null, enumTypes.name, enumIcons.user)]
                         : commonEnumProviders.characters('character')();
                 },
             }),
@@ -1578,7 +1577,6 @@ export function initDefaultSlashCommands() {
                 description: t`display name`,
                 typeList: [ARGUMENT_TYPE.STRING],
                 defaultValue: '{{user}}',
-                enumProvider: commonEnumProviders.personas({ allowPersonaKey: true }),
             }),
             SlashCommandNamedArgument.fromProps({
                 name: 'return',
@@ -1648,7 +1646,7 @@ export function initDefaultSlashCommands() {
         namedArgumentList: [
             SlashCommandNamedArgument.fromProps({
                 name: 'name',
-                description: t`only hide messages from a certain character or persona`,
+                description: t`only hide messages from a certain name`,
                 typeList: [ARGUMENT_TYPE.STRING],
                 enumProvider: commonEnumProviders.messageNames,
                 isRequired: false,
@@ -1671,7 +1669,7 @@ export function initDefaultSlashCommands() {
         namedArgumentList: [
             SlashCommandNamedArgument.fromProps({
                 name: 'name',
-                description: t`only unhide messages from a certain character or persona`,
+                description: t`only unhide messages from a certain name`,
                 typeList: [ARGUMENT_TYPE.STRING],
                 enumProvider: commonEnumProviders.messageNames,
                 isRequired: false,
@@ -4465,8 +4463,7 @@ async function sendUserMessageCallback(args, text) {
     let message;
     if ('name' in args) {
         const name = args.name || '';
-        const avatar = findPersona({ name })?.avatar || user_avatar;
-        message = await sendMessageAsUser(text, bias, insertAt, compact, name, avatar);
+        message = await sendMessageAsUser(text, bias, insertAt, compact, name);
     } else {
         message = await sendMessageAsUser(text, bias, insertAt, compact);
     }
@@ -5288,16 +5285,9 @@ async function messageNameCallback(args, name) {
     let newName = '';
 
     if (message.is_user) {
-        const persona = findPersona({ name: name });
-        if (persona) {
-            message.name = newName = persona.name;
-            message.force_avatar = getThumbnailUrl('persona', persona.avatar);
-            message.original_avatar = persona.avatar;
-        } else {
-            message.name = newName = name;
-            message.force_avatar = default_avatar;
-            message.original_avatar = default_avatar;
-        }
+        message.name = newName = name;
+        message.force_avatar = default_avatar;
+        message.original_avatar = default_avatar;
     } else {
         const character = findChar({ name: name });
         if (character) {

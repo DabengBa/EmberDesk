@@ -83,7 +83,6 @@ export interface WorldInfoWorkbenchEntryDetail {
     useGroupScoring: boolean | null;
     automationId: string;
     outletName: string;
-    matchPersonaDescription: boolean;
     matchCharacterDescription: boolean;
     matchCharacterPersonality: boolean;
     matchCharacterDepthPrompt: boolean;
@@ -195,8 +194,7 @@ function isAdvancedDefault(entry: WorldInfoWorkbenchEntryDetail | null | undefin
     return {
         timing: Boolean(entry.sticky || entry.cooldown || entry.delay || entry.delayUntilRecursion || entry.excludeRecursion || entry.preventRecursion),
         scope: Boolean(
-            entry.matchPersonaDescription
-            || entry.matchCharacterDescription
+            entry.matchCharacterDescription
             || entry.matchCharacterPersonality
             || entry.matchCharacterDepthPrompt
             || entry.matchScenario

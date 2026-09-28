@@ -344,7 +344,6 @@ export function select_selected_character(chid, { switchMenu = true } = {}) {
     $('#create_button').attr('value', 'Save');              // what is the use case for this?
     $('#dupe_button').show();
     $('#create_button_label').css('display', 'none');
-    $('#char_connections_button').show();
     $('.character-detail-edit-action').show();
 
     $('#set_chat_character_settings').show();

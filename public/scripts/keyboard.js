@@ -8,7 +8,6 @@ const interactableSelectors = [
     '.paginationjs-pages li a', // Pagination buttons
     '.character_select, .bogus_folder_select', // Cards to select characters or folders in the character list
     '.swipe_picker_block', // Swipe picker entries in the swipe history popup
-    '.avatar-container', // Persona list blocks
     '.tag .tag_remove', // Remove button in removable tags
     '#options a', // Option entries in the popup options menu
     '.mes_buttons .mes_button', // Small inline buttons on the chat messages

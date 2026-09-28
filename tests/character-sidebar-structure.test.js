@@ -40,7 +40,6 @@ describe('character detail sidebar structure', () => {
         const domHandlersSource = read('public/scripts/dom-handlers.js');
 
         expect(source).toContain('function toggleCharacterExportPopup(referenceElement = document.getElementById(\'export_button\'))');
-        expect(domHandlersSource).toContain('case \'character_action_connected_personas\':');
         expect(domHandlersSource).toContain('case \'character_action_export\':');
         expect(domHandlersSource).toContain('case \'character_action_duplicate\':');
         expect(domHandlersSource).toContain('case \'character_action_advanced\':');

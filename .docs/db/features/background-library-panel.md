@@ -19,7 +19,7 @@ The global Background Library is retired. The workspace no longer offers a Backg
 
 - A user can still use the active background applied to the chat workspace through the existing background setting and chat metadata. A chat-specific background may override the global active background and falls back without changing the chat metadata when that override is removed.
 - Static background paths remain available for active chat/background compatibility. This is an active-background concern, not a global library or gallery contract.
-- Character avatars, persona images, uploaded images, and their retained thumbnail behavior remain available. Avatar compatibility paths that happen to use `backgrounds/...` are not global Background Library entries.
+- Character avatars, uploaded images, and their retained thumbnail behavior remain available. Avatar compatibility paths that happen to use `backgrounds/...` are not global Background Library entries.
 - Group-chat `hideMutedSprites` metadata remains a chat behavior; it does not restore sprite management or expression persistence.
 
 ## Historical Boundary
@@ -38,5 +38,5 @@ The absence of the navigation entry and gallery is the user-visible retirement c
 ## Boundaries
 
 - Active chat background behavior belongs to [Chat Workspace](page.chat_workspace), not to this retired feature.
-- Avatar/persona image behavior belongs to the character and persona surfaces.
+- Avatar image behavior belongs to the character surfaces; the legacy user-persona system is retired.
 - Historical implementation details, route names, and migration mechanics belong in `.docs/tech/` and ADR/history records rather than this semantic feature.

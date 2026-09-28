@@ -7,7 +7,7 @@ import {
 } from '../lib.js';
 
 import { getContext } from './feature-settings.js';
-import { characters, processDroppedFiles, this_chid, user_avatar } from '../script.js';
+import { characters, processDroppedFiles, this_chid } from '../script.js';
 import { getRequestHeaders } from './request-context.js';
 import { isMobile } from './RossAscends-mods.js';
 import { collapseNewlines, power_user } from './power-user.js';
@@ -2570,47 +2570,6 @@ export async function showFontAwesomePicker(customList = null) {
     return null;
 }
 
-/**
- * Finds a persona by name, with optional filtering and precedence for avatars
- * @param {object} [options={}] - The options for the search
- * @param {string?} [options.name=null] - The name to search for
- * @param {boolean} [options.allowAvatar=true] - Whether to allow searching by avatar
- * @param {boolean} [options.insensitive=true] - Whether the search should be case insensitive
- * @param {boolean} [options.preferCurrentPersona=true] - Whether to prefer the current persona(s)
- * @param {boolean} [options.quiet=false] - Whether to suppress warnings
- * @returns {PersonaViewModel} The persona object
- * @typedef {object} PersonaViewModel
- * @property {string} avatar - The avatar of the persona
- * @property {string} name - The name of the persona
- */
-export function findPersona({ name = null, allowAvatar = true, insensitive = true, preferCurrentPersona = true, quiet = false } = {}) {
-    /** @type {PersonaViewModel[]} */
-    const personas = Object.entries(power_user.personas).map(([avatar, name]) => ({ avatar, name }));
-    const matches = (/** @type {PersonaViewModel} */ persona) => !name || (allowAvatar && persona.avatar === name) || (insensitive ? equalsIgnoreCaseAndAccents(persona.name, name) : persona.name === name);
-
-    // If we have a current persona and prefer it, return that if it matches
-    const currentPersona = personas.find(a => a.avatar === user_avatar);
-    if (preferCurrentPersona && currentPersona && matches(currentPersona)) {
-        return currentPersona;
-    }
-
-    // If allowAvatar is true, search by avatar first
-    if (allowAvatar && name) {
-        const personaByAvatar = personas.find(a => a.avatar === name);
-        if (personaByAvatar && matches(personaByAvatar)) {
-            return personaByAvatar;
-        }
-    }
-
-    // Search for matching personas by name
-    const matchingPersonas = personas.filter(a => matches(a));
-    if (matchingPersonas.length > 1) {
-        if (!quiet) toastr.warning(t`Multiple personas found for given conditions.`);
-        else console.warn(t`Multiple personas found for given conditions. Returning the first match.`);
-    }
-
-    return matchingPersonas[0] || null;
-}
 
 /**
  * Finds a character by name, with optional filtering and precedence for avatars

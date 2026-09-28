@@ -32,8 +32,6 @@ function getOriginalDirectory(directories, type) {
             return directories.backgrounds;
         case 'avatar':
             return directories.characters;
-        case 'persona':
-            return directories.avatars;
         default:
             throw new Error(`Unsupported thumbnail type: ${type}`);
     }
@@ -132,7 +130,7 @@ describe('thumbnail jpeg quality tuning', () => {
         expect(configSource).not.toMatch(/dimensions:.*['\"]bg['\"]/);
     });
 
-    test.each(['avatar', 'persona'])('jpg mode uses quality 85 for new %s thumbnails', async (type) => {
+    test.each(['avatar'])('jpg mode uses quality 85 for new %s thumbnails', async (type) => {
         const { result, outputBuffer, mockCover, mockResize, mockGetBuffer } = await runGenerationScenario({
             type,
             format: 'jpg',
