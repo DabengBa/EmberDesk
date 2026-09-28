@@ -4,6 +4,7 @@ import { eventSource, event_types } from './events.js';
 import { swipe } from './generation-service.js';
 import { updateMessageElement } from './message-service.js';
 import { requireDomHandlersShellContext } from './dom-handlers-shell-context.js';
+import { initMainChatComposerService } from './main-chat-composer-service.js';
 
 function shell() {
     return requireDomHandlersShellContext();
@@ -133,6 +134,7 @@ export function initDomHandlers() {
 export async function bindLegacyShellHandlers() {
     // React-owned composer markup must exist before handlers bind below.
     await mountChatComposer();
+    initMainChatComposerService();
     // React-owned static panels must exist before the direct $(...).on()
     // bindings below; bootstrapWorkspace re-invokes these mounts later, and
     // each mount is idempotent via its dataset.react*Mounted guard.

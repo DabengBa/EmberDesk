@@ -215,6 +215,7 @@ import {
 } from './scripts/main-chat-store-projection.js';
 import { getStreamingControlState } from './scripts/chat-streaming-control-state.js';
 import { getMainChatComposerState } from './scripts/main-chat-composer-state.js';
+import { getComposerValue, setComposerValue } from './scripts/main-chat-composer-service.js';
 import { getMainChatSlashCommandState } from './scripts/main-chat-slash-command-state.js';
 import { getMainChatStreamingTransportState } from './scripts/main-chat-streaming-transport-state.js';
 import { createChatMessageActionsController } from './scripts/chat-message-actions-controller.js';
@@ -410,12 +411,7 @@ const reactRuntimePort = createReactRuntimeProvider({
     eventTypes: event_types,
     commands: {
         submitMessage: async (input) => {
-            const textarea = document.getElementById('send_textarea');
-            if (!(textarea instanceof HTMLTextAreaElement)) {
-                throw new Error('Main chat composer is unavailable');
-            }
-            textarea.value = String(input ?? '');
-            textarea.dispatchEvent(new Event('input', { bubbles: true }));
+            setComposerValue(input ?? '');
             return mainChatVisibleGenerationMutex.update();
         },
         stopGeneration: () => stopGeneration(),
@@ -1847,7 +1843,7 @@ function getMainChatComposerBridgeState() {
     const textarea = document.getElementById('send_textarea');
     const sendButton = document.getElementById('send_but');
     const activeContext = getMainChatComposerActiveContext();
-    const valueLength = textarea instanceof HTMLTextAreaElement ? textarea.value.length : 0;
+    const valueLength = getComposerValue().length;
     const hasBackendConnection = online_status !== 'no_connection';
     const isGenerating = document.body.dataset.generating === 'true';
     const isDisabled = textarea?.disabled === true || sendButton?.disabled === true || !hasBackendConnection;
@@ -1906,13 +1902,12 @@ function getMainChatGenerationControlBridgeState() {
 }
 
 function getMainChatSlashCommandBridgeState() {
-    const textarea = document.getElementById('send_textarea');
     const formShell = document.getElementById('form_sheld');
     const hasError = formShell?.classList.contains('script_error') === true;
     const autoCompleteState = getMainChatSlashCommandAutoCompleteState();
 
     return getMainChatSlashCommandState({
-        text: textarea?.value ?? '',
+        text: getComposerValue(),
         autocompleteVisible: autoCompleteState.visible === true,
         isExecuting: Boolean(isExecutingCommandsFromChatInput || formShell?.classList.contains('isExecutingCommandsFromChatInput')),
         isPaused: formShell?.classList.contains('script_paused') === true,
@@ -3146,7 +3141,6 @@ function getMainChatMessageListReactBridgeState() {
     const slashCommand = getMainChatSlashCommandBridgeState();
     const slashUi = getMainChatSlashUiBridgeState();
     const streamingTransport = getMainChatStreamingTransportBridgeState();
-    const composerElement = document.getElementById('send_textarea');
     const projectedChat = reactMainChatProjectionCleared ? [] : chat;
     const visibleWindow = getMainChatReactVisibleWindow(projectedChat);
     const visibleMessageIds = visibleWindow.visibleMessageIds;
@@ -3198,7 +3192,7 @@ function getMainChatMessageListReactBridgeState() {
         modelIconEnabled: power_user.timestamp_model_icon === true,
         visibleMessageIds,
         composer: {
-            value: composerElement instanceof HTMLTextAreaElement ? composerElement.value : '',
+            value: getComposerValue(),
             activeContext: composer.activeContext,
             focused: composer.isFocused,
             disabled: composer.isDisabled,
@@ -5793,7 +5787,7 @@ export async function sendTextareaMessage() {
     let generateType = 'normal';
     // "Continue on send" is activated when the user hits "send" (or presses enter) on an empty chat box, and the last
     // message was sent from a character (not the user or the system).
-    const textareaText = String($('#send_textarea').val());
+    const textareaText = getComposerValue();
     const lastMessage = chat[chat.length - 1];
     if (power_user.continue_on_send &&
         !hasPendingFileAttachment() &&
@@ -6896,7 +6890,7 @@ export function shouldAutoContinue(messageChunk, isImpersonate) {
         return false;
     }
 
-    const textareaText = String($('#send_textarea').val());
+    const textareaText = getComposerValue();
     const USABLE_LENGTH = 5;
 
     if (textareaText.length > 0) {

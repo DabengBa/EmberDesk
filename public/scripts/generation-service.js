@@ -11,6 +11,7 @@ import { getWorldInfoPrompt } from './world-info-service.js';
 import { wi_anchor_position } from './world-info-domain.js';
 import { world_info_include_names } from './world-info-state.js';
 import { requireGenerationShellContext } from './generation-shell-context.js';
+import { getComposerValue, setComposerValue, clearComposerValue } from './main-chat-composer-service.js';
 
 function shell() {
     return requireGenerationShellContext();
@@ -140,8 +141,6 @@ export class GenerationStreamSession {
         this.messageTimerDom = null;
         /** @type {HTMLElement} */
         this.messageTokenCounterDom = null;
-        /** @type {HTMLTextAreaElement} */
-        this.sendTextarea = document.querySelector('#send_textarea');
         this.type = type;
         this.force_name2 = forceName2;
         this.isStopped = false;
@@ -224,8 +223,7 @@ export class GenerationStreamSession {
         let messageId = -1;
 
         if (this.type == 'impersonate') {
-            this.sendTextarea.value = '';
-            this.sendTextarea.dispatchEvent(new Event('input', { bubbles: true }));
+            clearComposerValue();
         } else {
             await saveReply({ type: this.type, getMessage: text, fromStreaming: true });
             messageId = state.chat.length - 1;
@@ -270,8 +268,7 @@ export class GenerationStreamSession {
         }
 
         if (isImpersonate) {
-            this.sendTextarea.value = processedText;
-            this.sendTextarea.dispatchEvent(new Event('input', { bubbles: true }));
+            setComposerValue(processedText);
         } else {
             const mesChanged = state.chat[messageId].mes !== processedText;
             await this.#checkDomElements(messageId);
@@ -572,10 +569,9 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
     const isImpersonate = type == 'impersonate';
 
     if (!(dryRun || depth || type == 'regenerate' || type == 'swipe' || type == 'quiet')) {
-        const interruptedByCommand = await processCommands(String($('#send_textarea').val()));
+        const interruptedByCommand = await processCommands(getComposerValue());
 
         if (interruptedByCommand) {
-            //$("#send_textarea").val('')[0].dispatchEvent(new Event('input', { bubbles:true }));
             unblockGeneration(type);
             return Promise.resolve();
         }
@@ -620,8 +616,8 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
     let textareaText;
     if (type !== 'regenerate' && type !== 'swipe' && type !== 'quiet' && !isImpersonate && !dryRun && !depth) {
         state.is_send_press = true;
-        textareaText = String($('#send_textarea').val());
-        $('#send_textarea').val('')[0].dispatchEvent(new Event('input', { bubbles: true }));
+        textareaText = getComposerValue();
+        clearComposerValue();
     } else {
         textareaText = '';
         if (state.chat.length && lastMessage.is_user) {
@@ -1627,7 +1623,7 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
         });
 
         if (isImpersonate) {
-            $('#send_textarea').val(getMessage)[0].dispatchEvent(new Event('input', { bubbles: true }));
+            setComposerValue(getMessage);
             await eventSource.emit(event_types.IMPERSONATE_READY, getMessage);
         } else if (type == 'quiet') {
             unblockGeneration(type);

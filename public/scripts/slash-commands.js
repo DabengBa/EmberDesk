@@ -1,3 +1,4 @@
+import { getComposerValue, setComposerValue, clearComposerValue } from './main-chat-composer-service.js';
 import { Fuse, DOMPurify } from '../lib.js';
 import { canUseNegativeLookbehind, copyText, debounce, delay, findChar, flashHighlight, getCharIndex, isFalseBoolean, isTrueBoolean, onlyUnique, regexFromString, resolveAvatarData, showFontAwesomePicker, stringToRange, trimToEndSentence, trimToStartSentence, waitUntilCondition } from './utils.js';
 
@@ -363,7 +364,7 @@ export function initDefaultSlashCommands() {
                 }
 
                 // Prevent generate recursion
-                $('#send_textarea').val('')[0].dispatchEvent(new Event('input', { bubbles: true }));
+                clearComposerValue();
 
                 outerResolve(new Promise(innerResolve => setTimeout(() => innerResolve(Generate('impersonate', options)), 1)));
             }, 1));
@@ -3565,7 +3566,7 @@ export function processChatSlashCommands() {
 }
 
 function setInputCallback(_, value) {
-    $('#send_textarea').val(value || '')[0].dispatchEvent(new Event('input', { bubbles: true }));
+    setComposerValue(value || '');
     return value;
 }
 
@@ -4072,7 +4073,7 @@ async function generateRawCallback(args, value) {
     }
 
     // Prevent generate recursion
-    $('#send_textarea').val('')[0].dispatchEvent(new Event('input', { bubbles: true }));
+    clearComposerValue();
     const lock = isTrueBoolean(args?.lock);
     const as = args?.as || 'system';
     const quietToLoud = as === 'char';
@@ -4119,7 +4120,7 @@ async function generateRawCallback(args, value) {
  */
 async function generateCallback(args, value) {
     // Prevent generate recursion
-    $('#send_textarea').val('')[0].dispatchEvent(new Event('input', { bubbles: true }));
+    clearComposerValue();
     const lock = isTrueBoolean(args?.lock);
     const trim = isTrueBoolean(args?.trim?.toString());
     const as = args?.as || 'system';
@@ -4319,7 +4320,7 @@ async function deleteSwipeCallback(_, arg) {
 
 async function askCharacter(args, text) {
     // Prevent generate recursion
-    $('#send_textarea').val('')[0].dispatchEvent(new Event('input', { bubbles: true }));
+    clearComposerValue();
 
     if (!args.name) {
         toastr.warning(t`You must specify a name of the character to ask.`);
@@ -4435,7 +4436,7 @@ async function triggerGenerationCallback(args) {
         }
 
         // Prevent generate recursion
-        $('#send_textarea').val('')[0].dispatchEvent(new Event('input', { bubbles: true }));
+        clearComposerValue();
         outerResolve(new Promise(innerResolve => setTimeout(() => innerResolve(Generate('normal')), 100)));
     }, 1));
 
@@ -5021,7 +5022,7 @@ async function continueChatCallback(args, prompt) {
 
             try {
                 // Prevent infinite recursion
-                $('#send_textarea').val('')[0].dispatchEvent(new Event('input', { bubbles: true }));
+                clearComposerValue();
 
                 const options = prompt?.trim() ? { quiet_prompt: prompt.trim(), quietToLoud: true } : {};
                 await Generate('continue', options);
@@ -5095,7 +5096,7 @@ async function swipeChatCallback(args) {
 }
 
 export async function generateSystemMessage(args, prompt) {
-    $('#send_textarea').val('')[0].dispatchEvent(new Event('input', { bubbles: true }));
+    clearComposerValue();
 
     if (!prompt) {
         console.warn('WARN: No prompt provided for /sysgen command');
@@ -6132,8 +6133,7 @@ export async function executeSlashCommandsOnChatInput(text, options = {}) {
     const fs = document.querySelector('#form_sheld');
 
     if (options.clearChatInput) {
-        ta.value = '';
-        ta.dispatchEvent(new Event('input', { bubbles: true }));
+        clearComposerValue();
     }
 
     ta.style.setProperty('--prog', '0%');
@@ -6339,7 +6339,7 @@ export async function initSlashCommandAutoComplete() {
     const sendTextarea = /** @type {HTMLTextAreaElement} */ (document.querySelector('#send_textarea'));
     setSlashCommandAutoComplete(sendTextarea);
     sendTextarea.addEventListener('input', () => {
-        if (sendTextarea.value && sendTextarea.value[0] == '/') {
+        if (getComposerValue() && getComposerValue()[0] == '/') {
             sendTextarea.style.fontFamily = 'var(--monoFontFamily, monospace)';
         } else {
             sendTextarea.style.fontFamily = null;

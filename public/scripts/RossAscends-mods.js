@@ -40,6 +40,7 @@ import { debounce_timeout, SWIPE_SOURCE } from './constants.js';
 import { Popup } from './popup.js';
 import { accountStorage } from './util/AccountStorage.js';
 import { getCurrentUserHandle } from './user.js';
+import { getComposerValue, setComposerValue } from './main-chat-composer-service.js';
 
 // Populated in initRossMods: drawer/panel markup is React-mounted after module eval.
 var RPanelPin = null;
@@ -391,12 +392,12 @@ function restoreUserInput() {
 
     const userInput = localStorage.getItem(getUserInputKey());
     if (userInput) {
-        $('#send_textarea').val(userInput)[0].dispatchEvent(new Event('input', { bubbles: true }));
+        setComposerValue(userInput);
     }
 }
 
 function saveUserInput() {
-    const userInput = String($('#send_textarea').val());
+    const userInput = getComposerValue();
     localStorage.setItem(getUserInputKey(), userInput);
     console.debug('User Input -- ', userInput);
 }
@@ -934,7 +935,7 @@ export function initRossMods() {
                 }
 
                 // If there is input text, we do not trigger a regenerate - we just send it
-                if ($('#send_textarea').val() !== '') {
+                if (getComposerValue() !== '') {
                     if (shouldSendOnEnter()) {
                         console.debug('Sending with Ctrl+Enter');
                         event.preventDefault();
@@ -978,7 +979,7 @@ export function initRossMods() {
             if (
                 isSwipingAllowed() &&
                 !isNanogallery2LightboxActive() &&  // Check if lightbox is NOT active
-                $('#send_textarea').val() === '' &&
+                getComposerValue() === '' &&
                 $('#character_popup').css('display') === 'none' &&
                 $('#shadow_select_chat_popup').css('display') === 'none' &&
                 !isInputElementInFocus() &&
@@ -993,7 +994,7 @@ export function initRossMods() {
             if (
                 isSwipingAllowed() &&
                 !isNanogallery2LightboxActive() &&  // Check if lightbox is NOT active
-                $('#send_textarea').val() === '' &&
+                getComposerValue() === '' &&
                 $('#character_popup').css('display') === 'none' &&
                 $('#shadow_select_chat_popup').css('display') === 'none' &&
                 !isInputElementInFocus() &&
@@ -1008,7 +1009,7 @@ export function initRossMods() {
 
         if (event.ctrlKey && event.key == 'ArrowUp') { //edits last USER message if chatbar is empty and focused
             if (
-                hotkeyTargets.send_textarea.value === '' &&
+                getComposerValue() === '' &&
                 chatbarInFocus === true &&
                 ($('.swipe_right:last').css('display') === 'flex' || $('.last_mes').attr('is_system') === 'true') &&
                 $('#character_popup').css('display') === 'none' &&
@@ -1027,7 +1028,7 @@ export function initRossMods() {
         if (event.key == 'ArrowUp') { //edits last message if chatbar is empty and focused
             console.log('got uparrow input');
             if (
-                hotkeyTargets.send_textarea.value === '' &&
+                getComposerValue() === '' &&
                 chatbarInFocus === true &&
                 //$('.swipe_right:last').css('display') === 'flex' &&
                 $('.last_mes .mes_buttons').is(':visible') &&

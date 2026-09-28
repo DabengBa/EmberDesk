@@ -6,6 +6,7 @@ import { getInstructMacros } from './macros/definitions/instruct-macros.js';
 import { getVariableMacros } from './variables.js';
 import { isMobile } from './RossAscends-mods.js';
 import { inject_ids } from './constants.js';
+import { getComposerValue } from './main-chat-composer-service.js';
 import { initRegisterMacros, macros as macroSystem } from './macros/macro-system.js';
 import { power_user } from './power-user.js';
 
@@ -627,7 +628,7 @@ export function evaluateMacros(content, env, postProcessFn) {
         { regex: /{{newline}}/gi, replace: () => '\n' },
         { regex: /(?:\r?\n)*{{trim}}(?:\r?\n)*/gi, replace: () => '' },
         { regex: /{{noop}}/gi, replace: () => '' },
-        { regex: /{{input}}/gi, replace: () => String($('#send_textarea').val()) },
+        { regex: /{{input}}/gi, replace: () => getComposerValue() },
     ];
 
     /**

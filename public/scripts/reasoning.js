@@ -1,6 +1,7 @@
 import {
     moment,
 } from '../lib.js';
+import { getComposerValue, setComposerValue } from './main-chat-composer-service.js';
 import { chat, closeMessageEditor, main_api, messageFormatting, saveChatConditional, saveChatDebounced, saveSettingsDebounced, substituteParams, syncMesToSwipe, updateMessageBlock } from '../script.js';
 import { eventSource, event_types } from './events.js';
 import { getRegexedString, regex_placement } from './extensions/regex/engine.js';
@@ -1598,22 +1599,15 @@ function registerReasoningAppEvents() {
             return;
         }
 
-        const sendTextArea = /** @type {HTMLTextAreaElement} */ (document.getElementById('send_textarea'));
-
-        if (!sendTextArea) {
-            console.warn('[Reasoning] Send textarea not found');
-            return;
-        }
-
         console.debug('[Reasoning] Auto-parsing reasoning block for impersonation');
 
-        if (!sendTextArea.value) {
+        const currentValue = getComposerValue();
+        if (!currentValue) {
             console.debug('[Reasoning] Reasoning is empty, skipping');
             return;
         }
 
-        sendTextArea.value = removeReasoningFromString(sendTextArea.value);
-        sendTextArea.dispatchEvent(new Event('input', { bubbles: true }));
+        setComposerValue(removeReasoningFromString(currentValue));
     });
 }
 

@@ -3,11 +3,13 @@ import { ContractIconButton } from '../contract/ContractIconButton';
 
 /**
  * Chat composer markup (React-owned shell inside #send_form).
- * Behavior stays legacy: send_textarea is intentionally UNCONTROLLED because
- * Quick Reply injection, STscript /send, macros, impersonate and autocomplete
- * all write it via jQuery .val() + dispatched input events. Button visibility
- * is toggled by legacy code (showSendButtons/showStopButtons) via CSS display;
- * this component renders once and never re-renders over those mutations.
+ * The textarea stays UNCONTROLLED as a render target: its text value is owned
+ * by public/scripts/main-chat-composer-service.js — the single command/state
+ * path used by submit flows, STscript commands, macros, impersonate injection,
+ * and autocomplete clearing — while user typing reaches the service through
+ * native 'input' events. Button visibility is toggled by legacy code
+ * (showSendButtons/showStopButtons) via CSS display; this component renders
+ * once and never re-renders over those mutations.
  *
  * stscript_* controls stay plain divs: their visibility chain is driven by
  * tag-qualified legacy CSS (`#rightSendForm>div.stscript_btn` under
