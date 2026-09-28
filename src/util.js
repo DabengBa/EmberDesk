@@ -356,10 +356,10 @@ export function getUniqueName(baseName, exists, { nameBuilder = null, maxTries =
 
 /**
  * Provides safe replacements for characters in filenames. Intended for use with sanitize() from the sanitize-filename package.
- * @param {string} char Character to sanitize
+ * @param {string} _char Character to sanitize
  * @returns {string} Safe replacement character
  */
-export function sanitizeSafeCharacterReplacements(char) {
+export function sanitizeSafeCharacterReplacements(_char) {
     return '_';
 }
 
@@ -480,8 +480,8 @@ export async function forwardFetchResponse(from, to) {
 
             console.warn(`Streaming request failed with status ${from.status} ${statusText}: ${detail}`);
             to.end(rawErrorText, 'utf-8');
-        } catch {
-            console.warn(`Streaming request failed with status ${from.status} ${statusText}: Unknown error occurred`);
+        } catch (error) {
+            console.warn(`Streaming request failed with status ${from.status} ${statusText}: Unknown error occurred`, error);
             to.end();
         }
 
@@ -665,7 +665,7 @@ export function isValidUrl(url) {
     try {
         new URL(url);
         return true;
-    } catch (error) {
+    } catch {
         return false;
     }
 }
@@ -701,7 +701,7 @@ export async function canResolve(name, useIPv6 = true, useIPv4 = true) {
             try {
                 await dnsPromise.resolve6(name);
                 v6Resolved = true;
-            } catch (error) {
+            } catch {
                 v6Resolved = false;
             }
         }
@@ -710,13 +710,13 @@ export async function canResolve(name, useIPv6 = true, useIPv4 = true) {
             try {
                 await dnsPromise.resolve(name);
                 v4Resolved = true;
-            } catch (error) {
+            } catch {
                 v4Resolved = false;
             }
         }
 
         return v6Resolved || v4Resolved;
-    } catch (error) {
+    } catch {
         return false;
     }
 }
@@ -1124,10 +1124,10 @@ export function getRequestURL(request) {
  * Flattens and simplifies a JSON schema by resolving $defs/$ref indirections
  * for providers with strict schema requirements.
  * @param {object} schema The JSON schema to process.
- * @param {string} api The API source.
+ * @param {string} _api The API source.
  * @returns {object} The flattened and simplified schema.
  */
-export function flattenSchema(schema, api) {
+export function flattenSchema(schema, _api) {
     if (!schema || typeof schema !== 'object') {
         return schema;
     }

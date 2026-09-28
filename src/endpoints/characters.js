@@ -1,6 +1,5 @@
 import path from 'node:path';
-import fs from 'node:fs';
-import { promises as fsPromises } from 'node:fs';
+import fs, { promises as fsPromises } from 'node:fs';
 import { Buffer } from 'node:buffer';
 import { randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
@@ -35,8 +34,9 @@ import { getCanonicalStorageStatus, openCanonicalDatabase, withCanonicalTransact
 import { runCanonicalMigrations } from '../canonical-sqlite-migrations.js';
 import { getPersistedCanonicalAuditStatus, invalidateCanonicalAuditStatus } from '../canonical-sqlite-shadow-import.js';
 import { getCanonicalFlagContractStatus } from '../canonical-sqlite-rollout-contract.js';
-import { getCanonicalCharacter, listCanonicalCharacters } from './character-store.js';
 import {
+    getCanonicalCharacter,
+    listCanonicalCharacters,
     markCanonicalCharacterDeleted,
     recordProjectionRepair as persistProjectionRepair,
     renameCanonicalCharacter,
@@ -72,7 +72,7 @@ function isInteractionPerfModeEnabled() {
     return process.env.EMBERDESK_INTERACTION_PERF_MODE === '1';
 }
 
-function applyInteractionPerfHeaders(response, pathName, startedAt, directories = null) {
+function applyInteractionPerfHeaders(response, pathName, startedAt, _directories = null) {
     if (!isInteractionPerfModeEnabled()) {
         return;
     }
@@ -243,7 +243,9 @@ async function readCharacterData(inputFile, inputFormat = 'png') {
     }
 
     const result = await parse(inputFile, inputFormat);
-    !isAndroid && memoryCache.set(cacheKey, result);
+    if (!isAndroid) {
+        memoryCache.set(cacheKey, result);
+    }
     if (useDiskCache) {
         try {
             const cache = await diskCache.instance();
@@ -645,7 +647,7 @@ function createCharacterWriteDependencies({ bustCache = null } = {}) {
                 reason: repair.reason,
                 details: {
                     operation: repair.operation,
-                    ...(repair.details ?? {}),
+                    ...repair.details,
                 },
             });
 
@@ -886,8 +888,8 @@ function charaFormatData(data, directories) {
             if (file && file.entries) {
                 _.set(char, 'data.character_book', convertWorldInfoToCharacterBook(data.world, file.entries));
             }
-        } catch {
-            console.warn(`Failed to read world info file: ${data.world}. Character book will not be available.`);
+        } catch (error) {
+            console.warn(`Failed to read world info file: ${data.world}. Character book will not be available.`, error);
         }
     }
 
@@ -896,8 +898,8 @@ function charaFormatData(data, directories) {
             const extensions = JSON.parse(data.extensions);
             // Deep merge the extensions object
             _.set(char, 'data.extensions', deepMerge(char.data.extensions, extensions));
-        } catch {
-            console.warn(`Failed to parse extensions JSON: ${data.extensions}`);
+        } catch (error) {
+            console.warn(`Failed to parse extensions JSON: ${data.extensions}`, error);
         }
     }
 

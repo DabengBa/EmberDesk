@@ -532,7 +532,7 @@ router.post('/get', async (request, response) => {
     const dirs = request.user.directories;
     const sortFn = () => (a, b) => a.localeCompare(b);
 
-    const presetOpts = (dir) => ({ sortFunction: sortFn(), removeFileExtension: true });
+    const presetOpts = (_dir) => ({ sortFunction: sortFn(), removeFileExtension: true });
 
     const [
         { fileContents: novelai_settings, fileNames: novelai_setting_names },

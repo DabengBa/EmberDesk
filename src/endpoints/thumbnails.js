@@ -151,7 +151,7 @@ export async function generateThumbnail(directories, type, file, forceGenerate =
                     const resolution = getThumbnailResolution(type);
                     return { path: pathToCachedFile, aspectRatio: ratio, resolution };
                 }
-            } catch (e) {
+            } catch {
                 forceGenerate = true;
             }
         }

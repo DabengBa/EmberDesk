@@ -200,7 +200,7 @@ async function registerMiddleware(app, cli) {
                 req.session.csrfToken = token;
             },
             skipCsrfProtection: (req) => {
-                return cli.enableCorsProxy ? /^\/proxy\//.test(req.path) : false;
+                return cli.enableCorsProxy ? req.path.startsWith('/proxy/') : false;
             },
             size: 32,
         });

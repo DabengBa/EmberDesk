@@ -38,7 +38,7 @@ export const write = (image, data) => {
         const base64EncodedData = Buffer.from(JSON.stringify(v3Data), 'utf8').toString('base64');
         chunks.splice(-1, 0, PNGtext.encode('ccv3', base64EncodedData));
     } catch (error) {
-        // Ignore errors when adding v3 chunk
+        console.error('Failed to add ccv3 chunk to PNG metadata:', error);
     }
 
     const newBuffer = Buffer.from(encode(chunks));

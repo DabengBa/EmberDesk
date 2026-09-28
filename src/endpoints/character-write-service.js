@@ -79,7 +79,7 @@ function writeFailedResult(avatarName) {
 
 function getProjectionWriteOptions(canonicalResult, extraOptions = undefined) {
     return {
-        ...(extraOptions ?? {}),
+        ...extraOptions,
         ...(canonicalResult.authorityCommitted ? { skipCanonicalAuditInvalidation: true } : {}),
     };
 }
@@ -509,7 +509,7 @@ export async function deleteCharacterCard({
             const chatsPath = joinPath(dependencies, userDirectories.chats, chatsDirectoryName);
             await dependencies.removeDirectory(chatsPath);
         }
-    } catch (error) {
+    } catch {
         if (canonicalResult.authorityCommitted) {
             await maybeRecordProjectionRepair(dependencies, {
                 repairKey: canonicalResult.repairKey,

@@ -501,27 +501,26 @@ async function checkChatIntegrity(filePath, integritySlug) {
  * @typedef {(textArray: string[]) => boolean} ChatMatchFunction
  */
 export async function getChatInfo(pathToFile, additionalData = {}, withMetadata = false, matcher = null) {
-    return new Promise(async (res) => {
-        const parsedPath = path.parse(pathToFile);
-        const stats = await fs.promises.stat(pathToFile);
-        const hasMatcher = (typeof matcher === 'function');
+    const parsedPath = path.parse(pathToFile);
+    const stats = await fs.promises.stat(pathToFile);
+    const hasMatcher = (typeof matcher === 'function');
 
-        const chatData = {
-            match: false,
-            file_id: parsedPath.name,
-            file_name: parsedPath.base,
-            file_size: formatBytes(stats.size),
-            chat_items: 0,
-            mes: '[The chat is empty]',
-            last_mes: stats.mtimeMs,
-            ...additionalData,
-        };
+    const chatData = {
+        match: false,
+        file_id: parsedPath.name,
+        file_name: parsedPath.base,
+        file_size: formatBytes(stats.size),
+        chat_items: 0,
+        mes: '[The chat is empty]',
+        last_mes: stats.mtimeMs,
+        ...additionalData,
+    };
 
-        if (stats.size === 0) {
-            res(chatData);
-            return;
-        }
+    if (stats.size === 0) {
+        return chatData;
+    }
 
+    return new Promise((res) => {
         const fileStream = fs.createReadStream(pathToFile);
         const rl = readline.createInterface({
             input: fileStream,

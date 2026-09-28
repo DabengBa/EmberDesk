@@ -63,7 +63,8 @@ const setupLimiter = new RateLimiterMemory({
 
 async function withSetupLock(callback) {
     const previous = setupQueue;
-    let release = () => {};
+    /** @type {() => void} */
+    let release;
     setupQueue = new Promise(resolve => {
         release = resolve;
     });
@@ -89,7 +90,7 @@ router.post('/list', async (_request, response) => {
         /** @type {Promise<import('../users.js').UserViewModel>[]} */
         const viewModelPromises = users
             .filter(x => x.enabled)
-            .map(user => new Promise(async (resolve) => {
+            .map(user => new Promise((resolve) => {
                 getUserAvatar(user.handle).then(avatar =>
                     resolve({
                         handle: user.handle,

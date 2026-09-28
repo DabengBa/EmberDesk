@@ -237,7 +237,7 @@ function isRequestFromTrustedProxy(ip) {
             if (ipMatching.matches(ip, match)) {
                 return true;
             }
-        } catch (e) {
+        } catch {
             continue;
         }
     }
