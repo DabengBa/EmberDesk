@@ -162,6 +162,7 @@ import {
 } from './scripts/extension-compatibility-slots.js';
 import { COMMENT_NAME_DEFAULT, CONNECT_API_MAP, executeSlashCommandsOnChatInput, getMainChatSlashCommandAutoCompleteState, initDefaultSlashCommands, initSlashCommandAutoComplete, isExecutingCommandsFromChatInput, pauseScriptExecution, selectMainChatSlashCommandOption, setMainChatSlashCommandReactOwnerEnabled, stopScriptExecution, UNIQUE_APIS } from './scripts/slash-commands.js';
 import { initMacroAutoComplete } from './scripts/autocomplete/MacroAutoComplete.js';
+import { initFrontendFrameController } from './scripts/frontend-frame-controller.js';
 import {
     tag_map,
     tags,
@@ -4802,6 +4803,7 @@ async function bootstrapWorkspace() {
         initDataMaid();
         initAccessibility();
         initSwipePicker();
+        initFrontendFrameController();
         addDebugFunctions();
     }));
     await measureStartupStage('emitAppInitialized', () => eventSource.emit(event_types.APP_INITIALIZED));

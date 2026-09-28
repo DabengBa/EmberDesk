@@ -107,6 +107,8 @@ export const event_types = {
     ITEMIZED_PROMPTS_LOADED: 'itemized_prompts_loaded',
     ITEMIZED_PROMPTS_SAVED: 'itemized_prompts_saved',
     ITEMIZED_PROMPTS_DELETED: 'itemized_prompts_deleted',
+    FRONTEND_FRAME_RENDER_STARTED: 'frontend_frame_render_started',
+    FRONTEND_FRAME_RENDER_ENDED: 'frontend_frame_render_ended',
 };
 
 export const eventSource = new EventEmitter([event_types.APP_READY, event_types.APP_INITIALIZED]);

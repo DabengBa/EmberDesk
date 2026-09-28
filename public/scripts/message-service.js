@@ -2,6 +2,7 @@ import { buildChatMessageRenderDescriptor, buildChatMessageRowPopulation } from 
 import { buildChatMessageRichBodyRender } from './chat-message-render-service.js';
 import { MEDIA_DISPLAY, MEDIA_TYPE, SCROLL_BEHAVIOR, debounce_timeout } from './constants.js';
 import { eventSource, event_types } from './events.js';
+import { isFrontendContent } from './frontend-frame.js';
 import { requireMessageShellContext } from './message-shell-context.js';
 
 function shell() {
@@ -748,18 +749,23 @@ export function appendMediaToMessage(mes, messageElement, scrollBehavior = SCROL
 }
 
 export function addCopyToCodeBlocks(messageElement) {
+    const skipFrontend = state.power_user?.frontend_frames?.skip_highlight !== false;
     const codeBlocks = $(messageElement).find('pre code');
     for (let i = 0; i < codeBlocks.length; i++) {
-        state.hljs.highlightElement(codeBlocks.get(i));
+        const codeElement = codeBlocks.get(i);
+        if (skipFrontend && isFrontendContent(codeElement.closest('pre')?.textContent)) {
+            continue;
+        }
+        state.hljs.highlightElement(codeElement);
         const copyButton = document.createElement('i');
         copyButton.classList.add('fa-solid', 'fa-copy', 'code-copy', 'interactable');
         copyButton.title = 'Copy code';
-        codeBlocks.get(i).appendChild(copyButton);
+        codeElement.appendChild(copyButton);
         copyButton.addEventListener('click', function (e) {
             e.stopPropagation();
         });
         copyButton.addEventListener('pointerup', async function () {
-            const text = codeBlocks.get(i).textContent;
+            const text = codeElement.textContent;
             await copyText(text);
             toastr.info(t`Copied!`, '', { timeOut: 2000 });
         });

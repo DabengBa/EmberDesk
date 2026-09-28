@@ -1118,6 +1118,22 @@ test('renders an Extensions Host workflow through React-owned controls and expli
         expect(rowSource).toContain('dangerouslySetInnerHTML={{ __html: render.messageHtml }}');
     });
 
+    test('mounts frontend frames only for finalized rows via the compat bridge', () => {
+        const rowSource = read('app/components/main-chat/MainChatMessageRow.tsx');
+        const compatSource = read('app/compat/frontend-frames.ts');
+        const frameModuleSource = read('public/scripts/frontend-frame.js');
+
+        expect(rowSource).toContain('useFrontendFrames(mesTextRef, message)');
+        expect(rowSource).toContain('ref={mesTextRef}');
+        // Non-finalized rows (streaming partial docs, editing, error) must never mount frames
+        expect(compatSource).toContain("message.state !== 'finalized'");
+        // Depth eligibility is computed before any iframe exists
+        expect(compatSource).toContain('computeDepthEligible');
+        // Frame scripts may only run for trusted, finalized message bodies
+        expect(frameModuleSource).toContain('FRONTEND_FRAME_MARKERS');
+        expect(frameModuleSource).toContain('iframe.srcdoc');
+    });
+
     test('expands only the React window when loading earlier messages', () => {
         const scriptSource = read('public/script.js');
         const chatOpsSource = read('public/scripts/chat-ops-service.js');

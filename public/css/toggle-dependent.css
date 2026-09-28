@@ -479,3 +479,39 @@ label[for="trim_spaces"]:not(:has(input:checked)) small {
     color: var(--warning);
     margin-left: 5px;
 }
+
+/* Message frontend frames */
+
+.ed-frontend-frame {
+    display: block;
+    margin: 0.5em 0;
+}
+
+.ed-frontend-frame__iframe {
+    display: block;
+    width: 100%;
+    border: none;
+    background: transparent;
+    color-scheme: normal;
+}
+
+.ed-frontend-frame__toggle,
+.ed-code-collapse-toggle {
+    display: inline-block;
+    margin: 0.25em 0;
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--SmartThemeBodyColor, inherit);
+    font: inherit;
+    font-size: smaller;
+    cursor: pointer;
+    opacity: 0.6;
+    user-select: none;
+}
+
+.ed-frontend-frame__toggle:hover,
+.ed-code-collapse-toggle:hover {
+    opacity: 1;
+    text-decoration: underline;
+}

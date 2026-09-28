@@ -51,6 +51,7 @@ import { IMAGE_OVERSWIPE, MEDIA_DISPLAY } from './constants.js';
 import { t } from './i18n.js';
 import { persona_description_positions as _persona_description_positions } from './personas.js';
 import { loadWorkspacePanelsModule } from './workspace-panels-react-bridge.js';
+import { DEFAULT_FRONTEND_FRAME_SETTINGS, normalizeFrontendFramesSettings } from './frontend-frame.js';
 
 export const toastPositionClasses = [
     'toast-top-left',
@@ -129,6 +130,8 @@ export const power_user = {
     play_sound_unfocused: true,
     auto_save_msg_edits: false,
     confirm_message_delete: true,
+
+    frontend_frames: { ...DEFAULT_FRONTEND_FRAME_SETTINGS },
 
     sort_field: 'name',
     sort_order: 'asc',
@@ -1105,6 +1108,9 @@ export async function loadPowerUserSettings(settings, data) {
         Object.assign(power_user, settings.power_user);
     }
 
+    // settings.power_user is shallow-merged, so rebuild nested objects against defaults
+    power_user.frontend_frames = normalizeFrontendFramesSettings(power_user.frontend_frames);
+
     if (power_user.stscript === undefined) {
         power_user.stscript = defaultStscript;
     } else {
@@ -1215,6 +1221,13 @@ export async function loadPowerUserSettings(settings, data) {
     $('#never_resize_avatars').prop('checked', power_user.never_resize_avatars);
     $('#show_card_avatar_urls').prop('checked', power_user.show_card_avatar_urls);
     $('#auto_save_msg_edits').prop('checked', power_user.auto_save_msg_edits);
+    $('#frontend_frames_enabled').prop('checked', power_user.frontend_frames.enabled);
+    $('#frontend_frames_depth').val(power_user.frontend_frames.depth);
+    $('#frontend_frames_depth_ignore_hidden').prop('checked', power_user.frontend_frames.depth_ignore_hidden);
+    $('#frontend_frames_collapse_code_block').val(power_user.frontend_frames.collapse_code_block);
+    $('#frontend_frames_skip_highlight').prop('checked', power_user.frontend_frames.skip_highlight);
+    $('#frontend_frames_use_blob_url').prop('checked', power_user.frontend_frames.use_blob_url);
+    $('#frontend_frames_allow_streaming').prop('checked', power_user.frontend_frames.allow_streaming);
     $('#allow_name1_display').prop('checked', power_user.allow_name1_display);
     $('#allow_name2_display').prop('checked', power_user.allow_name2_display);
     //$("#removeXML").prop("checked", power_user.removeXML);
@@ -2513,6 +2526,43 @@ jQuery(() => {
     $('#encode_tags').on('input', async function () {
         power_user.encode_tags = !!$(this).prop('checked');
         await reloadCurrentChat();
+        saveSettingsDebounced();
+    });
+
+    $('#frontend_frames_enabled').on('input', function () {
+        power_user.frontend_frames.enabled = !!$(this).prop('checked');
+        saveSettingsDebounced();
+    });
+
+    $('#frontend_frames_depth').on('input', function () {
+        const depth = Math.trunc(Number($(this).val()));
+        power_user.frontend_frames.depth = Number.isFinite(depth) && depth >= 0 ? depth : 0;
+        saveSettingsDebounced();
+    });
+
+    $('#frontend_frames_depth_ignore_hidden').on('input', function () {
+        power_user.frontend_frames.depth_ignore_hidden = !!$(this).prop('checked');
+        saveSettingsDebounced();
+    });
+
+    $('#frontend_frames_collapse_code_block').on('change', function () {
+        const value = String($(this).val());
+        power_user.frontend_frames.collapse_code_block = ['all', 'frontend_only', 'none'].includes(value) ? value : 'frontend_only';
+        saveSettingsDebounced();
+    });
+
+    $('#frontend_frames_skip_highlight').on('input', function () {
+        power_user.frontend_frames.skip_highlight = !!$(this).prop('checked');
+        saveSettingsDebounced();
+    });
+
+    $('#frontend_frames_use_blob_url').on('input', function () {
+        power_user.frontend_frames.use_blob_url = !!$(this).prop('checked');
+        saveSettingsDebounced();
+    });
+
+    $('#frontend_frames_allow_streaming').on('input', function () {
+        power_user.frontend_frames.allow_streaming = !!$(this).prop('checked');
         saveSettingsDebounced();
     });
 

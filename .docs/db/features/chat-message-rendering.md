@@ -33,6 +33,7 @@ Let users reliably read opened chat history and finalized generated messages as 
 - Returning to a previously read chat in the same page session may restore the expanded history window and reading region when safe; if not safe, EmberDesk falls back to the normal open result.
 - Recoverable visible generation failure must not remove the user message or duplicate assistant rows; final success or final failed state remains on one stable assistant row.
 - Missing workspace-panels builds fail closed with a visible build error rather than restoring a flag-off legacy list owner. Rollback is deployment of a previous application version.
+- Finalized message code blocks whose text contains a complete HTML document (`html>`, `<head>`, or `<body` markers) may render as first-party same-origin `srcdoc` iframes wrapped in `.ed-frontend-frame[data-frontend-slot]` slots inside `.mes_text`. Frames mount only on `finalized` rows after depth eligibility is computed — streaming, editing, error, and over-depth rows never execute frame scripts. The source code block collapses behind a view-source toggle per `power_user.frontend_frames.collapse_code_block`, mounted frames are host-owned and torn down on HTML rewrite, row unmount, deletion, depth/settings change, or `enabled=false`. The narrow `EmberDeskFrame` frame API (frame/message identity, automatic height, `--ed-viewport-height`/`--TH-viewport-height`, `.user_avatar`/`.char_avatar`) is a compatibility convenience, not a security boundary: frame scripts run same-origin and share the page's privileges.
 
 ## Approved Retirement Direction
 
@@ -46,6 +47,7 @@ The React Runtime Boundary is part of this feature's implementation contract: me
 - `feature.chat_message_rendering.stored_chat`: stored messages displayed in the main chat region.
 - `feature.chat_message_rendering.message_dom`: stable message row identity and compatibility surfaces.
 - `feature.chat_message_rendering.long_chat_window`: the initial visible window for long chats, load-more affordance, and row preservation after older messages load.
+- `feature.chat_message_rendering.frontend_frames`: same-origin iframe rendering of complete HTML documents inside finalized message code blocks, with depth/settings/unmount lifecycle.
 
 ## Acceptance Workflows
 
@@ -68,6 +70,7 @@ The React Runtime Boundary is part of this feature's implementation contract: me
 - Long-chat load-more loses row identity or reading position.
 - A finalized generation creates more than one assistant row for one request.
 - Editing, streaming, or extension-mutated rows remount as dual-owner or mixed broken owner surfaces.
+- Frame slots appear on streaming/editing/over-depth rows, frame scripts execute before depth eligibility, or mounted `.ed-frontend-frame` slots survive HTML rewrites, row deletion, or `frontend_frames.enabled=false`.
 - Protected message surfaces disappear while row actions or compatible extensions still depend on them.
 
 ## Boundaries

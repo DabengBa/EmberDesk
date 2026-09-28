@@ -3,6 +3,7 @@ import type { RefObject } from 'react';
 import type { MainChatCommands } from '../../compat/workspace-commands';
 import type { MainChatMessageRecord } from '../../stores/main-chat-store';
 import { translate } from '../../compat/i18n.js';
+import { useFrontendFrames } from '../../compat/frontend-frames';
 
 const EMPTY_RENDER = {
     messageHtml: '',
@@ -307,6 +308,8 @@ export function MainChatMessageRow({
     const hasReasoning = render.reasoningHtml !== '' || message.reasoningEditing;
     const metaStripRef = useRef<HTMLDivElement>(null);
     const reasoningHeaderRef = useRef<HTMLDivElement>(null);
+    const mesTextRef = useRef<HTMLDivElement>(null);
+    useFrontendFrames(mesTextRef, message);
     const [avatarFailed, setAvatarFailed] = useState(false);
     useEffect(() => {
         setAvatarFailed(false);
@@ -636,6 +639,7 @@ export function MainChatMessageRow({
                     />
                 ) : (
                     <div
+                        ref={mesTextRef}
                         className={message.inlineMediaText ? 'mes_text inline_media' : 'mes_text'}
                         dangerouslySetInnerHTML={{ __html: render.messageHtml }}
                     />
