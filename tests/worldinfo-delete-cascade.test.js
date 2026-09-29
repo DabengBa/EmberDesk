@@ -5,12 +5,13 @@ import path from 'node:path';
 
 const readCharacterCardMock = jest.fn();
 const writeCharacterCardMock = jest.fn();
+const parseCharacterCardMock = jest.fn();
 const invalidateDirectoryMock = jest.fn();
 
 jest.unstable_mockModule('../src/character-card-parser.js', () => ({
     read: readCharacterCardMock,
     write: writeCharacterCardMock,
-    parse: jest.fn(),
+    parse: parseCharacterCardMock,
     extractImageData: image => image,
 }));
 
@@ -19,6 +20,7 @@ jest.unstable_mockModule('../src/endpoints/settings-cache.js', () => ({
 }));
 
 const { router } = await import('../src/endpoints/worldinfo.js');
+const { ensureCanonicalSliceBackend, resetCanonicalBackendsForTests } = await import('../src/canonical-backend.js');
 
 function createResponse() {
     return {
@@ -55,6 +57,7 @@ async function invokeDeletePreflight(request) {
 describe('world info delete cascade', () => {
     let root;
     let directories;
+    let parsedCards;
 
     beforeEach(() => {
         root = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-worldinfo-cascade-'));
@@ -62,43 +65,37 @@ describe('world info delete cascade', () => {
             root,
             characters: path.join(root, 'characters'),
             worlds: path.join(root, 'worlds'),
+            chats: path.join(root, 'chats'),
+            storage: path.join(root, 'storage'),
         };
-        fs.mkdirSync(directories.characters, { recursive: true });
-        fs.mkdirSync(directories.worlds, { recursive: true });
+        for (const directory of Object.values(directories)) {
+            fs.mkdirSync(directory, { recursive: true });
+        }
 
-        // These tests cover the file-backed fallback path; canonical storage
-        // defaults to enabled when no config is present.
-        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_ENABLED = 'false';
-
+        parsedCards = new Map();
         readCharacterCardMock.mockReset();
         writeCharacterCardMock.mockReset();
+        parseCharacterCardMock.mockReset();
+        parseCharacterCardMock.mockImplementation((filePath) => {
+            const card = parsedCards.get(path.basename(filePath));
+            return card === undefined ? null : JSON.stringify(card);
+        });
         invalidateDirectoryMock.mockReset();
     });
 
     afterEach(() => {
-        delete process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_ENABLED;
+        resetCanonicalBackendsForTests();
         fs.rmSync(root, { recursive: true, force: true });
     });
 
-    test('reports bound characters by scanning character PNG snapshots without the index sidecar', async () => {
-        const alphaPath = path.join(directories.characters, 'alpha.png');
-        const betaPath = path.join(directories.characters, 'beta.png');
-        const worldPath = path.join(directories.worlds, 'OldWorld.json');
-        const alphaImage = Buffer.from('alpha png bytes');
-        const betaImage = Buffer.from('beta png bytes');
-        fs.writeFileSync(alphaPath, alphaImage);
-        fs.writeFileSync(betaPath, betaImage);
-        fs.writeFileSync(worldPath, JSON.stringify({ entries: { one: {} } }));
+    test('reports bound characters from canonical rows populated by shadow import', async () => {
+        fs.writeFileSync(path.join(directories.characters, 'alpha.png'), Buffer.from('alpha png bytes'));
+        fs.writeFileSync(path.join(directories.characters, 'beta.png'), Buffer.from('beta png bytes'));
+        fs.writeFileSync(path.join(directories.worlds, 'OldWorld.json'), JSON.stringify({ entries: { one: {} } }));
+        parsedCards.set('alpha.png', { name: 'Alpha', world: 'OldWorld' });
+        parsedCards.set('beta.png', { name: 'Beta', world: '' });
 
-        readCharacterCardMock.mockImplementation((buffer) => {
-            if (buffer.equals(alphaImage)) {
-                return JSON.stringify({ data: { name: 'Alpha', extensions: { world: 'OldWorld' } } });
-            }
-            if (buffer.equals(betaImage)) {
-                return JSON.stringify({ data: { name: 'Beta', extensions: { world: '' } } });
-            }
-            throw new Error('unexpected image buffer');
-        });
+        await ensureCanonicalSliceBackend('characters', directories, 'default-user');
 
         const response = await invokeDeletePreflight({
             body: { name: 'OldWorld' },
@@ -114,18 +111,12 @@ describe('world info delete cascade', () => {
         })]);
     });
 
-    test('reports bound characters from legacy card.world bindings without the index sidecar', async () => {
-        const legacyPath = path.join(directories.characters, 'legacy.png');
-        const legacyImage = Buffer.from('legacy png bytes');
-        fs.writeFileSync(legacyPath, legacyImage);
+    test('reports bound characters from legacy card.world bindings via canonical import', async () => {
+        fs.writeFileSync(path.join(directories.characters, 'legacy.png'), Buffer.from('legacy png bytes'));
         fs.writeFileSync(path.join(directories.worlds, 'Lorebook.json'), JSON.stringify({ entries: { one: {} } }));
+        parsedCards.set('legacy.png', { name: 'Legacy Hero', world: 'Lorebook' });
 
-        readCharacterCardMock.mockImplementation((buffer) => {
-            if (buffer.equals(legacyImage)) {
-                return JSON.stringify({ name: 'Legacy Hero', world: 'Lorebook' });
-            }
-            throw new Error('unexpected image buffer');
-        });
+        await ensureCanonicalSliceBackend('characters', directories, 'default-user');
 
         const response = await invokeDeletePreflight({
             body: { name: 'Lorebook' },
@@ -141,24 +132,14 @@ describe('world info delete cascade', () => {
         })]);
     });
 
-    test('clears character world references by scanning PNG snapshots without invalidating the index row', async () => {
+    test('clears canonical character world bindings without rewriting projection PNGs', async () => {
         const avatar = 'alpha.png';
         const characterPath = path.join(directories.characters, avatar);
         const worldPath = path.join(directories.worlds, 'OldWorld.json');
         const originalImage = Buffer.from('original png bytes');
-        const rewrittenImage = Buffer.from('rewritten png bytes');
         fs.writeFileSync(characterPath, originalImage);
         fs.writeFileSync(worldPath, '{}');
-
-        readCharacterCardMock.mockReturnValue(JSON.stringify({
-            data: {
-                name: 'Alpha',
-                extensions: {
-                    world: 'OldWorld',
-                },
-            },
-        }));
-        writeCharacterCardMock.mockReturnValue(rewrittenImage);
+        parsedCards.set('alpha.png', { name: 'Alpha', world: 'OldWorld' });
 
         const response = await invokeDeleteCascade({
             body: {
@@ -169,17 +150,16 @@ describe('world info delete cascade', () => {
         });
 
         expect(response.statusCode).toBe(200);
-        expect(readCharacterCardMock).toHaveBeenCalledWith(originalImage);
-        expect(writeCharacterCardMock).toHaveBeenCalledWith(originalImage, JSON.stringify({
-            data: {
-                name: 'Alpha',
-                extensions: {
-                    world: '',
-                },
-            },
-        }));
-        expect(fs.readFileSync(characterPath)).toEqual(rewrittenImage);
+        expect(writeCharacterCardMock).not.toHaveBeenCalled();
+        expect(fs.readFileSync(characterPath)).toEqual(originalImage);
         expect(fs.existsSync(worldPath)).toBe(false);
         expect(invalidateDirectoryMock).toHaveBeenCalledWith(directories.worlds);
+
+        const { db } = await ensureCanonicalSliceBackend('characters', directories, 'default-user');
+        expect(db.prepare('SELECT world_name FROM characters WHERE avatar_filename = ?').get(avatar))
+            .toEqual({ world_name: '' });
+        expect(db.prepare(`
+            SELECT deleted_at_ms FROM world_books WHERE name = 'OldWorld'
+        `).get()?.deleted_at_ms).not.toBeNull();
     });
 });

@@ -3,13 +3,11 @@ import fs from 'node:fs';
 
 import express from 'express';
 import sanitize from 'sanitize-filename';
-import { sync as writeFileSyncAtomic } from 'write-file-atomic';
 
 import { validateAssetFileName } from './assets.js';
 import { clientRelativePath } from '../util.js';
 import {
     deleteCanonicalManagedMediaReference,
-    invalidateCanonicalManagedMediaAudit,
     writeCanonicalManagedMedia,
 } from './canonical-managed-media-write-service.js';
 import { getCanonicalManagedMediaReadState } from './canonical-managed-media-read-service.js';
@@ -22,13 +20,6 @@ function getRequestHandle(request) {
     return request.user?.profile?.handle ?? request.user?.handle ?? 'default-user';
 }
 
-function invalidateManagedMediaAudit(request, operation) {
-    invalidateCanonicalManagedMediaAudit({
-        handle: getRequestHandle(request),
-        directories: request.user.directories,
-        operation,
-    });
-}
 
 router.post('/sanitize-filename', async (request, response) => {
     try {
@@ -77,8 +68,10 @@ router.post('/upload', async (request, response) => {
             return response.status(500).send('File upload committed but compatibility projection failed');
         }
         if (!canonicalResult.authorityCommitted) {
-            writeFileSyncAtomic(pathToUpload, request.body.data, 'base64');
-            invalidateManagedMediaAudit(request, `attachment_upload:${url}`);
+            return response.status(503).send({
+                error: 'canonical_storage_unavailable',
+                reason: canonicalResult.reason ?? 'canonical_storage_unavailable',
+            });
         }
         console.info(`Uploaded file: ${url} from ${request.user.profile.handle}`);
         return response.send({ path: url });
@@ -120,10 +113,10 @@ router.post('/delete', async (request, response) => {
             return response.status(404).send('File not found');
         }
 
-        fs.unlinkSync(pathToDelete);
-        invalidateManagedMediaAudit(request, `attachment_delete:${compatibilityPath}`);
-        console.info(`Deleted file: ${request.body.path} from ${request.user.profile.handle}`);
-        return response.sendStatus(200);
+        return response.status(503).send({
+            error: 'canonical_storage_unavailable',
+            reason: canonicalResult.reason ?? 'canonical_storage_unavailable',
+        });
     } catch (error) {
         console.error(error);
         return response.sendStatus(500);

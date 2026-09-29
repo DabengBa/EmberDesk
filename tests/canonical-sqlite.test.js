@@ -136,7 +136,7 @@ describe('canonical sqlite feature flags', () => {
             },
             sources: expect.objectContaining({
                 enabled: 'global',
-                reads: 'global',
+                reads: 'retired',
             }),
             resolution: {
                 ok: true,
@@ -174,13 +174,13 @@ describe('canonical sqlite feature flags', () => {
         })).toEqual(expect.objectContaining({
             featureFlags: expect.objectContaining({
                 enabled: true,
-                reads: false,
+                reads: true,
                 writes: true,
             }),
             sources: expect.objectContaining({
                 enabled: 'slice',
-                reads: 'slice',
-                writes: 'global',
+                reads: 'retired',
+                writes: 'retired',
             }),
         }));
     });

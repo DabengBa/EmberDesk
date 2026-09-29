@@ -823,7 +823,7 @@ describe('canonical sqlite operator helpers', () => {
             }),
             flagSources: expect.objectContaining({
                 enabled: 'global_override',
-                reads: 'global_override',
+                reads: 'retired',
             }),
         }));
     });

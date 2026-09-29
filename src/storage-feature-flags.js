@@ -1,6 +1,12 @@
 import { getConfig, getConfigValue, hasConfigFilePath, keyToEnv } from './util.js';
 
 const STORAGE_FLAG_PREFIX = 'features.storage.canonicalSqlite';
+
+// Staged-rollout flags retired with the P4 cutover: runtime reads/writes are
+// always canonical, chat stats always derive from chat_sessions, and blocked
+// canonical operations fail instead of falling back to files. `enabled` stays
+// as the init-freeze switch and `shadowImport` stays as the import control.
+const RETIRED_STORAGE_FLAG_NAMES = Object.freeze(['reads', 'writes', 'chatStats', 'strict']);
 const BASE_STORAGE_FLAG_NAMES = Object.freeze([
     'enabled',
     'shadowImport',
@@ -8,6 +14,19 @@ const BASE_STORAGE_FLAG_NAMES = Object.freeze([
     'writes',
     'strict',
 ]);
+
+const warnedRetiredFlagPaths = new Set();
+
+function warnRetiredStorageFlag(configPath) {
+    if (warnedRetiredFlagPaths.has(configPath)) {
+        return;
+    }
+    warnedRetiredFlagPaths.add(configPath);
+    console.warn(
+        `Canonical storage flag '${configPath}' is retired and ignored; `
+        + 'runtime reads/writes are always canonical now. Remove it from config/env.',
+    );
+}
 
 function getStorageFlagNames(supportsChatStats) {
     return supportsChatStats
@@ -21,13 +40,19 @@ function getStorageFlag(flagName, defaultValue = true) {
 
 export function getCanonicalSqliteFeatureFlags() {
     const enabled = getStorageFlag('enabled');
+    for (const flagName of RETIRED_STORAGE_FLAG_NAMES) {
+        const configPath = `${STORAGE_FLAG_PREFIX}.${flagName}`;
+        if (getExplicitConfigValue(configPath).present) {
+            warnRetiredStorageFlag(configPath);
+        }
+    }
     return {
         enabled,
         shadowImport: enabled && getStorageFlag('shadowImport'),
-        reads: enabled && getStorageFlag('reads'),
-        writes: enabled && getStorageFlag('writes'),
-        chatStats: enabled && getStorageFlag('chatStats'),
-        strict: enabled && getStorageFlag('strict', false),
+        reads: enabled,
+        writes: enabled,
+        chatStats: enabled,
+        strict: enabled,
     };
 }
 
@@ -225,8 +250,12 @@ export function getCanonicalStorageSliceFeatureFlagSnapshot(options) {
                     source: 'invalid',
                 });
             }
-            value = parsed.value;
-            source = sliceSource;
+            if (RETIRED_STORAGE_FLAG_NAMES.includes(flagName)) {
+                warnRetiredStorageFlag(`${STORAGE_FLAG_PREFIX}.slices.${flagKey}.${flagName}`);
+            } else {
+                value = parsed.value;
+                source = sliceSource;
+            }
         } else if (!fallbackToGlobal) {
             value = false;
             source = 'default';
@@ -234,6 +263,14 @@ export function getCanonicalStorageSliceFeatureFlagSnapshot(options) {
 
         featureFlags[flagName] = value;
         sources[flagName] = source;
+    }
+
+    // Retired staged-rollout flags always track `enabled`.
+    for (const flagName of RETIRED_STORAGE_FLAG_NAMES) {
+        if (flagName in featureFlags) {
+            featureFlags[flagName] = featureFlags.enabled;
+            sources[flagName] = 'retired';
+        }
     }
 
     if (!featureFlags.enabled) {

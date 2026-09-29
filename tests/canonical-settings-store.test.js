@@ -598,18 +598,20 @@ describe('canonical settings route integration', () => {
         expect(JSON.parse(fs.readFileSync(path.join(directories.root, SETTINGS_FILE), 'utf8'))).toEqual(filePayload);
     });
 
-    test('falls back to file settings when reads are off or settings audit is blocked', async () => {
+    test('ignores the retired reads flag and fails closed when the settings audit blocks', async () => {
         const root = makeRoot();
         const directories = createRouteDirectories(root);
         const filePayload = { firstRun: true, source: 'file' };
         writeSettingsFile(directories, filePayload);
 
+        // 'reads' is retired: pinning it off warns and is ignored — the
+        // canonical document stays authoritative.
         setCanonicalEnv({ enabled: true, reads: false });
         const router = await loadSettingsRouter();
-        const { db } = await seedSettingsDocument(directories, { firstRun: false, source: 'db' }, { auditClean: false });
+        const { db } = await seedSettingsDocument(directories, { firstRun: false, source: 'db' });
         let response = await invokeRoute(router, '/get', { directories });
-        expect(JSON.parse(response.body.settings)).toEqual(filePayload);
-        expect(response.body.settings_revision).toBeUndefined();
+        expect(JSON.parse(response.body.settings)).toEqual({ firstRun: false, source: 'db' });
+        expect(response.body.settings_revision).toBe(1);
 
         const { persistCanonicalAuditStatus } = await import('../src/canonical-sqlite-shadow-import.js');
         persistCanonicalAuditStatus(db, {
@@ -623,9 +625,12 @@ describe('canonical settings route integration', () => {
             scope: SETTINGS_AUDIT_SCOPE,
             auditedAtMs: 3000,
         });
-        setCanonicalEnv({ enabled: true, reads: true });
         response = await invokeRoute(router, '/get', { directories });
-        expect(JSON.parse(response.body.settings)).toEqual(filePayload);
+        expect(response.statusCode).toBe(503);
+        expect(response.body).toEqual({
+            error: 'canonical_storage_unavailable',
+            reason: 'audit_drift_blocked',
+        });
     });
 
     test('canonical save enforces revision conflicts and projects settings.json after DB commit', async () => {

@@ -73,10 +73,6 @@ function failureResult(reason, message, avatarName) {
     };
 }
 
-function writeFailedResult(avatarName) {
-    return failureResult('write_failed', 'Error: failed to write character data', avatarName);
-}
-
 function getProjectionWriteOptions(canonicalResult, extraOptions = undefined) {
     return {
         ...extraOptions,
@@ -96,8 +92,12 @@ function projectionFailedResult(avatarName, repairKey) {
     };
 }
 
-function deleteFailedResult(avatarName) {
-    return failureResult('delete_failed', 'Error: failed to delete character data', avatarName);
+function canonicalUnavailableResult(avatarName) {
+    return failureResult(
+        'canonical_storage_unavailable',
+        'Error: canonical storage is unavailable; the character cannot be persisted',
+        avatarName,
+    );
 }
 
 async function maybeCommitCanonicalWrite(dependencies, operation, payload) {
@@ -154,11 +154,9 @@ async function createPreparedRenameData(body, directories, request, dependencies
     const oldInternalName = parsePath(dependencies, oldAvatarName).name;
     const newInternalName = dependencies.getPngName(newName, directories);
     const newAvatarName = getAvatarName(newInternalName);
-    const oldAvatarPath = joinPath(dependencies, directories.characters, oldAvatarName);
 
-    // Canonical row is authority when present; a leftover PNG may be stale.
-    const rawOldData = await dependencies.readCanonicalCharacterData?.(oldAvatarName, directories)
-        ?? (exists(dependencies, oldAvatarPath) ? await dependencies.readCharacterData(oldAvatarPath) : undefined);
+    // Canonical row is the only authority; a leftover PNG is never read back.
+    const rawOldData = await dependencies.readCanonicalCharacterData?.(oldAvatarName, directories);
     if (rawOldData === undefined) {
         throw new Error('Failed to read character file');
     }
@@ -228,6 +226,15 @@ export async function createCharacterCard({
         request,
     });
 
+    // No file-backed fallback remains: an uncommitted canonical write means
+    // storage is frozen/unavailable and the character cannot persist at all.
+    if (!canonicalResult.authorityCommitted) {
+        if (uploadPath) {
+            unlinkFile(dependencies, uploadPath);
+        }
+        return canonicalUnavailableResult(avatarName);
+    }
+
     const result = await dependencies.writeCharacterData(
         inputFile,
         prepared.characterData,
@@ -241,24 +248,21 @@ export async function createCharacterCard({
     }
 
     if (!result) {
-        if (canonicalResult.authorityCommitted) {
-            await maybeRecordProjectionRepair(dependencies, {
-                repairKey: canonicalResult.repairKey,
-                repairType: 'character_projection',
-                avatarName,
-                operation: 'create',
-                reason: 'projection_failed',
-                directories: userDirectories,
-                handle: request.user.profile?.handle ?? null,
-                details: buildProjectionRepairDetails({
-                    internalName: prepared.internalName,
-                    sourceImage: typeof inputFile === 'string' ? inputFile : 'buffer',
-                    chatsDirectoryName: prepared.internalName,
-                }),
-            });
-            return projectionFailedResult(avatarName, canonicalResult.repairKey);
-        }
-        return writeFailedResult(avatarName);
+        await maybeRecordProjectionRepair(dependencies, {
+            repairKey: canonicalResult.repairKey,
+            repairType: 'character_projection',
+            avatarName,
+            operation: 'create',
+            reason: 'projection_failed',
+            directories: userDirectories,
+            handle: request.user.profile?.handle ?? null,
+            details: buildProjectionRepairDetails({
+                internalName: prepared.internalName,
+                sourceImage: typeof inputFile === 'string' ? inputFile : 'buffer',
+                chatsDirectoryName: prepared.internalName,
+            }),
+        });
+        return projectionFailedResult(avatarName, canonicalResult.repairKey);
     }
 
     return okResult(avatarName, { internalName: prepared.internalName });
@@ -320,6 +324,13 @@ export async function editCharacterCard({
         response,
     });
 
+    if (!canonicalResult.authorityCommitted) {
+        if (uploadPath) {
+            unlinkFile(dependencies, uploadPath);
+        }
+        return canonicalUnavailableResult(prepared.avatarUrl);
+    }
+
     if (!uploadPath) {
         const result = await dependencies.writeCharacterData(
             avatarPath,
@@ -330,24 +341,21 @@ export async function editCharacterCard({
             getProjectionWriteOptions(canonicalResult, { shouldRegenerateThumbnail: false }),
         );
         if (!result) {
-            if (canonicalResult.authorityCommitted) {
-                await maybeRecordProjectionRepair(dependencies, {
-                    repairKey: canonicalResult.repairKey,
-                    repairType: 'character_projection',
-                    avatarName: prepared.avatarUrl,
-                    operation: 'edit',
-                    reason: 'projection_failed',
-                    directories: userDirectories,
-                    handle: request.user.profile?.handle ?? null,
-                    details: buildProjectionRepairDetails({
-                        internalName: prepared.targetFile,
-                        sourceAvatarName: prepared.avatarUrl,
-                        sourceImage: avatarPath,
-                    }),
-                });
-                return projectionFailedResult(prepared.avatarUrl, canonicalResult.repairKey);
-            }
-            return writeFailedResult(prepared.avatarUrl);
+            await maybeRecordProjectionRepair(dependencies, {
+                repairKey: canonicalResult.repairKey,
+                repairType: 'character_projection',
+                avatarName: prepared.avatarUrl,
+                operation: 'edit',
+                reason: 'projection_failed',
+                directories: userDirectories,
+                handle: request.user.profile?.handle ?? null,
+                details: buildProjectionRepairDetails({
+                    internalName: prepared.targetFile,
+                    sourceAvatarName: prepared.avatarUrl,
+                    sourceImage: avatarPath,
+                }),
+            });
+            return projectionFailedResult(prepared.avatarUrl, canonicalResult.repairKey);
         }
     } else {
         const result = await dependencies.writeCharacterData(
@@ -360,24 +368,21 @@ export async function editCharacterCard({
         );
         unlinkFile(dependencies, uploadPath);
         if (!result) {
-            if (canonicalResult.authorityCommitted) {
-                await maybeRecordProjectionRepair(dependencies, {
-                    repairKey: canonicalResult.repairKey,
-                    repairType: 'character_projection',
-                    avatarName: prepared.avatarUrl,
-                    operation: 'edit',
-                    reason: 'projection_failed',
-                    directories: userDirectories,
-                    handle: request.user.profile?.handle ?? null,
-                    details: buildProjectionRepairDetails({
-                        internalName: prepared.targetFile,
-                        sourceAvatarName: prepared.avatarUrl,
-                        sourceImage: uploadPath,
-                    }),
-                });
-                return projectionFailedResult(prepared.avatarUrl, canonicalResult.repairKey);
-            }
-            return writeFailedResult(prepared.avatarUrl);
+            await maybeRecordProjectionRepair(dependencies, {
+                repairKey: canonicalResult.repairKey,
+                repairType: 'character_projection',
+                avatarName: prepared.avatarUrl,
+                operation: 'edit',
+                reason: 'projection_failed',
+                directories: userDirectories,
+                handle: request.user.profile?.handle ?? null,
+                details: buildProjectionRepairDetails({
+                    internalName: prepared.targetFile,
+                    sourceAvatarName: prepared.avatarUrl,
+                    sourceImage: uploadPath,
+                }),
+            });
+            return projectionFailedResult(prepared.avatarUrl, canonicalResult.repairKey);
         }
 
         dependencies.bustCache?.(request, response);
@@ -433,6 +438,10 @@ export async function renameCharacterCard(options) {
         request,
     });
 
+    if (!canonicalResult.authorityCommitted) {
+        return canonicalUnavailableResult(newAvatarName);
+    }
+
     const result = await dependencies.writeCharacterData(
         oldAvatarPath,
         characterData,
@@ -442,28 +451,25 @@ export async function renameCharacterCard(options) {
         getProjectionWriteOptions(canonicalResult),
     );
     if (!result) {
-        if (canonicalResult.authorityCommitted) {
-            await maybeRecordProjectionRepair(dependencies, {
-                repairKey: canonicalResult.repairKey,
-                repairType: 'character_projection',
-                avatarName: newAvatarName,
-                operation: 'rename',
-                reason: 'projection_failed',
-                directories,
-                handle: request.user.profile?.handle ?? null,
-                details: buildProjectionRepairDetails({
-                    oldAvatarName,
-                    newAvatarName,
-                    oldInternalName,
-                    newInternalName,
-                    oldChatsPath,
-                    newChatsPath,
-                    sourceImage: oldAvatarPath,
-                }),
-            });
-            return projectionFailedResult(newAvatarName, canonicalResult.repairKey);
-        }
-        return writeFailedResult(newAvatarName);
+        await maybeRecordProjectionRepair(dependencies, {
+            repairKey: canonicalResult.repairKey,
+            repairType: 'character_projection',
+            avatarName: newAvatarName,
+            operation: 'rename',
+            reason: 'projection_failed',
+            directories,
+            handle: request.user.profile?.handle ?? null,
+            details: buildProjectionRepairDetails({
+                oldAvatarName,
+                newAvatarName,
+                oldInternalName,
+                newInternalName,
+                oldChatsPath,
+                newChatsPath,
+                sourceImage: oldAvatarPath,
+            }),
+        });
+        return projectionFailedResult(newAvatarName, canonicalResult.repairKey);
     }
 
     if (exists(dependencies, oldChatsPath) && !exists(dependencies, newChatsPath)) {
@@ -503,8 +509,7 @@ export async function deleteCharacterCard({
     const targetAvatarName = avatarName ?? request.body?.avatar_url;
     const avatarPath = joinPath(dependencies, userDirectories.characters, targetAvatarName);
 
-    if (!exists(dependencies, avatarPath)
-        && !(await dependencies.characterExists?.(userDirectories, targetAvatarName))) {
+    if (!(await dependencies.characterExists?.(userDirectories, targetAvatarName))) {
         return {
             ...failureResult('missing_avatar', 'Error: character file does not exist', targetAvatarName),
             avatarPath,
@@ -517,6 +522,10 @@ export async function deleteCharacterCard({
         directories: userDirectories,
         request,
     });
+
+    if (!canonicalResult.authorityCommitted) {
+        return canonicalUnavailableResult(targetAvatarName);
+    }
 
     try {
         if (canonicalResult.projection !== 'off' || exists(dependencies, avatarPath)) {
@@ -531,34 +540,22 @@ export async function deleteCharacterCard({
             await dependencies.removeDirectory(chatsPath);
         }
     } catch {
-        if (canonicalResult.authorityCommitted) {
-            await maybeRecordProjectionRepair(dependencies, {
-                repairKey: canonicalResult.repairKey,
-                repairType: 'character_projection',
+        await maybeRecordProjectionRepair(dependencies, {
+            repairKey: canonicalResult.repairKey,
+            repairType: 'character_projection',
+            avatarName: targetAvatarName,
+            operation: 'delete',
+            reason: 'projection_failed',
+            directories: userDirectories,
+            handle: request.user.profile?.handle ?? null,
+            details: buildProjectionRepairDetails({
                 avatarName: targetAvatarName,
-                operation: 'delete',
-                reason: 'projection_failed',
-                directories: userDirectories,
-                handle: request.user.profile?.handle ?? null,
-                details: buildProjectionRepairDetails({
-                    avatarName: targetAvatarName,
-                    deleteChats,
-                    sourceAvatarPath: avatarPath,
-                    chatsDirectoryName: sanitize(targetAvatarName.replace(/\.png$/i, '')),
-                }),
-            });
-            return projectionFailedResult(targetAvatarName, canonicalResult.repairKey);
-        }
-
-        return deleteFailedResult(targetAvatarName);
-    }
-
-    if (!canonicalResult.authorityCommitted) {
-        dependencies.invalidateCanonicalAudit?.(
-            request.user.profile?.handle ?? null,
-            userDirectories,
-            `character_delete:${targetAvatarName}`,
-        );
+                deleteChats,
+                sourceAvatarPath: avatarPath,
+                chatsDirectoryName: sanitize(targetAvatarName.replace(/\.png$/i, '')),
+            }),
+        });
+        return projectionFailedResult(targetAvatarName, canonicalResult.repairKey);
     }
 
     return okResult(targetAvatarName);

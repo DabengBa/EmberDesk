@@ -157,7 +157,7 @@ describe('character read service', () => {
         expect(dependencies.listIndexedCharacterPayloads).not.toHaveBeenCalled();
     });
 
-    test('falls back to filesystem /all with an explicit canonical fallback reason when reads are disabled', async () => {
+    test('returns an empty /all snapshot with an explicit canonical fallback reason when reads are disabled', async () => {
         const directories = makeDirectories();
         writeAvatar(directories, 'alpha.png');
 
@@ -182,15 +182,16 @@ describe('character read service', () => {
         expect(result).toEqual({
             result: {
                 mode: 'snapshot',
-                data: [{ avatar: 'alpha.png', name: 'Full alpha.png', json_data: 'json:alpha.png' }],
+                data: [],
             },
-            interactionPath: 'characters_all:filesystem',
-            latencyHint: 'slow',
+            interactionPath: 'characters_all:canonical_unavailable',
+            latencyHint: 'instant',
             fallbackReason: 'canonical_reads_disabled',
         });
+        expect(dependencies.processCharacter).not.toHaveBeenCalled();
     });
 
-    test('reads /all from filesystem even when the retired index is supported', async () => {
+    test('returns an empty /all snapshot when canonical storage is disabled even if the retired index is supported', async () => {
         const directories = makeDirectories();
         writeAvatar(directories, 'alpha.png');
         writeAvatar(directories, 'beta.png');
@@ -215,20 +216,17 @@ describe('character read service', () => {
         expect(result).toEqual({
             result: {
                 mode: 'snapshot',
-                data: [
-                    { avatar: 'alpha.png', name: 'Shallow alpha.png', json_data: undefined },
-                    { avatar: 'beta.png', name: 'Shallow beta.png', json_data: undefined },
-                ],
+                data: [],
             },
-            interactionPath: 'characters_all:filesystem',
-            latencyHint: 'slow',
+            interactionPath: 'characters_all:canonical_unavailable',
+            latencyHint: 'instant',
             fallbackReason: 'canonical_storage_disabled',
         });
         expect(dependencies.listIndexedCharacterPayloads).not.toHaveBeenCalled();
-        expect(dependencies.processCharacter).toHaveBeenCalledTimes(2);
+        expect(dependencies.processCharacter).not.toHaveBeenCalled();
     });
 
-    test('does not consult the retired index or warn when /all can read compatibility files', async () => {
+    test('does not consult the retired index or warn when /all canonical reads are unavailable', async () => {
         const directories = makeDirectories();
         writeAvatar(directories, 'alpha.png');
         writeAvatar(directories, 'broken.png');
@@ -252,13 +250,14 @@ describe('character read service', () => {
         expect(result).toEqual({
             result: {
                 mode: 'snapshot',
-                data: [{ avatar: 'alpha.png', name: 'Live alpha.png' }],
+                data: [],
             },
-            interactionPath: 'characters_all:filesystem',
-            latencyHint: 'slow',
+            interactionPath: 'characters_all:canonical_unavailable',
+            latencyHint: 'instant',
             fallbackReason: 'canonical_storage_disabled',
         });
         expect(dependencies.listIndexedCharacterPayloads).not.toHaveBeenCalled();
+        expect(dependencies.processCharacter).not.toHaveBeenCalled();
         expect(dependencies.warn).not.toHaveBeenCalled();
     });
 
@@ -278,12 +277,12 @@ describe('character read service', () => {
         expect(result).toEqual({
             result: {
                 mode: 'snapshot',
-                data: [{ avatar: 'alpha.png', name: 'Shallow alpha.png', json_data: undefined }],
+                data: [],
             },
-            latencyHint: 'slow',
+            latencyHint: 'instant',
             fallbackReason: 'canonical_storage_disabled',
         });
-        expect(dependencies.processCharacter).toHaveBeenCalledWith('alpha.png', directories, { shallow: true });
+        expect(dependencies.processCharacter).not.toHaveBeenCalled();
     });
 
     test('includes explicit fallback reason for /list filesystem fallback when canonical reads are blocked', async () => {
@@ -324,14 +323,15 @@ describe('character read service', () => {
         expect(result).toEqual({
             result: {
                 mode: 'snapshot',
-                data: [{ avatar: 'alpha.png', name: 'Shallow alpha.png', json_data: undefined }],
+                data: [],
             },
-            latencyHint: 'slow',
+            latencyHint: 'instant',
             fallbackReason: 'audit_not_run',
         });
+        expect(dependencies.processCharacter).not.toHaveBeenCalled();
     });
 
-    test('reads /list summaries from filesystem even when the retired index is supported', async () => {
+    test('returns an empty /list snapshot when canonical storage is disabled even if the retired index is supported', async () => {
         const directories = makeDirectories();
         writeAvatar(directories, 'alpha.png');
         writeAvatar(directories, 'beta.png');
@@ -355,19 +355,16 @@ describe('character read service', () => {
         expect(result).toEqual({
             result: {
                 mode: 'snapshot',
-                data: [
-                    { avatar: 'alpha.png', name: 'Shallow alpha.png', json_data: undefined },
-                    { avatar: 'beta.png', name: 'Shallow beta.png', json_data: undefined },
-                ],
+                data: [],
             },
-            latencyHint: 'slow',
+            latencyHint: 'instant',
             fallbackReason: 'canonical_storage_disabled',
         });
         expect(dependencies.listIndexedCharacterPayloads).not.toHaveBeenCalled();
-        expect(dependencies.processCharacter).toHaveBeenCalledTimes(2);
+        expect(dependencies.processCharacter).not.toHaveBeenCalled();
     });
 
-    test('does not consult the retired index or warn when /list can read compatibility files', async () => {
+    test('does not consult the retired index or warn when /list canonical reads are unavailable', async () => {
         const directories = makeDirectories();
         writeAvatar(directories, 'alpha.png');
         writeAvatar(directories, 'broken.png');
@@ -390,25 +387,24 @@ describe('character read service', () => {
         expect(result).toEqual({
             result: {
                 mode: 'snapshot',
-                data: [{ avatar: 'alpha.png', name: 'Summary alpha.png' }],
+                data: [],
             },
-            latencyHint: 'slow',
+            latencyHint: 'instant',
             fallbackReason: 'canonical_storage_disabled',
         });
         expect(dependencies.listIndexedCharacterPayloads).not.toHaveBeenCalled();
+        expect(dependencies.processCharacter).not.toHaveBeenCalled();
         expect(dependencies.warn).not.toHaveBeenCalled();
     });
 
-    test('serves /get from filesystem even when the retired index has a fresh payload', async () => {
+    test('reports /get not_found when canonical storage is disabled even if the retired index has a fresh payload', async () => {
         const directories = makeDirectories();
         writeAvatar(directories, 'alpha.png');
         const indexedPayload = { avatar: 'alpha.png', name: 'Indexed Alpha' };
-        const livePayload = { avatar: 'alpha.png', name: 'Live Alpha', json_data: '{}' };
 
         const dependencies = createDependencies({
             isCharacterIndexSupported: jest.fn(() => true),
             getFreshIndexedCharacterFullPayload: jest.fn(() => indexedPayload),
-            processCharacter: jest.fn(async () => livePayload),
         });
 
         const result = await readCharacterFullPayload({
@@ -418,17 +414,14 @@ describe('character read service', () => {
         });
 
         expect(result).toEqual({
-            status: 'found',
-            result: {
-                mode: 'snapshot',
-                data: livePayload,
-            },
-            interactionPath: 'characters_get:filesystem',
-            latencyHint: 'slow',
+            status: 'not_found',
+            interactionPath: 'characters_get:canonical_unavailable',
+            latencyHint: 'instant',
             fallbackReason: 'canonical_storage_disabled',
         });
         expect(dependencies.getFreshIndexedCharacterFullPayload).not.toHaveBeenCalled();
         expect(dependencies.upsertCharacterIndexEntry).not.toHaveBeenCalled();
+        expect(dependencies.processCharacter).not.toHaveBeenCalled();
     });
 
     test('serves /get from canonical sqlite even when the compatibility file is missing', async () => {
@@ -521,10 +514,9 @@ describe('character read service', () => {
         expect(getResult.result.data).toEqual({ avatar: 'alpha.png', name: 'Alpha', chat_size: 0, date_last_chat: 0 });
     });
 
-    test('warns and falls back when canonical /get misses the avatar row', async () => {
+    test('warns and reports not_found when canonical /get misses the avatar row', async () => {
         const directories = makeDirectories();
         writeAvatar(directories, 'alpha.png');
-        const livePayload = { avatar: 'alpha.png', name: 'Live Alpha', json_data: '{}' };
 
         const dependencies = createDependencies({
             getCanonicalSqliteFeatureFlags: jest.fn(() => ({
@@ -545,7 +537,6 @@ describe('character read service', () => {
             })),
             openCanonicalDatabase: jest.fn(() => ({ kind: 'db' })),
             getCanonicalCharacter: jest.fn(() => null),
-            processCharacter: jest.fn(async () => livePayload),
         });
 
         const result = await readCharacterFullPayload({
@@ -556,22 +547,18 @@ describe('character read service', () => {
         });
 
         expect(result).toEqual({
-            status: 'found',
-            result: {
-                mode: 'snapshot',
-                data: livePayload,
-            },
-            interactionPath: 'characters_get:filesystem',
-            latencyHint: 'slow',
+            status: 'not_found',
+            interactionPath: 'characters_get:canonical_unavailable',
+            latencyHint: 'instant',
             fallbackReason: 'canonical_db_row_missing',
         });
-        expect(dependencies.warn).toHaveBeenCalledWith('Canonical character row missing for alpha.png; falling back to file-backed read.');
+        expect(dependencies.warn).toHaveBeenCalledWith('Canonical character row missing for alpha.png.');
+        expect(dependencies.processCharacter).not.toHaveBeenCalled();
     });
 
     test('does not revive the derived character index after a canonical /get miss', async () => {
         const directories = makeDirectories();
         writeAvatar(directories, 'alpha.png');
-        const livePayload = { avatar: 'alpha.png', name: 'Live Alpha', json_data: '{}' };
 
         const dependencies = createDependencies({
             isCharacterIndexSupported: jest.fn(() => true),
@@ -594,7 +581,6 @@ describe('character read service', () => {
             })),
             openCanonicalDatabase: jest.fn(() => ({ kind: 'db' })),
             getCanonicalCharacter: jest.fn(() => null),
-            processCharacter: jest.fn(async () => livePayload),
         });
 
         const result = await readCharacterFullPayload({
@@ -605,17 +591,14 @@ describe('character read service', () => {
         });
 
         expect(result).toEqual({
-            status: 'found',
-            result: {
-                mode: 'snapshot',
-                data: livePayload,
-            },
-            interactionPath: 'characters_get:filesystem',
-            latencyHint: 'slow',
+            status: 'not_found',
+            interactionPath: 'characters_get:canonical_unavailable',
+            latencyHint: 'instant',
             fallbackReason: 'canonical_db_row_missing',
         });
         expect(dependencies.getFreshIndexedCharacterFullPayload).not.toHaveBeenCalled();
         expect(dependencies.upsertCharacterIndexEntry).not.toHaveBeenCalled();
+        expect(dependencies.processCharacter).not.toHaveBeenCalled();
     });
 
     test('rejects instead of silently falling back when strict canonical reads are blocked by audit drift', async () => {
@@ -708,7 +691,6 @@ describe('character read service', () => {
     ])('keeps the derived index retired when canonical reads hit $name', async ({ expectedFallbackReason, overrides }) => {
         const directories = makeDirectories();
         writeAvatar(directories, 'alpha.png');
-        const livePayload = { avatar: 'alpha.png', name: 'Live Alpha', json_data: '{}' };
 
         const dependencies = createDependencies({
             isCharacterIndexSupported: jest.fn(() => true),
@@ -731,7 +713,6 @@ describe('character read service', () => {
                 lastError: null,
             })),
             openCanonicalDatabase: jest.fn(() => ({ kind: 'db' })),
-            processCharacter: jest.fn(async () => livePayload),
             ...overrides,
         });
 
@@ -751,28 +732,25 @@ describe('character read service', () => {
         expect(listResult).toEqual({
             result: {
                 mode: 'snapshot',
-                data: [livePayload],
+                data: [],
             },
-            interactionPath: 'characters_all:filesystem',
-            latencyHint: 'slow',
+            interactionPath: 'characters_all:canonical_unavailable',
+            latencyHint: 'instant',
             fallbackReason: expectedFallbackReason,
         });
         expect(getResult).toEqual({
-            status: 'found',
-            result: {
-                mode: 'snapshot',
-                data: livePayload,
-            },
-            interactionPath: 'characters_get:filesystem',
-            latencyHint: 'slow',
+            status: 'not_found',
+            interactionPath: 'characters_get:canonical_unavailable',
+            latencyHint: 'instant',
             fallbackReason: expectedFallbackReason,
         });
         expect(dependencies.listIndexedCharacterPayloads).not.toHaveBeenCalled();
         expect(dependencies.getFreshIndexedCharacterFullPayload).not.toHaveBeenCalled();
         expect(dependencies.upsertCharacterIndexEntry).not.toHaveBeenCalled();
+        expect(dependencies.processCharacter).not.toHaveBeenCalled();
     });
 
-    test('falls back explicitly when canonical reads are enabled but no persisted audit has run yet', async () => {
+    test('reports canonical-unavailable when canonical reads are enabled but no persisted audit has run yet', async () => {
         const directories = makeDirectories();
         writeAvatar(directories, 'alpha.png');
 
@@ -812,13 +790,14 @@ describe('character read service', () => {
         expect(result).toEqual({
             result: {
                 mode: 'snapshot',
-                data: [{ avatar: 'alpha.png', name: 'Full alpha.png', json_data: 'json:alpha.png' }],
+                data: [],
             },
-            interactionPath: 'characters_all:filesystem',
-            latencyHint: 'slow',
+            interactionPath: 'characters_all:canonical_unavailable',
+            latencyHint: 'instant',
             fallbackReason: 'audit_not_run',
         });
         expect(dependencies.listIndexedCharacterPayloads).not.toHaveBeenCalled();
+        expect(dependencies.processCharacter).not.toHaveBeenCalled();
     });
 
     test('skips the derived character index entirely when canonical reads are blocked', async () => {
@@ -865,26 +844,25 @@ describe('character read service', () => {
         expect(result).toEqual({
             result: {
                 mode: 'snapshot',
-                data: [{ avatar: 'alpha.png', name: 'Full alpha.png', json_data: 'json:alpha.png' }],
+                data: [],
             },
-            interactionPath: 'characters_all:filesystem',
-            latencyHint: 'slow',
+            interactionPath: 'characters_all:canonical_unavailable',
+            latencyHint: 'instant',
             fallbackReason: 'audit_not_run',
         });
         expect(dependencies.listIndexedCharacterPayloads).not.toHaveBeenCalled();
+        expect(dependencies.processCharacter).not.toHaveBeenCalled();
     });
 
-    test('ignores retired index lookup failures during filesystem /get', async () => {
+    test('does not consult the retired index when /get canonical reads are unavailable', async () => {
         const directories = makeDirectories();
         writeAvatar(directories, 'alpha.png');
-        const livePayload = { avatar: 'alpha.png', name: 'Live Alpha', json_data: '{}' };
 
         const dependencies = createDependencies({
             isCharacterIndexSupported: jest.fn(() => true),
             getFreshIndexedCharacterFullPayload: jest.fn(() => {
                 throw new Error('index lookup failed');
             }),
-            processCharacter: jest.fn(async () => livePayload),
         });
 
         const result = await readCharacterFullPayload({
@@ -894,29 +872,24 @@ describe('character read service', () => {
         });
 
         expect(result).toEqual({
-            status: 'found',
-            result: {
-                mode: 'snapshot',
-                data: livePayload,
-            },
-            interactionPath: 'characters_get:filesystem',
-            latencyHint: 'slow',
+            status: 'not_found',
+            interactionPath: 'characters_get:canonical_unavailable',
+            latencyHint: 'instant',
             fallbackReason: 'canonical_storage_disabled',
         });
         expect(dependencies.getFreshIndexedCharacterFullPayload).not.toHaveBeenCalled();
         expect(dependencies.upsertCharacterIndexEntry).not.toHaveBeenCalled();
+        expect(dependencies.processCharacter).not.toHaveBeenCalled();
         expect(dependencies.warn).not.toHaveBeenCalled();
     });
 
-    test('falls back to filesystem /get without refreshing the retired index row', async () => {
+    test('reports /get not_found without touching the retired index row', async () => {
         const directories = makeDirectories();
         writeAvatar(directories, 'alpha.png');
-        const livePayload = { avatar: 'alpha.png', name: 'Live Alpha', json_data: '{}' };
 
         const dependencies = createDependencies({
             isCharacterIndexSupported: jest.fn(() => true),
             getFreshIndexedCharacterFullPayload: jest.fn(() => null),
-            processCharacter: jest.fn(async () => livePayload),
         });
 
         const result = await readCharacterFullPayload({
@@ -926,20 +899,17 @@ describe('character read service', () => {
         });
 
         expect(result).toEqual({
-            status: 'found',
-            result: {
-                mode: 'snapshot',
-                data: livePayload,
-            },
-            interactionPath: 'characters_get:filesystem',
-            latencyHint: 'slow',
+            status: 'not_found',
+            interactionPath: 'characters_get:canonical_unavailable',
+            latencyHint: 'instant',
             fallbackReason: 'canonical_storage_disabled',
         });
         expect(dependencies.getFreshIndexedCharacterFullPayload).not.toHaveBeenCalled();
         expect(dependencies.upsertCharacterIndexEntry).not.toHaveBeenCalled();
+        expect(dependencies.processCharacter).not.toHaveBeenCalled();
     });
 
-    test('does not hide non-missing stat errors during /get', async () => {
+    test('never touches the filesystem stat path during /get', async () => {
         const directories = makeDirectories();
         const statError = Object.assign(new Error('cannot stat character file'), { code: 'EACCES' });
         const dependencies = createDependencies({
@@ -948,25 +918,30 @@ describe('character read service', () => {
             }),
         });
 
-        await expect(readCharacterFullPayload({
+        const result = await readCharacterFullPayload({
             directories,
             avatarUrl: 'alpha.png',
             dependencies,
-        })).rejects.toThrow('cannot stat character file');
+        });
 
+        expect(result).toEqual({
+            status: 'not_found',
+            interactionPath: 'characters_get:canonical_unavailable',
+            latencyHint: 'instant',
+            fallbackReason: 'canonical_storage_disabled',
+        });
+        expect(dependencies.statCharacterFile).not.toHaveBeenCalled();
         expect(dependencies.processCharacter).not.toHaveBeenCalled();
         expect(dependencies.warn).not.toHaveBeenCalled();
     });
 
-    test('keeps filesystem /get response without touching retired index refresh', async () => {
+    test('keeps canonical-unavailable /get response without touching retired index refresh', async () => {
         const directories = makeDirectories();
         writeAvatar(directories, 'alpha.png');
-        const livePayload = { avatar: 'alpha.png', name: 'Live Alpha', json_data: '{}' };
 
         const dependencies = createDependencies({
             isCharacterIndexSupported: jest.fn(() => true),
             getFreshIndexedCharacterFullPayload: jest.fn(() => null),
-            processCharacter: jest.fn(async () => livePayload),
             upsertCharacterIndexEntry: jest.fn(() => {
                 throw new Error('index refresh failed');
             }),
@@ -979,17 +954,14 @@ describe('character read service', () => {
         });
 
         expect(result).toEqual({
-            status: 'found',
-            result: {
-                mode: 'snapshot',
-                data: livePayload,
-            },
-            interactionPath: 'characters_get:filesystem',
-            latencyHint: 'slow',
+            status: 'not_found',
+            interactionPath: 'characters_get:canonical_unavailable',
+            latencyHint: 'instant',
             fallbackReason: 'canonical_storage_disabled',
         });
         expect(dependencies.getFreshIndexedCharacterFullPayload).not.toHaveBeenCalled();
         expect(dependencies.upsertCharacterIndexEntry).not.toHaveBeenCalled();
+        expect(dependencies.processCharacter).not.toHaveBeenCalled();
         expect(dependencies.warn).not.toHaveBeenCalled();
     });
 
@@ -1005,7 +977,7 @@ describe('character read service', () => {
 
         expect(result).toEqual({
             status: 'not_found',
-            interactionPath: 'characters_get:filesystem',
+            interactionPath: 'characters_get:canonical_unavailable',
             latencyHint: 'instant',
             fallbackReason: 'canonical_storage_disabled',
         });

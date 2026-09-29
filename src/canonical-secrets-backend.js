@@ -73,9 +73,6 @@ function initializeCanonicalSecrets(directories) {
         strict: !!featureFlags.strict,
     });
     if (!migrationStatus.ok) {
-        if (featureFlags.strict) {
-            throw new Error(migrationStatus.blockedReason);
-        }
         return {
             ok: false,
             reason: 'migration_blocked',
@@ -143,17 +140,20 @@ export function initializeCanonicalSecretsForDirectories(directories) {
 export function getCanonicalSecretsReadBackend(directories) {
     const state = initializeCanonicalSecrets(directories);
     if (!state.ok) {
-        return null;
+        // Frozen or sqlite-less environments cannot run canonical secrets at
+        // all — the secrets file remains the only persistence surface there.
+        // A migration-blocked (enabled but broken) slice must fail closed:
+        // falling back to the file would silently resurrect drifted secrets.
+        if (state.reason === 'canonical_storage_disabled' || state.reason === 'canonical_storage_unavailable') {
+            return null;
+        }
+        throw new Error(`Canonical secrets reads blocked: ${state.reason ?? 'canonical_storage_unavailable'}`);
     }
 
     const openRepairs = listOpenSecretProjectionRepairs(state.db);
     if (openRepairs.length > 0) {
         // A failed projection must not make the compatibility file authoritative again.
         return state;
-    }
-
-    if (!state.featureFlags.reads) {
-        return null;
     }
 
     const slice = getCanonicalStorageSlice('secrets');
@@ -167,10 +167,7 @@ export function getCanonicalSecretsReadBackend(directories) {
         persistedAuditStatus: auditStatus,
     });
     if (!blockers.ok) {
-        if (state.featureFlags.strict) {
-            throw new Error(`Canonical secrets reads blocked: ${blockers.blockers[0]?.code ?? 'unknown'}`);
-        }
-        return null;
+        throw new Error(`Canonical secrets reads blocked: ${blockers.blockers[0]?.code ?? auditStatus.reason ?? 'secrets_slice_blocked'}`);
     }
     return state;
 }
@@ -184,9 +181,6 @@ export function getCanonicalSecretsWriteBackend(directories) {
     const state = initializeCanonicalSecrets(directories);
     if (!state.ok) {
         throw new Error(`Canonical secrets writes blocked: ${state.reason}`);
-    }
-    if (!state.featureFlags.reads) {
-        throw new Error('Canonical secrets writes require canonical reads.');
     }
 
     const slice = getCanonicalStorageSlice('secrets');

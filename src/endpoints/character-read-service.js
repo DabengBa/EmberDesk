@@ -1,6 +1,3 @@
-import fs from 'node:fs';
-import path from 'node:path';
-
 class CanonicalReadBlockedError extends Error {
     constructor(reason) {
         super(reason);
@@ -34,28 +31,6 @@ function maybeAttachFallbackReason(result, fallbackReason) {
     return fallbackReason
         ? { ...result, fallbackReason }
         : result;
-}
-
-/**
- * @param {string} charactersDirectory
- * @param {{ sorted?: boolean }} [options]
- * @returns {string[]}
- */
-function listAvatarFiles(charactersDirectory, { sorted = false } = {}) {
-    const avatarFiles = fs.readdirSync(charactersDirectory).filter(file => file.endsWith('.png'));
-    return sorted ? avatarFiles.sort((left, right) => left.localeCompare(right)) : avatarFiles;
-}
-
-/**
- * @param {import('../users.js').UserDirectoryList} directories
- * @param {boolean} shallow
- * @param {object} dependencies
- * @returns {Promise<object[]>}
- */
-async function readCharactersFromFiles(directories, shallow, dependencies) {
-    const avatarFiles = listAvatarFiles(directories.characters);
-    const processingPromises = avatarFiles.map(file => dependencies.processCharacter(file, directories, { shallow }));
-    return (await Promise.all(processingPromises)).filter(character => character.name);
 }
 
 async function getCanonicalReadState(handle, directories, dependencies) {
@@ -215,13 +190,13 @@ export async function readCharacterListPayload({
 
     maybeThrowCanonicalFallback(canonicalState);
 
-    const data = await readCharactersFromFiles(directories, shallow, dependencies);
-    return maybeAttachFallbackReason({
-        ...wrapSnapshot(data, {
-            interactionPath: 'characters_all:filesystem',
-            latencyHint: 'slow',
-        }),
-    }, canonicalState.fallbackReason);
+    // Canonical storage is the only runtime authority: files are export
+    // surfaces, so an unavailable canonical backend yields an empty snapshot
+    // with the blocking reason rather than a file-backed list.
+    return maybeAttachFallbackReason(wrapSnapshot([], {
+        interactionPath: 'characters_all:canonical_unavailable',
+        latencyHint: 'instant',
+    }), canonicalState.fallbackReason);
 }
 
 /**
@@ -258,8 +233,7 @@ export async function readCharacterSummaryPayload({
 
     maybeThrowCanonicalFallback(canonicalState);
 
-    const data = await readCharactersFromFiles(directories, true, dependencies);
-    return maybeAttachFallbackReason(wrapSnapshot(data, { latencyHint: 'slow' }), canonicalState.fallbackReason);
+    return maybeAttachFallbackReason(wrapSnapshot([], { latencyHint: 'instant' }), canonicalState.fallbackReason);
 }
 
 /**
@@ -302,33 +276,18 @@ export async function readCharacterFullPayload({
             };
         }
 
-        dependencies.warn?.(`Canonical character row missing for ${avatarUrl}; falling back to file-backed read.`);
+        dependencies.warn?.(`Canonical character row missing for ${avatarUrl}.`);
         fallbackReason = 'canonical_db_row_missing';
     } else {
         maybeThrowCanonicalFallback(canonicalState);
     }
 
-    const filePath = path.join(directories.characters, avatarUrl);
-    try {
-        dependencies.statCharacterFile(filePath);
-    } catch (error) {
-        if (error?.code === 'ENOENT') {
-            return {
-                status: 'not_found',
-                interactionPath: 'characters_get:filesystem',
-                latencyHint: 'instant',
-                ...(fallbackReason ? { fallbackReason } : {}),
-            };
-        }
-        throw error;
-    }
-
-    const data = await dependencies.processCharacter(avatarUrl, directories, { shallow: false });
-
-    return maybeAttachFallbackReason({
-        status: 'found',
-        result: { mode: 'snapshot', data },
-        interactionPath: 'characters_get:filesystem',
-        latencyHint: 'slow',
-    }, fallbackReason);
+    // No file fallback: a missing canonical row means the character does not
+    // exist (or has not been imported yet by the shadow-import machinery).
+    return {
+        status: 'not_found',
+        interactionPath: 'characters_get:canonical_unavailable',
+        latencyHint: 'instant',
+        ...(fallbackReason ? { fallbackReason } : {}),
+    };
 }

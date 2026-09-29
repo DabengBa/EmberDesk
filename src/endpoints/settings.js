@@ -273,17 +273,11 @@ async function getCanonicalSettingsReadState(request) {
         strict: !!featureFlags.strict,
     });
     if (!migrationStatus.ok) {
-        if (featureFlags.strict) {
-            throw new Error(migrationStatus.blockedReason);
-        }
         return { ok: false, reason: 'migration_blocked', featureFlags, migrationStatus };
     }
 
     const auditStatus = getPersistedCanonicalAuditStatus(db, { scope: settingsSlice.auditScope });
     if (auditStatus.blocking) {
-        if (featureFlags.strict) {
-            throw new Error(`Canonical settings reads blocked: ${auditStatus.reason}`);
-        }
         return { ok: false, reason: auditStatus.reason ?? 'settings_audit_blocked', featureFlags, auditStatus };
     }
 
@@ -295,9 +289,6 @@ async function getCanonicalSettingsReadState(request) {
     });
     if (!rollback.ok) {
         const reason = rollback.blockers[0]?.code ?? auditStatus.reason ?? 'settings_slice_blocked';
-        if (featureFlags.strict) {
-            throw new Error(`Canonical settings reads blocked: ${reason}`);
-        }
         return { ok: false, reason, featureFlags, auditStatus, rollback };
     }
 
@@ -354,17 +345,11 @@ async function getCanonicalSettingsWriteState(request) {
         strict: !!featureFlags.strict,
     });
     if (!migrationStatus.ok) {
-        if (featureFlags.strict) {
-            throw new Error(migrationStatus.blockedReason);
-        }
         return { ok: false, reason: 'migration_blocked', featureFlags, migrationStatus };
     }
 
     const auditStatus = getPersistedCanonicalAuditStatus(db, { scope: settingsSlice.auditScope });
     if (auditStatus.blocking) {
-        if (featureFlags.strict) {
-            throw new Error(`Canonical settings writes blocked: ${auditStatus.reason}`);
-        }
         return { ok: false, reason: auditStatus.reason ?? 'settings_audit_blocked', featureFlags, auditStatus, db, handle };
     }
 
@@ -376,9 +361,6 @@ async function getCanonicalSettingsWriteState(request) {
     });
     if (!writeBlockers.ok) {
         const reason = writeBlockers.blockers[0]?.code ?? 'settings_write_blocked';
-        if (featureFlags.strict) {
-            throw new Error(`Canonical settings writes blocked: ${reason}`);
-        }
         return {
             ok: false,
             reason,
@@ -481,9 +463,6 @@ function invalidateSettingsAuditAfterFileWrite(request, operation) {
         strict: !!featureFlags.strict,
     });
     if (!migrationStatus.ok) {
-        if (featureFlags.strict) {
-            throw new Error(migrationStatus.blockedReason);
-        }
         return;
     }
 
@@ -564,13 +543,21 @@ router.post('/save', async function (request, response) {
             });
         }
 
-        // File-backed path (flags off or blocked). Still atomic write.
-        const pathToSettings = path.join(request.user.directories.root, SETTINGS_FILE);
-        const filePayload = stripSettingsRevisionFields(request.body);
-        writeFileAtomicSync(pathToSettings, JSON.stringify(filePayload, null, 4), 'utf8');
-        invalidateSettingsAuditAfterFileWrite(request, 'save');
-        triggerAutoSave(request.user.profile.handle);
-        response.send({ result: 'ok' });
+        if (writeState.reason === 'canonical_flags_unavailable') {
+            // Config cannot even be resolved (no runtime flags at all): the
+            // settings.json write is the only persistence available.
+            const pathToSettings = path.join(request.user.directories.root, SETTINGS_FILE);
+            const filePayload = stripSettingsRevisionFields(request.body);
+            writeFileAtomicSync(pathToSettings, JSON.stringify(filePayload, null, 4), 'utf8');
+            invalidateSettingsAuditAfterFileWrite(request, 'save');
+            triggerAutoSave(request.user.profile.handle);
+            return response.send({ result: 'ok' });
+        }
+
+        return response.status(503).send({
+            error: 'canonical_storage_unavailable',
+            reason: writeState.reason ?? 'canonical_storage_unavailable',
+        });
     } catch (err) {
         console.error(err);
         response.send(err);
@@ -587,9 +574,16 @@ router.post('/get', async (request, response) => {
         if (readState.ok) {
             settings = readState.document.payloadJson;
             settingsRevision = readState.document.revision;
-        } else {
+        } else if (readState.reason === 'canonical_flags_unavailable') {
+            // Config cannot even be resolved (no runtime flags at all): keep the
+            // settings.json read so the shell can still boot.
             const pathToSettings = path.join(request.user.directories.root, SETTINGS_FILE);
             settings = await fs.promises.readFile(pathToSettings, 'utf8');
+        } else {
+            return response.status(503).send({
+                error: 'canonical_storage_unavailable',
+                reason: readState.reason ?? 'canonical_storage_unavailable',
+            });
         }
     } catch {
         return response.sendStatus(500);
@@ -874,11 +868,18 @@ router.post('/restore-snapshot', getFileNameValidationFunction('name'), async (r
             return response.sendStatus(204);
         }
 
-        const pathToSettings = path.join(request.user.directories.root, SETTINGS_FILE);
-        fs.rmSync(pathToSettings, { force: true });
-        fs.copyFileSync(snapshotPath, pathToSettings);
-        invalidateSettingsAuditAfterFileWrite(request, 'restore-snapshot');
-        response.sendStatus(204);
+        if (writeState.reason === 'canonical_flags_unavailable') {
+            const pathToSettings = path.join(request.user.directories.root, SETTINGS_FILE);
+            fs.rmSync(pathToSettings, { force: true });
+            fs.copyFileSync(snapshotPath, pathToSettings);
+            invalidateSettingsAuditAfterFileWrite(request, 'restore-snapshot');
+            return response.sendStatus(204);
+        }
+
+        return response.status(503).send({
+            error: 'canonical_storage_unavailable',
+            reason: writeState.reason ?? 'canonical_storage_unavailable',
+        });
     } catch (error) {
         console.error(error);
         response.sendStatus(500);

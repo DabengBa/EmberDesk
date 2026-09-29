@@ -143,17 +143,6 @@ describe('canonical storage slice registry', () => {
             phase: 'writes',
         })).toEqual(expect.objectContaining({ ok: true, blockers: [] }));
 
-        expect(chats.getRollbackBlockers({
-            db,
-            featureFlags: { ...featureFlags, reads: false, writes: true },
-            phase: 'writes',
-        })).toEqual(expect.objectContaining({
-            ok: false,
-            blockers: expect.arrayContaining([
-                expect.objectContaining({ code: 'illegal_flag_combination:writes' }),
-            ]),
-        }));
-
         recordCanonicalChatProjectionRepair(db, {
             repairKey: 'chat:character:alice:chats%2Falice%2Ffirst.jsonl:save',
             locator: {
@@ -193,7 +182,7 @@ describe('canonical storage slice registry', () => {
             shadowImport: true,
             reads: true,
             writes: true,
-            strict: false,
+            strict: true,
         });
         // Without a per-slice block, managed media now inherits the global
         // canonical-on defaults like every other slice.
@@ -208,7 +197,7 @@ describe('canonical storage slice registry', () => {
             shadowImport: true,
             reads: true,
             writes: true,
-            strict: false,
+            strict: true,
         });
         expect(media.listOpenRepairs(db)).toEqual([]);
         expect(media.getBackupManagedPaths(directories)).toEqual([
@@ -264,13 +253,13 @@ describe('canonical storage slice registry', () => {
         expect(registry.get('secrets').getFeatureFlagSnapshot(overrides)).toEqual(expect.objectContaining({
             featureFlags: expect.objectContaining({
                 enabled: true,
-                reads: false,
+                reads: true,
                 writes: true,
             }),
             sources: expect.objectContaining({
                 enabled: 'slice_override',
-                reads: 'slice_override',
-                writes: 'global_override',
+                reads: 'retired',
+                writes: 'retired',
             }),
         }));
     });

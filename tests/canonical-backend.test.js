@@ -79,7 +79,7 @@ afterEach(() => {
 });
 
 describe('canonical sqlite flag defaults', () => {
-    test('resolve enabled with reads/writes/shadowImport on and strict off', async () => {
+    test('resolve enabled with all runtime flags forced on after the staged-rollout retirement', async () => {
         const { getCanonicalSqliteFeatureFlags } = await import('../src/storage-feature-flags.js');
         expect(getCanonicalSqliteFeatureFlags()).toEqual({
             enabled: true,
@@ -87,7 +87,7 @@ describe('canonical sqlite flag defaults', () => {
             reads: true,
             writes: true,
             chatStats: true,
-            strict: false,
+            strict: true,
         });
     });
 
@@ -100,17 +100,22 @@ describe('canonical sqlite flag defaults', () => {
             expect(flags.shadowImport).toBe(true);
             expect(flags.reads).toBe(true);
             expect(flags.writes).toBe(true);
-            expect(flags.strict).toBe(false);
+            expect(flags.strict).toBe(true);
         }
     });
 
-    test('per-slice overrides still win over the enabled defaults', async () => {
+    test('retired staged-rollout flags are forced on while kept overrides still win', async () => {
         process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SLICES_CHATS_READS = 'false';
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SLICES_CHATS_SHADOWIMPORT = 'false';
         const { getDefaultCanonicalStorageSliceRegistry } = await import('../src/canonical-storage-slice-registry.js');
         const registry = getDefaultCanonicalStorageSliceRegistry();
-        expect(registry.get('chats').getFeatureFlags().reads).toBe(false);
+        // 'reads' is retired: the explicit 'false' warns and is ignored.
+        expect(registry.get('chats').getFeatureFlags().reads).toBe(true);
         expect(registry.get('chats').getFeatureFlags().writes).toBe(true);
+        // 'shadowImport' survives the cutover and honors the override.
+        expect(registry.get('chats').getFeatureFlags().shadowImport).toBe(false);
         expect(registry.get('settings').getFeatureFlags().reads).toBe(true);
+        expect(registry.get('settings').getFeatureFlags().shadowImport).toBe(true);
     });
 });
 
@@ -145,10 +150,6 @@ describe('legacy canonical sqlite config migration', () => {
         expect(migrated.features.storage.canonicalSqlite).toEqual({
             enabled: true,
             shadowImport: true,
-            reads: true,
-            writes: true,
-            chatStats: true,
-            strict: false,
             slices: {
                 secrets: {
                     projection: 'off',

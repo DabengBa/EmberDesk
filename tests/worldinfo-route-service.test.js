@@ -240,7 +240,7 @@ describe('world info canonical route service', () => {
         });
     });
 
-    test('falls back to file-backed reads when canonical reads are disabled or audit drift blocks cutover', async () => {
+    test('ignores the retired reads flag and keeps serving canonical books', async () => {
         const root = makeRoot();
         const directories = createDirectories(root);
         fs.writeFileSync(path.join(directories.worlds, 'Lorebook.json'), JSON.stringify({
@@ -248,42 +248,28 @@ describe('world info canonical route service', () => {
             extensions: { source: 'file' },
             entries: { one: { content: 'file' } },
         }));
-        const db = seedCanonicalWorldInfo(directories);
+        seedCanonicalWorldInfo(directories);
 
+        // 'reads' is retired: pinning it to false warns and is ignored, so the
+        // canonical book list stays authoritative.
         setCanonicalEnv({ enabled: true, shadowImport: true, reads: false });
-        expect((await invokeRoute('/list', {}, directories)).body).toEqual([{
-            file_id: 'Lorebook',
-            name: 'File Lore',
-            extensions: { source: 'file' },
-        }]);
-
-        persistCanonicalAuditStatus(db, {
-            ok: false,
-            handle: 'alice',
-            hasDrift: true,
-            blocking: true,
-            reason: 'audit_drift_blocked',
-            entries: [{ status: 'drift' }],
-        }, {
-            scope: 'world_info',
-            auditedAtMs: 1735689602000,
-        });
-
-        setCanonicalEnv({ enabled: true, shadowImport: true, reads: true });
-        expect((await invokeRoute('/get', { name: 'Lorebook' }, directories)).body).toEqual({
-            name: 'File Lore',
-            extensions: { source: 'file' },
-            entries: { one: { content: 'file' } },
-        });
+        const response = await invokeRoute('/list', {}, directories);
+        expect(response.statusCode).toBe(200);
+        expect(response.body).toEqual(expect.arrayContaining([
+            expect.objectContaining({ name: 'Canonical Lore' }),
+        ]));
+        expect(response.body).not.toEqual(expect.arrayContaining([
+            expect.objectContaining({ name: 'File Lore' }),
+        ]));
     });
 
-    test('strict canonical reads fail closed instead of silently falling back', async () => {
+    test('canonical reads fail closed with a structured 503 instead of silently falling back', async () => {
         const root = makeRoot();
         const directories = createDirectories(root);
         fs.writeFileSync(path.join(directories.worlds, 'Lorebook.json'), JSON.stringify({
             entries: { one: { content: 'file' } },
         }));
-        // audit_not_run now self-heals through lazy init, so strict fail-closed
+        // audit_not_run now self-heals through lazy init, so fail-closed
         // coverage uses a real blocking drift verdict that init must preserve.
         const db = seedCanonicalWorldInfo(directories, { auditClean: true });
         persistCanonicalAuditStatus(db, {
@@ -299,8 +285,12 @@ describe('world info canonical route service', () => {
         });
         setCanonicalEnv({ enabled: true, shadowImport: true, reads: true, strict: true });
 
-        await expect(invokeRoute('/get', { name: 'Lorebook' }, directories))
-            .rejects.toThrow('Canonical World Info reads blocked: audit_drift_blocked');
+        const response = await invokeRoute('/get', { name: 'Lorebook' }, directories);
+        expect(response.statusCode).toBe(503);
+        expect(response.body).toEqual({
+            error: 'canonical_storage_unavailable',
+            reason: 'audit_drift_blocked',
+        });
     });
 
     test('writes edits to canonical sqlite first and projects the compatibility JSON file', async () => {
@@ -336,7 +326,7 @@ describe('world info canonical route service', () => {
             }));
     });
 
-    test('file-backed writes invalidate the world_info audit when reads are enabled but writes are disabled', async () => {
+    test('commits edits to canonical sqlite even when the retired writes flag is pinned off', async () => {
         const root = makeRoot();
         const directories = createDirectories(root);
         fs.writeFileSync(path.join(directories.worlds, 'Lorebook.json'), JSON.stringify({
@@ -351,24 +341,30 @@ describe('world info canonical route service', () => {
         const response = await invokeRoute('/edit', {
             name: 'Lorebook',
             data: {
-                name: 'File Edited',
-                entries: { one: { content: 'file-backed write' } },
+                name: 'Canonical Edited',
+                entries: { one: { content: 'canonical write' } },
             },
         }, directories);
 
         expect(response.statusCode).toBe(200);
+        expect(db.prepare('SELECT payload_json FROM world_books WHERE name = ?').get('Lorebook').payload_json)
+            .toBe(JSON.stringify({
+                name: 'Canonical Edited',
+                entries: { one: { content: 'canonical write' } },
+            }));
+        // The retired flag is ignored: the write commits canonically, no file
+        // projection is written under 'off', and the audit stays clean.
         expect(JSON.parse(fs.readFileSync(path.join(directories.worlds, 'Lorebook.json'), 'utf8'))).toEqual({
-            name: 'File Edited',
-            entries: { one: { content: 'file-backed write' } },
+            name: 'File Lore',
+            entries: {},
         });
         expect(getPersistedCanonicalAuditStatus(db, { scope: 'world_info' })).toEqual(expect.objectContaining({
-            ok: false,
-            blocking: true,
-            reason: 'audit_stale_after_world_info_file_write',
+            ok: true,
+            blocking: false,
         }));
     });
 
-    test('file-backed writes invalidate the world_info audit while a slice override is disabled', async () => {
+    test('rejects edits with canonical unavailable while a slice override is frozen', async () => {
         const root = makeRoot();
         const directories = createDirectories(root);
         fs.writeFileSync(path.join(directories.worlds, 'Lorebook.json'), JSON.stringify({
@@ -385,15 +381,22 @@ describe('world info canonical route service', () => {
             name: 'Lorebook',
             data: {
                 name: 'File Edited',
-                entries: { one: { content: 'file-backed write' } },
+                entries: { one: { content: 'must not write' } },
             },
         }, directories);
 
-        expect(response.statusCode).toBe(200);
+        expect(response.statusCode).toBe(503);
+        expect(response.body).toEqual(expect.objectContaining({
+            error: 'canonical_storage_unavailable',
+        }));
+        // The frozen slice neither writes the file nor dirties the audit.
+        expect(JSON.parse(fs.readFileSync(path.join(directories.worlds, 'Lorebook.json'), 'utf8'))).toEqual({
+            name: 'File Lore',
+            entries: {},
+        });
         expect(getPersistedCanonicalAuditStatus(db, { scope: 'world_info' })).toEqual(expect.objectContaining({
-            ok: false,
-            blocking: true,
-            reason: 'audit_stale_after_world_info_file_write',
+            ok: true,
+            blocking: false,
         }));
     });
 

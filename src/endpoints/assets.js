@@ -16,7 +16,6 @@ import {
 } from './canonical-managed-media-read-service.js';
 import {
     deleteCanonicalManagedMediaReference,
-    invalidateCanonicalManagedMediaAudit,
     writeCanonicalManagedMedia,
 } from './canonical-managed-media-write-service.js';
 import { ensureCanonicalSliceBackend } from '../canonical-backend.js';
@@ -111,13 +110,6 @@ function getRequestHandle(request) {
     return request.user?.profile?.handle ?? request.user?.handle ?? 'default-user';
 }
 
-function invalidateManagedMediaAudit(request, operation) {
-    invalidateCanonicalManagedMediaAudit({
-        handle: getRequestHandle(request),
-        directories: request.user.directories,
-        operation,
-    });
-}
 
 /**
  * HTTP POST handler function to retrieve name of all files of a given folder path.
@@ -313,8 +305,11 @@ router.post('/download', async (request, response) => {
             return response.status(500).send({ error: 'Asset download committed but compatibility projection failed' });
         }
         if (!canonicalResult.authorityCommitted) {
-            fs.copyFileSync(temp_path, file_path);
-            invalidateManagedMediaAudit(request, `asset_download:${category}/${request.body.filename}`);
+            fs.unlinkSync(temp_path);
+            return response.status(503).send({
+                error: 'canonical_storage_unavailable',
+                reason: canonicalResult.reason ?? 'canonical_storage_unavailable',
+            });
         }
         fs.unlinkSync(temp_path);
         response.sendStatus(200);
@@ -377,10 +372,10 @@ router.post('/delete', async (request, response) => {
             return response.sendStatus(400);
         }
 
-        await fs.promises.unlink(file_path);
-        invalidateManagedMediaAudit(request, `asset_delete:${category}/${request.body.filename}`);
-        console.info('Asset deleted.');
-        return response.sendStatus(200);
+        return response.status(503).send({
+            error: 'canonical_storage_unavailable',
+            reason: canonicalResult.reason ?? 'canonical_storage_unavailable',
+        });
     } catch (error) {
         console.error(error);
         return response.sendStatus(500);

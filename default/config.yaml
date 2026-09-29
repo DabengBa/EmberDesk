@@ -110,12 +110,12 @@ features:
     # dirty audit keeps the compatibility files authoritative until repaired.
     # Set enabled: false to force the file-backed fallback everywhere.
     canonicalSqlite:
+      # enabled: false freezes canonical init for every slice (no DB open,
+      # import, or audit); shadowImport controls lazy file->DB import.
+      # The old reads/writes/chatStats/strict rollout keys are retired and
+      # ignored: runtime reads/writes are always canonical while enabled.
       enabled: true
       shadowImport: true
-      reads: true
-      writes: true
-      chatStats: true
-      strict: false
       slices:
         # secrets.json is an export-only surface by default: the canonical DB
         # is authoritative, runtime writes no longer re-project the file, and

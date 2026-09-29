@@ -142,9 +142,6 @@ async function initializeSlice(slice, handle, directories, featureFlags, options
         strict: !!featureFlags.strict,
     });
     if (!migrationStatus.ok) {
-        if (featureFlags.strict) {
-            throw new Error(migrationStatus.blockedReason);
-        }
         return { ok: false, reason: 'migration_blocked', featureFlags, migrationStatus };
     }
 

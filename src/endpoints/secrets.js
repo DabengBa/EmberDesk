@@ -479,8 +479,13 @@ export class SecretManager {
      * Migrates legacy flat secrets format to new format
      */
     migrateFlatSecrets() {
-        if (getCanonicalSecretsReadBackend(this.directories)) {
-            // Canonical shadow import already normalizes the flat format.
+        try {
+            if (getCanonicalSecretsReadBackend(this.directories)) {
+                // Canonical shadow import already normalizes the flat format.
+                return;
+            }
+        } catch (error) {
+            console.warn('Canonical secrets read backend blocked; skipping flat-secrets file migration:', error?.message ?? error);
             return;
         }
         if (!fs.existsSync(this.filePath)) {
@@ -529,7 +534,13 @@ export class SecretManager {
     migrateCustomToOpenAI() {
         const openaiKey = SECRET_KEYS.OPENAI;
         const customKey = SECRET_KEYS.CUSTOM;
-        const readBackend = getCanonicalSecretsReadBackend(this.directories);
+        let readBackend;
+        try {
+            readBackend = getCanonicalSecretsReadBackend(this.directories);
+        } catch (error) {
+            console.warn('Canonical secrets read backend blocked; skipping CUSTOM→OPENAI file migration:', error?.message ?? error);
+            return;
+        }
         if (readBackend) {
             const canonical = getCanonicalSecrets(readBackend.db);
             const openaiRecords = canonical[openaiKey];

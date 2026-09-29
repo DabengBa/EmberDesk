@@ -30,10 +30,6 @@ import {
     createCharacterChatImportPlan,
 } from './chat-import-service.js';
 import { createChatBackupPlan } from './chat-backup-helpers.js';
-import {
-    readRecentChatPayload,
-    searchChatPayload,
-} from './chat-route-service.js';
 import { getCanonicalStorageSlice } from '../canonical-storage-slice-registry.js';
 import { ensureCanonicalSliceBackend } from '../canonical-backend.js';
 import { getCanonicalStorageStatus, openCanonicalDatabase, withCanonicalTransaction } from '../canonical-sqlite.js';
@@ -56,7 +52,7 @@ import {
     renameCanonicalChat,
     writeCanonicalChatPayload,
 } from './canonical-chat-write-service.js';
-import { calculateCanonicalCharacterChatStats } from './canonical-chat-store.js';
+import { calculateCanonicalCharacterChatStats, getCanonicalChatSession } from './canonical-chat-store.js';
 
 const isBackupEnabled = !!getConfigValue('backups.chat.enabled', true, 'boolean');
 const maxTotalChatBackups = Number(getConfigValue('backups.chat.maxTotalBackups', -1, 'number'));
@@ -111,9 +107,6 @@ async function getCanonicalChatReadState(request) {
 
     const migrationStatus = runCanonicalMigrations(db, { strict: !!featureFlags.strict });
     if (!migrationStatus.ok) {
-        if (featureFlags.strict) {
-            throw new Error(migrationStatus.blockedReason);
-        }
         return { ok: false, reason: 'migration_blocked', featureFlags, migrationStatus };
     }
 
@@ -126,9 +119,6 @@ async function getCanonicalChatReadState(request) {
     });
     if (!rollback.ok) {
         const reason = rollback.blockers[0]?.code ?? auditStatus.reason ?? 'chat_audit_blocked';
-        if (featureFlags.strict) {
-            throw new Error(`Canonical chat reads blocked: ${reason}`);
-        }
         return { ok: false, reason, featureFlags, auditStatus, rollback };
     }
 
@@ -168,9 +158,6 @@ async function getCanonicalChatWriteState(request) {
     });
     if (!rollback.ok) {
         const reason = rollback.blockers[0]?.code ?? 'canonical_chat_write_blocked';
-        if (readState.featureFlags.strict) {
-            throw new Error(`Canonical chat writes blocked: ${reason}`);
-        }
         return { ...readState, ok: false, blocked: true, reason, rollback };
     }
 
@@ -204,10 +191,17 @@ function getCanonicalChatLocator(directories, { ownerType, ownerId, filePath }) 
     };
 }
 
+function sendCanonicalChatReadBlocked(response, readState) {
+    return response.status(503).send({
+        error: 'canonical_chat_read_blocked',
+        reason: readState.reason ?? 'canonical_chat_read_blocked',
+    });
+}
+
 async function readCanonicalChatRoutePayload(request, locator) {
     const readState = await getCanonicalChatReadState(request);
     if (!readState.ok) {
-        return { active: false, payload: null };
+        return { active: false, payload: null, reason: readState.reason };
     }
 
     return {
@@ -220,7 +214,7 @@ async function readCanonicalChatRoutePayload(request, locator) {
 async function serializeCanonicalChatRoutePayload(request, locator) {
     const readState = await getCanonicalChatReadState(request);
     if (!readState.ok) {
-        return { active: false, jsonl: null };
+        return { active: false, jsonl: null, reason: readState.reason };
     }
 
     return {
@@ -371,17 +365,6 @@ function warnAboutChatImportFailure(importPlan) {
     }
 
     console.error(`Chat import failed: ${importPlan.errorKind}`);
-}
-
-function writeCharacterChatImportPlan(importPlan) {
-    for (const write of importPlan.writes) {
-        if (write.kind === 'copy-upload') {
-            fs.copyFileSync(write.uploadPath, write.filePath);
-            continue;
-        }
-
-        writeFileAtomicSync(write.filePath, write.contents, 'utf8');
-    }
 }
 
 function getInteractionPerfChatTimestampMs() {
@@ -599,21 +582,6 @@ class IntegrityMismatchError extends Error {
     }
 }
 
-/**
- * Tries to save the chat data to a file, performing an integrity check if required.
- * @param {Array} chatData The chat array to save.
- * @param {string} filePath Target file path for the data.
- * @param {boolean} skipIntegrityCheck If undefined, the chat's integrity will not be checked.
- * @param {string} handle The users handle, passed to getBackupFunction.
- * @param {string} cardName Passed to backupChat.
- * @param {string} backupDirectory Passed to backupChat.
- */
-export async function trySaveChat(chatData, filePath, skipIntegrityCheck = false, handle, cardName, backupDirectory) {
-    const jsonlData = chatData?.map(m => JSON.stringify(m)).join('\n');
-    await assertChatIntegrity(chatData, filePath, skipIntegrityCheck);
-    writeChatProjection(jsonlData, filePath, handle, cardName, backupDirectory);
-}
-
 export async function assertChatIntegrity(chatData, filePath, skipIntegrityCheck = false) {
     const doIntegrityCheck = (checkIntegrity && !skipIntegrityCheck);
     const chatIntegritySlug = doIntegrityCheck ? chatData?.[0]?.chat_metadata?.integrity : undefined;
@@ -693,10 +661,7 @@ router.post('/save', rejectGroupChatRequest, validateAvatarUrlMiddleware, async 
                 return response.send({ ok: true });
             }
 
-            await trySaveChat(chatData, chatFilePath, request.body.force, handle, cardName, request.user.directories.backups);
-            applyInteractionPerfChatTimestamp(chatFilePath);
-            syncCanonicalChatStatsAfterCharacterChatMutation(handle, request.user.directories, request.body.avatar_url, 'chat save');
-            return response.send({ ok: true });
+            return sendCanonicalChatWriteBlocked(response, writeState);
         } else {
             return response.status(400).send({ error: 'The request\'s body.chat is not an array.' });
         }
@@ -751,17 +716,10 @@ router.post('/get', rejectGroupChatRequest, validateAvatarUrlMiddleware, async f
             ownerId: dirName,
             filePath: chatFilePath,
         }));
-        if (canonical.active) {
-            return response.send(canonical.payload ?? {});
+        if (!canonical.active) {
+            return sendCanonicalChatReadBlocked(response, canonical);
         }
-
-        //if no chat dir for the character is found, make one with the character name
-        if (!fs.existsSync(directoryPath)) {
-            fs.mkdirSync(directoryPath);
-            return response.send({});
-        }
-
-        return response.send(getChatData(chatFilePath));
+        return response.send(canonical.payload ?? {});
     } catch (error) {
         console.error(error);
         return response.send({});
@@ -784,11 +742,6 @@ router.post('/rename', rejectGroupChatRequest, validateAvatarUrlMiddleware, asyn
         console.debug('Old chat name', pathToOriginalFile);
         console.debug('New chat name', pathToRenamedFile);
 
-        if (!fs.existsSync(pathToOriginalFile) || fs.existsSync(pathToRenamedFile)) {
-            console.error('Either Source or Destination files are not available');
-            return response.status(400).send({ error: true });
-        }
-
         const writeState = await getCanonicalChatWriteState(request);
         if (writeState.blocked) {
             return sendCanonicalChatWriteBlocked(response, writeState);
@@ -804,6 +757,17 @@ router.post('/rename', rejectGroupChatRequest, validateAvatarUrlMiddleware, asyn
                 ownerId: String(request.body.avatar_url).replace('.png', ''),
                 filePath: pathToRenamedFile,
             });
+            // Canonical sessions are the authority: a stale projection file can
+            // be missing, and a destination name may collide with an existing
+            // session even when its projection file was cleaned up.
+            if (getCanonicalChatSession(writeState.db, {
+                ownerType: nextLocator.ownerType,
+                ownerId: nextLocator.ownerId,
+                sourcePath: nextLocator.sourcePath,
+            })) {
+                console.error('Either Source or Destination files are not available');
+                return response.status(400).send({ error: true });
+            }
             const result = renameCanonicalChat({
                 db: writeState.db,
                 locator: originalLocator,
@@ -839,11 +803,7 @@ router.post('/rename', rejectGroupChatRequest, validateAvatarUrlMiddleware, asyn
             return response.send({ ok: true, sanitizedFileName });
         }
 
-        fs.copyFileSync(pathToOriginalFile, pathToRenamedFile);
-        fs.unlinkSync(pathToOriginalFile);
-        console.info('Successfully renamed chat file.');
-        syncCanonicalChatStatsAfterCharacterChatMutation(request.user.profile?.handle ?? null, request.user.directories, request.body.avatar_url, 'chat rename');
-        return response.send({ ok: true, sanitizedFileName });
+        return sendCanonicalChatWriteBlocked(response, writeState);
     } catch (error) {
         console.error('Error renaming chat file:', error);
         return response.status(500).send({ error: true });
@@ -910,14 +870,7 @@ router.post('/delete', rejectGroupChatRequest, validateAvatarUrlMiddleware, asyn
             syncCanonicalChatStatsAfterCharacterChatMutation(request.user.profile?.handle ?? null, request.user.directories, request.body.avatar_url, 'chat delete');
             return response.send({ ok: true });
         }
-        //Return success if the file was deleted.
-        if (tryDeleteFile(chatFilePath)) {
-            syncCanonicalChatStatsAfterCharacterChatMutation(request.user.profile?.handle ?? null, request.user.directories, request.body.avatar_url, 'chat delete');
-            return response.send({ ok: true });
-        } else {
-            console.error('The chat file was not deleted.');
-            return response.sendStatus(400);
-        }
+        return sendCanonicalChatWriteBlocked(response, writeState);
     } catch (error) {
         console.error(error);
         return response.sendStatus(500);
@@ -939,7 +892,10 @@ router.post('/export', rejectGroupChatRequest, validateAvatarUrlMiddleware, asyn
         ownerId: String(request.body.avatar_url).replace('.png', ''),
         filePath: filename,
     }));
-    if (canonical.active && canonical.jsonl === null) {
+    if (!canonical.active) {
+        return sendCanonicalChatReadBlocked(response, canonical);
+    }
+    if (canonical.jsonl === null) {
         const errorMessage = {
             message: `Could not find JSONL file to export. Source chat file: ${filename}.`,
         };
@@ -947,11 +903,7 @@ router.post('/export', rejectGroupChatRequest, validateAvatarUrlMiddleware, asyn
         return response.status(404).json(errorMessage);
     }
     try {
-        const rawFile = canonical.active
-            ? canonical.jsonl
-            : fs.existsSync(filename)
-                ? fs.readFileSync(filename, 'utf8')
-                : null;
+        const rawFile = canonical.jsonl;
         if (rawFile === null) {
             const errorMessage = {
                 message: `Could not find JSONL file to export. Source chat file: ${filename}.`,
@@ -1088,18 +1040,7 @@ router.post('/import', validateAvatarUrlMiddleware, async function (request, res
             return response.send({ res: true, fileNames });
         }
 
-        writeCharacterChatImportPlan(importPlan);
-        fileNames.push(...importPlan.fileNames);
-
-        if (importPlan.uploadCleanup === CHAT_IMPORT_UPLOAD_CLEANUP.AFTER_SUCCESS) {
-            fs.unlinkSync(pathToUpload);
-        }
-
-        if (importPlan.shouldMarkChatStatsDirty) {
-            syncCanonicalChatStatsAfterCharacterChatMutation(request.user.profile?.handle ?? null, request.user.directories, request.body.avatar_url, 'chat import');
-        }
-
-        return response.send({ res: true, fileNames });
+        return sendCanonicalChatWriteBlocked(response, writeState);
     } catch (error) {
         console.error(error);
         return response.send({ error: true });
@@ -1114,25 +1055,15 @@ router.post('/search', validateAvatarUrlMiddleware, async function (request, res
         if (group_id) {
             return response.send([]);
         }
-        const dependencies = {
-            fs,
-            path,
-            getChatInfo,
-            warn: console.warn,
-        };
         const readState = await getCanonicalChatReadState(request);
-        const payload = readState.ok
-            ? await searchCanonicalChatPayload({
-                db: readState.db,
-                query,
-                avatarUrl: avatar_url,
-            })
-            : await searchChatPayload({
-                directories: request.user.directories,
-                query,
-                avatarUrl: avatar_url,
-                dependencies,
-            });
+        if (!readState.ok) {
+            return sendCanonicalChatReadBlocked(response, readState);
+        }
+        const payload = await searchCanonicalChatPayload({
+            db: readState.db,
+            query,
+            avatarUrl: avatar_url,
+        });
 
         return response.send(payload);
     } catch (error) {
@@ -1149,22 +1080,17 @@ router.post('/recent', async function (request, response) {
             getChatInfo,
         };
         const readState = await getCanonicalChatReadState(request);
-        const payload = readState.ok
-            ? await readCanonicalRecentChatPayload({
-                db: readState.db,
-                directories: request.user.directories,
-                pinned: request.body.pinned,
-                max: request.body.max,
-                metadata: !!request.body.metadata,
-                dependencies,
-            })
-            : await readRecentChatPayload({
-                directories: request.user.directories,
-                pinned: request.body.pinned,
-                max: request.body.max,
-                metadata: !!request.body.metadata,
-                dependencies,
-            });
+        if (!readState.ok) {
+            return sendCanonicalChatReadBlocked(response, readState);
+        }
+        const payload = await readCanonicalRecentChatPayload({
+            db: readState.db,
+            directories: request.user.directories,
+            pinned: request.body.pinned,
+            max: request.body.max,
+            metadata: !!request.body.metadata,
+            dependencies,
+        });
 
         return response.send(payload);
     } catch (error) {

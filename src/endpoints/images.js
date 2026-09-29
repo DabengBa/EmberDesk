@@ -9,7 +9,6 @@ import { clientRelativePath, removeFileExtension, getImages, isPathUnderParent }
 import { MEDIA_EXTENSIONS, MEDIA_REQUEST_TYPE } from '../constants.js';
 import {
     deleteCanonicalManagedMediaReference,
-    invalidateCanonicalManagedMediaAudit,
     writeCanonicalManagedMedia,
 } from './canonical-managed-media-write-service.js';
 import {
@@ -40,13 +39,6 @@ function getRequestHandle(request) {
     return request.user?.profile?.handle ?? request.user?.handle ?? 'default-user';
 }
 
-function invalidateManagedMediaAudit(request, operation) {
-    invalidateCanonicalManagedMediaAudit({
-        handle: getRequestHandle(request),
-        directories: request.user.directories,
-        operation,
-    });
-}
 
 /**
  * Canonical managed-media read state for listing endpoints, or null when the
@@ -127,8 +119,10 @@ router.post('/upload', async (request, response) => {
             return response.status(500).send({ error: 'Image upload committed but compatibility projection failed' });
         }
         if (!canonicalResult.authorityCommitted) {
-            await fs.promises.writeFile(pathToNewFile, new Uint8Array(imageBuffer));
-            invalidateManagedMediaAudit(request, `user_image_upload:${compatibilityPath}`);
+            return response.status(503).send({
+                error: 'canonical_storage_unavailable',
+                reason: canonicalResult.reason ?? 'canonical_storage_unavailable',
+            });
         }
         response.send({ path: compatibilityPath });
     } catch (error) {
@@ -236,10 +230,10 @@ router.post('/delete', async (request, response) => {
             return response.status(404).send('File not found');
         }
 
-        fs.unlinkSync(pathToDelete);
-        invalidateManagedMediaAudit(request, `user_image_delete:${compatibilityPath}`);
-        console.info(`Deleted image: ${request.body.path} from ${request.user.profile.handle}`);
-        return response.sendStatus(200);
+        return response.status(503).send({
+            error: 'canonical_storage_unavailable',
+            reason: canonicalResult.reason ?? 'canonical_storage_unavailable',
+        });
     } catch (error) {
         console.error(error);
         return response.sendStatus(500);

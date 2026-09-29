@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { afterEach, describe, expect, test } from '@jest/globals';
+import { afterEach, describe, expect, jest, test } from '@jest/globals';
 
 import { setConfigFilePath } from '../src/util.js';
 import { canonicalSqliteManager } from '../src/canonical-sqlite.js';
@@ -76,6 +76,10 @@ afterEach(() => {
 });
 
 describe('canonical chat route authority', () => {
+    // Each case spins up a fresh data root and lazy canonical init (migrations
+    // + shadow import + audit), which can exceed the default 5s under load.
+    jest.setTimeout(20000);
+
     test('keeps getChatData on JSONL even when canonical chat flags are enabled', () => {
         const root = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-canonical-chat-route-'));
         roots.push(root);
@@ -278,7 +282,7 @@ describe('canonical chat route authority', () => {
         expect(fs.readFileSync(chatPath, 'utf8')).toBe(nextPayload.map(line => JSON.stringify(line)).join('\n'));
     });
 
-    test('rejects /save when canonical writes are enabled without canonical reads', async () => {
+    test('rejects /save when the canonical chats slice is frozen', async () => {
         const root = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-canonical-chat-route-'));
         roots.push(root);
         const directories = {
@@ -299,8 +303,8 @@ describe('canonical chat route authority', () => {
             { name: 'User', mes: 'Before' },
         ];
         fs.writeFileSync(chatPath, initialPayload.map(line => JSON.stringify(line)).join('\n'), 'utf8');
-        const originalReadFlag = process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SLICES_CHATS_READS;
-        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SLICES_CHATS_READS = 'false';
+        const originalEnabledFlag = process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SLICES_CHATS_ENABLED;
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SLICES_CHATS_ENABLED = 'false';
 
         try {
             const response = makeResponse();
@@ -320,14 +324,14 @@ describe('canonical chat route authority', () => {
             expect(response.statusCode).toBe(503);
             expect(response.body).toEqual({
                 error: 'canonical_chat_write_blocked',
-                reason: 'canonical_reads_disabled',
+                reason: 'canonical_storage_disabled',
             });
             expect(fs.readFileSync(chatPath, 'utf8')).toBe(initialPayload.map(line => JSON.stringify(line)).join('\n'));
         } finally {
-            if (originalReadFlag === undefined) {
-                delete process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SLICES_CHATS_READS;
+            if (originalEnabledFlag === undefined) {
+                delete process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SLICES_CHATS_ENABLED;
             } else {
-                process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SLICES_CHATS_READS = originalReadFlag;
+                process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SLICES_CHATS_ENABLED = originalEnabledFlag;
             }
         }
     });
