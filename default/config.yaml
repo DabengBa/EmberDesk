@@ -128,6 +128,11 @@ features:
         # regenerates the file. Set projection: sync to keep projecting.
         settings:
           projection: off
+        # worlds/*.json files are export-only: the canonical world_books table
+        # is authoritative, character world bindings come from the
+        # characters.world_name column, and export-all regenerates the files.
+        world_info:
+          projection: off
   react:
     pages:
     panels:

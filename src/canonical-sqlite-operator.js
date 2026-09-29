@@ -16,7 +16,7 @@ import {
     auditCanonicalChatShadowImport,
     CANONICAL_CHAT_AUDIT_SCOPE,
 } from './canonical-chat-shadow-import.js';
-import { recordImportLedgerEntry } from './canonical-import-ledger.js';
+import { recordImportLedgerEntry, removeImportLedgerEntry } from './canonical-import-ledger.js';
 import { repairCanonicalManagedMediaProjection } from './endpoints/canonical-managed-media-write-service.js';
 import {
     auditCanonicalSecretsShadowImport,
@@ -528,6 +528,7 @@ export async function runCanonicalWorldInfoAudit({ handle, directories, db, audi
         directories,
         db,
         auditedAtMs,
+        projection: getCanonicalStorageSlice('world_info').getProjectionMode(),
     });
 }
 
@@ -617,24 +618,40 @@ export async function repairCanonicalProjection({ db, directories, repairKeys = 
     };
 }
 
-function writeWorldInfoProjectionFile({ directories, worldName, payload }) {
+function writeWorldInfoProjectionFile({ db, directories, worldName, payload, nowMs = Date.now() }) {
     const normalizedWorldName = normalizeCanonicalWorldInfoName(worldName);
     const outputPath = path.join(directories.worlds, `${normalizedWorldName}.json`);
+    const contents = JSON.stringify(payload, null, 4);
     fs.mkdirSync(directories.worlds, { recursive: true });
-    writeFileAtomicSync(outputPath, JSON.stringify(payload, null, 4));
+    writeFileAtomicSync(outputPath, contents);
+    if (db) {
+        recordImportLedgerEntry(db, {
+            sliceKey: 'world_info',
+            sourcePath: path.relative(directories.root, outputPath),
+            contentHash: crypto.createHash('sha256').update(contents).digest('hex'),
+            origin: 'projection',
+            nowMs,
+        });
+    }
     return outputPath;
 }
 
-function deleteWorldInfoProjectionForRepair({ repair, directories }) {
+function deleteWorldInfoProjectionForRepair({ db, repair, directories }) {
     const normalizedWorldName = normalizeCanonicalWorldInfoName(repair.worldName);
     const outputPath = path.join(directories.worlds, `${normalizedWorldName}.json`);
     fs.rmSync(outputPath, { force: true });
+    if (db) {
+        removeImportLedgerEntry(db, {
+            sliceKey: 'world_info',
+            sourcePath: path.relative(directories.root, outputPath),
+        });
+    }
 }
 
 async function repairSingleWorldInfoProjection({ db, directories, repair, nowMs = Date.now() }) {
     const operation = repair.details?.operation ?? null;
     if (operation === 'delete') {
-        deleteWorldInfoProjectionForRepair({ repair, directories });
+        deleteWorldInfoProjectionForRepair({ db, repair, directories });
         withCanonicalTransaction(db, txnDb => {
             resolveWorldInfoProjectionRepair(txnDb, {
                 repairKey: repair.repairKey,
@@ -659,9 +676,11 @@ async function repairSingleWorldInfoProjection({ db, directories, repair, nowMs 
     }
 
     writeWorldInfoProjectionFile({
+        db,
         directories,
         worldName: repair.worldName,
         payload,
+        nowMs,
     });
 
     withCanonicalTransaction(db, txnDb => {

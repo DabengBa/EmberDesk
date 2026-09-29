@@ -7,6 +7,7 @@ import { afterEach, beforeAll, describe, expect, test } from '@jest/globals';
 import { canonicalSqliteManager } from '../src/canonical-sqlite.js';
 import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
 import { getPersistedCanonicalAuditStatus, persistCanonicalAuditStatus } from '../src/canonical-sqlite-shadow-import.js';
+import { runCanonicalWorldInfoAudit } from '../src/canonical-sqlite-operator.js';
 import { upsertCanonicalWorldInfoBook } from '../src/endpoints/world-info-store.js';
 import { router } from '../src/endpoints/worldinfo.js';
 import { setConfigFilePath } from '../src/util.js';
@@ -26,9 +27,11 @@ function createDirectories(root) {
         root,
         storage: path.join(root, 'storage'),
         worlds: path.join(root, 'worlds'),
+        characters: path.join(root, 'characters'),
     };
     fs.mkdirSync(directories.storage, { recursive: true });
     fs.mkdirSync(directories.worlds, { recursive: true });
+    fs.mkdirSync(directories.characters, { recursive: true });
     return directories;
 }
 
@@ -70,12 +73,15 @@ async function invokeRouteWithRequest(pathName, request) {
     return response;
 }
 
-function setCanonicalEnv({ enabled = true, shadowImport = true, reads = true, writes = false, strict = false } = {}) {
+function setCanonicalEnv({ enabled = true, shadowImport = true, reads = true, writes = false, strict = false, projection = null } = {}) {
     process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_ENABLED = String(enabled);
     process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SHADOWIMPORT = String(shadowImport);
     process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_READS = String(reads);
     process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_WRITES = String(writes);
     process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_STRICT = String(strict);
+    if (projection != null) {
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SLICES_WORLDINFO_PROJECTION = String(projection);
+    }
 }
 
 function clearCanonicalEnv() {
@@ -86,6 +92,7 @@ function clearCanonicalEnv() {
     delete process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_CHATSTATS;
     delete process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_STRICT;
     delete process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SLICES_WORLDINFO_ENABLED;
+    delete process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SLICES_WORLDINFO_PROJECTION;
 }
 
 function seedCanonicalWorldInfo(directories, {
@@ -118,6 +125,39 @@ function seedCanonicalWorldInfo(directories, {
             auditedAtMs: 1735689600100,
         });
     }
+    return db;
+}
+
+function seedCanonicalCharacter(directories, {
+    avatarFilename = 'alpha.png',
+    displayName = 'Alpha',
+    worldName = '',
+    cardPayload = null,
+    shallowPayload = null,
+} = {}) {
+    const db = canonicalSqliteManager.open({
+        handle: 'alice',
+        directories,
+        featureFlags: { enabled: true, strict: false },
+    });
+    runCanonicalMigrations(db, { nowMs: 1735689600000 });
+    const nowMs = 1735689600000;
+    db.prepare(`
+        INSERT INTO characters (
+            id, avatar_filename, internal_name, display_name, card_json, shallow_json,
+            world_name, created_at_ms, updated_at_ms, deleted_at_ms
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
+    `).run(
+        `char-${avatarFilename}`,
+        avatarFilename,
+        avatarFilename.replace(/\.png$/i, ''),
+        displayName,
+        JSON.stringify(cardPayload ?? { name: displayName, data: { name: displayName } }),
+        JSON.stringify(shallowPayload ?? cardPayload ?? { name: displayName, data: { name: displayName } }),
+        worldName,
+        nowMs,
+        nowMs,
+    );
     return db;
 }
 
@@ -270,7 +310,7 @@ describe('world info canonical route service', () => {
         const db = seedCanonicalWorldInfo(directories, {
             payload: { name: 'Old', entries: {} },
         });
-        setCanonicalEnv({ enabled: true, shadowImport: true, reads: true, writes: true });
+        setCanonicalEnv({ enabled: true, shadowImport: true, reads: true, writes: true, projection: 'sync' });
 
         const response = await invokeRoute('/edit', {
             name: 'Lorebook',
@@ -366,7 +406,7 @@ describe('world info canonical route service', () => {
         const db = seedCanonicalWorldInfo(directories, {
             payload: { name: 'Old', entries: {} },
         });
-        setCanonicalEnv({ enabled: true, shadowImport: true, reads: true, writes: true });
+        setCanonicalEnv({ enabled: true, shadowImport: true, reads: true, writes: true, projection: 'sync' });
 
         const response = await invokeRoute('/edit', {
             name: 'Lorebook',
@@ -404,7 +444,7 @@ describe('world info canonical route service', () => {
             name: 'Existing',
             payload: { name: 'Existing', entries: { old: { content: 'old' } } },
         });
-        setCanonicalEnv({ enabled: true, shadowImport: true, reads: true, writes: true });
+        setCanonicalEnv({ enabled: true, shadowImport: true, reads: true, writes: true, projection: 'sync' });
         const uploadDirectory = path.join(root, 'uploads');
         fs.mkdirSync(uploadDirectory, { recursive: true });
         fs.writeFileSync(path.join(uploadDirectory, 'upload.json'), JSON.stringify({
@@ -448,5 +488,202 @@ describe('world info canonical route service', () => {
         expect(deleteResponse.statusCode).toBe(200);
         expect(db.prepare('SELECT deleted_at_ms FROM world_books WHERE name = ?').get('Existing').deleted_at_ms).not.toBeNull();
         expect(fs.existsSync(path.join(directories.worlds, 'Existing.json'))).toBe(false);
+    });
+
+    test('default projection mode off keeps canonical writes out of worlds/*.json', async () => {
+        const root = makeRoot();
+        const directories = createDirectories(root);
+        const db = seedCanonicalWorldInfo(directories, {
+            payload: { name: 'Old', entries: {} },
+        });
+        setCanonicalEnv({ enabled: true, shadowImport: true, reads: true, writes: true });
+
+        const response = await invokeRoute('/edit', {
+            name: 'Lorebook',
+            data: { name: 'Edited Lore', entries: { one: { content: 'edited' } } },
+        }, directories);
+
+        expect(response.statusCode).toBe(200);
+        expect(JSON.parse(db.prepare('SELECT payload_json FROM world_books WHERE name = ?').get('Lorebook').payload_json)).toEqual({
+            name: 'Edited Lore',
+            entries: { one: { content: 'edited' } },
+        });
+        expect(fs.existsSync(path.join(directories.worlds, 'Lorebook.json'))).toBe(false);
+    });
+
+    test('serves canonical reads over a stale projection file when projection is off', async () => {
+        const root = makeRoot();
+        const directories = createDirectories(root);
+        fs.writeFileSync(path.join(directories.worlds, 'Lorebook.json'), JSON.stringify({
+            name: 'Stale File Lore',
+            entries: { old: { content: 'stale' } },
+        }));
+        seedCanonicalWorldInfo(directories);
+        setCanonicalEnv({ enabled: true, shadowImport: true, reads: true });
+
+        const response = await invokeRoute('/get', { name: 'Lorebook' }, directories);
+
+        expect(response.statusCode).toBe(200);
+        expect(response.body).toEqual({
+            name: 'Canonical Lore',
+            extensions: { source: 'db' },
+            entries: { one: { content: 'db' } },
+        });
+    });
+
+    test('audit suppresses stale projection drift when projection is off', async () => {
+        const root = makeRoot();
+        const directories = createDirectories(root);
+        fs.writeFileSync(path.join(directories.worlds, 'Lorebook.json'), JSON.stringify({
+            name: 'Stale File Lore',
+            entries: { old: { content: 'stale' } },
+        }));
+        fs.writeFileSync(path.join(directories.worlds, 'ExtraFile.json'), JSON.stringify({
+            name: 'File Only',
+            entries: {},
+        }));
+        seedCanonicalWorldInfo(directories);
+        setCanonicalEnv({ enabled: true, shadowImport: true, reads: true });
+
+        const db = canonicalSqliteManager.open({
+            handle: 'alice',
+            directories,
+            featureFlags: { enabled: true, strict: false },
+        });
+        const audit = await runCanonicalWorldInfoAudit({ handle: 'alice', directories, db });
+
+        expect(audit.blocking).toBe(false);
+        expect(audit.ok).toBe(true);
+        expect(audit.hasDrift).toBe(false);
+        const suppressed = audit.entries.filter(entry => entry.details?.suppressed);
+        expect(suppressed.map(entry => entry.drift_types)).toEqual(expect.arrayContaining([
+            ['payload_mismatch'],
+            ['missing_db_world_info'],
+        ]));
+        expect(suppressed.every(entry => entry.details?.import_classification != null)).toBe(true);
+    });
+
+    test('audit blocks on stale projection drift when projection is sync', async () => {
+        const root = makeRoot();
+        const directories = createDirectories(root);
+        fs.writeFileSync(path.join(directories.worlds, 'Lorebook.json'), JSON.stringify({
+            name: 'Stale File Lore',
+            entries: { old: { content: 'stale' } },
+        }));
+        seedCanonicalWorldInfo(directories);
+        setCanonicalEnv({ enabled: true, shadowImport: true, reads: true, projection: 'sync' });
+
+        const db = canonicalSqliteManager.open({
+            handle: 'alice',
+            directories,
+            featureFlags: { enabled: true, strict: false },
+        });
+        const audit = await runCanonicalWorldInfoAudit({ handle: 'alice', directories, db });
+
+        expect(audit.blocking).toBe(true);
+        expect(audit.entries).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                status: 'drift',
+                drift_types: ['payload_mismatch'],
+            }),
+        ]));
+    });
+
+    test('canonical delete removes the row without requiring a projection file', async () => {
+        const root = makeRoot();
+        const directories = createDirectories(root);
+        seedCanonicalWorldInfo(directories);
+        setCanonicalEnv({ enabled: true, shadowImport: true, reads: true, writes: true });
+
+        const response = await invokeRoute('/delete', { name: 'Lorebook' }, directories);
+
+        const db = canonicalSqliteManager.open({
+            handle: 'alice',
+            directories,
+            featureFlags: { enabled: true, strict: false },
+        });
+        expect(response.statusCode).toBe(200);
+        expect(db.prepare('SELECT deleted_at_ms FROM world_books WHERE name = ?').get('Lorebook').deleted_at_ms).not.toBeNull();
+    });
+
+    test('delete-preflight reads bound characters from canonical sqlite', async () => {
+        const root = makeRoot();
+        const directories = createDirectories(root);
+        seedCanonicalWorldInfo(directories);
+        seedCanonicalCharacter(directories, {
+            avatarFilename: 'alpha.png',
+            worldName: 'Lorebook',
+            displayName: 'Alpha',
+        });
+        seedCanonicalCharacter(directories, {
+            avatarFilename: 'beta.png',
+            worldName: '',
+            displayName: 'Beta',
+        });
+        setCanonicalEnv({ enabled: true, shadowImport: true, reads: true, writes: true });
+
+        const response = await invokeRoute('/delete-preflight', { name: 'Lorebook' }, directories);
+
+        expect(response.statusCode).toBe(200);
+        expect(response.body.worldInfos).toEqual([expect.objectContaining({
+            name: 'Lorebook',
+            entryCount: 1,
+            boundCharacters: [{ avatar: 'alpha.png', name: 'Alpha' }],
+            deleteCandidateAvatars: [],
+        })]);
+    });
+
+    test('delete-cascade clears canonical character bindings and tombstones the book', async () => {
+        const root = makeRoot();
+        const directories = createDirectories(root);
+        seedCanonicalWorldInfo(directories);
+        seedCanonicalCharacter(directories, {
+            avatarFilename: 'alpha.png',
+            worldName: 'Lorebook',
+            displayName: 'Alpha',
+            cardPayload: {
+                name: 'Alpha',
+                world: 'Lorebook',
+                data: { name: 'Alpha', extensions: { world: 'Lorebook' } },
+            },
+            shallowPayload: {
+                name: 'Alpha',
+                world: 'Lorebook',
+                data: { name: 'Alpha', extensions: { world: 'Lorebook' } },
+            },
+        });
+        seedCanonicalCharacter(directories, {
+            avatarFilename: 'beta.png',
+            worldName: 'Other',
+            displayName: 'Beta',
+            cardPayload: { name: 'Beta', data: { name: 'Beta', extensions: { world: 'Other' } } },
+        });
+        fs.writeFileSync(path.join(directories.worlds, 'Lorebook.json'), JSON.stringify({ entries: {} }));
+        setCanonicalEnv({ enabled: true, shadowImport: true, reads: true, writes: true });
+
+        const response = await invokeRoute('/delete-cascade', {
+            worlds: ['Lorebook'],
+            clear_references: true,
+        }, directories);
+
+        const db = canonicalSqliteManager.open({
+            handle: 'alice',
+            directories,
+            featureFlags: { enabled: true, strict: false },
+        });
+        const alpha = db.prepare('SELECT card_json, shallow_json, world_name FROM characters WHERE avatar_filename = ?').get('alpha.png');
+        const alphaCard = JSON.parse(alpha.card_json);
+        const alphaShallow = JSON.parse(alpha.shallow_json);
+        const beta = db.prepare('SELECT world_name FROM characters WHERE avatar_filename = ?').get('beta.png');
+
+        expect(response.statusCode).toBe(200);
+        expect(alpha.world_name).toBe('');
+        expect(alphaCard.data.extensions.world).toBe('');
+        expect(alphaCard.world).toBe('');
+        expect(alphaShallow.data.extensions.world).toBe('');
+        expect(alphaShallow.world).toBe('');
+        expect(beta.world_name).toBe('Other');
+        expect(db.prepare('SELECT deleted_at_ms FROM world_books WHERE name = ?').get('Lorebook').deleted_at_ms).not.toBeNull();
+        expect(fs.existsSync(path.join(directories.worlds, 'Lorebook.json'))).toBe(false);
     });
 });

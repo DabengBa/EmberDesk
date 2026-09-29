@@ -135,7 +135,7 @@ function createCharacterSlice() {
 }
 
 function createWorldInfoSlice() {
-    const flags = createSliceFlagCapabilities({ flagKey: 'worldInfo' });
+    const flags = createSliceFlagCapabilities({ flagKey: 'worldInfo', defaultProjection: 'off' });
     return {
         key: 'world_info',
         ...flags,

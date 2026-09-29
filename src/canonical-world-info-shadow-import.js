@@ -91,9 +91,10 @@ function buildAuditEntry({ handle, worldName, worldBookId = null, status, driftT
     };
 }
 
-function buildAuditSummary({ handle, migrationStatus, entries }) {
-    const driftEntries = entries.filter(entry => entry.status === 'drift');
-    const errorEntries = entries.filter(entry => entry.status === 'error');
+function buildAuditSummary({ handle, migrationStatus, entries, ignoreSuppressed = false }) {
+    const active = entries.filter(entry => !(ignoreSuppressed && entry.details?.suppressed));
+    const driftEntries = active.filter(entry => entry.status === 'drift');
+    const errorEntries = active.filter(entry => entry.status === 'error');
     const blocking = driftEntries.length > 0 || errorEntries.length > 0;
     return {
         ok: !blocking,
@@ -220,6 +221,7 @@ export async function auditCanonicalWorldInfoShadowImport({
     directories,
     db,
     auditedAtMs = Date.now(),
+    projection = 'sync',
 }) {
     const migrationStatus = getCanonicalMigrationStatus(db);
     if (!migrationStatus.ok) {
@@ -246,6 +248,11 @@ export async function auditCanonicalWorldInfoShadowImport({
         };
     }
 
+    const suppressFileSide = projection === 'off';
+    const suppressDetails = suppressFileSide
+        ? { projection_mode: 'off', suppressed: true }
+        : {};
+
     const entries = [];
     const projectionNames = new Set();
     for (const filename of listWorldInfoJsonFiles(directories)) {
@@ -265,7 +272,7 @@ export async function auditCanonicalWorldInfoShadowImport({
                     worldName,
                     status: 'drift',
                     driftTypes: ['missing_db_world_info'],
-                    details: { import_classification: importClassification },
+                    details: { import_classification: importClassification, ...suppressDetails },
                     auditedAtMs,
                 }));
                 continue;
@@ -281,6 +288,7 @@ export async function auditCanonicalWorldInfoShadowImport({
                         expected_payload_json: stableJson(projection.payload),
                         actual_payload_json: stableJson(stored),
                         import_classification: importClassification,
+                        ...suppressDetails,
                     },
                     auditedAtMs,
                 }));
@@ -294,6 +302,7 @@ export async function auditCanonicalWorldInfoShadowImport({
                 driftTypes: ['audit_error'],
                 details: {
                     errorMessage: String(error?.message ?? error ?? ''),
+                    ...suppressDetails,
                 },
                 auditedAtMs,
             }));
@@ -311,7 +320,7 @@ export async function auditCanonicalWorldInfoShadowImport({
             worldBookId: row.id,
             status: 'drift',
             driftTypes: ['missing_projection_file'],
-            details: {},
+            details: { ...suppressDetails },
             auditedAtMs,
         }));
     }
@@ -320,6 +329,7 @@ export async function auditCanonicalWorldInfoShadowImport({
         handle,
         migrationStatus,
         entries,
+        ignoreSuppressed: suppressFileSide,
     });
     persistCanonicalAuditStatus(db, result, {
         scope: WORLD_INFO_AUDIT_SCOPE,

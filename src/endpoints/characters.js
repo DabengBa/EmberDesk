@@ -55,9 +55,10 @@ import {
     markCanonicalCharacterDeleted,
     recordProjectionRepair as persistProjectionRepair,
     renameCanonicalCharacter,
+    scanCanonicalCharacterWorldBindings,
     upsertCanonicalCharacter,
 } from './character-store.js';
-import { getCanonicalWorldInfoBook } from './world-info-store.js';
+import { getCanonicalWorldInfoBook, normalizeCanonicalWorldInfoName } from './world-info-store.js';
 import {
     createCharacterCard,
     deleteCharacterCard,
@@ -453,6 +454,34 @@ function invalidateCanonicalCharacterAuditSafe(handle, directories, source) {
         });
     } catch (error) {
         console.warn(`Canonical audit invalidation skipped after ${source}:`, error);
+    }
+}
+
+async function getCanonicalWorldBindingScanState(request) {
+    try {
+        const characterFlags = getCanonicalStorageSlice('characters').getFeatureFlags();
+        const worldInfoFlags = getCanonicalStorageSlice('world_info').getFeatureFlags();
+        if (!characterFlags.enabled || !characterFlags.reads || !worldInfoFlags.enabled || !worldInfoFlags.reads) {
+            return { ok: false };
+        }
+
+        const handle = request.user?.profile?.handle ?? null;
+        const directories = request.user.directories;
+        await ensureCanonicalSliceBackend('characters', directories, handle);
+        await ensureCanonicalSliceBackend('world_info', directories, handle);
+        const storageStatus = getCanonicalStorageStatus({ handle, directories, featureFlags: characterFlags });
+        if (!storageStatus.supported || storageStatus.disabledReason === 'migration_blocked') {
+            return { ok: false };
+        }
+
+        const db = openCanonicalDatabase({ handle, directories, featureFlags: characterFlags });
+        if (!db) {
+            return { ok: false };
+        }
+
+        return { ok: true, db };
+    } catch {
+        return { ok: false };
     }
 }
 
@@ -1568,7 +1597,10 @@ router.post('/delete-preflight', async function (request, response) {
 
         const directories = request.user.directories;
         const worldNameToAvatars = new Map();
-        const { worldNameToCharacters, avatarToWorldName } = scanCharacterWorldBindingsFromFiles(directories);
+        const canonicalBindings = await getCanonicalWorldBindingScanState(request);
+        const { worldNameToCharacters, avatarToWorldName } = canonicalBindings.ok
+            ? scanCanonicalCharacterWorldBindings(canonicalBindings.db)
+            : scanCharacterWorldBindingsFromFiles(directories);
 
         for (const avatar of avatars) {
             const safeName = sanitize(avatar);
@@ -1590,19 +1622,27 @@ router.post('/delete-preflight', async function (request, response) {
         const worldInfos = [];
 
         for (const [worldName, deleteCandidateAvatars] of worldNameToAvatars) {
-            const worldFilename = sanitize(`${worldName}.json`);
-            const worldPath = path.join(directories.worlds, worldFilename);
-            if (!fs.existsSync(worldPath)) continue;
-
             let entryCount = 0;
-            try {
-                const worldData = JSON.parse(fs.readFileSync(worldPath, 'utf8'));
-                entryCount = worldData.entries ? Object.keys(worldData.entries).length : 0;
-            } catch {
-                // If we can't parse, still show with 0 entries
-            }
+            let boundCharacters;
+            if (canonicalBindings.ok) {
+                const book = getCanonicalWorldInfoBook(canonicalBindings.db, normalizeCanonicalWorldInfoName(worldName));
+                if (!book) continue;
+                entryCount = book?.entries ? Object.keys(book.entries).length : 0;
+                boundCharacters = worldNameToCharacters.get(worldName) ?? [];
+            } else {
+                const worldFilename = sanitize(`${worldName}.json`);
+                const worldPath = path.join(directories.worlds, worldFilename);
+                if (!fs.existsSync(worldPath)) continue;
 
-            const boundCharacters = worldNameToCharacters.get(worldName) ?? findCharactersBoundToWorldFromFiles(directories, worldName);
+                try {
+                    const worldData = JSON.parse(fs.readFileSync(worldPath, 'utf8'));
+                    entryCount = worldData.entries ? Object.keys(worldData.entries).length : 0;
+                } catch {
+                    // If we can't parse, still show with 0 entries
+                }
+
+                boundCharacters = worldNameToCharacters.get(worldName) ?? findCharactersBoundToWorldFromFiles(directories, worldName);
+            }
 
             worldInfos.push({
                 name: worldName,

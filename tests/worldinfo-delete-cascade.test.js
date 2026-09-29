@@ -66,12 +66,17 @@ describe('world info delete cascade', () => {
         fs.mkdirSync(directories.characters, { recursive: true });
         fs.mkdirSync(directories.worlds, { recursive: true });
 
+        // These tests cover the file-backed fallback path; canonical storage
+        // defaults to enabled when no config is present.
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_ENABLED = 'false';
+
         readCharacterCardMock.mockReset();
         writeCharacterCardMock.mockReset();
         invalidateDirectoryMock.mockReset();
     });
 
     afterEach(() => {
+        delete process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_ENABLED;
         fs.rmSync(root, { recursive: true, force: true });
     });
 

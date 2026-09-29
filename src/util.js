@@ -106,6 +106,10 @@ export function getConfigValue(key, defaultValue = null, typeConverter = null) {
             const envValue = process.env[envKey];
             return needsJsonParse ? (tryParse(envValue) ?? defaultValue) : envValue;
         }
+        // getConfig() hard-exits without a registered config path (bare CLI use).
+        if (!hasConfigFilePath()) {
+            return defaultValue;
+        }
         const config = getConfig();
         return _.get(config, key, defaultValue);
     }

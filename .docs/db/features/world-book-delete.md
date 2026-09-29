@@ -23,7 +23,7 @@ Let a user delete a world info/lorebook file from the World Info editor while ma
 - If no bound characters are found, or if the preflight cannot provide bound-character details, EmberDesk falls back to a simple irreversible-delete confirmation rather than blocking deletion.
 - After deletion, visible World Info state is flushed so global selections, cached world lists, and the open editor no longer show the deleted world as editable.
 - Cleanup errors for individual character references must not pretend reference cleanup succeeded, but they also must not reverse the confirmed world-file deletion.
-- With canonical SQLite World Info authority (enabled by default), deletion commits to the canonical store first and then projects JSON-file cleanup for compatibility. Users still see the same confirmation and post-refresh absence of the deleted world; projection repair state is an operator concern, not an extra user-facing step.
+- With canonical SQLite World Info authority (enabled by default), deletion tombstones the canonical store row, clears bound character references in canonical card payloads when opted in, and removes the compatibility JSON file when present. Users still see the same confirmation and post-refresh absence of the deleted world; projection repair state is an operator concern, not an extra user-facing step.
 
 ## Semantic Interaction IDs
 

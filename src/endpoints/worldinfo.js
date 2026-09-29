@@ -9,7 +9,7 @@ import { sync as writeFileAtomicSync } from 'write-file-atomic';
 import { tryParse } from '../util.js';
 import { invalidateDirectory } from './settings-cache.js';
 import { read, write } from '../character-card-parser.js';
-import { canonicalSqliteManager } from '../canonical-sqlite.js';
+import { canonicalSqliteManager, withCanonicalTransaction } from '../canonical-sqlite.js';
 import { runCanonicalMigrations } from '../canonical-sqlite-migrations.js';
 import { getPersistedCanonicalAuditStatus, invalidateCanonicalAuditStatus } from '../canonical-sqlite-shadow-import.js';
 import { WORLD_INFO_AUDIT_SCOPE } from '../canonical-world-info-shadow-import.js';
@@ -24,6 +24,10 @@ import {
     recordWorldInfoProjectionRepair,
     upsertCanonicalWorldInfoBook,
 } from './world-info-store.js';
+import {
+    clearCanonicalCharacterWorldBinding,
+    listCanonicalCharactersBoundToWorld,
+} from './character-store.js';
 
 function getRequestHandle(request) {
     return request.user?.profile?.handle ?? request.user?.handle ?? 'default-user';
@@ -133,6 +137,9 @@ async function getCanonicalWorldInfoWriteState(request) {
 }
 
 function writeWorldInfoProjectionFile(directories, worldName, payload, db = null) {
+    if (getCanonicalStorageSlice('world_info').getProjectionMode() === 'off') {
+        return;
+    }
     const filename = `${normalizeCanonicalWorldInfoName(worldName)}.json`;
     const pathToFile = path.join(directories.worlds, filename);
     const contents = JSON.stringify(payload, null, 4);
@@ -318,6 +325,31 @@ export function findCharactersBoundToWorldFromFiles(directories, worldName) {
     return scanCharacterWorldBindingsFromFiles(directories).worldNameToCharacters.get(worldName) ?? [];
 }
 
+function clearCharacterWorldReferencesFromFiles(directories, worldName) {
+    const boundCharacters = findCharactersBoundToWorldFromFiles(directories, worldName);
+    for (const { avatar } of boundCharacters) {
+        const charPath = path.join(directories.characters, avatar);
+        if (!fs.existsSync(charPath)) continue;
+
+        try {
+            const imageBuffer = fs.readFileSync(charPath);
+            const jsonString = read(imageBuffer);
+            const card = JSON.parse(jsonString);
+            if ((card?.data?.extensions?.world ?? card?.world) === worldName) {
+                if (card?.data?.extensions) {
+                    card.data.extensions.world = '';
+                } else {
+                    card.world = '';
+                }
+                const newBuffer = write(imageBuffer, JSON.stringify(card));
+                writeFileAtomicSync(charPath, newBuffer);
+            }
+        } catch {
+            // Skip characters that can't be updated
+        }
+    }
+}
+
 export const router = express.Router();
 
 router.post('/list', async (request, response) => {
@@ -375,7 +407,7 @@ router.post('/get', async (request, response) => {
     return response.send(file);
 });
 
-router.post('/delete-preflight', (request, response) => {
+router.post('/delete-preflight', async (request, response) => {
     try {
         const worldName = request.body?.name;
         if (!worldName || typeof worldName !== 'string') {
@@ -383,6 +415,25 @@ router.post('/delete-preflight', (request, response) => {
         }
 
         const directories = request.user.directories;
+        const canonicalReadState = await getCanonicalWorldInfoReadState(request);
+        if (canonicalReadState.ok) {
+            const normalizedName = normalizeCanonicalWorldInfoName(worldName);
+            const book = getCanonicalWorldInfoBook(canonicalReadState.db, normalizedName);
+            if (!book) {
+                return response.send({ worldInfos: [] });
+            }
+            const entryCount = book?.entries ? Object.keys(book.entries).length : 0;
+            const boundCharacters = listCanonicalCharactersBoundToWorld(canonicalReadState.db, normalizedName);
+            return response.send({
+                worldInfos: [{
+                    name: worldName,
+                    entryCount,
+                    boundCharacters,
+                    deleteCandidateAvatars: [],
+                }],
+            });
+        }
+
         const worldFilename = sanitize(`${worldName}.json`);
         const worldPath = path.join(directories.worlds, worldFilename);
 
@@ -589,32 +640,68 @@ router.post('/delete-cascade', async (request, response) => {
         const clearReferences = request.body.clear_references === true;
         const directories = request.user.directories;
 
+        const canonicalWriteState = await getCanonicalWorldInfoWriteState(request);
+        if (canonicalWriteState.ok) {
+            const db = canonicalWriteState.db;
+            const characterFlags = getCanonicalStorageSlice('characters').getFeatureFlags();
+            let canonicalCharacterWrites = characterFlags.enabled && characterFlags.writes;
+            if (clearReferences && canonicalCharacterWrites) {
+                try {
+                    await ensureCanonicalSliceBackend('characters', directories, getRequestHandle(request));
+                } catch (error) {
+                    console.warn('Canonical character init failed; clearing world bindings on files:', error);
+                    canonicalCharacterWrites = false;
+                }
+            }
+            for (const worldName of worlds) {
+                if (typeof worldName !== 'string' || !worldName.trim()) continue;
+                const normalizedName = normalizeCanonicalWorldInfoName(worldName);
+
+                withCanonicalTransaction(db, txnDb => {
+                    if (clearReferences && canonicalCharacterWrites) {
+                        for (const { avatar } of listCanonicalCharactersBoundToWorld(txnDb, normalizedName)) {
+                            clearCanonicalCharacterWorldBinding(txnDb, { avatarFilename: avatar });
+                        }
+                    }
+                    markCanonicalWorldInfoBookDeleted(txnDb, {
+                        name: normalizedName,
+                        deletedAtMs: Date.now(),
+                    });
+                });
+
+                if (clearReferences && !canonicalCharacterWrites) {
+                    clearCharacterWorldReferencesFromFiles(directories, normalizedName);
+                }
+
+                const worldPath = path.join(directories.worlds, sanitize(`${normalizedName}.json`));
+                try {
+                    if (fs.existsSync(worldPath)) {
+                        fs.unlinkSync(worldPath);
+                    }
+                    removeImportLedgerEntry(db, {
+                        sliceKey: 'world_info',
+                        sourcePath: path.relative(directories.root, worldPath),
+                    });
+                } catch (error) {
+                    return sendWorldInfoProjectionFailure({
+                        response,
+                        db,
+                        worldName: normalizedName,
+                        operation: 'delete',
+                        error,
+                    });
+                }
+            }
+
+            invalidateDirectory(directories.worlds);
+            return response.sendStatus(200);
+        }
+
         for (const worldName of worlds) {
             if (typeof worldName !== 'string' || !worldName.trim()) continue;
 
             if (clearReferences) {
-                const boundCharacters = findCharactersBoundToWorldFromFiles(directories, worldName);
-                for (const { avatar } of boundCharacters) {
-                    const charPath = path.join(directories.characters, avatar);
-                    if (!fs.existsSync(charPath)) continue;
-
-                    try {
-                        const imageBuffer = fs.readFileSync(charPath);
-                        const jsonString = read(imageBuffer);
-                        const card = JSON.parse(jsonString);
-                        if ((card?.data?.extensions?.world ?? card?.world) === worldName) {
-                            if (card?.data?.extensions) {
-                                card.data.extensions.world = '';
-                            } else {
-                                card.world = '';
-                            }
-                            const newBuffer = write(imageBuffer, JSON.stringify(card));
-                            writeFileAtomicSync(charPath, newBuffer);
-                        }
-                    } catch {
-                        // Skip characters that can't be updated
-                    }
-                }
+                clearCharacterWorldReferencesFromFiles(directories, worldName);
             }
 
             const worldFilename = sanitize(`${worldName}.json`);

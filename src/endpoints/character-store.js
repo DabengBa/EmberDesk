@@ -90,6 +90,93 @@ export function getCanonicalCharacter(db, avatarFilename, { includeChatStats = t
     return mapCanonicalRowToPayload(row, false, { includeChatStats });
 }
 
+/**
+ * Lists live characters bound to a World Info book by name.
+ * @returns {Array<{ avatar: string, name: string }>}
+ */
+export function listCanonicalCharactersBoundToWorld(db, worldName) {
+    return db.prepare(`
+        SELECT avatar_filename, display_name
+        FROM characters
+        WHERE world_name = ?
+            AND deleted_at_ms IS NULL
+        ORDER BY avatar_filename COLLATE NOCASE ASC
+    `).all(String(worldName ?? '')).map(row => ({
+        avatar: String(row.avatar_filename),
+        name: String(row.display_name ?? row.avatar_filename),
+    }));
+}
+
+/**
+ * Returns the canonical world-binding maps matching the file-scan contract:
+ * characters grouped by bound world plus a direct avatar lookup.
+ */
+export function scanCanonicalCharacterWorldBindings(db) {
+    const rows = db.prepare(`
+        SELECT avatar_filename, display_name, world_name
+        FROM characters
+        WHERE world_name != ''
+            AND deleted_at_ms IS NULL
+        ORDER BY avatar_filename COLLATE NOCASE ASC
+    `).all();
+
+    const worldNameToCharacters = new Map();
+    const avatarToWorldName = new Map();
+    for (const row of rows) {
+        const avatar = String(row.avatar_filename);
+        const worldName = String(row.world_name);
+        avatarToWorldName.set(avatar, worldName);
+        if (!worldNameToCharacters.has(worldName)) {
+            worldNameToCharacters.set(worldName, []);
+        }
+        worldNameToCharacters.get(worldName).push({
+            avatar,
+            name: String(row.display_name ?? avatar),
+        });
+    }
+
+    return { worldNameToCharacters, avatarToWorldName };
+}
+
+/**
+ * Clears the World Info binding on one canonical character by rewriting the
+ * stored card payloads (world_name is derived from card_json, so both must
+ * move together).
+ */
+export function clearCanonicalCharacterWorldBinding(db, { avatarFilename, nowMs = Date.now() }) {
+    const row = db.prepare(`
+        SELECT id, card_json, shallow_json, created_at_ms
+        FROM characters
+        WHERE avatar_filename = ?
+            AND deleted_at_ms IS NULL
+    `).get(String(avatarFilename));
+    if (!row) {
+        return false;
+    }
+    const clearWorld = payload => {
+        if (payload?.data?.extensions && typeof payload.data.extensions === 'object') {
+            payload.data.extensions.world = '';
+        }
+        if (payload && Object.prototype.hasOwnProperty.call(payload, 'world')) {
+            payload.world = '';
+        }
+        return payload;
+    };
+    const fullPayload = clearWorld(parseRequiredJson(row.card_json, 'card_json'));
+    const shallowPayload = row.shallow_json == null
+        ? fullPayload
+        : clearWorld(parseRequiredJson(row.shallow_json, 'shallow_json'));
+    upsertCanonicalCharacter(db, {
+        id: row.id,
+        avatarFilename: String(avatarFilename),
+        fullPayload,
+        shallowPayload,
+        createdAtMs: row.created_at_ms,
+        updatedAtMs: nowMs,
+    });
+    return true;
+}
+
 export function upsertCanonicalCharacter(db, {
     id,
     avatarFilename,

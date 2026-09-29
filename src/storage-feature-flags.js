@@ -48,6 +48,10 @@ function getExplicitConfigValue(path) {
         };
     }
 
+    // getConfig() hard-exits without a registered config path (bare CLI use).
+    if (!hasConfigFilePath()) {
+        return { present: false, value: undefined };
+    }
     const value = getObjectValue(getConfig(), path);
     return {
         present: value !== undefined,
