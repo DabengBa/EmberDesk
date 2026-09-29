@@ -138,6 +138,13 @@ features:
         # canonical payload, and export-all regenerates the files.
         chats:
           projection: off
+        # assets/user-images/user-files compatibility copies are export-only:
+        # canonical managed_blobs (content-addressed bytes under storage/) plus
+        # media_references are authoritative, the /assets, /user/images and
+        # /user/files routes serve blob bytes when the file is absent, and
+        # export-all materializes the file tree on demand.
+        managed_media:
+          projection: off
   react:
     pages:
     panels:

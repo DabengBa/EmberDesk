@@ -355,11 +355,9 @@ router.post('/delete', async (request, response) => {
     console.info('Request received to delete', category, file_path);
 
     try {
-        if (!fs.existsSync(file_path)) {
-            console.error('Asset not found.');
-            return response.sendStatus(400);
-        }
-
+        // Under projection 'off' the compatibility file may not exist while the
+        // canonical reference does — let the canonical delete decide.
+        const fileExists = fs.existsSync(file_path);
         const compatibilityPath = path.posix.join('assets', category, request.body.filename);
         await ensureCanonicalSliceBackend('managed_media', request.user.directories, getRequestHandle(request));
         const canonicalResult = await deleteCanonicalManagedMediaReference({
@@ -373,6 +371,10 @@ router.post('/delete', async (request, response) => {
             }
             console.info('Asset deleted.');
             return response.sendStatus(200);
+        }
+        if (!fileExists) {
+            console.error('Asset not found.');
+            return response.sendStatus(400);
         }
 
         await fs.promises.unlink(file_path);

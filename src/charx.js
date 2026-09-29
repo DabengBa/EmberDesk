@@ -304,7 +304,7 @@ function deleteExistingByBaseName(dirPath, baseName) {
  * @param {string} characterFolder - Character folder name (sanitized)
  * @returns {{backgrounds: number, misc: number}}
  */
-export function persistCharXAssets(assets, bufferMap, directories, characterFolder) {
+export async function persistCharXAssets(assets, bufferMap, directories, characterFolder, { handle = null } = {}) {
     /** @type {{backgrounds: number, misc: number}} */
     const summary = { backgrounds: 0, misc: 0 };
     if (!Array.isArray(assets) || assets.length === 0) {
@@ -353,13 +353,41 @@ export function persistCharXAssets(assets, bufferMap, directories, characterFold
             }
 
             if (asset.storageCategory === 'misc') {
-                const miscDir = ensureMiscPath();
-                if (!miscDir) {
-                    continue;
+                // user/images/* is a managed-media domain: write through the
+                // canonical service so the asset stays listable under
+                // projection 'off'. Fall back to a plain file write when the
+                // canonical slice is unavailable.
+                const fileName = `${asset.baseName}.${asset.ext || 'png'}`;
+                const compatibilityPath = `user/images/${characterFolder}/${fileName}`;
+                let committed = false;
+                try {
+                    const { ensureCanonicalSliceBackend } = await import('./canonical-backend.js');
+                    const { writeCanonicalManagedMedia } = await import('./endpoints/canonical-managed-media-write-service.js');
+                    const resolvedHandle = handle ?? directories.handle ?? path.basename(path.resolve(directories.root));
+                    await ensureCanonicalSliceBackend('managed_media', directories, resolvedHandle);
+                    const canonicalResult = await writeCanonicalManagedMedia({
+                        handle: resolvedHandle,
+                        directories,
+                        compatibilityPath,
+                        ownerType: 'user_image',
+                        ownerId: compatibilityPath,
+                        role: 'user_image',
+                        displayName: fileName,
+                        contents: buffer,
+                    });
+                    committed = !!canonicalResult.authorityCommitted;
+                } catch (error) {
+                    console.warn(`CharX: Canonical write skipped for ${compatibilityPath}:`, error);
                 }
-                // Overwrite existing misc asset with same name
-                const filePath = path.join(miscDir, `${asset.baseName}.${asset.ext || 'png'}`);
-                writeFileAtomicSync(filePath, buffer);
+                if (!committed) {
+                    const miscDir = ensureMiscPath();
+                    if (!miscDir) {
+                        continue;
+                    }
+                    // Overwrite existing misc asset with same name
+                    const filePath = path.join(miscDir, fileName);
+                    writeFileAtomicSync(filePath, buffer);
+                }
                 summary.misc += 1;
             }
         } catch (error) {

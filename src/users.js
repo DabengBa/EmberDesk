@@ -480,6 +480,64 @@ export async function createBackupArchive(handle, response) {
  * Express router for serving files from the user's directories.
  */
 export const router = express.Router();
+
+/**
+ * Serves a managed-media compatibility path from the canonical blob store
+ * when the projected file is absent (projection 'off').
+ * @param {import('express').Request} req Request object
+ * @param {string} fullPath Absolute compatibility file path
+ * @returns {Promise<{contents: Buffer, mediaType?: string}|null>} Blob payload or null
+ */
+async function tryReadManagedMediaBlob(req, fullPath) {
+    try {
+        const directories = req.user.directories;
+        const handle = directories.handle ?? path.basename(path.resolve(directories.root));
+        const compatibilityPath = path.relative(directories.root, fullPath).split(path.sep).join(path.posix.sep);
+        const {
+            getCanonicalManagedMediaReadState,
+            readManagedMediaContent,
+        } = await import('./endpoints/canonical-managed-media-read-service.js');
+        const state = getCanonicalManagedMediaReadState({ handle, directories });
+        if (!state.ok) {
+            return null;
+        }
+        const blob = readManagedMediaContent(state.db, directories, compatibilityPath);
+        return blob.ok ? blob : null;
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * Route handler for managed-media domains (assets, user images, user files).
+ * Missing compatibility files fall back to the canonical blob store before
+ * answering 404.
+ * @param {(req: import('express').Request) => string} directoryFn A function that returns the directory path to serve files from
+ * @returns {import('express').RequestHandler}
+ */
+function createManagedMediaRouteHandler(directoryFn) {
+    const fileHandler = createRouteHandler(directoryFn);
+    return async (req, res) => {
+        try {
+            const directory = directoryFn(req);
+            const filePath = getWildcardFilePath(req);
+            const fullPath = path.join(directory, filePath);
+            if (isPathUnderParent(directory, path.resolve(fullPath)) && !fs.existsSync(fullPath)) {
+                const blob = await tryReadManagedMediaBlob(req, path.resolve(fullPath));
+                if (blob) {
+                    res.setHeader('Content-Type', blob.mediaType ?? 'application/octet-stream');
+                    invalidateFirefoxCache(filePath, req, res);
+                    return res.send(blob.contents);
+                }
+            }
+            return fileHandler(req, res);
+        } catch (error) {
+            console.error('Failed to serve managed media:', error);
+            return res.sendStatus(500);
+        }
+    };
+}
+
 /**
  * Route handler for character files. Root-level `<name>.png` avatars are
  * served from the canonical avatar blob when available; subdirectory assets
@@ -524,6 +582,6 @@ function createCharacterRouteHandler() {
 router.use('/backgrounds/*filePath', createRouteHandler(req => req.user.directories.backgrounds));
 router.use('/characters/*filePath', createCharacterRouteHandler());
 router.use('/User%20Avatars/*filePath', createRouteHandler(req => req.user.directories.avatars));
-router.use('/assets/*filePath', createRouteHandler(req => req.user.directories.assets));
-router.use('/user/images/*filePath', createRouteHandler(req => req.user.directories.userImages));
-router.use('/user/files/*filePath', createRouteHandler(req => req.user.directories.files));
+router.use('/assets/*filePath', createManagedMediaRouteHandler(req => req.user.directories.assets));
+router.use('/user/images/*filePath', createManagedMediaRouteHandler(req => req.user.directories.userImages));
+router.use('/user/files/*filePath', createManagedMediaRouteHandler(req => req.user.directories.files));

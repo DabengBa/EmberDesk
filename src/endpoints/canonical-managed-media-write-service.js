@@ -32,10 +32,19 @@ function getDefaultDependencies() {
     return {
         getFeatureFlags: () => slice.getFeatureFlags(),
         getSlice: () => slice,
+        getProjectionMode: () => typeof slice.getProjectionMode === 'function' ? slice.getProjectionMode() : 'sync',
         openDatabase: options => canonicalSqliteManager.open(options),
         runMigrations: (db, options) => runCanonicalMigrations(db, options),
         getAuditStatus: (db, options) => getPersistedCanonicalAuditStatus(db, options),
     };
+}
+
+function resolveProjectionMode(projection, dependencies) {
+    if (projection === 'off' || projection === 'sync') {
+        return projection;
+    }
+    const getProjectionMode = dependencies.getProjectionMode ?? getDefaultDependencies().getProjectionMode;
+    return getProjectionMode();
 }
 
 function blockedWriteState({ reason, featureFlags, strict, details = {} }) {
@@ -198,7 +207,7 @@ export async function writeCanonicalManagedMedia({
     mediaType = null,
     metadata = {},
     projectCompatibility = null,
-    projection = 'sync',
+    projection = null,
     dependencies = {},
     nowMs = Date.now(),
 } = {}) {
@@ -206,6 +215,7 @@ export async function writeCanonicalManagedMedia({
     if (!state.ok) {
         return state;
     }
+    const projectionMode = resolveProjectionMode(projection, dependencies);
 
     const target = assertCompatibilityPath(directories, compatibilityPath);
     const buffer = getContentsBuffer(contents);
@@ -252,7 +262,7 @@ export async function writeCanonicalManagedMedia({
     }
 
     try {
-        if (projection !== 'off') {
+        if (projectionMode !== 'off') {
             (projectCompatibility ?? projectCompatibilityFile)({
                 managedPath: staged.managedPath,
                 compatibilityPath: target.absolute,
@@ -291,6 +301,7 @@ export async function deleteCanonicalManagedMediaReference({
     directories,
     compatibilityPath,
     projectDelete = null,
+    projection = null,
     dependencies = {},
     nowMs = Date.now(),
 } = {}) {
@@ -298,6 +309,7 @@ export async function deleteCanonicalManagedMediaReference({
     if (!state.ok) {
         return state;
     }
+    const projectionMode = resolveProjectionMode(projection, dependencies);
     const target = assertCompatibilityPath(directories, compatibilityPath);
     const { reference, managedPath } = getReferenceAndManagedPath(state.db, directories, target.normalized);
     if (!reference) {
@@ -325,6 +337,25 @@ export async function deleteCanonicalManagedMediaReference({
             `).run(Number(nowMs), Number(nowMs), reference.blobId);
         }
     });
+
+    if (projectionMode === 'off') {
+        // Export-surface cleanup only: a stale compatibility file is removed
+        // best-effort and never escalates to a blocking repair record.
+        try {
+            fs.rmSync(target.absolute, { force: true });
+        } catch (error) {
+            console.warn(`Managed media projection cleanup skipped for ${target.normalized}:`, error);
+        }
+        removeImportLedgerEntry(state.db, { sliceKey: 'managed_media', sourcePath: target.normalized });
+        return {
+            ok: true,
+            authorityCommitted: true,
+            reference,
+            blobTombstoned,
+            managedRelativePath: reference.managedRelativePath,
+            managedPath,
+        };
+    }
 
     try {
         (projectDelete ?? (targetPath => fs.rmSync(targetPath, { force: true })))(target.absolute);
@@ -358,6 +389,7 @@ export async function renameCanonicalManagedMediaReference({
     newCompatibilityPath,
     displayName = null,
     projectRename = null,
+    projection = null,
     dependencies = {},
     nowMs = Date.now(),
 } = {}) {
@@ -365,6 +397,7 @@ export async function renameCanonicalManagedMediaReference({
     if (!state.ok) {
         return state;
     }
+    const projectionMode = resolveProjectionMode(projection, dependencies);
     const oldTarget = assertCompatibilityPath(directories, oldCompatibilityPath);
     const newTarget = assertCompatibilityPath(directories, newCompatibilityPath);
     const { reference, managedPath } = getReferenceAndManagedPath(state.db, directories, oldTarget.normalized);
@@ -387,6 +420,16 @@ export async function renameCanonicalManagedMediaReference({
         `).run(newTarget.normalized, displayName ?? path.posix.basename(newTarget.normalized), Number(nowMs), reference.id);
     });
     const renamed = getCanonicalManagedMediaReference(state.db, newTarget.normalized);
+
+    if (projectionMode === 'off') {
+        try {
+            fs.rmSync(oldTarget.absolute, { force: true });
+        } catch (error) {
+            console.warn(`Managed media projection cleanup skipped for ${oldTarget.normalized}:`, error);
+        }
+        removeImportLedgerEntry(state.db, { sliceKey: 'managed_media', sourcePath: oldTarget.normalized });
+        return { ok: true, authorityCommitted: true, reference: renamed };
+    }
 
     try {
         (projectRename ?? ((input) => {
@@ -451,6 +494,24 @@ export async function repairCanonicalManagedMediaProjection({
         try {
             projectRepair({ directories, repair });
             resolveCanonicalManagedMediaRepair(db, { repairKey: repair.repairKey, resolvedAtMs: nowMs });
+            if (repair.operation !== 'delete' && repair.details?.compatibilityPath) {
+                const reference = getCanonicalManagedMediaReference(db, normalizePath(repair.details.compatibilityPath));
+                if (reference) {
+                    recordImportLedgerEntry(db, {
+                        sliceKey: 'managed_media',
+                        sourcePath: reference.compatibilityPath,
+                        contentHash: reference.contentHash,
+                        origin: 'projection',
+                        nowMs,
+                    });
+                }
+            }
+            if (repair.operation !== 'project' && repair.details?.previousCompatibilityPath) {
+                removeImportLedgerEntry(db, {
+                    sliceKey: 'managed_media',
+                    sourcePath: normalizePath(repair.details.previousCompatibilityPath),
+                });
+            }
             results.push({ repairKey: repair.repairKey, status: 'repaired', operation: repair.operation });
         } catch (error) {
             results.push({

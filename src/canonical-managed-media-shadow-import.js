@@ -116,12 +116,13 @@ function summarizeImport({ handle, entries, skipped = false, reason = null, migr
     };
 }
 
-function buildAuditSummary({ handle, migrationStatus, entries }) {
-    const blocking = entries.some(entry => entry.status === 'drift' || entry.status === 'error');
+function buildAuditSummary({ handle, migrationStatus, entries, ignoreSuppressed = false }) {
+    const active = entries.filter(entry => !(ignoreSuppressed && entry.details?.suppressed));
+    const blocking = active.some(entry => entry.status === 'drift' || entry.status === 'error');
     return {
         ok: !blocking,
         handle,
-        hasDrift: entries.some(entry => entry.status === 'drift'),
+        hasDrift: active.some(entry => entry.status === 'drift'),
         blocking,
         reason: resolveAuditDriftReason(blocking, entries),
         migrationStatus,
@@ -212,6 +213,7 @@ export async function auditCanonicalManagedMediaShadowImport({
     directories,
     db,
     auditedAtMs = Date.now(),
+    projection = 'sync',
 } = {}) {
     const migrationStatus = getCanonicalMigrationStatus(db);
     if (!migrationStatus.ok || migrationStatus.currentVersion !== migrationStatus.targetVersion) {
@@ -225,6 +227,16 @@ export async function auditCanonicalManagedMediaShadowImport({
             entries: [],
         };
     }
+
+    // File-side drift (missing/hash_mismatch/orphan) means the compatibility
+    // copy is absent or stale. With projection 'off' that is the expected
+    // steady state — entries stay informational with suppressed details.
+    // unsafe_path stays blocking: it flags malformed canonical rows, not
+    // file-vs-DB divergence.
+    const suppressFileSide = projection === 'off';
+    const suppressDetails = suppressFileSide
+        ? { projection_mode: 'off', suppressed: true }
+        : {};
 
     const entries = [];
     const liveFiles = new Map(listCompatibilityMedia(directories).map(item => [item.compatibilityPath, item]));
@@ -270,7 +282,7 @@ export async function auditCanonicalManagedMediaShadowImport({
                 compatibility_path: reference.compatibilityPath,
                 status: 'drift',
                 drift_types: ['missing'],
-                details: {},
+                details: { ...suppressDetails },
                 audited_at_ms: auditedAtMs,
             });
             continue;
@@ -289,6 +301,7 @@ export async function auditCanonicalManagedMediaShadowImport({
                         sourcePath: reference.compatibilityPath,
                         contentHash: actualHash,
                     }),
+                    ...suppressDetails,
                 },
                 audited_at_ms: auditedAtMs,
             });
@@ -321,11 +334,12 @@ export async function auditCanonicalManagedMediaShadowImport({
                         contentHash: hashFile(item.filePath),
                     })
                     : 'candidate',
+                ...suppressDetails,
             },
             audited_at_ms: auditedAtMs,
         });
     }
-    const result = buildAuditSummary({ handle, migrationStatus, entries });
+    const result = buildAuditSummary({ handle, migrationStatus, entries, ignoreSuppressed: suppressFileSide });
     persistCanonicalAuditStatus(db, result, { scope: MANAGED_MEDIA_AUDIT_SCOPE, auditedAtMs });
     return result;
 }

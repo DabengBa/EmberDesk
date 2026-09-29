@@ -12,6 +12,8 @@ import {
     invalidateCanonicalManagedMediaAudit,
     writeCanonicalManagedMedia,
 } from './canonical-managed-media-write-service.js';
+import { getCanonicalManagedMediaReadState } from './canonical-managed-media-read-service.js';
+import { getCanonicalManagedMediaReference } from './canonical-managed-media-store.js';
 import { ensureCanonicalSliceBackend } from '../canonical-backend.js';
 
 export const router = express.Router();
@@ -97,10 +99,9 @@ router.post('/delete', async (request, response) => {
             return response.status(400).send('Invalid path');
         }
 
-        if (!fs.existsSync(pathToDelete)) {
-            return response.status(404).send('File not found');
-        }
-
+        // Under projection 'off' the compatibility file may not exist while the
+        // canonical reference does — let the canonical delete decide.
+        const fileExists = fs.existsSync(pathToDelete);
         const compatibilityPath = clientRelativePath(request.user.directories.root, pathToDelete).split(path.sep).join(path.posix.sep);
         await ensureCanonicalSliceBackend('managed_media', request.user.directories, getRequestHandle(request));
         const canonicalResult = await deleteCanonicalManagedMediaReference({
@@ -114,6 +115,9 @@ router.post('/delete', async (request, response) => {
             }
             console.info(`Deleted file: ${request.body.path} from ${request.user.profile.handle}`);
             return response.sendStatus(200);
+        }
+        if (!fileExists) {
+            return response.status(404).send('File not found');
         }
 
         fs.unlinkSync(pathToDelete);
@@ -134,14 +138,29 @@ router.post('/verify', async (request, response) => {
 
         const verified = {};
 
+        const canonicalReadState = getCanonicalManagedMediaReadState({
+            handle: getRequestHandle(request),
+            directories: request.user.directories,
+        });
         for (const url of request.body.urls) {
             const pathToVerify = path.join(request.user.directories.root, url);
             if (!pathToVerify.startsWith(request.user.directories.files)) {
                 console.warn(`File verification: Invalid path: ${pathToVerify}`);
                 continue;
             }
-            const fileExists = fs.existsSync(pathToVerify);
-            verified[url] = fileExists;
+            if (fs.existsSync(pathToVerify)) {
+                verified[url] = true;
+                continue;
+            }
+            // Under projection 'off' the file may only exist as a canonical blob.
+            if (canonicalReadState.ok) {
+                const compatibilityPath = clientRelativePath(request.user.directories.root, pathToVerify)
+                    .split(path.sep).join(path.posix.sep);
+                const reference = getCanonicalManagedMediaReference(canonicalReadState.db, compatibilityPath);
+                verified[url] = !!reference && reference.deletedAtMs == null;
+            } else {
+                verified[url] = false;
+            }
         }
 
         return response.send(verified);

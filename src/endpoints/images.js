@@ -12,6 +12,11 @@ import {
     invalidateCanonicalManagedMediaAudit,
     writeCanonicalManagedMedia,
 } from './canonical-managed-media-write-service.js';
+import {
+    getCanonicalManagedMediaReadState,
+    listCanonicalUserImageFiles,
+    listCanonicalUserImageFolders,
+} from './canonical-managed-media-read-service.js';
 import { ensureCanonicalSliceBackend } from '../canonical-backend.js';
 
 /**
@@ -41,6 +46,25 @@ function invalidateManagedMediaAudit(request, operation) {
         directories: request.user.directories,
         operation,
     });
+}
+
+/**
+ * Canonical managed-media read state for listing endpoints, or null when the
+ * slice cannot initialize (legacy fallback keeps serving the file tree).
+ * @param {import('express').Request} request Request object
+ * @returns {Promise<object|null>} Read state or null
+ */
+async function tryManagedMediaReadState(request) {
+    try {
+        await ensureCanonicalSliceBackend('managed_media', request.user.directories, getRequestHandle(request));
+        const state = getCanonicalManagedMediaReadState({
+            handle: getRequestHandle(request),
+            directories: request.user.directories,
+        });
+        return state?.ok ? state : null;
+    } catch {
+        return null;
+    }
 }
 
 /**
@@ -113,7 +137,7 @@ router.post('/upload', async (request, response) => {
     }
 });
 
-router.post('/list{/:folder}', (request, response) => {
+router.post('/list{/:folder}', async (request, response) => {
     try {
         if (request.params.folder) {
             if (request.body.folder) {
@@ -128,11 +152,20 @@ router.post('/list{/:folder}', (request, response) => {
             return response.status(400).send({ error: 'No folder specified' });
         }
 
-        const directoryPath = path.join(request.user.directories.userImages, sanitize(request.body.folder));
         const type = Number(request.body.type ?? MEDIA_REQUEST_TYPE.IMAGE);
         const sort = request.body.sortField || 'date';
         const order = request.body.sortOrder || 'asc';
 
+        const canonicalReadState = await tryManagedMediaReadState(request);
+        if (canonicalReadState?.ok) {
+            const images = listCanonicalUserImageFiles(canonicalReadState.db, sanitize(request.body.folder), sort, type);
+            if (order === 'desc') {
+                images.reverse();
+            }
+            return response.send(images);
+        }
+
+        const directoryPath = path.join(request.user.directories.userImages, sanitize(request.body.folder));
         if (!fs.existsSync(directoryPath)) {
             fs.mkdirSync(directoryPath, { recursive: true });
         }
@@ -148,8 +181,13 @@ router.post('/list{/:folder}', (request, response) => {
     }
 });
 
-router.post('/folders', (request, response) => {
+router.post('/folders', async (request, response) => {
     try {
+        const canonicalReadState = await tryManagedMediaReadState(request);
+        if (canonicalReadState?.ok) {
+            return response.send(listCanonicalUserImageFolders(canonicalReadState.db));
+        }
+
         const directoryPath = request.user.directories.userImages;
         if (!fs.existsSync(directoryPath)) {
             fs.mkdirSync(directoryPath, { recursive: true });
@@ -177,10 +215,9 @@ router.post('/delete', async (request, response) => {
             return response.status(400).send('Invalid path');
         }
 
-        if (!fs.existsSync(pathToDelete)) {
-            return response.status(404).send('File not found');
-        }
-
+        // Under projection 'off' the compatibility file may not exist while the
+        // canonical reference does — let the canonical delete decide.
+        const fileExists = fs.existsSync(pathToDelete);
         const compatibilityPath = clientRelativePath(request.user.directories.root, pathToDelete).split(path.sep).join(path.posix.sep);
         await ensureCanonicalSliceBackend('managed_media', request.user.directories, getRequestHandle(request));
         const canonicalResult = await deleteCanonicalManagedMediaReference({
@@ -194,6 +231,9 @@ router.post('/delete', async (request, response) => {
             }
             console.info(`Deleted image: ${request.body.path} from ${request.user.profile.handle}`);
             return response.sendStatus(200);
+        }
+        if (!fileExists) {
+            return response.status(404).send('File not found');
         }
 
         fs.unlinkSync(pathToDelete);

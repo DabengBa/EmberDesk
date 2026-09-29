@@ -914,49 +914,54 @@ describe('canonical sqlite operator helpers', () => {
     });
 
     test('runs the managed media audit through its registered slice runner', async () => {
-        const root = makeRoot();
-        const directories = createDirectories(root);
-        const manager = createManager();
-        const db = manager.open({
-            handle: 'alice',
-            directories,
-            featureFlags: { enabled: true, strict: false },
-        });
-        runCanonicalMigrations(db, { nowMs: 1735689600000 });
-        fs.writeFileSync(path.join(directories.assets, 'sky.png'), 'background', 'utf8');
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SLICES_MANAGED_MEDIA_PROJECTION = 'sync';
+        try {
+            const root = makeRoot();
+            const directories = createDirectories(root);
+            const manager = createManager();
+            const db = manager.open({
+                handle: 'alice',
+                directories,
+                featureFlags: { enabled: true, strict: false },
+            });
+            runCanonicalMigrations(db, { nowMs: 1735689600000 });
+            fs.writeFileSync(path.join(directories.assets, 'sky.png'), 'background', 'utf8');
 
-        const audit = await runCanonicalSliceAudit({
-            sliceKey: 'managed_media',
-            handle: 'alice',
-            directories,
-            db,
-            auditedAtMs: 1735689601111,
-        });
+            const audit = await runCanonicalSliceAudit({
+                sliceKey: 'managed_media',
+                handle: 'alice',
+                directories,
+                db,
+                auditedAtMs: 1735689601111,
+            });
 
-        expect(audit).toEqual(expect.objectContaining({
-            sliceKey: 'managed_media',
-            ok: false,
-            blocking: true,
-            reason: 'audit_stale_file_changes',
-        }));
-        expect(audit.entries).toEqual(expect.arrayContaining([
-            expect.objectContaining({
-                compatibility_path: 'assets/sky.png',
-                drift_types: ['orphan'],
-            }),
-        ]));
-        expect(getPersistedCanonicalAuditStatus(db, { scope: MANAGED_MEDIA_AUDIT_SCOPE }))
-            .toEqual(expect.objectContaining({ blocking: true }));
-        const repair = await runCanonicalSliceRepair({
-            sliceKey: 'managed_media',
-            db,
-            directories,
-        });
-        expect(repair).toEqual(expect.objectContaining({
-            ok: true,
-            sliceKey: 'managed_media',
-            results: [],
-        }));
+            expect(audit).toEqual(expect.objectContaining({
+                sliceKey: 'managed_media',
+                ok: false,
+                blocking: true,
+                reason: 'audit_stale_file_changes',
+            }));
+            expect(audit.entries).toEqual(expect.arrayContaining([
+                expect.objectContaining({
+                    compatibility_path: 'assets/sky.png',
+                    drift_types: ['orphan'],
+                }),
+            ]));
+            expect(getPersistedCanonicalAuditStatus(db, { scope: MANAGED_MEDIA_AUDIT_SCOPE }))
+                .toEqual(expect.objectContaining({ blocking: true }));
+            const repair = await runCanonicalSliceRepair({
+                sliceKey: 'managed_media',
+                db,
+                directories,
+            });
+            expect(repair).toEqual(expect.objectContaining({
+                ok: true,
+                sliceKey: 'managed_media',
+                results: [],
+            }));
+        } finally {
+            delete process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SLICES_MANAGED_MEDIA_PROJECTION;
+        }
     });
 
     test('routes audit and repair by slice key through the control plane', async () => {

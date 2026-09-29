@@ -1028,7 +1028,13 @@ function ensureDefaultSliceRunners(registry = getDefaultCanonicalStorageSliceReg
     }
     if (!registry.getRunners('managed_media')) {
         registry.setRunners('managed_media', {
-            runAudit: auditCanonicalManagedMediaShadowImport,
+            runAudit: ({ handle, directories, db, auditedAtMs }) => auditCanonicalManagedMediaShadowImport({
+                handle,
+                directories,
+                db,
+                auditedAtMs,
+                projection: getCanonicalStorageSlice('managed_media').getProjectionMode(),
+            }),
             runRepair: repairCanonicalManagedMediaProjection,
         });
     }

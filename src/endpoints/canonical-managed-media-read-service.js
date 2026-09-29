@@ -1,6 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+import mime from 'mime-types';
+
+import { MEDIA_REQUEST_TYPE } from '../constants.js';
 import { canonicalSqliteManager } from '../canonical-sqlite.js';
 import { runCanonicalMigrations } from '../canonical-sqlite-migrations.js';
 import { getPersistedCanonicalAuditStatus } from '../canonical-sqlite-shadow-import.js';
@@ -155,6 +158,73 @@ export function readManagedMediaContent(db, directories, referenceOrPath) {
         contentHash: reference.contentHash,
         reference,
     };
+}
+
+const USER_IMAGES_PREFIX = 'user/images/';
+
+/**
+ * Lists file names for one user-images folder from canonical references.
+ * Subfolder assets are not included (same contract as `getImages`).
+ * @param {object} db Canonical SQLite handle
+ * @param {string} folder Folder name under user/images
+ * @param {string} sortBy 'name' or 'date'
+ * @param {number} type MEDIA_REQUEST_TYPE bitmask
+ * @returns {string[]} File names
+ */
+export function listCanonicalUserImageFiles(db, folder, sortBy = 'name', type = MEDIA_REQUEST_TYPE.IMAGE) {
+    const prefix = `${USER_IMAGES_PREFIX}${String(folder ?? '').replace(/^\/+|\/+$/g, '')}/`;
+    const collator = Intl.Collator();
+    return listCanonicalManagedMediaReferences(db)
+        .filter(reference => {
+            const compatibilityPath = normalizeCompatibilityPath(reference.compatibilityPath);
+            return compatibilityPath.startsWith(prefix)
+                && !compatibilityPath.slice(prefix.length).includes('/');
+        })
+        .filter(reference => {
+            const fileType = mime.lookup(reference.displayName || reference.compatibilityPath);
+            if (!fileType) {
+                return false;
+            }
+            if ((type & MEDIA_REQUEST_TYPE.IMAGE) && fileType.startsWith('image/')) {
+                return true;
+            }
+            if ((type & MEDIA_REQUEST_TYPE.VIDEO) && fileType.startsWith('video/')) {
+                return true;
+            }
+            return (type & MEDIA_REQUEST_TYPE.AUDIO) !== 0 && fileType.startsWith('audio/');
+        })
+        .map(reference => {
+            const name = normalizeCompatibilityPath(reference.compatibilityPath).slice(prefix.length);
+            return {
+                name,
+                sortKey: sortBy === 'date'
+                    ? Number(reference.metadata?.sourceMtimeMs ?? reference.updatedAtMs ?? 0)
+                    : name,
+            };
+        })
+        .sort((a, b) => sortBy === 'date' ? a.sortKey - b.sortKey : collator.compare(a.sortKey, b.sortKey))
+        .map(entry => entry.name);
+}
+
+/**
+ * Lists first-level folder names under user/images from canonical references.
+ * @param {object} db Canonical SQLite handle
+ * @returns {string[]} Folder names
+ */
+export function listCanonicalUserImageFolders(db) {
+    const folders = new Set();
+    for (const reference of listCanonicalManagedMediaReferences(db)) {
+        const compatibilityPath = normalizeCompatibilityPath(reference.compatibilityPath);
+        if (!compatibilityPath.startsWith(USER_IMAGES_PREFIX)) {
+            continue;
+        }
+        const remainder = compatibilityPath.slice(USER_IMAGES_PREFIX.length);
+        const separator = remainder.indexOf('/');
+        if (separator > 0) {
+            folders.add(remainder.slice(0, separator));
+        }
+    }
+    return [...folders].sort(Intl.Collator().compare);
 }
 
 export function listCanonicalAssetPayload(db) {

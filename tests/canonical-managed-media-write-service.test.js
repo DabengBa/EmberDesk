@@ -67,7 +67,7 @@ function seedCleanAudit(manager, directories) {
     return db;
 }
 
-function dependencies(manager) {
+function dependencies(manager, { projection = 'sync' } = {}) {
     return {
         getFeatureFlags: () => ({
             enabled: true,
@@ -76,6 +76,7 @@ function dependencies(manager) {
             writes: true,
             strict: false,
         }),
+        getProjectionMode: () => projection,
         openDatabase: options => manager.open(options),
     };
 }
@@ -206,6 +207,127 @@ describe('canonical managed media write service', () => {
             },
         })).toBe(false);
         expect(openDatabase).not.toHaveBeenCalled();
+    });
+
+    test('projection off commits the blob without materializing the compatibility file', async () => {
+        const directories = makeDirectories();
+        const manager = createManager();
+        const db = seedCleanAudit(manager, directories);
+        const offDependencies = dependencies(manager, { projection: 'off' });
+
+        const result = await writeCanonicalManagedMedia({
+            handle: 'alice',
+            directories,
+            compatibilityPath: 'user/files/notes.txt',
+            ownerType: 'attachment',
+            ownerId: 'user/files/notes.txt',
+            role: 'attachment',
+            displayName: 'notes.txt',
+            contents: Buffer.from('hello-blob'),
+            dependencies: offDependencies,
+            nowMs: 1735689600100,
+        });
+
+        expect(result).toEqual(expect.objectContaining({ ok: true, authorityCommitted: true }));
+        expect(fs.existsSync(path.join(directories.files, 'notes.txt'))).toBe(false);
+
+        const { readManagedMediaContent } = await import('../src/endpoints/canonical-managed-media-read-service.js');
+        const served = readManagedMediaContent(db, directories, 'user/files/notes.txt');
+        expect(served.ok).toBe(true);
+        expect(served.contents.toString()).toBe('hello-blob');
+    });
+
+    test('projection off suppresses file-side drift but keeps unsafe_path blocking', async () => {
+        const directories = makeDirectories();
+        const manager = createManager();
+        const db = seedCleanAudit(manager, directories);
+        const offDependencies = dependencies(manager, { projection: 'off' });
+
+        const result = await writeCanonicalManagedMedia({
+            handle: 'alice',
+            directories,
+            compatibilityPath: 'assets/sky.png',
+            ownerType: 'asset',
+            ownerId: 'assets/sky.png',
+            role: 'asset',
+            displayName: 'sky.png',
+            contents: Buffer.from('sky-content'),
+            dependencies: offDependencies,
+            nowMs: 1735689600100,
+        });
+        expect(result.ok).toBe(true);
+        // Out-of-band leftover file with no reference → orphan under sync.
+        fs.writeFileSync(path.join(directories.files, 'loose.bin'), 'loose-bytes');
+
+        const { auditCanonicalManagedMediaShadowImport } = await import('../src/canonical-managed-media-shadow-import.js');
+        const offAudit = await auditCanonicalManagedMediaShadowImport({
+            handle: 'alice',
+            directories,
+            db,
+            auditedAtMs: 1735689600200,
+            projection: 'off',
+        });
+        expect(offAudit.blocking).toBe(false);
+        expect(offAudit.ok).toBe(true);
+        const suppressed = offAudit.entries.filter(entry => entry.details?.suppressed);
+        expect(suppressed.map(entry => entry.drift_types[0]).sort()).toEqual(['missing', 'orphan']);
+
+        const syncAudit = await auditCanonicalManagedMediaShadowImport({
+            handle: 'alice',
+            directories,
+            db,
+            auditedAtMs: 1735689600300,
+            projection: 'sync',
+        });
+        expect(syncAudit.blocking).toBe(true);
+
+        // unsafe_path is a canonical-row integrity issue, not file drift.
+        db.prepare(`
+            UPDATE media_references
+            SET compatibility_path = '../escape.bin'
+            WHERE compatibility_path = 'assets/sky.png'
+        `).run();
+        const unsafeAudit = await auditCanonicalManagedMediaShadowImport({
+            handle: 'alice',
+            directories,
+            db,
+            auditedAtMs: 1735689600400,
+            projection: 'off',
+        });
+        expect(unsafeAudit.blocking).toBe(true);
+        expect(unsafeAudit.entries.some(entry => entry.drift_types.includes('unsafe_path') && !entry.details?.suppressed)).toBe(true);
+    });
+
+    test('projection off rename clears the stale file without writing the new one', async () => {
+        const directories = makeDirectories();
+        const manager = createManager();
+        const db = seedCleanAudit(manager, directories);
+        const offDependencies = dependencies(manager, { projection: 'off' });
+        const options = { handle: 'alice', directories, dependencies: offDependencies, nowMs: 1735689600100 };
+
+        await writeCanonicalManagedMedia({
+            ...options,
+            compatibilityPath: 'assets/old.png',
+            ownerType: 'asset',
+            ownerId: 'assets/old.png',
+            role: 'asset',
+            displayName: 'old.png',
+            contents: Buffer.from('image-bytes'),
+        });
+        // Pre-existing stale projection at the old path must be removed.
+        fs.writeFileSync(path.join(directories.assets, 'old.png'), 'stale-bytes');
+
+        const { renameCanonicalManagedMediaReference } = await import('../src/endpoints/canonical-managed-media-write-service.js');
+        const renamed = await renameCanonicalManagedMediaReference({
+            ...options,
+            oldCompatibilityPath: 'assets/old.png',
+            newCompatibilityPath: 'assets/new.png',
+        });
+        expect(renamed).toEqual(expect.objectContaining({ ok: true, authorityCommitted: true }));
+        expect(fs.existsSync(path.join(directories.assets, 'old.png'))).toBe(false);
+        expect(fs.existsSync(path.join(directories.assets, 'new.png'))).toBe(false);
+        expect(db.prepare('SELECT compatibility_path FROM media_references WHERE deleted_at_ms IS NULL').all())
+            .toEqual([{ compatibility_path: 'assets/new.png' }]);
     });
 
 });

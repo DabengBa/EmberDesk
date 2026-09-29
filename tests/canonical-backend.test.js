@@ -162,6 +162,9 @@ describe('legacy canonical sqlite config migration', () => {
                 chats: {
                     projection: 'off',
                 },
+                managed_media: {
+                    projection: 'off',
+                },
             },
         });
     });
