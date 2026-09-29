@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { afterEach, describe, expect, jest, test } from '@jest/globals';
 
@@ -27,9 +28,14 @@ import {
 import {
     listCanonicalManagedMediaReferences,
 } from '../src/endpoints/canonical-managed-media-store.js';
+import { readManagedMediaContent } from '../src/endpoints/canonical-managed-media-read-service.js';
 import { extractImageData, write } from '../src/character-card-parser.js';
 import encode from '../src/png/encode.js';
 import { getImportLedgerEntry } from '../src/canonical-import-ledger.js';
+
+const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const REAL_AVATAR_PNG = path.join(REPO_ROOT, 'public', 'img', 'ai4.png');
+const REAL_AVATAR_PNG_ALT = path.join(REPO_ROOT, 'public', 'img', 'apple-icon-144x144.png');
 
 const tempRoots = [];
 const managers = [];
@@ -47,8 +53,10 @@ function makeRoot() {
 function createDirectories(root) {
     const directories = {
         root,
+        handle: 'alice',
         storage: path.join(root, 'storage'),
         characters: path.join(root, 'characters'),
+        thumbnailsAvatar: path.join(root, 'thumbnails', 'avatar'),
         backgrounds: path.join(root, 'backgrounds'),
         assets: path.join(root, 'assets'),
         files: path.join(root, 'user', 'files'),
@@ -224,6 +232,84 @@ describe('character avatar blobs', () => {
         expect(getCharacterAvatarBlobReference(db, 'eps2.png')).toBeNull();
         const tombstone = db.prepare(`SELECT lifecycle_state FROM managed_blobs WHERE id = ?`).get(before.blobId);
         expect(tombstone.lifecycle_state).toBe('tombstoned');
+    });
+
+    test('readManagedMediaContent serves avatar bytes by path or reference', async () => {
+        const root = makeRoot();
+        const directories = createDirectories(root);
+        const manager = createManager();
+        const db = openDb(manager, directories);
+        const png = write(makePng(6), JSON.stringify({ name: 'Zeta' }));
+
+        await recordCharacterAvatarBlob({
+            handle: 'alice',
+            directories,
+            avatarFilename: 'zeta.png',
+            contents: png,
+        });
+
+        const byPath = readManagedMediaContent(db, directories, 'character-avatars/zeta.png');
+        expect(byPath).toEqual(expect.objectContaining({ ok: true, mediaType: 'image/png' }));
+        expect(byPath.contents.equals(extractImageData(png))).toBe(true);
+
+        const reference = getCharacterAvatarBlobReference(db, 'zeta.png');
+        const byRef = readManagedMediaContent(db, directories, reference);
+        expect(byRef.ok).toBe(true);
+        expect(byRef.contents.equals(byPath.contents)).toBe(true);
+
+        retireCharacterAvatarBlobReference(db, 'zeta.png');
+        expect(readManagedMediaContent(db, directories, 'character-avatars/zeta.png').ok).toBe(false);
+        expect(readManagedMediaContent(db, directories, 'character-avatars/missing.png'))
+            .toEqual(expect.objectContaining({ ok: false, reason: 'reference_not_found' }));
+    });
+
+    test('avatar thumbnail cache is gated by the blob content hash sidecar', async () => {
+        const root = makeRoot();
+        const directories = createDirectories(root);
+        const manager = createManager();
+        const db = openDb(manager, directories);
+
+        const pngV1 = write(fs.readFileSync(REAL_AVATAR_PNG), JSON.stringify({ name: 'Eta' }));
+        fs.writeFileSync(path.join(directories.characters, 'eta.png'), pngV1);
+        insertCharacter(db, 'eta.png');
+        await backfillCharacterAvatarBlobs({ handle: 'alice', directories, db });
+        const referenceV1 = getCharacterAvatarBlobReference(db, 'eta.png');
+
+        // Loaded lazily: image-metadata reads config at module eval time, so the
+        // module must be imported after setConfigFilePath ran in this file.
+        const { generateThumbnail } = await import('../src/endpoints/thumbnails.js');
+
+        // Seed a cached thumbnail + hash sidecar as if a prior generation ran.
+        const cachedPath = path.join(directories.thumbnailsAvatar, 'eta.png');
+        const sidecarPath = `${cachedPath}.srchash`;
+        fs.mkdirSync(path.dirname(cachedPath), { recursive: true });
+        fs.writeFileSync(cachedPath, fs.readFileSync(REAL_AVATAR_PNG));
+        fs.writeFileSync(sidecarPath, referenceV1.contentHash);
+
+        // Make the compatibility file look newer than the cache: the file-mtime
+        // branch would regenerate (and fail on Jimp in this environment), so a
+        // cache hit here can only come from the blob-hash branch.
+        const future = new Date(Date.now() + 60_000);
+        fs.utimesSync(path.join(directories.characters, 'eta.png'), future, future);
+
+        // Matching hash → cache hit serves without regeneration.
+        const hit = await generateThumbnail(directories, 'avatar', 'eta.png');
+        expect(hit.path).toBe(cachedPath);
+
+        // Blob content moves (avatar replaced) → hash mismatch → regeneration
+        // is attempted instead of serving the stale cache.
+        const pngV2 = write(fs.readFileSync(REAL_AVATAR_PNG_ALT), JSON.stringify({ name: 'Eta' }));
+        await recordCharacterAvatarBlob({
+            handle: 'alice',
+            directories,
+            avatarFilename: 'eta.png',
+            contents: pngV2,
+        });
+        const referenceV2 = getCharacterAvatarBlobReference(db, 'eta.png');
+        expect(referenceV2.contentHash).not.toBe(referenceV1.contentHash);
+
+        const stale = await generateThumbnail(directories, 'avatar', 'eta.png');
+        expect(stale.path).not.toBe(cachedPath);
     });
 
     test('deleted characters do not count as missing avatar blobs', async () => {

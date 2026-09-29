@@ -97,6 +97,33 @@ export function invalidateThumbnail(directories, type, file) {
     if (fs.existsSync(pathToThumbnail)) {
         fs.unlinkSync(pathToThumbnail);
     }
+    const pathToSidecar = `${pathToThumbnail}.srchash`;
+    if (fs.existsSync(pathToSidecar)) {
+        fs.unlinkSync(pathToSidecar);
+    }
+}
+
+/**
+ * Resolves the blob-backed source for an avatar thumbnail, or null when the
+ * canonical avatar blob is unavailable (file fallback stays authoritative).
+ * @param {import('../users.js').UserDirectoryList} directories User directories
+ * @param {ThumbnailType} type Thumbnail type
+ * @param {string} file Avatar filename
+ * @returns {Promise<{contents: Buffer, contentHash: string, mediaType: string}|null>}
+ */
+async function getBlobSource(directories, type, file) {
+    if (type !== 'avatar') {
+        return null;
+    }
+    try {
+        // Dynamic import keeps this route's module surface unchanged for tests
+        // that mock ../util.js — the canonical chain pulls many util exports.
+        const { getCharacterAvatarBlobContents } = await import('../canonical-avatar-blob-service.js');
+        const handle = directories?.handle ?? path.basename(path.resolve(directories?.root ?? 'default-user'));
+        return await getCharacterAvatarBlobContents({ handle, directories, avatarFilename: file });
+    } catch {
+        return null;
+    }
 }
 
 /**
@@ -118,22 +145,32 @@ export async function generateThumbnail(directories, type, file, forceGenerate =
     const originalFolder = getOriginalFolder(directories, type);
     if (thumbnailFolder === undefined || originalFolder === undefined) throw new Error('Invalid thumbnail type');
     const pathToCachedFile = path.join(thumbnailFolder, file);
+    const pathToSidecar = `${pathToCachedFile}.srchash`;
 
     try {
+        const blobSource = await getBlobSource(directories, type, file);
         const pathToOriginalFile = path.join(originalFolder, file);
 
         // Check if thumbnail already exists and return it if not forcing regeneration
         if (!forceGenerate && fs.existsSync(pathToCachedFile)) {
             try {
-                // Check if original image was updated after thumbnail creation
-                const originalFileExists = fs.existsSync(pathToOriginalFile);
-                if (originalFileExists) {
-                    const originalStat = fs.statSync(pathToOriginalFile);
-                    const cachedStat = fs.statSync(pathToCachedFile);
-
-                    if (originalStat.mtimeMs > cachedStat.ctimeMs) {
-                        // Original file changed, regenerate thumbnail
+                if (blobSource) {
+                    // Blob source is content-addressed: regenerate only when the hash moved.
+                    const cachedHash = fs.existsSync(pathToSidecar) ? fs.readFileSync(pathToSidecar, 'utf8').trim() : null;
+                    if (cachedHash !== blobSource.contentHash) {
                         forceGenerate = true;
+                    }
+                } else {
+                    // Check if original image was updated after thumbnail creation
+                    const originalFileExists = fs.existsSync(pathToOriginalFile);
+                    if (originalFileExists) {
+                        const originalStat = fs.statSync(pathToOriginalFile);
+                        const cachedStat = fs.statSync(pathToCachedFile);
+
+                        if (originalStat.mtimeMs > cachedStat.ctimeMs) {
+                            // Original file changed, regenerate thumbnail
+                            forceGenerate = true;
+                        }
                     }
                 }
 
@@ -149,17 +186,18 @@ export async function generateThumbnail(directories, type, file, forceGenerate =
                 forceGenerate = true;
             }
         }
-        if (!fs.existsSync(pathToOriginalFile)) {
+        if (!blobSource && !fs.existsSync(pathToOriginalFile)) {
             console.error(`[generateThumbnail] Cannot generate thumbnail, original file not found: ${pathToOriginalFile}`);
             return { path: null, aspectRatio: null, resolution: null };
         }
 
         const fileExtension = path.extname(file).toLowerCase();
+        const sourceBuffer = blobSource?.contents ?? null;
 
         // For WebP files, we must check if they are animated, as Jimp cannot process them.
         // If isKnownAnimated is false, we assume the caller knows it is static and skip this check.
         if (fileExtension === '.webp' && isKnownAnimated !== false) {
-            const buffer = fs.readFileSync(pathToOriginalFile);
+            const buffer = sourceBuffer ?? fs.readFileSync(pathToOriginalFile);
             const isAnimated = isAnimatedWebP(buffer);
             if (isAnimated) {
                 // The client is expected to handle it.
@@ -169,7 +207,7 @@ export async function generateThumbnail(directories, type, file, forceGenerate =
 
         // For PNG files, check if they are actually APNGs.
         if (fileExtension === '.png' && isKnownAnimated !== false) {
-            const buffer = fs.readFileSync(pathToOriginalFile);
+            const buffer = sourceBuffer ?? fs.readFileSync(pathToOriginalFile);
             const isAnimated = isAnimatedApng(buffer);
             if (isAnimated) {
                 // The client is expected to handle it.
@@ -182,7 +220,10 @@ export async function generateThumbnail(directories, type, file, forceGenerate =
         }
 
         // Process the image to generate thumbnail
-        const result = await processSingleImage(file, originalFolder, thumbnailFolder, type);
+        const result = await processSingleImage(file, originalFolder, thumbnailFolder, type, sourceBuffer);
+        if (result.success && blobSource) {
+            writeFileAtomicSync(pathToSidecar, blobSource.contentHash);
+        }
         if (result.success) {
             return { path: pathToCachedFile, aspectRatio: result.aspectRatio ?? null, resolution: result.resolution ?? null };
         } else {
@@ -201,14 +242,15 @@ export async function generateThumbnail(directories, type, file, forceGenerate =
  * @param {string} originalFolder - Path to the original image folder.
  * @param {string} thumbnailFolder - Path to the thumbnail output folder.
  * @param {ThumbnailType} type - The type of thumbnail to generate.
+ * @param {Buffer|null} [sourceBuffer] - Optional source bytes (blob-backed sources skip disk reads).
  * @returns {Promise<{success: boolean, filename?: string, error?: string, aspectRatio?: number, resolution?: number}>} Result of the processing.
  */
-async function processSingleImage(file, originalFolder, thumbnailFolder, type) {
+async function processSingleImage(file, originalFolder, thumbnailFolder, type, sourceBuffer = null) {
     const pathToOriginalFile = path.join(originalFolder, file);
     const pathToCachedFile = path.join(thumbnailFolder, file);
 
     try {
-        const fileBuffer = fs.readFileSync(pathToOriginalFile);
+        const fileBuffer = sourceBuffer ?? fs.readFileSync(pathToOriginalFile);
         const image = await Jimp.read(fileBuffer);
 
         // Calculate aspect ratio from original image dimensions
@@ -252,7 +294,14 @@ publicRouter.get('/', async function (request, response) {
         const file = sanitize(rawFile);
         if (file !== rawFile) return response.sendStatus(403);
 
-        const serveOriginal = () => {
+        const serveOriginal = async () => {
+            const blobSource = await getBlobSource(request.user.directories, type, file);
+            if (blobSource) {
+                applyThumbnailCacheHeaders(request, response);
+                invalidateFirefoxCache(file, request, response);
+                response.setHeader('Content-Type', blobSource.mediaType ?? 'image/png');
+                return response.send(blobSource.contents);
+            }
             const folder = getOriginalFolder(request.user.directories, type);
             const pathToOriginalFile = path.resolve(path.join(folder, file));
             if (!fs.existsSync(pathToOriginalFile)) return response.sendStatus(404);

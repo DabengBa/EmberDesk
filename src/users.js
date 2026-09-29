@@ -480,8 +480,49 @@ export async function createBackupArchive(handle, response) {
  * Express router for serving files from the user's directories.
  */
 export const router = express.Router();
+/**
+ * Route handler for character files. Root-level `<name>.png` avatars are
+ * served from the canonical avatar blob when available; subdirectory assets
+ * (sprites, live2d, …) keep their file-backed path.
+ * @returns {import('express').RequestHandler}
+ */
+function createCharacterRouteHandler() {
+    const fileHandler = createRouteHandler(req => req.user.directories.characters);
+    return async (req, res) => {
+        try {
+            const filePath = getWildcardFilePath(req);
+            const isRootAvatar = !filePath.includes('/') && filePath.toLowerCase().endsWith('.png');
+            if (isRootAvatar) {
+                const directories = req.user.directories;
+                let blob = null;
+                try {
+                    const handle = directories.handle ?? path.basename(path.resolve(directories.root));
+                    // Lazy import keeps this barrel's eval-time surface unchanged.
+                    const { getCharacterAvatarBlobContents } = await import('./canonical-avatar-blob-service.js');
+                    blob = await getCharacterAvatarBlobContents({
+                        handle,
+                        directories,
+                        avatarFilename: filePath,
+                    });
+                } catch {
+                    blob = null;
+                }
+                if (blob) {
+                    res.setHeader('Content-Type', blob.mediaType ?? 'image/png');
+                    invalidateFirefoxCache(filePath, req, res);
+                    return res.send(blob.contents);
+                }
+            }
+            return fileHandler(req, res);
+        } catch (error) {
+            console.error('Failed to serve character file:', error);
+            return res.sendStatus(500);
+        }
+    };
+}
+
 router.use('/backgrounds/*filePath', createRouteHandler(req => req.user.directories.backgrounds));
-router.use('/characters/*filePath', createRouteHandler(req => req.user.directories.characters));
+router.use('/characters/*filePath', createCharacterRouteHandler());
 router.use('/User%20Avatars/*filePath', createRouteHandler(req => req.user.directories.avatars));
 router.use('/assets/*filePath', createRouteHandler(req => req.user.directories.assets));
 router.use('/user/images/*filePath', createRouteHandler(req => req.user.directories.userImages));

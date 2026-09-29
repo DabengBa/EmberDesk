@@ -10,6 +10,10 @@ import {
     listCharacterRowsMissingAvatarBlob,
 } from './canonical-avatar-blobs.js';
 import { writeCanonicalManagedMedia } from './endpoints/canonical-managed-media-write-service.js';
+import {
+    getCanonicalManagedMediaReadState,
+    readManagedMediaContent,
+} from './endpoints/canonical-managed-media-read-service.js';
 
 /**
  * Registers the pure image bytes of a character card PNG as a managed-media
@@ -41,6 +45,26 @@ export async function recordCharacterAvatarBlob({
         metadata: { source: 'character_card_image' },
         nowMs,
     });
+}
+
+/**
+ * Resolves the avatar blob bytes for a character when canonical managed-media
+ * reads are healthy. Returns null when the slice is disabled, the audit is
+ * not clean, or no avatar blob exists — callers fall back to the PNG file.
+ * @returns {Promise<{contents: Buffer, contentHash: string, mediaType: string, reference: object}|null>}
+ */
+export async function getCharacterAvatarBlobContents({ handle, directories, avatarFilename } = {}) {
+    try {
+        await ensureCanonicalSliceBackend('managed_media', directories, handle);
+        const state = getCanonicalManagedMediaReadState({ handle, directories });
+        if (!state.ok) {
+            return null;
+        }
+        const read = readManagedMediaContent(state.db, directories, getCharacterAvatarBlobPath(avatarFilename));
+        return read.ok ? read : null;
+    } catch {
+        return null;
+    }
 }
 
 /**
