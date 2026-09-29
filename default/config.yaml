@@ -123,6 +123,11 @@ features:
         # Set projection: sync to restore continuous file projection.
         secrets:
           projection: off
+        # settings.json is likewise export-only: the canonical document is the
+        # authority, autosave backups materialize from the DB, and export-all
+        # regenerates the file. Set projection: sync to keep projecting.
+        settings:
+          projection: off
   react:
     pages:
     panels:

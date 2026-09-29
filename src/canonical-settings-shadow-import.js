@@ -94,9 +94,10 @@ function buildAuditEntry({ handle, status, driftTypes, details, auditedAtMs }) {
     };
 }
 
-function buildAuditSummary({ handle, migrationStatus, entries }) {
-    const driftEntries = entries.filter(entry => entry.status === 'drift');
-    const errorEntries = entries.filter(entry => entry.status === 'error');
+function buildAuditSummary({ handle, migrationStatus, entries, ignoreSuppressed = false }) {
+    const active = entries.filter(entry => !(ignoreSuppressed && entry.details?.suppressed));
+    const driftEntries = active.filter(entry => entry.status === 'drift');
+    const errorEntries = active.filter(entry => entry.status === 'error');
     const blocking = driftEntries.length > 0 || errorEntries.length > 0;
     return {
         ok: !blocking,
@@ -249,6 +250,7 @@ export async function auditCanonicalSettingsShadowImport({
     directories,
     db,
     auditedAtMs = Date.now(),
+    projection = 'sync',
 }) {
     const migrationStatus = getCanonicalMigrationStatus(db);
     if (!migrationStatus.ok) {
@@ -305,6 +307,11 @@ export async function auditCanonicalSettingsShadowImport({
         })
         : null;
 
+    const suppressFileSide = projection === 'off';
+    const suppressDetails = suppressFileSide
+        ? { projection_mode: 'off', suppressed: true }
+        : {};
+
     if (file.exists && file.error) {
         entries.push(buildAuditEntry({
             handle,
@@ -312,6 +319,7 @@ export async function auditCanonicalSettingsShadowImport({
             driftTypes: ['invalid_json'],
             details: {
                 errorMessage: String(file.error?.message ?? file.error ?? ''),
+                ...suppressDetails,
             },
             auditedAtMs,
         }));
@@ -320,7 +328,7 @@ export async function auditCanonicalSettingsShadowImport({
             handle,
             status: 'drift',
             driftTypes: ['missing_db_settings'],
-            details: { import_classification: importClassification },
+            details: { import_classification: importClassification, ...suppressDetails },
             auditedAtMs,
         }));
     } else if (!file.exists && stored) {
@@ -330,6 +338,7 @@ export async function auditCanonicalSettingsShadowImport({
             driftTypes: ['missing_projection_file'],
             details: {
                 revision: stored.revision,
+                ...suppressDetails,
             },
             auditedAtMs,
         }));
@@ -345,6 +354,7 @@ export async function auditCanonicalSettingsShadowImport({
                     actual_content_hash: stored.contentHash,
                     revision: stored.revision,
                     import_classification: importClassification,
+                    ...suppressDetails,
                 },
                 auditedAtMs,
             }));
@@ -355,6 +365,7 @@ export async function auditCanonicalSettingsShadowImport({
         handle,
         migrationStatus,
         entries,
+        ignoreSuppressed: suppressFileSide,
     });
     persistCanonicalAuditStatus(db, result, {
         scope: SETTINGS_AUDIT_SCOPE,

@@ -814,6 +814,7 @@ async function runCanonicalSettingsAudit({ handle, directories, db, auditedAtMs 
         directories,
         db,
         auditedAtMs,
+        projection: getCanonicalStorageSlice('settings').getProjectionMode(),
     });
 }
 
@@ -836,7 +837,15 @@ async function repairCanonicalSettingsProjection({ db, directories, repairKeys =
         }
         try {
             const pathToSettings = path.join(directories.root, 'settings.json');
-            writeFileAtomicSync(pathToSettings, JSON.stringify(document.payload, null, 4), 'utf8');
+            const contents = JSON.stringify(document.payload, null, 4);
+            writeFileAtomicSync(pathToSettings, contents, 'utf8');
+            recordImportLedgerEntry(db, {
+                sliceKey: 'settings',
+                sourcePath: 'settings.json',
+                contentHash: crypto.createHash('sha256').update(contents).digest('hex'),
+                origin: 'projection',
+                nowMs,
+            });
             resolveSettingsProjectionRepair(db, {
                 repairKey: repair.repairKey,
                 resolvedAtMs: nowMs,

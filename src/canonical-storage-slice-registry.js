@@ -173,7 +173,7 @@ function createWorldInfoSlice() {
 }
 
 function createSettingsSlice() {
-    const flags = createSliceFlagCapabilities({ flagKey: 'settings' });
+    const flags = createSliceFlagCapabilities({ flagKey: 'settings', defaultProjection: 'off' });
     return {
         key: 'settings',
         ...flags,

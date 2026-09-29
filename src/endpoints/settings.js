@@ -119,6 +119,23 @@ function backupUserSettings(handle, preventDuplicates, directoriesOverride = nul
     }
 
     const backupFile = path.join(userDirectories.backups, `${getSettingsBackupFilePrefix(handle)}${generateTimestamp()}.json`);
+
+    // Canonical-first: when the settings slice is live, materialize the backup
+    // from the DB instead of copying a (possibly stale) projection file.
+    const canonicalPayload = readCanonicalSettingsBackupPayload(userDirectories, handle);
+    if (canonicalPayload != null) {
+        if (preventDuplicates) {
+            const latestBackupPath = getLatestBackup(handle);
+            if (latestBackupPath && fs.existsSync(latestBackupPath)
+                && fs.readFileSync(latestBackupPath, 'utf8') === canonicalPayload) {
+                return;
+            }
+        }
+        writeFileAtomicSync(backupFile, canonicalPayload, 'utf8');
+        removeOldBackups(userDirectories.backups, `settings_${handle}`);
+        return;
+    }
+
     const sourceFile = path.join(userDirectories.root, SETTINGS_FILE);
 
     if (preventDuplicates && isDuplicateBackup(handle, sourceFile)) {
@@ -131,6 +148,38 @@ function backupUserSettings(handle, preventDuplicates, directoriesOverride = nul
 
     fs.copyFileSync(sourceFile, backupFile);
     removeOldBackups(userDirectories.backups, `settings_${handle}`);
+}
+
+/**
+ * Returns the canonical settings payload text for backup materialization, or
+ * null when the canonical slice is not authoritative for this user.
+ * @param {object} directories User directories
+ * @param {string} handle User handle
+ * @returns {string|null}
+ */
+function readCanonicalSettingsBackupPayload(directories, handle) {
+    try {
+        if (!canReadCanonicalFeatureFlags()) {
+            return null;
+        }
+        const settingsSlice = getCanonicalStorageSlice('settings');
+        const featureFlags = settingsSlice.getFeatureFlags();
+        if (!featureFlags.enabled || !featureFlags.reads) {
+            return null;
+        }
+        const db = canonicalSqliteManager.open({
+            handle,
+            directories,
+            featureFlags: { enabled: true, strict: !!featureFlags.strict },
+        });
+        if (!db) {
+            return null;
+        }
+        const document = getCanonicalSettingsDocument(db, { userId: handle });
+        return document ? document.payloadJson : null;
+    } catch {
+        return null;
+    }
 }
 
 /**
@@ -354,6 +403,9 @@ async function getCanonicalSettingsWriteState(request) {
 
 function projectSettingsJson(directories, payload, db = null) {
     const pathToSettings = path.join(directories.root, SETTINGS_FILE);
+    if (getCanonicalStorageSlice('settings').getProjectionMode() === 'off') {
+        return pathToSettings;
+    }
     const contents = JSON.stringify(payload, null, 4);
     writeFileAtomicSync(pathToSettings, contents, 'utf8');
     if (db) {

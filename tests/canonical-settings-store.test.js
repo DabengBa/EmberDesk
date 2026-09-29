@@ -434,14 +434,18 @@ describe('canonical settings route integration', () => {
         'EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_READS',
         'EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_WRITES',
         'EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_STRICT',
+        'EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SLICES_SETTINGS_PROJECTION',
     ];
 
-    function setCanonicalEnv({ enabled = true, shadowImport = true, reads = true, writes = false, strict = false } = {}) {
+    function setCanonicalEnv({ enabled = true, shadowImport = true, reads = true, writes = false, strict = false, projection = null } = {}) {
         process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_ENABLED = String(enabled);
         process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SHADOWIMPORT = String(shadowImport);
         process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_READS = String(reads);
         process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_WRITES = String(writes);
         process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_STRICT = String(strict);
+        if (projection != null) {
+            process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SLICES_SETTINGS_PROJECTION = projection;
+        }
     }
 
     function clearCanonicalEnv() {
@@ -625,11 +629,12 @@ describe('canonical settings route integration', () => {
     });
 
     test('canonical save enforces revision conflicts and projects settings.json after DB commit', async () => {
+        // Projection assertions require sync mode; the slice default is 'off'.
         const root = makeRoot();
         const directories = createRouteDirectories(root);
         writeSettingsFile(directories, { firstRun: true });
 
-        setCanonicalEnv({ enabled: true, shadowImport: true, reads: true, writes: true });
+        setCanonicalEnv({ enabled: true, shadowImport: true, reads: true, writes: true, projection: 'sync' });
         const router = await loadSettingsRouter();
 
         // First save lazily imports settings.json (rev 1) before the DB write.
@@ -690,7 +695,7 @@ describe('canonical settings route integration', () => {
         const directories = createRouteDirectories(root);
         writeSettingsFile(directories, { firstRun: true });
 
-        setCanonicalEnv({ enabled: true, reads: true, writes: true });
+        setCanonicalEnv({ enabled: true, reads: true, writes: true, projection: 'sync' });
         const router = await loadSettingsRouter();
         // Initialize the slice backend (import + clean audit) before sabotage.
         await invokeRoute(router, '/get', { directories });
@@ -764,6 +769,102 @@ describe('canonical settings route integration', () => {
         });
     });
 
+    test('leaves settings.json stale while serving DB authority when projection is off', async () => {
+        const root = makeRoot();
+        const directories = createRouteDirectories(root);
+        writeSettingsFile(directories, { firstRun: true });
+        setCanonicalEnv({ enabled: true, reads: true, writes: true, projection: 'off' });
+        const router = await loadSettingsRouter();
+
+        const save = await invokeRoute(router, '/save', {
+            directories,
+            body: {
+                firstRun: false,
+                v: 2,
+            },
+        });
+        const get = await invokeRoute(router, '/get', { directories });
+        const filePayload = JSON.parse(fs.readFileSync(path.join(directories.root, SETTINGS_FILE), 'utf8'));
+
+        expect(save.statusCode).toBe(200);
+        expect(save.body).toEqual(expect.objectContaining({ result: 'ok' }));
+        expect(JSON.parse(get.body.settings)).toEqual({ firstRun: false, v: 2 });
+        // The compatibility file still holds the pre-save content.
+        expect(filePayload).toEqual({ firstRun: true });
+    });
+
+    test('reports stale settings.json as suppressed informational drift when projection is off', async () => {
+        const root = makeRoot();
+        const directories = createRouteDirectories(root);
+        writeSettingsFile(directories, { firstRun: true });
+        setCanonicalEnv({ enabled: true, reads: true, writes: true, projection: 'off' });
+        const router = await loadSettingsRouter();
+        await invokeRoute(router, '/get', { directories });
+
+        const { canonicalSqliteManager } = await import('../src/canonical-sqlite.js');
+        const { auditCanonicalSettingsShadowImport } = await import('../src/canonical-settings-shadow-import.js');
+        const db = canonicalSqliteManager.open({
+            handle: 'alice',
+            directories,
+            featureFlags: { enabled: true, strict: false },
+        });
+        upsertCanonicalSettingsDocument(db, {
+            userId: 'alice',
+            payload: { firstRun: false, v: 2 },
+            expectedRevision: 1,
+            nowMs: 3000,
+        });
+
+        const auditResult = await auditCanonicalSettingsShadowImport({
+            handle: 'alice',
+            directories,
+            db,
+            projection: 'off',
+        });
+
+        expect(auditResult).toEqual(expect.objectContaining({
+            ok: true,
+            blocking: false,
+            hasDrift: false,
+            reason: null,
+        }));
+        expect(auditResult.entries).toContainEqual(expect.objectContaining({
+            status: 'drift',
+            drift_types: ['payload_mismatch'],
+            details: expect.objectContaining({
+                projection_mode: 'off',
+                suppressed: true,
+                import_classification: 'known',
+            }),
+        }));
+    });
+
+    test('file backup materializes canonical settings when projection is off', async () => {
+        const root = makeRoot();
+        const directories = createRouteDirectories(root);
+        writeSettingsFile(directories, { firstRun: true });
+        setCanonicalEnv({ enabled: true, reads: true, writes: true, projection: 'off' });
+        const router = await loadSettingsRouter();
+        await invokeRoute(router, '/save', {
+            directories,
+            body: { firstRun: false, v: 5 },
+        });
+        // settings.json is intentionally stale at this point.
+        expect(JSON.parse(fs.readFileSync(path.join(directories.root, SETTINGS_FILE), 'utf8')))
+            .toEqual({ firstRun: true });
+
+        const make = await invokeRoute(router, '/make-snapshot', { directories });
+        expect(make.statusCode).toBe(204);
+
+        const backups = fs.readdirSync(directories.backups)
+            .filter(name => name.startsWith('settings_alice_'));
+        expect(backups.length).toBeGreaterThanOrEqual(1);
+        const backupPayload = JSON.parse(
+            fs.readFileSync(path.join(directories.backups, backups[0]), 'utf8'),
+        );
+        expect(backupPayload).toEqual({ firstRun: false, v: 5 });
+    });
+
 });
 
 describe('canonical settings snapshots and rollback', () => {
@@ -773,14 +874,18 @@ describe('canonical settings snapshots and rollback', () => {
         'EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_READS',
         'EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_WRITES',
         'EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_STRICT',
+        'EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SLICES_SETTINGS_PROJECTION',
     ];
 
-    function setCanonicalEnv({ enabled = true, shadowImport = true, reads = true, writes = true, strict = false } = {}) {
+    function setCanonicalEnv({ enabled = true, shadowImport = true, reads = true, writes = true, strict = false, projection = null } = {}) {
         process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_ENABLED = String(enabled);
         process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SHADOWIMPORT = String(shadowImport);
         process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_READS = String(reads);
         process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_WRITES = String(writes);
         process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_STRICT = String(strict);
+        if (projection != null) {
+            process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SLICES_SETTINGS_PROJECTION = projection;
+        }
     }
 
     function clearCanonicalEnv() {
@@ -878,7 +983,7 @@ describe('canonical settings snapshots and rollback', () => {
         const root = makeRoot();
         const directories = createRouteDirectories(root);
         writeSettingsFile(directories, { firstRun: true, v: 0 });
-        setCanonicalEnv({ enabled: true, reads: true, writes: true });
+        setCanonicalEnv({ enabled: true, reads: true, writes: true, projection: 'sync' });
         const router = await loadSettingsRouter();
 
         // Lazy init imports the file (rev 1) before we seed divergent state.

@@ -34,6 +34,7 @@ const envKeys = [
     'EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_WRITES',
     'EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_STRICT',
     'EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SLICES_CHATS_READS',
+    'EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SLICES_SETTINGS_PROJECTION',
 ];
 
 function clearCanonicalEnv() {
@@ -152,6 +153,9 @@ describe('legacy canonical sqlite config migration', () => {
                 secrets: {
                     projection: 'off',
                 },
+                settings: {
+                    projection: 'off',
+                },
             },
         });
     });
@@ -245,6 +249,8 @@ describe('lazy slice backend initialization', () => {
     test('re-audits without re-importing when a projection failure marked the DB ahead', async () => {
         const root = makeRoot();
         const directories = createDirectories(root);
+        // DB-ahead drift is only blocking while the file is still a projection.
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SLICES_SETTINGS_PROJECTION = 'sync';
         writeSettingsFile(directories, { firstRun: true, marker: 'stale-file' });
         const first = await ensureCanonicalSliceBackend('settings', directories, 'alice');
         expect(first.ok).toBe(true);
@@ -276,6 +282,9 @@ describe('lazy slice backend initialization', () => {
     test('leaves a real drift verdict blocking instead of importing over it', async () => {
         const root = makeRoot();
         const directories = createDirectories(root);
+        // This scenario verifies sync-projection repair blocking; pin it so the
+        // slice default ('off') does not suppress the file-side drift.
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SLICES_SETTINGS_PROJECTION = 'sync';
         writeSettingsFile(directories, { firstRun: true, marker: 'file' });
         const first = await ensureCanonicalSliceBackend('settings', directories, 'alice');
         expect(first.ok).toBe(true);
