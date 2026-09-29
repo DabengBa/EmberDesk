@@ -50,7 +50,8 @@ describe('workspace React shell retirement', () => {
 
         expect(packageSource).toContain('"build:react:workspace-panels": "vite build --mode workspace-panels"');
         expect(viteSource).toContain('const isWorkspacePanelsBuild = mode === \'workspace-panels\';');
-        expect(viteSource).toContain('entry: path.resolve(process.cwd(), \'app/workspace-panels.tsx\')');
-        expect(viteSource).toContain('fileName: () => \'assets/workspace-panels.js\'');
+        expect(viteSource).toContain('return reactPanelConfig(\'workspace-panels\')');
+        expect(viteSource).toContain('entry: path.resolve(process.cwd(), `app/${name}.tsx`)');
+        expect(viteSource).toContain('fileName: () => `assets/${name}.js`');
     });
 });

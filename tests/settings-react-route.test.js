@@ -123,9 +123,9 @@ describe('settings React route flag', () => {
         expect(routeSource).toContain('<settingsForm.Subscribe');
         expect(routeSource).toContain('selector={state => state.isPristine}');
         expect(routeSource).toContain('disabled={isBusy || settingsQuery.isPending || isPristine || hasRevisionConflict}');
-        expect(routeSource).toContain("import { startTransition, useEffect, useMemo, useState } from 'react';");
+        expect(routeSource).toContain("import { startTransition, useCallback, useEffect, useMemo, useState } from 'react';");
         expect(routeSource).toContain('const [isSettingsFormReady, setIsSettingsFormReady] = useState(false);');
-        expect(routeSource).toContain('function openSettingsTab(tabId: string)');
+        expect(routeSource).toContain('const openSettingsTab = useCallback((tabId: string)');
         expect(routeSource).toContain('startTransition(() => {');
         expect(routeSource).toContain('{isSettingsFormReady ? (');
         expect(routeSource).toContain('const providerSettingsValues = useStore(settingsForm.store, state => state.values.providers);');

@@ -45,6 +45,6 @@ describe('thumbnail lazy image loading templates', () => {
 
         expect(chatOpsSource).toContain("avatarImg: String(avatarImg ?? '')");
         expect(chatOpsSource).not.toContain("replaceWith(groupAvatar.clone())");
-        expect(selectChatSource).toContain('<div className="avatar"><img src={avatarImg} loading="lazy" decoding="async" /></div>');
+        expect(selectChatSource).toContain('<div className="avatar"><img src={avatarImg} alt="" loading="lazy" decoding="async" /></div>');
     });
 });

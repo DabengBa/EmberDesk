@@ -541,8 +541,8 @@ describe('character list structure', () => {
         expect(rightNavSource).toContain('labelKey="Character Toolbar Bulk"');
         expect(rightNavSource).toContain('label="Bulk"');
         expect(rightNavSource).toContain('data-i18n="Character Toolbar Sort">Sort</label>');
-        expect(rightNavSource).toMatch(/id="bulkSelectedCount"[^>]*"display": "none"[^>]*role="status"/);
-        expect(rightNavSource).toContain('role="status"');
+        expect(rightNavSource).toMatch(/<output id="bulkSelectedCount"[^>]*"display": "none"/);
+        expect(rightNavSource).toContain('className="character-list-tool-group character-list-bulk-actions" aria-live="polite"');
         expect(rightNavSource).toMatch(/id="bulkEditButton"[^>]*tabIndex=\{0\}/);
         expect(scriptSource).toContain('setCharacterSearchBusy(true)');
         expect(scriptSource).toContain('setCharacterSearchBusy(false)');
@@ -554,8 +554,9 @@ describe('character list structure', () => {
         expect(powerUserSource).toContain('if (!instance) {');
         expect(powerUserSource).not.toContain('$(this).autocomplete(\'widget\')[0].style.display');
         expect(rowSource).toContain('className="bulk_select_checkbox"');
-        expect(rowSource).toContain('role={bulkMode ? \'checkbox\' : \'button\'}');
-        expect(rowSource).toContain('aria-checked={bulkMode ? selected : undefined}');
+        expect(rowSource).toContain('type="button"');
+        expect(rowSource).toContain('aria-pressed={selected}');
+        expect(rowSource).toContain('onBulkToggle?.(model.id, !selected)');
         expect(rowSource).toContain('aria-checked={selected}');
         expect(scriptSource).toContain('const pageCharacterIds = currentCharacterListPageEntities');
         expect(scriptSource).toContain('.filter(entity => entity?.type === \'character\')');

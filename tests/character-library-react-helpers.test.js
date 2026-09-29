@@ -30,8 +30,9 @@ describe('character library React panel scaffold', () => {
 
         expect(packageSource).toContain('"@tanstack/react-virtual"');
         expect(viteSource).toContain('const isCharacterLibraryPanelBuild = mode === \'character-library-panel\';');
-        expect(viteSource).toContain('entry: path.resolve(process.cwd(), \'app/character-library-panel.tsx\')');
-        expect(viteSource).toContain('fileName: () => \'assets/character-library-panel.js\'');
+        expect(viteSource).toContain('return reactPanelConfig(\'character-library-panel\')');
+        expect(viteSource).toContain('entry: path.resolve(process.cwd(), `app/${name}.tsx`)');
+        expect(viteSource).toContain('fileName: () => `assets/${name}.js`');
         expect(viteSource).toContain('emptyOutDir: false');
         expect(panelEntrySource).toContain('export function mountCharacterLibraryToolbar(');
         expect(panelEntrySource).toContain('export function updateCharacterLibraryToolbar(');
