@@ -82,8 +82,10 @@ export function writeCanonicalChatPayload({
     payload,
     operation = 'save',
     projectJsonl,
+    projection = 'sync',
     nowMs = Date.now(),
     onProjectionFailure = null,
+    onAuthorityCommitted = null,
 }) {
     if (typeof projectJsonl !== 'function') {
         throw new Error('Canonical chat projection function is required.');
@@ -100,6 +102,21 @@ export function writeCanonicalChatPayload({
 
     const record = createCanonicalChatSessionRecord(db, { locator, payload, nowMs });
     const persisted = upsertCanonicalChatSession(db, record);
+    if (projection === 'off') {
+        // The chat file is an export surface now; post-commit side effects
+        // (chat backups) still run but never fail the committed write.
+        try {
+            onAuthorityCommitted?.(record.sourceJsonl);
+        } catch (error) {
+            console.warn('Canonical chat post-commit side effects skipped:', error);
+        }
+        return {
+            ok: true,
+            authorityCommitted: true,
+            sessionId: persisted.id,
+            status: persisted.status,
+        };
+    }
     try {
         projectJsonl(record.sourceJsonl);
         recordImportLedgerEntry(db, {
@@ -163,8 +180,10 @@ export function renameCanonicalChat({
     locator,
     nextLocator,
     projectRename,
+    projection = 'sync',
     nowMs = Date.now(),
     onProjectionFailure = null,
+    onAuthorityCommitted = null,
 }) {
     if (typeof projectRename !== 'function') {
         throw new Error('Canonical chat rename projection function is required.');
@@ -173,6 +192,15 @@ export function renameCanonicalChat({
     const renamed = renameCanonicalChatSession(db, { locator, nextLocator, nowMs });
     if (!renamed) {
         return { ok: false, authorityCommitted: false, reason: 'missing_canonical_session' };
+    }
+    if (projection === 'off') {
+        try {
+            onAuthorityCommitted?.(renamed.sourceJsonl);
+        } catch (error) {
+            console.warn('Canonical chat post-commit side effects skipped:', error);
+        }
+        removeImportLedgerEntry(db, { sliceKey: 'chats', sourcePath: locator.sourcePath });
+        return { ok: true, authorityCommitted: true, sessionId: renamed.id };
     }
     try {
         projectRename();
@@ -216,6 +244,7 @@ export function deleteCanonicalChat({
     db,
     locator,
     projectDelete,
+    projection = 'sync',
     nowMs = Date.now(),
     onProjectionFailure = null,
 }) {
@@ -226,6 +255,15 @@ export function deleteCanonicalChat({
     const deleted = deleteCanonicalChatSession(db, locator);
     if (!deleted) {
         return { ok: false, authorityCommitted: false, reason: 'missing_canonical_session' };
+    }
+    if (projection === 'off') {
+        try {
+            projectDelete();
+        } catch (error) {
+            console.warn('Canonical chat stale-file cleanup skipped:', error);
+        }
+        removeImportLedgerEntry(db, { sliceKey: 'chats', sourcePath: locator.sourcePath });
+        return { ok: true, authorityCommitted: true, sessionId: deleted.id };
     }
     try {
         projectDelete();

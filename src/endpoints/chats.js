@@ -56,6 +56,7 @@ import {
     renameCanonicalChat,
     writeCanonicalChatPayload,
 } from './canonical-chat-write-service.js';
+import { calculateCanonicalCharacterChatStats } from './canonical-chat-store.js';
 
 const isBackupEnabled = !!getConfigValue('backups.chat.enabled', true, 'boolean');
 const maxTotalChatBackups = Number(getConfigValue('backups.chat.maxTotalBackups', -1, 'number'));
@@ -174,6 +175,10 @@ async function getCanonicalChatWriteState(request) {
     }
 
     return readState;
+}
+
+function getChatsProjectionMode() {
+    return getCanonicalStorageSlice('chats').getProjectionMode();
 }
 
 function sendCanonicalChatWriteBlocked(response, writeState) {
@@ -308,7 +313,11 @@ function updateCanonicalCharacterChatStats(handle, directories, avatar, operatio
         throw createCanonicalChatStatsError('canonical_migration_blocked', operation, avatar);
     }
 
-    const stats = calculateCharacterChatStats(getCharacterChatDirectory(directories, avatar));
+    const chatsSlice = getCanonicalStorageSlice('chats');
+    const chatsFlags = chatsSlice.getFeatureFlags();
+    const stats = chatsFlags.enabled && chatsFlags.writes && chatsSlice.getProjectionMode() === 'off'
+        ? calculateCanonicalCharacterChatStats(db, String(avatar).replace(/\.png$/i, ''))
+        : calculateCharacterChatStats(getCharacterChatDirectory(directories, avatar));
     const nowMs = Date.now();
     const result = withCanonicalTransaction(db, txnDb => txnDb.prepare(`
         INSERT INTO character_chat_stats (
@@ -646,6 +655,7 @@ router.post('/save', rejectGroupChatRequest, validateAvatarUrlMiddleware, async 
                     }),
                     payload: chatData,
                     operation: 'save',
+                    projection: getChatsProjectionMode(),
                     projectJsonl(jsonlData) {
                         writeChatProjection(
                             jsonlData,
@@ -654,6 +664,11 @@ router.post('/save', rejectGroupChatRequest, validateAvatarUrlMiddleware, async 
                             cardName,
                             request.user.directories.backups,
                         );
+                    },
+                    onAuthorityCommitted(jsonlData) {
+                        // Backups keep materializing the canonical payload even
+                        // when the compatibility JSONL file is not written.
+                        getBackupFunction(handle)(request.user.directories.backups, cardName, jsonlData);
                     },
                     onProjectionFailure() {
                         invalidateCanonicalAuditStatus(writeState.db, {
@@ -793,9 +808,13 @@ router.post('/rename', rejectGroupChatRequest, validateAvatarUrlMiddleware, asyn
                 db: writeState.db,
                 locator: originalLocator,
                 nextLocator,
+                projection: getChatsProjectionMode(),
                 projectRename() {
                     fs.copyFileSync(pathToOriginalFile, pathToRenamedFile);
                     fs.unlinkSync(pathToOriginalFile);
+                },
+                onAuthorityCommitted() {
+                    fs.rmSync(pathToOriginalFile, { force: true });
                 },
                 onProjectionFailure() {
                     invalidateCanonicalAuditStatus(writeState.db, {
@@ -848,7 +867,8 @@ router.post('/delete', rejectGroupChatRequest, validateAvatarUrlMiddleware, asyn
             return sendCanonicalChatWriteBlocked(response, writeState);
         }
         if (writeState.ok) {
-            if (!fs.existsSync(chatFilePath)) {
+            const chatsProjection = getChatsProjectionMode();
+            if (chatsProjection !== 'off' && !fs.existsSync(chatFilePath)) {
                 console.error('The chat file was not deleted.');
                 return response.sendStatus(400);
             }
@@ -859,7 +879,12 @@ router.post('/delete', rejectGroupChatRequest, validateAvatarUrlMiddleware, asyn
                     ownerId: dirName,
                     filePath: chatFilePath,
                 }),
+                projection: chatsProjection,
                 projectDelete() {
+                    if (chatsProjection === 'off') {
+                        tryDeleteFile(chatFilePath);
+                        return;
+                    }
                     if (!tryDeleteFile(chatFilePath)) {
                         throw new Error('JSONL chat projection was not deleted.');
                     }
@@ -1033,6 +1058,7 @@ router.post('/import', validateAvatarUrlMiddleware, async function (request, res
                     }),
                     payload: parseCanonicalChatJsonl(jsonlData),
                     operation: 'import',
+                    projection: getChatsProjectionMode(),
                     projectJsonl(projectedJsonl) {
                         writeFileAtomicSync(write.filePath, projectedJsonl, 'utf8');
                     },

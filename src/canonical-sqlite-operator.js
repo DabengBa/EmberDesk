@@ -54,6 +54,7 @@ import {
 } from './endpoints/canonical-secrets-store.js';
 import { listOpenCanonicalManagedMediaRepairs } from './endpoints/canonical-managed-media-store.js';
 import {
+    calculateCanonicalCharacterChatStats,
     listOpenCanonicalChatProjectionRepairs,
     resolveCanonicalChatProjectionRepair,
     serializeCanonicalChatSession,
@@ -522,6 +523,16 @@ export async function runCanonicalAudit({ handle, directories, db, auditedAtMs =
     });
 }
 
+async function runCanonicalChatAudit({ handle, directories, db, auditedAtMs = Date.now() }) {
+    return auditCanonicalChatShadowImport({
+        handle,
+        directories,
+        db,
+        auditedAtMs,
+        projection: getCanonicalStorageSlice('chats').getProjectionMode(),
+    });
+}
+
 export async function runCanonicalWorldInfoAudit({ handle, directories, db, auditedAtMs = Date.now() }) {
     return auditCanonicalWorldInfoShadowImport({
         handle,
@@ -549,8 +560,11 @@ export function rebuildCanonicalChatStats({ db, directories, avatars = null, now
                 continue;
             }
 
-            const chatsDirectory = getCharacterChatDirectory(directories, avatarFilename);
-            const stats = calculateCharacterChatStats(chatsDirectory);
+            const chatsSlice = getCanonicalStorageSlice('chats');
+            const chatsFlags = chatsSlice.getFeatureFlags();
+            const stats = chatsFlags.enabled && chatsFlags.writes && chatsSlice.getProjectionMode() === 'off'
+                ? calculateCanonicalCharacterChatStats(db, avatarFilename.replace(/\.png$/i, ''))
+                : calculateCharacterChatStats(getCharacterChatDirectory(directories, avatarFilename));
             txnDb.prepare(`
                 INSERT INTO character_chat_stats (
                     character_id,
@@ -743,6 +757,10 @@ function repairSingleCanonicalChatProjection({ db, directories, repair, nowMs = 
         );
         if (operation === 'delete') {
             fs.rmSync(filePath, { force: true });
+            removeImportLedgerEntry(db, {
+                sliceKey: 'chats',
+                sourcePath: repair.sourcePath,
+            });
         } else {
             if (!repair.sessionId) {
                 return {
@@ -763,6 +781,13 @@ function repairSingleCanonicalChatProjection({ db, directories, repair, nowMs = 
             }
             fs.mkdirSync(path.dirname(filePath), { recursive: true });
             writeFileAtomicSync(filePath, jsonl, 'utf8');
+            recordImportLedgerEntry(db, {
+                sliceKey: 'chats',
+                sourcePath: repair.sourcePath,
+                contentHash: crypto.createHash('sha256').update(jsonl).digest('hex'),
+                origin: 'projection',
+                nowMs,
+            });
 
             if (operation === 'rename' && repair.details?.previousSourcePath) {
                 const previousPath = getCanonicalChatProjectionPath(
@@ -773,6 +798,10 @@ function repairSingleCanonicalChatProjection({ db, directories, repair, nowMs = 
                 );
                 if (previousPath !== filePath) {
                     fs.rmSync(previousPath, { force: true });
+                    removeImportLedgerEntry(db, {
+                        sliceKey: 'chats',
+                        sourcePath: repair.details.previousSourcePath,
+                    });
                 }
             }
         }
@@ -1005,7 +1034,7 @@ function ensureDefaultSliceRunners(registry = getDefaultCanonicalStorageSliceReg
     }
     if (!registry.getRunners('chats')) {
         registry.setRunners('chats', {
-            runAudit: auditCanonicalChatShadowImport,
+            runAudit: runCanonicalChatAudit,
             runRepair: repairCanonicalChatProjection,
         });
     }

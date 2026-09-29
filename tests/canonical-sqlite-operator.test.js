@@ -304,6 +304,8 @@ describe('canonical sqlite operator helpers', () => {
     });
 
     test('rebuilds canonical chat stats from JSONL chat files', async () => {
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SLICES_CHATS_PROJECTION = 'sync';
+        try {
         const root = makeRoot();
         const directories = createDirectories(root);
         const manager = createManager();
@@ -362,6 +364,83 @@ describe('canonical sqlite operator helpers', () => {
             FROM character_chat_stats
             WHERE character_id = (SELECT id FROM characters WHERE avatar_filename = ?)
         `).get('alpha.png').chat_count).toBe(2);
+        } finally {
+            delete process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SLICES_CHATS_PROJECTION;
+        }
+    });
+
+    test('rebuilds canonical chat stats from canonical chat_sessions when chats projection is off', async () => {
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SLICES_CHATS_PROJECTION = 'off';
+        try {
+        const root = makeRoot();
+        const directories = createDirectories(root);
+        const manager = createManager();
+        const buildSnapshotRow = createSnapshotBuilder();
+
+        writeCharacterFile(directories, 'alpha.png', {
+            name: 'Alpha',
+            chat: 'Alpha - chat',
+            fav: false,
+            tags: [],
+            data: { name: 'Alpha', extensions: { fav: false, world: '' }, tags: [] },
+        });
+        writeChatFile(directories, 'alpha.png', 'one.jsonl', '{"mes":"one"}\n');
+
+        await runCanonicalShadowImport({
+            handle: 'alice',
+            directories,
+            featureFlags: { enabled: true, shadowImport: true, strict: false },
+            manager,
+            buildSnapshotRow,
+            nowMs: 1735689600000,
+        });
+        const db = manager.open({
+            handle: 'alice',
+            directories,
+            featureFlags: { enabled: true, strict: false },
+        });
+
+        await runCanonicalChatShadowImport({
+            handle: 'alice',
+            directories,
+            db,
+            featureFlags: { enabled: true, shadowImport: true, strict: false },
+            nowMs: 1735689600000,
+        });
+
+        db.prepare(`
+            UPDATE character_chat_stats
+            SET chat_count = 0,
+                chat_size_bytes = 0,
+                date_last_chat_ms = 0
+        `).run();
+        // A file that never entered canonical storage must not count under 'off'.
+        writeChatFile(directories, 'alpha.png', 'unimported.jsonl', '{"mes":"two"}\n');
+
+        const rebuilt = rebuildCanonicalChatStats({
+            db,
+            directories,
+            avatars: ['alpha.png'],
+            nowMs: 1735689603333,
+        });
+
+        expect(rebuilt).toEqual({
+            ok: true,
+            rebuilt: [
+                expect.objectContaining({
+                    avatarFilename: 'alpha.png',
+                    chatCount: 1,
+                }),
+            ],
+        });
+        expect(db.prepare(`
+            SELECT chat_count
+            FROM character_chat_stats
+            WHERE character_id = (SELECT id FROM characters WHERE avatar_filename = ?)
+        `).get('alpha.png').chat_count).toBe(1);
+        } finally {
+            delete process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SLICES_CHATS_PROJECTION;
+        }
     });
 
     test('repairs a missing world info projection file from canonical data using a safe filename', async () => {

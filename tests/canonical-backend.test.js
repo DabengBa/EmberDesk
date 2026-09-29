@@ -159,6 +159,9 @@ describe('legacy canonical sqlite config migration', () => {
                 world_info: {
                     projection: 'off',
                 },
+                chats: {
+                    projection: 'off',
+                },
             },
         });
     });

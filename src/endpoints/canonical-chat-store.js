@@ -163,6 +163,25 @@ export function listCanonicalChatSessions(db) {
     return db.prepare('SELECT * FROM chat_sessions ORDER BY owner_type ASC, owner_id ASC, source_path ASC').all();
 }
 
+/**
+ * Derives character chat stats from canonical sessions. Source of truth once
+ * chats projection is 'off' and no JSONL files are written.
+ */
+export function calculateCanonicalCharacterChatStats(db, ownerId) {
+    const row = db.prepare(`
+        SELECT COUNT(*) AS chat_count,
+            COALESCE(SUM(source_size_bytes), 0) AS chat_size_bytes,
+            COALESCE(MAX(source_mtime_ms), 0) AS date_last_chat_ms
+        FROM chat_sessions
+        WHERE owner_type = 'character' AND owner_id = ?
+    `).get(String(ownerId ?? ''));
+    return {
+        chatCount: Number(row?.chat_count ?? 0),
+        chatSize: Number(row?.chat_size_bytes ?? 0),
+        dateLastChat: Number(row?.date_last_chat_ms ?? 0),
+    };
+}
+
 export function serializeCanonicalChatSession(db, sessionId) {
     const session = db.prepare('SELECT source_jsonl FROM chat_sessions WHERE id = ?').get(sessionId);
     return session?.source_jsonl ?? null;

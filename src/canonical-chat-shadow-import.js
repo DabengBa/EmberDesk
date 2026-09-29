@@ -298,12 +298,13 @@ export async function runCanonicalChatShadowImport({
     return summarizeImport({ handle, entries, migrationStatus });
 }
 
-function buildAuditSummary({ handle, migrationStatus, entries }) {
-    const blocking = entries.some(entry => entry.status === 'drift' || entry.status === 'error');
+function buildAuditSummary({ handle, migrationStatus, entries, ignoreSuppressed = false }) {
+    const active = entries.filter(entry => !(ignoreSuppressed && entry.details?.suppressed));
+    const blocking = active.some(entry => entry.status === 'drift' || entry.status === 'error');
     return {
         ok: !blocking,
         handle,
-        hasDrift: entries.some(entry => entry.status === 'drift'),
+        hasDrift: active.some(entry => entry.status === 'drift'),
         blocking,
         reason: resolveAuditDriftReason(blocking, entries),
         migrationStatus,
@@ -347,6 +348,7 @@ export async function auditCanonicalChatShadowImport({
     directories,
     db,
     auditedAtMs = Date.now(),
+    projection = 'sync',
 } = {}) {
     const migrationStatus = getCanonicalMigrationStatus(db);
     if (!migrationStatus.ok || migrationStatus.currentVersion !== migrationStatus.targetVersion) {
@@ -361,6 +363,11 @@ export async function auditCanonicalChatShadowImport({
         };
     }
 
+    const suppressFileSide = projection === 'off';
+    const suppressDetails = suppressFileSide
+        ? { projection_mode: 'off', suppressed: true }
+        : {};
+
     const entries = [];
     const projections = [];
     for (const item of listChatProjectionFiles(directories)) {
@@ -371,7 +378,7 @@ export async function auditCanonicalChatShadowImport({
                 projection: item,
                 status: 'error',
                 driftTypes: ['parse_failure'],
-                details: { errorMessage: String(error?.message ?? error ?? '') },
+                details: { errorMessage: String(error?.message ?? error ?? ''), ...suppressDetails },
                 auditedAtMs,
             }));
         }
@@ -405,7 +412,7 @@ export async function auditCanonicalChatShadowImport({
                 stored,
                 status: 'drift',
                 driftTypes: ['duplicate_identity'],
-                details: { import_classification: importClassification },
+                details: { import_classification: importClassification, ...suppressDetails },
                 auditedAtMs,
             }));
             continue;
@@ -415,7 +422,7 @@ export async function auditCanonicalChatShadowImport({
                 projection,
                 status: 'drift',
                 driftTypes: ['unregistered_file'],
-                details: { import_classification: importClassification },
+                details: { import_classification: importClassification, ...suppressDetails },
                 auditedAtMs,
             }));
             continue;
@@ -429,7 +436,7 @@ export async function auditCanonicalChatShadowImport({
                 stored,
                 status: 'drift',
                 driftTypes: [driftType ?? 'payload_drift'],
-                details: { import_classification: importClassification },
+                details: { import_classification: importClassification, ...suppressDetails },
                 auditedAtMs,
             }));
         }
@@ -439,7 +446,7 @@ export async function auditCanonicalChatShadowImport({
                 stored,
                 status: 'drift',
                 driftTypes: ['dangling_attachment'],
-                details: attachment,
+                details: { ...attachment, ...suppressDetails },
                 auditedAtMs,
             }));
         }
@@ -451,12 +458,12 @@ export async function auditCanonicalChatShadowImport({
                 stored,
                 status: 'drift',
                 driftTypes: ['missing_file'],
-                details: {},
+                details: { ...suppressDetails },
                 auditedAtMs,
             }));
         }
     }
-    const result = buildAuditSummary({ handle, migrationStatus, entries });
+    const result = buildAuditSummary({ handle, migrationStatus, entries, ignoreSuppressed: suppressFileSide });
     persistCanonicalAuditStatus(db, result, {
         scope: CANONICAL_CHAT_AUDIT_SCOPE,
         auditedAtMs,

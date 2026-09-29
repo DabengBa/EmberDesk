@@ -296,7 +296,7 @@ function createManagedMediaSlice() {
 }
 
 function createChatsSlice() {
-    const flags = createSliceFlagCapabilities({ flagKey: 'chats' });
+    const flags = createSliceFlagCapabilities({ flagKey: 'chats', defaultProjection: 'off' });
     return {
         key: 'chats',
         ...flags,

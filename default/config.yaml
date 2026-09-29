@@ -133,6 +133,11 @@ features:
         # characters.world_name column, and export-all regenerates the files.
         world_info:
           projection: off
+        # chats/*.jsonl files are export-only: canonical chat_sessions and
+        # chat_messages are authoritative, chat backups still materialize the
+        # canonical payload, and export-all regenerates the files.
+        chats:
+          projection: off
   react:
     pages:
     panels:

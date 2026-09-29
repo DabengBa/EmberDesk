@@ -36,6 +36,7 @@ fs.writeFileSync(configPath, [
     '          shadowImport: true',
     '          reads: true',
     '          writes: true',
+    '          projection: sync',
 ].join('\n'), 'utf8');
 setConfigFilePath(configPath);
 
@@ -388,5 +389,205 @@ describe('canonical chat route authority', () => {
             path: 'files/unregistered.txt',
         });
         expect(fs.readFileSync(chatPath, 'utf8')).toBe(initialPayload.map(line => JSON.stringify(line)).join('\n'));
+    });
+});
+
+describe('chats projection off', () => {
+    const PROJECTION_ENV = 'EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SLICES_CHATS_PROJECTION';
+
+    function makeDirectories() {
+        const root = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-canonical-chat-off-'));
+        roots.push(root);
+        const directories = {
+            root,
+            storage: path.join(root, 'storage'),
+            chats: path.join(root, 'chats'),
+            groupChats: path.join(root, 'group chats'),
+            backups: path.join(root, 'backups'),
+        };
+        for (const directory of Object.values(directories)) {
+            fs.mkdirSync(directory, { recursive: true });
+        }
+        return directories;
+    }
+
+    async function seedCanonicalChat(directories, payload) {
+        fs.mkdirSync(path.join(directories.chats, 'alice'), { recursive: true });
+        const chatPath = path.join(directories.chats, 'alice', 'first.jsonl');
+        fs.writeFileSync(chatPath, payload.map(line => JSON.stringify(line)).join('\n'), 'utf8');
+        const db = canonicalSqliteManager.open({
+            handle: 'alice',
+            directories,
+            featureFlags: { enabled: true, strict: false },
+        });
+        runCanonicalMigrations(db);
+        await runCanonicalChatShadowImport({
+            handle: 'alice',
+            directories,
+            db,
+            featureFlags: { enabled: true, shadowImport: true, strict: false },
+        });
+        await auditCanonicalChatShadowImport({ handle: 'alice', directories, db, projection: 'off' });
+        return { db, chatPath };
+    }
+
+    test('commits /save to canonical rows without writing the JSONL compatibility file', async () => {
+        process.env[PROJECTION_ENV] = 'off';
+        try {
+            const directories = makeDirectories();
+            const { db } = await seedCanonicalChat(directories, [
+                { chat_metadata: { integrity: 'clean' } },
+                { name: 'User', mes: 'Before' },
+            ]);
+
+            const nextPayload = [
+                { chat_metadata: { integrity: 'clean', updated: true } },
+                { name: 'User', mes: 'After' },
+            ];
+            const response = makeResponse();
+            await getRouteHandler('/save')({
+                body: {
+                    avatar_url: 'alice.png',
+                    file_name: 'first',
+                    chat: nextPayload,
+                    force: false,
+                },
+                user: { directories, profile: { handle: 'alice' } },
+            }, response);
+
+            expect(response.statusCode).toBe(200);
+            expect(response.body).toEqual({ ok: true });
+            expect(db.prepare(`SELECT header_payload_json FROM chat_sessions WHERE owner_id = 'alice'`).get())
+                .toEqual({ header_payload_json: JSON.stringify(nextPayload[0]) });
+            // Canonical save replaces the stale projection file's authority entirely.
+            expect(fs.readFileSync(path.join(directories.chats, 'alice', 'first.jsonl'), 'utf8'))
+                .not.toContain('After');
+        } finally {
+            delete process.env[PROJECTION_ENV];
+        }
+    });
+
+    test('/save under projection off leaves a brand-new chat entirely fileless', async () => {
+        process.env[PROJECTION_ENV] = 'off';
+        try {
+            const directories = makeDirectories();
+            const db = canonicalSqliteManager.open({
+                handle: 'alice',
+                directories,
+                featureFlags: { enabled: true, strict: false },
+            });
+            runCanonicalMigrations(db);
+            await runCanonicalChatShadowImport({
+                handle: 'alice',
+                directories,
+                db,
+                featureFlags: { enabled: true, shadowImport: true, strict: false },
+            });
+            await auditCanonicalChatShadowImport({ handle: 'alice', directories, db, projection: 'off' });
+
+            const response = makeResponse();
+            await getRouteHandler('/save')({
+                body: {
+                    avatar_url: 'alice.png',
+                    file_name: 'fresh',
+                    chat: [
+                        { chat_metadata: { integrity: 'clean' } },
+                        { name: 'Alice', mes: 'DB only' },
+                    ],
+                    force: false,
+                },
+                user: { directories, profile: { handle: 'alice' } },
+            }, response);
+
+            expect(response.statusCode).toBe(200);
+            expect(db.prepare(`SELECT COUNT(*) AS n FROM chat_sessions WHERE source_path = 'chats/alice/fresh.jsonl'`).get().n).toBe(1);
+            expect(fs.existsSync(path.join(directories.chats, 'alice', 'fresh.jsonl'))).toBe(false);
+        } finally {
+            delete process.env[PROJECTION_ENV];
+        }
+    });
+
+    test('canonical /rename updates source_path and removes the stale file without writing a new one', async () => {
+        process.env[PROJECTION_ENV] = 'off';
+        try {
+            const directories = makeDirectories();
+            const { db } = await seedCanonicalChat(directories, [
+                { chat_metadata: { integrity: 'clean' } },
+                { name: 'User', mes: 'Before' },
+            ]);
+
+            const response = makeResponse();
+            await getRouteHandler('/rename')({
+                body: {
+                    avatar_url: 'alice.png',
+                    original_file: 'first.jsonl',
+                    renamed_file: 'renamed.jsonl',
+                },
+                user: { directories, profile: { handle: 'alice' } },
+            }, response);
+
+            expect(response.statusCode).toBe(200);
+            expect(db.prepare(`SELECT source_path FROM chat_sessions WHERE owner_id = 'alice'`).get())
+                .toEqual({ source_path: 'chats/alice/renamed.jsonl' });
+            expect(fs.existsSync(path.join(directories.chats, 'alice', 'first.jsonl'))).toBe(false);
+            expect(fs.existsSync(path.join(directories.chats, 'alice', 'renamed.jsonl'))).toBe(false);
+        } finally {
+            delete process.env[PROJECTION_ENV];
+        }
+    });
+
+    test('canonical /delete removes the session without requiring the JSONL file', async () => {
+        process.env[PROJECTION_ENV] = 'off';
+        try {
+            const directories = makeDirectories();
+            const { db } = await seedCanonicalChat(directories, [
+                { chat_metadata: { integrity: 'clean' } },
+                { name: 'User', mes: 'Before' },
+            ]);
+            fs.unlinkSync(path.join(directories.chats, 'alice', 'first.jsonl'));
+
+            const response = makeResponse();
+            await getRouteHandler('/delete')({
+                body: {
+                    avatar_url: 'alice.png',
+                    chatfile: 'first.jsonl',
+                },
+                user: { directories, profile: { handle: 'alice' } },
+            }, response);
+
+            expect(response.statusCode).toBe(200);
+            expect(db.prepare(`SELECT COUNT(*) AS n FROM chat_sessions WHERE owner_id = 'alice'`).get().n).toBe(0);
+        } finally {
+            delete process.env[PROJECTION_ENV];
+        }
+    });
+
+    test('audit suppresses stale JSONL drift under projection off but blocks under sync', async () => {
+        const directories = makeDirectories();
+        const { db, chatPath } = await seedCanonicalChat(directories, [
+            { chat_metadata: { integrity: 'clean' } },
+            { name: 'User', mes: 'Before' },
+        ]);
+        fs.writeFileSync(chatPath, [
+            JSON.stringify({ chat_metadata: { integrity: 'stale' } }),
+            JSON.stringify({ name: 'User', mes: 'Stale edit' }),
+        ].join('\n'), 'utf8');
+
+        const offAudit = await auditCanonicalChatShadowImport({
+            handle: 'alice', directories, db, projection: 'off',
+        });
+        expect(offAudit.blocking).toBe(false);
+        expect(offAudit.entries).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                status: 'drift',
+                drift_types: ['payload_drift'],
+                details: expect.objectContaining({ suppressed: true }),
+            }),
+        ]));
+
+        const syncAudit = await auditCanonicalChatShadowImport({
+            handle: 'alice', directories, db, projection: 'sync',
+        });
+        expect(syncAudit.blocking).toBe(true);
     });
 });

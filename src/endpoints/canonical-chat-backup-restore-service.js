@@ -16,6 +16,7 @@ import {
 } from './canonical-chat-store.js';
 import { parseCanonicalChatJsonl } from './canonical-chat-write-service.js';
 import { resolveCanonicalChatProjectionPath } from './canonical-chat-projection-path.js';
+import { getCanonicalStorageSlice } from '../canonical-storage-slice-registry.js';
 
 export const CANONICAL_CHAT_BACKUP_MANIFEST_VERSION = 1;
 export const CANONICAL_CHAT_ATTACHMENT_MANIFEST_VERSION = 1;
@@ -584,6 +585,7 @@ export async function restoreCanonicalChatBackup({
             directories,
             db,
             auditedAtMs: nowMs,
+            projection: getCanonicalStorageSlice('chats').getProjectionMode(),
         });
         if (!audit.ok) {
             writeRestoreStatus(db, {
