@@ -145,6 +145,12 @@ features:
         # export-all materializes the file tree on demand.
         managed_media:
           projection: off
+        # characters/*.png cards are export-only: the canonical characters
+        # table plus character-avatars blobs are authoritative, card reads and
+        # name dedup consult canonical rows, /export synthesizes the PNG on
+        # demand, and export-all materializes the file tree.
+        characters:
+          projection: off
   react:
     pages:
     panels:

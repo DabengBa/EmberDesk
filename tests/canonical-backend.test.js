@@ -165,6 +165,9 @@ describe('legacy canonical sqlite config migration', () => {
                 managed_media: {
                     projection: 'off',
                 },
+                characters: {
+                    projection: 'off',
+                },
             },
         });
     });

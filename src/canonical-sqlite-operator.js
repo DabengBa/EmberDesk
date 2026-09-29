@@ -520,6 +520,7 @@ export async function runCanonicalAudit({ handle, directories, db, auditedAtMs =
         db,
         buildSnapshotRow: createSnapshotBuilder(),
         auditedAtMs,
+        projection: getCanonicalStorageSlice('characters').getProjectionMode(),
     });
 }
 

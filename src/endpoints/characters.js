@@ -47,7 +47,7 @@ import {
     renameCharacterAvatarBlobReference,
     retireCharacterAvatarBlobReference,
 } from '../canonical-avatar-blobs.js';
-import { recordCharacterAvatarBlob } from '../canonical-avatar-blob-service.js';
+import { getCharacterAvatarBlobContents, recordCharacterAvatarBlob } from '../canonical-avatar-blob-service.js';
 import { getCanonicalFlagContractStatus } from '../canonical-sqlite-rollout-contract.js';
 import {
     getCanonicalCharacter,
@@ -65,6 +65,16 @@ import {
     editCharacterCard,
     renameCharacterCard,
 } from './character-write-service.js';
+import { listCanonicalCharacterChatPayload } from './canonical-chat-query-service.js';
+import {
+    deleteCanonicalChatSessionsForOwner,
+    retargetCanonicalChatSessionsOwner,
+} from './canonical-chat-store.js';
+import {
+    parseCanonicalChatJsonl,
+    writeCanonicalChatPayload,
+} from './canonical-chat-write-service.js';
+import { writeCanonicalManagedMedia } from './canonical-managed-media-write-service.js';
 import { createCharacterImportCoordinator } from './character-import-service.js';
 
 import { areThumbnailsEnabled, generateThumbnail, invalidateThumbnail } from './thumbnails.js';
@@ -290,6 +300,32 @@ async function writeCharacterData(inputFile, data, outputFile, request, crop = u
         const outputAvatarName = path.parse(outputImagePath).base;
         const shouldRegenerateThumbnail = options.shouldRegenerateThumbnail ?? true;
 
+        if (options.projection === 'off') {
+            // Canonical rows are already committed; the PNG file is an export
+            // surface. Only keep the avatar blob + thumbnail warm when a real
+            // image source was provided (card-only edits and renames may not
+            // have one — their blobs are handled by canonical transactions).
+            const hasImageSource = Buffer.isBuffer(inputFile)
+                || (typeof inputFile === 'string' && fs.existsSync(inputFile));
+            if (!hasImageSource) {
+                return true;
+            }
+            const inputImage = await (async () => {
+                try {
+                    return Buffer.isBuffer(inputFile)
+                        ? await parseImageBuffer(inputFile, crop)
+                        : await tryReadImage(inputFile, crop);
+                } catch (error) {
+                    console.warn('Failed to read image; using fallback avatar.', error);
+                    return await fs.promises.readFile(DEFAULT_AVATAR_PATH);
+                }
+            })();
+            const outputImage = write(inputImage, data);
+            recordCharacterAvatarBlobSafe(request.user.profile?.handle ?? null, request.user.directories, outputAvatarName, outputImage);
+            startThumbnailPregeneration(request.user.directories, 'avatar', outputAvatarName, false, shouldRegenerateThumbnail);
+            return true;
+        }
+
         // Reset the cache
         for (const key of memoryCache.keys()) {
             if (Buffer.isBuffer(inputFile)) {
@@ -346,6 +382,287 @@ async function writeCharacterData(inputFile, data, outputFile, request, crop = u
 
 function getCanonicalCharacterFeatureFlags() {
     return getCanonicalStorageSlice('characters').getFeatureFlags();
+}
+
+/**
+ * Reads a live canonical character row's card_json string, or null when the
+ * canonical slice cannot serve it. Used as the projection 'off' fallback for
+ * every legacy PNG read.
+ * @param {string|null} handle User handle
+ * @param {import('../users.js').UserDirectoryList} directories User directories
+ * @param {string} avatarFilename Avatar file name (e.g. "name.png")
+ * @param {{ forWrite?: boolean }} [options] When forWrite is set the row only
+ *        wins while canonical writes can land; with writes disabled the PNG
+ *        is the write authority and must be the edit base.
+ * @returns {string|null} card_json string or null
+ */
+function getCanonicalCharacterCardJsonSafe(handle, directories, avatarFilename, { forWrite = false } = {}) {
+    try {
+        const featureFlags = getCanonicalCharacterFeatureFlags();
+        if (!featureFlags.enabled || !featureFlags.reads) {
+            return null;
+        }
+        // Under 'sync' the PNG is the live projection: file-first preserves
+        // out-of-band edits and matches pre-canonical semantics. Under 'off'
+        // the canonical row is authority and a leftover PNG may be stale.
+        if (getCanonicalStorageSlice('characters').getProjectionMode() !== 'off') {
+            return null;
+        }
+        if (forWrite && !featureFlags.writes) {
+            return null;
+        }
+        const resolvedHandle = handle
+            ?? directories?.handle
+            ?? path.basename(path.resolve(directories?.root ?? 'default-user'));
+        const storageStatus = getCanonicalStorageStatus({ handle: resolvedHandle, directories, featureFlags });
+        if (!storageStatus.supported || storageStatus.disabledReason === 'migration_blocked') {
+            return null;
+        }
+        const db = openCanonicalDatabase({ handle: resolvedHandle, directories, featureFlags });
+        if (!db) {
+            return null;
+        }
+        const migrationStatus = runCanonicalMigrations(db, { strict: !!featureFlags.strict });
+        if (!migrationStatus.ok) {
+            return null;
+        }
+        const row = db.prepare(`
+            SELECT card_json FROM characters
+            WHERE avatar_filename = ? AND deleted_at_ms IS NULL
+        `).get(avatarFilename);
+        return row?.card_json ?? null;
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * Whether a live canonical character row exists for the avatar filename.
+ * @param {string|null} handle User handle
+ * @param {import('../users.js').UserDirectoryList} directories User directories
+ * @param {string} avatarFilename Avatar file name
+ * @returns {boolean} True when a live canonical row exists
+ */
+function canonicalCharacterExistsSafe(handle, directories, avatarFilename) {
+    return getCanonicalCharacterCardJsonSafe(handle, directories, avatarFilename) != null;
+}
+
+/**
+ * Reads canonical avatar blob contents for a character, or null when the blob
+ * slice cannot serve it.
+ * @param {import('../users.js').UserDirectoryList} directories User directories
+ * @param {string} avatarFilename Avatar file name
+ * @returns {Promise<{contents: Buffer, mediaType?: string}|null>} Blob read result
+ */
+async function getCharacterAvatarBlobContentsSafe(directories, avatarFilename) {
+    try {
+        const handle = directories?.handle ?? path.basename(path.resolve(directories?.root ?? 'default-user'));
+        return await getCharacterAvatarBlobContents({ handle, directories, avatarFilename });
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * Opens the canonical chats database for the request's user, or null when the
+ * slice cannot serve the phase (callers then fall back to JSONL files).
+ * Mirrors getCanonicalChatReadState: strict mode throws on real blockers.
+ * @param {import('express').Request} request Request object
+ * @param {'reads'|'writes'} phase Gate phase
+ * @returns {Promise<{db: import('better-sqlite3').Database, featureFlags: object, handle: string}|null>}
+ */
+async function getCanonicalChatsDbSafe(request, phase = 'reads') {
+    const chatSlice = getCanonicalStorageSlice('chats');
+    const featureFlags = chatSlice.getFeatureFlags();
+    if (!featureFlags.enabled || !featureFlags.reads) {
+        return null;
+    }
+    if (phase === 'writes' && !featureFlags.writes) {
+        return null;
+    }
+    const handle = request.user?.profile?.handle ?? 'default-user';
+    try {
+        await ensureCanonicalSliceBackend('chats', request.user.directories, handle);
+    } catch {
+        return null;
+    }
+    const storageStatus = getCanonicalStorageStatus({
+        handle,
+        directories: request.user.directories,
+        featureFlags,
+    });
+    if (!storageStatus.supported || storageStatus.disabledReason === 'migration_blocked') {
+        return null;
+    }
+    const db = openCanonicalDatabase({ handle, directories: request.user.directories, featureFlags });
+    if (!db) {
+        return null;
+    }
+    const migrationStatus = runCanonicalMigrations(db, { strict: !!featureFlags.strict });
+    if (!migrationStatus.ok) {
+        if (featureFlags.strict) {
+            throw new Error(migrationStatus.blockedReason);
+        }
+        return null;
+    }
+    const auditStatus = getPersistedCanonicalAuditStatus(db, { scope: chatSlice.auditScope });
+    const rollback = chatSlice.getRollbackBlockers({
+        db,
+        featureFlags,
+        phase,
+        persistedAuditStatus: auditStatus,
+    });
+    if (!rollback.ok) {
+        const reason = rollback.blockers[0]?.code ?? auditStatus.reason ?? 'chat_audit_blocked';
+        if (featureFlags.strict) {
+            throw new Error(`Canonical chat ${phase} blocked: ${reason}`);
+        }
+        return null;
+    }
+    return { db, featureFlags, handle };
+}
+
+/**
+ * Lists canonical chat sessions for one character, or null when the canonical
+ * chats slice cannot serve reads (callers then fall back to JSONL files).
+ * @param {import('express').Request} request Request object
+ * @param {string} ownerId Character internal name
+ * @returns {Promise<object[]|null>} Chat info payloads, or null when inactive
+ */
+async function listCanonicalCharacterChatsSafe(request, ownerId) {
+    // Under 'sync' JSONL files are live projections; only 'off' makes
+    // canonical sessions the listing authority.
+    if (getCanonicalStorageSlice('chats').getProjectionMode() !== 'off') {
+        return null;
+    }
+    const state = await getCanonicalChatsDbSafe(request, 'reads');
+    if (!state) {
+        return null;
+    }
+    return listCanonicalCharacterChatPayload({
+        db: state.db,
+        ownerId,
+        metadata: !!request.body?.metadata,
+    });
+}
+
+/**
+ * Commits a canonical chat session for a character import path (BYAF), or null
+ * when canonical chats cannot serve writes. The projected JSONL file is
+ * materialized only while chats projection is 'sync'.
+ * @param {import('express').Request} request Request object
+ * @param {string} ownerId Character internal name
+ * @param {string} filePath Legacy chat file destination
+ * @param {string} jsonlData Full chat JSONL payload
+ * @returns {Promise<{ok: boolean, repairKey?: string}|null>} Write result
+ */
+async function writeCanonicalChatSafe(request, ownerId, filePath, jsonlData) {
+    const state = await getCanonicalChatsDbSafe(request, 'writes');
+    if (!state) {
+        return null;
+    }
+    const sourcePath = path.relative(request.user.directories.root, filePath).split(path.sep).join('/');
+    const result = writeCanonicalChatPayload({
+        db: state.db,
+        locator: { ownerType: 'character', ownerId, sourcePath },
+        payload: parseCanonicalChatJsonl(jsonlData),
+        operation: 'import',
+        projection: getCanonicalStorageSlice('chats').getProjectionMode(),
+        projectJsonl(projectedJsonl) {
+            const dir = path.dirname(filePath);
+            if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+            writeFileAtomicSync(filePath, projectedJsonl, 'utf8');
+        },
+    });
+    return { ok: result.ok, repairKey: result.repairKey };
+}
+
+/**
+ * Commits a user-images asset through canonical managed media, or null when the
+ * slice cannot serve writes (callers then fall back to a plain file write).
+ * @param {import('express').Request} request Request object
+ * @param {string} compatibilityPath Path relative to the user root
+ * @param {Buffer} contents File bytes
+ * @param {object} [options] Extra write options (displayName, mediaType)
+ * @returns {Promise<object|null>} Canonical write result or null
+ */
+async function writeCanonicalManagedMediaSafe(request, compatibilityPath, contents, options = {}) {
+    try {
+        const handle = request.user?.profile?.handle ?? 'default-user';
+        await ensureCanonicalSliceBackend('managed_media', request.user.directories, handle);
+        const result = await writeCanonicalManagedMedia({
+            handle,
+            directories: request.user.directories,
+            compatibilityPath,
+            ownerType: 'user_image',
+            ownerId: compatibilityPath,
+            role: 'user_image',
+            displayName: options.displayName ?? path.basename(compatibilityPath),
+            contents,
+            mediaType: options.mediaType ?? null,
+        });
+        return result.authorityCommitted ? result : null;
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * Marks the chats audit stale so a file-side chat write heals through the next
+ * shadow import. Best-effort; silent when canonical chats are unavailable.
+ * @param {import('express').Request} request Request object
+ */
+async function invalidateCanonicalChatsAuditSafe(request) {
+    try {
+        const state = await getCanonicalChatsDbSafe(request, 'reads');
+        if (!state) {
+            return;
+        }
+        invalidateCanonicalAuditStatus(state.db, {
+            scope: getCanonicalStorageSlice('chats').auditScope,
+            handle: state.handle,
+            reason: 'audit_stale_after_side_channel_chat_write',
+            source: 'characters:chat_import',
+        });
+    } catch {
+        // best-effort only
+    }
+}
+
+/**
+ * Lists canonical avatar filenames (live rows). Empty when the slice is off.
+ * @param {string|null} handle User handle
+ * @param {import('../users.js').UserDirectoryList} directories User directories
+ * @returns {Set<string>} Canonical avatar filenames
+ */
+function listCanonicalAvatarFilenamesSafe(handle, directories) {
+    try {
+        const featureFlags = getCanonicalCharacterFeatureFlags();
+        if (!featureFlags.enabled || !featureFlags.reads) {
+            return new Set();
+        }
+        const resolvedHandle = handle
+            ?? directories?.handle
+            ?? path.basename(path.resolve(directories?.root ?? 'default-user'));
+        const storageStatus = getCanonicalStorageStatus({ handle: resolvedHandle, directories, featureFlags });
+        if (!storageStatus.supported || storageStatus.disabledReason === 'migration_blocked') {
+            return new Set();
+        }
+        const db = openCanonicalDatabase({ handle: resolvedHandle, directories, featureFlags });
+        if (!db) {
+            return new Set();
+        }
+        const migrationStatus = runCanonicalMigrations(db, { strict: !!featureFlags.strict });
+        if (!migrationStatus.ok) {
+            return new Set();
+        }
+        return new Set(db.prepare(`
+            SELECT avatar_filename FROM characters
+            WHERE deleted_at_ms IS NULL
+        `).all().map(row => String(row.avatar_filename)));
+    } catch {
+        return new Set();
+    }
 }
 
 function getCanonicalCharacterAuditTrackingFeatureFlags() {
@@ -684,6 +1001,10 @@ function createCharacterWriteDependencies({ bustCache = null } = {}) {
         formatCharacterData: charaFormatData,
         getPngName,
         readCharacterData,
+        readCanonicalCharacterData: async (avatarName, directories) =>
+            getCanonicalCharacterCardJsonSafe(null, directories, avatarName, { forWrite: true }) ?? undefined,
+        characterExists: async (directories, avatarName) =>
+            canonicalCharacterExistsSafe(null, directories, avatarName),
         getCharaCardV2,
         setValue: _.set,
         fileExists: fs.existsSync,
@@ -779,6 +1100,11 @@ function createCharacterWriteDependencies({ bustCache = null } = {}) {
                             throw new Error(`Canonical rename target not found: ${payload.oldAvatarName}`);
                         }
                         renameCharacterAvatarBlobReference(txnDb, payload.oldAvatarName, payload.newAvatarName);
+                        retargetCanonicalChatSessionsOwner(txnDb, {
+                            oldOwnerId: payload.oldInternalName,
+                            newOwnerId: payload.newInternalName,
+                            nowMs,
+                        });
                     });
                 } else if (operation === 'delete') {
                     withCanonicalTransaction(db, txnDb => {
@@ -791,6 +1117,12 @@ function createCharacterWriteDependencies({ bustCache = null } = {}) {
                             throw new Error(`Canonical delete target not found: ${payload.avatarName}`);
                         }
                         retireCharacterAvatarBlobReference(txnDb, payload.avatarName);
+                        if (payload.deleteChats) {
+                            deleteCanonicalChatSessionsForOwner(
+                                txnDb,
+                                String(payload.avatarName ?? '').replace(/\.png$/i, ''),
+                            );
+                        }
                     });
                 } else {
                     const fullPayload = JSON.parse(payload.characterData);
@@ -819,6 +1151,9 @@ function createCharacterWriteDependencies({ bustCache = null } = {}) {
                 enabled: true,
                 authorityCommitted: true,
                 repairKey,
+                projection: typeof characterSlice.getProjectionMode === 'function'
+                    ? characterSlice.getProjectionMode()
+                    : 'sync',
             };
         },
         recordProjectionRepair: async repair => {
@@ -989,12 +1324,19 @@ async function importFromByaf(uploadPath, { request }, preservedFileName) {
         /**
          * @param {Partial<ByafScenario>} scenario
         */
-        const createChatAsCurrentPersona = (scenario) => {
+        const createChatAsCurrentPersona = async (scenario) => {
             const chatName = sanitize(`${scenario.title || card.name} - ${humanizedDateTime()} imported.jsonl`, { replacement: sanitizeSafeCharacterReplacements });
             const filePath = path.join(request.user.directories.chats, path.basename(fileName), chatName);
+            const jsonlData = ByafParser.getChatFromScenario(scenario, request.body.user_name, card.name, byafData.chatBackgrounds);
+            const canonicalResult = await writeCanonicalChatSafe(request, path.basename(fileName), filePath, jsonlData);
+            if (canonicalResult) {
+                console.log(`Created ${chatName} chat from BYAF import (canonical)`);
+                return chatName;
+            }
             const dir = path.dirname(filePath);
             if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-            writeFileAtomicSync(filePath, ByafParser.getChatFromScenario(scenario, request.body.user_name, card.name, byafData.chatBackgrounds), 'utf8');
+            writeFileAtomicSync(filePath, jsonlData, 'utf8');
+            await invalidateCanonicalChatsAuditSafe(request);
             console.log(`Created ${chatName} chat from BYAF import`);
             return chatName;
         };
@@ -1008,8 +1350,19 @@ async function importFromByaf(uploadPath, { request }, preservedFileName) {
             const file = getUniqueName(baseName, (name) => fs.existsSync(path.join(filePath, `${name}${extension}`)));
             if (Buffer.isBuffer(bg.data)) {
                 const newFile = `${file}${extension}`;
-                writeFileAtomicSync(path.join(filePath, newFile), bg.data);
-                bg.name = clientRelativePath(request.user.directories.root, path.join(filePath, newFile)); // Update background name to the new file
+                const newFilePath = path.join(filePath, newFile);
+                bg.name = clientRelativePath(request.user.directories.root, newFilePath); // Update background name to the new file
+                // user/images/* is a managed-media domain: commit through the
+                // canonical service so the asset stays listable under 'off'.
+                const canonicalResult = await writeCanonicalManagedMediaSafe(
+                    request,
+                    `user/images/${fileName}/${newFile}`,
+                    bg.data,
+                    { displayName: newFile },
+                );
+                if (!canonicalResult) {
+                    writeFileAtomicSync(newFilePath, bg.data);
+                }
                 console.log(`Created ${newFile} background from BYAF import`);
             }
         }
@@ -1018,7 +1371,7 @@ async function importFromByaf(uploadPath, { request }, preservedFileName) {
         // Create chats for each scenario
         if (Array.isArray(byafData.scenarios)) {
             for (const scenario of byafData.scenarios) {
-                chats.push(createChatAsCurrentPersona(scenario));
+                chats.push(await createChatAsCurrentPersona(scenario));
             }
         }
 
@@ -1328,10 +1681,14 @@ router.post('/edit-avatar', validateAvatarUrlMiddleware, async function (request
             return response.status(400).send('Error: uploaded file does not exist');
         }
         const characterPath = path.join(request.user.directories.characters, request.body.avatar_url);
-        if (!fs.existsSync(characterPath)) {
+        const characterExists = fs.existsSync(characterPath)
+            || canonicalCharacterExistsSafe(request.user.profile?.handle ?? null, request.user.directories, request.body.avatar_url);
+        if (!characterExists) {
             return response.status(400).send('Error: character file does not exist');
         }
-        const data = await readCharacterData(characterPath);
+        // Canonical row is authority when present; a leftover PNG may be stale.
+        const data = getCanonicalCharacterCardJsonSafe(request.user.profile?.handle ?? null, request.user.directories, request.body.avatar_url, { forWrite: true })
+            ?? (fs.existsSync(characterPath) ? await readCharacterData(characterPath) : null);
         if (!data) {
             return response.status(400).send('Error: failed to read character data');
         }
@@ -1389,7 +1746,8 @@ router.post('/edit-attribute', validateAvatarUrlMiddleware, async function (requ
 
     try {
         const avatarPath = path.join(request.user.directories.characters, request.body.avatar_url);
-        const charJSON = await readCharacterData(avatarPath);
+        const charJSON = getCanonicalCharacterCardJsonSafe(request.user.profile?.handle ?? null, request.user.directories, request.body.avatar_url, { forWrite: true })
+            ?? (fs.existsSync(avatarPath) ? await readCharacterData(avatarPath) : null);
         if (typeof charJSON !== 'string') throw new Error('Failed to read character file');
 
         const char = JSON.parse(charJSON);
@@ -1436,7 +1794,8 @@ const BULK_MERGE_CONCURRENCY = 10;
  * @returns {Promise<{ok: boolean, error?: string, skipped?: boolean}>} Result of the merge operation, including any validation error
  */
 async function mergeCharacterUpdate(avatarPath, avatar, updateData, request, shouldSkip = null) {
-    const pngStringData = await readCharacterData(avatarPath);
+    const pngStringData = getCanonicalCharacterCardJsonSafe(request.user.profile?.handle ?? null, request.user.directories, avatar, { forWrite: true })
+        ?? (fs.existsSync(avatarPath) ? await readCharacterData(avatarPath) : null);
     if (!pngStringData) {
         return { ok: false, error: 'Invalid character file' };
     }
@@ -1518,9 +1877,14 @@ router.post('/merge-attributes', getFileNameValidationFunction('avatar'), async 
                 }
                 targetAvatars = avatars;
             } else {
-                // Empty array → scan all characters in the directory
+                // Empty array → all characters: directory scan ∪ canonical rows
+                // (projection 'off' may leave live characters fileless).
                 const files = fs.readdirSync(request.user.directories.characters);
-                targetAvatars = files.filter(file => path.extname(file).toLowerCase() === '.png');
+                const fileAvatars = files.filter(file => path.extname(file).toLowerCase() === '.png');
+                targetAvatars = [...new Set([
+                    ...fileAvatars,
+                    ...listCanonicalAvatarFilenamesSafe(request.user.profile?.handle ?? null, request.user.directories),
+                ])];
             }
 
             const updated = [];
@@ -1771,6 +2135,16 @@ router.post('/chats', validateAvatarUrlMiddleware, async function (request, resp
         const characterDirectory = (request.body.avatar_url).replace('.png', '');
         const chatsDirectory = path.join(request.user.directories.chats, characterDirectory);
 
+        // Canonical chat sessions are the authority when the chats slice can
+        // serve reads; JSONL files are a projection surface under 'off'.
+        const canonicalChats = await listCanonicalCharacterChatsSafe(request, characterDirectory);
+        if (canonicalChats) {
+            if (request.body.simple) {
+                return response.send(canonicalChats.map(chat => ({ file_name: chat.file_name, file_id: chat.file_id })));
+            }
+            return response.send(canonicalChats);
+        }
+
         if (!fs.existsSync(chatsDirectory)) {
             return response.send({ error: true });
         }
@@ -1810,8 +2184,12 @@ router.post('/chats', validateAvatarUrlMiddleware, async function (request, resp
  */
 function getPngName(file, directories) {
     file = sanitize(file);
-    return getUniqueName(file, (name) => fs.existsSync(path.join(directories.characters, `${name}.png`)),
-        { nameBuilder: (base, i) => i === 0 ? base : `${base}${i}`, startIndex: 0, maxTries: 10000 }) ?? file;
+    // Name uniqueness spans projected PNGs *and* canonical rows — under
+    // projection 'off' the directory may not list every live character.
+    const canonicalNames = listCanonicalAvatarFilenamesSafe(null, directories);
+    return getUniqueName(file, (name) => fs.existsSync(path.join(directories.characters, `${name}.png`))
+        || canonicalNames.has(`${name}.png`),
+    { nameBuilder: (base, i) => i === 0 ? base : `${base}${i}`, startIndex: 0, maxTries: 10000 }) ?? file;
 }
 
 /**
@@ -1915,7 +2293,9 @@ router.post('/duplicate', validateAvatarUrlMiddleware, async function (request, 
             return response.sendStatus(400);
         }
         let filename = path.join(request.user.directories.characters, sanitize(request.body.avatar_url));
-        if (!fs.existsSync(filename)) {
+        const fileExists = fs.existsSync(filename);
+        const canonicalExists = canonicalCharacterExistsSafe(request.user.profile?.handle ?? null, request.user.directories, request.body.avatar_url);
+        if (!fileExists && !canonicalExists) {
             console.error('file for dupe not found', filename);
             return response.sendStatus(404);
         }
@@ -1935,25 +2315,34 @@ router.post('/duplicate', validateAvatarUrlMiddleware, async function (request, 
             baseName = nameParts.join('_'); // original filename is completely the baseName
         }
 
+        // Uniqueness spans projected PNGs and canonical rows.
+        const canonicalNames = listCanonicalAvatarFilenamesSafe(request.user.profile?.handle ?? null, request.user.directories);
         newFilename = path.join(request.user.directories.characters, `${baseName}_${suffix}${path.extname(filename)}`);
 
-        while (fs.existsSync(newFilename)) {
+        while (fs.existsSync(newFilename) || canonicalNames.has(path.basename(newFilename))) {
             let suffixStr = '_' + suffix;
             newFilename = path.join(request.user.directories.characters, `${baseName}${suffixStr}${path.extname(filename)}`);
             suffix++;
         }
 
-        const rawCharacterData = await readCharacterData(filename);
-        if (rawCharacterData === undefined) {
+        const rawCharacterData = getCanonicalCharacterCardJsonSafe(request.user.profile?.handle ?? null, request.user.directories, request.body.avatar_url, { forWrite: true })
+            ?? (fileExists ? await readCharacterData(filename) : null);
+        if (rawCharacterData == null) {
             throw new Error(`Failed to read character file for duplicate: ${filename}`);
         }
+
+        // The PNG file may be absent under projection 'off'; the canonical
+        // avatar blob is the image source in that case.
+        const sourceImage = fileExists
+            ? filename
+            : (await getCharacterAvatarBlobContentsSafe(request.user.directories, request.body.avatar_url))?.contents ?? null;
 
         const duplicateInternalName = path.parse(newFilename).name;
         const result = await createCharacterCard({
             request,
             internalName: duplicateInternalName,
             characterData: rawCharacterData,
-            sourceImage: filename,
+            sourceImage: sourceImage ?? filename,
             ensureChatsDirectory: false,
             dependencies: createCharacterWriteDependencies(),
         });
@@ -1977,15 +2366,30 @@ router.post('/export', validateAvatarUrlMiddleware, async function (request, res
         }
 
         let filename = path.join(request.user.directories.characters, sanitize(request.body.avatar_url));
+        const handle = request.user.profile?.handle ?? null;
 
-        if (!fs.existsSync(filename)) {
+        // Canonical rows + avatar blobs can serve exports without a PNG
+        // projection on disk.
+        // Canonical card_json is the authority when present; a leftover PNG
+        // may be arbitrarily stale under projection 'off'.
+        const fileExists = fs.existsSync(filename);
+        const canonicalJson = getCanonicalCharacterCardJsonSafe(handle, request.user.directories, request.body.avatar_url);
+        if (!fileExists && canonicalJson === null) {
             return response.sendStatus(404);
         }
 
         switch (request.body.format) {
             case 'png': {
-                const rawBuffer = await fsPromises.readFile(filename);
-                const rawData = read(rawBuffer);
+                const blob = fileExists
+                    ? null
+                    : await getCharacterAvatarBlobContentsSafe(request.user.directories, request.body.avatar_url);
+                const rawBuffer = fileExists
+                    ? await fsPromises.readFile(filename)
+                    : blob?.contents;
+                if (!rawBuffer) {
+                    return response.sendStatus(404);
+                }
+                const rawData = fileExists && canonicalJson === null ? read(rawBuffer) : String(canonicalJson);
                 const mutatedData = mutateJsonString(rawData, unsetPrivateFields);
                 const mutatedBuffer = write(rawBuffer, mutatedData);
                 const contentType = mime.lookup(filename) || 'image/png';
@@ -1995,8 +2399,9 @@ router.post('/export', validateAvatarUrlMiddleware, async function (request, res
             }
             case 'json': {
                 try {
-                    const json = await readCharacterData(filename);
-                    if (json === undefined) return response.sendStatus(400);
+                    const json = canonicalJson
+                        ?? (fileExists ? await readCharacterData(filename) : null);
+                    if (json == null) return response.sendStatus(400);
                     const jsonObject = getCharaCardV2(JSON.parse(json), request.user.directories);
                     unsetPrivateFields(jsonObject);
                     return response.type('json').send(JSON.stringify(jsonObject, null, 4));

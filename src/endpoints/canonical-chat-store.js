@@ -407,6 +407,57 @@ export function deleteCanonicalChatSession(db, locator) {
     };
 }
 
+/**
+ * Moves every canonical chat session owned by one character to a new owner.
+ * Mirrors the legacy `chats/<old>/ → chats/<new>/` directory copy on rename.
+ * Runs inside the caller's transaction.
+ * @param {import('better-sqlite3').Database} db Canonical database (txn handle)
+ * @param {object} options Options
+ * @param {string} options.oldOwnerId Previous character internal name
+ * @param {string} options.newOwnerId New character internal name
+ * @param {number} options.nowMs Update timestamp
+ * @returns {number} Number of retargeted sessions
+ */
+export function retargetCanonicalChatSessionsOwner(db, { oldOwnerId, newOwnerId, nowMs = Date.now() }) {
+    const sessions = db.prepare(`
+        SELECT id, source_path
+        FROM chat_sessions
+        WHERE owner_type = 'character' AND owner_id = ?
+    `).all(String(oldOwnerId ?? ''));
+    if (sessions.length === 0) {
+        return 0;
+    }
+    const oldPrefix = `chats/${oldOwnerId}/`;
+    const newPrefix = `chats/${newOwnerId}/`;
+    const update = db.prepare(`
+        UPDATE chat_sessions
+        SET owner_id = ?, source_path = ?, updated_at_ms = ?
+        WHERE id = ?
+    `);
+    for (const session of sessions) {
+        const sourcePath = String(session.source_path ?? '');
+        const nextSourcePath = sourcePath.startsWith(oldPrefix)
+            ? newPrefix + sourcePath.slice(oldPrefix.length)
+            : sourcePath;
+        update.run(String(newOwnerId), nextSourcePath, Number(nowMs), session.id);
+    }
+    return sessions.length;
+}
+
+/**
+ * Deletes every canonical chat session owned by one character (messages
+ * cascade). Runs inside the caller's transaction.
+ * @param {import('better-sqlite3').Database} db Canonical database (txn handle)
+ * @param {string} ownerId Character internal name
+ * @returns {number} Number of deleted sessions
+ */
+export function deleteCanonicalChatSessionsForOwner(db, ownerId) {
+    return Number(db.prepare(`
+        DELETE FROM chat_sessions
+        WHERE owner_type = 'character' AND owner_id = ?
+    `).run(String(ownerId ?? '')).changes ?? 0);
+}
+
 export function getCanonicalChatMessagePayloads(db, sessionId) {
     return db.prepare(`
         SELECT id, message_order, payload_json

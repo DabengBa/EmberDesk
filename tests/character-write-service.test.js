@@ -376,7 +376,7 @@ describe('character write service', () => {
         };
         const request = makeRequest(directories);
         const { calls, dependencies } = makeDependencies({
-            existingPaths: ['user/chats/Old'],
+            existingPaths: ['user/chats/Old', 'user/characters/Old.png'],
             includeCanonicalSeam: false,
         });
 
@@ -411,7 +411,7 @@ describe('character write service', () => {
         };
         const request = makeRequest(directories);
         const { calls, dependencies } = makeDependencies({
-            existingPaths: ['user/chats/Old'],
+            existingPaths: ['user/chats/Old', 'user/characters/Old.png'],
             canonicalResult: {
                 enabled: true,
                 authorityCommitted: true,
@@ -444,7 +444,7 @@ describe('character write service', () => {
         };
         const request = makeRequest(directories);
         const { calls, dependencies } = makeDependencies({
-            existingPaths: ['user/chats/Old'],
+            existingPaths: ['user/chats/Old', 'user/characters/Old.png'],
             writeResult: false,
             includeCanonicalSeam: false,
         });
@@ -581,7 +581,7 @@ describe('character write service', () => {
         };
         const request = makeRequest(directories);
         const { calls, dependencies } = makeDependencies({
-            existingPaths: ['user/chats/Old'],
+            existingPaths: ['user/chats/Old', 'user/characters/Old.png'],
             writeResult: false,
             canonicalResult: {
                 enabled: true,
@@ -617,5 +617,136 @@ describe('character write service', () => {
                 sourceImage: 'user/characters/Old.png',
             }),
         })]);
+    });
+
+    test('propagates the canonical projection mode into compatibility write options', async () => {
+        const directories = {
+            characters: 'user/characters',
+            chats: 'user/chats',
+        };
+        const request = makeRequest(directories);
+        const { calls, dependencies } = makeDependencies({
+            canonicalResult: {
+                enabled: true,
+                authorityCommitted: true,
+                repairKey: 'repair:create:Tester.png',
+                projection: 'off',
+            },
+        });
+
+        const result = await createCharacterCard({
+            request,
+            body: { ch_name: 'Tester' },
+            dependencies,
+        });
+
+        expect(result).toEqual({ ok: true, avatarName: 'Tester.png', internalName: 'Tester' });
+        expect(calls).toContainEqual([
+            'write',
+            'default-avatar.png',
+            '{"name":"Tester"}',
+            'Tester',
+            undefined,
+            { skipCanonicalAuditInvalidation: true, projection: 'off' },
+        ]);
+    });
+
+    test('deletes a canonical character whose PNG projection is absent under projection off', async () => {
+        const directories = {
+            characters: 'user/characters',
+            chats: 'user/chats',
+        };
+        const request = makeRequest(directories);
+        const { calls, dependencies } = makeDependencies({
+            canonicalResult: {
+                enabled: true,
+                authorityCommitted: true,
+                repairKey: 'repair:delete:Tester.png',
+                projection: 'off',
+            },
+        });
+        dependencies.characterExists = jest.fn(async () => true);
+
+        const result = await deleteCharacterCard({
+            request,
+            avatarName: 'Tester.png',
+            deleteChats: true,
+            dependencies,
+        });
+
+        expect(result).toEqual({ ok: true, avatarName: 'Tester.png' });
+        expect(calls).toContainEqual(['canonical-write', 'delete', expect.objectContaining({
+            avatarName: 'Tester.png',
+            deleteChats: true,
+        })]);
+        expect(dependencies.characterExists).toHaveBeenCalledWith(directories, 'Tester.png');
+        // No PNG exists: unlink must not run and no projection repair is recorded.
+        expect(calls.find(call => call[0] === 'unlink')).toBeUndefined();
+        expect(calls.find(call => call[0] === 'repair')).toBeUndefined();
+    });
+
+    test('still reports missing_avatar when neither file nor canonical row exists', async () => {
+        const directories = {
+            characters: 'user/characters',
+            chats: 'user/chats',
+        };
+        const request = makeRequest(directories);
+        const { dependencies } = makeDependencies({
+            canonicalResult: {
+                enabled: true,
+                authorityCommitted: true,
+                repairKey: 'repair:delete:Tester.png',
+                projection: 'off',
+            },
+        });
+        dependencies.characterExists = jest.fn(async () => false);
+
+        const result = await deleteCharacterCard({
+            request,
+            avatarName: 'Tester.png',
+            dependencies,
+        });
+
+        expect(result.reason).toBe('missing_avatar');
+        expect(dependencies.performCanonicalWrite).not.toHaveBeenCalled();
+    });
+
+    test('renames a canonical character by reading card data when the PNG is absent', async () => {
+        const directories = {
+            characters: 'user/characters',
+            chats: 'user/chats',
+        };
+        const request = makeRequest(directories);
+        const { calls, dependencies } = makeDependencies({
+            existingPaths: ['user/chats/Old'],
+            canonicalResult: {
+                enabled: true,
+                authorityCommitted: true,
+                repairKey: 'repair:rename:New.png',
+                projection: 'off',
+            },
+        });
+        dependencies.readCanonicalCharacterData = jest.fn(async () => '{"name":"Old","data":{"name":"Old"}}');
+
+        const result = await renameCharacterCard({
+            request,
+            body: {
+                avatar_url: 'Old.png',
+                new_name: 'New',
+            },
+            dependencies,
+        });
+
+        expect(result).toEqual({ ok: true, avatarName: 'New.png' });
+        expect(dependencies.readCanonicalCharacterData).toHaveBeenCalledWith('Old.png', directories);
+        expect(calls.find(call => call[0] === 'read')).toBeUndefined();
+        expect(calls).toContainEqual([
+            'write',
+            'user/characters/Old.png',
+            '{"name":"New","data":{"name":"New"}}',
+            'New',
+            undefined,
+            { skipCanonicalAuditInvalidation: true, projection: 'off' },
+        ]);
     });
 });

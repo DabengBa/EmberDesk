@@ -81,6 +81,7 @@ function getProjectionWriteOptions(canonicalResult, extraOptions = undefined) {
     return {
         ...extraOptions,
         ...(canonicalResult.authorityCommitted ? { skipCanonicalAuditInvalidation: true } : {}),
+        ...(canonicalResult.projection ? { projection: canonicalResult.projection } : {}),
     };
 }
 
@@ -155,7 +156,9 @@ async function createPreparedRenameData(body, directories, request, dependencies
     const newAvatarName = getAvatarName(newInternalName);
     const oldAvatarPath = joinPath(dependencies, directories.characters, oldAvatarName);
 
-    const rawOldData = await dependencies.readCharacterData(oldAvatarPath);
+    // Canonical row is authority when present; a leftover PNG may be stale.
+    const rawOldData = await dependencies.readCanonicalCharacterData?.(oldAvatarName, directories)
+        ?? (exists(dependencies, oldAvatarPath) ? await dependencies.readCharacterData(oldAvatarPath) : undefined);
     if (rawOldData === undefined) {
         throw new Error('Failed to read character file');
     }
@@ -294,6 +297,19 @@ export async function editCharacterCard({
         ? createPreparedEditData(body, userDirectories, dependencies)
         : { avatarUrl, targetFile, characterData };
     const uploadPath = getUploadPath(file ?? uploadFile, dependencies);
+    const avatarPath = joinPath(dependencies, userDirectories.characters, prepared.avatarUrl);
+
+    // Existence must be checked before the canonical write: an edit upsert
+    // would otherwise create a row for a character that never existed. A
+    // replacement-avatar upload is exempt — it creates the card image.
+    if (!uploadPath
+        && !exists(dependencies, avatarPath)
+        && !(await dependencies.characterExists?.(userDirectories, prepared.avatarUrl))) {
+        return {
+            ...failureResult('missing_avatar', 'Error: character file does not exist'),
+            avatarPath,
+        };
+    }
 
     const canonicalResult = await maybeCommitCanonicalWrite(dependencies, 'edit', {
         avatarName: prepared.avatarUrl,
@@ -305,14 +321,6 @@ export async function editCharacterCard({
     });
 
     if (!uploadPath) {
-        const avatarPath = joinPath(dependencies, userDirectories.characters, prepared.avatarUrl);
-        if (!exists(dependencies, avatarPath)) {
-            return {
-                ...failureResult('missing_avatar', 'Error: character file does not exist'),
-                avatarPath,
-            };
-        }
-
         const result = await dependencies.writeCharacterData(
             avatarPath,
             prepared.characterData,
@@ -463,7 +471,14 @@ export async function renameCharacterCard(options) {
         removeDirectory(dependencies, oldChatsPath);
     }
 
-    unlinkFile(dependencies, oldAvatarPath);
+    // Under projection 'off' the old PNG may not exist — removal is best-effort.
+    try {
+        unlinkFile(dependencies, oldAvatarPath);
+    } catch (error) {
+        if (canonicalResult.projection !== 'off') {
+            throw error;
+        }
+    }
     dependencies.removeCompatibilityLedgerEntry?.(oldAvatarPath, directories, request.user.profile?.handle ?? null);
     return okResult(newAvatarName);
 }
@@ -488,7 +503,8 @@ export async function deleteCharacterCard({
     const targetAvatarName = avatarName ?? request.body?.avatar_url;
     const avatarPath = joinPath(dependencies, userDirectories.characters, targetAvatarName);
 
-    if (!exists(dependencies, avatarPath)) {
+    if (!exists(dependencies, avatarPath)
+        && !(await dependencies.characterExists?.(userDirectories, targetAvatarName))) {
         return {
             ...failureResult('missing_avatar', 'Error: character file does not exist', targetAvatarName),
             avatarPath,
@@ -497,12 +513,15 @@ export async function deleteCharacterCard({
 
     const canonicalResult = await maybeCommitCanonicalWrite(dependencies, 'delete', {
         avatarName: targetAvatarName,
+        deleteChats,
         directories: userDirectories,
         request,
     });
 
     try {
-        unlinkFile(dependencies, avatarPath);
+        if (canonicalResult.projection !== 'off' || exists(dependencies, avatarPath)) {
+            unlinkFile(dependencies, avatarPath);
+        }
         dependencies.removeCompatibilityLedgerEntry?.(avatarPath, userDirectories, request.user.profile?.handle ?? null);
         dependencies.invalidateThumbnail?.(userDirectories, 'avatar', targetAvatarName);
 

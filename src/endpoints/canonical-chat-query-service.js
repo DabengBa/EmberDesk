@@ -221,6 +221,22 @@ export async function searchCanonicalChatPayload({
 }
 
 /**
+ * Build `/api/characters/chats` results for one character from canonical
+ * sessions. Preserves the legacy getChatInfo response shape.
+ * @param {object} options Options
+ * @param {import('better-sqlite3').Database} options.db Canonical database
+ * @param {string} options.ownerId Character internal name (avatar sans .png)
+ * @param {boolean} [options.metadata] Include chat_metadata payloads
+ * @returns {object[]} Chat info payloads ordered by source path
+ */
+export function listCanonicalCharacterChatPayload({ db, ownerId, metadata = false }) {
+    return listCanonicalChatSummaries(db, {
+        ownerType: 'character',
+        ownerIds: [String(ownerId ?? '')],
+    }).map(summary => buildRecentPayload(summary, { metadata }));
+}
+
+/**
  * Build `/api/chats/recent` results from canonical character chats while
  * preserving top-level root-chat compatibility files.
  */

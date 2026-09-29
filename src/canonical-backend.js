@@ -57,11 +57,12 @@ const SLICE_RUNNERS = {
             manager,
             buildSnapshotRow: buildSnapshotRow ?? buildCharacterSnapshotRow,
         }),
-        runAudit: ({ handle, directories, db, buildSnapshotRow }) => auditCanonicalShadowImport({
+        runAudit: ({ handle, directories, db, buildSnapshotRow, projection }) => auditCanonicalShadowImport({
             handle,
             directories,
             db,
             buildSnapshotRow: buildSnapshotRow ?? buildCharacterSnapshotRow,
+            projection,
         }),
         // Avatar blobs are registered lazily on every init so already-clean
         // installs still get their one-time backfill (idempotent scan).

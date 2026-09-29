@@ -96,6 +96,7 @@ function createCharacterSlice() {
     const flags = createSliceFlagCapabilities({
         flagKey: 'characters',
         supportsChatStats: true,
+        defaultProjection: 'off',
     });
     return {
         key: 'characters',

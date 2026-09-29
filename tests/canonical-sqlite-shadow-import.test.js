@@ -823,4 +823,254 @@ describe('canonical sqlite shadow import', () => {
             status: 'missing',
         }));
     });
+
+    test('suppresses stale projection drift under projection off', async () => {
+        const root = makeRoot();
+        const directories = createDirectories(root);
+        const manager = createManager();
+        const buildSnapshotRow = createSnapshotBuilder();
+
+        writeCharacterFile(directories, 'alpha.png', {
+            name: 'Alpha',
+            chat: 'Alpha - chat',
+            fav: false,
+            tags: [],
+            data: { name: 'Alpha', extensions: { fav: false, world: '' }, tags: [] },
+        });
+
+        await runCanonicalShadowImport({
+            handle: 'alice',
+            directories,
+            featureFlags: { enabled: true, shadowImport: true, strict: false },
+            manager,
+            buildSnapshotRow,
+            nowMs: 1735689600000,
+        });
+
+        writeCharacterFile(directories, 'alpha.png', {
+            name: 'Alpha Out Of Band',
+            chat: 'Alpha - chat',
+            fav: false,
+            tags: [],
+            data: { name: 'Alpha Out Of Band', extensions: { fav: false, world: '' }, tags: [] },
+        });
+
+        const db = manager.open({
+            handle: 'alice',
+            directories,
+            featureFlags: { enabled: true, strict: false },
+        });
+
+        const audit = await auditCanonicalShadowImport({
+            handle: 'alice',
+            directories,
+            db,
+            buildSnapshotRow,
+            projection: 'off',
+            auditedAtMs: 1735689612222,
+        });
+
+        expect(audit.ok).toBe(true);
+        expect(audit.hasDrift).toBe(false);
+        expect(audit.entries).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                avatar_filename: 'alpha.png',
+                status: 'drift',
+                drift_types: expect.arrayContaining(['payload_mismatch']),
+                details: expect.objectContaining({
+                    suppressed: true,
+                    projection_mode: 'off',
+                }),
+            }),
+        ]));
+    });
+
+    test('suppresses missing projection files under projection off', async () => {
+        const root = makeRoot();
+        const directories = createDirectories(root);
+        const manager = createManager();
+        const buildSnapshotRow = createSnapshotBuilder();
+
+        writeCharacterFile(directories, 'alpha.png', {
+            name: 'Alpha',
+            chat: 'Alpha - chat',
+            fav: false,
+            tags: [],
+            data: { name: 'Alpha', extensions: { fav: false, world: '' }, tags: [] },
+        });
+
+        await runCanonicalShadowImport({
+            handle: 'alice',
+            directories,
+            featureFlags: { enabled: true, shadowImport: true, strict: false },
+            manager,
+            buildSnapshotRow,
+            nowMs: 1735689600000,
+        });
+
+        fs.rmSync(path.join(directories.characters, 'alpha.png'));
+
+        const db = manager.open({
+            handle: 'alice',
+            directories,
+            featureFlags: { enabled: true, strict: false },
+        });
+
+        const audit = await auditCanonicalShadowImport({
+            handle: 'alice',
+            directories,
+            db,
+            buildSnapshotRow,
+            projection: 'off',
+            auditedAtMs: 1735689612222,
+        });
+
+        expect(audit.ok).toBe(true);
+        expect(audit.entries).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                avatar_filename: 'alpha.png',
+                status: 'drift',
+                drift_types: ['missing_projection_file'],
+                details: expect.objectContaining({ suppressed: true }),
+            }),
+        ]));
+    });
+
+    test('keeps open projection repairs blocking under projection off', async () => {
+        const root = makeRoot();
+        const directories = createDirectories(root);
+        const manager = createManager();
+        const buildSnapshotRow = createSnapshotBuilder();
+
+        writeCharacterFile(directories, 'alpha.png', {
+            name: 'Alpha',
+            chat: 'Alpha - chat',
+            fav: false,
+            tags: [],
+            data: { name: 'Alpha', extensions: { fav: false, world: '' }, tags: [] },
+        });
+
+        await runCanonicalShadowImport({
+            handle: 'alice',
+            directories,
+            featureFlags: { enabled: true, shadowImport: true, strict: false },
+            manager,
+            buildSnapshotRow,
+            nowMs: 1735689600000,
+        });
+
+        const db = manager.open({
+            handle: 'alice',
+            directories,
+            featureFlags: { enabled: true, strict: false },
+        });
+        recordProjectionRepair(db, {
+            repairKey: 'repair:create:alpha.png',
+            repairType: 'character_projection',
+            avatarFilename: 'alpha.png',
+            reason: 'projection_failed',
+            details: { operation: 'create' },
+            nowMs: 1735689613333,
+        });
+        invalidateCanonicalAuditStatus(db, {
+            handle: 'alice',
+            reason: 'projection_repair_pending',
+            source: 'test',
+        });
+
+        const audit = await auditCanonicalShadowImport({
+            handle: 'alice',
+            directories,
+            db,
+            buildSnapshotRow,
+            projection: 'off',
+            auditedAtMs: 1735689614444,
+        });
+
+        expect(audit.ok).toBe(false);
+        expect(audit.blocking).toBe(true);
+        expect(audit.entries).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                avatar_filename: 'alpha.png',
+                status: 'drift',
+                drift_types: expect.arrayContaining(['open_projection_repair']),
+            }),
+        ]));
+    });
+
+    test('keeps canonical chat-stats drift blocking under projection off', async () => {
+        const previousEnv = process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SLICES_CHATS_PROJECTION;
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SLICES_CHATS_PROJECTION = 'off';
+        try {
+            const root = makeRoot();
+            const directories = createDirectories(root);
+            const manager = createManager();
+            const buildSnapshotRow = createSnapshotBuilder();
+
+            writeCharacterFile(directories, 'alpha.png', {
+                name: 'Alpha',
+                chat: 'Alpha - chat',
+                fav: false,
+                tags: [],
+                data: { name: 'Alpha', extensions: { fav: false, world: '' }, tags: [] },
+            });
+
+            await runCanonicalShadowImport({
+                handle: 'alice',
+                directories,
+                featureFlags: { enabled: true, shadowImport: true, strict: false },
+                manager,
+                buildSnapshotRow,
+                nowMs: 1735689600000,
+            });
+
+            const db = manager.open({
+                handle: 'alice',
+                directories,
+                featureFlags: { enabled: true, strict: false },
+            });
+
+            // A canonical chat session exists while the stored stats claim zero:
+            // DB-side drift must stay blocking even with both projections off.
+            const { createCanonicalChatSessionRecord, upsertCanonicalChatSession } =
+                await import('../src/endpoints/canonical-chat-store.js');
+            upsertCanonicalChatSession(db, createCanonicalChatSessionRecord(db, {
+                locator: {
+                    ownerType: 'character',
+                    ownerId: 'alpha',
+                    sourcePath: 'chats/alpha/first.jsonl',
+                },
+                payload: [
+                    { chat_metadata: { integrity: 'session' } },
+                    { name: 'User', mes: 'Hello', send_date: '2026-01-01T00:00:00.000Z' },
+                ],
+                nowMs: 1735689601111,
+            }));
+
+            const audit = await auditCanonicalShadowImport({
+                handle: 'alice',
+                directories,
+                db,
+                buildSnapshotRow,
+                projection: 'off',
+                auditedAtMs: 1735689614444,
+            });
+
+            expect(audit.ok).toBe(false);
+            expect(audit.blocking).toBe(true);
+            expect(audit.entries).toEqual(expect.arrayContaining([
+                expect.objectContaining({
+                    avatar_filename: 'alpha.png',
+                    status: 'drift',
+                    drift_types: expect.arrayContaining(['chat_stats_mismatch']),
+                }),
+            ]));
+        } finally {
+            if (previousEnv === undefined) {
+                delete process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SLICES_CHATS_PROJECTION;
+            } else {
+                process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SLICES_CHATS_PROJECTION = previousEnv;
+            }
+        }
+    });
 });

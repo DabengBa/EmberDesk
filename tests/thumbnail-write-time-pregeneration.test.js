@@ -70,6 +70,7 @@ async function importCharacterRoutes({ generateThumbnailImpl, thumbnailsEnabled 
         },
         keyToEnv: key => String(key).replace(/[.-]/g, '_').toUpperCase(),
         mutateJsonString: value => value,
+        formatBytes: value => `${value} B`,
         clientRelativePath: (_root, inputPath) => inputPath,
         getUniqueName: (baseName) => baseName,
         getImageBuffers: async () => new Map(),
@@ -252,6 +253,10 @@ afterEach(() => {
     jest.resetModules();
     jest.clearAllMocks();
 });
+
+// These hook tests assert the legacy PNG write behavior — pin characters
+// projection to 'sync' (the mocked keyToEnv drops the EMBERDESK_ prefix).
+process.env.FEATURES_STORAGE_CANONICALSQLITE_SLICES_CHARACTERS_PROJECTION = 'sync';
 
 describe('thumbnail write-time pregeneration hooks', () => {
     test('CharX expression assets are not mapped for persistence', () => {

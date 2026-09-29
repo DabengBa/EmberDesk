@@ -881,6 +881,7 @@ afterEach(() => {
     delete process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_CHATSTATS;
     delete process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_STRICT;
     delete process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SLICES_CHATS_PROJECTION;
+    delete process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SLICES_CHARACTERS_PROJECTION;
 
     for (const root of tempRoots.splice(0, tempRoots.length)) {
         fs.rmSync(root, { recursive: true, force: true });
@@ -1346,6 +1347,7 @@ describe('character index', () => {
         tempRoots.push(directories.root);
         writeCharacterCardFile(directories, 'alpha.png', 'Alpha Live');
 
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SLICES_CHATS_PROJECTION = 'sync';
         writeChatFile(directories.root, 'alpha.png', 'alpha.jsonl', 'hello');
 
         const response = await invokeCharacterGet(directories, 'alpha.png');
@@ -2303,6 +2305,9 @@ describe('character index', () => {
         process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SHADOWIMPORT = 'true';
         process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_READS = 'true';
         process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_WRITES = 'true';
+        // The seeded file-vs-row divergence asserts 'sync' write-base semantics:
+        // under 'off' the canonical row would win the duplicate source read.
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SLICES_CHARACTERS_PROJECTION = 'sync';
 
         writeCharacterCardFile(directories, 'alpha.png', 'Live Alpha');
 
@@ -2372,6 +2377,8 @@ describe('character index', () => {
         process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SHADOWIMPORT = 'true';
         process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_READS = 'true';
         process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_WRITES = 'true';
+        // 'sync' write-base semantics: the merge reads the live PNG projection.
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SLICES_CHARACTERS_PROJECTION = 'sync';
 
         writeCharacterCardFile(directories, 'alpha.png', 'Live Alpha');
 

@@ -7,6 +7,8 @@ import {
     calculateCharacterChatStats,
     getCharacterChatDirectory,
 } from './endpoints/character-file-snapshot.js';
+import { calculateCanonicalCharacterChatStats } from './endpoints/canonical-chat-store.js';
+import { getCanonicalSliceProjectionMode } from './storage-feature-flags.js';
 import { countMissingCharacterAvatarBlobs } from './canonical-avatar-blobs.js';
 import { listOpenProjectionRepairs } from './canonical-sqlite-rollout-contract.js';
 import { normalizeCanonicalCharacterPayload } from './endpoints/character-store.js';
@@ -46,9 +48,20 @@ function buildCanonicalCharacterRecord(snapshotRow, existingId = null) {
     };
 }
 
-function buildCanonicalChatStatsRecord(directories, snapshotRow, characterId, nowMs) {
-    const chatsDirectory = getCharacterChatDirectory(directories, snapshotRow.avatar);
-    const { chatCount, chatSize, dateLastChat } = calculateCharacterChatStats(chatsDirectory);
+function buildCanonicalChatStatsRecord(directories, snapshotRow, characterId, nowMs, db = null) {
+    let chatCount;
+    let chatSize;
+    let dateLastChat;
+    if (db && getCanonicalSliceProjectionMode('chats') === 'off') {
+        // JSONL files are export surfaces; canonical sessions carry the stats.
+        ({ chatCount, chatSize, dateLastChat } = calculateCanonicalCharacterChatStats(
+            db,
+            String(snapshotRow.avatar ?? '').replace('.png', ''),
+        ));
+    } else {
+        const chatsDirectory = getCharacterChatDirectory(directories, snapshotRow.avatar);
+        ({ chatCount, chatSize, dateLastChat } = calculateCharacterChatStats(chatsDirectory));
+    }
     return {
         character_id: characterId,
         chat_count: chatCount,
@@ -448,7 +461,7 @@ export async function runCanonicalShadowImport({
             };
 
             const characterRecord = buildCanonicalCharacterRecord(snapshotRow, storedRow?.id);
-            const chatStatsRecord = buildCanonicalChatStatsRecord(directories, snapshotRow, characterRecord.id, nowMs);
+            const chatStatsRecord = buildCanonicalChatStatsRecord(directories, snapshotRow, characterRecord.id, nowMs, db);
 
             if (isSameCharacterRecord(storedRow, characterRecord) && isSameChatStatsRecord(storedRow, chatStatsRecord)) {
                 recordFileImport();
@@ -490,6 +503,7 @@ export async function auditCanonicalShadowImport({
     db,
     buildSnapshotRow,
     auditedAtMs = Date.now(),
+    projection = 'sync',
 }) {
     const migrationStatus = getCanonicalMigrationStatus(db);
     if (!migrationStatus.ok) {
@@ -516,6 +530,15 @@ export async function auditCanonicalShadowImport({
         };
     }
 
+    // With projection 'off' the PNG files are export surfaces: file-side drift
+    // (out-of-band edits, stale copies, missing projections, snapshot parse
+    // errors) stays informational. Open projection repairs stay blocking —
+    // they mark canonical writes whose export surface could not be produced.
+    const suppressFileSide = projection === 'off';
+    const suppressDetails = suppressFileSide
+        ? { projection_mode: 'off', suppressed: true }
+        : {};
+
     const entries = [];
     const avatarFiles = listCharacterAvatarFiles(directories);
     const avatarFileSet = new Set(avatarFiles);
@@ -533,7 +556,7 @@ export async function auditCanonicalShadowImport({
                 : 'candidate';
 
             const characterRecord = buildCanonicalCharacterRecord(snapshotRow, storedRow?.id ?? null);
-            const chatStatsRecord = buildCanonicalChatStatsRecord(directories, snapshotRow, storedRow?.id ?? null, auditedAtMs);
+            const chatStatsRecord = buildCanonicalChatStatsRecord(directories, snapshotRow, storedRow?.id ?? null, auditedAtMs, db);
 
             if (!storedRow) {
                 entries.push(buildAuditEntry({
@@ -545,6 +568,7 @@ export async function auditCanonicalShadowImport({
                     details: {
                         expected_avatar_filename: avatarFilename,
                         import_classification: importClassification,
+                        ...suppressDetails,
                     },
                     auditedAtMs,
                 }));
@@ -607,13 +631,17 @@ export async function auditCanonicalShadowImport({
                 continue;
             }
 
+            // chat_stats_mismatch compares canonical stats against their
+            // authoritative source — it stays blocking even when the PNG
+            // projection is off; every other drift type here is file-side.
+            const fileSideOnly = !driftTypes.includes('chat_stats_mismatch');
             entries.push(buildAuditEntry({
                 handle,
                 avatarFilename,
                 characterId: characterRecord.id,
                 status: 'drift',
                 driftTypes,
-                details,
+                details: { ...details, ...(fileSideOnly ? suppressDetails : {}) },
                 auditedAtMs,
             }));
         } catch (error) {
@@ -625,6 +653,7 @@ export async function auditCanonicalShadowImport({
                 driftTypes: ['audit_error'],
                 details: {
                     errorMessage: String(error?.message ?? error ?? ''),
+                    ...suppressDetails,
                 },
                 auditedAtMs,
             }));
@@ -645,6 +674,7 @@ export async function auditCanonicalShadowImport({
             driftTypes: [storedRow.deleted_at_ms == null ? 'missing_projection_file' : 'deleted_db_row_without_projection_cleanup'],
             details: {
                 deleted_at_ms: storedRow.deleted_at_ms == null ? null : Number(storedRow.deleted_at_ms),
+                ...suppressDetails,
             },
             auditedAtMs,
         }));
@@ -667,7 +697,8 @@ export async function auditCanonicalShadowImport({
         }));
     }
 
-    const hasDrift = entries.some(entry => entry.status === 'drift' || entry.status === 'error');
+    const active = entries.filter(entry => !(suppressFileSide && entry.details?.suppressed));
+    const hasDrift = active.some(entry => entry.status === 'drift' || entry.status === 'error');
     const result = {
         ok: !hasDrift,
         handle,
