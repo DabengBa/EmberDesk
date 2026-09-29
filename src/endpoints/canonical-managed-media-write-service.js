@@ -198,6 +198,7 @@ export async function writeCanonicalManagedMedia({
     mediaType = null,
     metadata = {},
     projectCompatibility = null,
+    projection = 'sync',
     dependencies = {},
     nowMs = Date.now(),
 } = {}) {
@@ -251,17 +252,19 @@ export async function writeCanonicalManagedMedia({
     }
 
     try {
-        (projectCompatibility ?? projectCompatibilityFile)({
-            managedPath: staged.managedPath,
-            compatibilityPath: target.absolute,
-        });
-        recordImportLedgerEntry(state.db, {
-            sliceKey: 'managed_media',
-            sourcePath: target.normalized,
-            contentHash,
-            origin: 'projection',
-            nowMs,
-        });
+        if (projection !== 'off') {
+            (projectCompatibility ?? projectCompatibilityFile)({
+                managedPath: staged.managedPath,
+                compatibilityPath: target.absolute,
+            });
+            recordImportLedgerEntry(state.db, {
+                sliceKey: 'managed_media',
+                sourcePath: target.normalized,
+                contentHash,
+                origin: 'projection',
+                nowMs,
+            });
+        }
         return { ok: true, authorityCommitted: true, reference, managedPath: staged.managedPath };
     } catch (error) {
         const repairKey = createRepairKey('project', reference.id);

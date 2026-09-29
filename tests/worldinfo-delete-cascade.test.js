@@ -11,6 +11,7 @@ jest.unstable_mockModule('../src/character-card-parser.js', () => ({
     read: readCharacterCardMock,
     write: writeCharacterCardMock,
     parse: jest.fn(),
+    extractImageData: image => image,
 }));
 
 jest.unstable_mockModule('../src/endpoints/settings-cache.js', () => ({

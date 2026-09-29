@@ -105,6 +105,7 @@ async function importCharacterRoutes({ generateThumbnailImpl, thumbnailsEnabled 
         parse: mockParse,
         read: () => '{"spec":"chara_card_v2","data":{"name":"Character"}}',
         write: mockWrite,
+        extractImageData: image => image,
     }));
 
     jest.unstable_mockModule('../src/constants.js', () => ({

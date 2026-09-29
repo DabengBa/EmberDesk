@@ -46,6 +46,20 @@ export const write = (image, data) => {
 };
 
 /**
+ * Strips all textual metadata chunks (tEXt/zTXt/iTXt) from a PNG buffer,
+ * returning the pure image bytes. Character-card edits change only the
+ * embedded text chunks, so two cards sharing an image produce identical
+ * output here — which keeps blob content hashes stable across edits.
+ * @param {Buffer} image PNG image buffer
+ * @returns {Buffer} PNG image buffer without textual chunks
+ */
+export const extractImageData = (image) => {
+    const chunks = extract(new Uint8Array(image));
+    const imageChunks = chunks.filter(chunk => !['tEXt', 'zTXt', 'iTXt'].includes(chunk.name));
+    return Buffer.from(encode(imageChunks));
+};
+
+/**
  * Reads Character metadata from a PNG image buffer.
  * Supports both V2 (chara) and V3 (ccv3). V3 (ccv3) takes precedence.
  * @param {Buffer} image PNG image buffer

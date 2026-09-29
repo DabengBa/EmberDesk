@@ -31,6 +31,7 @@ import { getPersistedCanonicalAuditStatus } from './canonical-sqlite-shadow-impo
 import { buildCharacterFileSnapshotRow } from './endpoints/character-file-snapshot.js';
 import { parse as parseCharacterCard } from './character-card-parser.js';
 import { getCharaCardV2 } from './endpoints/character-card-v2.js';
+import { backfillCharacterAvatarBlobs } from './canonical-avatar-blob-service.js';
 
 /**
  * Default canonical character snapshot builder: real PNG card decoding and
@@ -62,6 +63,9 @@ const SLICE_RUNNERS = {
             db,
             buildSnapshotRow: buildSnapshotRow ?? buildCharacterSnapshotRow,
         }),
+        // Avatar blobs are registered lazily on every init so already-clean
+        // installs still get their one-time backfill (idempotent scan).
+        postInit: ({ handle, directories, db }) => backfillCharacterAvatarBlobs({ handle, directories, db }),
     },
     world_info: {
         runImport: runCanonicalWorldInfoShadowImport,
@@ -154,8 +158,21 @@ async function initializeSlice(slice, handle, directories, featureFlags, options
         // Without shadow import the file side cannot heal drift — audit only.
         action = 'audit';
     }
+    const runPostInit = async () => {
+        if (!runners.postInit) {
+            return null;
+        }
+        try {
+            return await runners.postInit({ handle, directories, db, featureFlags });
+        } catch (error) {
+            console.warn(`Canonical ${slice.key} postInit skipped:`, error);
+            return { error: String(error?.message ?? error ?? '') };
+        }
+    };
+
     if (action === 'skip') {
-        return { ok: true, db, handle, featureFlags, migrationStatus, auditResult: persistedAudit };
+        const postInitResult = await runPostInit();
+        return { ok: true, db, handle, featureFlags, migrationStatus, auditResult: persistedAudit, postInitResult };
     }
 
     const importResult = action === 'import'
@@ -174,6 +191,7 @@ async function initializeSlice(slice, handle, directories, featureFlags, options
         db,
         buildSnapshotRow: options.buildSnapshotRow,
     });
+    const postInitResult = await runPostInit();
     return {
         ok: true,
         db,
@@ -182,6 +200,7 @@ async function initializeSlice(slice, handle, directories, featureFlags, options
         migrationStatus,
         importResult,
         auditResult,
+        postInitResult,
     };
 }
 

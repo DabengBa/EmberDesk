@@ -7,6 +7,7 @@ import {
     calculateCharacterChatStats,
     getCharacterChatDirectory,
 } from './endpoints/character-file-snapshot.js';
+import { countMissingCharacterAvatarBlobs } from './canonical-avatar-blobs.js';
 import { listOpenProjectionRepairs } from './canonical-sqlite-rollout-contract.js';
 import { normalizeCanonicalCharacterPayload } from './endpoints/character-store.js';
 import {
@@ -298,6 +299,7 @@ export function persistCanonicalAuditStatus(db, auditResult, { scope = 'characte
             handle: auditResult.handle ?? null,
             migrationStatus: auditResult.migrationStatus ?? null,
             hasDrift: !!auditResult.hasDrift,
+            avatarBlobMissing: auditResult.avatarBlobMissing ?? null,
         },
     };
 
@@ -671,6 +673,7 @@ export async function auditCanonicalShadowImport({
         handle,
         hasDrift,
         blocking: hasDrift,
+        avatarBlobMissing: countMissingCharacterAvatarBlobs(db),
         ...(hasDrift ? { reason: resolveAuditDriftReason(true, entries) } : {}),
         entries,
     };

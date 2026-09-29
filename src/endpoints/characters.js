@@ -43,6 +43,11 @@ import { getCanonicalStorageStatus, openCanonicalDatabase, withCanonicalTransact
 import { runCanonicalMigrations } from '../canonical-sqlite-migrations.js';
 import { getPersistedCanonicalAuditStatus, invalidateCanonicalAuditStatus } from '../canonical-sqlite-shadow-import.js';
 import { recordImportLedgerEntry, removeImportLedgerEntry } from '../canonical-import-ledger.js';
+import {
+    renameCharacterAvatarBlobReference,
+    retireCharacterAvatarBlobReference,
+} from '../canonical-avatar-blobs.js';
+import { recordCharacterAvatarBlob } from '../canonical-avatar-blob-service.js';
 import { getCanonicalFlagContractStatus } from '../canonical-sqlite-rollout-contract.js';
 import {
     getCanonicalCharacter,
@@ -326,6 +331,7 @@ async function writeCharacterData(inputFile, data, outputFile, request, crop = u
 
         writeFileAtomicSync(outputImagePath, outputImage);
         recordCharacterProjectionLedgerSafe(request.user.profile?.handle ?? null, request.user.directories, outputAvatarName, outputImage);
+        recordCharacterAvatarBlobSafe(request.user.profile?.handle ?? null, request.user.directories, outputAvatarName, outputImage);
         if (!options.skipCanonicalAuditInvalidation) {
             invalidateCanonicalCharacterAuditSafe(request.user.profile?.handle ?? null, request.user.directories, `character_write:${outputAvatarName}`);
         }
@@ -401,6 +407,25 @@ function removeCharacterFileLedgerEntrySafe(handle, directories, targetPath) {
         });
     } catch (error) {
         console.warn('Canonical character ledger cleanup skipped:', error);
+    }
+}
+
+function recordCharacterAvatarBlobSafe(handle, directories, avatarFilename, contents) {
+    try {
+        const featureFlags = getCanonicalCharacterAuditTrackingFeatureFlags();
+        if (!featureFlags.enabled) {
+            return;
+        }
+        Promise.resolve(recordCharacterAvatarBlob({
+            handle,
+            directories,
+            avatarFilename,
+            contents,
+        })).catch(error => {
+            console.warn('Canonical character avatar blob skipped:', error);
+        });
+    } catch (error) {
+        console.warn('Canonical character avatar blob skipped:', error);
     }
 }
 
@@ -724,6 +749,7 @@ function createCharacterWriteDependencies({ bustCache = null } = {}) {
                         if ((renameResult?.changes ?? 0) === 0) {
                             throw new Error(`Canonical rename target not found: ${payload.oldAvatarName}`);
                         }
+                        renameCharacterAvatarBlobReference(txnDb, payload.oldAvatarName, payload.newAvatarName);
                     });
                 } else if (operation === 'delete') {
                     withCanonicalTransaction(db, txnDb => {
@@ -735,6 +761,7 @@ function createCharacterWriteDependencies({ bustCache = null } = {}) {
                         if ((deleteResult?.changes ?? 0) === 0) {
                             throw new Error(`Canonical delete target not found: ${payload.avatarName}`);
                         }
+                        retireCharacterAvatarBlobReference(txnDb, payload.avatarName);
                     });
                 } else {
                     const fullPayload = JSON.parse(payload.characterData);

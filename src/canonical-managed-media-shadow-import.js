@@ -15,6 +15,7 @@ import {
     listCanonicalManagedMediaReferences,
     upsertCanonicalManagedMediaReference,
 } from './endpoints/canonical-managed-media-store.js';
+import { isVirtualAvatarReference } from './canonical-avatar-blobs.js';
 import { isPathUnderParent } from './util.js';
 
 export const MANAGED_MEDIA_AUDIT_SCOPE = 'managed_media';
@@ -246,6 +247,10 @@ export async function auditCanonicalManagedMediaShadowImport({
         }
         // Only safe, retired background references are ignored after background retirement.
         if (isRetiredCompatibilityPath(directories, reference)) {
+            continue;
+        }
+        // Avatar blob references live on virtual paths with no projected file.
+        if (isVirtualAvatarReference(reference)) {
             continue;
         }
         const domain = getDomainForPath(directories, reference.compatibilityPath);
