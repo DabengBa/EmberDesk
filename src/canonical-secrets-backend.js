@@ -1,7 +1,9 @@
+import crypto from 'node:crypto';
 import path from 'node:path';
 
 import { sync as writeFileAtomicSync } from 'write-file-atomic';
 
+import { recordImportLedgerEntry } from './canonical-import-ledger.js';
 import { canonicalSqliteManager } from './canonical-sqlite.js';
 import { runCanonicalMigrations } from './canonical-sqlite-migrations.js';
 import {
@@ -85,7 +87,11 @@ function initializeCanonicalSecrets(directories) {
     const persistedAudit = getPersistedCanonicalAuditStatus(db, {
         scope: CANONICAL_SECRETS_AUDIT_SCOPE,
     });
-    const action = decideCanonicalBackendInitAction(persistedAudit);
+    let action = decideCanonicalBackendInitAction(persistedAudit);
+    if (action === 'import' && featureFlags.shadowImport === false) {
+        // Without shadow import the file side cannot heal drift — audit only.
+        action = 'audit';
+    }
     if (action === 'skip') {
         const state = {
             ok: true,
@@ -194,9 +200,17 @@ export function getCanonicalSecretsWriteBackend(directories) {
     return state;
 }
 
-export function projectCanonicalSecretsFile(directories, db) {
+export function projectCanonicalSecretsFile(directories, db, { nowMs = Date.now() } = {}) {
     const filePath = path.join(directories.root, 'secrets.json');
-    writeFileAtomicSync(filePath, JSON.stringify(getCanonicalSecretsProjection(db), null, 4), 'utf8');
+    const contents = JSON.stringify(getCanonicalSecretsProjection(db), null, 4);
+    writeFileAtomicSync(filePath, contents, 'utf8');
+    recordImportLedgerEntry(db, {
+        sliceKey: 'secrets',
+        sourcePath: 'secrets.json',
+        contentHash: crypto.createHash('sha256').update(contents).digest('hex'),
+        origin: 'projection',
+        nowMs,
+    });
     return filePath;
 }
 

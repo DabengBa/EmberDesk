@@ -24,6 +24,7 @@ import {
     runCanonicalSliceRepair,
     runCanonicalWorldInfoAudit,
 } from '../src/canonical-sqlite-operator.js';
+import { exportCanonicalStorageToFiles } from '../src/canonical-sqlite-export.js';
 import { collectCanonicalManagedMediaGarbage } from '../src/endpoints/canonical-managed-media-write-service.js';
 import {
     createCanonicalChatBackup,
@@ -57,6 +58,8 @@ function printUsage() {
         '                       Replay managed-media projection for one or more repair keys',
         '  repair-chat-projection',
         '                       Replay canonical chat projection for one or more repair keys',
+        '  export-all           Materialize canonical rows into the compatibility file tree',
+        '                       (rollback escape hatch; use --out-dir to stage elsewhere)',
         '  backup-chat          Write a canonical chat backup bundle to --backup-file',
         '  restore-chat         Restore a canonical chat backup bundle from --backup-file',
         '  chat-restore-status  Print the latest canonical chat restore status',
@@ -71,6 +74,7 @@ function printUsage() {
         '  --phase <phase>      reads | writes | chatStats for explain-blockers/status',
         '  --slice <key>        characters | world_info | settings | secrets | managed_media | chats for status/audit/repair/blockers',
         '  --backup-file <path> Required for backup-chat and restore-chat',
+        '  --out-dir <path>   Alternate root for export-all output',
         '  --apply              Allow gc-managed-media to delete eligible managed files',
         '  --feature <k=v>      Repeatable feature flag override for explain-blockers/status',
         '  --json               Print JSON output',
@@ -130,6 +134,9 @@ function parseArgs(argv) {
                 break;
             case '--backup-file':
                 options.backupFile = argv[++index] ?? null;
+                break;
+            case '--out-dir':
+                options.outDir = argv[++index] ?? null;
                 break;
             case '--apply':
                 options.apply = true;
@@ -337,6 +344,22 @@ function formatChatBackup(result) {
     ].join('\n') + '\n';
 }
 
+function formatExportAll(result) {
+    const lines = ['Canonical SQLite export', `status: ${result.ok ? 'ok' : 'partial'}`];
+    for (const slice of result.slices) {
+        const exported = slice.results.filter(entry => entry.status === 'exported').length;
+        const failed = slice.results.filter(entry => entry.status === 'error').length;
+        lines.push(`- ${slice.slice}: exported=${exported} skipped=${slice.results.length - exported - failed} errors=${failed}`);
+        for (const entry of slice.results.filter(item => item.status === 'error' || item.status === 'json_fallback')) {
+            lines.push(`    ${entry.status}: ${entry.path ?? entry.avatar ?? entry.name ?? entry.sessionId ?? ''} ${entry.reason ?? entry.error ?? ''}`.trimEnd());
+        }
+    }
+    if (result.manifestPath) {
+        lines.push(`manifest: ${result.manifestPath}`);
+    }
+    return `${lines.join('\n')}\n`;
+}
+
 function formatChatRestore(result) {
     return [
         'Canonical chat restore',
@@ -427,6 +450,16 @@ async function main() {
                 repairKeys: options.repairKeys.length ? options.repairKeys : null,
             });
             formatter = formatRepairProjection;
+            break;
+        case 'export-all':
+            result = exportCanonicalStorageToFiles({
+                db,
+                directories,
+                handle: options.handle,
+                sliceKeys: options.slice ? [options.slice] : null,
+                outDir: options.outDir,
+            });
+            formatter = formatExportAll;
             break;
         case 'backup-chat': {
             const backupFile = getBackupFilePath(options);

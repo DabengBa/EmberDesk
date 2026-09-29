@@ -293,7 +293,7 @@ describe('canonical world info store', () => {
             ok: false,
             blocking: true,
             hasDrift: true,
-            reason: 'audit_drift_blocked',
+            reason: 'audit_stale_file_changes',
         }));
         expect(audit.entries).toEqual(expect.arrayContaining([
             expect.objectContaining({
@@ -314,7 +314,7 @@ describe('canonical world info store', () => {
         ]));
         expect(getPersistedCanonicalAuditStatus(db, { scope: 'world_info' })).toEqual(expect.objectContaining({
             ok: false,
-            reason: 'audit_drift_blocked',
+            reason: 'audit_stale_file_changes',
             driftCount: 3,
             entryCount: 3,
         }));

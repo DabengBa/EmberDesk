@@ -1,7 +1,7 @@
 import path from 'node:path';
 import fs, { promises as fsPromises } from 'node:fs';
 import { Buffer } from 'node:buffer';
-import { randomUUID } from 'node:crypto';
+import crypto, { randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 
 import express from 'express';
@@ -42,6 +42,7 @@ import { ensureCanonicalSliceBackend } from '../canonical-backend.js';
 import { getCanonicalStorageStatus, openCanonicalDatabase, withCanonicalTransaction } from '../canonical-sqlite.js';
 import { runCanonicalMigrations } from '../canonical-sqlite-migrations.js';
 import { getPersistedCanonicalAuditStatus, invalidateCanonicalAuditStatus } from '../canonical-sqlite-shadow-import.js';
+import { recordImportLedgerEntry, removeImportLedgerEntry } from '../canonical-import-ledger.js';
 import { getCanonicalFlagContractStatus } from '../canonical-sqlite-rollout-contract.js';
 import {
     getCanonicalCharacter,
@@ -324,6 +325,7 @@ async function writeCharacterData(inputFile, data, outputFile, request, crop = u
         const outputImage = write(inputImage, data);
 
         writeFileAtomicSync(outputImagePath, outputImage);
+        recordCharacterProjectionLedgerSafe(request.user.profile?.handle ?? null, request.user.directories, outputAvatarName, outputImage);
         if (!options.skipCanonicalAuditInvalidation) {
             invalidateCanonicalCharacterAuditSafe(request.user.profile?.handle ?? null, request.user.directories, `character_write:${outputAvatarName}`);
         }
@@ -341,6 +343,65 @@ function getCanonicalCharacterFeatureFlags() {
 
 function getCanonicalCharacterAuditTrackingFeatureFlags() {
     return getCanonicalStorageSlice('characters').getAuditTrackingFeatureFlags();
+}
+
+function recordCharacterProjectionLedgerSafe(handle, directories, avatarFilename, contents) {
+    try {
+        const featureFlags = getCanonicalCharacterAuditTrackingFeatureFlags();
+        if (!featureFlags.enabled) {
+            return;
+        }
+
+        const storageStatus = getCanonicalStorageStatus({ handle, directories, featureFlags });
+        if (!storageStatus.supported || storageStatus.disabledReason === 'migration_blocked') {
+            return;
+        }
+
+        const db = openCanonicalDatabase({ handle, directories, featureFlags });
+        if (!db) {
+            return;
+        }
+
+        recordImportLedgerEntry(db, {
+            sliceKey: 'characters',
+            sourcePath: `characters/${avatarFilename}`,
+            contentHash: crypto.createHash('sha256').update(contents).digest('hex'),
+            origin: 'projection',
+        });
+    } catch (error) {
+        console.warn('Canonical character projection ledger skipped:', error);
+    }
+}
+
+function removeCharacterFileLedgerEntrySafe(handle, directories, targetPath) {
+    try {
+        const relative = path.relative(directories.characters, targetPath);
+        if (!relative || relative.startsWith('..') || path.isAbsolute(relative) || relative.includes(path.sep)) {
+            return;
+        }
+
+        const featureFlags = getCanonicalCharacterAuditTrackingFeatureFlags();
+        if (!featureFlags.enabled) {
+            return;
+        }
+
+        const storageStatus = getCanonicalStorageStatus({ handle, directories, featureFlags });
+        if (!storageStatus.supported || storageStatus.disabledReason === 'migration_blocked') {
+            return;
+        }
+
+        const db = openCanonicalDatabase({ handle, directories, featureFlags });
+        if (!db) {
+            return;
+        }
+
+        removeImportLedgerEntry(db, {
+            sliceKey: 'characters',
+            sourcePath: `characters/${relative}`,
+        });
+    } catch (error) {
+        console.warn('Canonical character ledger cleanup skipped:', error);
+    }
 }
 
 function invalidateCanonicalCharacterAuditSafe(handle, directories, source) {
@@ -580,6 +641,7 @@ function createCharacterWriteDependencies({ bustCache = null } = {}) {
         parsePath: path.parse,
         writeCharacterData,
         invalidateCanonicalAudit: invalidateCanonicalCharacterAuditSafe,
+        removeCompatibilityLedgerEntry: (target, directories, handle) => removeCharacterFileLedgerEntrySafe(handle, directories, target),
         invalidateThumbnail,
         bustCache,
         performCanonicalWrite: async (operation, payload) => {

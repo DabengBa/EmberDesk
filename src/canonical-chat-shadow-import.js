@@ -2,6 +2,11 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 
+import {
+    classifyImportCandidate,
+    recordImportLedgerEntry,
+    resolveAuditDriftReason,
+} from './canonical-import-ledger.js';
 import { getCanonicalMigrationStatus, runCanonicalMigrations } from './canonical-sqlite-migrations.js';
 import { persistCanonicalAuditStatus } from './canonical-sqlite-shadow-import.js';
 import {
@@ -251,7 +256,8 @@ export async function runCanonicalChatShadowImport({
     const projections = [];
     for (const item of listChatProjectionFiles(directories)) {
         try {
-            projections.push(parseJsonlProjection(item));
+            const projection = parseJsonlProjection(item);
+            projections.push(projection);
         } catch (error) {
             entries.push({
                 source_path: item.sourcePath,
@@ -276,6 +282,13 @@ export async function runCanonicalChatShadowImport({
             continue;
         }
         const result = upsertCanonicalChatSession(activeDb, buildChatRecord(projection, activeDb, nowMs));
+        recordImportLedgerEntry(activeDb, {
+            sliceKey: 'chats',
+            sourcePath: projection.sourcePath,
+            contentHash: crypto.createHash('sha256').update(projection.sourceJsonl).digest('hex'),
+            origin: 'import',
+            nowMs,
+        });
         entries.push({
             source_path: projection.sourcePath,
             session_id: result.id,
@@ -292,7 +305,7 @@ function buildAuditSummary({ handle, migrationStatus, entries }) {
         handle,
         hasDrift: entries.some(entry => entry.status === 'drift'),
         blocking,
-        reason: blocking ? 'audit_drift_blocked' : null,
+        reason: resolveAuditDriftReason(blocking, entries),
         migrationStatus,
         entries,
     };
@@ -381,13 +394,18 @@ export async function auditCanonicalChatShadowImport({
             ownerId: projection.ownerId,
             sourcePath: projection.sourcePath,
         });
+        const importClassification = classifyImportCandidate(db, {
+            sliceKey: 'chats',
+            sourcePath: projection.sourcePath,
+            contentHash: crypto.createHash('sha256').update(projection.sourceJsonl).digest('hex'),
+        });
         if (identityCounts.get(identityKey) > 1) {
             entries.push(buildAuditEntry({
                 projection,
                 stored,
                 status: 'drift',
                 driftTypes: ['duplicate_identity'],
-                details: {},
+                details: { import_classification: importClassification },
                 auditedAtMs,
             }));
             continue;
@@ -397,7 +415,7 @@ export async function auditCanonicalChatShadowImport({
                 projection,
                 status: 'drift',
                 driftTypes: ['unregistered_file'],
-                details: {},
+                details: { import_classification: importClassification },
                 auditedAtMs,
             }));
             continue;
@@ -411,7 +429,7 @@ export async function auditCanonicalChatShadowImport({
                 stored,
                 status: 'drift',
                 driftTypes: [driftType ?? 'payload_drift'],
-                details: {},
+                details: { import_classification: importClassification },
                 auditedAtMs,
             }));
         }

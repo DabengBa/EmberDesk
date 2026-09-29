@@ -333,7 +333,7 @@ describe('canonical settings store', () => {
             ok: false,
             blocking: true,
             hasDrift: true,
-            reason: 'audit_drift_blocked',
+            reason: 'audit_stale_file_changes',
         }));
         expect(driftAudit.entries).toEqual(expect.arrayContaining([
             expect.objectContaining({

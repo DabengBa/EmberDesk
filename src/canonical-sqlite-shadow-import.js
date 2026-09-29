@@ -9,6 +9,11 @@ import {
 } from './endpoints/character-file-snapshot.js';
 import { listOpenProjectionRepairs } from './canonical-sqlite-rollout-contract.js';
 import { normalizeCanonicalCharacterPayload } from './endpoints/character-store.js';
+import {
+    classifyImportCandidate,
+    recordImportLedgerEntry,
+    resolveAuditDriftReason,
+} from './canonical-import-ledger.js';
 import { uuidv4 } from './util.js';
 
 function listCharacterAvatarFiles(directories) {
@@ -428,11 +433,23 @@ export async function runCanonicalShadowImport({
         const storedRow = getStoredCanonicalRow(db, avatarFilename);
         try {
             const snapshotRow = await buildSnapshotRow(avatarFilename, directories);
+            const recordFileImport = () => {
+                if (snapshotRow.sourceHash) {
+                    recordImportLedgerEntry(db, {
+                        sliceKey: 'characters',
+                        sourcePath: path.relative(directories.root, path.join(directories.characters, avatarFilename)),
+                        contentHash: snapshotRow.sourceHash,
+                        origin: 'import',
+                        nowMs,
+                    });
+                }
+            };
 
             const characterRecord = buildCanonicalCharacterRecord(snapshotRow, storedRow?.id);
             const chatStatsRecord = buildCanonicalChatStatsRecord(directories, snapshotRow, characterRecord.id, nowMs);
 
             if (isSameCharacterRecord(storedRow, characterRecord) && isSameChatStatsRecord(storedRow, chatStatsRecord)) {
+                recordFileImport();
                 entries.push({
                     avatar_filename: avatarFilename,
                     character_id: characterRecord.id,
@@ -442,6 +459,7 @@ export async function runCanonicalShadowImport({
             }
 
             upsertCanonicalCharacter(db, characterRecord, chatStatsRecord);
+            recordFileImport();
             entries.push({
                 avatar_filename: avatarFilename,
                 character_id: characterRecord.id,
@@ -504,6 +522,13 @@ export async function auditCanonicalShadowImport({
         const storedRow = getStoredCanonicalRow(db, avatarFilename);
         try {
             const snapshotRow = await buildSnapshotRow(avatarFilename, directories);
+            const importClassification = snapshotRow.sourceHash
+                ? classifyImportCandidate(db, {
+                    sliceKey: 'characters',
+                    sourcePath: path.relative(directories.root, path.join(directories.characters, avatarFilename)),
+                    contentHash: snapshotRow.sourceHash,
+                })
+                : 'candidate';
 
             const characterRecord = buildCanonicalCharacterRecord(snapshotRow, storedRow?.id ?? null);
             const chatStatsRecord = buildCanonicalChatStatsRecord(directories, snapshotRow, storedRow?.id ?? null, auditedAtMs);
@@ -517,6 +542,7 @@ export async function auditCanonicalShadowImport({
                     driftTypes: ['missing_db_character'],
                     details: {
                         expected_avatar_filename: avatarFilename,
+                        import_classification: importClassification,
                     },
                     auditedAtMs,
                 }));
@@ -524,7 +550,7 @@ export async function auditCanonicalShadowImport({
             }
 
             const driftTypes = [];
-            const details = {};
+            const details = { import_classification: importClassification };
 
             if (!isSameCharacterRecord(storedRow, characterRecord)) {
                 if (storedRow.deleted_at_ms != null) {
@@ -645,7 +671,7 @@ export async function auditCanonicalShadowImport({
         handle,
         hasDrift,
         blocking: hasDrift,
-        ...(hasDrift ? { reason: 'audit_drift_blocked' } : {}),
+        ...(hasDrift ? { reason: resolveAuditDriftReason(true, entries) } : {}),
         entries,
     };
     persistCanonicalAuditStatus(db, result, { auditedAtMs });

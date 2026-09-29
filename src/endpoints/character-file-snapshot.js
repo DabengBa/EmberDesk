@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -225,6 +226,9 @@ export async function buildCharacterFileSnapshotRow({
     const filePath = path.join(directories.characters, avatar);
     const stat = statCharacterSnapshotFile(filePath);
     const worldMetadata = getCharacterSnapshotWorldMetadata(directories, fullPayload);
+    // Source-byte hash feeds the import ledger so later scans can tell a
+    // stale projected file apart from a genuinely new/edited one.
+    const sourceHash = crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');
 
     return {
         avatar,
@@ -232,6 +236,7 @@ export async function buildCharacterFileSnapshotRow({
         shallowPayload: toShallow(fullPayload),
         sourceMtimeMs: stat.mtimeMs,
         sourceSize: stat.size,
+        sourceHash,
         ...worldMetadata,
     };
 }

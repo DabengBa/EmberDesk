@@ -313,6 +313,23 @@ product/performance contract rather than a hidden requirement of storage migrati
 Vectra, chunks, and generation manifests remain deletable derived state. They reference stable
 canonical source IDs but do not become a second text authority.
 
+## Projection Retirement Sequence (ADR-0015)
+
+The compatibility-file projection is a transitional double-write surface, not a permanent
+contract. Retirement is sequenced so each irreversible step has a working escape hatch first:
+
+| Order | Package | Delivered state | True dependency |
+|---|---|---|---|
+| P0 | Import ledger + `export-all` escape hatch + audit semantics | Delivered: `import_ledger` (migration v10) records `(slice, path, hash, origin)` for `import`/`projection`/`export`; audits classify file drift as `candidate` (import-heals via `audit_stale_file_changes`) vs `known` (stays `audit_drift_blocked`); `repair.mjs export-all --slice --out-dir` materializes DB back to the file tree plus `export-manifest.json`; managed-media invalidation vocabulary unified (`audit_stale_*` reasons, operation details on `source`) | — |
+| P1 | Avatar blob storage | Pending: pure-image bytes under `character-avatars/<avatar>` virtual path with noop projection, idempotent backfill of existing PNGs, `readManagedMediaContent` API, thumbnail/`/characters/<name>.png` root-file split (subdirectories stay file-backed), cache invalidation keyed on `content_hash` | P0 |
+| P2 | Per-slice `projection: 'sync'/'off'` | Pending: stop continuous projection one slice at a time — `secrets → settings → world_info → chats → managed_media → characters`; export routes generate artifacts on demand | P0, P1 |
+| P3 | Upload imports write DB+blob directly | Pending: `/import` routes stop writing into compatibility dirs | P2 for the touched slice |
+| P4 | Runtime file-fallback removal | Pending: delete read/write file fallback branches; `strict` retires; `enabled:false` becomes init-freeze; old flag keys warn | P0–P3 with a stable multi-release window |
+
+`characters/` and `World Info/` are not pure inboxes: `characters/<name>/<category>/`
+asset subdirectories (sprites, live2d) stay file-backed media, and only root-level
+`<avatar>.png` files split to blob storage in P1.
+
 ## Task Breakdown And Dependencies
 
 1. `ADR + roadmap docs`

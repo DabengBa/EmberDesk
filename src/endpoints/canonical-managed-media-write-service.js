@@ -6,6 +6,10 @@ import mime from 'mime-types';
 import { canonicalSqliteManager, withCanonicalTransaction } from '../canonical-sqlite.js';
 import { runCanonicalMigrations } from '../canonical-sqlite-migrations.js';
 import { getPersistedCanonicalAuditStatus, invalidateCanonicalAuditStatus } from '../canonical-sqlite-shadow-import.js';
+import {
+    recordImportLedgerEntry,
+    removeImportLedgerEntry,
+} from '../canonical-import-ledger.js';
 import { getCanonicalStorageSlice } from '../canonical-storage-slice-registry.js';
 import { uuidv4 } from '../util.js';
 import {
@@ -251,6 +255,13 @@ export async function writeCanonicalManagedMedia({
             managedPath: staged.managedPath,
             compatibilityPath: target.absolute,
         });
+        recordImportLedgerEntry(state.db, {
+            sliceKey: 'managed_media',
+            sourcePath: target.normalized,
+            contentHash,
+            origin: 'projection',
+            nowMs,
+        });
         return { ok: true, authorityCommitted: true, reference, managedPath: staged.managedPath };
     } catch (error) {
         const repairKey = createRepairKey('project', reference.id);
@@ -314,6 +325,7 @@ export async function deleteCanonicalManagedMediaReference({
 
     try {
         (projectDelete ?? (targetPath => fs.rmSync(targetPath, { force: true })))(target.absolute);
+        removeImportLedgerEntry(state.db, { sliceKey: 'managed_media', sourcePath: target.normalized });
         return {
             ok: true,
             authorityCommitted: true,
@@ -378,6 +390,14 @@ export async function renameCanonicalManagedMediaReference({
             projectCompatibilityFile({ managedPath: input.managedPath, compatibilityPath: input.newPath });
             fs.rmSync(input.oldPath, { force: true });
         }))({ managedPath, oldPath: oldTarget.absolute, newPath: newTarget.absolute });
+        recordImportLedgerEntry(state.db, {
+            sliceKey: 'managed_media',
+            sourcePath: newTarget.normalized,
+            contentHash: reference.contentHash,
+            origin: 'projection',
+            nowMs,
+        });
+        removeImportLedgerEntry(state.db, { sliceKey: 'managed_media', sourcePath: oldTarget.normalized });
         return { ok: true, authorityCommitted: true, reference: renamed };
     } catch (error) {
         const repairKey = createRepairKey('rename', renamed.id);
@@ -511,7 +531,7 @@ export async function collectCanonicalManagedMediaGarbage({
 export function invalidateCanonicalManagedMediaAudit({
     handle,
     directories,
-    reason,
+    operation,
     dependencies = {},
 } = {}) {
     const defaults = getDefaultDependencies();
@@ -535,8 +555,8 @@ export function invalidateCanonicalManagedMediaAudit({
     invalidateCanonicalAuditStatus(db, {
         scope: 'managed_media',
         handle,
-        reason: reason ?? 'audit_stale_after_compatibility_media_mutation',
-        source: 'compatibility_media_mutation',
+        reason: 'audit_stale_after_compatibility_media_mutation',
+        source: operation ?? 'compatibility_media_mutation',
     });
     return true;
 }

@@ -224,7 +224,7 @@ describe('canonical managed media catalog', () => {
         expect(audit).toEqual(expect.objectContaining({
             ok: false,
             blocking: true,
-            reason: 'audit_drift_blocked',
+            reason: 'audit_stale_file_changes',
         }));
         expect(audit.entries).not.toEqual(expect.arrayContaining([
             expect.objectContaining({ compatibility_path: 'backgrounds/changed.png' }),
@@ -240,7 +240,7 @@ describe('canonical managed media catalog', () => {
         expect(getPersistedCanonicalAuditStatus(db, { scope: MANAGED_MEDIA_AUDIT_SCOPE })).toEqual(expect.objectContaining({
             ok: false,
             blocking: true,
-            reason: 'audit_drift_blocked',
+            reason: 'audit_stale_file_changes',
         }));
     });
 

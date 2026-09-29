@@ -1,6 +1,12 @@
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 
+import {
+    classifyImportCandidate,
+    recordImportLedgerEntry,
+    resolveAuditDriftReason,
+} from './canonical-import-ledger.js';
 import { getCanonicalMigrationStatus, runCanonicalMigrations } from './canonical-sqlite-migrations.js';
 import { persistCanonicalAuditStatus } from './canonical-sqlite-shadow-import.js';
 import {
@@ -23,16 +29,17 @@ function getSecretsFilePath(directories) {
 function readSecretsFile(directories) {
     const filePath = getSecretsFilePath(directories);
     if (!fs.existsSync(filePath)) {
-        return { exists: false, payload: {}, error: null };
+        return { exists: false, payload: {}, raw: null, error: null };
     }
     try {
-        const payload = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+        const raw = fs.readFileSync(filePath, 'utf8');
+        const payload = JSON.parse(raw);
         if (payload == null || typeof payload !== 'object' || Array.isArray(payload)) {
-            return { exists: true, payload: {}, error: new Error('secrets.json root must be an object') };
+            return { exists: true, payload: {}, raw, error: new Error('secrets.json root must be an object') };
         }
-        return { exists: true, payload, error: null };
+        return { exists: true, payload, raw, error: null };
     } catch (error) {
-        return { exists: true, payload: {}, error };
+        return { exists: true, payload: {}, raw: null, error };
     }
 }
 
@@ -163,6 +170,17 @@ export function runCanonicalSecretsShadowImport({
     }
 
     const file = readSecretsFile(directories);
+    const recordFileImport = () => {
+        if (file.exists && !file.error && file.raw != null) {
+            recordImportLedgerEntry(db, {
+                sliceKey: 'secrets',
+                sourcePath: CANONICAL_SECRETS_FILE,
+                contentHash: crypto.createHash('sha256').update(file.raw).digest('hex'),
+                origin: 'import',
+                nowMs,
+            });
+        }
+    };
     if (file.error) {
         return summarizeImport({
             handle,
@@ -188,6 +206,7 @@ export function runCanonicalSecretsShadowImport({
     const entries = [];
 
     if (featureFlags.reads && marker) {
+        recordFileImport();
         for (const key of keysFromRecords(recordsByKey)) {
             entries.push({ key, status: 'unchanged' });
         }
@@ -202,6 +221,7 @@ export function runCanonicalSecretsShadowImport({
             nowMs,
         });
     }
+    recordFileImport();
     for (const key of keysFromRecords(recordsByKey)) {
         entries.push({
             key,
@@ -258,6 +278,13 @@ export function auditCanonicalSecretsShadowImport({
 
     const file = readSecretsFile(directories);
     const entries = [];
+    const importClassification = file.exists && !file.error && file.raw != null
+        ? classifyImportCandidate(db, {
+            sliceKey: 'secrets',
+            sourcePath: CANONICAL_SECRETS_FILE,
+            contentHash: crypto.createHash('sha256').update(file.raw).digest('hex'),
+        })
+        : null;
     if (file.error) {
         entries.push(buildAuditEntry({
             key: null,
@@ -334,6 +361,7 @@ export function auditCanonicalSecretsShadowImport({
                     details: {
                         expectedRecordCount: expectedRecords.length,
                         actualRecordCount: actualRecords.length,
+                        import_classification: importClassification,
                     },
                     auditedAtMs,
                 }));
@@ -361,7 +389,7 @@ export function auditCanonicalSecretsShadowImport({
         handle,
         blocking,
         hasDrift: blocking,
-        reason: blocking ? 'audit_drift_blocked' : null,
+        reason: resolveAuditDriftReason(blocking, entries),
         migrationStatus,
         entries,
     };

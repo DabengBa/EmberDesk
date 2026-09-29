@@ -149,7 +149,11 @@ async function initializeSlice(slice, handle, directories, featureFlags, options
     }
 
     const persistedAudit = getPersistedCanonicalAuditStatus(db, { scope: slice.auditScope });
-    const action = decideCanonicalBackendInitAction(persistedAudit);
+    let action = decideCanonicalBackendInitAction(persistedAudit);
+    if (action === 'import' && featureFlags.shadowImport === false) {
+        // Without shadow import the file side cannot heal drift — audit only.
+        action = 'audit';
+    }
     if (action === 'skip') {
         return { ok: true, db, handle, featureFlags, migrationStatus, auditResult: persistedAudit };
     }

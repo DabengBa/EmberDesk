@@ -111,11 +111,11 @@ function getRequestHandle(request) {
     return request.user?.profile?.handle ?? request.user?.handle ?? 'default-user';
 }
 
-function invalidateManagedMediaAudit(request, reason) {
+function invalidateManagedMediaAudit(request, operation) {
     invalidateCanonicalManagedMediaAudit({
         handle: getRequestHandle(request),
         directories: request.user.directories,
-        reason,
+        operation,
     });
 }
 

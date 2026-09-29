@@ -464,6 +464,7 @@ export async function renameCharacterCard(options) {
     }
 
     unlinkFile(dependencies, oldAvatarPath);
+    dependencies.removeCompatibilityLedgerEntry?.(oldAvatarPath, directories, request.user.profile?.handle ?? null);
     return okResult(newAvatarName);
 }
 
@@ -502,6 +503,7 @@ export async function deleteCharacterCard({
 
     try {
         unlinkFile(dependencies, avatarPath);
+        dependencies.removeCompatibilityLedgerEntry?.(avatarPath, userDirectories, request.user.profile?.handle ?? null);
         dependencies.invalidateThumbnail?.(userDirectories, 'avatar', targetAvatarName);
 
         if (deleteChats) {

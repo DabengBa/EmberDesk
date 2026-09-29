@@ -4,6 +4,11 @@ import path from 'node:path';
 
 import mime from 'mime-types';
 
+import {
+    classifyImportCandidate,
+    recordImportLedgerEntry,
+    resolveAuditDriftReason,
+} from './canonical-import-ledger.js';
 import { getCanonicalMigrationStatus, runCanonicalMigrations } from './canonical-sqlite-migrations.js';
 import { persistCanonicalAuditStatus } from './canonical-sqlite-shadow-import.js';
 import {
@@ -117,7 +122,7 @@ function buildAuditSummary({ handle, migrationStatus, entries }) {
         handle,
         hasDrift: entries.some(entry => entry.status === 'drift'),
         blocking,
-        reason: blocking ? 'audit_drift_blocked' : null,
+        reason: resolveAuditDriftReason(blocking, entries),
         migrationStatus,
         entries,
     };
@@ -180,6 +185,13 @@ export async function runCanonicalManagedMediaShadowImport({
                 role: item.domain.role,
                 displayName: path.basename(item.filePath),
                 metadata: { sourceMtimeMs: Number(stat.mtimeMs) },
+                nowMs,
+            });
+            recordImportLedgerEntry(db, {
+                sliceKey: 'managed_media',
+                sourcePath: item.compatibilityPath,
+                contentHash,
+                origin: 'import',
                 nowMs,
             });
             entries.push({ compatibility_path: item.compatibilityPath, status: result.status });
@@ -264,7 +276,15 @@ export async function auditCanonicalManagedMediaShadowImport({
                 compatibility_path: reference.compatibilityPath,
                 status: 'drift',
                 drift_types: ['hash_mismatch'],
-                details: { expectedContentHash: reference.contentHash, actualContentHash: actualHash },
+                details: {
+                    expectedContentHash: reference.contentHash,
+                    actualContentHash: actualHash,
+                    import_classification: classifyImportCandidate(db, {
+                        sliceKey: 'managed_media',
+                        sourcePath: reference.compatibilityPath,
+                        contentHash: actualHash,
+                    }),
+                },
                 audited_at_ms: auditedAtMs,
             });
             continue;
@@ -283,12 +303,20 @@ export async function auditCanonicalManagedMediaShadowImport({
         liveFiles.delete(reference.compatibilityPath);
     }
 
-    for (const [compatibilityPath] of liveFiles) {
+    for (const [compatibilityPath, item] of liveFiles) {
         entries.push({
             compatibility_path: compatibilityPath,
             status: 'drift',
             drift_types: ['orphan'],
-            details: {},
+            details: {
+                import_classification: fs.existsSync(item.filePath)
+                    ? classifyImportCandidate(db, {
+                        sliceKey: 'managed_media',
+                        sourcePath: compatibilityPath,
+                        contentHash: hashFile(item.filePath),
+                    })
+                    : 'candidate',
+            },
             audited_at_ms: auditedAtMs,
         });
     }

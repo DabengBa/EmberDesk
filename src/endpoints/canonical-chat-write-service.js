@@ -1,3 +1,9 @@
+import crypto from 'node:crypto';
+
+import {
+    recordImportLedgerEntry,
+    removeImportLedgerEntry,
+} from '../canonical-import-ledger.js';
 import {
     createCanonicalChatSessionRecord,
     deleteCanonicalChatSession,
@@ -96,6 +102,13 @@ export function writeCanonicalChatPayload({
     const persisted = upsertCanonicalChatSession(db, record);
     try {
         projectJsonl(record.sourceJsonl);
+        recordImportLedgerEntry(db, {
+            sliceKey: 'chats',
+            sourcePath: locator.sourcePath,
+            contentHash: crypto.createHash('sha256').update(record.sourceJsonl).digest('hex'),
+            origin: 'projection',
+            nowMs,
+        });
     } catch (error) {
         const repairKey = buildRepairKey(locator, operation);
         recordCanonicalChatProjectionRepair(db, {
@@ -163,6 +176,16 @@ export function renameCanonicalChat({
     }
     try {
         projectRename();
+        recordImportLedgerEntry(db, {
+            sliceKey: 'chats',
+            sourcePath: nextLocator.sourcePath,
+            contentHash: crypto.createHash('sha256').update(renamed.sourceJsonl).digest('hex'),
+            origin: 'projection',
+            nowMs,
+        });
+        if (locator.sourcePath !== nextLocator.sourcePath) {
+            removeImportLedgerEntry(db, { sliceKey: 'chats', sourcePath: locator.sourcePath });
+        }
     } catch (error) {
         const repairKey = buildRepairKey(nextLocator, 'rename');
         recordCanonicalChatProjectionRepair(db, {
@@ -206,6 +229,7 @@ export function deleteCanonicalChat({
     }
     try {
         projectDelete();
+        removeImportLedgerEntry(db, { sliceKey: 'chats', sourcePath: locator.sourcePath });
     } catch (error) {
         const repairKey = buildRepairKey(locator, 'delete');
         recordCanonicalChatProjectionRepair(db, {

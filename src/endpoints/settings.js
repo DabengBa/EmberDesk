@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -21,6 +22,7 @@ import { runCanonicalMigrations } from '../canonical-sqlite-migrations.js';
 import { getPersistedCanonicalAuditStatus, invalidateCanonicalAuditStatus } from '../canonical-sqlite-shadow-import.js';
 import { ensureCanonicalSliceBackend } from '../canonical-backend.js';
 import { SETTINGS_AUDIT_SCOPE } from '../canonical-settings-shadow-import.js';
+import { recordImportLedgerEntry } from '../canonical-import-ledger.js';
 import { getCanonicalStorageSlice } from '../canonical-storage-slice-registry.js';
 import {
     createSettingsSnapshot,
@@ -350,9 +352,18 @@ async function getCanonicalSettingsWriteState(request) {
     };
 }
 
-function projectSettingsJson(directories, payload) {
+function projectSettingsJson(directories, payload, db = null) {
     const pathToSettings = path.join(directories.root, SETTINGS_FILE);
-    writeFileAtomicSync(pathToSettings, JSON.stringify(payload, null, 4), 'utf8');
+    const contents = JSON.stringify(payload, null, 4);
+    writeFileAtomicSync(pathToSettings, contents, 'utf8');
+    if (db) {
+        recordImportLedgerEntry(db, {
+            sliceKey: 'settings',
+            sourcePath: SETTINGS_FILE,
+            contentHash: crypto.createHash('sha256').update(contents).digest('hex'),
+            origin: 'projection',
+        });
+    }
 }
 
 function extractSettingsRevision(body) {
@@ -467,7 +478,7 @@ router.post('/save', async function (request, response) {
             }
 
             try {
-                projectSettingsJson(request.user.directories, payload);
+                projectSettingsJson(request.user.directories, payload, writeState.db);
             } catch (projectionError) {
                 const repairKey = `settings:${handle}:projection`;
                 recordSettingsProjectionRepair(writeState.db, {
@@ -681,7 +692,7 @@ router.post('/make-snapshot', async (request, response) => {
             try {
                 const document = getCanonicalSettingsDocument(writeState.db, { userId: writeState.handle });
                 if (document) {
-                    projectSettingsJson(request.user.directories, document.payload);
+                    projectSettingsJson(request.user.directories, document.payload, writeState.db);
                 }
                 backupUserSettings(writeState.handle, false, request.user.directories);
             } catch (error) {
@@ -729,7 +740,7 @@ router.post('/restore-snapshot', getFileNameValidationFunction('name'), async (r
                 });
             }
             try {
-                projectSettingsJson(request.user.directories, restored.payload);
+                projectSettingsJson(request.user.directories, restored.payload, writeState.db);
             } catch (projectionError) {
                 const repairKey = `settings:${handle}:projection`;
                 recordSettingsProjectionRepair(writeState.db, {
@@ -789,7 +800,7 @@ router.post('/restore-snapshot', getFileNameValidationFunction('name'), async (r
                 });
             }
             try {
-                projectSettingsJson(request.user.directories, payload);
+                projectSettingsJson(request.user.directories, payload, writeState.db);
             } catch (projectionError) {
                 const repairKey = `settings:${handle}:projection`;
                 recordSettingsProjectionRepair(writeState.db, {

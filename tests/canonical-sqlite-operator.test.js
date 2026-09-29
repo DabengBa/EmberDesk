@@ -858,7 +858,7 @@ describe('canonical sqlite operator helpers', () => {
             sliceKey: 'managed_media',
             ok: false,
             blocking: true,
-            reason: 'audit_drift_blocked',
+            reason: 'audit_stale_file_changes',
         }));
         expect(audit.entries).toEqual(expect.arrayContaining([
             expect.objectContaining({

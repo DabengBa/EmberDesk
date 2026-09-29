@@ -199,7 +199,7 @@ describe('canonical managed media write service', () => {
         expect(invalidateCanonicalManagedMediaAudit({
             handle: 'alice',
             directories,
-            reason: 'filesystem_write',
+            operation: 'filesystem_write',
             dependencies: {
                 getFeatureFlags: () => ({ enabled: false }),
                 openDatabase,

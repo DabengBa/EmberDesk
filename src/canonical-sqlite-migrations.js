@@ -390,6 +390,23 @@ export const CANONICAL_SQLITE_MIGRATIONS = Object.freeze([
                 ON chat_restore_operations (status, updated_at_ms DESC);
         `,
     }),
+    Object.freeze({
+        version: 10,
+        name: 'canonical_import_ledger',
+        sql: `
+            CREATE TABLE IF NOT EXISTS import_ledger (
+                slice_key TEXT NOT NULL,
+                source_path TEXT NOT NULL,
+                content_hash TEXT NOT NULL,
+                origin TEXT NOT NULL,
+                imported_at_ms INTEGER NOT NULL,
+                PRIMARY KEY (slice_key, source_path)
+            );
+
+            CREATE INDEX IF NOT EXISTS import_ledger_slice_idx
+                ON import_ledger (slice_key, imported_at_ms);
+        `,
+    }),
 ]);
 
 export class CanonicalMigrationBlockedError extends Error {

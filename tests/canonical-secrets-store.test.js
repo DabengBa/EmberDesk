@@ -265,7 +265,7 @@ describe('canonical secrets store', () => {
         expect(driftAudit).toEqual(expect.objectContaining({
             ok: false,
             blocking: true,
-            reason: 'audit_drift_blocked',
+            reason: 'audit_stale_file_changes',
         }));
         expect(serialized).not.toContain(canary);
         expect(serialized).toContain('value_hash_mismatch');

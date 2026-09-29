@@ -1,6 +1,12 @@
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 
+import {
+    classifyImportCandidate,
+    recordImportLedgerEntry,
+    resolveAuditDriftReason,
+} from './canonical-import-ledger.js';
 import { getCanonicalMigrationStatus, runCanonicalMigrations } from './canonical-sqlite-migrations.js';
 import { persistCanonicalAuditStatus } from './canonical-sqlite-shadow-import.js';
 import {
@@ -36,7 +42,8 @@ function getWorldNameFromFilename(filename) {
 function readWorldInfoProjection(directories, filename) {
     const filePath = path.join(directories.worlds, filename);
     const stat = fs.statSync(filePath);
-    const payload = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    const contents = fs.readFileSync(filePath, 'utf8');
+    const payload = JSON.parse(contents);
     if (!payload.entries || typeof payload.entries !== 'object' || Array.isArray(payload.entries)) {
         payload.entries = {};
     }
@@ -45,6 +52,7 @@ function readWorldInfoProjection(directories, filename) {
         payload,
         sourceMtimeMs: Number(stat.mtimeMs ?? 0),
         sourceSizeBytes: Number(stat.size ?? 0),
+        sourceHash: crypto.createHash('sha256').update(contents).digest('hex'),
     };
 }
 
@@ -92,7 +100,7 @@ function buildAuditSummary({ handle, migrationStatus, entries }) {
         handle,
         hasDrift: driftEntries.length > 0,
         blocking,
-        reason: blocking ? 'audit_drift_blocked' : null,
+        reason: resolveAuditDriftReason(blocking, entries),
         migrationStatus,
         entries,
     };
@@ -159,6 +167,13 @@ export async function runCanonicalWorldInfoShadowImport({
             const projection = readWorldInfoProjection(directories, filename);
             const existing = getCanonicalWorldInfoBook(db, worldName);
             if (existing && stableJson(existing) === stableJson(projection.payload)) {
+                recordImportLedgerEntry(db, {
+                    sliceKey: 'world_info',
+                    sourcePath: path.relative(directories.root, path.join(directories.worlds, filename)),
+                    contentHash: projection.sourceHash,
+                    origin: 'import',
+                    nowMs,
+                });
                 entries.push({
                     world_name: worldName,
                     status: 'unchanged',
@@ -171,6 +186,13 @@ export async function runCanonicalWorldInfoShadowImport({
                 payload: projection.payload,
                 sourceMtimeMs: projection.sourceMtimeMs,
                 sourceSizeBytes: projection.sourceSizeBytes,
+                nowMs,
+            });
+            recordImportLedgerEntry(db, {
+                sliceKey: 'world_info',
+                sourcePath: path.relative(directories.root, path.join(directories.worlds, filename)),
+                contentHash: projection.sourceHash,
+                origin: 'import',
                 nowMs,
             });
             entries.push({
@@ -232,13 +254,18 @@ export async function auditCanonicalWorldInfoShadowImport({
         const stored = getCanonicalWorldInfoBook(db, worldName);
         try {
             const projection = readWorldInfoProjection(directories, filename);
+            const importClassification = classifyImportCandidate(db, {
+                sliceKey: 'world_info',
+                sourcePath: path.relative(directories.root, path.join(directories.worlds, filename)),
+                contentHash: projection.sourceHash,
+            });
             if (!stored) {
                 entries.push(buildAuditEntry({
                     handle,
                     worldName,
                     status: 'drift',
                     driftTypes: ['missing_db_world_info'],
-                    details: {},
+                    details: { import_classification: importClassification },
                     auditedAtMs,
                 }));
                 continue;
@@ -253,6 +280,7 @@ export async function auditCanonicalWorldInfoShadowImport({
                     details: {
                         expected_payload_json: stableJson(projection.payload),
                         actual_payload_json: stableJson(stored),
+                        import_classification: importClassification,
                     },
                     auditedAtMs,
                 }));

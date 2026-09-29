@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -12,6 +13,7 @@ import { canonicalSqliteManager } from '../canonical-sqlite.js';
 import { runCanonicalMigrations } from '../canonical-sqlite-migrations.js';
 import { getPersistedCanonicalAuditStatus, invalidateCanonicalAuditStatus } from '../canonical-sqlite-shadow-import.js';
 import { WORLD_INFO_AUDIT_SCOPE } from '../canonical-world-info-shadow-import.js';
+import { recordImportLedgerEntry, removeImportLedgerEntry } from '../canonical-import-ledger.js';
 import { getCanonicalStorageSlice } from '../canonical-storage-slice-registry.js';
 import { ensureCanonicalSliceBackend } from '../canonical-backend.js';
 import {
@@ -130,11 +132,20 @@ async function getCanonicalWorldInfoWriteState(request) {
     return readState;
 }
 
-function writeWorldInfoProjectionFile(directories, worldName, payload) {
+function writeWorldInfoProjectionFile(directories, worldName, payload, db = null) {
     const filename = `${normalizeCanonicalWorldInfoName(worldName)}.json`;
     const pathToFile = path.join(directories.worlds, filename);
-    writeFileAtomicSync(pathToFile, JSON.stringify(payload, null, 4));
+    const contents = JSON.stringify(payload, null, 4);
+    writeFileAtomicSync(pathToFile, contents);
     invalidateDirectory(directories.worlds);
+    if (db) {
+        recordImportLedgerEntry(db, {
+            sliceKey: 'world_info',
+            sourcePath: path.relative(directories.root, pathToFile),
+            contentHash: crypto.createHash('sha256').update(contents).digest('hex'),
+            origin: 'projection',
+        });
+    }
 }
 
 function canReadCanonicalFeatureFlags() {
@@ -424,6 +435,10 @@ router.post('/delete', async (request, response) => {
                 fs.unlinkSync(pathToWorldInfo);
             }
             invalidateDirectory(request.user.directories.worlds);
+            removeImportLedgerEntry(canonicalWriteState.db, {
+                sliceKey: 'world_info',
+                sourcePath: path.relative(request.user.directories.root, pathToWorldInfo),
+            });
         } catch (error) {
             return sendWorldInfoProjectionFailure({
                 response,
@@ -489,7 +504,7 @@ router.post('/import', async (request, response) => {
         });
 
         try {
-            writeWorldInfoProjectionFile(request.user.directories, worldName, payload);
+            writeWorldInfoProjectionFile(request.user.directories, worldName, payload, canonicalWriteState.db);
         } catch (error) {
             return sendWorldInfoProjectionFailure({
                 response,
@@ -543,7 +558,7 @@ router.post('/edit', async (request, response) => {
         });
 
         try {
-            writeWorldInfoProjectionFile(request.user.directories, worldName, request.body.data);
+            writeWorldInfoProjectionFile(request.user.directories, worldName, request.body.data, canonicalWriteState.db);
         } catch (error) {
             return sendWorldInfoProjectionFailure({
                 response,

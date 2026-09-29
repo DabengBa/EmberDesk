@@ -1,7 +1,13 @@
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 
 import { SETTINGS_FILE } from './constants.js';
+import {
+    classifyImportCandidate,
+    recordImportLedgerEntry,
+    resolveAuditDriftReason,
+} from './canonical-import-ledger.js';
 import { getCanonicalMigrationStatus, runCanonicalMigrations } from './canonical-sqlite-migrations.js';
 import { persistCanonicalAuditStatus } from './canonical-sqlite-shadow-import.js';
 import {
@@ -97,7 +103,7 @@ function buildAuditSummary({ handle, migrationStatus, entries }) {
         handle,
         hasDrift: driftEntries.length > 0,
         blocking,
-        reason: blocking ? 'audit_drift_blocked' : null,
+        reason: resolveAuditDriftReason(blocking, entries),
         migrationStatus,
         entries,
     };
@@ -185,7 +191,15 @@ export async function runCanonicalSettingsShadowImport({
     try {
         const existing = getCanonicalSettingsDocument(db, { userId: handle });
         const fileHash = hashSettingsPayload(file.payload);
+        const recordFileImport = () => recordImportLedgerEntry(db, {
+            sliceKey: 'settings',
+            sourcePath: SETTINGS_FILE,
+            contentHash: crypto.createHash('sha256').update(file.raw).digest('hex'),
+            origin: 'import',
+            nowMs,
+        });
         if (existing && existing.contentHash === fileHash) {
+            recordFileImport();
             entries.push({ status: 'unchanged' });
         } else {
             const expectedRevision = existing ? existing.revision : 0;
@@ -199,6 +213,7 @@ export async function runCanonicalSettingsShadowImport({
                 // Concurrent import race: re-check hash against winner.
                 const latest = getCanonicalSettingsDocument(db, { userId: handle });
                 if (latest && latest.contentHash === fileHash) {
+                    recordFileImport();
                     entries.push({ status: 'unchanged' });
                 } else {
                     entries.push({
@@ -208,6 +223,7 @@ export async function runCanonicalSettingsShadowImport({
                     });
                 }
             } else {
+                recordFileImport();
                 entries.push({
                     status: existing ? 'updated' : 'imported',
                     revision: saved.revision,
@@ -281,6 +297,13 @@ export async function auditCanonicalSettingsShadowImport({
     const entries = [];
     const file = readSettingsFileRaw(directories);
     const stored = getCanonicalSettingsDocument(db, { userId: handle });
+    const importClassification = file.exists && file.raw != null
+        ? classifyImportCandidate(db, {
+            sliceKey: 'settings',
+            sourcePath: SETTINGS_FILE,
+            contentHash: crypto.createHash('sha256').update(file.raw).digest('hex'),
+        })
+        : null;
 
     if (file.exists && file.error) {
         entries.push(buildAuditEntry({
@@ -297,7 +320,7 @@ export async function auditCanonicalSettingsShadowImport({
             handle,
             status: 'drift',
             driftTypes: ['missing_db_settings'],
-            details: {},
+            details: { import_classification: importClassification },
             auditedAtMs,
         }));
     } else if (!file.exists && stored) {
@@ -321,6 +344,7 @@ export async function auditCanonicalSettingsShadowImport({
                     expected_content_hash: fileHash,
                     actual_content_hash: stored.contentHash,
                     revision: stored.revision,
+                    import_classification: importClassification,
                 },
                 auditedAtMs,
             }));
