@@ -479,6 +479,10 @@ export class SecretManager {
      * Migrates legacy flat secrets format to new format
      */
     migrateFlatSecrets() {
+        if (getCanonicalSecretsReadBackend(this.directories)) {
+            // Canonical shadow import already normalizes the flat format.
+            return;
+        }
         if (!fs.existsSync(this.filePath)) {
             return;
         }
@@ -523,13 +527,47 @@ export class SecretManager {
      * Runs once per user directory.
      */
     migrateCustomToOpenAI() {
+        const openaiKey = SECRET_KEYS.OPENAI;
+        const customKey = SECRET_KEYS.CUSTOM;
+        const readBackend = getCanonicalSecretsReadBackend(this.directories);
+        if (readBackend) {
+            const canonical = getCanonicalSecrets(readBackend.db);
+            const openaiRecords = canonical[openaiKey];
+            const customRecords = canonical[customKey];
+            if (!Array.isArray(customRecords) || customRecords.length === 0
+                || (Array.isArray(openaiRecords) && openaiRecords.length > 0)) {
+                return;
+            }
+            const writeBackend = getCanonicalSecretsWriteBackend(this.directories);
+            if (!writeBackend) {
+                return;
+            }
+            // secret_records.id is globally unique: free the id before reusing it.
+            // Write inactive records first so a surviving active record stays active.
+            const inactiveRecords = customRecords.filter(record => !record.active);
+            const activeRecords = customRecords.filter(record => record.active);
+            for (const record of [...inactiveRecords, ...activeRecords]) {
+                deleteCanonicalSecret(writeBackend.db, { key: customKey, id: record.id });
+                writeCanonicalSecret(writeBackend.db, {
+                    key: openaiKey,
+                    value: record.value,
+                    label: record.label,
+                    id: record.id,
+                });
+            }
+            this._projectCanonicalSecrets(writeBackend.db, {
+                key: openaiKey,
+                operation: 'migrate',
+            });
+            console.info(color.green('Migrated CUSTOM API key to OPENAI key.'));
+            return;
+        }
+
         if (!fs.existsSync(this.filePath)) {
             return;
         }
 
         const secrets = this._readSecretsFile();
-        const openaiKey = SECRET_KEYS.OPENAI;
-        const customKey = SECRET_KEYS.CUSTOM;
 
         const openaiSecrets = secrets[openaiKey];
         const customSecrets = secrets[customKey];

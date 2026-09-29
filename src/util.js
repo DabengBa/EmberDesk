@@ -53,6 +53,15 @@ export function setConfigFilePath(configFilePath) {
 }
 
 /**
+ * Whether a config file path has been registered via setConfigFilePath().
+ * CLI contexts that run before config init can use this to avoid getConfig()'s hard exit.
+ * @returns {boolean}
+ */
+export function hasConfigFilePath() {
+    return CONFIG_PATH !== null;
+}
+
+/**
  * Returns the config object from the config.yaml file.
  * @returns {object} Config object
  */

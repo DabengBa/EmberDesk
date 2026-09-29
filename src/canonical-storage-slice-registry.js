@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { getCanonicalSliceProjectionMode } from './storage-feature-flags.js';
 import { getCanonicalMigrationStatus } from './canonical-sqlite-migrations.js';
 import { getPersistedCanonicalAuditStatus } from './canonical-sqlite-shadow-import.js';
 import { WORLD_INFO_AUDIT_SCOPE } from './canonical-world-info-shadow-import.js';
@@ -65,6 +66,7 @@ function createSliceFlagCapabilities({
     flagKey,
     supportsChatStats = false,
     fallbackToGlobal = true,
+    defaultProjection = 'sync',
 }) {
     const getFeatureFlagSnapshot = (overrides = null) => getCanonicalStorageSliceFeatureFlagSnapshot({
         flagKey,
@@ -77,6 +79,9 @@ function createSliceFlagCapabilities({
         getFeatureFlagSnapshot,
         getFeatureFlags(overrides = null) {
             return getFeatureFlagSnapshot(overrides).featureFlags;
+        },
+        getProjectionMode() {
+            return getCanonicalSliceProjectionMode(flagKey, defaultProjection);
         },
         getAuditTrackingFeatureFlags() {
             const featureFlags = getFeatureFlagSnapshot().featureFlags;
@@ -207,7 +212,7 @@ function createSettingsSlice() {
 }
 
 function createSecretsSlice() {
-    const flags = createSliceFlagCapabilities({ flagKey: 'secrets' });
+    const flags = createSliceFlagCapabilities({ flagKey: 'secrets', defaultProjection: 'off' });
     return {
         key: 'secrets',
         ...flags,

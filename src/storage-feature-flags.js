@@ -1,4 +1,4 @@
-import { getConfig, getConfigValue, keyToEnv } from './util.js';
+import { getConfig, getConfigValue, hasConfigFilePath, keyToEnv } from './util.js';
 
 const STORAGE_FLAG_PREFIX = 'features.storage.canonicalSqlite';
 const BASE_STORAGE_FLAG_NAMES = Object.freeze([
@@ -255,4 +255,41 @@ export function getCanonicalManagedMediaFeatureFlags() {
     return getCanonicalStorageSliceFeatureFlagSnapshot({
         flagKey: 'managedMedia',
     }).featureFlags;
+}
+
+const PROJECTION_MODES = Object.freeze(['sync', 'off']);
+
+function normalizeProjectionMode(value, fallback) {
+    const normalized = String(value ?? '').trim().toLowerCase();
+    return PROJECTION_MODES.includes(normalized) ? normalized : fallback;
+}
+
+/**
+ * Resolves the compatibility-projection mode for one storage slice.
+ * `sync` keeps writing the projected file after every canonical commit;
+ * `off` makes the file an export/import surface only (export-all +
+ * shadow import still function). Config path:
+ * `features.storage.canonicalSqlite.slices.<flagKey>.projection`.
+ * @param {string} flagKey Slice flag key (e.g. 'secrets', 'worldInfo')
+ * @param {'sync'|'off'} [defaultMode] Slice rollout default
+ * @returns {'sync'|'off'}
+ */
+export function getCanonicalSliceProjectionMode(flagKey, defaultMode = 'sync') {
+    const snakeCaseFlagKey = flagKey.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
+    const configAvailable = hasConfigFilePath();
+    for (const key of [flagKey, snakeCaseFlagKey]) {
+        const configPath = `${STORAGE_FLAG_PREFIX}.slices.${key}.projection`;
+        const environmentKey = keyToEnv(configPath);
+        if (Object.prototype.hasOwnProperty.call(process.env, environmentKey)) {
+            return normalizeProjectionMode(process.env[environmentKey], 'sync');
+        }
+        // getConfig() hard-exits without a registered config path (bare CLI use).
+        if (configAvailable) {
+            const explicit = getExplicitConfigValue(configPath);
+            if (explicit.present) {
+                return normalizeProjectionMode(explicit.value, 'sync');
+            }
+        }
+    }
+    return defaultMode;
 }

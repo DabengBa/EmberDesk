@@ -48,6 +48,7 @@ async function importCharacterRoutes({ generateThumbnailImpl, thumbnailsEnabled 
     jest.unstable_mockModule('../src/util.js', () => ({
         deepMerge: (target, source) => ({ ...target, ...source }),
         getConfig: () => ({}),
+        hasConfigFilePath: () => true,
         humanizedDateTime: () => '2026-05-13',
         tryParse: () => undefined,
         MemoryLimitedMap: class MemoryLimitedMap extends Map {

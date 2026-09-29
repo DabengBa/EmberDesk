@@ -117,6 +117,7 @@ function initializeCanonicalSecrets(directories) {
         handle,
         directories,
         db,
+        projection: getCanonicalSecretsProjectionMode(),
     });
     const state = {
         ok: true,
@@ -129,6 +130,10 @@ function initializeCanonicalSecrets(directories) {
     };
     initializedBackends.set(stateKey, state);
     return state;
+}
+
+export function getCanonicalSecretsProjectionMode() {
+    return getCanonicalStorageSlice('secrets').getProjectionMode();
 }
 
 export function initializeCanonicalSecretsForDirectories(directories) {
@@ -202,6 +207,9 @@ export function getCanonicalSecretsWriteBackend(directories) {
 
 export function projectCanonicalSecretsFile(directories, db, { nowMs = Date.now() } = {}) {
     const filePath = path.join(directories.root, 'secrets.json');
+    if (getCanonicalSecretsProjectionMode() === 'off') {
+        return filePath;
+    }
     const contents = JSON.stringify(getCanonicalSecretsProjection(db), null, 4);
     writeFileAtomicSync(filePath, contents, 'utf8');
     recordImportLedgerEntry(db, {

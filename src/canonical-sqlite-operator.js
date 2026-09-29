@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -15,6 +16,7 @@ import {
     auditCanonicalChatShadowImport,
     CANONICAL_CHAT_AUDIT_SCOPE,
 } from './canonical-chat-shadow-import.js';
+import { recordImportLedgerEntry } from './canonical-import-ledger.js';
 import { repairCanonicalManagedMediaProjection } from './endpoints/canonical-managed-media-write-service.js';
 import {
     auditCanonicalSecretsShadowImport,
@@ -27,6 +29,7 @@ import {
 } from './canonical-sqlite-rollout-contract.js';
 import {
     getCanonicalBackupRestoreReadiness,
+    getCanonicalStorageSlice,
     getDefaultCanonicalStorageSliceRegistry,
     listCanonicalStorageSliceKeys,
 } from './canonical-storage-slice-registry.js';
@@ -872,6 +875,7 @@ async function runCanonicalSecretsAudit({ handle, directories, db, auditedAtMs =
         directories,
         db,
         auditedAtMs,
+        projection: getCanonicalStorageSlice('secrets').getProjectionMode(),
     });
 }
 
@@ -894,7 +898,15 @@ export async function repairCanonicalSecretProjection({
     for (const repair of repairs) {
         try {
             const filePath = path.join(directories.root, 'secrets.json');
-            writeFileAtomicSync(filePath, JSON.stringify(getCanonicalSecretsProjection(db), null, 4), 'utf8');
+            const contents = JSON.stringify(getCanonicalSecretsProjection(db), null, 4);
+            writeFileAtomicSync(filePath, contents, 'utf8');
+            recordImportLedgerEntry(db, {
+                sliceKey: 'secrets',
+                sourcePath: 'secrets.json',
+                contentHash: crypto.createHash('sha256').update(contents).digest('hex'),
+                origin: 'projection',
+                nowMs,
+            });
             resolveSecretProjectionRepair(db, {
                 repairKey: repair.repairKey,
                 resolvedAtMs: nowMs,

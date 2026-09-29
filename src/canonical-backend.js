@@ -190,6 +190,7 @@ async function initializeSlice(slice, handle, directories, featureFlags, options
         directories,
         db,
         buildSnapshotRow: options.buildSnapshotRow,
+        projection: typeof slice.getProjectionMode === 'function' ? slice.getProjectionMode() : 'sync',
     });
     const postInitResult = await runPostInit();
     return {

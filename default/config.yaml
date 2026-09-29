@@ -116,6 +116,13 @@ features:
       writes: true
       chatStats: true
       strict: false
+      slices:
+        # secrets.json is an export-only surface by default: the canonical DB
+        # is authoritative, runtime writes no longer re-project the file, and
+        # `canonical-sqlite-repair.mjs export-all` materializes it on demand.
+        # Set projection: sync to restore continuous file projection.
+        secrets:
+          projection: off
   react:
     pages:
     panels:

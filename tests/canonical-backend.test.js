@@ -148,6 +148,11 @@ describe('legacy canonical sqlite config migration', () => {
             writes: true,
             chatStats: true,
             strict: false,
+            slices: {
+                secrets: {
+                    projection: 'off',
+                },
+            },
         });
     });
 

@@ -246,6 +246,7 @@ export function auditCanonicalSecretsShadowImport({
     directories,
     db,
     auditedAtMs = Date.now(),
+    projection = 'sync',
 } = {}) {
     const migrationStatus = getCanonicalMigrationStatus(db);
     if (!migrationStatus.ok || migrationStatus.currentVersion !== migrationStatus.targetVersion) {
@@ -285,12 +286,15 @@ export function auditCanonicalSecretsShadowImport({
             contentHash: crypto.createHash('sha256').update(file.raw).digest('hex'),
         })
         : null;
+    const suppressFileSide = projection === 'off';
     if (file.error) {
         entries.push(buildAuditEntry({
             key: null,
             status: 'error',
             driftTypes: ['invalid_json'],
-            details: { errorClass: file.error.name || 'Error' },
+            details: suppressFileSide
+                ? { errorClass: file.error.name || 'Error', projection_mode: 'off', suppressed: true }
+                : { errorClass: file.error.name || 'Error' },
             auditedAtMs,
         }));
     } else {
@@ -303,7 +307,9 @@ export function auditCanonicalSecretsShadowImport({
                 key: null,
                 status: 'error',
                 driftTypes: ['invalid_secret_record_ids'],
-                details: { errorClass: error.name || 'Error' },
+                details: suppressFileSide
+                    ? { errorClass: error.name || 'Error', projection_mode: 'off', suppressed: true }
+                    : { errorClass: error.name || 'Error' },
                 auditedAtMs,
             }));
         }
@@ -362,6 +368,7 @@ export function auditCanonicalSecretsShadowImport({
                         expectedRecordCount: expectedRecords.length,
                         actualRecordCount: actualRecords.length,
                         import_classification: importClassification,
+                        ...(suppressFileSide ? { projection_mode: 'off', suppressed: true } : {}),
                     },
                     auditedAtMs,
                 }));
@@ -383,7 +390,9 @@ export function auditCanonicalSecretsShadowImport({
         }));
     }
 
-    const blocking = entries.some(entry => entry.status === 'drift' || entry.status === 'error');
+    const blocking = entries.some(entry =>
+        (entry.status === 'drift' || entry.status === 'error')
+        && !(suppressFileSide && entry.details?.suppressed));
     const result = {
         ok: !blocking,
         handle,

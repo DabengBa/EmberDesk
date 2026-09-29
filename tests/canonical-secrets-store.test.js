@@ -11,6 +11,7 @@ import { expectCanonicalDomainSchema } from './helpers/canonical-domain-schema.j
 import {
     getCanonicalSecretRecords,
     listOpenSecretProjectionRepairs,
+    recordSecretProjectionRepair,
     writeCanonicalSecret,
 } from '../src/endpoints/canonical-secrets-store.js';
 import {
@@ -30,6 +31,7 @@ const canonicalEnvKeys = [
     'EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_READS',
     'EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_WRITES',
     'EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_STRICT',
+    'EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SLICES_SECRETS_PROJECTION',
 ];
 
 function makeRoot() {
@@ -320,6 +322,7 @@ describe('canonical secrets store', () => {
             _migrated: [],
         });
         setCanonicalEnv();
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SLICES_SECRETS_PROJECTION = 'sync';
 
         jest.resetModules();
         const { setConfigFilePath } = await import('../src/util.js');
@@ -379,6 +382,7 @@ describe('canonical secrets store', () => {
             _migrated: [],
         });
         setCanonicalEnv();
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SLICES_SECRETS_PROJECTION = 'sync';
 
         jest.resetModules();
         const { setConfigFilePath } = await import('../src/util.js');
@@ -444,5 +448,220 @@ describe('canonical secrets store', () => {
         expect(listOpenSecretProjectionRepairs(db)).toEqual([]);
         expect(projected).toContain(`${canary}-committed`);
         expect(JSON.stringify(repaired)).not.toContain(canary);
+    });
+
+    test('keeps secrets.json untouched when projection mode is off', async () => {
+        const root = makeRoot();
+        const directories = createDirectories(root);
+        writeSecretsFile(directories, {
+            api_key_openai: [
+                { id: 'seed', value: `${canary}-seed`, label: 'Seed', active: true },
+            ],
+            _migrated: [],
+        });
+        setCanonicalEnv();
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SLICES_SECRETS_PROJECTION = 'off';
+
+        jest.resetModules();
+        const { setConfigFilePath } = await import('../src/util.js');
+        setConfigFilePath(fileURLToPath(new URL('../default/config.yaml', import.meta.url)));
+        const { SecretManager } = await import(`../src/endpoints/secrets.js?canonicalOff=${Date.now()}-${Math.random()}`);
+        const { canonicalSqliteManager } = await import('../src/canonical-sqlite.js');
+        const secretManager = new SecretManager(directories);
+
+        expect(secretManager.readSecret('api_key_openai')).toBe(`${canary}-seed`);
+        secretManager.writeSecret('api_key_openai', `${canary}-second`, 'Second');
+        secretManager.rotateSecret('api_key_openai', 'seed');
+
+        const db = canonicalSqliteManager.open({
+            handle: 'alice',
+            directories,
+            featureFlags: { enabled: true, strict: false },
+        });
+        const projected = JSON.parse(fs.readFileSync(path.join(directories.root, 'secrets.json'), 'utf8'));
+
+        expect(getCanonicalSecretRecords(db, 'api_key_openai')).toEqual([
+            expect.objectContaining({ id: 'seed', active: true }),
+            expect.objectContaining({ label: 'Second', active: false, value: `${canary}-second` }),
+        ]);
+        expect(secretManager.readSecret('api_key_openai')).toBe(`${canary}-seed`);
+        expect(projected.api_key_openai).toEqual([
+            expect.objectContaining({ id: 'seed', label: 'Seed', active: true, value: `${canary}-seed` }),
+        ]);
+    });
+
+    test('reports stale secrets.json as suppressed informational drift when projection is off', () => {
+        const root = makeRoot();
+        const directories = createDirectories(root);
+        const manager = createManager();
+        writeSecretsFile(directories, {
+            api_key_openai: [{ id: 'seed', value: canary, label: 'Seed', active: true }],
+        });
+
+        runCanonicalSecretsShadowImport({
+            handle: 'alice',
+            directories,
+            featureFlags: {
+                enabled: true,
+                shadowImport: true,
+                reads: false,
+                strict: false,
+            },
+            manager,
+            nowMs: 1735689600000,
+        });
+        const db = manager.open({
+            handle: 'alice',
+            directories,
+            featureFlags: { enabled: true, strict: false },
+        });
+        writeCanonicalSecret(db, {
+            key: 'api_key_custom',
+            value: `${canary}-db-only`,
+            label: 'DB only',
+            id: 'db-only',
+            nowMs: 1735689601000,
+        });
+
+        const auditResult = auditCanonicalSecretsShadowImport({
+            handle: 'alice',
+            directories,
+            db,
+            auditedAtMs: 1735689602000,
+            projection: 'off',
+        });
+        const serialized = JSON.stringify(auditResult);
+
+        expect(auditResult).toEqual(expect.objectContaining({
+            ok: true,
+            blocking: false,
+            reason: null,
+        }));
+        expect(auditResult.entries).toContainEqual(expect.objectContaining({
+            key: 'api_key_custom',
+            status: 'drift',
+            drift_types: ['missing_projection_records'],
+            details: expect.objectContaining({
+                projection_mode: 'off',
+                suppressed: true,
+                import_classification: 'known',
+            }),
+        }));
+        expect(getPersistedCanonicalAuditStatus(db, { scope: CANONICAL_SECRETS_AUDIT_SCOPE })).toEqual(expect.objectContaining({
+            ok: true,
+            blocking: false,
+        }));
+        expect(serialized).not.toContain(canary);
+        expect(serialized).toContain('missing_projection_records');
+    });
+
+    test('keeps an out-of-band secrets.json edit suppressed and never overwrites DB when projection is off', () => {
+        const root = makeRoot();
+        const directories = createDirectories(root);
+        const manager = createManager();
+        writeSecretsFile(directories, {
+            api_key_openai: [{ id: 'seed', value: canary, label: 'Seed', active: true }],
+        });
+
+        runCanonicalSecretsShadowImport({
+            handle: 'alice',
+            directories,
+            featureFlags: {
+                enabled: true,
+                shadowImport: true,
+                reads: false,
+                strict: false,
+            },
+            manager,
+            nowMs: 1735689600000,
+        });
+        const db = manager.open({
+            handle: 'alice',
+            directories,
+            featureFlags: { enabled: true, strict: false },
+        });
+        writeSecretsFile(directories, {
+            api_key_openai: [{ id: 'seed', value: `${canary}-edited`, label: 'Edited', active: true }],
+        });
+
+        const auditResult = auditCanonicalSecretsShadowImport({
+            handle: 'alice',
+            directories,
+            db,
+            auditedAtMs: 1735689601000,
+            projection: 'off',
+        });
+        const importResult = runCanonicalSecretsShadowImport({
+            handle: 'alice',
+            directories,
+            featureFlags: {
+                enabled: true,
+                shadowImport: true,
+                reads: true,
+                strict: false,
+            },
+            manager,
+            nowMs: 1735689602000,
+        });
+        const records = getCanonicalSecretRecords(db, 'api_key_openai');
+
+        expect(auditResult).toEqual(expect.objectContaining({
+            ok: true,
+            blocking: false,
+            reason: null,
+        }));
+        expect(auditResult.entries).toContainEqual(expect.objectContaining({
+            status: 'drift',
+            drift_types: expect.arrayContaining(['value_hash_mismatch']),
+            details: expect.objectContaining({
+                import_classification: 'candidate',
+                suppressed: true,
+            }),
+        }));
+        expect(importResult).toEqual(expect.objectContaining({
+            ok: true,
+            entries: [expect.objectContaining({ status: 'unchanged' })],
+        }));
+        expect(records).toEqual([
+            expect.objectContaining({ id: 'seed', value: canary, label: 'Seed' }),
+        ]);
+    });
+
+    test('keeps open projection repairs blocking when projection is off', () => {
+        const root = makeRoot();
+        const directories = createDirectories(root);
+        const manager = createManager();
+        const db = manager.open({
+            handle: 'alice',
+            directories,
+            featureFlags: { enabled: true, strict: false },
+        });
+        runCanonicalMigrations(db, { nowMs: 1735689600000 });
+        recordSecretProjectionRepair(db, {
+            repairKey: 'secrets:api_key_openai:seed:write',
+            key: 'api_key_openai',
+            recordId: 'seed',
+            operation: 'write',
+            errorClass: 'Error',
+            nowMs: 1735689600500,
+        });
+
+        const auditResult = auditCanonicalSecretsShadowImport({
+            handle: 'alice',
+            directories,
+            db,
+            auditedAtMs: 1735689601000,
+            projection: 'off',
+        });
+
+        expect(auditResult).toEqual(expect.objectContaining({
+            ok: false,
+            blocking: true,
+            reason: 'audit_drift_blocked',
+        }));
+        expect(auditResult.entries).toContainEqual(expect.objectContaining({
+            status: 'drift',
+            drift_types: ['open_secret_projection_repair'],
+        }));
     });
 });
