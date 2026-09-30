@@ -20,7 +20,6 @@ export const SECRET_KEYS = {
     APHRODITE: 'api_key_aphrodite',
     TABBY: 'api_key_tabby',
     OPENAI: 'api_key_openai',
-    OPENAI_FALLBACK: 'api_key_openai_fallback',
     DEEPL: 'deepl',
     LIBRE: 'libre',
     LIBRE_URL: 'libre_url',
@@ -68,7 +67,6 @@ const FRIENDLY_NAMES = {
     [SECRET_KEYS.HORDE]: 'AI Horde',
     [SECRET_KEYS.MANCER]: 'Mancer',
     [SECRET_KEYS.OPENAI]: 'OpenAI',
-    [SECRET_KEYS.OPENAI_FALLBACK]: 'Fallback OpenAI-compatible',
     [SECRET_KEYS.NOVEL]: 'NovelAI',
     [SECRET_KEYS.OPENROUTER]: 'OpenRouter',
     [SECRET_KEYS.AI21]: 'AI21',
@@ -120,7 +118,6 @@ const FRIENDLY_NAMES = {
 const INPUT_MAP = {
     [SECRET_KEYS.MANCER]: '#api_key_mancer',
     [SECRET_KEYS.OPENAI]: '#api_key_openai',
-    [SECRET_KEYS.OPENAI_FALLBACK]: '#fallback_provider_api_key',
     [SECRET_KEYS.AI21]: '#api_key_ai21',
     [SECRET_KEYS.VLLM]: '#api_key_vllm',
     [SECRET_KEYS.APHRODITE]: '#api_key_aphrodite',

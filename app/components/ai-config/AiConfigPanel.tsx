@@ -123,12 +123,6 @@ export function AiConfigPanel() {
                                     <span data-i18n="Request model reasoning">Model Reasoning</span>
                                 </label>
                             </div>
-                            <div className="range-block" data-source="openai">
-                                <label htmlFor="bind_preset_to_connection" className="checkbox_label widthFreeExpand" title="Bind presets to API connections" data-i18n="[title]Bind presets to API connections">
-                                    <input id="bind_preset_to_connection" type="checkbox" />
-                                    <span data-i18n="Bind presets to API connections">Bind Presets to Connection</span>
-                                </label>
-                            </div>
                         </div>
                         <div className="config-section-header"><span data-i18n="Advanced Sampling">高级采样</span></div>
                         <div className="range-block-pair" data-source="openai">

@@ -16,15 +16,15 @@ describe('frontend structure contract helpers', () => {
         const apiPanel = readRepoFile('app/components/api/ApiConnectionsPanel.tsx');
 
         expect(getTagById(apiPanel, 'fallback_provider_section')).toContain('data-doc-id="feature.fallback_provider"');
-        expect(getTagByClass(apiPanel, 'fallback_provider_save_key')).toContain('id="fallback_provider_save_key"');
+        expect(getTagByClass(apiPanel, 'fallback-provider-status')).toContain('id="fallback_provider_status"');
     });
 
     test('checks button affordance and readable marker failures', () => {
         const apiPanel = readRepoFile('app/components/api/ApiConnectionsPanel.tsx');
         const indexHtml = apiPanel;
 
-        expectButtonAffordance(getTagByClass(indexHtml, 'fallback_provider_save_key'), 'Save fallback API key', {
-            contractName: 'fallback provider save key',
+        expectButtonAffordance(getTagByClass(indexHtml, 'manage-api-keys'), 'Manage API keys', {
+            contractName: 'API key manage button',
         });
 
         expect(() => getTagByClass(indexHtml, 'missing_contract_class', { contractName: 'sample contract' }))

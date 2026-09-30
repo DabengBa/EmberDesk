@@ -1,27 +1,15 @@
-export const OPENAI_FALLBACK_SECRET_MARKER = 'openai_fallback_provider';
-
-export function normalizeFallbackBaseUrl(baseUrl) {
-    return String(baseUrl ?? '').trim().replace(/\/+$/, '');
+/**
+ * The fallback attempt reuses the primary URL and API key; the model is the only
+ * override. A non-empty fallback model means fallback is enabled.
+ * @param {object} settings Chat completion settings
+ * @returns {string} Configured fallback model name, or '' when fallback is off
+ */
+export function getFallbackOpenAIModel(settings) {
+    return String(settings?.fallback_provider_model ?? '').trim();
 }
 
-export function hasFallbackProviderSettings(settings, secretState, fallbackSecretKey) {
-    if (!settings?.fallback_provider_enabled) {
-        return false;
-    }
-
-    const hasEndpoint = Boolean(normalizeFallbackBaseUrl(settings.fallback_provider_base_url));
-    const hasModel = Boolean(String(settings.fallback_provider_model ?? '').trim());
-    const hasSecret = Boolean(secretState?.[fallbackSecretKey]);
-    return hasEndpoint && hasModel && hasSecret;
-}
-
-export function buildFallbackOpenAIRequestOverrides(settings) {
-    return {
-        chatCompletionSource: 'openai',
-        model: String(settings?.fallback_provider_model ?? '').trim(),
-        customUrl: normalizeFallbackBaseUrl(settings?.fallback_provider_base_url),
-        openaiSecretMarker: OPENAI_FALLBACK_SECRET_MARKER,
-    };
+export function hasFallbackProviderSettings(settings) {
+    return Boolean(getFallbackOpenAIModel(settings));
 }
 
 export function isRecoverableGenerationFailure(failure) {

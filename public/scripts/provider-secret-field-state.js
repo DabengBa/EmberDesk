@@ -1,47 +1,21 @@
 import { hasFallbackProviderSettings } from './chat-generation-auto-recovery.js';
 
-export function getFallbackProviderStatus(settings, secretState, fallbackSecretKey) {
-    if (!settings?.fallback_provider_enabled) {
-        return { state: 'disabled', text: 'Disabled', ready: false };
-    }
-
-    const ready = hasFallbackProviderSettings(settings, secretState, fallbackSecretKey);
-    return ready
+export function getFallbackProviderStatus(settings) {
+    return hasFallbackProviderSettings(settings)
         ? { state: 'ready', text: 'Ready', ready: true }
-        : { state: 'needs_setup', text: 'Needs setup', ready: false };
+        : { state: 'disabled', text: 'Disabled', ready: false };
 }
 
-export function resolveProviderSecretKeyForSettings({
-    settings,
-    source: _source,
-    secretKey,
-    chatCompletionSources: _chatCompletionSources,
-}) {
-    if (settings?.reverse_proxy) {
-        return null;
-    }
-
+export function resolveProviderSecretKeyForSettings({ secretKey }) {
     return secretKey;
 }
 
-export function canUseDirectProviderSecret({ settings, secretKey }) {
-    return !settings?.reverse_proxy && Boolean(secretKey);
-}
-
 export function getUnifiedKeyFieldState({
-    settings,
     source,
     secretKey,
     secretState,
     chatCompletionSources,
 }) {
-    if (settings?.reverse_proxy) {
-        return {
-            placeholder: 'Proxy password',
-            value: settings.proxy_password || '',
-        };
-    }
-
     if (secretKey && secretState?.[secretKey]) {
         const label = Array.isArray(secretState[secretKey])
             ? (secretState[secretKey].find(secret => secret.active)?.label || '')

@@ -147,12 +147,10 @@ export class ConnectionManagerRequestService {
                         model: profile.model,
                         chat_completion_source: selectedApiMap.source,
                         secret_id: profile['secret-id'],
-                        custom_url: profile['api-url'],
+                        custom_url: profile['api-url'] || profile['proxy-url'],
                         zai_endpoint: profile['api-url'],
                         siliconflow_endpoint: profile['api-url'],
                         minimax_endpoint: profile['api-url'],
-                        reverse_proxy: profile['proxy-url'],
-                        proxy_password: profile['api-key'],
                         custom_prompt_post_processing: profile['prompt-post-processing'],
                         ...overridePayload,
                     }, {

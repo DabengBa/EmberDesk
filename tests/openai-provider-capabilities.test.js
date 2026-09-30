@@ -35,56 +35,64 @@ function settings(overrides = {}) {
 }
 
 describe('OpenAI provider capability helpers', () => {
-    test('keeps fallback provider endpoint settings persistent but outside connection profiles', () => {
+    test('keeps the fallback model field persistent under the four-field contract', () => {
         const source = fs.readFileSync(path.join(repoRoot, 'public/scripts/openai.js'), 'utf8');
 
-        expect(source).toContain("fallback_provider_enabled: ['#fallback_provider_enabled', 'fallback_provider_enabled', true, false]");
-        expect(source).toContain("fallback_provider_base_url: ['#fallback_provider_base_url', 'fallback_provider_base_url', false, false]");
         expect(source).toContain("fallback_provider_model: ['#fallback_provider_model', 'fallback_provider_model', false, false]");
-        expect(source).toContain('fallback_provider_enabled: false');
-        expect(source).toContain("fallback_provider_base_url: ''");
         expect(source).toContain("fallback_provider_model: ''");
         expect(source).toContain('function updateFallbackProviderStatus()');
-        expect(source).toContain("$('#fallback_provider_enabled').on('change',");
-        expect(source).toContain("$('#fallback_provider_base_url').on('input',");
         expect(source).toContain("$('#fallback_provider_model').on('input',");
-        expect(source).not.toContain('fallback_provider_api_key:');
+
+        // Retired two-endpoint fields keep no bindings, defaults, or send-path use.
+        // (The load-time migration still reads the legacy literals to clean them.)
+        for (const retired of [
+            "fallback_provider_enabled: ['#",
+            "fallback_provider_base_url: ['#",
+            'fallback_provider_enabled: false',
+            "fallback_provider_base_url: ''",
+            'fallback_provider_api_key',
+            'oai_settings.proxy_password',
+            'oai_settings.reverse_proxy',
+            'oai_settings.custom_include_body',
+            'oai_settings.custom_exclude_body',
+            'oai_settings.custom_include_headers',
+            'oai_settings.bind_preset_to_connection',
+            'syncProxies',
+            'validateReverseProxy',
+        ]) {
+            expect(source).not.toContain(retired);
+        }
+        // The retired reverse_proxy URL still folds into custom_url during load-time cleanup.
+        expect(source).toContain('settings.custom_url = settings.reverse_proxy;');
+        expect(source).toContain("delete settings[key]");
     });
 
-    test('requires the dedicated fallback secret before showing fallback provider as ready', () => {
+    test('marks fallback ready from the model alone; the primary key covers it', () => {
         const source = fs.readFileSync(path.join(repoRoot, 'public/scripts/openai.js'), 'utf8');
 
         expect(getFallbackProviderStatus({
-            fallback_provider_enabled: true,
-            fallback_provider_base_url: 'https://fallback.example/v1',
             fallback_provider_model: 'fallback-model',
-        }, { api_key_openai_fallback: [{ active: true }] }, 'api_key_openai_fallback')).toMatchObject({ state: 'ready', ready: true });
+        })).toMatchObject({ state: 'ready', ready: true });
         expect(getFallbackProviderStatus({
-            fallback_provider_enabled: true,
-            fallback_provider_base_url: 'https://fallback.example/v1',
-            fallback_provider_model: 'fallback-model',
-        }, {}, 'api_key_openai_fallback')).toMatchObject({ state: 'needs_setup', ready: false });
+            fallback_provider_model: '   ',
+        })).toMatchObject({ state: 'disabled', ready: false });
+        expect(getFallbackProviderStatus({})).toMatchObject({ state: 'disabled', ready: false });
 
-        expect(source).toContain('getFallbackProviderStatus(oai_settings, secret_state, SECRET_KEYS.OPENAI_FALLBACK)');
-        expect(source).toContain('saveProviderSecretField({');
-        expect(source).toContain('clearProviderSecretField({');
-        expect(source).toContain('key: SECRET_KEYS.OPENAI_FALLBACK');
-        expect(source).toContain('writeSecret,');
-        expect(source).toContain('deleteSecret,');
-        expect(source).toMatch(/saveProviderSecretField\(\{[\s\S]*?key: SECRET_KEYS\.OPENAI_FALLBACK[\s\S]*?\}\);[\s\S]*?updateFallbackProviderStatus\(\);/);
-        expect(source).toMatch(/clearProviderSecretField\(\{[\s\S]*?key: SECRET_KEYS\.OPENAI_FALLBACK[\s\S]*?\}\);[\s\S]*?updateFallbackProviderStatus\(\);/);
+        expect(source).toContain('getFallbackProviderStatus(oai_settings)');
+        // Fallback reuses the primary secret; no dedicated key handling remains.
+        expect(source).not.toContain('SECRET_KEYS.OPENAI_FALLBACK');
+        expect(source).not.toContain('openai_secret_marker');
     });
 
-    test('builds fallback request payloads without mutating or inheriting primary connection settings', () => {
+    test('builds fallback requests as a model-only override on the primary connection', () => {
         const source = fs.readFileSync(path.join(repoRoot, 'public/scripts/openai.js'), 'utf8');
 
-        expect(source).toContain('buildFallbackOpenAIRequestOverrides(oai_settings)');
-        expect(source).toContain('requestSettings.chat_completion_source = fallbackOverrides.chatCompletionSource;');
-        expect(source).toContain('requestSettings.openai_model = fallbackOverrides.model;');
-        expect(source).toContain('requestSettings.custom_url = fallbackOverrides.customUrl;');
-        expect(source).toContain("requestSettings.reverse_proxy = '';");
-        expect(source).toContain("requestSettings.proxy_password = '';");
-        expect(source).toContain('generate_data.openai_secret_marker = fallbackOverrides.openaiSecretMarker;');
+        expect(source).toContain('requestSettings.openai_model = getFallbackOpenAIModel(oai_settings);');
+        expect(source).not.toContain('buildFallbackOpenAIRequestOverrides');
+        expect(source).not.toContain('openai_secret_marker');
+        expect(source).not.toContain('requestSettings.reverse_proxy');
+        expect(source).not.toContain('requestSettings.proxy_password');
+        expect(source).not.toContain('requestSettings.custom_url =');
     });
 
     test('keeps missing provider API key feedback visible before connection attempts', () => {

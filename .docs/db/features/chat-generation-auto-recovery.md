@@ -18,7 +18,7 @@ Recover visible main-chat generation failures through a bounded retry chain befo
 ## User-Visible Contract
 
 - The feature applies to visible main-chat send, continue, regenerate/retry, and swipe requests that produce or update an assistant row.
-- Recovery is bounded: the original request may be followed by one primary-provider retry and, when a ready fallback provider exists, one fallback-provider retry.
+- Recovery is bounded: the original request may be followed by one primary-provider retry and, when a fallback model is configured, one fallback-model retry on the same connection.
 - Recoverable failures keep the user message and assistant row identity stable; partial assistant text from an intermediate failed attempt is cleared before the next attempt continues.
 - If automatic recovery succeeds, the user sees only the final assistant text in the existing row.
 - If all automatic attempts fail, EmberDesk preserves the failed assistant row and exposes the ordinary manual retry action on that same row.

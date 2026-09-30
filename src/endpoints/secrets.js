@@ -29,7 +29,6 @@ export const SECRET_KEYS = {
     APHRODITE: 'api_key_aphrodite',
     TABBY: 'api_key_tabby',
     OPENAI: 'api_key_openai',
-    OPENAI_FALLBACK: 'api_key_openai_fallback',
     DEEPL: 'deepl',
     LIBRE: 'libre',
     LIBRE_URL: 'libre_url',

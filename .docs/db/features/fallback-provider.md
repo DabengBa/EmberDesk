@@ -9,47 +9,44 @@ related: [page.api_configuration, feature.connection_profile]
 
 ## ID 解释
 
-`feature.fallback_provider` represents the optional OpenAI-compatible fallback connection that lives inside the API configuration drawer. It covers the fallback enabled toggle, base URL, model, secret-backed API key controls, and the visible cost warning. It does not cover general connection profiles, provider routing, or non-OpenAI-compatible protocols.
+`feature.fallback_provider` represents the optional fallback model inside the API configuration drawer. It covers the fallback model input and its readiness status. The fallback attempt reuses the primary connection's base URL and API key; there is no separate fallback endpoint, secret, or enable toggle. It does not cover general connection profiles or non-OpenAI-compatible protocols.
 
 ## Purpose
 
-Let a user configure an optional second OpenAI-compatible endpoint that eligible visible-chat recovery may use after the primary provider retry is exhausted.
+Let a user name one fallback model that eligible visible-chat recovery may retry with after the primary provider retry is exhausted, without configuring a second endpoint or credential.
 
 ## User-Visible Contract
 
-- The fallback section lives inside [API Configuration](page.api_configuration) and remains separate from the main provider credentials.
-- Fallback use is disabled until the user enables it and supplies the required base URL, model, and dedicated API key.
-- The section shows enough readiness state and warning copy for the user to understand that fallback can create extra API requests and cost.
-- The fallback API key is handled as a dedicated secret; after save, the UI must not expose the raw secret as plain settings text.
-- If saving the fallback key fails, the typed value remains available in the input so the user can retry or copy it instead of losing the secret.
+- The fallback section lives inside [API Configuration](page.api_configuration) next to the primary model.
+- Fallback is enabled by a non-empty fallback model and disabled by leaving the field empty; there is no separate toggle.
+- The fallback attempt always reuses the same base URL and the same `api_key_openai` secret as the primary request; the UI never offers a fallback URL, fallback key, or fallback secret controls.
+- The section shows a readiness state (`Ready` when a model is set, `Disabled` when empty) plus copy explaining that the primary URL and key apply.
 - Quiet and background helpers do not consume this fallback: they return text without a visible assistant row or automatic recovery.
+- Legacy `fallback_provider_enabled`/`fallback_provider_base_url`/`api_key_openai_fallback` settings and secrets are retired: the dedicated secret is deleted lazily at startup, a fallback explicitly disabled in legacy data does not resurrect, and the retired base URL is ignored.
 
 ## Semantic Interaction IDs
 
-- `feature.fallback_provider.enabled`: enabling or disabling fallback use.
-- `feature.fallback_provider.base_url`: entering the fallback endpoint.
-- `feature.fallback_provider.model`: entering the fallback model name.
-- `feature.fallback_provider.api_key`: saving or clearing the dedicated fallback secret.
+- `feature.fallback_provider.model`: entering or clearing the fallback model name.
 - `feature.fallback_provider.status`: reading the current readiness state.
 
 ## Acceptance Workflows
 
-- As an API-configuration user who wants a recovery endpoint, from [API Configuration](page.api_configuration) open the fallback section, enter base URL, model, and API key, then enable fallback; EmberDesk must show a ready enabled state with cost warning while hiding the saved key as a raw setting, refresh or reopen must keep the configured readiness without exposing the secret, and failure is fallback shown as ready with missing fields, lost settings, or leaked secret text.
-- As a cautious user who wants fallback configured but inactive, from the fallback section fill fields and leave the enable toggle off or disable it later; EmberDesk must preserve the visible configuration while making fallback inactive, later re-enable must restore readiness, and failure is automatic fallback use while the section is disabled.
-- As a user whose fallback key save fails, from the fallback API key input attempt to save and receive an error; EmberDesk must keep the entered key visible in that input for retry or copying, leave the section not-ready until save succeeds, and failure is clearing the typed secret or reporting readiness after failed save.
+- As an API-configuration user who wants a recovery model, from [API Configuration](page.api_configuration) enter a fallback model while the primary URL and key are already set; EmberDesk must show the ready state, refresh or reopen must keep the model value, and failure is fallback requests targeting a different endpoint or credential than the primary one.
+- As a cautious user who wants fallback configured but inactive, leave the fallback model empty; EmberDesk must show the disabled state, no automatic fallback attempt may run, and failure is fallback use with an empty model.
+- As a returning user with legacy two-endpoint fallback data, open the drawer after upgrade; EmberDesk must show only the model field with prior model value preserved when fallback was enabled, must not expose the retired URL/key inputs, and failure is resurrecting a disabled legacy fallback or keeping a usable dedicated fallback secret.
 
 ## Feature-Specific Evidence
 
-- Visible enabled/disabled/readiness state, warning copy, and key placeholder behavior are primary evidence.
-- Secret storage checks are supporting evidence only when the UI proves the raw fallback key is not exposed after save.
+- Visible ready/disabled state, model persistence, and the absence of fallback URL/key controls are primary evidence.
+- Request payloads prove contract: the fallback attempt carries only a different `model` over the primary `custom_url` and `api_key_openai` secret.
 - Automatic use of the fallback provider is proven under [Chat Generation Auto Recovery](feature.chat_generation_auto_recovery), not by this configuration feature alone.
 
 ## Failure Signals
 
-- The section can be enabled and shown ready without a base URL, model, or saved key.
-- Connection profiles overwrite, capture, or silently clear fallback fields.
-- Saving the fallback secret fails and the entered value disappears.
-- The UI hides the cost warning while fallback is enabled.
+- A fallback request uses any URL or credential other than the primary connection's.
+- Fallback runs while the fallback model field is empty.
+- The UI offers a separate fallback endpoint, key, or enable toggle.
+- Legacy fallback secrets survive startup cleanup.
 
 ## Boundaries
 

@@ -54,7 +54,19 @@ function createOpenAIResponse(body) {
     };
 }
 
-describe('OpenAI-compatible fallback chat completions backend', () => {
+function generateBody(overrides = {}) {
+    return {
+        chat_completion_source: 'openai',
+        custom_url: 'https://endpoint.example/v1',
+        model: 'primary-model',
+        messages: [{ role: 'user', content: 'hello' }],
+        stream: false,
+        max_tokens: 64,
+        ...overrides,
+    };
+}
+
+describe('single-endpoint OpenAI-compatible chat completions backend', () => {
     let router;
 
     beforeEach(async () => {
@@ -68,7 +80,6 @@ describe('OpenAI-compatible fallback chat completions backend', () => {
         jest.unstable_mockModule('../src/endpoints/secrets.js', () => ({
             SECRET_KEYS: {
                 OPENAI: 'api_key_openai',
-                OPENAI_FALLBACK: 'api_key_openai_fallback',
             },
             readSecret: readSecretMock,
         }));
@@ -80,60 +91,85 @@ describe('OpenAI-compatible fallback chat completions backend', () => {
         jest.restoreAllMocks();
     });
 
-    test('resolves the fallback marker only to the dedicated fallback OpenAI secret', async () => {
-        readSecretMock.mockImplementation((_directories, key) => {
-            if (key === 'api_key_openai') return 'primary-key';
-            if (key === 'api_key_openai_fallback') return 'fallback-key';
-            return '';
+    test('primary and fallback requests share one URL and the primary API key', async () => {
+        readSecretMock.mockImplementation((_directories, key) => (key === 'api_key_openai' ? 'shared-key' : ''));
+        fetchMock.mockResolvedValue(createOpenAIResponse({ choices: [{ message: { content: 'reply' } }] }));
+
+        await withServer(createApp(router), async url => {
+            const primary = await fetch(`${url}/api/backends/chat-completions/generate`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(generateBody()),
+            });
+            expect(primary.status).toBe(200);
+            await primary.text();
+
+            const fallback = await fetch(`${url}/api/backends/chat-completions/generate`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(generateBody({ model: 'fallback-model' })),
+            });
+            expect(fallback.status).toBe(200);
+            await fallback.text();
         });
-        fetchMock.mockResolvedValue(createOpenAIResponse({ choices: [{ message: { content: 'fallback reply' } }] }));
+
+        expect(readSecretMock).toHaveBeenCalledTimes(2);
+        expect(readSecretMock).toHaveBeenNthCalledWith(1, { root: 'unused' }, 'api_key_openai', undefined);
+        expect(readSecretMock).toHaveBeenNthCalledWith(2, { root: 'unused' }, 'api_key_openai', undefined);
+        expect(fetchMock.mock.calls[0][0]).toBe('https://endpoint.example/v1/chat/completions');
+        expect(fetchMock.mock.calls[1][0]).toBe('https://endpoint.example/v1/chat/completions');
+        expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe('Bearer shared-key');
+        expect(fetchMock.mock.calls[1][1].headers.Authorization).toBe('Bearer shared-key');
+        expect(JSON.parse(fetchMock.mock.calls[0][1].body).model).toBe('primary-model');
+        expect(JSON.parse(fetchMock.mock.calls[1][1].body).model).toBe('fallback-model');
+    });
+
+    test('legacy secret markers and proxy fields are ignored entirely', async () => {
+        readSecretMock.mockImplementation((_directories, key) => (key === 'api_key_openai' ? 'shared-key' : 'x'));
+        fetchMock.mockResolvedValue(createOpenAIResponse({ choices: [{ message: { content: 'reply' } }] }));
 
         await withServer(createApp(router), async url => {
             const response = await fetch(`${url}/api/backends/chat-completions/generate`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    chat_completion_source: 'openai',
-                    custom_url: 'https://fallback.example/v1',
+                body: JSON.stringify(generateBody({
                     openai_secret_marker: 'openai_fallback_provider',
-                    model: 'fallback-model',
-                    messages: [{ role: 'user', content: 'hello' }],
-                    stream: false,
-                    max_tokens: 64,
-                }),
+                    reverse_proxy: 'https://legacy-proxy.example',
+                    proxy_password: 'proxy-secret',
+                })),
             });
 
             expect(response.status).toBe(200);
             await response.text();
         });
 
-        expect(readSecretMock).toHaveBeenCalledWith({ root: 'unused' }, 'api_key_openai_fallback', undefined);
-        expect(readSecretMock).not.toHaveBeenCalledWith({ root: 'unused' }, 'api_key_openai', undefined);
-        expect(fetchMock.mock.calls[0][0]).toBe('https://fallback.example/v1/chat/completions');
-        expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe('Bearer fallback-key');
+        // The retired marker/keys never reroute the endpoint or the credential.
+        expect(readSecretMock).toHaveBeenCalledWith({ root: 'unused' }, 'api_key_openai', undefined);
+        expect(fetchMock.mock.calls[0][0]).toBe('https://endpoint.example/v1/chat/completions');
+        expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe('Bearer shared-key');
     });
 
-    test('rejects arbitrary OpenAI secret markers from browser payloads', async () => {
-        readSecretMock.mockReturnValue('primary-key');
+    test('missing key still fails closed unless a custom endpoint is configured', async () => {
+        readSecretMock.mockReturnValue('');
 
         await withServer(createApp(router), async url => {
-            const response = await fetch(`${url}/api/backends/chat-completions/generate`, {
+            const noEndpoint = await fetch(`${url}/api/backends/chat-completions/generate`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    chat_completion_source: 'openai',
-                    custom_url: 'https://fallback.example/v1',
-                    openai_secret_marker: 'api_key_openai',
-                    model: 'fallback-model',
-                    messages: [{ role: 'user', content: 'hello' }],
-                    stream: false,
-                }),
+                body: JSON.stringify(generateBody({ custom_url: undefined })),
             });
+            expect(noEndpoint.status).toBe(400);
 
-            expect(response.status).toBe(400);
+            fetchMock.mockResolvedValue(createOpenAIResponse({ choices: [{ message: { content: 'ok' } }] }));
+            const keylessEndpoint = await fetch(`${url}/api/backends/chat-completions/generate`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(generateBody()),
+            });
+            expect(keylessEndpoint.status).toBe(200);
+            await keylessEndpoint.text();
         });
 
-        expect(readSecretMock).not.toHaveBeenCalled();
-        expect(fetchMock).not.toHaveBeenCalled();
+        expect(fetchMock).toHaveBeenCalledTimes(1);
     });
 });

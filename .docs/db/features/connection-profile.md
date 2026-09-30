@@ -21,7 +21,7 @@ Let users save named API configuration snapshots and switch between them from th
 - Creating a profile captures the current visible connection setup into a named dropdown option.
 - Applying a profile updates the visible API drawer fields together so the selected provider, model, endpoint, key state, preset, and included options match the chosen snapshot.
 - Users can rename, edit included fields, and delete profiles; those changes must persist across drawer reopen and page refresh.
-- Empty proxy URL or API key values can be intentionally captured and applied as clearing actions.
+- Empty base URL or API key values can be intentionally captured and applied as clearing actions.
 - Older profile fields are tolerated for compatibility without exposing them as a new user-facing profile model.
 
 ## Semantic Interaction IDs

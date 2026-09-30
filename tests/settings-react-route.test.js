@@ -116,7 +116,6 @@ describe('settings React route flag', () => {
         expect(routeSource).toContain('const secretsQuery = useQuery(');
         expect(routeSource).toContain('const saveMutation = useMutation(');
         expect(routeSource).toContain('const settingsForm = useForm(');
-        expect(routeSource).toContain('const providerSettingsValues = useStore(settingsForm.store, state => state.values.providers);');
         expect(routeSource).toContain('const settingsSchema = z.object(');
         expect(routeSource).toContain('settingsForm.reset(nextDefaults, { keepDefaultValues: true });');
         expect(routeSource).not.toContain('settingsForm.reset(nextDefaults);');
@@ -128,24 +127,34 @@ describe('settings React route flag', () => {
         expect(routeSource).toContain('const openSettingsTab = useCallback((tabId: string)');
         expect(routeSource).toContain('startTransition(() => {');
         expect(routeSource).toContain('{isSettingsFormReady ? (');
-        expect(routeSource).toContain('const providerSettingsValues = useStore(settingsForm.store, state => state.values.providers);');
         expect(routeSource).not.toContain('const settingsFormValues = useStore(settingsForm.store, state => state.values);');
         expect(routeSource).toContain('settingsStyles.tabPanelOverlay');
         expect(routeSource).toContain("{activeTab === 'general' ? (");
         expect(routeSource).toContain("{activeTab === 'providers' ? (");
         expect(routeSource).toContain("{activeTab === 'userInterface' ? (");
         expect(routeSource).toContain("{activeTab === 'advanced' ? (");
-        expect(routeSource).toContain('name="providers.fallbackProviderEnabled"');
+        expect(routeSource).toContain('name="providers.customUrl"');
+        expect(routeSource).toContain('name="providers.fallbackProviderModel"');
         expect(routeSource).toContain('name="userInterface.customCss"');
         expect(routeSource).toContain('name="advanced.autoSwipe"');
         expect(routeSource).not.toContain("{activeTab === 'general' && (");
         expect(routeSource).not.toContain("{activeTab === 'providers' && (");
         expect(routeSource).not.toContain("{activeTab === 'userInterface' && (");
         expect(routeSource).not.toContain("{activeTab === 'advanced' && (");
-        expect(routeSource).toContain("chatCompletionSource: z.enum(['openai']),");
+        // Four-field provider contract: URL, key, model, fallback model only.
+        expect(routeSource).not.toContain('chatCompletionSource: z.enum(');
+        expect(routeSource).not.toContain('reverseProxy:');
+        expect(routeSource).not.toContain('proxyPassword:');
+        expect(routeSource).not.toContain('customIncludeBody');
+        expect(routeSource).not.toContain('customExcludeBody');
+        expect(routeSource).not.toContain('customIncludeHeaders');
+        expect(routeSource).not.toContain('fallbackProviderEnabled');
+        expect(routeSource).not.toContain('fallbackProviderBaseUrl');
+        expect(routeSource).not.toContain('bindPresetToConnection');
+        expect(routeSource).not.toContain('connectionProfileId');
+        expect(routeSource).not.toContain('fallbackSecretInput');
+        expect(routeSource).not.toContain('api_key_openai_fallback');
         expect(routeSource).toContain('openaiModel: z.string(),');
-        expect(routeSource).not.toContain('claudeModel');
-        expect(routeSource).not.toContain('googleModel');
         expect(routeSource).not.toContain('theme: z.string(),');
         expect(routeSource).toContain('systemPromptName: z.string(),');
         expect(routeSource).toContain('systemPromptContent: z.string(),');
@@ -158,9 +167,8 @@ describe('settings React route flag', () => {
         expect(routeSource).toContain("fetch('/api/secrets/delete', {");
         expect(routeSource).toContain('saveProviderSecretField({');
         expect(routeSource).toContain('clearProviderSecretField({');
-        expect(routeSource).toContain('const providerSource = providerSettingsValues.chatCompletionSource;');
-        expect(routeSource).toContain('!providerSettingsValues.fallbackProviderEnabled');
-        expect(routeSource).not.toContain('settingsForm.state.values.providers.fallbackProviderEnabled');
+        expect(routeSource).toContain("const providerSource = 'openai' as const;");
+        expect(routeSource).not.toContain('providerSettingsValues');
         expect(routeSource).toContain('const SAVE_STATUS_TIMEOUT_MS = 4000;');
         expect(routeSource).toContain("const [saveStatus, setSaveStatus] = useState<{ kind: 'success' | 'info'; message: string } | null>(null);");
         expect(routeSource).toContain('const [showDiagnostics, setShowDiagnostics] = useState(false);');
@@ -191,9 +199,8 @@ describe('settings React route flag', () => {
         expect(settingFieldSource).not.toContain('checked={Boolean(field.state.value)}');
 
         expect(helperModule.settingsTabDefinitions).toHaveLength(4);
-        expect(helperModule.providerOptions).toEqual([
-            { value: 'openai', label: 'OpenAI' },
-        ]);
+        // Single-provider contract: the provider picker is retired.
+        expect(helperModule.providerOptions).toBeUndefined();
         expect(helperModule.providerSecretKeyBySource.claude).toBeUndefined();
         expect(helperModule.providerSecretKeyBySource.makersuite).toBeUndefined();
         expect(helperModule.reasoningEffortOptions.map(option => option.value)).toEqual([
@@ -210,8 +217,12 @@ describe('settings React route flag', () => {
         expect(helperModule.settingsCoverage.reactOwned.general).toContain('oai_settings.preset_settings_openai');
         expect(helperModule.settingsCoverage.reactOwned.general).toContain('oai_settings.temp_openai');
         expect(helperModule.settingsCoverage.reactOwned.general).toContain('oai_settings.reasoning_effort');
-        expect(helperModule.settingsCoverage.reactOwned.providers).toContain('oai_settings.chat_completion_source');
-        expect(helperModule.settingsCoverage.reactOwned.providers).toContain('oai_settings.fallback_provider_enabled');
+        expect(helperModule.settingsCoverage.reactOwned.providers).toEqual(expect.arrayContaining([
+            'oai_settings.openai_model',
+            'oai_settings.custom_url',
+            'oai_settings.fallback_provider_model',
+        ]));
+        expect(helperModule.settingsCoverage.reactOwned.providers).toHaveLength(3);
         expect(helperModule.settingsCoverage.reactOwned.userInterface).toContain('power_user.custom_css');
         expect(helperModule.settingsCoverage.reactOwned.advanced).toContain('power_user.auto_swipe');
         expect(helperModule.settingsCoverage.reactOwned.advanced).toContain('power_user.stscript.autocomplete.state');
@@ -359,7 +370,8 @@ describe('settings React route flag', () => {
         expect(defaults.providers.claudeModel).toBeUndefined();
         expect(defaults.providers.googleModel).toBeUndefined();
         expect(defaults.general.enableWebSearch).toBeUndefined();
-        expect(defaults.providers.fallbackProviderEnabled).toBe(true);
+        // Legacy enabled flag is honored on read; the toggle itself is retired.
+        expect(defaults.providers.fallbackProviderEnabled).toBeUndefined();
         expect(defaults.providers.fallbackProviderModel).toBe('gpt-4.1-mini');
         expect(defaults.userInterface.customCss).toBe('.chat { color: white; }');
         expect(defaults.advanced.autoSwipe).toBe(true);
@@ -384,18 +396,9 @@ describe('settings React route flag', () => {
                 customPromptPostProcessing: 'strict_tools',
             },
             providers: {
-                chatCompletionSource: 'openai',
                 openaiModel: 'gpt-5.2',
-                reverseProxy: 'https://proxy.example.com',
-                proxyPassword: 'secret',
                 customUrl: 'https://custom.example.com/v1',
-                customIncludeBody: 'include',
-                customExcludeBody: 'exclude',
-                customIncludeHeaders: 'X-Test: 1',
-                fallbackProviderEnabled: false,
-                fallbackProviderBaseUrl: 'https://fallback2.example.com/v1',
                 fallbackProviderModel: 'gpt-4.1',
-                bindPresetToConnection: true,
             },
             userInterface: {
                 chatWidth: 72,
@@ -473,15 +476,22 @@ describe('settings React route flag', () => {
         expect(merged.oai_settings.preset_settings_openai).toBe('RecoveredRuins');
         expect(merged.oai_settings.chat_completion_source).toBe('openai');
         expect(merged.oai_settings.openai_model).toBe('gpt-5.2');
-        expect(merged.oai_settings.claude_model).toBe('claude-sonnet-4-5');
-        expect(merged.oai_settings.google_model).toBe('gemini-2.5-pro');
-        expect(merged.oai_settings.reverse_proxy).toBe('https://proxy.example.com');
+        expect(merged.oai_settings.custom_url).toBe('https://custom.example.com/v1');
+        expect(merged.oai_settings.fallback_provider_model).toBe('gpt-4.1');
+        // Retired two-credential fields are stripped from the saved payload.
+        expect(merged.oai_settings.reverse_proxy).toBeUndefined();
+        expect(merged.oai_settings.proxy_password).toBeUndefined();
+        expect(merged.oai_settings.custom_include_body).toBeUndefined();
+        expect(merged.oai_settings.custom_exclude_body).toBeUndefined();
+        expect(merged.oai_settings.custom_include_headers).toBeUndefined();
+        expect(merged.oai_settings.fallback_provider_enabled).toBeUndefined();
+        expect(merged.oai_settings.fallback_provider_base_url).toBeUndefined();
+        expect(merged.oai_settings.bind_preset_to_connection).toBeUndefined();
         expect(merged.oai_settings.stream_openai).toBe(false);
         expect(merged.oai_settings.openai_max_context).toBe(8192);
         expect(merged.oai_settings.openai_max_tokens).toBe(512);
         expect(merged.oai_settings.function_calling).toBe(false);
         expect(merged.oai_settings.reasoning_effort).toBe('high');
-        expect(merged.oai_settings.fallback_provider_enabled).toBe(false);
         expect(merged.power_user.custom_css).toBe('.chat { color: gold; }');
         expect(merged.power_user.toastr_position).toBe('toast-bottom-right');
         expect(merged.power_user.auto_swipe).toBe(false);
@@ -690,11 +700,12 @@ describe('settings React route flag', () => {
         });
 
         const defaults = helperModule.buildSettingsFormDefaults(parsed.settings);
-        expect(defaults.providers.chatCompletionSource).toBe('openai');
+        expect(defaults.providers.chatCompletionSource).toBeUndefined();
         expect(defaults.general.reasoningEffort).toBe('minimal');
 
         const preserved = helperModule.buildSettingsSavePayload(parsed.settings, defaults);
         expect(preserved.untouched.keep).toBe(true);
+        // Saving normalizes the retired multi-provider source key.
         expect(preserved.oai_settings.chat_completion_source).toBe('openai');
         expect(preserved.oai_settings.reasoning_effort).toBe('minimal');
 
@@ -714,7 +725,7 @@ describe('settings React route flag', () => {
         });
 
         const defaults = helperModule.buildSettingsFormDefaults(parsed.settings);
-        expect(defaults.providers.chatCompletionSource).toBe('openai');
+        expect(defaults.providers.chatCompletionSource).toBeUndefined();
 
         const preserved = helperModule.buildSettingsSavePayload(parsed.settings, defaults);
         expect(preserved.untouched.keep).toBe(true);
@@ -785,21 +796,19 @@ describe('settings React route flag', () => {
         expect(saved.power_user.instruct.system_same_as_user).toBe(true);
     });
 
-    test('wires connection profile selection without putting secrets into settings JSON', async () => {
+    test('keeps secrets out of settings JSON and retires the connection-profile picker', async () => {
         const routeSource = fs.readFileSync(path.join(repoRoot, 'app', 'components', 'settings', 'SettingsSurface.tsx'), 'utf8');
-        const pageRouteSource = fs.readFileSync(path.join(repoRoot, 'app', 'routes', 'settings.tsx'), 'utf8');
         const helperModule = await import(`../app/lib/settings-helpers.js?settingsSecrets=${Date.now()}-${Math.random()}`);
         const secretHelpers = await import(`../public/scripts/provider-secret-field-state.js?settingsSecrets=${Date.now()}-${Math.random()}`);
 
         expect(routeSource).not.toContain('vertexai_service_account_json');
-        expect(routeSource).toContain('providers.connectionProfileId');
+        expect(routeSource).not.toContain('providers.connectionProfileId');
+        expect(routeSource).not.toContain('getConnectionProfileOptions');
+        expect(routeSource).not.toContain('emberdesk-settings-apply-connection-profile');
         expect(routeSource).toContain("fetch('/api/secrets/write'");
 
         const openaiKey = secretHelpers.resolveProviderSecretKeyForSettings({
-            settings: { reverse_proxy: '' },
-            source: 'openai',
             secretKey: 'api_key_openai',
-            chatCompletionSources: { OPENAI: 'openai' },
         });
         expect(openaiKey).toBe('api_key_openai');
 
@@ -819,48 +828,14 @@ describe('settings React route flag', () => {
             secrets_should_not_exist: 'x',
         };
         const defaults = helperModule.buildSettingsFormDefaults(fixture);
-        expect(defaults.providers.connectionProfileId).toBe('profile-1');
+        expect(defaults.providers.connectionProfileId).toBeUndefined();
 
-        const next = structuredClone(defaults);
-        next.providers.connectionProfileId = 'profile-2';
-        const saved = helperModule.buildSettingsSavePayload(fixture, next);
-        expect(saved.feature_settings.connectionManager.selectedProfile).toBe('profile-2');
-        expect(saved.feature_settings.connectionManager.profiles).toEqual([
-            { id: 'profile-1', name: 'Home' },
-            { id: 'profile-2', name: 'Work' },
-        ]);
+        // The stored profile selection is preserved untouched; React no longer edits it.
+        const saved = helperModule.buildSettingsSavePayload(fixture, defaults);
+        expect(saved.feature_settings.connectionManager.selectedProfile).toBe('profile-1');
         expect(JSON.stringify(saved)).not.toContain('BEGIN PRIVATE KEY');
         expect(JSON.stringify(saved)).not.toContain('vertexai_service_account_json');
-        expect(helperModule.settingsCoverage.reactOwned.providers).toContain('feature_settings.connectionManager.selectedProfile');
-    });
-
-    test('offers named connection profiles plus a safe stale selection and defers profile application to the workspace', async () => {
-        const routeSource = fs.readFileSync(path.join(repoRoot, 'app', 'components', 'settings', 'SettingsSurface.tsx'), 'utf8');
-        const pageRouteSource = fs.readFileSync(path.join(repoRoot, 'app', 'routes', 'settings.tsx'), 'utf8');
-        const connectionManagerSource = fs.readFileSync(path.join(repoRoot, 'public', 'scripts', 'extensions', 'connection-manager', 'index.js'), 'utf8');
-        const helperModule = await import(`../app/lib/settings-helpers.js?settingsProfiles=${Date.now()}-${Math.random()}`);
-        const options = helperModule.getConnectionProfileOptions({
-            feature_settings: {
-                connectionManager: {
-                    selectedProfile: 'removed-profile',
-                    profiles: [
-                        { id: 'home', name: 'Home' },
-                    ],
-                },
-            },
-        });
-
-        expect(options).toEqual([
-            { value: '', label: 'No connection profile' },
-            { value: 'home', label: 'Home' },
-            { value: 'removed-profile', label: 'Unavailable profile (removed-profile)' },
-        ]);
-        expect(routeSource).toContain('getConnectionProfileOptions');
-        expect(routeSource).toContain("variant=\"select\"");
-        expect(routeSource).toContain("emberdesk-settings-apply-connection-profile");
-        expect(connectionManagerSource).toContain('selectConnectionProfile');
-        expect(connectionManagerSource).toContain('SETTINGS_PROFILE_APPLY_MARKER');
-        expect(connectionManagerSource).toContain('await applyConnectionProfile(profile)');
+        expect(helperModule.settingsCoverage.reactOwned.providers).not.toContain('feature_settings.connectionManager.selectedProfile');
     });
 
     test('keeps a conflict draft until an explicit reload and routes legacy settings toggles to React Settings', () => {

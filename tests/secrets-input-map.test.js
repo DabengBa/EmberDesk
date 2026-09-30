@@ -7,36 +7,29 @@ import {
 } from './helpers/frontend-structure-contract.js';
 
 describe('secrets input map', () => {
-    test('Workers AI uses the key manager instead of a missing autocomplete input', () => {
+    test('retired fallback secret is removed from both secret maps', () => {
         const frontendSecrets = readRepoFile('public/scripts/secrets.js');
         const backendSecrets = readRepoFile('src/endpoints/secrets.js');
 
-        expectContainsMarkers(frontendSecrets, [
-            'OPENAI_FALLBACK: \'api_key_openai_fallback\'',
-            '[SECRET_KEYS.OPENAI_FALLBACK]: \'Fallback OpenAI-compatible\'',
-            '[SECRET_KEYS.OPENAI_FALLBACK]: \'#fallback_provider_api_key\'',
-        ], { contractName: 'fallback frontend secret mapping' });
-        expectContainsMarkers(backendSecrets, [
-            'OPENAI_FALLBACK: \'api_key_openai_fallback\'',
-        ], { contractName: 'fallback backend secret mapping' });
         expectNotContainsMarkers(frontendSecrets, [
-            '[SECRET_KEYS.OPENAI_FALLBACK]: \'#api_key_openai\'',
+            'OPENAI_FALLBACK',
+            'api_key_openai_fallback',
+            'fallback_provider_api_key',
         ], { contractName: 'fallback frontend secret mapping' });
-        expect(readRepoFile('app/components/api/ApiConnectionsPanel.tsx')).toContain('id="fallback_provider_api_key"');
+        expectNotContainsMarkers(backendSecrets, [
+            'OPENAI_FALLBACK',
+            'api_key_openai_fallback',
+        ], { contractName: 'fallback backend secret mapping' });
+        expect(readRepoFile('app/components/api/ApiConnectionsPanel.tsx')).not.toContain('id="fallback_provider_api_key"');
     });
 
-    test('fallback key controls write and clear only the dedicated fallback secret', () => {
+    test('the retired fallback secret is lazily cleaned up at boot', () => {
         const openaiSource = readRepoFile('public/scripts/openai.js');
 
         expectContainsMarkers(openaiSource, [
-            '$(\'#fallback_provider_save_key\').on(\'click\', onFallbackProviderSaveKeyClick);',
-            '$(\'#fallback_provider_clear_key\').on(\'click\', onFallbackProviderClearKeyClick);',
-            'saveProviderSecretField({',
-            'clearProviderSecretField({',
-            'key: SECRET_KEYS.OPENAI_FALLBACK',
-            'writeSecret,',
-            'deleteSecret,',
-        ], { contractName: 'fallback key control wiring' });
+            'secret_state.api_key_openai_fallback',
+            "deleteSecret('api_key_openai_fallback')",
+        ], { contractName: 'retired fallback secret cleanup' });
         expect(openaiSource).not.toMatch(/oai_settings\.[a-zA-Z0-9_]*key/i);
     });
 
@@ -52,7 +45,7 @@ describe('secrets input map', () => {
         ], { contractName: 'unified provider key manager entry' });
         expectContainsMarkers(openaiSource, [
             'resolveProviderSecretKeyForSettings({',
-            'canUseDirectProviderSecret({ settings: oai_settings, secretKey })',
+            '.toggle(Boolean(secretKey))',
             '$(\'#api_key_unified_manage\')',
             '.attr(\'data-key\', secretKey ?? \'\')',
             '.data(\'key\', secretKey ?? \'\')',

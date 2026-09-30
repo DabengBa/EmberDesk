@@ -225,11 +225,9 @@ async function enableOpenAiStreaming(page, { chatCompletionSource = 'openai', st
 async function enableFallbackProvider(page) {
     await page.evaluate(async () => {
         const context = window.SillyTavern.getContext();
-        context.chatCompletionSettings.fallback_provider_enabled = true;
-        context.chatCompletionSettings.fallback_provider_base_url = 'https://fallback.example/v1';
+        // Four-field contract: a non-empty fallback model enables fallback and
+        // the attempt reuses the primary URL and API key.
         context.chatCompletionSettings.fallback_provider_model = 'fallback-model';
-        const secrets = await import('/scripts/secrets.js');
-        secrets.secret_state[secrets.SECRET_KEYS.OPENAI_FALLBACK] = true;
     });
 }
 
@@ -1318,11 +1316,12 @@ test.describe('chat message streaming', () => {
         expect(requests[0].chat_completion_source).toBe('openai');
         expect(requests[1].chat_completion_source).toBe('openai');
         expect(requests[2].chat_completion_source).toBe('openai');
-        expect(requests[2].custom_url).toBe('https://fallback.example/v1');
         expect(requests[2].model).toBe('fallback-model');
-        expect(requests[2].openai_secret_marker).toBe('openai_fallback_provider');
-        expect(requests[2].reverse_proxy ?? '').toBe('');
-        expect(requests[2].proxy_password ?? '').toBe('');
+        // Model-only override: same endpoint and credential as the primary attempt.
+        expect(requests[2].custom_url).toBe(requests[0].custom_url);
+        expect(requests[2]).not.toHaveProperty('openai_secret_marker');
+        expect(requests[2]).not.toHaveProperty('reverse_proxy');
+        expect(requests[2]).not.toHaveProperty('proxy_password');
 
         const finalEvents = await page.evaluate(() => ({
             message: window.__emberdeskStreamingMessageEvents,
@@ -1363,7 +1362,9 @@ test.describe('chat message streaming', () => {
         expect(requests[0].chat_completion_source).toBe('openai');
         expect(requests[1].chat_completion_source).toBe('openai');
         expect(requests[2].chat_completion_source).toBe('openai');
-        expect(requests[2].openai_secret_marker).toBe('openai_fallback_provider');
+        expect(requests[2].model).toBe('fallback-model');
+        expect(requests[2].custom_url).toBe(requests[0].custom_url);
+        expect(requests[2]).not.toHaveProperty('openai_secret_marker');
     });
 
     test('stop does not enter the auto recovery chain', async ({ page }) => {
@@ -1491,9 +1492,9 @@ test.describe('chat message streaming', () => {
         expect(requestBodies).toHaveLength(3);
         expect(requestBodies[0].chat_completion_source).toBe('openai');
         expect(requestBodies[1].chat_completion_source).toBe('openai');
-        expect(requestBodies[2].openai_secret_marker).toBe('openai_fallback_provider');
-        expect(requestBodies[2].custom_url).toBe('https://fallback.example/v1');
         expect(requestBodies[2].model).toBe('fallback-model');
+        expect(requestBodies[2].custom_url).toBe(requestBodies[0].custom_url);
+        expect(requestBodies[2]).not.toHaveProperty('openai_secret_marker');
         expect(requestBodies[2]).not.toHaveProperty('reverse_proxy');
         expect(requestBodies[2]).not.toHaveProperty('proxy_password');
 
@@ -1577,7 +1578,9 @@ test.describe('chat message streaming', () => {
 
         const requests = await page.evaluate(() => window.__emberdeskStreamingRequests);
         expect(requests).toHaveLength(4);
-        expect(requests[3].openai_secret_marker).toBe('openai_fallback_provider');
+        expect(requests[3].model).toBe('fallback-model');
+        expect(requests[3].custom_url).toBe(requests[0].custom_url);
+        expect(requests[3]).not.toHaveProperty('openai_secret_marker');
     });
 
     test('continue auto recovery final failure preserves the original assistant message', async ({ page }) => {

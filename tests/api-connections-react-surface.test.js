@@ -30,17 +30,26 @@ describe('API connections drawer React surface', () => {
             'openai_form', 'model_openai_select', 'model_openai_list',
             'api_key_section', 'api_key_unified', 'api_key_unified_show',
             'api_key_unified_manage', 'openai_reverse_proxy', 'base_url_status',
-            'fallback_provider_enabled', 'fallback_provider_section',
-            'fallback_provider_base_url', 'fallback_provider_model',
-            'fallback_provider_api_key', 'fallback_provider_api_key_show',
-            'fallback_provider_save_key', 'fallback_provider_clear_key',
-            'fallback_provider_status', 'fallback_provider_cost_warning',
-            'prompt_post_processing_form', 'customize_additional_parameters',
+            'fallback_provider_section', 'fallback_provider_model',
+            'fallback_provider_status',
+            'prompt_post_processing_form',
             'custom_prompt_post_processing', 'test_api_button', 'api_button_openai',
             'feature.fallback_provider',
         ];
         for (const id of ids) {
             expect(panel).toContain(`id="${id}"`);
+        }
+
+        // Retired single-provider surface: separate fallback URL/key, reverse proxy
+        // mode, and the parameters popup were cut in favor of one URL + one key.
+        const retiredIds = [
+            'fallback_provider_enabled', 'fallback_provider_base_url',
+            'fallback_provider_api_key', 'fallback_provider_api_key_show',
+            'fallback_provider_save_key', 'fallback_provider_clear_key',
+            'fallback_provider_cost_warning', 'customize_additional_parameters',
+        ];
+        for (const id of retiredIds) {
+            expect(panel).not.toContain(`id="${id}"`);
         }
     });
 

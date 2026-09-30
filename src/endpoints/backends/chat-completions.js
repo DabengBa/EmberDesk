@@ -15,8 +15,6 @@ import {
     getConfigValue,
     tryParse,
     uuidv4,
-    mergeObjectWithYaml,
-    excludeKeysByYaml,
     flattenSchema,
 } from '../../util.js';
 import {
@@ -28,18 +26,6 @@ import {
 
 import { readSecret, SECRET_KEYS } from '../secrets.js';
 const API_OPENAI = 'https://api.openai.com/v1';
-const OPENAI_FALLBACK_SECRET_MARKER = 'openai_fallback_provider';
-
-function resolveOpenAISecretKey(request) {
-    const marker = request.body.openai_secret_marker;
-    if (!marker) {
-        return SECRET_KEYS.OPENAI;
-    }
-    if (marker === OPENAI_FALLBACK_SECRET_MARKER) {
-        return SECRET_KEYS.OPENAI_FALLBACK;
-    }
-    return null;
-}
 
 export const router = express.Router();
 
@@ -53,16 +39,14 @@ router.post('/status', async function (request, statusResponse) {
         let queryParams = {};
 
         if (request.body.chat_completion_source === CHAT_COMPLETION_SOURCES.OPENAI) {
-            apiUrl = request.body.custom_url || new URL(request.body.reverse_proxy || API_OPENAI).toString();
-            apiKey = request.body.reverse_proxy ? request.body.proxy_password : readSecret(request.user.directories, SECRET_KEYS.OPENAI, request.body.secret_id);
-            headers = {};
-            mergeObjectWithYaml(headers, request.body.custom_include_headers);
+            apiUrl = request.body.custom_url || API_OPENAI;
+            apiKey = readSecret(request.user.directories, SECRET_KEYS.OPENAI, request.body.secret_id);
         } else {
             console.warn('This chat completion source is not supported yet.');
             return statusResponse.status(400).send({ error: true });
         }
 
-        if (!apiKey && !request.body.reverse_proxy && !request.body.custom_url) {
+        if (!apiKey && !request.body.custom_url) {
             console.warn('Chat Completion API key is missing.');
             return statusResponse.status(400).send({ error: true });
         }
@@ -131,13 +115,8 @@ router.post('/generate', async function (request, response) {
         let bodyParams;
 
         if (request.body.chat_completion_source === CHAT_COMPLETION_SOURCES.OPENAI) {
-            apiUrl = request.body.custom_url || new URL(request.body.reverse_proxy || API_OPENAI).toString();
-            const secretKey = resolveOpenAISecretKey(request);
-            if (!request.body.reverse_proxy && !secretKey) {
-                console.warn('Invalid OpenAI secret marker.');
-                return response.status(400).send({ error: true });
-            }
-            apiKey = request.body.reverse_proxy ? request.body.proxy_password : readSecret(request.user.directories, secretKey, request.body.secret_id);
+            apiUrl = request.body.custom_url || API_OPENAI;
+            apiKey = readSecret(request.user.directories, SECRET_KEYS.OPENAI, request.body.secret_id);
             headers = {};
             bodyParams = {};
 
@@ -145,8 +124,6 @@ router.post('/generate', async function (request, response) {
                 bodyParams['user'] = uuidv4();
             }
 
-            mergeObjectWithYaml(bodyParams, request.body.custom_include_body);
-            mergeObjectWithYaml(headers, request.body.custom_include_headers);
             embedOpenRouterMedia(request.body.messages, { audio: true, video: false });
             if (request.body.custom_url && request.body.json_schema) {
                 bodyParams['response_format'] = {
@@ -179,7 +156,7 @@ router.post('/generate', async function (request, response) {
             }
         }
 
-        if (!apiKey && !request.body.reverse_proxy && !request.body.custom_url) {
+        if (!apiKey && !request.body.custom_url) {
             console.warn('OpenAI API key is missing.');
             return response.status(400).send({ error: true });
         }
@@ -230,10 +207,6 @@ router.post('/generate', async function (request, response) {
             'n': request.body.n,
             ...bodyParams,
         };
-
-        if (request.body.chat_completion_source === CHAT_COMPLETION_SOURCES.OPENAI && request.body.custom_exclude_body) {
-            excludeKeysByYaml(requestBody, request.body.custom_exclude_body);
-        }
 
         /** @type {import('node-fetch').RequestInit} */
         const config = {

@@ -9,51 +9,47 @@ related: [page.api_configuration, feature.connection_profile]
 
 ## ID 解释
 
-`feature.custom_base_url` represents the collapsible section in the API configuration drawer that contains the base URL input and the unified API key input. It covers the Custom Base URL drawer header, the URL input with its /v1 hint, the API key input with show/hide toggle, and the automatic credential routing between proxy mode and direct mode. It does not cover provider-specific authentication flows or connection profile management.
+`feature.custom_base_url` represents the base URL input and the unified API key input in the API configuration drawer. It covers the optional OpenAI-compatible endpoint override (`custom_url`), the single provider API key field with its reveal/hide and credential-history controls, and the direct/custom endpoint status hint. It does not cover provider-specific authentication flows beyond the single key, connection profile management, or any second credential.
 
 ## Purpose
 
-Let a user point the chat-completion connection at an OpenAI-compatible base URL or return to the provider's direct endpoint while using one visible key input.
+Let a user point the chat-completion connection at an OpenAI-compatible base URL or return to the provider's direct endpoint, always authenticated by the same single API key.
 
 ## User-Visible Contract
 
-- The Custom Base URL drawer in [API Configuration](page.api_configuration) exposes the base URL input, the unified API key input, and the key reveal/hide control.
-- When the base URL is filled, the drawer presents proxy/gateway mode: the key field represents the gateway password for the configured endpoint.
-- When the base URL is empty, the drawer presents direct-provider mode: the key field saves or reflects the selected provider's secret-backed API key.
-- Switching between proxy and direct mode clears the active key field value and updates placeholder text so the user does not accidentally send a provider key to a gateway or a gateway password to a provider.
-- Provider-specific credentials such as MiniMax group ID and Azure deployment fields remain outside this unified key path.
+- The API connection path in [API Configuration](page.api_configuration) exposes exactly one base URL input, one API key input, one model input, and one fallback model input.
+- The base URL input is optional; when empty the request targets the provider's default endpoint, and when filled it targets that OpenAI-compatible endpoint. In both cases the same `api_key_openai` secret authenticates the request.
+- An endpoint that needs no key (for example a local gateway) works by setting a base URL and leaving the key unsaved; the status hint communicates which mode is active.
 - The reveal/hide control affects only the visible key text, not the stored credential.
+- Legacy `reverse_proxy`/`proxy_password`/`custom_include_*` settings are retired: a stored reverse-proxy URL folds into `custom_url` on load when `custom_url` is empty, and the retired keys are stripped on save.
 
 ## Semantic Interaction IDs
 
-- `feature.custom_base_url.expand`: opening the Custom Base URL drawer.
 - `feature.custom_base_url.base_url_input`: entering or clearing the base URL.
-- `feature.custom_base_url.api_key_input`: entering the API key or gateway password.
-- `feature.custom_base_url.api_key_toggle`: revealing or hiding the key text in the drawer.
+- `feature.custom_base_url.api_key_input`: entering the API key.
+- `feature.custom_base_url.api_key_toggle`: revealing or hiding the key text.
 
 ## Acceptance Workflows
 
-- As a user connecting through an OpenAI-compatible gateway, from [API Configuration](page.api_configuration) open Custom Base URL, enter the gateway URL and key, then connect; EmberDesk must show proxy-mode fields and use that gateway state for later chat connections, refresh or reopen must preserve the gateway configuration without exposing the raw key as ordinary text, and failure is direct-provider credentials being used or leaked in proxy mode.
-- As a user returning to the official provider endpoint, from the same drawer clear the base URL and provide the provider key; EmberDesk must clear the gateway password entry, show provider-secret placeholder state, and after refresh or reconnect use direct-provider mode, with failure signaled by gateway password carryover or missing saved-key feedback.
-- As a user switching providers after saving keys, from the provider selector change provider while Custom Base URL is empty and reopen the drawer; EmberDesk must update the key placeholder for the selected provider and keep the field value cleared until the user types a new key, and failure is showing the previous provider's secret as the current typed value.
-- As a user checking a key before saving, from the drawer press the reveal/hide control; EmberDesk must reveal and re-mask only the visible key field without changing saved credential state, and failure is altered key value or persisted reveal state after refresh.
+- As a user connecting through an OpenAI-compatible endpoint, from [API Configuration](page.api_configuration) enter the endpoint URL and API key, then connect; EmberDesk must use that endpoint with that key for chat requests, refresh or reopen must preserve the configuration without exposing the raw key as ordinary text, and failure is silently dropping the endpoint or the credential.
+- As a user returning to the official provider endpoint, from the same input clear the base URL; EmberDesk must target the default endpoint with the same saved key, and failure is continuing to route through the cleared URL.
+- As a user checking a key before saving, press the reveal/hide control; EmberDesk must reveal and re-mask only the visible key field without changing saved credential state, and failure is altered key value or persisted reveal state after refresh.
+- As a user with legacy proxy settings, load the workspace after upgrade; EmberDesk must surface the stored proxy URL as the base URL when no custom URL exists, must not offer a separate proxy password field, and failure is losing the endpoint or keeping a second credential path.
 
 ## Feature-Specific Evidence
 
-- Drawer mode, base URL value, key placeholder, visible key masking, and successful reconnect feedback are primary evidence.
-- Secret-store entries and settings payloads are supporting evidence for the same mode boundary.
-- Connection profile captures can support proof only when the visible drawer still reflects the correct proxy/direct state after apply.
+- Endpoint value, key placeholder/masking, the direct/custom status hint, and successful reconnect feedback are primary evidence.
+- Secret-store entries and settings payloads are supporting evidence that exactly one provider credential exists.
 
 ## Failure Signals
 
-- Clearing the base URL leaves a gateway password in the visible key field.
-- Entering a base URL sends a provider secret to a gateway without an explicit new key entry.
-- Provider switch exposes a saved raw secret as typed text.
-- Special provider credentials are hidden, overwritten, or treated as the unified key.
+- The UI offers more than one URL field or more than one credential for the primary connection.
+- A request sends a credential other than `api_key_openai`, or a proxy-password field reappears.
+- Retired `reverse_proxy`/`proxy_password`/`custom_include_*` keys are written back on save.
 
 ## Boundaries
 
 - Provider and model selection belongs to [Chat Completion Provider and Model Select](feature.chat_completion_select).
 - Named snapshot behavior belongs to [Connection Profile](feature.connection_profile).
-- Fallback endpoint credentials belong to [Fallback Provider](feature.fallback_provider).
+- Fallback model configuration belongs to [Fallback Provider](feature.fallback_provider).
 - The API drawer layout belongs to [API Configuration](page.api_configuration).

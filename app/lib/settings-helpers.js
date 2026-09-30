@@ -7,7 +7,7 @@ export const settingsTabDefinitions = [
     {
         id: 'providers',
         label: 'Providers',
-        description: '主 provider 路由、fallback 和连接级参数。',
+        description: 'endpoint、API key、主模型与 fallback 模型。',
     },
     {
         id: 'userInterface',
@@ -21,20 +21,8 @@ export const settingsTabDefinitions = [
     },
 ];
 
-export const providerOptions = [
-    { value: 'openai', label: 'OpenAI' },
-];
-
 export const providerSecretKeyBySource = {
     openai: 'api_key_openai',
-};
-
-export const providerModelFieldBySource = {
-    openai: {
-        name: 'providers.openaiModel',
-        placeholder: 'gpt-5.2',
-        description: 'OpenAI primary path 当前使用的模型名称。',
-    },
 };
 
 export const reasoningEffortOptions = [
@@ -159,19 +147,9 @@ export const defaultSettingsFormValues = {
         namesBehavior: 0,
     },
     providers: {
-        chatCompletionSource: 'openai',
         openaiModel: '',
-        reverseProxy: '',
-        proxyPassword: '',
         customUrl: '',
-        customIncludeBody: '',
-        customExcludeBody: '',
-        customIncludeHeaders: '',
-        fallbackProviderEnabled: false,
-        fallbackProviderBaseUrl: '',
         fallbackProviderModel: '',
-        bindPresetToConnection: true,
-        connectionProfileId: '',
     },
     userInterface: {
         chatWidth: 50,
@@ -314,17 +292,6 @@ function parseBlacklistToSettingsValue(value) {
         .filter(Boolean);
 }
 
-function mapChatCompletionSourceToFormValue(value) {
-    if (['vertexai', 'makersuite', 'palm', 'claude'].includes(value)) {
-        return 'openai';
-    }
-    return value;
-}
-
-function mapChatCompletionSourceToSettingsValue(value) {
-    return value;
-}
-
 const fieldBindings = [
     { tab: 'general', formPath: 'general.presetSettings', settingsPath: 'oai_settings.preset_settings_openai' },
     { tab: 'general', formPath: 'general.openaiMaxContext', settingsPath: 'oai_settings.openai_max_context' },
@@ -342,38 +309,15 @@ const fieldBindings = [
     { tab: 'general', formPath: 'general.squashSystemMessages', settingsPath: 'oai_settings.squash_system_messages' },
     { tab: 'general', formPath: 'general.customPromptPostProcessing', settingsPath: 'oai_settings.custom_prompt_post_processing' },
 
-    {
-        tab: 'providers',
-        formPath: 'providers.chatCompletionSource',
-        settingsPath: 'oai_settings.chat_completion_source',
-        toForm: mapChatCompletionSourceToFormValue,
-        toSettings: mapChatCompletionSourceToSettingsValue,
-    },
     { tab: 'providers', formPath: 'providers.openaiModel', settingsPath: 'oai_settings.openai_model' },
-    { tab: 'providers', formPath: 'providers.reverseProxy', settingsPath: 'oai_settings.reverse_proxy' },
-    { tab: 'providers', formPath: 'providers.proxyPassword', settingsPath: 'oai_settings.proxy_password' },
     { tab: 'providers', formPath: 'providers.customUrl', settingsPath: 'oai_settings.custom_url' },
-    { tab: 'providers', formPath: 'providers.customIncludeBody', settingsPath: 'oai_settings.custom_include_body' },
-    { tab: 'providers', formPath: 'providers.customExcludeBody', settingsPath: 'oai_settings.custom_exclude_body' },
-    { tab: 'providers', formPath: 'providers.customIncludeHeaders', settingsPath: 'oai_settings.custom_include_headers' },
-    { tab: 'providers', formPath: 'providers.fallbackProviderEnabled', settingsPath: 'oai_settings.fallback_provider_enabled' },
-    { tab: 'providers', formPath: 'providers.fallbackProviderBaseUrl', settingsPath: 'oai_settings.fallback_provider_base_url' },
-    { tab: 'providers', formPath: 'providers.fallbackProviderModel', settingsPath: 'oai_settings.fallback_provider_model' },
-    { tab: 'providers', formPath: 'providers.bindPresetToConnection', settingsPath: 'oai_settings.bind_preset_to_connection' },
     {
         tab: 'providers',
-        formPath: 'providers.connectionProfileId',
-        settingsPath: 'feature_settings.connectionManager.selectedProfile',
-        toForm: (value) => (value == null ? '' : String(value)),
-        toFormWhenMissing: true,
-        toSettings: (value, _formValues, baseSettings) => {
-            const normalized = value == null ? '' : String(value);
-            const hasConnectionManager = getValueAtPath(baseSettings, 'feature_settings.connectionManager') !== undefined;
-            if (!normalized && !hasConnectionManager) {
-                return undefined;
-            }
-            return normalized || null;
-        },
+        formPath: 'providers.fallbackProviderModel',
+        settingsPath: 'oai_settings.fallback_provider_model',
+        // Under the retired contract an unchecked fallback meant "off"; a stale model
+        // value must not silently re-enable it under "non-empty model = enabled".
+        toForm: (value, settings) => (getValueAtPath(settings, 'oai_settings.fallback_provider_enabled') === false ? '' : value),
     },
 
     { tab: 'userInterface', formPath: 'userInterface.chatWidth', settingsPath: 'power_user.chat_width' },
@@ -579,10 +523,6 @@ export const settingsCoverage = {
     ],
 };
 
-export function getProviderModelFieldConfig(source) {
-    return providerModelFieldBySource[source] ?? providerModelFieldBySource.openai;
-}
-
 export function getValueAtPath(source, path, fallbackValue = undefined) {
     if (!source || typeof source !== 'object') {
         return fallbackValue;
@@ -665,37 +605,6 @@ export function buildSettingsFormDefaults(settings) {
     return defaults;
 }
 
-export function getConnectionProfileOptions(settings) {
-    const profiles = getValueAtPath(settings, 'feature_settings.connectionManager.profiles', []);
-    const selectedProfile = getValueAtPath(settings, 'feature_settings.connectionManager.selectedProfile', null);
-    const profileOptions = [];
-    const profileIds = new Set();
-
-    if (Array.isArray(profiles)) {
-        for (const profile of profiles) {
-            const id = profile?.id == null ? '' : String(profile.id);
-            if (!id || profileIds.has(id)) {
-                continue;
-            }
-
-            profileIds.add(id);
-            profileOptions.push({
-                value: id,
-                label: String(profile?.name || id),
-            });
-        }
-    }
-
-    const staleProfileId = selectedProfile == null ? '' : String(selectedProfile);
-    return [
-        { value: '', label: 'No connection profile' },
-        ...profileOptions.sort((left, right) => left.label.localeCompare(right.label)),
-        ...(staleProfileId && !profileIds.has(staleProfileId)
-            ? [{ value: staleProfileId, label: `Unavailable profile (${staleProfileId})` }]
-            : []),
-    ];
-}
-
 function areFormValuesEqual(left, right) {
     if (Object.is(left, right)) {
         return true;
@@ -746,6 +655,30 @@ export function buildSettingsSavePayload(baseSettings, formValues, { settingsRev
         }
 
         setValueAtPath(nextSettings, binding.settingsPath, nextValue);
+    }
+
+    // Retired provider contract: the settings form owns exactly one URL, one key,
+    // one model, and one fallback model. Strip legacy routing keys so a save cannot
+    // resurrect them, and fold the retired reverse-proxy URL into custom_url.
+    const oaiSettings = getValueAtPath(nextSettings, 'oai_settings');
+    if (oaiSettings && typeof oaiSettings === 'object') {
+        if (oaiSettings.reverse_proxy && !oaiSettings.custom_url) {
+            oaiSettings.custom_url = oaiSettings.reverse_proxy;
+        }
+        // Single-provider contract: every saved document normalizes the source.
+        oaiSettings.chat_completion_source = 'openai';
+        for (const key of [
+            'reverse_proxy',
+            'proxy_password',
+            'custom_include_body',
+            'custom_exclude_body',
+            'custom_include_headers',
+            'fallback_provider_enabled',
+            'fallback_provider_base_url',
+            'bind_preset_to_connection',
+        ]) {
+            delete oaiSettings[key];
+        }
     }
 
     if (settingsRevision != null && Number.isFinite(Number(settingsRevision))) {

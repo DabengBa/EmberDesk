@@ -28,8 +28,7 @@ describe('AI Response Configuration drawer React surface', () => {
         const ids = [
             'left-nav-panelheader', 'lm_button_panel_pin_div', 'lm_button_panel_pin',
             'labModeWarning', 'ai_response_configuration', 'respective-presets-block',
-            'openai_api-presets', 'settings_preset_openai',
-            'bind_preset_to_connection', 'temp_openai',
+            'openai_api-presets', 'settings_preset_openai', 'temp_openai',
             'top_p_openai', 'freq_pen_openai', 'pres_pen_openai',
             'n_openai', 'openai_function_calling',
             'impersonation_prompt_textarea', 'newchat_prompt_textarea',

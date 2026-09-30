@@ -1,47 +1,27 @@
 import { describe, expect, test } from '@jest/globals';
 
 import {
-    OPENAI_FALLBACK_SECRET_MARKER,
-    buildFallbackOpenAIRequestOverrides,
+    getFallbackOpenAIModel,
     hasFallbackProviderSettings,
     isMainChatVisibleGeneration,
     isRecoverableGenerationFailure,
-    normalizeFallbackBaseUrl,
 } from '../public/scripts/chat-generation-auto-recovery.js';
 
 describe('chat generation auto recovery helpers', () => {
-    test('builds one-shot OpenAI-compatible fallback request overrides', () => {
-        const overrides = buildFallbackOpenAIRequestOverrides({
-            fallback_provider_base_url: ' https://fallback.example/v1/ ',
-            fallback_provider_model: ' fallback-model ',
-        });
+    test('fallback readiness depends only on a non-empty fallback model', () => {
+        expect(getFallbackOpenAIModel({ fallback_provider_model: ' fallback-model ' })).toBe('fallback-model');
+        expect(getFallbackOpenAIModel({})).toBe('');
+        expect(getFallbackOpenAIModel(null)).toBe('');
 
-        expect(overrides).toEqual({
-            chatCompletionSource: 'openai',
-            model: 'fallback-model',
-            customUrl: 'https://fallback.example/v1',
-            openaiSecretMarker: OPENAI_FALLBACK_SECRET_MARKER,
-        });
-    });
-
-    test('requires enabled endpoint model and dedicated secret state before fallback is available', () => {
-        const settings = {
-            fallback_provider_enabled: true,
-            fallback_provider_base_url: 'https://fallback.example/v1',
+        expect(hasFallbackProviderSettings({ fallback_provider_model: 'fallback-model' })).toBe(true);
+        expect(hasFallbackProviderSettings({ fallback_provider_model: '   ' })).toBe(false);
+        expect(hasFallbackProviderSettings({})).toBe(false);
+        // Legacy keys no longer gate fallback: the same URL and key apply to both models.
+        expect(hasFallbackProviderSettings({
             fallback_provider_model: 'fallback-model',
-        };
-
-        expect(hasFallbackProviderSettings(settings, { api_key_openai_fallback: [{}] }, 'api_key_openai_fallback')).toBe(true);
-        expect(hasFallbackProviderSettings({ ...settings, fallback_provider_enabled: false }, { api_key_openai_fallback: [{}] }, 'api_key_openai_fallback')).toBe(false);
-        expect(hasFallbackProviderSettings({ ...settings, fallback_provider_base_url: '' }, { api_key_openai_fallback: [{}] }, 'api_key_openai_fallback')).toBe(false);
-        expect(hasFallbackProviderSettings({ ...settings, fallback_provider_model: '' }, { api_key_openai_fallback: [{}] }, 'api_key_openai_fallback')).toBe(false);
-        expect(hasFallbackProviderSettings(settings, {}, 'api_key_openai_fallback')).toBe(false);
-    });
-
-    test('normalizes fallback Base URL without mutating unrelated provider settings', () => {
-        expect(normalizeFallbackBaseUrl('https://fallback.example/v1///')).toBe('https://fallback.example/v1');
-        expect(normalizeFallbackBaseUrl('')).toBe('');
-        expect(normalizeFallbackBaseUrl(null)).toBe('');
+            fallback_provider_enabled: false,
+            fallback_provider_base_url: '',
+        })).toBe(true);
     });
 
     test.each([

@@ -64,23 +64,12 @@ describe('chat generation lifecycle coordinator', () => {
         ]);
     });
 
-    test('delegates fallback readiness to existing fallback settings rules', () => {
-        const settings = {
-            fallback_provider_enabled: true,
-            fallback_provider_base_url: 'https://fallback.example/v1',
-            fallback_provider_model: 'fallback-model',
-        };
+    test('delegates fallback readiness to the configured fallback model only', () => {
+        const settings = { fallback_provider_model: 'fallback-model' };
 
-        expect(hasFallbackProviderForGeneration({
-            settings,
-            secretState: { api_key_openai_fallback: [{}] },
-            fallbackSecretKey: 'api_key_openai_fallback',
-        })).toBe(true);
-        expect(hasFallbackProviderForGeneration({
-            settings: { ...settings, fallback_provider_base_url: '' },
-            secretState: { api_key_openai_fallback: [{}] },
-            fallbackSecretKey: 'api_key_openai_fallback',
-        })).toBe(false);
+        expect(hasFallbackProviderForGeneration({ settings })).toBe(true);
+        expect(hasFallbackProviderForGeneration({ settings: { fallback_provider_model: '' } })).toBe(false);
+        expect(hasFallbackProviderForGeneration({ settings: {} })).toBe(false);
     });
 
     test('matches existing-message baselines only for the current recovery message id', () => {

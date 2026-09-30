@@ -22,8 +22,6 @@ import EventSourceStream from './sse-stream.js';
  * @property {number} max_tokens - Maximum number of tokens to generate
  * @property {number} [temperature] - Optional temperature parameter for response randomness
  * @property {string} [custom_url] - Optional custom URL
- * @property {string} [reverse_proxy] - Optional reverse proxy URL
- * @property {string} [proxy_password] - Optional proxy password
  * @property {string} [custom_prompt_post_processing] - Optional custom prompt post-processing
  * @property {import('../script.js').JsonSchema} [json_schema] - Optional JSON schema for structured generation
  */
@@ -57,7 +55,7 @@ export class ChatCompletionService {
      * @param {ChatCompletionPayload} custom
      * @returns {ChatCompletionPayload}
      */
-    static createRequestData({ stream = false, messages, model, chat_completion_source, max_tokens, temperature, custom_url, reverse_proxy, proxy_password, custom_prompt_post_processing, ...props }) {
+    static createRequestData({ stream = false, messages, model, chat_completion_source, max_tokens, temperature, custom_url, custom_prompt_post_processing, ...props }) {
         const payload = {
             stream,
             messages,
@@ -66,8 +64,6 @@ export class ChatCompletionService {
             max_tokens,
             temperature,
             custom_url,
-            reverse_proxy,
-            proxy_password,
             custom_prompt_post_processing,
             ...props,
         };

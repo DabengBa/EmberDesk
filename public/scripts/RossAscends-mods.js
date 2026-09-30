@@ -330,7 +330,7 @@ function RA_autoconnect(_PrevApi) {
     if (online_status === 'no_connection' && power_user.auto_connect) {
         switch (main_api) {
             case 'openai':
-                if (((secret_state[SECRET_KEYS.OPENAI] || oai_settings.reverse_proxy) && oai_settings.chat_completion_source == chat_completion_sources.OPENAI)
+                if (((secret_state[SECRET_KEYS.OPENAI] || oai_settings.custom_url) && oai_settings.chat_completion_source == chat_completion_sources.OPENAI)
                     || (secret_state[SECRET_KEYS.AI21] && oai_settings.chat_completion_source == chat_completion_sources.AI21)
                     || (secret_state[SECRET_KEYS.MISTRALAI] && oai_settings.chat_completion_source == chat_completion_sources.MISTRALAI)
                     || (secret_state[SECRET_KEYS.COHERE] && oai_settings.chat_completion_source == chat_completion_sources.COHERE)

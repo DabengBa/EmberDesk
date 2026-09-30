@@ -6348,9 +6348,7 @@ body:has(#character_popup.open) #top-settings-holder:has(.drawer-content.openDra
 
 #api_key_unified,
 #openai_reverse_proxy,
-#fallback_provider_base_url,
-#fallback_provider_model,
-#fallback_provider_api_key {
+#fallback_provider_model {
     background-color: color-mix(in srgb, var(--SmartThemeBodyColor) 12%, var(--SmartThemeBlurTintColor) 88%);
 }
 
@@ -6388,8 +6386,7 @@ body:has(#character_popup.open) #top-settings-holder:has(.drawer-content.openDra
     background-color: color-mix(in srgb, var(--SmartThemeBlurTintColor) 82%, transparent);
 }
 
-.fallback-provider-header,
-.fallback-provider-key-row {
+.fallback-provider-header {
     display: flex;
     align-items: center;
     gap: 6px;
@@ -6412,12 +6409,6 @@ body:has(#character_popup.open) #top-settings-holder:has(.drawer-content.openDra
     background-color: color-mix(in srgb, var(--success-green) 14%, transparent);
 }
 
-.fallback-provider-status[data-state="needs_setup"] {
-    color: var(--SmartThemeQuoteColor);
-    border-color: color-mix(in srgb, var(--SmartThemeQuoteColor) 45%, var(--SmartThemeBorderColor) 55%);
-    background-color: color-mix(in srgb, var(--SmartThemeQuoteColor) 12%, transparent);
-}
-
 .fallback-provider-status[data-state="disabled"] {
     color: var(--SmartThemeEmColor);
     border-color: color-mix(in srgb, var(--SmartThemeBorderColor) 55%, transparent);
@@ -6431,22 +6422,9 @@ body:has(#character_popup.open) #top-settings-holder:has(.drawer-content.openDra
     padding-top: 8px;
 }
 
-.fallback-provider-section:not(:has(#fallback_provider_enabled:checked)) .fallback-provider-details {
-    display: none;
-}
-
-.fallback-provider-section:has(#fallback_provider_enabled:checked) .fallback-provider-details {
-    display: flex;
-}
-
-.fallback-provider-section:has(#fallback_provider_enabled:checked) {
-    border-color: color-mix(in srgb, var(--SmartThemeQuoteColor) 24%, var(--SmartThemeBorderColor) 76%);
-    background-color: color-mix(in srgb, var(--SmartThemeBlurTintColor) 74%, transparent);
-}
-
 .fallback-provider-fields {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr);
     gap: 6px;
 }
 
@@ -6456,11 +6434,6 @@ body:has(#character_popup.open) #top-settings-holder:has(.drawer-content.openDra
 
 .fallback-provider-field .field-label {
     margin-top: 0;
-}
-
-.fallback-provider-key-row .menu_button {
-    margin: 0;
-    flex: 0 0 auto;
 }
 
 .fallback-provider-warning {

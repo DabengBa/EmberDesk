@@ -317,25 +317,37 @@ describe('chat workspace structure', () => {
         });
     });
 
-    test('keeps fallback provider controls embedded in the API configuration drawer', () => {
+    test('keeps the single-URL fallback model control embedded in the API configuration drawer', () => {
         const indexHtml = readRepoFile('app/components/api/ApiConnectionsPanel.tsx');
         const scriptSource = readRepoFile('public/scripts/openai.js');
         const styleSource = readRepoFile('public/style.css');
 
         const fallbackProviderContract = [
             'id="fallback_provider_section"',
-            'id="fallback_provider_enabled"',
             'id="fallback_provider_status"',
             'className="fallback-provider-details"',
-            'id="fallback_provider_base_url"',
             'id="fallback_provider_model"',
+        ];
+        expectContainsMarkers(indexHtml, fallbackProviderContract, { contractName: 'fallback provider selectors' });
+
+        // Retired four-field cleanup: separate fallback URL/key, enable toggle, and
+        // the cost warning are gone; fallback reuses the primary URL and key.
+        const retiredSelectors = [
+            'id="fallback_provider_enabled"',
+            'id="fallback_provider_base_url"',
             'id="fallback_provider_api_key"',
             'id="fallback_provider_api_key_show"',
             'id="fallback_provider_save_key"',
             'id="fallback_provider_clear_key"',
             'id="fallback_provider_cost_warning"',
         ];
-        expectContainsMarkers(indexHtml, fallbackProviderContract, { contractName: 'fallback provider selectors' });
+        for (const marker of retiredSelectors) {
+            expect(indexHtml).not.toContain(marker);
+        }
+        expect(scriptSource).not.toContain('OPENAI_FALLBACK');
+        expect(scriptSource).not.toContain('openai_secret_marker');
+        expect(scriptSource).not.toContain('oai_settings.reverse_proxy');
+        expect(scriptSource).not.toContain('oai_settings.proxy_password');
 
         expectDocumentOrder(indexHtml, [
             'id="openai_reverse_proxy"',
@@ -344,43 +356,27 @@ describe('chat workspace structure', () => {
         ], { contractName: 'fallback provider drawer order' });
 
         expect(indexHtml).not.toMatch(/<dialog[^>]*id="fallback_provider_section"/);
-        expect(indexHtml).toMatch(/id="fallback_provider_enabled"[^>]*type="checkbox"/);
-        expect(indexHtml).toMatch(/<select id="chat_completion_source">/);
-        expect(indexHtml).not.toMatch(/<select id="chat_completion_source"[^>]*data-source/);
-        expect(scriptSource).not.toContain("$(this).attr('data-source', oai_settings.chat_completion_source);");
-        expect(scriptSource).toContain("$('[data-source]').each(function () {");
+        expect(indexHtml).toMatch(/<select id="chat_completion_source" hidden>/);
         expect(indexHtml).toMatch(/<div className="base-url-field wide100p"[^>]*data-source="openai">[\s\S]*<label className="chat-completion-field wide100p"[^>]*htmlFor="openai_reverse_proxy"/);
         expect(indexHtml).toMatch(/id="openai_reverse_proxy"[^>]*\baria-describedby="base_url_status"/);
         expect(indexHtml).toMatch(/<output id="base_url_status"[^>]*\baria-live="polite"[^>]*\bdata-mode="direct"/);
         expect(scriptSource).toContain('function updateBaseUrlStatus()');
         expect(scriptSource).toContain(".attr('data-mode', hasCustomEndpoint ? 'custom' : 'direct')");
-        expect(scriptSource).toContain('Custom endpoint active. API key field stores proxy password.');
+        expect(scriptSource).toContain('Custom endpoint active. API key applies to both models.');
         expect(styleSource).toContain('.base-url-status[data-mode="custom"]');
-        expect(indexHtml).toMatch(/<div className="fallback-provider-details">[\s\S]*id="fallback_provider_base_url"/);
-        expect(indexHtml).toMatch(/id="fallback_provider_base_url"[^>]*\baria-label="Fallback provider Base URL"/);
         expect(indexHtml).toMatch(/id="fallback_provider_model"[^>]*\bplaceholder="gpt-4.1-mini"/);
-        expect(indexHtml).toMatch(/id="fallback_provider_api_key"[^>]*\bautoComplete="off"/);
         expect(indexHtml).toMatch(/id="fallback_provider_status"[^>]*\baria-live="polite"/);
-        expect(indexHtml).toMatch(/id="fallback_provider_cost_warning"[^>]*\brole="note"/);
         expect(indexHtml).toMatch(/id="test_api_button"[^>]*className="[^"]*\bapi_button\b/);
         expect(scriptSource).toContain(".attr('data-state', status.state)");
         expect(styleSource).toContain('.fallback-provider-status[data-state="ready"]');
-        expect(styleSource).toContain('.fallback-provider-status[data-state="needs_setup"]');
         expect(styleSource).toContain('.fallback-provider-status[data-state="disabled"]');
-
-        expectButtonAffordance(getTagByClass(indexHtml, 'fallback_provider_api_key_show'), 'Show fallback API key');
-        expectButtonAffordance(getTagByClass(indexHtml, 'fallback_provider_save_key'), 'Save fallback API key');
-        expectButtonAffordance(getTagByClass(indexHtml, 'fallback_provider_clear_key'), 'Clear fallback API key');
-
-        expect(styleSource).toContain('.fallback-provider-section:not(:has(#fallback_provider_enabled:checked)) .fallback-provider-details');
-        expect(styleSource).toContain('.fallback-provider-section:has(#fallback_provider_enabled:checked) .fallback-provider-details');
     });
 
     test('localizes custom Base URL status guidance for Simplified Chinese users', () => {
         const zhCnLocale = JSON.parse(readRepoFile('public/locales/zh-cn.json'));
 
-        expect(zhCnLocale['Custom endpoint active. API key field stores proxy password.'])
-            .toBe('已启用自定义端点。API 密钥字段将存储网关密钥。');
+        expect(zhCnLocale['Custom endpoint active. API key applies to both models.'])
+            .toBe('已启用自定义端点。API 密钥同时用于主模型与备用模型。');
         expect(zhCnLocale['Direct provider endpoint. API key stays in the API Key field.'])
             .toBe('当前使用直连服务端点。API 密钥保留在 API 密钥字段。');
     });
@@ -420,7 +416,7 @@ describe('chat workspace structure', () => {
         expect(lifecycleSource).toContain("label: 'primary'");
         expect(lifecycleSource).toContain("label: 'primary_retry'");
         expect(lifecycleSource).toContain("label: 'fallback'");
-        expect(lifecycleSource).toContain('hasFallbackProviderSettings(settings, secretState, fallbackSecretKey)');
+        expect(lifecycleSource).toContain('hasFallbackProviderSettings(settings)');
         expect(lifecycleSource).toContain('isMainChatVisibleGeneration({ type, mainApi, dryRun, depth })');
         expect(lifecycleSource).toContain('isRecoverableGenerationFailure(failure)');
     });

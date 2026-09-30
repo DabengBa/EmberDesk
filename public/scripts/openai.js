@@ -53,7 +53,6 @@ import {
     getFileText,
     getImageSizeFromDataURL,
     getSortableDelay,
-    getStringHash,
     getVideoDurationFromDataURL,
     isDataURL,
     isValidUrl,
@@ -69,17 +68,13 @@ import { renderTemplateAsync } from './templates.js';
 import { callGenericPopup, Popup, POPUP_RESULT, POPUP_TYPE } from './popup.js';
 import { t } from './i18n.js';
 import { ToolManager } from './tool-calling.js';
-import { accountStorage } from './util/AccountStorage.js';
 import { IGNORE_SYMBOL, MEDIA_DISPLAY, MEDIA_TYPE } from './constants.js';
-import { buildFallbackOpenAIRequestOverrides } from './chat-generation-auto-recovery.js';
+import { getFallbackOpenAIModel } from './chat-generation-auto-recovery.js';
 import { loadWorkspacePanelsModule } from './workspace-panels-react-bridge.js';
 import {
-    canUseDirectProviderSecret,
-    clearProviderSecretField,
     getFallbackProviderStatus,
     getUnifiedKeyFieldState,
     resolveProviderSecretKeyForSettings,
-    saveProviderSecretField,
     toggleSecretInputMask,
 } from './provider-secret-field-state.js';
 import {
@@ -90,15 +85,6 @@ import {
     resolveReasoningEffort,
     resolveVerbosity,
 } from './openai-provider-capabilities.js';
-
-/** @type {{name: string, url: string, password: string}[]} */
-export let proxies = [];
-
-function syncProxies() {
-    proxies = oai_settings?.reverse_proxy
-        ? [{ name: 'default', url: oai_settings.reverse_proxy, password: oai_settings.proxy_password ?? '' }]
-        : [];
-}
 
 function syncSegmentedFromSelect(selectId) {
     const value = $('#' + selectId).val();
@@ -228,12 +214,7 @@ export const MINIMAX_ENDPOINT = {
 };
 
 const sensitiveFields = [
-    'reverse_proxy',
-    'proxy_password',
     'custom_url',
-    'custom_include_body',
-    'custom_exclude_body',
-    'custom_include_headers',
 ];
 
 /**
@@ -249,9 +230,6 @@ export const settingsToUpdate = {
     openai_model: ['#model_openai_select', 'openai_model', false, true],
     tool_reasoning_mode: ['#tool_reasoning_mode', 'tool_reasoning_mode', false, false],
     custom_url: ['#openai_reverse_proxy', 'custom_url', false, true],
-    custom_include_body: ['#custom_include_body', 'custom_include_body', false, true],
-    custom_exclude_body: ['#custom_exclude_body', 'custom_exclude_body', false, true],
-    custom_include_headers: ['#custom_include_headers', 'custom_include_headers', false, true],
     custom_prompt_post_processing: ['#custom_prompt_post_processing', 'custom_prompt_post_processing', false, true],
     openai_max_context: ['#openai_max_context', 'openai_max_context', false, false],
     openai_max_tokens: ['#openai_max_tokens', 'openai_max_tokens', false, false],
@@ -261,14 +239,12 @@ export const settingsToUpdate = {
     new_chat_prompt: ['#newchat_prompt_textarea', 'new_chat_prompt', false, false],
     new_example_chat_prompt: ['#newexamplechat_prompt_textarea', 'new_example_chat_prompt', false, false],
     continue_nudge_prompt: ['#continue_nudge_prompt_textarea', 'continue_nudge_prompt', false, false],
-    reverse_proxy: ['#openai_reverse_proxy', 'reverse_proxy', false, true],
     wi_format: ['#wi_format_textarea', 'wi_format', false, false],
     scenario_format: ['#scenario_format_textarea', 'scenario_format', false, false],
     personality_format: ['#personality_format_textarea', 'personality_format', false, false],
     stream_openai: ['#stream_toggle', 'stream_openai', true, false],
     prompts: ['', 'prompts', false, false],
     prompt_order: ['', 'prompt_order', false, false],
-    proxy_password: ['#api_key_unified', 'proxy_password', false, true],
     squash_system_messages: ['#squash_system_messages', 'squash_system_messages', true, false],
     media_inlining: ['#openai_media_inlining', 'media_inlining', true, false],
     inline_image_quality: ['#openai_inline_image_quality', 'inline_image_quality', false, false],
@@ -280,8 +256,6 @@ export const settingsToUpdate = {
     reasoning_effort: ['#openai_reasoning_effort', 'reasoning_effort', false, false],
     verbosity: ['#openai_verbosity', 'verbosity', false, false],
     n: ['#n_openai', 'n', false, false],
-    fallback_provider_enabled: ['#fallback_provider_enabled', 'fallback_provider_enabled', true, false],
-    fallback_provider_base_url: ['#fallback_provider_base_url', 'fallback_provider_base_url', false, false],
     fallback_provider_model: ['#fallback_provider_model', 'fallback_provider_model', false, false],
     extensions: ['#NULL_SELECTOR', 'extensions', false, false],
 };
@@ -308,13 +282,8 @@ const default_settings = {
     openai_model: 'gpt-4-turbo',
     custom_model: '',
     custom_url: '',
-    custom_include_body: '',
-    custom_exclude_body: '',
-    custom_include_headers: '',
     tool_reasoning_mode: tool_reasoning_modes.DISABLED,
-    reverse_proxy: '',
     chat_completion_source: chat_completion_sources.OPENAI,
-    proxy_password: '',
     squash_system_messages: false,
     media_inlining: true,
     inline_image_quality: 'auto',
@@ -328,50 +297,18 @@ const default_settings = {
     reasoning_effort: reasoning_effort_types.high,
     verbosity: verbosity_levels.auto,
     n: 1,
-    fallback_provider_enabled: false,
-    fallback_provider_base_url: '',
     fallback_provider_model: '',
-    bind_preset_to_connection: true,
     extensions: {},
 };
 
 const oai_settings = structuredClone(default_settings);
 let _presetChangeGuard = false;
-syncProxies();
 
 export let openai_setting_names;
 export let openai_settings;
 
 /** @type {import('./PromptManager.js').PromptManager} */
 export let promptManager = null;
-
-async function validateReverseProxy() {
-    if (!oai_settings.reverse_proxy) {
-        return;
-    }
-
-    try {
-        new URL(oai_settings.reverse_proxy);
-    } catch (err) {
-        toastr.error(t`Entered reverse proxy address is not a valid URL`);
-        setOnlineStatus('no_connection');
-        resultCheckStatus();
-        throw err;
-    }
-    const rememberKey = `Proxy_SkipConfirm_${getStringHash(oai_settings.reverse_proxy)}`;
-    const skipConfirm = accountStorage.getItem(rememberKey) === 'true';
-
-    const confirmation = skipConfirm || await Popup.show.confirm(t`Connecting To Proxy`, await renderTemplateAsync('proxyConnectionWarning', { proxyURL: DOMPurify.sanitize(oai_settings.reverse_proxy) }));
-
-    if (!confirmation) {
-        toastr.error(t`Update or remove your reverse proxy settings.`);
-        setOnlineStatus('no_connection');
-        resultCheckStatus();
-        throw new Error('Proxy connection denied.');
-    }
-
-    accountStorage.setItem(rememberKey, String(true));
-}
 
 /**
  * Formats chat messages into chat completion messages.
@@ -1534,11 +1471,6 @@ export async function createGenerationParameters(settings, model, type, messages
         chat_completion_sources.OPENAI,
     ];
 
-    // Sources that support proxying
-    const proxySupportedSources = [
-        chat_completion_sources.OPENAI,
-    ];
-
     // Sources that support "n" parameter for multi-swipe
     const multiswipeSources = [
         chat_completion_sources.OPENAI,
@@ -1582,23 +1514,14 @@ export async function createGenerationParameters(settings, model, type, messages
         delete generate_data.stop;
     }
 
-    if (settings.reverse_proxy && proxySupportedSources.includes(settings.chat_completion_source)) {
-        await validateReverseProxy();
-        generate_data.reverse_proxy = settings.reverse_proxy;
-        generate_data.proxy_password = settings.proxy_password;
-    }
-
     // Remove stop-strings if not supported by the model
     const isVision = (m) => ['gpt', 'vision'].every(x => typeof m === 'string' && m.includes(x));
     if (gptSources.includes(settings.chat_completion_source) && isVision(model)) {
         delete generate_data.stop;
     }
 
-    if (settings.chat_completion_source === chat_completion_sources.OPENAI) {
+    if (settings.chat_completion_source === chat_completion_sources.OPENAI && settings.custom_url) {
         generate_data.custom_url = settings.custom_url;
-        generate_data.custom_include_body = settings.custom_include_body;
-        generate_data.custom_exclude_body = settings.custom_exclude_body;
-        generate_data.custom_include_headers = settings.custom_include_headers;
     }
 
 
@@ -1679,20 +1602,12 @@ async function sendOpenAIRequest(type, messages, signal, { jsonSchema = null, fa
     }
 
     const requestSettings = structuredClone(oai_settings);
-    const fallbackOverrides = fallbackProvider ? buildFallbackOpenAIRequestOverrides(oai_settings) : null;
-    if (fallbackOverrides) {
-        requestSettings.chat_completion_source = fallbackOverrides.chatCompletionSource;
-        requestSettings.openai_model = fallbackOverrides.model;
-        requestSettings.custom_url = fallbackOverrides.customUrl;
-        requestSettings.reverse_proxy = '';
-        requestSettings.proxy_password = '';
+    if (fallbackProvider) {
+        requestSettings.openai_model = getFallbackOpenAIModel(oai_settings);
     }
 
     const model = getChatCompletionModel(requestSettings);
     const { generate_data, stream, canMultiSwipe } = await createGenerationParameters(requestSettings, model, type, messages, { jsonSchema });
-    if (fallbackOverrides) {
-        generate_data.openai_secret_marker = fallbackOverrides.openaiSecretMarker;
-    }
     await eventSource.emit(event_types.CHAT_COMPLETION_SETTINGS_READY, generate_data);
 
     const generate_url = '/api/backends/chat-completions/generate';
@@ -2646,6 +2561,29 @@ function migrateChatCompletionSettings(settings) {
         settings.openai_model = settings.custom_model;
     }
 
+    // Provider contract cleanup: one URL, one key, one model, one fallback model.
+    // Fold the retired reverse-proxy endpoint into the sole URL field when it is empty.
+    if (settings.reverse_proxy && !settings.custom_url) {
+        settings.custom_url = settings.reverse_proxy;
+    }
+    // A fallback explicitly switched off must not resurrect under
+    // "model set = enabled" semantics; a missing flag means the new contract.
+    if (settings.fallback_provider_enabled === false) {
+        delete settings.fallback_provider_model;
+    }
+    for (const key of [
+        'reverse_proxy',
+        'proxy_password',
+        'custom_include_body',
+        'custom_exclude_body',
+        'custom_include_headers',
+        'fallback_provider_enabled',
+        'fallback_provider_base_url',
+        'bind_preset_to_connection',
+    ]) {
+        delete settings[key];
+    }
+
     settings.reasoning_effort = normalizeReasoningEffort(settings.reasoning_effort);
 }
 
@@ -2706,10 +2644,7 @@ function loadOpenAISettings(data, settings) {
     }
 
     $(`#settings_preset_openai option[value="${openai_setting_names[oai_settings.preset_settings_openai]}"]`).prop('selected', true);
-    $('#bind_preset_to_connection').prop('checked', oai_settings.bind_preset_to_connection);
-    $('.reverse_proxy_warning').toggle(oai_settings.reverse_proxy !== '');
     updateBaseUrlStatus();
-    syncProxies();
 
     // Protect openai_max_context from being overridden by extensions on initial load
     const loadedMaxContext = oai_settings.openai_max_context;
@@ -2774,21 +2709,11 @@ async function getStatusOpen() {
 
 
     let data = {
-        reverse_proxy: oai_settings.reverse_proxy,
-        proxy_password: oai_settings.proxy_password,
         chat_completion_source: oai_settings.chat_completion_source,
     };
 
-    const validateProxySources = [
-        chat_completion_sources.OPENAI,
-    ];
-    if (oai_settings.reverse_proxy && validateProxySources.includes(data.chat_completion_source)) {
-        await validateReverseProxy();
-    }
-
     if (oai_settings.chat_completion_source === chat_completion_sources.OPENAI && oai_settings.custom_url) {
         data.custom_url = oai_settings.custom_url;
-        data.custom_include_headers = oai_settings.custom_include_headers;
     }
 
     try {
@@ -3069,15 +2994,9 @@ function onSettingsPresetChange() {
         savePreset: saveOpenAIPreset,
         presetNameBefore: presetNameBefore,
     }).finally(async () => {
-        if (oai_settings.bind_preset_to_connection) {
-            $('.model_custom_select').empty();
-        }
+        $('.model_custom_select').empty();
 
-        for (const [key, [selector, setting, isCheckbox, isConnection]] of Object.entries(settingsToUpdate)) {
-            if (isConnection && !oai_settings.bind_preset_to_connection) {
-                continue;
-            }
-
+        for (const [key, [selector, setting, isCheckbox]] of Object.entries(settingsToUpdate)) {
             // Extensions don't need UI updates and shouldn't fallback to current settings
             if (key === 'extensions') {
                 oai_settings.extensions = preset.extensions || {};
@@ -3094,10 +3013,8 @@ function onSettingsPresetChange() {
             }
         }
 
-        // These cannot be changed via preset if unbound to connection
-        if (oai_settings.bind_preset_to_connection) {
-            $('#chat_completion_source').trigger('change');
-        }
+        // Connection fields always follow the selected preset
+        $('#chat_completion_source').trigger('change');
 
         // Protect openai_max_context from being overridden by extensions
         _presetChangeGuard = true;
@@ -3146,43 +3063,34 @@ function updateUnifiedKeyField() {
     const $field = $('#api_key_unified');
     const source = oai_settings.chat_completion_source;
     const secretKey = resolveProviderSecretKeyForSettings({
-        settings: oai_settings,
-        source,
         secretKey: resolveSecretKey(),
-        chatCompletionSources: chat_completion_sources,
     });
     const state = getUnifiedKeyFieldState({
-        settings: oai_settings,
         source,
         secretKey,
         secretState: secret_state,
         chatCompletionSources: chat_completion_sources,
     });
-    const canManageSecret = canUseDirectProviderSecret({ settings: oai_settings, secretKey });
 
     $field.attr('placeholder', state.placeholder);
     $field.val(state.value);
     $('#api_key_unified_manage')
         .attr('data-key', secretKey ?? '')
         .data('key', secretKey ?? '')
-        .toggle(canManageSecret);
+        .toggle(Boolean(secretKey));
 }
 
 function updateBaseUrlStatus() {
-    const hasCustomEndpoint = Boolean(oai_settings.reverse_proxy);
+    const hasCustomEndpoint = Boolean(oai_settings.custom_url);
     $('#base_url_status')
         .attr('data-mode', hasCustomEndpoint ? 'custom' : 'direct')
         .text(hasCustomEndpoint
-            ? t`Custom endpoint active. API key field stores proxy password.`
+            ? t`Custom endpoint active. API key applies to both models.`
             : t`Direct provider endpoint. API key stays in the API Key field.`);
 }
 
-function onReverseProxyInput() {
-    oai_settings.reverse_proxy = String($(this).val());
-    oai_settings.custom_url = oai_settings.reverse_proxy;
-    $('.reverse_proxy_warning').toggle(oai_settings.reverse_proxy != '');
-    syncProxies();
-    updateUnifiedKeyField();
+function onBaseUrlInput() {
+    oai_settings.custom_url = String($(this).val());
     updateBaseUrlStatus();
     saveSettingsDebounced();
 }
@@ -3192,39 +3100,22 @@ function getPendingProviderCredentialValue(_secretKey = resolveSecretKey()) {
 }
 
 function isProviderCredentialMissing() {
-    if (oai_settings.reverse_proxy) {
-        return false;
-    }
-
     const secretKey = resolveSecretKey();
-    return !!secretKey && !secret_state[secretKey] && !getPendingProviderCredentialValue(secretKey);
+    return !!secretKey && !secret_state[secretKey] && !getPendingProviderCredentialValue(secretKey) && !oai_settings.custom_url;
 }
 
 async function onConnectButtonClick(e) {
     e.stopPropagation();
 
-    /** @type {Object.<string, {key: string, selector: string, proxy?: boolean, keyless?: boolean}>} */
-    const unifiedSelector = '#api_key_unified';
-    const apiSourceConfig = {
-        [chat_completion_sources.OPENAI]: { key: SECRET_KEYS.OPENAI, selector: unifiedSelector, proxy: true },
-    };
+    const apiKey = String($('#api_key_unified').val() || '').trim();
+    if (apiKey.length) {
+        await writeSecret(SECRET_KEYS.OPENAI, apiKey);
+    }
 
-    const config = apiSourceConfig[oai_settings.chat_completion_source];
-    if (config) {
-        const apiKey = String($(config.selector).val()).trim();
-        if (apiKey.length) {
-            if (oai_settings.reverse_proxy) {
-                oai_settings.proxy_password = apiKey;
-            } else {
-                await writeSecret(config.key, apiKey);
-            }
-        }
-
-        if (!oai_settings.reverse_proxy && !secret_state[config.key] && !config.keyless) {
-            console.log(`No secret key saved for ${oai_settings.chat_completion_source}`);
-            toastr.warning(t`Enter or save an API key before connecting.`);
-            return;
-        }
+    if (!secret_state[SECRET_KEYS.OPENAI] && !oai_settings.custom_url) {
+        console.log(`No secret key saved for ${oai_settings.chat_completion_source}`);
+        toastr.warning(t`Enter or save an API key before connecting.`);
+        return;
     }
 
     startStatusLoading();
@@ -3299,75 +3190,10 @@ function onApiKeyUnifiedShowClick() {
 }
 
 function updateFallbackProviderStatus() {
-    const status = getFallbackProviderStatus(oai_settings, secret_state, SECRET_KEYS.OPENAI_FALLBACK);
+    const status = getFallbackProviderStatus(oai_settings);
     $('#fallback_provider_status')
         .attr('data-state', status.state)
         .text(status.text);
-}
-
-function onFallbackProviderApiKeyShowClick() {
-    toggleSecretInputMask($('#fallback_provider_api_key')[0], this);
-}
-
-async function onFallbackProviderSaveKeyClick() {
-    const $input = $('#fallback_provider_api_key');
-    const value = String($input.val()).trim();
-    const result = await saveProviderSecretField({
-        key: SECRET_KEYS.OPENAI_FALLBACK,
-        value,
-        writeSecret,
-    });
-
-    if (result.status === 'empty') {
-        toastr.warning(t`Enter a fallback API key first.`);
-        return;
-    }
-
-    if (result.status === 'failed') {
-        updateFallbackProviderStatus();
-        toastr.error(t`Fallback API key could not be saved.`);
-        return;
-    }
-
-    if (result.shouldClearInput) {
-        $input.val('').trigger('input');
-    }
-    updateFallbackProviderStatus();
-    toastr.success(t`Fallback API key saved.`);
-}
-
-async function onFallbackProviderClearKeyClick() {
-    const result = await clearProviderSecretField({
-        key: SECRET_KEYS.OPENAI_FALLBACK,
-        deleteSecret,
-    });
-
-    if (result.shouldClearInput) {
-        $('#fallback_provider_api_key').val('').trigger('input');
-    }
-    updateFallbackProviderStatus();
-    toastr.success(t`Fallback API key cleared.`);
-}
-
-async function onCustomizeParametersClick() {
-    const template = $(await renderTemplateAsync('customEndpointAdditionalParameters'));
-
-    template.find('#custom_include_body').val(oai_settings.custom_include_body).on('input', function () {
-        oai_settings.custom_include_body = String($(this).val());
-        saveSettingsDebounced();
-    });
-
-    template.find('#custom_exclude_body').val(oai_settings.custom_exclude_body).on('input', function () {
-        oai_settings.custom_exclude_body = String($(this).val());
-        saveSettingsDebounced();
-    });
-
-    template.find('#custom_include_headers').val(oai_settings.custom_include_headers).on('input', function () {
-        oai_settings.custom_include_headers = String($(this).val());
-        saveSettingsDebounced();
-    });
-
-    await callGenericPopup(template, POPUP_TYPE.TEXT, '', { wide: true, large: true });
 }
 
 /**
@@ -3432,31 +3258,22 @@ export function isReasoningSignatureSupported() {
 
 function proxyUrlCallback(_, value) {
     if (!value) {
-        return oai_settings.reverse_proxy ?? '';
+        return oai_settings.custom_url ?? '';
     }
-    oai_settings.reverse_proxy = value;
+    oai_settings.custom_url = value;
     $('#openai_reverse_proxy').val(value);
-    syncProxies();
     updateBaseUrlStatus();
     reconnectOpenAi();
-    return oai_settings.reverse_proxy;
+    return oai_settings.custom_url;
 }
 
 function apiKeyCallback(_, value) {
     if (!value) {
-        if (oai_settings.reverse_proxy) {
-            return oai_settings.proxy_password ?? '';
-        }
         return '';
     }
-    if (oai_settings.reverse_proxy) {
-        oai_settings.proxy_password = value;
-        syncProxies();
-    } else {
-        const secretKey = resolveSecretKey();
-        if (secretKey) {
-            writeSecret(secretKey, value);
-        }
+    const secretKey = resolveSecretKey();
+    if (secretKey) {
+        writeSecret(secretKey, value);
     }
     $('#api_key_unified').val(value);
     return value;
@@ -3482,7 +3299,7 @@ export function initOpenAI() {
     SlashCommandParser.addCommandObject(SlashCommand.fromProps({
         name: 'proxy-url',
         callback: proxyUrlCallback,
-        returns: 'current proxy URL',
+        returns: 'current base URL',
         namedArgumentList: [],
         unnamedArgumentList: [
             SlashCommandArgument.fromProps({
@@ -3491,7 +3308,7 @@ export function initOpenAI() {
                 isRequired: false,
             }),
         ],
-        helpString: 'Gets or sets the reverse proxy URL. Leave empty to get the current value.',
+        helpString: 'Gets or sets the provider endpoint Base URL. Leave empty to get the current value.',
     }));
     SlashCommandParser.addCommandObject(SlashCommand.fromProps({
         name: 'api-key',
@@ -3505,7 +3322,7 @@ export function initOpenAI() {
                 isRequired: false,
             }),
         ],
-        helpString: 'Gets or sets the API key. With proxy: proxy password. Without proxy: provider secret key.',
+        helpString: 'Gets or sets the API key. Applies to both the primary and fallback model.',
     }));
 
     $('#test_api_button').on('click', testApiConnection);
@@ -3657,30 +3474,9 @@ export function initOpenAI() {
         updateUnifiedKeyField();
     });
 
-    $('#fallback_provider_enabled').on('change', function () {
-        oai_settings.fallback_provider_enabled = !!$(this).prop('checked');
-        updateFallbackProviderStatus();
-        saveSettingsDebounced();
-    });
-
-    $('#fallback_provider_base_url').on('input', function () {
-        oai_settings.fallback_provider_base_url = String($(this).val());
-        updateFallbackProviderStatus();
-        saveSettingsDebounced();
-    });
-
     $('#fallback_provider_model').on('input', function () {
         oai_settings.fallback_provider_model = String($(this).val());
         updateFallbackProviderStatus();
-        saveSettingsDebounced();
-    });
-
-    $('#api_key_unified').on('input', function () {
-        const value = String($(this).val());
-        if (oai_settings.reverse_proxy) {
-            oai_settings.proxy_password = value;
-            syncProxies();
-        }
         saveSettingsDebounced();
     });
 
@@ -3809,13 +3605,8 @@ export function initOpenAI() {
         });
     }
 
-    $('#bind_preset_to_connection').on('input', function () {
-        oai_settings.bind_preset_to_connection = !!$(this).prop('checked');
-        saveSettingsDebounced();
-    });
-
     $('#api_button_openai').on('click', onConnectButtonClick);
-    $('#openai_reverse_proxy').on('input', onReverseProxyInput);
+    $('#openai_reverse_proxy').on('input', onBaseUrlInput);
     $('#model_openai_select').on('change', onModelChange);
     $('#settings_preset_openai').on('change', onSettingsPresetChange);
     $('#new_oai_preset').on('click', onNewPresetClick);
@@ -3828,10 +3619,6 @@ export function initOpenAI() {
     // item action bindings below stay direct-by-ID because the items never unmount.
 
     $('#api_key_unified_show').on('click', onApiKeyUnifiedShowClick);
-    $('#fallback_provider_api_key_show').on('click', onFallbackProviderApiKeyShowClick);
-    $('#fallback_provider_save_key').on('click', onFallbackProviderSaveKeyClick);
-    $('#fallback_provider_clear_key').on('click', onFallbackProviderClearKeyClick);
-    $('#customize_additional_parameters').on('click', onCustomizeParametersClick);
     eventSource.on(event_types.SETTINGS_LOADED, updateUnifiedKeyField);
     eventSource.on(event_types.MAIN_API_CHANGED, updateUnifiedKeyField);
     [
@@ -3840,6 +3627,13 @@ export function initOpenAI() {
         event_types.SECRET_ROTATED,
         event_types.SECRET_EDITED,
     ].forEach(eventType => eventSource.on(eventType, updateUnifiedKeyField));
+
+    // Retired provider contract: the fallback model reuses the primary key, so the
+    // dedicated fallback secret must not linger. Lazy cleanup once per session.
+    if (secret_state.api_key_openai_fallback) {
+        void deleteSecret('api_key_openai_fallback');
+    }
+
     updateUnifiedKeyField();
 }
 

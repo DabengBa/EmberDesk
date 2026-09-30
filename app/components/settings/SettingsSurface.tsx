@@ -1,5 +1,5 @@
 import * as stylex from '@stylexjs/stylex';
-import { useForm, useStore } from '@tanstack/react-form';
+import { useForm } from '@tanstack/react-form';
 
 // Zod `z.coerce.*` fields widen the StandardSchema `input` to `unknown`, which TS 7
 // strictly rejects against the form's number-typed default values. The runtime coercion
@@ -11,12 +11,9 @@ const toSettingsFormValidator = (schema: unknown): SettingsFormValidator => sche
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { startTransition, useCallback, useEffect, useMemo, useState } from 'react';
 import { z } from 'zod';
-import { hasFallbackProviderSettings } from '../../../public/scripts/chat-generation-auto-recovery.js';
 import {
-    canUseDirectProviderSecret,
     clearProviderSecretField,
     getUnifiedKeyFieldState,
-    resolveProviderSecretKeyForSettings,
     saveProviderSecretField,
 } from '../../../public/scripts/provider-secret-field-state.js';
 import { SettingField } from '@/components/settings/SettingField';
@@ -30,15 +27,11 @@ import {
     buildSettingsSavePayload,
     chatDisplayOptions,
     defaultSettingsFormValues,
-    getConnectionProfileOptions,
-    getProviderModelFieldConfig,
-    getValueAtPath,
     imageOverswipeOptions,
     mediaDisplayOptions,
     namesBehaviorOptions,
     parseSettingsPayload,
     promptPostProcessingOptions,
-    providerOptions,
     providerSecretKeyBySource,
     reasoningEffortOptions,
     sendOnEnterOptions,
@@ -87,19 +80,9 @@ const settingsSchema = z.object({
         namesBehavior: z.coerce.number(),
     }),
     providers: z.object({
-        chatCompletionSource: z.enum(['openai']),
         openaiModel: z.string(),
-        reverseProxy: z.string(),
-        proxyPassword: z.string(),
         customUrl: z.string(),
-        customIncludeBody: z.string(),
-        customExcludeBody: z.string(),
-        customIncludeHeaders: z.string(),
-        fallbackProviderEnabled: z.boolean(),
-        fallbackProviderBaseUrl: z.string(),
         fallbackProviderModel: z.string(),
-        bindPresetToConnection: z.boolean(),
-        connectionProfileId: z.string(),
     }),
     userInterface: z.object({
         chatWidth: z.number().min(20, 'Chat Width 不能小于 20').max(100, 'Chat Width 不能大于 100'),
@@ -307,7 +290,6 @@ export function SettingsSurface({
     const [hasRevisionConflict, setHasRevisionConflict] = useState(false);
     const [showDiagnostics, setShowDiagnostics] = useState(false);
     const [providerSecretInput, setProviderSecretInput] = useState('');
-    const [fallbackSecretInput, setFallbackSecretInput] = useState('');
 
     const openSettingsTab = useCallback((tabId: string) => {
         // Dense tab bodies are non-urgent; leave the shell responsive while they mount.
@@ -449,8 +431,6 @@ export function SettingsSurface({
         },
     });
 
-    // Provider-only derived state must not rerender a dense active tab on every unrelated field edit.
-    const providerSettingsValues = useStore(settingsForm.store, state => state.values.providers);
 
     const saveMutation = useMutation({
         mutationFn: async (values: typeof defaultSettingsFormValues) => {
@@ -460,8 +440,6 @@ export function SettingsSurface({
 
             const csrfToken = await ensureCsrfToken();
             const baselineFormValues = buildSettingsFormDefaults(parsedPayload.settings);
-            const connectionProfileChanged = values.providers.connectionProfileId
-                !== baselineFormValues.providers.connectionProfileId;
             const payload = buildSettingsSavePayload(parsedPayload.settings, values, {
                 settingsRevision: parsedPayload.settingsRevision,
                 baselineFormValues,
@@ -490,12 +468,6 @@ export function SettingsSurface({
             try {
                 window.sessionStorage.setItem('emberdesk-settings-saved-at', String(Date.now()));
                 window.sessionStorage.setItem('emberdesk-settings-revision', String(parsedPayload.settingsRevision ?? ''));
-                if (connectionProfileChanged) {
-                    window.sessionStorage.setItem(
-                        'emberdesk-settings-apply-connection-profile',
-                        JSON.stringify(values.providers.connectionProfileId),
-                    );
-                }
             } catch {
                 // sessionStorage may be unavailable in private contexts
             }
@@ -504,30 +476,10 @@ export function SettingsSurface({
         retry: false,
     });
 
-    const providerSource = providerSettingsValues.chatCompletionSource;
-    const providerModelField = useMemo(() => getProviderModelFieldConfig(providerSource), [providerSource]);
-    const providerSettingsSnapshot = ((parsedPayload
-        ? getValueAtPath(parsedPayload.settings, 'oai_settings')
-        : undefined) as Record<string, any> | undefined) ?? {};
-    const providerSecretKey = providerSecretKeyBySource[providerSource as keyof typeof providerSecretKeyBySource] ?? null;
-    const currentSecretKey = resolveProviderSecretKeyForSettings({
-        settings: {
-            reverse_proxy: providerSettingsValues.reverseProxy,
-        },
-        source: providerSource,
-        secretKey: providerSecretKey,
-        chatCompletionSources: {
-            OPENAI: 'openai',
-        },
-    });
-    const fallbackSecretKey = 'api_key_openai_fallback';
+    const providerSource = 'openai' as const;
+    const currentSecretKey = providerSecretKeyBySource[providerSource];
 
     const unifiedKeyFieldState = getUnifiedKeyFieldState({
-        settings: {
-            ...providerSettingsSnapshot,
-            reverse_proxy: providerSettingsValues.reverseProxy,
-            proxy_password: providerSettingsValues.proxyPassword,
-        },
         source: providerSource,
         secretKey: currentSecretKey,
         secretState: secretsData,
@@ -535,18 +487,6 @@ export function SettingsSurface({
             OPENAI: 'openai',
         },
     });
-
-    const directSecretMode = canUseDirectProviderSecret({
-        settings: {
-            reverse_proxy: providerSettingsValues.reverseProxy,
-        },
-        secretKey: currentSecretKey,
-    });
-    const fallbackProviderReady = hasFallbackProviderSettings({
-        fallback_provider_enabled: providerSettingsValues.fallbackProviderEnabled,
-        fallback_provider_base_url: providerSettingsValues.fallbackProviderBaseUrl,
-        fallback_provider_model: providerSettingsValues.fallbackProviderModel,
-    }, secretsData, fallbackSecretKey);
 
     const providerSecretMutation = useMutation({
         mutationFn: async (options: { key: string; value: string; mode: 'save' | 'clear' }) => {
@@ -648,10 +588,6 @@ export function SettingsSurface({
     }, [settingsData]);
 
     const isBusy = saveMutation.isPending || secretsQuery.isPending || providerSecretMutation.isPending;
-    const connectionProfileOptions = useMemo(
-        () => getConnectionProfileOptions(parsedPayload?.settings ?? {}),
-        [parsedPayload?.settings],
-    );
 
     function clearTransientState() {
         saveMutation.reset();
@@ -701,10 +637,6 @@ export function SettingsSurface({
             setPageError(error instanceof Error ? error.message : String(error));
         }
     }
-
-    const activeFallbackStatus = providerSettingsValues.fallbackProviderEnabled
-        ? (fallbackProviderReady ? 'Ready' : 'Needs setup')
-        : 'Disabled';
 
     return (
         <main
@@ -1107,124 +1039,24 @@ export function SettingsSurface({
                             {activeTab === 'providers' ? (
                             <div>
                                 <SettingsSection
-                                    title="Provider Routing"
-                                    description="主 provider 路由、fallback provider 和自定义连接字段。"
+                                    title="Provider"
+                                    description="一个 endpoint URL、一个 API key、一个主模型和一个可选 fallback 模型。"
                                 >
                                     <SettingField
                                         form={settingsForm}
-                                        name="providers.chatCompletionSource"
-                                        label="Provider"
-                                        description="当前默认 chat-completion provider。"
-                                        variant="select"
-                                        options={providerOptions}
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name={providerModelField.name}
-                                        label="Model"
-                                        description={providerModelField.description}
-                                        placeholder={providerModelField.placeholder}
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="providers.reverseProxy"
-                                        label="Base URL / Reverse Proxy"
-                                        description="代理模式下的 Base URL。"
-                                        placeholder="https://proxy.example.com"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="providers.proxyPassword"
-                                        label="Proxy Password"
-                                        description="reverse proxy 模式下使用的网关密码。"
-                                        placeholder="Proxy password"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
                                         name="providers.customUrl"
-                                        label="Custom URL"
-                                        description="OpenAI-compatible 自定义 endpoint。"
-                                        placeholder="https://custom.example.com/v1"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="providers.customIncludeHeaders"
-                                        label="Custom Headers"
-                                        description="发送到自定义 endpoint 的附加 headers。"
-                                        placeholder="X-Test: 1"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="providers.customIncludeBody"
-                                        label="Custom Body Include"
-                                        description="合并到请求体的额外字段。"
-                                        placeholder='{"foo":"bar"}'
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="providers.customExcludeBody"
-                                        label="Custom Body Exclude"
-                                        description="从请求体排除的字段。"
-                                        placeholder="temperature,top_p"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="providers.bindPresetToConnection"
-                                        label="Bind Preset To Connection"
-                                        description="切换连接时自动绑定 preset。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="providers.fallbackProviderEnabled"
-                                        label="Fallback Provider"
-                                        description="启用 OpenAI-compatible fallback provider。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="providers.fallbackProviderBaseUrl"
-                                        label="Fallback Base URL"
-                                        description="Fallback provider endpoint。"
+                                        label="Base URL"
+                                        description="OpenAI-compatible endpoint；留空使用官方 api.openai.com。"
                                         placeholder="https://api.openai.com/v1"
-                                        disabled={isBusy || !providerSettingsValues.fallbackProviderEnabled}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="providers.fallbackProviderModel"
-                                        label="Fallback Model"
-                                        description="Fallback provider 使用的模型。"
-                                        placeholder="gpt-4.1-mini"
-                                        disabled={isBusy || !providerSettingsValues.fallbackProviderEnabled}
+                                        disabled={isBusy}
                                         onValueChange={clearTransientState}
                                     />
                                     <div {...stylex.props(settingsStyles.inlinePanel)}>
                                         <div {...stylex.props(settingsStyles.inlineHeader)}>
                                             <div>
-                                                <h3 {...stylex.props(settingsStyles.sectionTitle)}>Provider API Key</h3>
+                                                <h3 {...stylex.props(settingsStyles.sectionTitle)}>API Key</h3>
                                                 <p {...stylex.props(settingsStyles.mutedText, settingsStyles.sectionDescription)}>
-                                                    Secret storage is kept separate from normal settings.
+                                                    主模型与 fallback 模型共用此 key；secret 与普通设置分开存储。
                                                 </p>
                                             </div>
                                             <span {...stylex.props(settingsStyles.pill)}>
@@ -1232,93 +1064,18 @@ export function SettingsSurface({
                                             </span>
                                         </div>
 
-                                        {directSecretMode ? (
-                                            <div {...stylex.props(settingsStyles.inlineActions)}>
-                                                <input
-                                                    type="password"
-                                                    id="provider-secret-input"
-                                                    name="provider-secret-input"
-                                                    aria-label="Provider API Key"
-                                                    {...stylex.props(settingsStyles.input, settingsStyles.inlineActionsInput)}
-                                                    placeholder={unifiedKeyFieldState.placeholder}
-                                                    value={providerSecretInput}
-                                                    disabled={providerSecretMutation.isPending}
-                                                    onChange={event => {
-                                                        setProviderSecretInput(event.target.value);
-                                                        setSaveStatus(null);
-                                                        setPageError('');
-                                                    }}
-                                                />
-                                                <button
-                                                    type="button"
-                                                    {...stylex.props(settingsStyles.button, settingsStyles.buttonPrimary)}
-                                                    disabled={providerSecretMutation.isPending}
-                                                    onClick={() => {
-                                                        if (!currentSecretKey) {
-                                                            return;
-                                                        }
-                                                        void handleProviderSecretAction({
-                                                            key: currentSecretKey,
-                                                            mode: 'save',
-                                                            value: providerSecretInput,
-                                                            successMessage: 'Provider API key 已保存。',
-                                                            clearInput: () => setProviderSecretInput(''),
-                                                        });
-                                                    }}
-                                                >
-                                                    保存 Key
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    {...stylex.props(settingsStyles.button, settingsStyles.buttonSecondary)}
-                                                    disabled={providerSecretMutation.isPending}
-                                                    onClick={() => {
-                                                        if (!currentSecretKey) {
-                                                            return;
-                                                        }
-                                                        void handleProviderSecretAction({
-                                                            key: currentSecretKey,
-                                                            mode: 'clear',
-                                                            value: '',
-                                                            successMessage: 'Provider API key 已清除。',
-                                                            clearInput: () => setProviderSecretInput(''),
-                                                        });
-                                                    }}
-                                                >
-                                                    清除 Key
-                                                </button>
-                                            </div>
-                                        ) : (
-                                            <p {...stylex.props(settingsStyles.mutedText, settingsStyles.sectionDescription)}>
-                                                Reverse proxy mode uses Proxy Password instead of provider secrets.
-                                            </p>
-                                        )}
-                                    </div>
-
-                                    <div {...stylex.props(settingsStyles.inlinePanel)}>
-                                        <div {...stylex.props(settingsStyles.inlineHeader)}>
-                                            <div>
-                                                <h3 {...stylex.props(settingsStyles.sectionTitle)}>Fallback Provider Secret</h3>
-                                                <p {...stylex.props(settingsStyles.mutedText, settingsStyles.sectionDescription)}>
-                                                    Separate server-side key for fallback routing.
-                                                </p>
-                                            </div>
-                                            <span {...stylex.props(settingsStyles.pill)}>
-                                                {activeFallbackStatus}
-                                            </span>
-                                        </div>
                                         <div {...stylex.props(settingsStyles.inlineActions)}>
                                             <input
                                                 type="password"
-                                                id="fallback-provider-secret-input"
-                                                name="fallback-provider-secret-input"
-                                                aria-label="Fallback Provider API Key"
+                                                id="provider-secret-input"
+                                                name="provider-secret-input"
+                                                aria-label="Provider API Key"
                                                 {...stylex.props(settingsStyles.input, settingsStyles.inlineActionsInput)}
-                                                placeholder="Fallback API Key"
-                                                value={fallbackSecretInput}
-                                                disabled={providerSecretMutation.isPending || !providerSettingsValues.fallbackProviderEnabled}
+                                                placeholder={unifiedKeyFieldState.placeholder}
+                                                value={providerSecretInput}
+                                                disabled={providerSecretMutation.isPending}
                                                 onChange={event => {
-                                                    setFallbackSecretInput(event.target.value);
+                                                    setProviderSecretInput(event.target.value);
                                                     setSaveStatus(null);
                                                     setPageError('');
                                                 }}
@@ -1326,52 +1083,53 @@ export function SettingsSurface({
                                             <button
                                                 type="button"
                                                 {...stylex.props(settingsStyles.button, settingsStyles.buttonPrimary)}
-                                                disabled={providerSecretMutation.isPending || !providerSettingsValues.fallbackProviderEnabled}
+                                                disabled={providerSecretMutation.isPending}
                                                 onClick={() => {
                                                     void handleProviderSecretAction({
-                                                        key: fallbackSecretKey,
+                                                        key: currentSecretKey,
                                                         mode: 'save',
-                                                        value: fallbackSecretInput,
-                                                        successMessage: 'Fallback provider API key 已保存。',
-                                                        clearInput: () => setFallbackSecretInput(''),
+                                                        value: providerSecretInput,
+                                                        successMessage: 'Provider API key 已保存。',
+                                                        clearInput: () => setProviderSecretInput(''),
                                                     });
                                                 }}
                                             >
-                                                保存 Fallback Key
+                                                保存 Key
                                             </button>
                                             <button
                                                 type="button"
                                                 {...stylex.props(settingsStyles.button, settingsStyles.buttonSecondary)}
-                                                disabled={providerSecretMutation.isPending || !providerSettingsValues.fallbackProviderEnabled}
+                                                disabled={providerSecretMutation.isPending}
                                                 onClick={() => {
                                                     void handleProviderSecretAction({
-                                                        key: fallbackSecretKey,
+                                                        key: currentSecretKey,
                                                         mode: 'clear',
                                                         value: '',
-                                                        successMessage: 'Fallback provider API key 已清除。',
-                                                        clearInput: () => setFallbackSecretInput(''),
+                                                        successMessage: 'Provider API key 已清除。',
+                                                        clearInput: () => setProviderSecretInput(''),
                                                     });
                                                 }}
                                             >
-                                                清除 Fallback Key
+                                                清除 Key
                                             </button>
                                         </div>
                                     </div>
-                                                                    <SettingField
+
+                                    <SettingField
                                         form={settingsForm}
                                         name="providers.openaiModel"
-                                        label="Openai Model"
-                                        description="Settings path binding for providers.openaiModel."
+                                        label="Model"
+                                        description="主生成模型。"
+                                        placeholder="gpt-5.2"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
                                     />
                                     <SettingField
                                         form={settingsForm}
-                                        name="providers.connectionProfileId"
-                                        label="Connection Profile"
-                                        description="Returning to Workspace applies the selected profile through Connection Manager."
-                                        variant="select"
-                                        options={connectionProfileOptions}
+                                        name="providers.fallbackProviderModel"
+                                        label="Fallback Model"
+                                        description="主请求失败时以同一 URL 与 API key 换用此模型重试；留空即关闭。"
+                                        placeholder="gpt-4.1-mini"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
                                     />

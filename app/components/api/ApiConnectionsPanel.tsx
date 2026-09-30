@@ -13,13 +13,11 @@ export function ApiConnectionsPanel() {
                     <div id="api_connection_form">
                         <div className="api-primary-path">
                             <div className="chat-completion-select">
+                                {/* Single-provider contract: the hidden select keeps legacy jQuery bindings alive. */}
+                                <select id="chat_completion_source" hidden>
+                                    <option value="openai">OpenAI</option>
+                                </select>
                                 <div className="chat-completion-row">
-                                    <label className="chat-completion-field provider-field" htmlFor="chat_completion_source">
-                                        <span className="field-label" data-i18n="Provider">Provider</span>
-                                        <select id="chat_completion_source">
-                                            <option value="openai">OpenAI</option>
-                                        </select>
-                                    </label>
                                     <div id="openai_form" className="chat-completion-field model-field" data-source="openai">
                                         <label className="field-label" htmlFor="model_openai_select" data-i18n="Model">Model</label>
                                         <input id="model_openai_select" list="model_openai_list" className="text_pole" placeholder="Select or type a model" />
@@ -46,31 +44,18 @@ export function ApiConnectionsPanel() {
                         </div>
                         <section id="fallback_provider_section" className="fallback-provider-section" data-doc-id="feature.fallback_provider" data-source="openai">
                             <div className="fallback-provider-header">
-                                <label className="checkbox_label margin0 widthFreeExpand" htmlFor="fallback_provider_enabled">
-                                    <input id="fallback_provider_enabled" type="checkbox" />
-                                    <span data-i18n="Fallback provider">Fallback provider</span>
-                                </label>
+                                <span className="field-label" data-i18n="Fallback model">Fallback model</span>
                                 <output id="fallback_provider_status" className="fallback-provider-status" aria-live="polite" data-i18n="Disabled">Disabled</output>
                             </div>
                             <div className="fallback-provider-details">
                                 <div className="fallback-provider-fields">
-                                    <label className="fallback-provider-field" htmlFor="fallback_provider_base_url">
-                                        <span className="field-label" data-i18n="Base URL">Base URL</span>
-                                        <input id="fallback_provider_base_url" type="text" className="text_pole" aria-label="Fallback provider Base URL" placeholder="https://api.openai.com/v1" />
-                                    </label>
                                     <label className="fallback-provider-field" htmlFor="fallback_provider_model">
                                         <span className="field-label" data-i18n="Model">Model</span>
-                                        <input id="fallback_provider_model" type="text" className="text_pole" placeholder="gpt-4.1-mini" />
+                                        <input id="fallback_provider_model" type="text" className="text_pole" aria-label="Fallback model" placeholder="gpt-4.1-mini" />
                                     </label>
                                 </div>
-                                <div className="fallback-provider-key-row">
-                                    <input id="fallback_provider_api_key" type="text" className="text_pole flex1 api-key-masked" autoComplete="off" data-lpignore="true" data-1p-ignore data-bwignore data-i18n="[placeholder]Fallback API Key" placeholder="Fallback API Key" />
-                                    <ContractIconButton id="fallback_provider_api_key_show" className="menu_button menu_button_icon fallback_provider_api_key_show fa-fw" label="Show fallback API key" nativeTitle title="Show fallback API key" icon={<i className="fa-solid fa-eye-slash" aria-hidden="true" />} tabIndex={0} />
-                                    <ContractIconButton id="fallback_provider_save_key" className="menu_button menu_button_icon fallback_provider_save_key fa-fw" label="Save fallback API key" nativeTitle title="Save fallback API key" icon={<i className="fa-solid fa-save" aria-hidden="true" />} tabIndex={0} />
-                                    <ContractIconButton id="fallback_provider_clear_key" className="menu_button menu_button_icon fallback_provider_clear_key fa-fw" label="Clear fallback API key" nativeTitle title="Clear fallback API key" icon={<i className="fa-solid fa-trash-can" aria-hidden="true" />} tabIndex={0} />
-                                </div>
-                                <div id="fallback_provider_cost_warning" className="info-block warning fallback-provider-warning" role="note" data-i18n="Fallback provider may use a different billing account and model pricing.">
-                                    Fallback provider may use a different billing account and model pricing.
+                                <div className="info-block fallback-provider-warning" role="note" data-i18n="Fallback reuses the Base URL and API key above. Leave empty to disable.">
+                                    Fallback reuses the Base URL and API key above. Leave empty to disable.
                                 </div>
                             </div>
                         </section>
@@ -104,7 +89,6 @@ export function ApiConnectionsPanel() {
                         <div className="flex-container flex chat-completion-actions">
                             <ContractButton id="api_button_openai" className="api_button menu_button menu_button_icon" label="Connect" />
                             <ContractButton className="api_loading menu_button menu_button_icon" label="Cancel" style={{ opacity: '0.6' }} />
-                            <ContractButton data-source="openai" id="customize_additional_parameters" className="menu_button menu_button_icon api-action-secondary" label="Parameters" labelKey="Additional Parameters" />
                             <ContractButton id="test_api_button" className="api_button menu_button menu_button_icon" label="Test" nativeTitle title="Send a short test message to verify your connection." />
                         </div>
                         <div className="online_status">

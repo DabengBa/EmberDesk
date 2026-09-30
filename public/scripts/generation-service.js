@@ -1336,8 +1336,6 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
         const lifecyclePlan = createGenerationCommandPlan(generationEnvelope.command, {
             fallbackReady: hasFallbackProviderForGeneration({
                 settings: state.oai_settings,
-                secretState: state.secret_state,
-                fallbackSecretKey: state.SECRET_KEYS.OPENAI_FALLBACK,
             }),
             statusLabels: getGenerationLifecycleStatusLabels(),
         });

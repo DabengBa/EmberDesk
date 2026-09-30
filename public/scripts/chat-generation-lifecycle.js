@@ -23,8 +23,8 @@ function createAttemptTrace(attempts) {
     }));
 }
 
-export function hasFallbackProviderForGeneration({ settings, secretState, fallbackSecretKey } = {}) {
-    return hasFallbackProviderSettings(settings, secretState, fallbackSecretKey);
+export function hasFallbackProviderForGeneration({ settings } = {}) {
+    return hasFallbackProviderSettings(settings);
 }
 
 export function buildGenerationLifecycleAttempts({ fallbackReady = false, statusLabels = {} } = {}) {
