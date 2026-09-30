@@ -633,6 +633,49 @@ describe('canonical settings route integration', () => {
         });
     });
 
+    test('world_names lists canonical world books even without file projections', async () => {
+        const root = makeRoot();
+        const directories = createRouteDirectories(root);
+        writeSettingsFile(directories, { firstRun: false });
+
+        setCanonicalEnv({ enabled: true, shadowImport: true });
+        const router = await loadSettingsRouter();
+
+        // Seed a DB-only world book: no worlds/*.json exists, so a directory
+        // scan would produce an empty list while canonical storage has the row.
+        const { canonicalSqliteManager } = await import('../src/canonical-sqlite.js');
+        const { upsertCanonicalWorldInfoBook } = await import('../src/endpoints/world-info-store.js');
+        const { persistCanonicalAuditStatus } = await import('../src/canonical-sqlite-shadow-import.js');
+        const db = canonicalSqliteManager.open({
+            handle: 'alice',
+            directories,
+            featureFlags: { enabled: true, strict: false },
+        });
+        runCanonicalMigrations(db, { nowMs: 3000 });
+        upsertCanonicalWorldInfoBook(db, {
+            name: 'DbOnlyBook',
+            payload: { entries: {} },
+            sourceMtimeMs: 1,
+            sourceSizeBytes: 2,
+            nowMs: 3000,
+        });
+        persistCanonicalAuditStatus(db, {
+            ok: true,
+            handle: 'alice',
+            hasDrift: false,
+            blocking: false,
+            entries: [],
+        }, {
+            scope: 'world_info',
+            auditedAtMs: 3001,
+        });
+        expect(fs.readdirSync(directories.worlds)).toHaveLength(0);
+
+        const response = await invokeRoute(router, '/get', { directories });
+        expect(response.statusCode).toBe(200);
+        expect(response.body.world_names).toContain('DbOnlyBook');
+    });
+
     test('canonical save enforces revision conflicts and projects settings.json after DB commit', async () => {
         // Projection assertions require sync mode; the slice default is 'off'.
         const root = makeRoot();

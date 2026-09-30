@@ -60,7 +60,7 @@ export function RightNavPanel() {
 
                 <div className="scrollableInner">
                     <div name="Solo Char Create/Edit Panel" id="rm_ch_create_block" className="right_menu flex-container flexFlowColumn character-detail-panel" style={{ "display": "none" }}>
-                        <form id="form_create" action="javascript:void(null);" method="post" encType="multipart/form-data">
+                        <form id="form_create" method="post" encType="multipart/form-data" onSubmit={(event) => event.preventDefault()}>
                             <div id="avatar-and-name-block" className="character-detail-identity">
                                 <div id="name_div" className="character-detail-name">
                                     <input id="character_name_pole" name="ch_name" className="text_pole" data-i18n="[placeholder]Name this character" placeholder="Name this character" defaultValue="" autoComplete="off" />
@@ -220,7 +220,7 @@ export function RightNavPanel() {
                         </form>
                     </div>
                     <div id="rm_character_import" className="right_menu" style={{ "display": "none" }}>
-                        <form id="form_import" action="javascript:void(null);" method="post" encType="multipart/form-data">
+                        <form id="form_import" method="post" encType="multipart/form-data" onSubmit={(event) => event.preventDefault()}>
                             <input multiple type="file" id="character_import_file" accept=".json, image/png, .yaml, .yml, .charx, .byaf" name="avatar" />
                             <input id="character_import_file_type" name="file_type" className="text_pole" defaultValue="" autoComplete="off" />
                         </form>

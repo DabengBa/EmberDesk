@@ -29,7 +29,7 @@ function getRequestHandle(request) {
     return request.user?.profile?.handle ?? request.user?.handle ?? 'default-user';
 }
 
-async function getCanonicalWorldInfoReadState(request) {
+export async function getCanonicalWorldInfoReadState(request) {
     const worldInfoSlice = getCanonicalStorageSlice('world_info');
     const featureFlags = worldInfoSlice.getFeatureFlags();
     if (!featureFlags.enabled) {

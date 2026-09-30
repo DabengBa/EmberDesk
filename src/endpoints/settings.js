@@ -14,9 +14,10 @@ import { getFileNameValidationFunction } from '../middleware/validateFileName.js
 import {
     readAndParseFromDirectoryAsync,
     readPresetsFromDirectoryAsync,
-    readWorldNamesAsync,
     getCachedPayload,
 } from './settings-cache.js';
+import { getCanonicalWorldInfoReadState } from './worldinfo.js';
+import { listCanonicalWorldInfoBooks } from './world-info-store.js';
 import { canonicalSqliteManager } from '../canonical-sqlite.js';
 import { runCanonicalMigrations } from '../canonical-sqlite-migrations.js';
 import { getPersistedCanonicalAuditStatus, invalidateCanonicalAuditStatus } from '../canonical-sqlite-shadow-import.js';
@@ -231,6 +232,26 @@ function getLatestBackup(handle) {
 
 function getRequestHandle(request) {
     return request.user?.profile?.handle ?? request.user?.handle ?? 'default-user';
+}
+
+/**
+ * Lists world book names from canonical storage. World books are no longer
+ * file-backed at runtime, so the worlds/ directory scan cannot see books that
+ * were created without a file projection. Fail-closed to an empty list when
+ * the canonical slice is unavailable, matching the worldinfo endpoints.
+ * @param {import('express').Request} request Express request
+ * @returns {Promise<string[]>} World book names
+ */
+async function listCanonicalWorldNamesOrEmpty(request) {
+    try {
+        const readState = await getCanonicalWorldInfoReadState(request);
+        if (!readState.ok) {
+            return [];
+        }
+        return listCanonicalWorldInfoBooks(readState.db).map(book => book.name);
+    } catch {
+        return [];
+    }
 }
 
 function canReadCanonicalFeatureFlags() {
@@ -620,7 +641,7 @@ router.post('/get', async (request, response) => {
         getCachedPayload(dirs.openAI_Settings, () => readPresetsFromDirectoryAsync(dirs.openAI_Settings, presetOpts(dirs.openAI_Settings))),
         getCachedPayload(dirs.koboldAI_Settings, () => readPresetsFromDirectoryAsync(dirs.koboldAI_Settings, presetOpts(dirs.koboldAI_Settings))),
         getCachedPayload(dirs.textGen_Settings, () => readPresetsFromDirectoryAsync(dirs.textGen_Settings, presetOpts(dirs.textGen_Settings))),
-        getCachedPayload(dirs.worlds, () => readWorldNamesAsync(dirs.worlds)),
+        listCanonicalWorldNamesOrEmpty(request),
         getCachedPayload(dirs.quickreplies, () => readAndParseFromDirectoryAsync(dirs.quickreplies)),
         getCachedPayload(dirs.sysprompt, () => readAndParseFromDirectoryAsync(dirs.sysprompt)),
         getCachedPayload(dirs.reasoning, () => readAndParseFromDirectoryAsync(dirs.reasoning)),
