@@ -213,6 +213,47 @@ export const testSetup = {
     },
 
     /**
+     * Seeds a character chat through the canonical save route. Direct JSONL
+     * writes are only import surfaces once chats serve canonical reads, so
+     * mid-process fixtures must go through the real write path to become
+     * authoritative for the current session.
+     * @param {Object} params
+     * @param {import('@playwright/test').Page} params.page
+     * @param {string} params.characterName Character display name (ch_name)
+     * @param {string} params.avatarUrl Character avatar filename (e.g. 'dev-character-001.png')
+     * @param {string} params.fileName Chat file name without .jsonl
+     * @param {object[]} params.chat Chat payload — [header, ...messages]
+     */
+    saveCharacterChat: async ({ page, characterName, avatarUrl, fileName, chat }) => {
+        const result = await page.evaluate(async ({ body }) => {
+            const csrfPayload = await fetch('/csrf-token')
+                .then(response => response.json())
+                .catch(() => null);
+            const csrfToken = csrfPayload?.token ?? csrfPayload?.data?.token ?? null;
+            const response = await fetch('/api/chats/save', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(csrfToken ? { 'x-csrf-token': csrfToken } : {}),
+                },
+                body: JSON.stringify(body),
+            });
+            return { ok: response.ok, status: response.status, text: await response.text() };
+        }, {
+            body: {
+                ch_name: characterName,
+                file_name: fileName,
+                avatar_url: avatarUrl,
+                chat,
+                force: true,
+            },
+        });
+        if (!result.ok) {
+            throw new Error(`Seeding chat "${fileName}" failed: HTTP ${result.status} ${result.text}`);
+        }
+    },
+
+    /**
      * Ensures a usable local session exists and waits for the application to finish loading.
      * This removes the dependency on the local default-user/test123 account while preserving the existing test contract.
      * @param {Object} params

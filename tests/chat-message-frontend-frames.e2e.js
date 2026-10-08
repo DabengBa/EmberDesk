@@ -1,21 +1,10 @@
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-
 import { test, expect } from '@playwright/test';
 
 import { testSetup } from './frontend/frontent-test-utils.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const repoRoot = path.resolve(__dirname, '..');
-const dataRoot = path.resolve(repoRoot, process.env.PLAYWRIGHT_DATA_ROOT ?? '.tmp/playwright-e2e-data');
-const userHandle = process.env.PLAYWRIGHT_USER ?? 'playwright-e2e';
-const userRoot = path.join(dataRoot, userHandle);
 const characterName = 'Dev Character 001';
 const chatFolder = 'dev-character-001';
 const frontendChatName = 'Dev Character 001 Frontend Frames Proof';
-const frontendChatPath = path.join(userRoot, 'chats', chatFolder, `${frontendChatName}.jsonl`);
 
 const FRAME_DOCUMENT_ONE = [
     '<!DOCTYPE html>',
@@ -36,12 +25,12 @@ const FRAME_DOCUMENT_TWO = [
     '</html>',
 ].join('\n');
 
-function createFrontendFramesFixture() {
-    const header = JSON.stringify({
+function buildFrontendFramesChat() {
+    const header = {
         chat_metadata: { integrity: 'frontend-frames-proof' },
         user_name: 'unused',
         character_name: 'unused',
-    });
+    };
     const messages = [
         { name: 'User', is_user: true, is_system: false, mes: 'Frontend frames proof seed.' },
         {
@@ -63,12 +52,20 @@ function createFrontendFramesFixture() {
             mes: ['```html', FRAME_DOCUMENT_TWO, '```'].join('\n'),
         },
     ];
-    const lines = [header, ...messages.map((message, index) => JSON.stringify({
+    return [header, ...messages.map((message, index) => ({
         send_date: new Date(Date.UTC(2026, 5, 7, 9, index)).toISOString(),
         ...message,
     }))];
-    fs.mkdirSync(path.dirname(frontendChatPath), { recursive: true });
-    fs.writeFileSync(frontendChatPath, `${lines.join('\n')}\n`, 'utf8');
+}
+
+async function seedFrontendChat(page) {
+    await testSetup.saveCharacterChat({
+        page,
+        characterName,
+        avatarUrl: `${chatFolder}.png`,
+        fileName: frontendChatName,
+        chat: buildFrontendFramesChat(),
+    });
 }
 
 async function openCharacterLibrary(page) {
@@ -128,13 +125,18 @@ async function setFrontendFramesSettings(page, patch) {
             ...context.powerUserSettings.frontend_frames,
             ...settingsPatch,
         };
-        context.saveSettingsDebounced();
+        // In-memory patch + direct emit: the tests exercise the frame
+        // mount/unmount controller, not settings persistence. A real save
+        // would leak `enabled:false` into the shared user settings document
+        // and flake parallel tests opening chats in the same window.
+        await context.eventSource.emit('settings_updated');
     }, patch);
 }
 
 test.describe('chat message frontend frames', () => {
-    test.beforeEach(async () => {
-        createFrontendFramesFixture();
+    test.beforeEach(async ({ page }) => {
+        await testSetup.awaitST({ page });
+        await seedFrontendChat(page);
     });
 
     test('renders complete HTML documents as live same-origin frames', async ({ page }) => {

@@ -42,6 +42,7 @@ import {
     readCanonicalChatPayload,
     serializeCanonicalChatPayload,
 } from './canonical-chat-read-service.js';
+import { reconcileCanonicalChatSources } from '../canonical-chat-shadow-import.js';
 import {
     readCanonicalRecentChatPayload,
     searchCanonicalChatPayload,
@@ -198,12 +199,23 @@ function sendCanonicalChatReadBlocked(response, readState) {
     });
 }
 
+function reconcileCanonicalChatLocator(db, directories, locator) {
+    reconcileCanonicalChatSources({
+        db,
+        directories,
+        ownerType: locator.ownerType,
+        ownerId: locator.ownerId,
+        filePaths: [path.join(directories.root, locator.sourcePath)],
+    });
+}
+
 async function readCanonicalChatRoutePayload(request, locator) {
     const readState = await getCanonicalChatReadState(request);
     if (!readState.ok) {
         return { active: false, payload: null, reason: readState.reason };
     }
 
+    reconcileCanonicalChatLocator(readState.db, request.user.directories, locator);
     return {
         active: true,
         payload: readCanonicalChatPayload(readState.db, locator),
@@ -217,6 +229,7 @@ async function serializeCanonicalChatRoutePayload(request, locator) {
         return { active: false, jsonl: null, reason: readState.reason };
     }
 
+    reconcileCanonicalChatLocator(readState.db, request.user.directories, locator);
     return {
         active: true,
         jsonl: serializeCanonicalChatPayload(readState.db, locator),
@@ -1059,6 +1072,12 @@ router.post('/search', validateAvatarUrlMiddleware, async function (request, res
         if (!readState.ok) {
             return sendCanonicalChatReadBlocked(response, readState);
         }
+        reconcileCanonicalChatSources({
+            db: readState.db,
+            directories: request.user.directories,
+            ownerType: 'character',
+            ownerId: String(avatar_url ?? '').replace('.png', ''),
+        });
         const payload = await searchCanonicalChatPayload({
             db: readState.db,
             query,

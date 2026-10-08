@@ -36,12 +36,15 @@ test.describe('character library bulk mode', () => {
 
         const bulkToggle = page.getByRole('button', { name: 'Bulk edit characters', exact: true });
         await bulkToggle.click();
-        await expect(characterRow).toHaveAttribute('role', 'checkbox');
+        const bulkCheckbox = characterRow.locator('.bulk_select_checkbox');
+        await expect(bulkCheckbox).toHaveCount(1, { timeout: 10_000 });
         await characterRow.click();
         await expect(characterRow).toHaveAttribute('aria-checked', 'true');
+        await expect(bulkCheckbox).toBeChecked();
 
         await bulkToggle.click();
-        await expect(characterRow).toHaveAttribute('role', 'button');
+        await expect(characterRow.locator('.bulk_select_checkbox')).toHaveCount(0);
+        await expect(characterRow).toHaveAttribute('aria-checked', 'false');
         await expect(characterRow).toBeVisible({ timeout: 15_000 });
     });
 

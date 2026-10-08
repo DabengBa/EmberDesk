@@ -13,6 +13,7 @@ import {
     getCanonicalChatMessagePayloads,
     getCanonicalChatSession,
     listCanonicalChatSessions,
+    listOpenCanonicalChatProjectionRepairs,
     upsertCanonicalChatSession,
 } from './endpoints/canonical-chat-store.js';
 
@@ -296,6 +297,99 @@ export async function runCanonicalChatShadowImport({
         });
     }
     return summarizeImport({ handle, entries, migrationStatus });
+}
+
+/**
+ * Imports on-disk chat JSONL projections that have no canonical session yet,
+ * scoped to one owner chat directory or to explicit file paths. The lazy
+ * per-slice shadow import runs at most once per process, so chat files that
+ * appear afterwards (drops, restores, test seeding) would stay invisible to
+ * canonical reads until the next init pass; this closes that gap for the
+ * scope a request actually needs.
+ *
+ * Files that already have a canonical session are left untouched — canonical
+ * stays authoritative for committed sessions and out-of-band file edits are
+ * handled by the init-time audit/import cycle, not per request. Paths with
+ * open projection repairs are skipped so a stale file can never regress a
+ * committed canonical revision.
+ *
+ * @param {object} options
+ * @param {import('node:sqlite').DatabaseSync} options.db Canonical database
+ * @param {object} options.directories User directories
+ * @param {'character'|'group'} options.ownerType Chat owner type
+ * @param {string} options.ownerId Chat owner id (character internal name, or group chat file base name)
+ * @param {string[]} [options.filePaths] Explicit file paths to reconcile; defaults to the owner's chat directory
+ * @param {number} [options.nowMs]
+ * @returns {{imported: number, errors: {sourcePath: string, message: string}[]}}
+ */
+export function reconcileCanonicalChatSources({
+    db,
+    directories,
+    ownerType,
+    ownerId,
+    filePaths = null,
+    nowMs = Date.now(),
+} = {}) {
+    const result = { imported: 0, errors: [] };
+    if (!db || !directories) {
+        return result;
+    }
+
+    const items = Array.isArray(filePaths)
+        ? filePaths.map(filePath => ({
+            ownerType,
+            ownerId,
+            filePath,
+            sourcePath: toSourcePath(directories, filePath),
+        }))
+        : ownerType === 'character'
+            ? listJsonlFiles(path.join(directories.chats, String(ownerId))).map(filePath => ({
+                ownerType,
+                ownerId,
+                filePath,
+                sourcePath: toSourcePath(directories, filePath),
+            }))
+            : ownerType === 'group'
+                ? listJsonlFiles(directories.groupChats)
+                    .filter(filePath => path.parse(filePath).name === String(ownerId))
+                    .map(filePath => ({
+                        ownerType,
+                        ownerId,
+                        filePath,
+                        sourcePath: toSourcePath(directories, filePath),
+                    }))
+                : [];
+
+    const openRepairPaths = new Set(listOpenCanonicalChatProjectionRepairs(db).map(repair => repair.sourcePath));
+    for (const item of items) {
+        if (openRepairPaths.has(item.sourcePath)) {
+            continue;
+        }
+        try {
+            if (getCanonicalChatSession(db, item)) {
+                continue;
+            }
+            const projection = parseJsonlProjection(item);
+            const persisted = upsertCanonicalChatSession(db, buildChatRecord(projection, db, nowMs));
+            if (persisted.status === 'unchanged') {
+                continue;
+            }
+            recordImportLedgerEntry(db, {
+                sliceKey: 'chats',
+                sourcePath: projection.sourcePath,
+                contentHash: crypto.createHash('sha256').update(projection.sourceJsonl).digest('hex'),
+                origin: 'import',
+                nowMs,
+            });
+            result.imported++;
+        } catch (error) {
+            result.errors.push({
+                sourcePath: item.sourcePath,
+                message: String(error?.message ?? error ?? ''),
+            });
+        }
+    }
+    return result;
 }
 
 function buildAuditSummary({ handle, migrationStatus, entries, ignoreSuppressed = false }) {

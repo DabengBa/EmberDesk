@@ -21,8 +21,6 @@ const longChatName = 'Dev Character 001 Long Walkthrough Proof';
 const reasoningChatName = 'Dev Character 001 Reasoning Walkthrough';
 const reactMainChatMessageListEnabled = true;
 const seededChatPath = path.join(userRoot, 'chats', chatFolder, `${seededChatName}.jsonl`);
-const longChatPath = path.join(userRoot, 'chats', chatFolder, `${longChatName}.jsonl`);
-const reasoningChatPath = path.join(userRoot, 'chats', chatFolder, `${reasoningChatName}.jsonl`);
 const longChatLimit = 25;
 const mobileViewports = [
     { name: 'narrow phone', width: 390, height: 844 },
@@ -40,26 +38,26 @@ function getChatMessages(filePath) {
     return readChatJsonl(filePath).slice(1);
 }
 
-function createLongChatFixture(sourceFilePath, targetFilePath, messageCount = 130) {
+function buildLongChatFixture(sourceFilePath, messageCount = 130) {
     const [header] = readChatJsonl(sourceFilePath);
     const startedAt = Date.UTC(2026, 5, 6, 8, 0, 0);
-    const lines = [JSON.stringify(header)];
+    const messages = [];
 
     for (let index = 0; index < messageCount; index++) {
         const isUser = index % 2 === 0;
-        lines.push(JSON.stringify({
+        messages.push({
             name: isUser ? 'User' : characterName,
             is_user: isUser,
             is_system: false,
             mes: `Long walkthrough message ${String(index + 1).padStart(3, '0')} from ${isUser ? 'user' : characterName}.`,
             send_date: new Date(startedAt + index * 30000).toISOString(),
-        }));
+        });
     }
 
-    fs.writeFileSync(targetFilePath, `${lines.join('\n')}\n`, 'utf8');
+    return [header, ...messages];
 }
 
-function createReasoningChatFixture(sourceFilePath, targetFilePath) {
+function buildReasoningChatFixture(sourceFilePath) {
     const [header] = readChatJsonl(sourceFilePath);
     const startedAt = Date.UTC(2026, 5, 7, 9, 0, 0);
     const messages = [
@@ -107,8 +105,7 @@ function createReasoningChatFixture(sourceFilePath, targetFilePath) {
         },
     ];
 
-    const lines = [JSON.stringify(header), ...messages.map(message => JSON.stringify(message))];
-    fs.writeFileSync(targetFilePath, `${lines.join('\n')}\n`, 'utf8');
+    return [header, ...messages];
 }
 
 function createConsoleErrorCollector(page) {
@@ -317,16 +314,29 @@ async function expectMainChatHostPresent(page, expectedMessageCount) {
 test.describe('main chat message list walkthrough', () => {
     test.describe.configure({ mode: 'serial' });
 
-    test.beforeEach(async () => {
+    test.beforeEach(async ({ page }) => {
         expect(fs.existsSync(seededChatPath)).toBe(true);
-        createLongChatFixture(seededChatPath, longChatPath);
-        createReasoningChatFixture(seededChatPath, reasoningChatPath);
+        await testSetup.awaitST({ page });
+        await testSetup.saveCharacterChat({
+            page,
+            characterName,
+            avatarUrl: `${chatFolder}.png`,
+            fileName: longChatName,
+            chat: buildLongChatFixture(seededChatPath),
+        });
+        await testSetup.saveCharacterChat({
+            page,
+            characterName,
+            avatarUrl: `${chatFolder}.png`,
+            fileName: reasoningChatName,
+            chat: buildReasoningChatFixture(seededChatPath),
+        });
     });
 
     test('sprint 1 walkthrough reaches stored messages, message actions, and long-chat load more through visible UI', async ({ page }) => {
         const consoleErrors = createConsoleErrorCollector(page);
         const seededMessages = getChatMessages(seededChatPath);
-        const longMessages = getChatMessages(longChatPath);
+        const longMessages = buildLongChatFixture(seededChatPath).slice(1);
         const assistantMessageIndex = seededMessages.findIndex(message => !message.is_user && !message.is_system);
 
         expect(assistantMessageIndex).toBeGreaterThanOrEqual(0);
@@ -464,7 +474,7 @@ test.describe('main chat message list walkthrough', () => {
         test.skip(!reactMainChatMessageListEnabled, 'scroll restore is only required behind the React main-chat flag');
 
         const consoleErrors = createConsoleErrorCollector(page);
-        const longMessages = getChatMessages(longChatPath);
+        const longMessages = buildLongChatFixture(seededChatPath).slice(1);
         const anchorMessageId = longMessages.length - longChatLimit - Math.ceil(longChatLimit / 2);
 
         await testSetup.awaitST({ page });

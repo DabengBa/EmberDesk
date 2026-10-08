@@ -65,6 +65,7 @@ import {
     renameCharacterCard,
 } from './character-write-service.js';
 import { listCanonicalCharacterChatPayload } from './canonical-chat-query-service.js';
+import { reconcileCanonicalChatSources } from '../canonical-chat-shadow-import.js';
 import {
     deleteCanonicalChatSessionsForOwner,
     retargetCanonicalChatSessionsOwner,
@@ -515,6 +516,12 @@ async function listCanonicalCharacterChatsSafe(request, ownerId) {
     if (!state) {
         return null;
     }
+    reconcileCanonicalChatSources({
+        db: state.db,
+        directories: request.user.directories,
+        ownerType: 'character',
+        ownerId,
+    });
     return listCanonicalCharacterChatPayload({
         db: state.db,
         ownerId,

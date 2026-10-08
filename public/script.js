@@ -7980,6 +7980,12 @@ export async function saveSettings(loopCounter = 0) {
                 } catch {
                     // ignore parse failures
                 }
+                if (loopCounter < MAX_RETRIES) {
+                    // A concurrent in-flight save landed first. Retry once with the
+                    // adopted revision — the payload reserializes the live in-memory
+                    // document, so the newest snapshot wins without dropping edits.
+                    return saveSettings(loopCounter + 1);
+                }
                 toastr.warning(t`Settings were updated elsewhere. Reload to pick up the latest settings before saving again.`, t`Settings conflict`);
                 throw new Error('Failed to save settings: revision conflict');
             }

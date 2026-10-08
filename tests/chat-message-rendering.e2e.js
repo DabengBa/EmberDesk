@@ -20,8 +20,6 @@ const longChatName = 'Dev Character 001 Long Rendering Proof';
 const mobileLongChatName = 'Dev Character 001 Mobile Long Rendering Proof';
 const reactMainChatMessageListEnabled = true;
 const seededChatPath = path.join(userRoot, 'chats', chatFolder, `${seededChatName}.jsonl`);
-const longChatPath = path.join(userRoot, 'chats', chatFolder, `${longChatName}.jsonl`);
-const mobileLongChatPath = path.join(userRoot, 'chats', chatFolder, `${mobileLongChatName}.jsonl`);
 const longChatLimit = 25;
 const mobileViewports = [
     { name: 'narrow phone', width: 390, height: 844 },
@@ -43,23 +41,33 @@ function getChatMessages(filePath) {
     return readChatJsonl(filePath).slice(1);
 }
 
-function createLongChatFixture(sourceFilePath, targetFilePath, messageCount = 130) {
+function buildLongChatFixture(sourceFilePath, messageCount = 130) {
     const [header] = readChatJsonl(sourceFilePath);
     const startedAt = Date.UTC(2026, 5, 6, 8, 0, 0);
-    const lines = [JSON.stringify(header)];
+    const messages = [];
 
     for (let index = 0; index < messageCount; index++) {
         const isUser = index % 2 === 0;
-        lines.push(JSON.stringify({
+        messages.push({
             name: isUser ? 'User' : characterName,
             is_user: isUser,
             is_system: false,
             mes: `Long rendering proof message ${String(index + 1).padStart(3, '0')} from ${isUser ? 'user' : characterName}.`,
             send_date: new Date(startedAt + index * 30000).toISOString(),
-        }));
+        });
     }
 
-    fs.writeFileSync(targetFilePath, `${lines.join('\n')}\n`, 'utf8');
+    return [header, ...messages];
+}
+
+async function seedLongChatFixture(page, fileName, chat) {
+    await testSetup.saveCharacterChat({
+        page,
+        characterName,
+        avatarUrl: `${chatFolder}.png`,
+        fileName,
+        chat,
+    });
 }
 
 function createConsoleErrorCollector(page) {
@@ -330,7 +338,7 @@ test.describe('chat message rendering', () => {
 
     test('renders seeded stored chat messages through the real app DOM', async ({ page }, testInfo) => {
         expect(fs.existsSync(seededChatPath)).toBe(true);
-        createLongChatFixture(seededChatPath, longChatPath);
+        const longChat = buildLongChatFixture(seededChatPath);
 
         const seededMessages = getChatMessages(seededChatPath);
         const userMessageIndex = seededMessages.findIndex(message => message.is_user);
@@ -342,6 +350,7 @@ test.describe('chat message rendering', () => {
         const consoleErrors = createConsoleErrorCollector(page);
 
         await testSetup.awaitST({ page });
+        await seedLongChatFixture(page, longChatName, longChat);
         await selectCharacterByName(page, characterName);
         await page.evaluate((truncationLimit) => {
             const context = window.SillyTavern.getContext();
@@ -399,8 +408,12 @@ test.describe('chat message rendering', () => {
         const messageActionsButton = actionRow.getByRole('button', { name: 'Message Actions' });
         await expect(messageActionsButton).toBeVisible();
         await expect(actionRow.getByRole('button', { name: 'Edit' })).toBeVisible();
-        await messageActionsButton.focus();
-        await expect(messageActionsButton).toBeFocused();
+        // Focus+assert must be atomic: React row re-renders can replace this
+        // legacy-injected button between the two calls, so re-focus each poll.
+        await expect.poll(async () => messageActionsButton.evaluate(element => {
+            element.focus();
+            return document.activeElement === element;
+        })).toBe(true);
         const actionButtonBox = await messageActionsButton.boundingBox();
         expect(actionButtonBox?.width ?? 0).toBeGreaterThanOrEqual(16);
         expect(actionButtonBox?.height ?? 0).toBeGreaterThanOrEqual(16);
@@ -415,7 +428,7 @@ test.describe('chat message rendering', () => {
         await messageActionsButton.click();
         await expect(actionRow.getByRole('button', { name: 'Copy' })).toBeVisible();
 
-        const longMessages = getChatMessages(longChatPath);
+        const longMessages = longChat.slice(1);
         await page.evaluate(async ({ chatName, truncationLimit }) => {
             const context = window.SillyTavern.getContext();
             context.powerUserSettings.chat_truncation = truncationLimit;
@@ -617,14 +630,15 @@ test.describe('chat message rendering', () => {
         test.skip(!reactMainChatMessageListEnabled, 'scroll restore is only required behind the React main-chat flag');
 
         expect(fs.existsSync(seededChatPath)).toBe(true);
-        createLongChatFixture(seededChatPath, longChatPath);
+        const longChat = buildLongChatFixture(seededChatPath);
 
         const seededMessages = getChatMessages(seededChatPath);
-        const longMessages = getChatMessages(longChatPath);
+        const longMessages = longChat.slice(1);
         const consoleErrors = createConsoleErrorCollector(page);
         const seededVisibleMessageCount = Math.min(seededMessages.length, longChatLimit);
 
         await testSetup.awaitST({ page });
+        await seedLongChatFixture(page, longChatName, longChat);
         await selectCharacterByName(page, characterName);
         await openCharacterChatWithTruncation(page, seededChatName, longChatLimit);
         await expect(page.locator('#chat .mes[mesid]')).toHaveCount(seededVisibleMessageCount);
@@ -657,11 +671,12 @@ test.describe('chat message rendering', () => {
 
     test('keeps long-chat load-more reachable on mobile viewports', async ({ page }) => {
         expect(fs.existsSync(seededChatPath)).toBe(true);
-        createLongChatFixture(seededChatPath, mobileLongChatPath);
-        const longMessages = getChatMessages(mobileLongChatPath);
+        const longChat = buildLongChatFixture(seededChatPath);
+        const longMessages = longChat.slice(1);
 
         const consoleErrors = createConsoleErrorCollector(page);
         await testSetup.awaitST({ page });
+        await seedLongChatFixture(page, mobileLongChatName, longChat);
         await selectCharacterByName(page, characterName);
 
         for (const viewport of mobileViewports) {

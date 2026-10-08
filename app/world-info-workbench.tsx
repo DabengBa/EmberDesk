@@ -550,6 +550,7 @@ function EntryEditor({
     emptyMessage?: string;
 }) {
     const [draft, setDraft] = useState(entry);
+    const [draftEntry, setDraftEntry] = useState(entry);
     const [contentModalOpen, setContentModalOpen] = useState(false);
     const titleInputRef = useRef<HTMLInputElement>(null);
     const contentInputRef = useRef<HTMLTextAreaElement>(null);
@@ -564,9 +565,13 @@ function EntryEditor({
         draft?.selectiveLogic ? (SELECTIVE_LOGIC_OPTIONS.find(o => o.value === draft.selectiveLogic)?.label ?? '') : '',
     ].filter(Boolean).join(' · ');
 
-    useEffect(() => {
+    // Sync draft in render (not an effect) so the editor fields mount in the
+    // same commit that delivers the entry — a downstream focus effect must not
+    // find an unmounted input on its animation frame.
+    if (draftEntry !== entry) {
+        setDraftEntry(entry);
         setDraft(entry);
-    }, [entry]);
+    }
 
     useEffect(() => {
         if (!entryUid || !focusTitleOnOpen) {
