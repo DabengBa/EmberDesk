@@ -358,6 +358,35 @@ export function registerCoreMacros() {
         },
     });
 
+    // Random subset macro: {{sample:3::a::b::c::d}} — picks N distinct items in random order.
+    MacroRegistry.registerMacro('sample', {
+        category: MacroCategory.RANDOM,
+        list: true,
+        description: 'Picks N random distinct items from a list and joins them with commas, in random order. Will be re-rolled every time macros are resolved.',
+        returns: 'Comma-separated random subset of the list.',
+        exampleUsage: ['{{sample:3::A::B::C::D::E::F}}'],
+        handler: ({ list }) => {
+            // Handle old legacy cases, where we have to split the list manually
+            if (list.length === 1) {
+                list = readSingleArgsRandomList(list[0]);
+            }
+
+            const count = Number.parseInt(String(list[0] ?? '').trim(), 10);
+            const items = list.slice(1);
+            if (!Number.isInteger(count) || count <= 0 || items.length === 0) {
+                return '';
+            }
+
+            const rng = seedrandom('added entropy.', { entropy: true });
+            const shuffled = [...items];
+            for (let i = shuffled.length - 1; i > 0; i--) {
+                const j = Math.floor(rng() * (i + 1));
+                [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+            }
+            return shuffled.slice(0, count).join(',');
+        },
+    });
+
     // Deterministic choice macro: {{pick::a::b}} or {{pick a,b}}
     MacroRegistry.registerMacro('pick', {
         category: MacroCategory.RANDOM,

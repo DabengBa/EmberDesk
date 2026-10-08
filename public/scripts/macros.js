@@ -541,6 +541,37 @@ function getPickReplaceMacro(rawContent) {
 }
 
 /**
+ * Returns a macro that picks N random distinct items from a list, in random order.
+ * @returns {Macro} The sample replace macro
+ */
+function getSampleReplaceMacro() {
+    const samplePattern = /{{sample\s?::?([^}]+)}}/gi;
+    const sampleReplace = (match, listString) => {
+        // Split on either double colons or comma. If comma is the separator, we are also trimming all items.
+        const list = listString.includes('::')
+            ? listString.split('::')
+            // Replaced escaped commas with a placeholder to avoid splitting on them
+            : listString.replace(/\\,/g, '##�COMMA�##').split(',').map(item => item.trim().replace(/##�COMMA�##/g, ','));
+
+        const count = Number.parseInt(String(list[0] ?? '').trim(), 10);
+        const items = list.slice(1);
+        if (!Number.isInteger(count) || count <= 0 || items.length === 0) {
+            return '';
+        }
+
+        const rng = seedrandom('added entropy.', { entropy: true });
+        const shuffled = [...items];
+        for (let i = shuffled.length - 1; i > 0; i--) {
+            const j = Math.floor(rng() * (i + 1));
+            [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+        }
+        return shuffled.slice(0, count).join(',');
+    };
+
+    return { regex: samplePattern, replace: sampleReplace };
+}
+
+/**
  * @returns {Macro} The dire roll macro
  */
 function getDiceRollMacro() {
@@ -665,6 +696,7 @@ export function evaluateMacros(content, env, postProcessFn) {
         getTimeDiffMacro(),
         getBannedWordsMacro(),
         getRandomReplaceMacro(),
+        getSampleReplaceMacro(),
         getPickReplaceMacro(rawContent),
     ];
 

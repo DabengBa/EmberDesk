@@ -287,9 +287,10 @@ test.describe('workspace shell panel navigation', () => {
         await expect(page.locator('[data-settings-overlay="true"] .settings-tab[data-active="true"]')).toHaveText(/Providers/i);
 
         const aiConfigLink = page.locator('[data-settings-overlay="true"] button').filter({ hasText: 'Open AI Response Configuration' });
+        // The API Connections drawer is retired; no such workspace link may exist.
         const apiConnectionsLink = page.locator('[data-settings-overlay="true"] button').filter({ hasText: 'Open API Connections' });
         await expect(aiConfigLink).toBeVisible();
-        await expect(apiConnectionsLink).toBeVisible();
+        await expect(apiConnectionsLink).toHaveCount(0);
 
         await aiConfigLink.click();
         await expect(page.locator('[data-settings-overlay="true"]')).toHaveCount(0, { timeout: 10_000 });

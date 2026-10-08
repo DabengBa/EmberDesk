@@ -874,6 +874,47 @@ test.describe('MacroEngine', () => {
         });
     });
 
+    test.describe('Random sample macro', () => {
+        const options = ['A', 'B', 'C', 'D', 'E', 'F'];
+
+        test('should pick N distinct items joined with commas', async ({ page }) => {
+            const output = await evaluateWithEngine(page, '{{sample:3::A::B::C::D::E::F}}');
+            const items = output.split(',');
+            expect(items.length).toBe(3);
+            expect(new Set(items).size).toBe(3);
+            expect(items.every(item => options.includes(item))).toBeTruthy();
+        });
+
+        test('should support legacy comma-separated arguments', async ({ page }) => {
+            const output = await evaluateWithEngine(page, '{{sample:2,A,B,C}}');
+            const items = output.split(',');
+            expect(items.length).toBe(2);
+            expect(items.every(item => ['A', 'B', 'C'].includes(item))).toBeTruthy();
+        });
+
+        test('should return shuffled whole list when count exceeds list length', async ({ page }) => {
+            const output = await evaluateWithEngine(page, '{{sample:10::A::B::C}}');
+            const items = output.split(',');
+            expect(items.length).toBe(3);
+            expect(new Set(items).size).toBe(3);
+            expect(items.every(item => ['A', 'B', 'C'].includes(item))).toBeTruthy();
+        });
+
+        test('should return empty string for non-positive or invalid count', async ({ page }) => {
+            expect(await evaluateWithEngine(page, 'x{{sample:0::A::B}}y')).toBe('xy');
+            expect(await evaluateWithEngine(page, 'x{{sample:abc::A::B}}y')).toBe('xy');
+        });
+
+        test('should produce varied subsets across evaluations', async ({ page }) => {
+            const outputs = new Set();
+            for (let i = 0; i < 30; i++) {
+                outputs.add(await evaluateWithEngine(page, '{{sample:3::A::B::C::D::E::F}}'));
+            }
+            // C(6,3)=20 subsets with random order => many distinct outputs expected
+            expect(outputs.size).toBeGreaterThan(5);
+        });
+    });
+
     test.describe('Dynamic macros', () => {
         test.describe('String value dynamic macros', () => {
             test('should resolve dynamic macro with string value', async ({ page }) => {

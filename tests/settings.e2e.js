@@ -85,9 +85,9 @@ test.describe('React settings sole-owner page', () => {
         await expect(page.locator('.settings-workspace-link')).toBeVisible();
 
         await selectTab(page, 'Providers');
-        await expect(page.getByText('Provider API Key')).toBeVisible();
+        await expect(page.getByText('API Key', { exact: true })).toBeVisible();
         await expect(page.locator('#provider-secret-input')).toBeVisible();
-        await expect(page.locator('#fallback-provider-secret-input')).toBeVisible();
+        await expect(page.locator('#fallback-provider-secret-input')).toHaveCount(0);
 
         await selectTab(page, 'Advanced');
         await expect(page.getByRole('heading', { name: /Prompt|Templates|Power-User/i })).toBeVisible({ timeout: 15_000 });
