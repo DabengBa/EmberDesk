@@ -13,18 +13,17 @@ import {
 
 describe('frontend structure contract helpers', () => {
     test('reads repository files and locates tags by id or class', () => {
-        const apiPanel = readRepoFile('app/components/api/ApiConnectionsPanel.tsx');
+        const aiConfigPanel = readRepoFile('app/components/ai-config/AiConfigPanel.tsx');
 
-        expect(getTagById(apiPanel, 'fallback_provider_section')).toContain('data-doc-id="feature.fallback_provider"');
-        expect(getTagByClass(apiPanel, 'fallback-provider-status')).toContain('id="fallback_provider_status"');
+        expect(getTagById(aiConfigPanel, 'ai_response_configuration')).toContain('className="flex-container flexNoGap"');
+        expect(getTagByClass(aiConfigPanel, 'preset-header')).toContain('className="margin0 title_restorable preset-header"');
     });
 
     test('checks button affordance and readable marker failures', () => {
-        const apiPanel = readRepoFile('app/components/api/ApiConnectionsPanel.tsx');
-        const indexHtml = apiPanel;
+        const indexHtml = readRepoFile('public/index.html');
 
-        expectButtonAffordance(getTagByClass(indexHtml, 'manage-api-keys'), 'Manage API keys', {
-            contractName: 'API key manage button',
+        expectButtonAffordance(getTagByClass(indexHtml, 'swipe_left'), 'Previous swipe', {
+            contractName: 'previous swipe button',
         });
 
         expect(() => getTagByClass(indexHtml, 'missing_contract_class', { contractName: 'sample contract' }))

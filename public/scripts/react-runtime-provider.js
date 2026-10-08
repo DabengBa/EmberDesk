@@ -4,12 +4,14 @@ const RUNTIME_EVENT_KEYS = Object.freeze([
     'GENERATION_STARTED',
     'GENERATION_STOPPED',
     'GENERATION_ENDED',
+    'ONLINE_STATUS_CHANGED',
 ]);
 
 function freezeSnapshot(snapshot) {
     return Object.freeze({
         chat: Object.freeze({ ...snapshot.chat }),
         generation: Object.freeze({ ...snapshot.generation }),
+        provider: Object.freeze({ ...snapshot.provider }),
     });
 }
 
@@ -45,6 +47,9 @@ function createSnapshot(getContext) {
         generation: {
             phase: getGenerationPhase(context),
         },
+        provider: {
+            status: normalizeString(context.providerStatus) ?? 'no_connection',
+        },
     });
 }
 
@@ -52,7 +57,8 @@ function snapshotsMatch(left, right) {
     return left.chat.id === right.chat.id
         && left.chat.characterId === right.chat.characterId
         && left.chat.title === right.chat.title
-        && left.generation.phase === right.generation.phase;
+        && left.generation.phase === right.generation.phase
+        && left.provider.status === right.provider.status;
 }
 
 function createNamedEventSubscription(eventSource, eventTypes, listener) {
@@ -87,7 +93,7 @@ export function createReactRuntimeProvider({
         throw new TypeError('React runtime provider requires named commands');
     }
 
-    const commandNames = ['submitMessage', 'stopGeneration', 'retryMessage', 'loadEarlier', 'saveSettings', 'openWorkspaceDrawer'];
+    const commandNames = ['submitMessage', 'stopGeneration', 'retryMessage', 'loadEarlier', 'saveSettings', 'openWorkspaceDrawer', 'connectProvider', 'testProviderConnection'];
     for (const commandName of commandNames) {
         if (typeof commands[commandName] !== 'function') {
             throw new TypeError(`React runtime provider requires command ${commandName}`);
@@ -123,6 +129,8 @@ export function createReactRuntimeProvider({
             loadEarlier: anchorId => Promise.resolve(commands.loadEarlier(anchorId)),
             saveSettings: settings => Promise.resolve(commands.saveSettings(settings)),
             openWorkspaceDrawer: hostId => Promise.resolve(commands.openWorkspaceDrawer(hostId)),
+            connectProvider: () => Promise.resolve(commands.connectProvider()),
+            testProviderConnection: () => Promise.resolve(commands.testProviderConnection()),
         }),
     };
 }

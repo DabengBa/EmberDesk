@@ -315,10 +315,6 @@ export const commonEnumProviders = {
         new SlashCommandEnumValue('system', null, enumTypes.enum, enumIcons.system),
     ],
 
-    connectionProfiles: ({ includeNone = false } = {}) => () => [
-        ...includeNone ? [new SlashCommandEnumValue('<None>')] : [],
-        ...feature_settings.connectionManager.profiles.map(p => new SlashCommandEnumValue(p.name, null, enumTypes.name, enumIcons.server)),
-    ],
 };
 
 

@@ -25,6 +25,10 @@ describe('React runtime provider', () => {
                 loadEarlier: () => undefined,
                 saveSettings: () => undefined,
                 openWorkspaceDrawer: () => undefined,
+            connectProvider: () => undefined,
+            testProviderConnection: () => undefined,
+                connectProvider: () => undefined,
+                testProviderConnection: () => undefined,
             },
         });
 
@@ -40,6 +44,7 @@ describe('React runtime provider', () => {
             chatId: 'chat-1',
             characterId: 3,
             name2: 'Assistant',
+            providerStatus: 'online',
         };
         const commands = {
             submitMessage: jest.fn(),
@@ -48,6 +53,8 @@ describe('React runtime provider', () => {
             loadEarlier: jest.fn(),
             saveSettings: jest.fn(),
             openWorkspaceDrawer: jest.fn(),
+            connectProvider: jest.fn(),
+            testProviderConnection: jest.fn(),
         };
         const eventSource = {
             on: jest.fn(),
@@ -62,6 +69,7 @@ describe('React runtime provider', () => {
                 GENERATION_STARTED: 'generation_started',
                 GENERATION_STOPPED: 'generation_stopped',
                 GENERATION_ENDED: 'generation_ended',
+                ONLINE_STATUS_CHANGED: 'online_status_changed',
             },
             commands,
         });
@@ -76,6 +84,9 @@ describe('React runtime provider', () => {
             generation: {
                 phase: 'idle',
             },
+            provider: {
+                status: 'online',
+            },
         });
         expect(Object.isFrozen(snapshot)).toBe(true);
         expect(Object.isFrozen(snapshot.chat)).toBe(true);
@@ -89,6 +100,8 @@ describe('React runtime provider', () => {
         await runtime.commands.loadEarlier('2');
         await runtime.commands.saveSettings({ oai_settings: { temperature: 0.7 } });
         runtime.commands.openWorkspaceDrawer('left-nav-panel');
+        await runtime.commands.connectProvider();
+        await runtime.commands.testProviderConnection();
 
         expect(commands.submitMessage).toHaveBeenCalledWith('hello');
         expect(commands.stopGeneration).toHaveBeenCalledTimes(1);
@@ -96,6 +109,8 @@ describe('React runtime provider', () => {
         expect(commands.loadEarlier).toHaveBeenCalledWith('2');
         expect(commands.saveSettings).toHaveBeenCalledWith({ oai_settings: { temperature: 0.7 } });
         expect(commands.openWorkspaceDrawer).toHaveBeenCalledWith('left-nav-panel');
+        expect(commands.connectProvider).toHaveBeenCalledTimes(1);
+        expect(commands.testProviderConnection).toHaveBeenCalledTimes(1);
     });
 
     test('subscribes only to named lifecycle events and detaches them', () => {
@@ -113,6 +128,7 @@ describe('React runtime provider', () => {
                 GENERATION_STARTED: 'generation_started',
                 GENERATION_STOPPED: 'generation_stopped',
                 GENERATION_ENDED: 'generation_ended',
+                ONLINE_STATUS_CHANGED: 'online_status_changed',
             },
             commands: {
                 submitMessage: () => undefined,
@@ -121,25 +137,30 @@ describe('React runtime provider', () => {
                 loadEarlier: () => undefined,
                 saveSettings: () => undefined,
                 openWorkspaceDrawer: () => undefined,
+            connectProvider: () => undefined,
+            testProviderConnection: () => undefined,
+                connectProvider: () => undefined,
+                testProviderConnection: () => undefined,
             },
         });
         const listener = jest.fn();
 
         const unsubscribe = runtime.subscribe(listener);
 
-        expect(eventSource.on).toHaveBeenCalledTimes(5);
+        expect(eventSource.on).toHaveBeenCalledTimes(6);
         expect([...listeners.keys()]).toEqual([
             'chat_changed',
             'settings_updated',
             'generation_started',
             'generation_stopped',
             'generation_ended',
+            'online_status_changed',
         ]);
         listeners.get('chat_changed')();
         expect(listener).toHaveBeenCalledTimes(1);
 
         unsubscribe();
-        expect(eventSource.removeListener).toHaveBeenCalledTimes(5);
+        expect(eventSource.removeListener).toHaveBeenCalledTimes(6);
         expect(listeners.size).toBe(0);
     });
 
@@ -163,6 +184,7 @@ describe('React runtime provider', () => {
                 GENERATION_STARTED: 'generation_started',
                 GENERATION_STOPPED: 'generation_stopped',
                 GENERATION_ENDED: 'generation_ended',
+                ONLINE_STATUS_CHANGED: 'online_status_changed',
             },
             commands: {
                 submitMessage: () => undefined,
@@ -171,6 +193,10 @@ describe('React runtime provider', () => {
                 loadEarlier: () => undefined,
                 saveSettings: () => undefined,
                 openWorkspaceDrawer: () => undefined,
+            connectProvider: () => undefined,
+            testProviderConnection: () => undefined,
+                connectProvider: () => undefined,
+                testProviderConnection: () => undefined,
             },
         });
         const initialSnapshot = runtime.getSnapshot();

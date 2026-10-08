@@ -72,18 +72,17 @@ async function selectTab(page, label) {
 }
 
 test.describe('React settings sole-owner page', () => {
-    test('covers general/provider/ui/advanced domains, secret isolation, and reload persistence', async ({ page }) => {
+    test('covers provider/ui/advanced domains, secret isolation, and reload persistence', async ({ page }) => {
         await testSetup.awaitST({ page });
         await openSettings(page);
 
-        await expect(page.getByRole('button', { name: 'General', exact: true })).toBeVisible();
+        // Generation defaults moved to the AI Response Configuration drawer;
+        // the React surface owns only Providers, User Interface, and Advanced.
+        await expect(page.getByRole('button', { name: 'General', exact: true })).toHaveCount(0);
         await expect(page.getByRole('button', { name: 'Providers', exact: true })).toBeVisible();
         await expect(page.getByRole('button', { name: 'User Interface', exact: true })).toBeVisible();
         await expect(page.getByRole('button', { name: 'Advanced', exact: true })).toBeVisible();
         await expect(page.locator('.settings-workspace-link')).toBeVisible();
-
-        await selectTab(page, 'General');
-        await expect(page.getByRole('spinbutton', { name: /Context/ })).toBeVisible({ timeout: 30_000 });
 
         await selectTab(page, 'Providers');
         await expect(page.getByText('Provider API Key')).toBeVisible();

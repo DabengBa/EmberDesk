@@ -1,7 +1,6 @@
 /* ─────────────────────────────────────────────────────────────────────────────
    Streaming Display — floating toast panel for live LLM generation output.
    Shows reasoning (thinking) and content as they stream in.
-   Used by extensions that leverage ConnectionManagerRequestService streaming.
    ───────────────────────────────────────────────────────────────────────────── */
 
 .streaming-display {

@@ -1,5 +1,4 @@
 import { registerDebugFunction } from './power-user.js';
-import { updateSecretDisplay } from './secrets.js';
 import { applyI18nTranslations, parseI18nAttributeSpecs } from './i18n-data.js';
 
 const storageKey = 'language';
@@ -268,7 +267,6 @@ export async function initLocales() {
     document.documentElement.lang = localeFile;
     applyLocale();
     addLanguagesToDropdown();
-    updateSecretDisplay();
 
     $('#ui_language_select, #onboarding_ui_language_select').on('change', async function () {
         const language = String($(this).val());

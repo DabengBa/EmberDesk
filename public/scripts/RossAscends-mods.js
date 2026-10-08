@@ -21,7 +21,7 @@ import {
     openWorkspaceShellWorldInfo,
 } from '../script.js';
 
-import { eventSource } from './events.js';
+import { eventSource, event_types } from './events.js';
 import {
     power_user,
     send_on_enter_options,
@@ -33,7 +33,7 @@ import {
     secret_state,
 } from './secrets.js';
 import { debounce, getStringHash, isValidUrl } from './utils.js';
-import { chat_completion_sources, oai_settings } from './openai.js';
+import { chat_completion_sources, connectProviderConnection, oai_settings } from './openai.js';
 import { getTokenCountAsync } from './tokenizers.js';
 import { debounce_timeout, SWIPE_SOURCE } from './constants.js';
 
@@ -60,16 +60,13 @@ let counterNonce = Date.now();
 const observerConfig = { childList: true, subtree: true };
 const countTokensDebounced = debounce(RA_CountCharTokens, debounce_timeout.relaxed);
 const countTokensShortDebounced = debounce(RA_CountCharTokens, debounce_timeout.short);
-const checkStatusDebounced = debounce(RA_checkOnlineStatus, debounce_timeout.short);
 
 const observer = new MutationObserver(function (mutations) {
     mutations.forEach(function (mutation) {
         if (!(mutation.target instanceof HTMLElement)) {
             return;
         }
-        if (mutation.target.classList.contains('online_status_text')) {
-            checkStatusDebounced();
-        } else if (mutation.target.parentNode === SelectedCharacterTab) {
+        if (mutation.target.parentNode === SelectedCharacterTab) {
             countTokensShortDebounced();
         } else if (mutation.target.classList.contains('mes_text')) {
             for (const element of mutation.target.getElementsByTagName('math')) {
@@ -330,30 +327,10 @@ function RA_autoconnect(_PrevApi) {
     if (online_status === 'no_connection' && power_user.auto_connect) {
         switch (main_api) {
             case 'openai':
-                if (((secret_state[SECRET_KEYS.OPENAI] || oai_settings.custom_url) && oai_settings.chat_completion_source == chat_completion_sources.OPENAI)
-                    || (secret_state[SECRET_KEYS.AI21] && oai_settings.chat_completion_source == chat_completion_sources.AI21)
-                    || (secret_state[SECRET_KEYS.MISTRALAI] && oai_settings.chat_completion_source == chat_completion_sources.MISTRALAI)
-                    || (secret_state[SECRET_KEYS.COHERE] && oai_settings.chat_completion_source == chat_completion_sources.COHERE)
-                    || (secret_state[SECRET_KEYS.PERPLEXITY] && oai_settings.chat_completion_source == chat_completion_sources.PERPLEXITY)
-                    || (secret_state[SECRET_KEYS.GROQ] && oai_settings.chat_completion_source == chat_completion_sources.GROQ)
-                    || (secret_state[SECRET_KEYS.CHUTES] && oai_settings.chat_completion_source == chat_completion_sources.CHUTES)
-                    || (secret_state[SECRET_KEYS.SILICONFLOW] && oai_settings.chat_completion_source == chat_completion_sources.SILICONFLOW)
-                    || (secret_state[SECRET_KEYS.ELECTRONHUB] && oai_settings.chat_completion_source == chat_completion_sources.ELECTRONHUB)
-                    || (secret_state[SECRET_KEYS.NANOGPT] && oai_settings.chat_completion_source == chat_completion_sources.NANOGPT)
-                    || (secret_state[SECRET_KEYS.DEEPSEEK] && oai_settings.chat_completion_source == chat_completion_sources.DEEPSEEK)
-                    || (secret_state[SECRET_KEYS.XAI] && oai_settings.chat_completion_source == chat_completion_sources.XAI)
-                    || (secret_state[SECRET_KEYS.AIMLAPI] && oai_settings.chat_completion_source == chat_completion_sources.AIMLAPI)
-                    || (secret_state[SECRET_KEYS.MOONSHOT] && oai_settings.chat_completion_source == chat_completion_sources.MOONSHOT)
-                    || (secret_state[SECRET_KEYS.FIREWORKS] && oai_settings.chat_completion_source == chat_completion_sources.FIREWORKS)
-                    || (secret_state[SECRET_KEYS.COMETAPI] && oai_settings.chat_completion_source == chat_completion_sources.COMETAPI)
-                    || (secret_state[SECRET_KEYS.ZAI] && oai_settings.chat_completion_source == chat_completion_sources.ZAI)
-                    || (secret_state[SECRET_KEYS.POLLINATIONS] && oai_settings.chat_completion_source === chat_completion_sources.POLLINATIONS)
-                    || (secret_state[SECRET_KEYS.WORKERS_AI] && oai_settings.chat_completion_source == chat_completion_sources.WORKERS_AI)
-                    || (secret_state[SECRET_KEYS.MINIMAX] && oai_settings.chat_completion_source == chat_completion_sources.MINIMAX)
-                    || (isValidUrl(oai_settings.custom_url) && oai_settings.chat_completion_source == chat_completion_sources.OPENAI)
-                    || (secret_state[SECRET_KEYS.AZURE_OPENAI] && oai_settings.chat_completion_source == chat_completion_sources.AZURE_OPENAI)
-                ) {
-                    $('#api_button_openai').trigger('click');
+                // Single-provider contract: only the unified OpenAI-compatible key/endpoint remains.
+                if ((secret_state[SECRET_KEYS.OPENAI] || isValidUrl(oai_settings.custom_url))
+                    && oai_settings.chat_completion_source == chat_completion_sources.OPENAI) {
+                    void connectProviderConnection();
                 }
                 break;
         }
@@ -610,7 +587,8 @@ export function initRossMods() {
     $('#character_popup').on('input', function () { countTokensDebounced(); });
 
     // initial status check
-    checkStatusDebounced();
+    RA_checkOnlineStatus();
+    eventSource.on(event_types.ONLINE_STATUS_CHANGED, () => RA_checkOnlineStatus());
 
     if (power_user.auto_load_chat) {
         RA_autoloadchat();
@@ -619,8 +597,6 @@ export function initRossMods() {
     if (power_user.auto_connect) {
         RA_autoconnect();
     }
-
-    $('#api_button').on('click', () => checkStatusDebounced());
 
     //toggle pin class when lock toggle clicked
     $(RPanelPin).on('click', function () {

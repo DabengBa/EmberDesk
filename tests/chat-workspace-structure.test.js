@@ -317,68 +317,42 @@ describe('chat workspace structure', () => {
         });
     });
 
-    test('keeps the single-URL fallback model control embedded in the API configuration drawer', () => {
-        const indexHtml = readRepoFile('app/components/api/ApiConnectionsPanel.tsx');
+    test('keeps the single-URL fallback model field on the React Providers tab', () => {
+        const settingsSurface = readRepoFile('app/components/settings/SettingsSurface.tsx');
+        const helpersSource = readRepoFile('app/lib/settings-helpers.js');
         const scriptSource = readRepoFile('public/scripts/openai.js');
-        const styleSource = readRepoFile('public/style.css');
 
-        const fallbackProviderContract = [
-            'id="fallback_provider_section"',
-            'id="fallback_provider_status"',
-            'className="fallback-provider-details"',
-            'id="fallback_provider_model"',
-        ];
-        expectContainsMarkers(indexHtml, fallbackProviderContract, { contractName: 'fallback provider selectors' });
+        // The fallback model reuses the primary URL and key; it is a plain
+        // settings field on the React-owned Providers tab.
+        expectContainsMarkers(settingsSurface, [
+            'name="providers.fallbackProviderModel"',
+            'label="Fallback Model"',
+            'placeholder="gpt-4.1-mini"',
+        ], { contractName: 'fallback provider model field' });
+        expect(helpersSource).toContain("formPath: 'providers.fallbackProviderModel'");
+        expect(helpersSource).toContain("settingsPath: 'oai_settings.fallback_provider_model'");
 
         // Retired four-field cleanup: separate fallback URL/key, enable toggle, and
-        // the cost warning are gone; fallback reuses the primary URL and key.
-        const retiredSelectors = [
-            'id="fallback_provider_enabled"',
-            'id="fallback_provider_base_url"',
-            'id="fallback_provider_api_key"',
-            'id="fallback_provider_api_key_show"',
-            'id="fallback_provider_save_key"',
-            'id="fallback_provider_clear_key"',
-            'id="fallback_provider_cost_warning"',
-        ];
-        for (const marker of retiredSelectors) {
-            expect(indexHtml).not.toContain(marker);
+        // the cost warning are gone from the React surface; fallback reuses the
+        // primary URL and key. (settings-helpers.js still names the retired keys
+        // inside the load/save-time migration blocks that fold or strip them.)
+        for (const marker of [
+            'fallback_provider_enabled',
+            'fallback_provider_base_url',
+            'fallback_provider_api_key',
+            'fallback_provider_cost_warning',
+        ]) {
+            expect(settingsSurface).not.toContain(marker);
+        }
+        // No binding may resurrect a retired provider field.
+        for (const binding of helpersSource.matchAll(/settingsPath: '([^']+)'/g)) {
+            expect(binding[1]).not.toMatch(/reverse_proxy|proxy_password|bind_preset|custom_include|custom_exclude|fallback_provider_(?:enabled|base_url|api_key)/);
         }
         expect(scriptSource).not.toContain('OPENAI_FALLBACK');
         expect(scriptSource).not.toContain('openai_secret_marker');
         expect(scriptSource).not.toContain('oai_settings.reverse_proxy');
         expect(scriptSource).not.toContain('oai_settings.proxy_password');
-
-        expectDocumentOrder(indexHtml, [
-            'id="openai_reverse_proxy"',
-            'id="fallback_provider_section"',
-            'id="prompt_post_processing_form"',
-        ], { contractName: 'fallback provider drawer order' });
-
-        expect(indexHtml).not.toMatch(/<dialog[^>]*id="fallback_provider_section"/);
-        expect(indexHtml).toMatch(/<select id="chat_completion_source" hidden>/);
-        expect(indexHtml).toMatch(/<div className="base-url-field wide100p"[^>]*data-source="openai">[\s\S]*<label className="chat-completion-field wide100p"[^>]*htmlFor="openai_reverse_proxy"/);
-        expect(indexHtml).toMatch(/id="openai_reverse_proxy"[^>]*\baria-describedby="base_url_status"/);
-        expect(indexHtml).toMatch(/<output id="base_url_status"[^>]*\baria-live="polite"[^>]*\bdata-mode="direct"/);
-        expect(scriptSource).toContain('function updateBaseUrlStatus()');
-        expect(scriptSource).toContain(".attr('data-mode', hasCustomEndpoint ? 'custom' : 'direct')");
-        expect(scriptSource).toContain('Custom endpoint active. API key applies to both models.');
-        expect(styleSource).toContain('.base-url-status[data-mode="custom"]');
-        expect(indexHtml).toMatch(/id="fallback_provider_model"[^>]*\bplaceholder="gpt-4.1-mini"/);
-        expect(indexHtml).toMatch(/id="fallback_provider_status"[^>]*\baria-live="polite"/);
-        expect(indexHtml).toMatch(/id="test_api_button"[^>]*className="[^"]*\bapi_button\b/);
-        expect(scriptSource).toContain(".attr('data-state', status.state)");
-        expect(styleSource).toContain('.fallback-provider-status[data-state="ready"]');
-        expect(styleSource).toContain('.fallback-provider-status[data-state="disabled"]');
-    });
-
-    test('localizes custom Base URL status guidance for Simplified Chinese users', () => {
-        const zhCnLocale = JSON.parse(readRepoFile('public/locales/zh-cn.json'));
-
-        expect(zhCnLocale['Custom endpoint active. API key applies to both models.'])
-            .toBe('已启用自定义端点。API 密钥同时用于主模型与备用模型。');
-        expect(zhCnLocale['Direct provider endpoint. API key stays in the API Key field.'])
-            .toBe('当前使用直连服务端点。API 密钥保留在 API 密钥字段。');
+        expect(scriptSource).toContain('getFallbackOpenAIModel');
     });
 
     test('keeps automatic recovery status scoped outside message text', () => {

@@ -18,7 +18,7 @@ Goals:
 
 - Document the current rules that turn `/api/settings/get` payloads into React Settings form defaults.
 - Document the save merge that writes React-owned settings paths while preserving untouched legacy settings.
-- Make the legacy `vertexai` normalization rule and expanded reasoning-effort value set reproducible without importing production code.
+- Make the single-provider source normalization rule and the unbound generation-defaults preservation reproducible without importing production code.
 - Record the boundary between normal settings payload saves and server-side secret saves.
 
 Non-goals:
@@ -35,9 +35,9 @@ Inputs:
 
 - `payload.settings`: a JSON string containing the full settings object.
 - `baseSettings`: the parsed settings object after `payload.settings` is decoded.
-- `formValues`: the TanStack Form value tree for the General, Providers, User Interface, and Advanced tabs.
+- `formValues`: the TanStack Form value tree for the Providers, User Interface, and Advanced tabs.
 - `fieldBindings`: the React-owned mapping from form paths to settings paths.
-- `secrets`: provider and fallback secret state read through `/api/secrets/read`, saved through `/api/secrets/write`, and cleared through `/api/secrets/delete`.
+- `secrets`: the single provider secret state read through `/api/secrets/read`, saved through `/api/secrets/write`, and cleared through `/api/secrets/delete`.
 
 If `payload.settings` is missing or invalid JSON, the parser falls back to `{}` so the form can render default values. Missing settings paths keep their default form values unless a binding explicitly opts into transform-on-missing behavior.
 
@@ -49,8 +49,7 @@ The processing outputs are:
 - `parsedSettings`: the parsed full settings object.
 - `formDefaults`: form-shaped values for the React Settings tabs.
 - `savePayload`: a full settings object with React-owned paths rewritten from the form.
-- `providerSecretKey`: the current server-side secret key for the selected provider mode.
-- `fallbackSecretKey`: the dedicated fallback provider secret key.
+- `providerSecretKey`: the single server-side secret key for the OpenAI-compatible provider.
 
 ## Staged Processing Flow
 
@@ -71,8 +70,7 @@ The processing outputs are:
 
 Special rules:
 
-- `oai_settings.chat_completion_source: "vertexai"` becomes form value `providers.chatCompletionSource: "makersuite"`; Google Vertex AI is retired and the stored source normalizes to Google AI Studio.
-- `oai_settings.reasoning_effort` accepts `auto`, `low`, `medium`, `high`, `min`, `max`, `none`, `minimal`, and `xhigh`.
+- Generation-default keys under `oai_settings` (sampling, reasoning, continue, prompt formats, names behavior) are unbound: they never appear in form defaults because the AI Response Configuration drawer owns them.
 - `power_user.auto_swipe_blacklist` arrays are displayed as comma-separated text.
 
 ### Build settings save payload
@@ -85,25 +83,23 @@ Special rules:
 
 Special rules:
 
-- The saved `chat_completion_source` is always the visible form source; a stored legacy `vertexai` value saves back as `makersuite`.
+- The saved `chat_completion_source` always normalizes to `openai`; a stored legacy `vertexai`/`claude` value saves back as `openai`.
 - `advanced.autoSwipeBlacklist` text is split on commas or newlines, trimmed, and saved as an array.
 - Legacy-owned settings paths remain in the payload when already present, but the React form does not manufacture or edit them.
 
 ### Save provider secrets
 
-1. Resolve the provider secret key from provider source and reverse proxy state.
-2. Save direct provider keys through `/api/secrets/write`.
-3. Clear direct provider keys through `/api/secrets/delete`.
-4. Save fallback provider keys through the dedicated fallback secret key.
-5. Keep secrets out of the normal `/api/settings/save` payload.
+1. Resolve the provider secret key (`api_key_openai`).
+2. Save the provider key through `/api/secrets/write`.
+3. Clear the provider key through `/api/secrets/delete`.
+4. Keep secrets out of the normal `/api/settings/save` payload.
 
 ## Key Rules
 
 - React Settings submits a full settings object but only rewrites paths listed in the React-owned coverage ledger.
 - The field mapping is one-way per binding: unbound legacy fields are preserved by cloning, not by being represented in the form.
-- Legacy `vertexai` sources are normalized to `makersuite` in both directions because the provider dropdown only offers the visible Google label after the Vertex AI retirement.
-- Expanded reasoning effort values must pass both option rendering and Zod validation so existing saved configurations stay editable.
-- Provider and fallback secrets are separate side effects, not ordinary settings fields.
+- Any stored legacy provider source normalizes to `openai` on save under the single-provider contract.
+- The provider secret is a separate side effect, not an ordinary settings field.
 
 ## Output Schema
 
@@ -111,15 +107,13 @@ Special rules:
 {
   "formDefaults": {
     "providers": {
-      "chatCompletionSource": "makersuite"
-    },
-    "general": {
-      "reasoningEffort": "minimal"
+      "customUrl": "https://custom.example.com/v1"
     }
   },
   "savePayload": {
     "oai_settings": {
-      "chat_completion_source": "makersuite",
+      "chat_completion_source": "openai",
+      "custom_url": "https://custom.example.com/v1",
       "reasoning_effort": "minimal"
     },
     "untouched": {
@@ -137,7 +131,7 @@ Run:
 uv run python .docs/logic-description/react_settings_payload_sandbox_proof.py
 ```
 
-The proof script embeds fake settings payloads and form values. It verifies invalid JSON fallback, legacy `vertexai` source normalization to Google AI Studio on load and save, expanded reasoning-effort preservation, auto-swipe blacklist parsing, and untouched legacy field preservation.
+The proof script embeds fake settings payloads and form values. It verifies invalid JSON fallback, legacy provider-source normalization to `openai` on save, auto-swipe blacklist parsing, untouched legacy field preservation, and the unbound generation-default keys surviving a save.
 
 ## Boundaries And Failure Modes
 

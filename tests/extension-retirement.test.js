@@ -36,7 +36,6 @@ describe('third-party extension retirement (E-cut-1)', () => {
     test('built-in features init directly instead of through the extension manifest pipeline', () => {
         const extensionsSource = readRepoFile('public/scripts/feature-settings.js');
         expect(extensionsSource).toContain('export async function initCoreFeatures()');
-        expect(extensionsSource).toContain("import('./extensions/connection-manager/index.js')");
         expect(extensionsSource).toContain("import('./extensions/regex/index.js')");
 
         const scriptSource = readPublicFile('script.js');
@@ -45,12 +44,33 @@ describe('third-party extension retirement (E-cut-1)', () => {
         expect(scriptSource).not.toContain('doDailyExtensionUpdatesCheck');
     });
 
+    test('connection-manager feature is retired with its profile APIs and templates', () => {
+        expect(fs.existsSync(path.join(repoRoot, 'public', 'scripts', 'extensions', 'connection-manager'))).toBe(false);
+        expect(fs.existsSync(path.join(repoRoot, 'public', 'scripts', 'extensions', 'shared.js'))).toBe(false);
+
+        const featureSource = readRepoFile('public/scripts/feature-settings.js');
+        expect(featureSource).not.toContain('connection-manager');
+        expect(featureSource).not.toContain('connectionManager');
+
+        const indexHtml = readPublicFile('index.html');
+        expect(indexHtml).not.toContain('rm_api_block');
+        expect(indexHtml).not.toContain('connection-manager');
+
+        const scriptSource = readPublicFile('script.js');
+        expect(scriptSource).not.toContain('rm_api_block');
+        expect(scriptSource).not.toContain('ConnectionManagerRequestService');
+
+        const slashSource = readRepoFile('public/scripts/slash-commands.js');
+        for (const command of ['/profile', "'profile-list'", "'profile-create'", "'profile-update'", "'profile-get'", "'profile-genstream'"]) {
+            expect(slashSource).not.toContain(command);
+        }
+    });
+
     test('core feature init is retry-safe: successful inits are cached and only failures re-run', () => {
         const extensionsSource = readRepoFile('public/scripts/feature-settings.js');
         expect(extensionsSource).toContain('coreFeatureInitPromises');
         expect(extensionsSource).toContain('initCoreFeatureOnce');
         expect(extensionsSource).toContain('coreFeatureInitPromises.delete(key)');
-        expect(extensionsSource).toContain("initCoreFeatureOnce('connection-manager'");
         expect(extensionsSource).toContain("initCoreFeatureOnce('regex'");
     });
 
@@ -175,7 +195,6 @@ describe('third-party extension retirement (E-cut-2)', () => {
         const featureSource = readRepoFile('public/scripts/feature-settings.js');
         expect(featureSource).toContain('export const feature_settings');
         expect(featureSource).toContain('export async function initCoreFeatures()');
-        expect(featureSource).toContain("import('./extensions/connection-manager/index.js')");
         expect(featureSource).toContain("import('./extensions/regex/index.js')");
         expect(featureSource).toContain('export async function writeExtensionField(');
         expect(featureSource).toContain('export async function writeExtensionFieldBulk(');
@@ -204,8 +223,6 @@ describe('third-party extension retirement (E-cut-2)', () => {
             'public/scripts/variables.js',
             'public/scripts/extensions/regex/index.js',
             'public/scripts/extensions/regex/engine.js',
-            'public/scripts/extensions/connection-manager/index.js',
-            'public/scripts/extensions/shared.js',
         ]) {
             const source = readRepoFile(file);
             expect(source).not.toContain('extension_settings');

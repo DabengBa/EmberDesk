@@ -9,7 +9,7 @@ import { useForm } from '@tanstack/react-form';
 type SettingsFormValidator = (props: { value: typeof defaultSettingsFormValues }) => any;
 const toSettingsFormValidator = (schema: unknown): SettingsFormValidator => schema as SettingsFormValidator;
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { startTransition, useCallback, useEffect, useMemo, useState } from 'react';
+import { startTransition, useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { z } from 'zod';
 import {
     clearProviderSecretField,
@@ -29,60 +29,25 @@ import {
     defaultSettingsFormValues,
     imageOverswipeOptions,
     mediaDisplayOptions,
-    namesBehaviorOptions,
     parseSettingsPayload,
     promptPostProcessingOptions,
     providerSecretKeyBySource,
-    reasoningEffortOptions,
     sendOnEnterOptions,
     settingsCoverage,
     settingsTabDefinitions,
     saveSettingsToRuntime,
     tagImportSettingOptions,
     toastPositionOptions,
-    toolReasoningModeOptions,
-    verbosityOptions,
 } from '@/lib/settings-helpers.js';
 
 const SAVE_STATUS_TIMEOUT_MS = 4000;
 
 const settingsSchema = z.object({
-    general: z.object({
-        presetSettings: z.string(),
-        openaiMaxContext: z.number().int().min(1, 'Context 必须大于 0'),
-        openaiMaxTokens: z.number().int().min(1, 'Max Response 必须大于 0'),
-        streamOpenai: z.boolean(),
-        temperature: z.number().min(0).max(2),
-        frequencyPenalty: z.number().min(-2).max(2),
-        presencePenalty: z.number().min(-2).max(2),
-        topP: z.number().min(0).max(1),
-        functionCalling: z.boolean(),
-        showThoughts: z.boolean(),
-        reasoningEffort: z.enum(['auto', 'low', 'medium', 'high', 'min', 'max', 'none', 'minimal', 'xhigh']),
-        continuePrefill: z.boolean(),
-        continuePostfix: z.string(),
-        squashSystemMessages: z.boolean(),
-        customPromptPostProcessing: z.string(),
-        n: z.coerce.number(),
-        verbosity: z.string(),
-        mediaInlining: z.boolean(),
-        inlineImageQuality: z.string(),
-        toolReasoningMode: z.string(),
-        toolCallRecurseLimit: z.coerce.number(),
-        sendIfEmpty: z.string(),
-        impersonationPrompt: z.string(),
-        newChatPrompt: z.string(),
-        newExampleChatPrompt: z.string(),
-        continueNudgePrompt: z.string(),
-        wiFormat: z.string(),
-        scenarioFormat: z.string(),
-        personalityFormat: z.string(),
-        namesBehavior: z.coerce.number(),
-    }),
     providers: z.object({
         openaiModel: z.string(),
         customUrl: z.string(),
         fallbackProviderModel: z.string(),
+        promptPostProcessing: z.string(),
     }),
     userInterface: z.object({
         chatWidth: z.number().min(20, 'Chat Width 不能小于 20').max(100, 'Chat Width 不能大于 100'),
@@ -266,7 +231,6 @@ function resolveInitialSettingsTab(initialTab?: string | null) {
 const WORKSPACE_DRAWER_LINKS: Record<string, Array<{ target: string; label: string; hint: string }>> = {
     providers: [
         { target: 'left-nav-panel', label: 'Open AI Response Configuration', hint: 'Preset 下拉与操作、采样滑条、Prompt Manager。' },
-        { target: 'rm_api_block', label: 'Open API Connections', hint: 'Connect、API key、connection profile 的捕获与应用。' },
     ],
     userInterface: [
         { target: 'user-settings-block', label: 'Open User Settings', hint: '主题色、字体缩放、模糊与杂项开关。' },
@@ -290,6 +254,41 @@ export function SettingsSurface({
     const [hasRevisionConflict, setHasRevisionConflict] = useState(false);
     const [showDiagnostics, setShowDiagnostics] = useState(false);
     const [providerSecretInput, setProviderSecretInput] = useState('');
+    const [providerActionBusy, setProviderActionBusy] = useState<'connect' | 'test' | null>(null);
+
+    const subscribeRuntime = useCallback(
+        (listener: () => void) => (runtime ? runtime.subscribe(listener) : () => {}),
+        [runtime],
+    );
+    const providerStatus = useSyncExternalStore(
+        subscribeRuntime,
+        () => runtime?.getSnapshot().provider?.status ?? 'no_connection',
+        () => 'no_connection',
+    );
+    const providerStatusLabel = providerStatus === 'no_connection' ? 'Not connected' : providerStatus;
+    const canRunProviderActions = Boolean(
+        runtime?.commands
+        && typeof runtime.commands.connectProvider === 'function'
+        && typeof runtime.commands.testProviderConnection === 'function',
+    );
+
+    async function handleProviderAction(kind: 'connect' | 'test') {
+        const command = kind === 'connect'
+            ? runtime?.commands.connectProvider
+            : runtime?.commands.testProviderConnection;
+        if (typeof command !== 'function' || providerActionBusy) {
+            return;
+        }
+        setProviderActionBusy(kind);
+        setPageError('');
+        try {
+            await command();
+        } catch (error) {
+            setPageError(error instanceof Error ? error.message : 'Provider 操作失败。');
+        } finally {
+            setProviderActionBusy(null);
+        }
+    }
 
     const openSettingsTab = useCallback((tabId: string) => {
         // Dense tab bodies are non-urgent; leave the shell responsive while they mount.
@@ -737,304 +736,6 @@ export function SettingsSurface({
                             }}
                         >
                             <div className={`settings-tab-panel ${stylex.props(isOverlay && settingsStyles.tabPanelOverlay).className ?? ''}`}>
-                            {activeTab === 'general' ? (
-                            <div>
-                                <SettingsSection
-                                    title="Generation Defaults"
-                                    description="主 chat-completion path 的上下文、采样、reasoning 和 continue 行为。"
-                                >
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="general.presetSettings"
-                                        label="Preset"
-                                        description="当前默认的 chat-completion preset 名称。"
-                                        placeholder="RecoveredRuins"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="general.openaiMaxContext"
-                                        label="Context"
-                                        description="默认上下文窗口大小。"
-                                        variant="number"
-                                        min={1}
-                                        step={1}
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="general.openaiMaxTokens"
-                                        label="Max Response"
-                                        description="默认最大输出 token。"
-                                        variant="number"
-                                        min={1}
-                                        step={1}
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="general.temperature"
-                                        label="Temperature"
-                                        description="控制输出随机性。"
-                                        variant="number"
-                                        min={0}
-                                        max={2}
-                                        step={0.01}
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="general.topP"
-                                        label="Top P"
-                                        description="核采样概率阈值。"
-                                        variant="number"
-                                        min={0}
-                                        max={1}
-                                        step={0.01}
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="general.frequencyPenalty"
-                                        label="Frequency Penalty"
-                                        description="减少重复输出。"
-                                        variant="number"
-                                        min={-2}
-                                        max={2}
-                                        step={0.05}
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="general.presencePenalty"
-                                        label="Presence Penalty"
-                                        description="鼓励引入新内容。"
-                                        variant="number"
-                                        min={-2}
-                                        max={2}
-                                        step={0.05}
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="general.reasoningEffort"
-                                        label="Reasoning Effort"
-                                        description="给支持该能力的模型指定 reasoning effort。"
-                                        variant="select"
-                                        options={reasoningEffortOptions}
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="general.continuePostfix"
-                                        label="Continue Postfix"
-                                        description="continue 追加时使用的后缀。"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="general.streamOpenai"
-                                        label="Streaming"
-                                        description="控制当前 chat-completion path 是否默认流式输出。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="general.functionCalling"
-                                        label="Function Calling"
-                                        description="启用 tool/function calling。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="general.showThoughts"
-                                        label="Show Thoughts"
-                                        description="显示模型 reasoning / thoughts。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="general.continuePrefill"
-                                        label="Continue Prefill"
-                                        description="continue 时启用 assistant prefill。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="general.squashSystemMessages"
-                                        label="Squash System Messages"
-                                        description="发送前折叠多条 system prompt。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="general.customPromptPostProcessing"
-                                        label="Prompt Post-Processing"
-                                        description="在发送到 API 前对 prompt 做额外整理。"
-                                        variant="select"
-                                        options={promptPostProcessingOptions}
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                                                    <SettingField
-                                        form={settingsForm}
-                                        name="general.n"
-                                        label="N"
-                                        description="Settings path binding for general.n."
-                                        variant="number"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="general.verbosity"
-                                        label="Verbosity"
-                                        description="Settings path binding for general.verbosity."
-                                        variant="select"
-                                        options={verbosityOptions}
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="general.mediaInlining"
-                                        label="Media Inlining"
-                                        description="Settings path binding for general.mediaInlining."
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="general.inlineImageQuality"
-                                        label="Inline Image Quality"
-                                        description="Settings path binding for general.inlineImageQuality."
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="general.toolReasoningMode"
-                                        label="Tool Reasoning Mode"
-                                        description="Settings path binding for general.toolReasoningMode."
-                                        variant="select"
-                                        options={toolReasoningModeOptions}
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="general.toolCallRecurseLimit"
-                                        label="Tool Call Recurse Limit"
-                                        description="Settings path binding for general.toolCallRecurseLimit."
-                                        variant="number"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="general.sendIfEmpty"
-                                        label="Send If Empty"
-                                        description="Settings path binding for general.sendIfEmpty."
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="general.impersonationPrompt"
-                                        label="Impersonation Prompt"
-                                        description="Settings path binding for general.impersonationPrompt."
-                                        variant="textarea"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="general.newChatPrompt"
-                                        label="New Chat Prompt"
-                                        description="Settings path binding for general.newChatPrompt."
-                                        variant="textarea"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="general.newExampleChatPrompt"
-                                        label="New Example Chat Prompt"
-                                        description="Settings path binding for general.newExampleChatPrompt."
-                                        variant="textarea"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="general.continueNudgePrompt"
-                                        label="Continue Nudge Prompt"
-                                        description="Settings path binding for general.continueNudgePrompt."
-                                        variant="textarea"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="general.wiFormat"
-                                        label="Wi Format"
-                                        description="Settings path binding for general.wiFormat."
-                                        variant="textarea"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="general.scenarioFormat"
-                                        label="Scenario Format"
-                                        description="Settings path binding for general.scenarioFormat."
-                                        variant="textarea"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="general.personalityFormat"
-                                        label="Personality Format"
-                                        description="Settings path binding for general.personalityFormat."
-                                        variant="textarea"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="general.namesBehavior"
-                                        label="Names Behavior"
-                                        description="Settings path binding for general.namesBehavior."
-                                        variant="select"
-                                        selectValueType="number"
-                                        options={namesBehaviorOptions}
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-</SettingsSection>
-                            </div>
-                            ) : null}
 
                             {activeTab === 'providers' ? (
                             <div>
@@ -1133,7 +834,50 @@ export function SettingsSurface({
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
                                     />
-</SettingsSection>
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="providers.promptPostProcessing"
+                                        label="Prompt Post-Processing"
+                                        description="发送前对 prompt 做角色合并规整，兼容严格的 OpenAI-compatible 端点。"
+                                        variant="select"
+                                        options={promptPostProcessingOptions}
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    {canRunProviderActions ? (
+                                        <div {...stylex.props(settingsStyles.inlinePanel)}>
+                                            <div {...stylex.props(settingsStyles.inlineHeader)}>
+                                                <div>
+                                                    <h3 {...stylex.props(settingsStyles.sectionTitle)}>Connection</h3>
+                                                    <p {...stylex.props(settingsStyles.mutedText, settingsStyles.sectionDescription)}>
+                                                        Connect 校验凭证并拉取模型列表；Test 发送一条探测请求。
+                                                    </p>
+                                                </div>
+                                                <span {...stylex.props(settingsStyles.pill)}>{providerStatusLabel}</span>
+                                            </div>
+                                            <div {...stylex.props(settingsStyles.inlineActions)}>
+                                                <button
+                                                    type="button"
+                                                    id="provider-connect-button"
+                                                    {...stylex.props(settingsStyles.button, settingsStyles.buttonPrimary)}
+                                                    disabled={providerActionBusy !== null}
+                                                    onClick={() => { void handleProviderAction('connect'); }}
+                                                >
+                                                    {providerActionBusy === 'connect' ? 'Connecting…' : 'Connect'}
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    id="provider-test-button"
+                                                    {...stylex.props(settingsStyles.button, settingsStyles.buttonSecondary)}
+                                                    disabled={providerActionBusy !== null}
+                                                    onClick={() => { void handleProviderAction('test'); }}
+                                                >
+                                                    {providerActionBusy === 'test' ? 'Testing…' : 'Test'}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ) : null}
+                                </SettingsSection>
                             </div>
                             ) : null}
 

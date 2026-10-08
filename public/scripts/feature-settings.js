@@ -2,7 +2,7 @@
  * First-party feature runtime support.
  *
  * `feature_settings` is the settings.json data bag shared by built-in
- * features (note/regex/connection-manager/variables). The template helpers
+ * features (note/regex/variables). The template helpers
  * render built-in feature templates from public/scripts/extensions/, and
  * `writeExtensionField*` maintains `data.extensions.*` character-card
  * metadata (spec-v2 card field, unrelated to the retired extension system).
@@ -81,11 +81,7 @@ export const feature_settings = {
         chara: [],
         wiAddition: [],
     },
-    connectionManager: {
-        selectedProfile: '',
-        /** @type {import('./extensions/connection-manager/index.js').ConnectionProfile[]} */
-        profiles: [],
-    },
+
     /** @type {import('./char-data.js').RegexScriptData[]} */
     regex: [],
     /** @type {import('./extensions/regex/index.js').RegexPreset[]} */
@@ -297,10 +293,6 @@ function initCoreFeatureOnce(key, loader) {
  */
 export async function initCoreFeatures() {
     await Promise.all([
-        initCoreFeatureOnce('connection-manager', async () => {
-            const { init } = await import('./extensions/connection-manager/index.js');
-            await init();
-        }),
         initCoreFeatureOnce('regex', async () => {
             const { init } = await import('./extensions/regex/index.js');
             await init();

@@ -20,7 +20,6 @@ describe('secrets input map', () => {
             'OPENAI_FALLBACK',
             'api_key_openai_fallback',
         ], { contractName: 'fallback backend secret mapping' });
-        expect(readRepoFile('app/components/api/ApiConnectionsPanel.tsx')).not.toContain('id="fallback_provider_api_key"');
     });
 
     test('the retired fallback secret is lazily cleaned up at boot', () => {
@@ -33,28 +32,28 @@ describe('secrets input map', () => {
         expect(openaiSource).not.toMatch(/oai_settings\.[a-zA-Z0-9_]*key/i);
     });
 
-    test('unified provider key keeps saved state and key history reachable', () => {
-        const apiPanel = readRepoFile('app/components/api/ApiConnectionsPanel.tsx');
-        const openaiSource = readRepoFile('public/scripts/openai.js');
+    test('legacy drawer secret inputs are retired; the React Providers tab owns the key field', () => {
+        const frontendSecrets = readRepoFile('public/scripts/secrets.js');
+        const settingsSurface = readRepoFile('app/components/settings/SettingsSurface.tsx');
+        const indexHtml = readRepoFile('public/index.html');
 
-        expectContainsMarkers(apiPanel, [
-            'id="api_key_unified_manage"',
-            'className="menu_button menu_button_icon manage-api-keys"',
-            'label="Manage API keys"',
-            'title="Manage API keys"',
-        ], { contractName: 'unified provider key manager entry' });
-        expectContainsMarkers(openaiSource, [
-            'resolveProviderSecretKeyForSettings({',
-            '.toggle(Boolean(secretKey))',
-            '$(\'#api_key_unified_manage\')',
-            '.attr(\'data-key\', secretKey ?? \'\')',
-            '.data(\'key\', secretKey ?? \'\')',
-            'event_types.SETTINGS_LOADED',
-            'event_types.SECRET_WRITTEN',
-            'event_types.SECRET_DELETED',
-            'event_types.SECRET_ROTATED',
-            'event_types.SECRET_EDITED',
-            'updateUnifiedKeyField();',
-        ], { contractName: 'unified provider key state refresh' });
+        // The drawer INPUT_MAP, its key-manager popup entry point, and the
+        // datalist autosuggest plumbing were removed with the drawer.
+        expectNotContainsMarkers(frontendSecrets, [
+            'INPUT_MAP',
+            'updateSecretDisplay',
+            'updateInputDataLists',
+            'openKeyManagerDialog',
+            'manage-api-keys',
+            'secrets_datalists',
+        ], { contractName: 'retired drawer secret plumbing' });
+        expect(indexHtml).not.toContain('secrets_datalists');
+
+        // React Providers owns the single provider key input and writes through
+        // the secrets API directly — never into settings JSON.
+        expectContainsMarkers(settingsSurface, [
+            'provider-secret-input',
+            "fetch('/api/secrets/write'",
+        ], { contractName: 'React provider secret field' });
     });
 });

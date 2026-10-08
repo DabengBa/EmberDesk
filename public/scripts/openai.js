@@ -7,7 +7,6 @@ import { DOMPurify } from '../lib.js';
 
 import {
     abortStatusCheck,
-    cancelStatusCheck,
     characters,
     extension_prompt_roles,
     extension_prompt_types,
@@ -20,10 +19,9 @@ import {
     main_api,
     name1,
     name2,
-    resultCheckStatus,
+    displayOnlineStatus,
     saveSettingsDebounced,
     setOnlineStatus,
-    startStatusLoading,
     substituteParams,
     substituteParamsExtended,
     system_message_types,
@@ -71,12 +69,7 @@ import { ToolManager } from './tool-calling.js';
 import { IGNORE_SYMBOL, MEDIA_DISPLAY, MEDIA_TYPE } from './constants.js';
 import { getFallbackOpenAIModel } from './chat-generation-auto-recovery.js';
 import { loadWorkspacePanelsModule } from './workspace-panels-react-bridge.js';
-import {
-    getFallbackProviderStatus,
-    getUnifiedKeyFieldState,
-    resolveProviderSecretKeyForSettings,
-    toggleSecretInputMask,
-} from './provider-secret-field-state.js';
+
 import {
     getChatCompletionModelFromSettings,
     isAudioInliningSupportedForSettings,
@@ -222,15 +215,18 @@ const sensitiveFields = [
  * @type {Record<string, [string, string, boolean, boolean]>}
  */
 export const settingsToUpdate = {
-    chat_completion_source: ['#chat_completion_source', 'chat_completion_source', false, true],
+    // Provider-owned fields (source/model/url/post-processing/fallback) are
+    // edited by the React Settings surface; their selectors stay NULL so preset
+    // save/load keeps working without the retired API Connections drawer DOM.
+    chat_completion_source: ['#NULL_SELECTOR', 'chat_completion_source', false, true],
     temperature: ['#temp_openai', 'temp_openai', false, false],
     frequency_penalty: ['#freq_pen_openai', 'freq_pen_openai', false, false],
     presence_penalty: ['#pres_pen_openai', 'pres_pen_openai', false, false],
     top_p: ['#top_p_openai', 'top_p_openai', false, false],
-    openai_model: ['#model_openai_select', 'openai_model', false, true],
+    openai_model: ['#NULL_SELECTOR', 'openai_model', false, true],
     tool_reasoning_mode: ['#tool_reasoning_mode', 'tool_reasoning_mode', false, false],
-    custom_url: ['#openai_reverse_proxy', 'custom_url', false, true],
-    custom_prompt_post_processing: ['#custom_prompt_post_processing', 'custom_prompt_post_processing', false, true],
+    custom_url: ['#NULL_SELECTOR', 'custom_url', false, true],
+    custom_prompt_post_processing: ['#NULL_SELECTOR', 'custom_prompt_post_processing', false, true],
     openai_max_context: ['#openai_max_context', 'openai_max_context', false, false],
     openai_max_tokens: ['#openai_max_tokens', 'openai_max_tokens', false, false],
     names_behavior: ['#names_behavior', 'names_behavior', false, false],
@@ -256,7 +252,7 @@ export const settingsToUpdate = {
     reasoning_effort: ['#openai_reasoning_effort', 'reasoning_effort', false, false],
     verbosity: ['#openai_verbosity', 'verbosity', false, false],
     n: ['#n_openai', 'n', false, false],
-    fallback_provider_model: ['#fallback_provider_model', 'fallback_provider_model', false, false],
+    fallback_provider_model: ['#NULL_SELECTOR', 'fallback_provider_model', false, false],
     extensions: ['#NULL_SELECTOR', 'extensions', false, false],
 };
 
@@ -1421,15 +1417,39 @@ export function getChatCompletionModel(settings = null) {
     return model;
 }
 
+/**
+ * Models reported by the last successful provider status check.
+ * @returns {Array<{id: string}>}
+ */
+export function getOpenAIModelList() {
+    return model_list;
+}
+
+/**
+ * Sets the primary chat-completion model (React field and /model share this).
+ * @param {string} model Model id
+ */
+export function setOpenAIModel(model) {
+    const value = String(model ?? '').trim();
+    if (!value || oai_settings.openai_model === value) {
+        return;
+    }
+    oai_settings.openai_model = value;
+    saveSettingsDebounced();
+    updateFeatureSupportFlags();
+    eventSource.emit(event_types.CHATCOMPLETION_MODEL_CHANGED, value);
+}
+
 function saveModelList(data) {
     model_list = data.map((model) => ({ ...model }));
     model_list.sort((a, b) => a?.id && b?.id && a.id.localeCompare(b.id));
 
     if (oai_settings.chat_completion_source == chat_completion_sources.OPENAI) {
-        const list = document.getElementById('model_openai_list');
-        if (list) { list.innerHTML = ''; model_list.forEach(m => { const o = document.createElement('option'); o.value = m.id; list.appendChild(o); }); }
         const sel = model_list.find(m => m.id === oai_settings.openai_model);
-        if (sel) { $('#model_openai_select').val(oai_settings.openai_model).trigger('change'); } else if (model_list.length > 0) { oai_settings.openai_model = model_list[0].id; $('#model_openai_select').val(model_list[0].id).trigger('change'); }
+        if (!sel && model_list.length > 0) {
+            oai_settings.openai_model = model_list[0].id;
+            eventSource.emit(event_types.CHATCOMPLETION_MODEL_CHANGED, oai_settings.openai_model);
+        }
     }
 }
 
@@ -2593,6 +2613,7 @@ function migrateChatCompletionSettings(settings) {
  * @param {ChatCompletionSettings} settings Saved settings from backend
  */
 function loadOpenAISettings(data, settings) {
+    const previousModel = oai_settings.openai_model;
     openai_setting_names = data.openai_setting_names;
     openai_settings = data.openai_settings;
     openai_settings.forEach(function (item, i) {
@@ -2644,7 +2665,6 @@ function loadOpenAISettings(data, settings) {
     }
 
     $(`#settings_preset_openai option[value="${openai_setting_names[oai_settings.preset_settings_openai]}"]`).prop('selected', true);
-    updateBaseUrlStatus();
 
     // Protect openai_max_context from being overridden by extensions on initial load
     const loadedMaxContext = oai_settings.openai_max_context;
@@ -2665,9 +2685,15 @@ function loadOpenAISettings(data, settings) {
 
     syncSegmentedFromSelect('openai_reasoning_effort');
     syncSegmentedFromSelect('openai_verbosity');
-    updateFallbackProviderStatus();
 
-    $('#chat_completion_source').trigger('change');
+    // Provider form is React-owned; loading settings still needs the side
+    // effects the retired #chat_completion_source change handler produced.
+    updateFeatureSupportFlags();
+    if (oai_settings.openai_model !== previousModel) {
+        eventSource.emit(event_types.CHATCOMPLETION_MODEL_CHANGED, oai_settings.openai_model);
+    }
+    forceCharacterEditorTokenize();
+    reconnectOpenAi();
 }
 
 function setNamesBehaviorControls() {
@@ -2704,7 +2730,7 @@ async function getStatusOpen() {
     if (oai_settings.chat_completion_source === chat_completion_sources.OPENAI && oai_settings.custom_url && !isValidUrl(oai_settings.custom_url)) {
         console.debug('Invalid custom endpoint URL:', oai_settings.custom_url);
         setOnlineStatus(t`Invalid endpoint URL. Requests may fail.`);
-        return resultCheckStatus();
+        return displayOnlineStatus();
     }
 
 
@@ -2743,7 +2769,7 @@ async function getStatusOpen() {
     }
 
     updateFeatureSupportFlags();
-    return resultCheckStatus();
+    return displayOnlineStatus();
 }
 
 /**
@@ -3013,8 +3039,11 @@ function onSettingsPresetChange() {
             }
         }
 
-        // Connection fields always follow the selected preset
-        $('#chat_completion_source').trigger('change');
+        // Connection fields always follow the selected preset; the retired
+        // #chat_completion_source change handler used to apply these effects.
+        updateFeatureSupportFlags();
+        eventSource.emit(event_types.CHATCOMPLETION_MODEL_CHANGED, oai_settings.openai_model);
+        reconnectOpenAi();
 
         // Protect openai_max_context from being overridden by extensions
         _presetChangeGuard = true;
@@ -3024,29 +3053,6 @@ function onSettingsPresetChange() {
 
         saveSettingsDebounced();
     });
-}
-
-/**
- * Get the maximum context size for the Mistral model
- * @param {string} model Model identifier
- * @param {boolean} isUnlocked Whether context limits are unlocked
- * @returns {number} Maximum context size in tokens
- */
-async function onModelChange() {
-    let value = String($(this).val() || '');
-
-    if ($(this).is('#model_openai_select')) {
-        console.log('OpenAI model changed to', value);
-        oai_settings.openai_model = value;
-    }
-
-    if (oai_settings.chat_completion_source == chat_completion_sources.OPENAI) {
-        $('#openai_reverse_proxy').attr('placeholder', 'https://api.openai.com/v1');
-    }
-
-    saveSettingsDebounced();
-    updateFeatureSupportFlags();
-    eventSource.emit(event_types.CHATCOMPLETION_MODEL_CHANGED, value);
 }
 
 async function onNewPresetClick() {
@@ -3059,90 +3065,27 @@ async function onNewPresetClick() {
     await saveOpenAIPreset(name, oai_settings);
 }
 
-function updateUnifiedKeyField() {
-    const $field = $('#api_key_unified');
-    const source = oai_settings.chat_completion_source;
-    const secretKey = resolveProviderSecretKeyForSettings({
-        secretKey: resolveSecretKey(),
-    });
-    const state = getUnifiedKeyFieldState({
-        source,
-        secretKey,
-        secretState: secret_state,
-        chatCompletionSources: chat_completion_sources,
-    });
-
-    $field.attr('placeholder', state.placeholder);
-    $field.val(state.value);
-    $('#api_key_unified_manage')
-        .attr('data-key', secretKey ?? '')
-        .data('key', secretKey ?? '')
-        .toggle(Boolean(secretKey));
-}
-
-function updateBaseUrlStatus() {
-    const hasCustomEndpoint = Boolean(oai_settings.custom_url);
-    $('#base_url_status')
-        .attr('data-mode', hasCustomEndpoint ? 'custom' : 'direct')
-        .text(hasCustomEndpoint
-            ? t`Custom endpoint active. API key applies to both models.`
-            : t`Direct provider endpoint. API key stays in the API Key field.`);
-}
-
-function onBaseUrlInput() {
-    oai_settings.custom_url = String($(this).val());
-    updateBaseUrlStatus();
-    saveSettingsDebounced();
-}
-
-function getPendingProviderCredentialValue(_secretKey = resolveSecretKey()) {
-    return String($('#api_key_unified').val() || '').trim();
-}
-
 function isProviderCredentialMissing() {
-    const secretKey = resolveSecretKey();
-    return !!secretKey && !secret_state[secretKey] && !getPendingProviderCredentialValue(secretKey) && !oai_settings.custom_url;
+    return !secret_state[SECRET_KEYS.OPENAI] && !oai_settings.custom_url;
 }
 
-async function onConnectButtonClick(e) {
-    e.stopPropagation();
-
-    const apiKey = String($('#api_key_unified').val() || '').trim();
-    if (apiKey.length) {
-        await writeSecret(SECRET_KEYS.OPENAI, apiKey);
-    }
-
+/**
+ * Connects to the configured provider endpoint and refreshes the model list.
+ * Callable UI-free: the React Providers surface invokes this through the
+ * runtime command port; the retired API Connections drawer used to bind it.
+ */
+export async function connectProviderConnection() {
     if (!secret_state[SECRET_KEYS.OPENAI] && !oai_settings.custom_url) {
         console.log(`No secret key saved for ${oai_settings.chat_completion_source}`);
         toastr.warning(t`Enter or save an API key before connecting.`);
         return;
     }
 
-    startStatusLoading();
     saveSettingsDebounced();
     await getStatusOpen();
 }
 
-function toggleChatCompletionForms() {
-    if (oai_settings.chat_completion_source == chat_completion_sources.OPENAI) {
-        $('#model_openai_select').trigger('change');
-    }
-
-    $('[data-source]').each(function () {
-        const mode = $(this).data('source-mode');
-        const validSources = $(this).data('source').split(',');
-        const matchesSource = validSources.includes(oai_settings.chat_completion_source);
-        $(this).toggle(mode !== 'except' ? matchesSource : !matchesSource);
-    });
-
-    // Update Base URL placeholder per source
-    $('#openai_reverse_proxy').attr('placeholder', 'https://api.openai.com/v1');
-    updateBaseUrlStatus();
-
-    setToolReasoningControls();
-}
-
-async function testApiConnection() {
+export async function testProviderConnection() {
     // Check if the previous request is still in progress
     if (is_send_press) {
         toastr.info(t`Please wait for the previous request to complete.`);
@@ -3153,8 +3096,6 @@ async function testApiConnection() {
         toastr.warning(t`Enter or save provider credentials before testing the connection.`);
         return;
     }
-
-    startStatusLoading();
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort('API connection test timed out'), API_TEST_REQUEST_TIMEOUT_MS);
@@ -3173,27 +3114,16 @@ async function testApiConnection() {
         toastr.error(t`Could not get a reply from API. Check your connection settings / API key and try again.`);
     } finally {
         clearTimeout(timeout);
-        resultCheckStatus();
+        displayOnlineStatus();
     }
 }
 
 function reconnectOpenAi() {
     if (main_api == 'openai') {
         setOnlineStatus('no_connection');
-        resultCheckStatus();
-        $('#api_button_openai').trigger('click');
+        displayOnlineStatus();
+        void connectProviderConnection();
     }
-}
-
-function onApiKeyUnifiedShowClick() {
-    toggleSecretInputMask($('#api_key_unified')[0], this);
-}
-
-function updateFallbackProviderStatus() {
-    const status = getFallbackProviderStatus(oai_settings);
-    $('#fallback_provider_status')
-        .attr('data-state', status.state)
-        .text(status.text);
 }
 
 /**
@@ -3261,8 +3191,6 @@ function proxyUrlCallback(_, value) {
         return oai_settings.custom_url ?? '';
     }
     oai_settings.custom_url = value;
-    $('#openai_reverse_proxy').val(value);
-    updateBaseUrlStatus();
     reconnectOpenAi();
     return oai_settings.custom_url;
 }
@@ -3275,7 +3203,6 @@ function apiKeyCallback(_, value) {
     if (secretKey) {
         writeSecret(secretKey, value);
     }
-    $('#api_key_unified').val(value);
     return value;
 }
 
@@ -3324,8 +3251,6 @@ export function initOpenAI() {
         ],
         helpString: 'Gets or sets the API key. Applies to both the primary and fallback model.',
     }));
-
-    $('#test_api_button').on('click', testApiConnection);
 
     $(document).on('change', '.segmented-control input[type="radio"]', function () {
         const selectId = $(this).closest('.segmented-control').data('sync-select');
@@ -3461,25 +3386,6 @@ export function initOpenAI() {
         saveSettingsDebounced();
     });
 
-    $('#chat_completion_source').on('change', function () {
-        cancelStatusCheck('Chat Completion source changed');
-        model_list = [];
-        oai_settings.chat_completion_source = String($(this).find(':selected').val());
-        toggleChatCompletionForms();
-        saveSettingsDebounced();
-        reconnectOpenAi();
-        forceCharacterEditorTokenize();
-        updateFeatureSupportFlags();
-        eventSource.emit(event_types.CHATCOMPLETION_SOURCE_CHANGED, oai_settings.chat_completion_source);
-        updateUnifiedKeyField();
-    });
-
-    $('#fallback_provider_model').on('input', function () {
-        oai_settings.fallback_provider_model = String($(this).val());
-        updateFallbackProviderStatus();
-        saveSettingsDebounced();
-    });
-
     $('#squash_system_messages').on('input', function () {
         oai_settings.squash_system_messages = !!$(this).prop('checked');
         saveSettingsDebounced();
@@ -3526,12 +3432,6 @@ export function initOpenAI() {
         saveSettingsDebounced();
     });
 
-
-    $('#custom_prompt_post_processing').on('change', function () {
-        oai_settings.custom_prompt_post_processing = String($(this).val());
-        updateFeatureSupportFlags();
-        saveSettingsDebounced();
-    });
 
     $('#names_behavior').on('input', function () {
         oai_settings.names_behavior = Number($(this).val());
@@ -3605,9 +3505,6 @@ export function initOpenAI() {
         });
     }
 
-    $('#api_button_openai').on('click', onConnectButtonClick);
-    $('#openai_reverse_proxy').on('input', onBaseUrlInput);
-    $('#model_openai_select').on('change', onModelChange);
     $('#settings_preset_openai').on('change', onSettingsPresetChange);
     $('#new_oai_preset').on('click', onNewPresetClick);
     $('#delete_oai_preset').on('click', onDeletePresetClick);
@@ -3618,23 +3515,11 @@ export function initOpenAI() {
     // Preset overflow popup menu open/close is React-owned (PresetActionsMenu);
     // item action bindings below stay direct-by-ID because the items never unmount.
 
-    $('#api_key_unified_show').on('click', onApiKeyUnifiedShowClick);
-    eventSource.on(event_types.SETTINGS_LOADED, updateUnifiedKeyField);
-    eventSource.on(event_types.MAIN_API_CHANGED, updateUnifiedKeyField);
-    [
-        event_types.SECRET_WRITTEN,
-        event_types.SECRET_DELETED,
-        event_types.SECRET_ROTATED,
-        event_types.SECRET_EDITED,
-    ].forEach(eventType => eventSource.on(eventType, updateUnifiedKeyField));
-
     // Retired provider contract: the fallback model reuses the primary key, so the
     // dedicated fallback secret must not linger. Lazy cleanup once per session.
     if (secret_state.api_key_openai_fallback) {
         void deleteSecret('api_key_openai_fallback');
     }
-
-    updateUnifiedKeyField();
 }
 
 /**

@@ -9,11 +9,8 @@ import json
 
 
 DEFAULT_FORM_VALUES = {
-    "general": {
-        "reasoningEffort": "high",
-    },
     "providers": {
-        "chatCompletionSource": "openai",
+        "customUrl": "",
     },
     "advanced": {
         "autoSwipeBlacklist": "",
@@ -22,14 +19,8 @@ DEFAULT_FORM_VALUES = {
 
 FIELD_BINDINGS = [
     {
-        "formPath": "general.reasoningEffort",
-        "settingsPath": "oai_settings.reasoning_effort",
-    },
-    {
-        "formPath": "providers.chatCompletionSource",
-        "settingsPath": "oai_settings.chat_completion_source",
-        "toForm": "chat_completion_source",
-        "toSettings": "chat_completion_source",
+        "formPath": "providers.customUrl",
+        "settingsPath": "oai_settings.custom_url",
     },
     {
         "formPath": "advanced.autoSwipeBlacklist",
@@ -39,17 +30,9 @@ FIELD_BINDINGS = [
     },
 ]
 
-REASONING_EFFORT_OPTIONS = {
-    "auto",
-    "low",
-    "medium",
-    "high",
-    "min",
-    "max",
-    "none",
-    "minimal",
-    "xhigh",
-}
+# Generation defaults (sampling, reasoning, continue, prompt formats) are
+# legacy-owned by the AI Response Configuration drawer. They are unbound: the
+# React form never reads or writes them, so a save preserves them untouched.
 
 
 def get_value_at_path(source, path, fallback=None):
@@ -96,8 +79,6 @@ def parse_blacklist_to_settings_value(value):
 
 def to_form_value(binding, current_value, settings):
     transform = binding.get("toForm")
-    if transform == "chat_completion_source":
-        return "makersuite" if current_value == "vertexai" else current_value
     if transform == "blacklist":
         return parse_blacklist_to_form_value(current_value)
     return current_value
@@ -127,18 +108,24 @@ def build_settings_save_payload(base_settings, form_values):
     )
     for binding in FIELD_BINDINGS:
         form_value = get_value_at_path(form_values, binding["formPath"])
+        if form_value is None and not binding.get("toSettings"):
+            continue
         next_value = to_settings_value(binding, form_value, form_values, base_settings)
+        if next_value is None:
+            continue
         set_value_at_path(next_settings, binding["settingsPath"], next_value)
+
+    # Retired provider contract: single source normalizes on save.
+    oai_settings = next_settings.get("oai_settings")
+    if isinstance(oai_settings, dict):
+        oai_settings["chat_completion_source"] = "openai"
     return next_settings
 
 
 def main():
     invalid = parse_settings_payload({"settings": "not json"})
     assert invalid["settings"] == {}
-    assert (
-        build_settings_form_defaults(invalid["settings"])["general"]["reasoningEffort"]
-        == "high"
-    )
+    assert build_settings_form_defaults(invalid["settings"])["providers"]["customUrl"] == ""
 
     parsed = parse_settings_payload(
         {
@@ -149,6 +136,7 @@ def main():
                         "chat_completion_source": "vertexai",
                         "google_model": "gemini-2.5-pro",
                         "reasoning_effort": "minimal",
+                        "custom_url": "https://custom.example.com/v1",
                     },
                     "power_user": {
                         "auto_swipe_blacklist": ["skip", "retry"],
@@ -159,34 +147,33 @@ def main():
     )
 
     defaults = build_settings_form_defaults(parsed["settings"])
-    assert defaults["providers"]["chatCompletionSource"] == "makersuite"
-    assert defaults["general"]["reasoningEffort"] == "minimal"
-    assert defaults["general"]["reasoningEffort"] in REASONING_EFFORT_OPTIONS
+    assert "general" not in defaults
+    assert defaults["providers"]["customUrl"] == "https://custom.example.com/v1"
     assert defaults["advanced"]["autoSwipeBlacklist"] == "skip, retry"
 
     preserved = build_settings_save_payload(parsed["settings"], defaults)
     assert preserved["untouched"]["keep"] is True
-    assert preserved["oai_settings"]["chat_completion_source"] == "makersuite"
+    assert preserved["oai_settings"]["chat_completion_source"] == "openai"
+    # Unbound legacy-owned generation fields pass through untouched.
     assert preserved["oai_settings"]["reasoning_effort"] == "minimal"
+    assert preserved["oai_settings"]["google_model"] == "gemini-2.5-pro"
     assert preserved["power_user"]["auto_swipe_blacklist"] == ["skip", "retry"]
 
     edited_form = copy.deepcopy(defaults)
     edited_form["advanced"]["autoSwipeBlacklist"] = "alpha, beta\n gamma"
     edited = build_settings_save_payload(parsed["settings"], edited_form)
-    assert edited["oai_settings"]["chat_completion_source"] == "makersuite"
+    assert edited["oai_settings"]["chat_completion_source"] == "openai"
     assert edited["power_user"]["auto_swipe_blacklist"] == ["alpha", "beta", "gamma"]
 
-    new_google = build_settings_save_payload(
-        {"oai_settings": {"chat_completion_source": "openai"}},
-        {
-            "general": {"reasoningEffort": "xhigh"},
-            "providers": {"chatCompletionSource": "makersuite"},
-            "advanced": {"autoSwipeBlacklist": ""},
-        },
+    # A partial form carrying a changed provider field still cannot drop or
+    # rewrite unbound legacy-owned values.
+    sparse = build_settings_save_payload(
+        {"oai_settings": {"reasoning_effort": "xhigh", "temp_openai": 0.7}},
+        {"providers": {"customUrl": "https://new.example.com/v1"}},
     )
-    assert new_google["oai_settings"]["chat_completion_source"] == "makersuite"
-    assert new_google["oai_settings"]["reasoning_effort"] == "xhigh"
-    assert new_google["power_user"]["auto_swipe_blacklist"] == []
+    assert sparse["oai_settings"]["custom_url"] == "https://new.example.com/v1"
+    assert sparse["oai_settings"]["reasoning_effort"] == "xhigh"
+    assert sparse["oai_settings"]["temp_openai"] == 0.7
 
 
 if __name__ == "__main__":

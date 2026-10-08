@@ -38,10 +38,10 @@ describe('OpenAI provider capability helpers', () => {
     test('keeps the fallback model field persistent under the four-field contract', () => {
         const source = fs.readFileSync(path.join(repoRoot, 'public/scripts/openai.js'), 'utf8');
 
-        expect(source).toContain("fallback_provider_model: ['#fallback_provider_model', 'fallback_provider_model', false, false]");
+        // The field survives in the preset map (NULL_SELECTOR: no drawer input
+        // exists anymore; the React Providers tab owns the control).
+        expect(source).toContain("fallback_provider_model: ['#NULL_SELECTOR', 'fallback_provider_model', false, false]");
         expect(source).toContain("fallback_provider_model: ''");
-        expect(source).toContain('function updateFallbackProviderStatus()');
-        expect(source).toContain("$('#fallback_provider_model').on('input',");
 
         // Retired two-endpoint fields keep no bindings, defaults, or send-path use.
         // (The load-time migration still reads the legacy literals to clean them.)
@@ -78,7 +78,6 @@ describe('OpenAI provider capability helpers', () => {
         })).toMatchObject({ state: 'disabled', ready: false });
         expect(getFallbackProviderStatus({})).toMatchObject({ state: 'disabled', ready: false });
 
-        expect(source).toContain('getFallbackProviderStatus(oai_settings)');
         // Fallback reuses the primary secret; no dedicated key handling remains.
         expect(source).not.toContain('SECRET_KEYS.OPENAI_FALLBACK');
         expect(source).not.toContain('openai_secret_marker');
@@ -110,17 +109,19 @@ describe('OpenAI provider capability helpers', () => {
         expect(source).toContain('toastr.warning(t`Enter or save provider credentials before testing the connection.`);');
     });
 
-    test('keeps API test requests visibly loading until they settle', () => {
+    test('keeps API test requests bounded and UI-free until they settle', () => {
         const source = fs.readFileSync(path.join(repoRoot, 'public/scripts/openai.js'), 'utf8');
-        const testConnectionBody = source.match(/async function testApiConnection\(\) \{[\s\S]*?\n\}/)?.[0] ?? '';
+        const testConnectionBody = source.match(/export async function testProviderConnection\(\) \{[\s\S]*?\n\}/)?.[0] ?? '';
 
         expect(source).toContain('const API_TEST_REQUEST_TIMEOUT_MS = 15000;');
-        expect(testConnectionBody).toContain('startStatusLoading();');
         expect(testConnectionBody).toContain('new AbortController()');
         expect(testConnectionBody).toContain('API connection test timed out');
         expect(testConnectionBody).toContain('} finally {');
         expect(testConnectionBody).toContain('clearTimeout(timeout);');
-        expect(testConnectionBody).toContain('resultCheckStatus();');
+        // The loading affordance moved to the React Providers tab; the function
+        // only refreshes the online status when it settles.
+        expect(testConnectionBody).toContain('displayOnlineStatus();');
+        expect(testConnectionBody).not.toContain('startStatusLoading');
     });
 
     test('resolves model descriptors with structured capability fields', () => {

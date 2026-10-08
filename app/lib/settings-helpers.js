@@ -1,10 +1,5 @@
 export const settingsTabDefinitions = [
     {
-        id: 'general',
-        label: 'General',
-        description: '全局 chat-completion 默认行为、采样和 continue / reasoning 控制。',
-    },
-    {
         id: 'providers',
         label: 'Providers',
         description: 'endpoint、API key、主模型与 fallback 模型。',
@@ -24,18 +19,6 @@ export const settingsTabDefinitions = [
 export const providerSecretKeyBySource = {
     openai: 'api_key_openai',
 };
-
-export const reasoningEffortOptions = [
-    { value: 'auto', label: 'Auto' },
-    { value: 'low', label: 'Low' },
-    { value: 'medium', label: 'Medium' },
-    { value: 'high', label: 'High' },
-    { value: 'min', label: 'Min' },
-    { value: 'max', label: 'Max' },
-    { value: 'none', label: 'None' },
-    { value: 'minimal', label: 'Minimal' },
-    { value: 'xhigh', label: 'XHigh' },
-];
 
 export const promptPostProcessingOptions = [
     { value: '', label: 'None' },
@@ -70,26 +53,6 @@ export const chatDisplayOptions = [
     { value: '2', label: 'Document' },
 ];
 
-export const namesBehaviorOptions = [
-    { value: '-1', label: 'None' },
-    { value: '0', label: 'Default' },
-    { value: '1', label: 'Completion' },
-    { value: '2', label: 'Content' },
-];
-
-export const toolReasoningModeOptions = [
-    { value: 'disabled', label: 'Disabled' },
-    { value: 'since_last_user', label: 'Since Last User' },
-    { value: 'active_chain', label: 'Active Tool Chain' },
-];
-
-export const verbosityOptions = [
-    { value: 'auto', label: 'Auto' },
-    { value: 'low', label: 'Low' },
-    { value: 'medium', label: 'Medium' },
-    { value: 'high', label: 'High' },
-];
-
 export const mediaDisplayOptions = [
     { value: 'list', label: 'List' },
     { value: 'gallery', label: 'Gallery' },
@@ -114,42 +77,11 @@ export const tagImportSettingOptions = [
 ];
 
 export const defaultSettingsFormValues = {
-    general: {
-        presetSettings: '',
-        openaiMaxContext: 4095,
-        openaiMaxTokens: 300,
-        streamOpenai: true,
-        temperature: 0.7,
-        frequencyPenalty: 0,
-        presencePenalty: 0,
-        topP: 1,
-        functionCalling: false,
-        showThoughts: true,
-        reasoningEffort: 'high',
-        continuePrefill: false,
-        continuePostfix: ' ',
-        squashSystemMessages: false,
-        customPromptPostProcessing: '',
-        n: 1,
-        verbosity: 'auto',
-        mediaInlining: true,
-        inlineImageQuality: 'auto',
-        toolReasoningMode: 'disabled',
-        toolCallRecurseLimit: 5,
-        sendIfEmpty: '',
-        impersonationPrompt: '',
-        newChatPrompt: '',
-        newExampleChatPrompt: '',
-        continueNudgePrompt: '',
-        wiFormat: '',
-        scenarioFormat: '',
-        personalityFormat: '',
-        namesBehavior: 0,
-    },
     providers: {
         openaiModel: '',
         customUrl: '',
         fallbackProviderModel: '',
+        promptPostProcessing: '',
     },
     userInterface: {
         chatWidth: 50,
@@ -293,21 +225,6 @@ function parseBlacklistToSettingsValue(value) {
 }
 
 const fieldBindings = [
-    { tab: 'general', formPath: 'general.presetSettings', settingsPath: 'oai_settings.preset_settings_openai' },
-    { tab: 'general', formPath: 'general.openaiMaxContext', settingsPath: 'oai_settings.openai_max_context' },
-    { tab: 'general', formPath: 'general.openaiMaxTokens', settingsPath: 'oai_settings.openai_max_tokens' },
-    { tab: 'general', formPath: 'general.streamOpenai', settingsPath: 'oai_settings.stream_openai' },
-    { tab: 'general', formPath: 'general.temperature', settingsPath: 'oai_settings.temp_openai' },
-    { tab: 'general', formPath: 'general.frequencyPenalty', settingsPath: 'oai_settings.freq_pen_openai' },
-    { tab: 'general', formPath: 'general.presencePenalty', settingsPath: 'oai_settings.pres_pen_openai' },
-    { tab: 'general', formPath: 'general.topP', settingsPath: 'oai_settings.top_p_openai' },
-    { tab: 'general', formPath: 'general.functionCalling', settingsPath: 'oai_settings.function_calling' },
-    { tab: 'general', formPath: 'general.showThoughts', settingsPath: 'oai_settings.show_thoughts' },
-    { tab: 'general', formPath: 'general.reasoningEffort', settingsPath: 'oai_settings.reasoning_effort' },
-    { tab: 'general', formPath: 'general.continuePrefill', settingsPath: 'oai_settings.continue_prefill' },
-    { tab: 'general', formPath: 'general.continuePostfix', settingsPath: 'oai_settings.continue_postfix' },
-    { tab: 'general', formPath: 'general.squashSystemMessages', settingsPath: 'oai_settings.squash_system_messages' },
-    { tab: 'general', formPath: 'general.customPromptPostProcessing', settingsPath: 'oai_settings.custom_prompt_post_processing' },
 
     { tab: 'providers', formPath: 'providers.openaiModel', settingsPath: 'oai_settings.openai_model' },
     { tab: 'providers', formPath: 'providers.customUrl', settingsPath: 'oai_settings.custom_url' },
@@ -319,6 +236,7 @@ const fieldBindings = [
         // value must not silently re-enable it under "non-empty model = enabled".
         toForm: (value, settings) => (getValueAtPath(settings, 'oai_settings.fallback_provider_enabled') === false ? '' : value),
     },
+    { tab: 'providers', formPath: 'providers.promptPostProcessing', settingsPath: 'oai_settings.custom_prompt_post_processing' },
 
     { tab: 'userInterface', formPath: 'userInterface.chatWidth', settingsPath: 'power_user.chat_width' },
     { tab: 'userInterface', formPath: 'userInterface.fontScale', settingsPath: 'power_user.font_scale' },
@@ -384,21 +302,6 @@ const fieldBindings = [
     { tab: 'advanced', formPath: 'advanced.stscriptParserFlagStrictEscaping', settingsPath: 'power_user.stscript.parser.flags.1' },
     { tab: 'advanced', formPath: 'advanced.stscriptParserFlagReplaceGetvar', settingsPath: 'power_user.stscript.parser.flags.2' },
 
-    { tab: 'general', formPath: 'general.n', settingsPath: 'oai_settings.n' },
-    { tab: 'general', formPath: 'general.verbosity', settingsPath: 'oai_settings.verbosity' },
-    { tab: 'general', formPath: 'general.mediaInlining', settingsPath: 'oai_settings.media_inlining' },
-    { tab: 'general', formPath: 'general.inlineImageQuality', settingsPath: 'oai_settings.inline_image_quality' },
-    { tab: 'general', formPath: 'general.toolReasoningMode', settingsPath: 'oai_settings.tool_reasoning_mode' },
-    { tab: 'general', formPath: 'general.toolCallRecurseLimit', settingsPath: 'oai_settings.tool_call_recurse_limit' },
-    { tab: 'general', formPath: 'general.sendIfEmpty', settingsPath: 'oai_settings.send_if_empty' },
-    { tab: 'general', formPath: 'general.impersonationPrompt', settingsPath: 'oai_settings.impersonation_prompt' },
-    { tab: 'general', formPath: 'general.newChatPrompt', settingsPath: 'oai_settings.new_chat_prompt' },
-    { tab: 'general', formPath: 'general.newExampleChatPrompt', settingsPath: 'oai_settings.new_example_chat_prompt' },
-    { tab: 'general', formPath: 'general.continueNudgePrompt', settingsPath: 'oai_settings.continue_nudge_prompt' },
-    { tab: 'general', formPath: 'general.wiFormat', settingsPath: 'oai_settings.wi_format' },
-    { tab: 'general', formPath: 'general.scenarioFormat', settingsPath: 'oai_settings.scenario_format' },
-    { tab: 'general', formPath: 'general.personalityFormat', settingsPath: 'oai_settings.personality_format' },
-    { tab: 'general', formPath: 'general.namesBehavior', settingsPath: 'oai_settings.names_behavior' },
     { tab: 'userInterface', formPath: 'userInterface.expandMessageActions', settingsPath: 'power_user.expand_message_actions' },
 
     { tab: 'userInterface', formPath: 'userInterface.enableZenSliders', settingsPath: 'power_user.enableZenSliders' },
@@ -473,7 +376,6 @@ const fieldBindings = [
 export const settingsOwnerInventory = {
     drawers: {
         userSettings: '#user-settings-block',
-        apiConfiguration: '#rm_api_block',
         advancedFormatting: '#AdvancedFormatting',
     },
     specializedSurfaces: [
@@ -513,6 +415,37 @@ export const settingsCoverage = {
         'amount_gen',
         'world_info_settings',
         'feature_settings',
+        // Generation defaults: edited by the AI Response Configuration / preset
+        // drawer, not the React Settings surface.
+        'oai_settings.preset_settings_openai',
+        'oai_settings.openai_max_context',
+        'oai_settings.openai_max_tokens',
+        'oai_settings.stream_openai',
+        'oai_settings.temp_openai',
+        'oai_settings.freq_pen_openai',
+        'oai_settings.pres_pen_openai',
+        'oai_settings.top_p_openai',
+        'oai_settings.function_calling',
+        'oai_settings.show_thoughts',
+        'oai_settings.reasoning_effort',
+        'oai_settings.continue_prefill',
+        'oai_settings.continue_postfix',
+        'oai_settings.squash_system_messages',
+        'oai_settings.n',
+        'oai_settings.verbosity',
+        'oai_settings.media_inlining',
+        'oai_settings.inline_image_quality',
+        'oai_settings.tool_reasoning_mode',
+        'oai_settings.tool_call_recurse_limit',
+        'oai_settings.send_if_empty',
+        'oai_settings.impersonation_prompt',
+        'oai_settings.new_chat_prompt',
+        'oai_settings.new_example_chat_prompt',
+        'oai_settings.continue_nudge_prompt',
+        'oai_settings.wi_format',
+        'oai_settings.scenario_format',
+        'oai_settings.personality_format',
+        'oai_settings.names_behavior',
         // Complex managers / runtime-only surfaces
         'oai_settings.prompts',
         'oai_settings.prompt_order',

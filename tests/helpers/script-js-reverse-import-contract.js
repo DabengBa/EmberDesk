@@ -25,10 +25,8 @@ export const FIRST_PARTY_SCRIPT_JS_IMPORT_CONTRACT = Object.freeze([
     contractEntry('chat-backups.js', '/script.js', ['displayPastChats', 'importCharacterChat']),
     contractEntry('chats.js', '../script.js', ['addCopyToCodeBlocks', 'appendMediaToMessage', 'characters', 'chat', 'getCurrentChatId', 'name2', 'reloadCurrentChat', 'saveSettingsDebounced', 'this_chid', 'saveChatConditional', 'chat_metadata', 'neutralCharacterName', 'updateChatMetadata', 'system_message_types', 'converter', 'substituteParams', 'getSystemMessageByType', 'printMessages', 'clearChat', 'refreshSwipeButtons', 'getMediaIndex', 'getMediaDisplay', 'chatElement']),
     contractEntry('custom-request.js', '../script.js', ['extractJsonFromData', 'extractMessageFromData']),
-    contractEntry('extensions/connection-manager/index.js', '../../../script.js', ['activateSendButtons', 'deactivateSendButtons', 'main_api', 'online_status', 'saveSettingsDebounced']),
     contractEntry('extensions/regex/engine.js', '../../../script.js', ['characters', 'saveSettingsDebounced', 'substituteParams', 'substituteParamsExtended', 'this_chid']),
     contractEntry('extensions/regex/index.js', '../../../script.js', ['characters', 'getCurrentChatId', 'messageFormatting', 'reloadCurrentChat', 'saveSettingsDebounced', 'this_chid']),
-    contractEntry('extensions/shared.js', '../../script.js', ['CONNECT_API_MAP', 'createModelIcon']),
 
     contractEntry('import-confirm-dialog.js', '../script.js', ['characters', 'converter', 'substituteParams']),
 
@@ -38,7 +36,7 @@ export const FIRST_PARTY_SCRIPT_JS_IMPORT_CONTRACT = Object.freeze([
     contractEntry('macros/definitions/env-macros.js', '../../../script.js', ['parseMesExamples']),
     contractEntry('macros/definitions/time-macros.js', '../../../script.js', ['chat']),
     contractEntry('macros/engine/MacroEnvBuilder.js', '../../../script.js', ['getCharacterCardFieldsLazy', 'getGeneratingModel', 'name1', 'name2']),
-    contractEntry('openai.js', '../script.js', ['abortStatusCheck', 'cancelStatusCheck', 'characters', 'extension_prompt_roles', 'extension_prompt_types', 'Generate', 'getExtensionPrompt', 'getExtensionPromptMaxDepth', 'getMediaDisplay', 'getMediaIndex', 'is_send_press', 'main_api', 'name1', 'name2', 'resultCheckStatus', 'saveSettingsDebounced', 'setOnlineStatus', 'startStatusLoading', 'substituteParams', 'substituteParamsExtended', 'system_message_types', 'this_chid']),
+    contractEntry('openai.js', '../script.js', ['abortStatusCheck', 'characters', 'displayOnlineStatus', 'extension_prompt_roles', 'extension_prompt_types', 'Generate', 'getExtensionPrompt', 'getExtensionPromptMaxDepth', 'getMediaDisplay', 'getMediaIndex', 'is_send_press', 'main_api', 'name1', 'name2', 'saveSettingsDebounced', 'setOnlineStatus', 'substituteParams', 'substituteParamsExtended', 'system_message_types', 'this_chid']),
     contractEntry('power-user.js', '../script.js', ['ANIMATION_DURATION_DEFAULT', 'characters', 'chat', 'deleteMessage', 'doNewChat', 'entitiesFilter', 'extension_prompt_roles', 'extension_prompt_types', 'getCurrentChatId', 'getFirstDisplayedMessageId', 'messageFormatting', 'printCharactersDebounced', 'reloadCurrentChat', 'reloadMarkdownProcessor', 'saveChatConditional', 'saveSettings', 'saveSettingsDebounced', 'scrollChatToBottom', 'setActiveCharacter', 'setAnimationDuration', 'setCharacterId', 'setEditedMessageId', 'settingsReady', 'showMoreMessages', 'substituteParams']),
     contractEntry('preset-manager.js', '../script.js', ['amount_gen', 'characters', 'main_api', 'max_context', 'online_status', 'saveSettings', 'saveSettingsDebounced', 'this_chid']),
     contractEntry('PromptManager.js', '../script.js', ['is_send_press', 'main_api', 'substituteParams']),

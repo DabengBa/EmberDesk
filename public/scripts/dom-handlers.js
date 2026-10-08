@@ -26,7 +26,6 @@ const bootstrapWorkspace = (...args) => shell().bootstrapWorkspace(...args);
 const buildCascadeSectionHtml = (...args) => shell().buildCascadeSectionHtml(...args);
 const buildTemporaryChatDeleteWarningHtml = (...args) => shell().buildTemporaryChatDeleteWarningHtml(...args);
 const callGenericPopup = (...args) => shell().callGenericPopup(...args);
-const cancelStatusCheck = (...args) => shell().cancelStatusCheck(...args);
 const cancelTtsPlay = (...args) => shell().cancelTtsPlay(...args);
 const chooseBogusFolder = (...args) => shell().chooseBogusFolder(...args);
 const closeCharacterExportPopup = (...args) => shell().closeCharacterExportPopup(...args);
@@ -71,7 +70,6 @@ const messageEditCancel = (...args) => shell().messageEditCancel(...args);
 const messageEditDone = (...args) => shell().messageEditDone(...args);
 const messageEditMove = (...args) => shell().messageEditMove(...args);
 const mountAiConfigPanel = (...args) => shell().mountAiConfigPanel(...args);
-const mountApiConnectionsPanel = (...args) => shell().mountApiConnectionsPanel(...args);
 const mountCharacterContextMenu = (...args) => shell().mountCharacterContextMenu(...args);
 const mountCharacterPopup = (...args) => shell().mountCharacterPopup(...args);
 const mountChatComposer = (...args) => shell().mountChatComposer(...args);
@@ -104,7 +102,6 @@ const saveChatConditional = (...args) => shell().saveChatConditional(...args);
 const saveSettingsDebounced = (...args) => shell().saveSettingsDebounced(...args);
 const selectCharacterById = (...args) => shell().selectCharacterById(...args);
 const selectImportedChar = (...args) => shell().selectImportedChar(...args);
-const selectRightMenuWithAnimation = (...args) => shell().selectRightMenuWithAnimation(...args);
 const select_rm_characters = (...args) => shell().select_rm_characters(...args);
 const select_rm_create = (...args) => shell().select_rm_create(...args);
 const select_selected_character = (...args) => shell().select_selected_character(...args);
@@ -139,7 +136,6 @@ export async function bindLegacyShellHandlers() {
     // bindings below; bootstrapWorkspace re-invokes these mounts later, and
     // each mount is idempotent via its dataset.react*Mounted guard.
     await Promise.all([
-        mountApiConnectionsPanel(),
         mountAiConfigPanel(),
         mountCharacterPopup(),
         mountRightNavPanel(),
@@ -151,8 +147,6 @@ export async function bindLegacyShellHandlers() {
         mountDialogueDelMesControls(),
         mountOnboardingActions(),
     ]);
-
-    $(document).on('click', '.api_loading', () => cancelStatusCheck('Canceled because connecting was manually canceled'));
 
     //////////INPUT BAR FOCUS-KEEPING LOGIC/////////////
     let S_TAPreviouslyFocused = false;
@@ -221,10 +215,6 @@ export async function bindLegacyShellHandlers() {
 
     //menu buttons setup
 
-    $('#rm_button_settings').on('click', function () {
-        state.selected_button = 'settings';
-        selectRightMenuWithAnimation('rm_api_block');
-    });
     $('#rm_button_characters').on('click', function () {
         state.selected_button = 'characters';
         select_rm_characters();

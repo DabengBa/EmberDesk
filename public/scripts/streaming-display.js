@@ -1,7 +1,6 @@
 /**
  * A floating toast-like display panel for showing streaming LLM generation progress.
  * Shows reasoning (thinking) and content as they stream in.
- * Designed to work with ConnectionManagerRequestService streaming responses.
  *
  * Appends itself inside the topmost open `<dialog>` element (same approach as
  * fixToastrForDialogs in popup.js) so it renders above modal overlays.

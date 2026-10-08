@@ -9,7 +9,7 @@ related: [page.api_configuration, feature.custom_base_url]
 
 ## ID 解释
 
-`feature.chat_completion_select` represents the provider dropdown (`#chat_completion_source`) and the per-provider model inputs in the API configuration drawer. It covers the fixed OpenAI-compatible provider path, loading the model list into the datalist, and selecting or typing a target model. Retired providers (Google AI Studio, Anthropic Claude, Vertex AI) are normalized to OpenAI on settings load. It does not cover API key management, base URL configuration, or connection profile switching.
+`feature.chat_completion_select` represents the model input on the Providers tab of [Settings](page.settings). It covers the fixed OpenAI-compatible provider path, the Connect action that refreshes the model list, and selecting or typing a target model. Retired providers (Google AI Studio, Anthropic Claude, Vertex AI) are normalized to OpenAI on settings load. It does not cover API key management or base URL configuration; connection profiles are retired.
 
 ## Purpose
 
@@ -17,7 +17,7 @@ Let a user choose the chat-completion provider and model that visible chat reque
 
 ## User-Visible Contract
 
-- The provider dropdown in [API Configuration](page.api_configuration) currently offers the single OpenAI-compatible path; provider-keyed controls remain gated by the data-source mechanism.
+- The provider contract in [Settings](page.settings) offers the single OpenAI-compatible path; there is no provider dropdown.
 - The active provider's model input accepts either a model chosen from a refreshed list or a typed model id when no list is available.
 - Changing provider clears stale model-list UI so users do not mistake a previous provider's model list for the current provider.
 - New installations default to OpenAI chat completion; legacy API types are visibly normalized to the current chat-completion path on load.
@@ -31,8 +31,8 @@ Let a user choose the chat-completion provider and model that visible chat reque
 
 ## Acceptance Workflows
 
-- As a user configuring chat completions, from [API Configuration](page.api_configuration) switch the provider dropdown and choose or type a model; EmberDesk must show the matching provider controls and use that visible provider/model choice for later chat requests, refresh or reopen must not restore stale controls from the previous provider, and failure is mixed provider UI, stale model list, or a chat request visibly targeting the old model.
-- As a user whose provider model list is not loaded, from the active provider section click Connect or type a model id manually; EmberDesk must either populate the model list or leave manual model entry usable, retry after a connection failure must remain possible, and failure is blocking model entry because the list is empty.
+- As a user configuring chat completions, from the Providers tab of [Settings](page.settings) choose or type a model; EmberDesk must show the matching provider controls and use that visible provider/model choice for later chat requests, refresh or reopen must not restore stale controls from the previous provider, and failure is mixed provider UI, stale model list, or a chat request visibly targeting the old model.
+- As a user whose provider model list is not loaded, from the Providers tab click Connect or type a model id manually; EmberDesk must either populate the model list or leave manual model entry usable, retry after a connection failure must remain possible, and failure is blocking model entry because the list is empty.
 - As a user with a saved legacy Google or Vertex AI configuration, from React [Settings](page.settings) open provider settings and save; EmberDesk must display the provider as OpenAI and persist `openai` as the chat completion source, and failure is a saved source that still names the retired provider.
 
 ## Feature-Specific Evidence
@@ -51,5 +51,5 @@ Let a user choose the chat-completion provider and model that visible chat reque
 ## Boundaries
 
 - Base URL and unified API key handling belong to [Custom Base URL](feature.custom_base_url).
-- Named profile switching belongs to [Connection Profile](feature.connection_profile).
-- The legacy drawer and React settings page placement belong to [API Configuration](page.api_configuration) and [Settings](page.settings).
+- Named profile switching is retired with [Connection Profile](feature.connection_profile).
+- The React settings page placement belongs to [Settings](page.settings); the legacy drawer ([API Configuration](page.api_configuration)) is retired.

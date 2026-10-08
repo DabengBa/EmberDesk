@@ -122,14 +122,14 @@ describe('settings React route flag', () => {
         expect(routeSource).toContain('<settingsForm.Subscribe');
         expect(routeSource).toContain('selector={state => state.isPristine}');
         expect(routeSource).toContain('disabled={isBusy || settingsQuery.isPending || isPristine || hasRevisionConflict}');
-        expect(routeSource).toContain("import { startTransition, useCallback, useEffect, useMemo, useState } from 'react';");
+        expect(routeSource).toContain("import { startTransition, useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';");
         expect(routeSource).toContain('const [isSettingsFormReady, setIsSettingsFormReady] = useState(false);');
         expect(routeSource).toContain('const openSettingsTab = useCallback((tabId: string)');
         expect(routeSource).toContain('startTransition(() => {');
         expect(routeSource).toContain('{isSettingsFormReady ? (');
         expect(routeSource).not.toContain('const settingsFormValues = useStore(settingsForm.store, state => state.values);');
         expect(routeSource).toContain('settingsStyles.tabPanelOverlay');
-        expect(routeSource).toContain("{activeTab === 'general' ? (");
+        expect(routeSource).not.toContain("{activeTab === 'general' ? (");
         expect(routeSource).toContain("{activeTab === 'providers' ? (");
         expect(routeSource).toContain("{activeTab === 'userInterface' ? (");
         expect(routeSource).toContain("{activeTab === 'advanced' ? (");
@@ -198,31 +198,24 @@ describe('settings React route flag', () => {
         expect(settingFieldSource).toContain('checked={Boolean(currentValue)}');
         expect(settingFieldSource).not.toContain('checked={Boolean(field.state.value)}');
 
-        expect(helperModule.settingsTabDefinitions).toHaveLength(4);
+        expect(helperModule.settingsTabDefinitions).toHaveLength(3);
         // Single-provider contract: the provider picker is retired.
         expect(helperModule.providerOptions).toBeUndefined();
         expect(helperModule.providerSecretKeyBySource.claude).toBeUndefined();
         expect(helperModule.providerSecretKeyBySource.makersuite).toBeUndefined();
-        expect(helperModule.reasoningEffortOptions.map(option => option.value)).toEqual([
-            'auto',
-            'low',
-            'medium',
-            'high',
-            'min',
-            'max',
-            'none',
-            'minimal',
-            'xhigh',
-        ]);
-        expect(helperModule.settingsCoverage.reactOwned.general).toContain('oai_settings.preset_settings_openai');
-        expect(helperModule.settingsCoverage.reactOwned.general).toContain('oai_settings.temp_openai');
-        expect(helperModule.settingsCoverage.reactOwned.general).toContain('oai_settings.reasoning_effort');
+        // Generation defaults moved fully to the legacy AI Response
+        // Configuration / preset drawer; no React-owned general tab remains.
+        expect(helperModule.settingsCoverage.reactOwned.general).toBeUndefined();
+        expect(helperModule.settingsCoverage.legacyOwned).toContain('oai_settings.preset_settings_openai');
+        expect(helperModule.settingsCoverage.legacyOwned).toContain('oai_settings.temp_openai');
+        expect(helperModule.settingsCoverage.legacyOwned).toContain('oai_settings.reasoning_effort');
         expect(helperModule.settingsCoverage.reactOwned.providers).toEqual(expect.arrayContaining([
             'oai_settings.openai_model',
             'oai_settings.custom_url',
             'oai_settings.fallback_provider_model',
+            'oai_settings.custom_prompt_post_processing',
         ]));
-        expect(helperModule.settingsCoverage.reactOwned.providers).toHaveLength(3);
+        expect(helperModule.settingsCoverage.reactOwned.providers).toHaveLength(4);
         expect(helperModule.settingsCoverage.reactOwned.userInterface).toContain('power_user.custom_css');
         expect(helperModule.settingsCoverage.reactOwned.advanced).toContain('power_user.auto_swipe');
         expect(helperModule.settingsCoverage.reactOwned.advanced).toContain('power_user.stscript.autocomplete.state');
@@ -365,11 +358,10 @@ describe('settings React route flag', () => {
         expect(parsed.settings.power_user.theme).toBe('Dark Lite');
 
         const defaults = helperModule.buildSettingsFormDefaults(parsed.settings);
-        expect(defaults.general.presetSettings).toBe('RecoveredRuins');
+        expect(defaults.general).toBeUndefined();
         expect(defaults.providers.openaiModel).toBe('gpt-4-turbo');
         expect(defaults.providers.claudeModel).toBeUndefined();
         expect(defaults.providers.googleModel).toBeUndefined();
-        expect(defaults.general.enableWebSearch).toBeUndefined();
         // Legacy enabled flag is honored on read; the toggle itself is retired.
         expect(defaults.providers.fallbackProviderEnabled).toBeUndefined();
         expect(defaults.providers.fallbackProviderModel).toBe('gpt-4.1-mini');
@@ -378,23 +370,6 @@ describe('settings React route flag', () => {
         expect(defaults.advanced.stscriptAutocompleteFontScale).toBe(0.9);
 
         const merged = helperModule.buildSettingsSavePayload(parsed.settings, {
-            general: {
-                presetSettings: 'RecoveredRuins',
-                openaiMaxContext: 8192,
-                openaiMaxTokens: 512,
-                streamOpenai: false,
-                temperature: 0.8,
-                frequencyPenalty: 0.2,
-                presencePenalty: 0.3,
-                topP: 0.95,
-                functionCalling: false,
-                showThoughts: false,
-                reasoningEffort: 'high',
-                continuePrefill: false,
-                continuePostfix: '\n\n',
-                squashSystemMessages: false,
-                customPromptPostProcessing: 'strict_tools',
-            },
             providers: {
                 openaiModel: 'gpt-5.2',
                 customUrl: 'https://custom.example.com/v1',
@@ -487,11 +462,16 @@ describe('settings React route flag', () => {
         expect(merged.oai_settings.fallback_provider_enabled).toBeUndefined();
         expect(merged.oai_settings.fallback_provider_base_url).toBeUndefined();
         expect(merged.oai_settings.bind_preset_to_connection).toBeUndefined();
-        expect(merged.oai_settings.stream_openai).toBe(false);
-        expect(merged.oai_settings.openai_max_context).toBe(8192);
-        expect(merged.oai_settings.openai_max_tokens).toBe(512);
-        expect(merged.oai_settings.function_calling).toBe(false);
-        expect(merged.oai_settings.reasoning_effort).toBe('high');
+        // Generation defaults are legacy-drawer-owned: a React Settings save
+        // preserves them untouched instead of writing or deleting them.
+        expect(merged.oai_settings.stream_openai).toBe(true);
+        expect(merged.oai_settings.openai_max_context).toBe(4095);
+        expect(merged.oai_settings.openai_max_tokens).toBe(300);
+        expect(merged.oai_settings.temp_openai).toBe(0.7);
+        expect(merged.oai_settings.function_calling).toBe(true);
+        expect(merged.oai_settings.reasoning_effort).toBe('medium');
+        expect(merged.oai_settings.continue_prefill).toBe(true);
+        expect(merged.oai_settings.custom_prompt_post_processing).toBe('merge_tools');
         expect(merged.power_user.custom_css).toBe('.chat { color: gold; }');
         expect(merged.power_user.toastr_position).toBe('toast-bottom-right');
         expect(merged.power_user.auto_swipe).toBe(false);
@@ -511,12 +491,29 @@ describe('settings React route flag', () => {
 
 
 
-    test('allows two-decimal Temperature values used by chat-completion presets', () => {
+    test('keeps generation-default fields out of the React surface while legacy drawer bindings stay intact', async () => {
         const routeSource = fs.readFileSync(path.join(repoRoot, 'app', 'components', 'settings', 'SettingsSurface.tsx'), 'utf8');
-        const temperatureField = routeSource.match(/name="general\.temperature"[\s\S]*?\/>/)?.[0] ?? '';
+        const helperModule = await import(`../app/lib/settings-helpers.js?settingsGeneralRetired=${Date.now()}-${Math.random()}`);
+        const aiConfigSource = fs.readFileSync(path.join(repoRoot, 'app', 'components', 'ai-config', 'AiConfigPanel.tsx'), 'utf8');
+        const openaiSource = fs.readFileSync(path.join(repoRoot, 'public', 'scripts', 'openai.js'), 'utf8');
 
-        expect(temperatureField).toContain('step={0.01}');
-        expect(temperatureField).not.toContain('step={0.05}');
+        expect(routeSource).not.toContain('name="general.');
+        expect(routeSource).not.toContain("'Generation Defaults'");
+        expect(helperModule.settingsFormFieldPaths.some(path => path.startsWith('general.'))).toBe(false);
+        expect(helperModule.defaultSettingsFormValues.general).toBeUndefined();
+        // The AI Response Configuration drawer still owns every removed field.
+        for (const legacyId of [
+            'settings_preset_openai',
+            'openai_max_context',
+            'openai_max_tokens',
+            'temp_openai',
+            'openai_reasoning_effort',
+            'continue_nudge_prompt_textarea',
+            'names_behavior',
+        ]) {
+            expect(aiConfigSource).toContain(`id="${legacyId}"`);
+            expect(openaiSource).toContain(legacyId);
+        }
     });
 
     test('sends React settings saves through the injected runtime command port', async () => {
@@ -547,7 +544,6 @@ describe('settings React route flag', () => {
     test('coerces string numeric enums into form numbers for lossless save validation', async () => {
         const helperModule = await import(`../app/lib/settings-helpers.js?settingsCoerce=${Date.now()}-${Math.random()}`);
         const defaults = helperModule.buildSettingsFormDefaults({
-            oai_settings: { names_behavior: '2', n: '3' },
             power_user: {
                 avatar_style: '1',
                 chat_display: '2',
@@ -555,8 +551,6 @@ describe('settings React route flag', () => {
                 tag_import_setting: '3',
             },
         });
-        expect(defaults.general.namesBehavior).toBe(2);
-        expect(defaults.general.n).toBe(3);
         expect(defaults.userInterface.avatarStyle).toBe(1);
         expect(defaults.userInterface.chatDisplay).toBe(2);
         expect(defaults.userInterface.sendOnEnter).toBe(-1);
@@ -567,8 +561,9 @@ describe('settings React route flag', () => {
         const helperModule = await import(`../app/lib/settings-helpers.js?settingsInventory=${Date.now()}-${Math.random()}`);
 
         expect(helperModule.settingsOwnerInventory.drawers.userSettings).toBe('#user-settings-block');
-        expect(helperModule.settingsOwnerInventory.drawers.apiConfiguration).toBe('#rm_api_block');
         expect(helperModule.settingsOwnerInventory.drawers.advancedFormatting).toBe('#AdvancedFormatting');
+        // The retired API Connections drawer is no longer part of the inventory.
+        expect(helperModule.settingsOwnerInventory.drawers.apiConfiguration).toBeUndefined();
         expect(helperModule.settingsOwnerInventory.specializedSurfaces).toEqual(expect.arrayContaining([
             'world_info_settings',
             'feature_settings',
@@ -582,6 +577,11 @@ describe('settings React route flag', () => {
             'oai_settings.names_behavior',
             'oai_settings.verbosity',
             'oai_settings.media_inlining',
+        ]) {
+            expect(reactPaths).not.toContain(path);
+            expect(helperModule.settingsCoverage.legacyOwned).toContain(path);
+        }
+        for (const path of [
             'power_user.main_text_color',
             'power_user.expand_message_actions',
             'power_user.send_on_enter',
@@ -644,10 +644,7 @@ describe('settings React route flag', () => {
         };
 
         const defaults = helperModule.buildSettingsFormDefaults(fixture);
-        expect(defaults.general.toolReasoningMode).toBe('active_chain');
-        expect(defaults.general.namesBehavior).toBe(2);
-        expect(defaults.general.verbosity).toBe('low');
-        expect(defaults.general.assistantPrefill).toBeUndefined();
+        expect(defaults.general).toBeUndefined();
         expect(defaults.userInterface.mainTextColor).toBe('rgba(1, 2, 3, 1)');
         expect(defaults.userInterface.sendOnEnter).toBe(-1);
         expect(defaults.advanced.collapseNewlines).toBe(true);
@@ -685,8 +682,6 @@ describe('settings React route flag', () => {
     });
 
     test('downgrades legacy Vertex AI source to OpenAI and keeps advanced reasoning effort values saveable', async () => {
-        const routeSource = fs.readFileSync(path.join(repoRoot, 'app', 'components', 'settings', 'SettingsSurface.tsx'), 'utf8');
-        const pageRouteSource = fs.readFileSync(path.join(repoRoot, 'app', 'routes', 'settings.tsx'), 'utf8');
         const helperModule = await import(`../app/lib/settings-helpers.js?settingsCompat=${Date.now()}-${Math.random()}`);
         const parsed = helperModule.parseSettingsPayload({
             settings: JSON.stringify({
@@ -701,15 +696,14 @@ describe('settings React route flag', () => {
 
         const defaults = helperModule.buildSettingsFormDefaults(parsed.settings);
         expect(defaults.providers.chatCompletionSource).toBeUndefined();
-        expect(defaults.general.reasoningEffort).toBe('minimal');
+        expect(defaults.general).toBeUndefined();
 
         const preserved = helperModule.buildSettingsSavePayload(parsed.settings, defaults);
         expect(preserved.untouched.keep).toBe(true);
-        // Saving normalizes the retired multi-provider source key.
+        // Saving normalizes the retired multi-provider source key while the
+        // legacy-owned reasoning effort survives untouched.
         expect(preserved.oai_settings.chat_completion_source).toBe('openai');
         expect(preserved.oai_settings.reasoning_effort).toBe('minimal');
-
-        expect(routeSource).toContain("reasoningEffort: z.enum(['auto', 'low', 'medium', 'high', 'min', 'max', 'none', 'minimal', 'xhigh']),");
     });
 
     test('normalizes retired Claude source to OpenAI and preserves legacy keys', async () => {
@@ -859,20 +853,22 @@ describe('settings React route flag', () => {
         const providerSource = fs.readFileSync(path.join(repoRoot, 'public', 'scripts', 'react-runtime-provider.js'), 'utf8');
         const scriptSource = fs.readFileSync(path.join(repoRoot, 'public', 'script.js'), 'utf8');
 
-        // Legacy-owned surfaces (preset CRUD, Prompt Manager, connection-profile
-        // capture/apply, user-settings extras) still render
+        // Legacy-owned surfaces (preset CRUD, Prompt Manager,
+        // user-settings extras) still render
         // inside workspace drawers that the shell no longer opens. Overlay links
         // reach them through the openWorkspaceDrawer runtime command, which
         // resolves to openWorkspaceChildSlotHostImmediate on the drawer host id.
         for (const target of [
             'left-nav-panel',
-            'rm_api_block',
             'AdvancedFormatting',
             'user-settings-block',
         ]) {
             expect(routeSource).toContain(`'${target}'`);
             expect(indexHtml).toContain(`id="${target}" class="drawer-content`);
         }
+        // The retired API Connections drawer is gone from both surfaces.
+        expect(routeSource).not.toContain("'rm_api_block'");
+        expect(indexHtml).not.toContain('id="rm_api_block"');
 
         expect(routeSource).toContain('runtime?.commands.openWorkspaceDrawer(link.target)');
         expect(routeSource).toContain('onRequestClose?.()');
@@ -888,12 +884,12 @@ describe('settings React route flag', () => {
         expect(scriptSource).toContain('rejected unknown drawer host id');
         for (const target of [
             'left-nav-panel',
-            'rm_api_block',
             'AdvancedFormatting',
             'user-settings-block',
         ]) {
             expect(scriptSource).toContain(`'${target}'`);
         }
+        expect(scriptSource).not.toContain("'rm_api_block'");
     });
 
     test('redirects unauthenticated /settings requests to /login', async () => {

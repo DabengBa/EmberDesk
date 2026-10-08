@@ -3,7 +3,6 @@ import { eventSource, event_types } from './events.js';
 import { getRequestHeaders } from './request-context.js';
 import { t } from './i18n.js';
 import { chat_completion_sources } from './openai.js';
-import { callGenericPopup, Popup, POPUP_RESULT, POPUP_TYPE } from './popup.js';
 import { SlashCommand } from './slash-commands/SlashCommand.js';
 import { ARGUMENT_TYPE, SlashCommandArgument, SlashCommandNamedArgument } from './slash-commands/SlashCommandArgument.js';
 import { enumIcons } from './slash-commands/SlashCommandCommonEnumsProvider.js';
@@ -11,8 +10,7 @@ import { enumTypes, SlashCommandEnumValue } from './slash-commands/SlashCommandE
 import { SlashCommandExecutor } from './slash-commands/SlashCommandExecutor.js';
 import { SlashCommandParser } from './slash-commands/SlashCommandParser.js';
 import { SlashCommandScope } from './slash-commands/SlashCommandScope.js';
-import { renderTemplateAsync } from './templates.js';
-import { copyText, isTrueBoolean } from './utils.js';
+import { isTrueBoolean } from './utils.js';
 
 export const SECRET_KEYS = {
     MANCER: 'api_key_mancer',
@@ -115,41 +113,6 @@ const FRIENDLY_NAMES = {
     [SECRET_KEYS.WORKERS_AI]: 'Cloudflare Workers AI',
 };
 
-const INPUT_MAP = {
-    [SECRET_KEYS.MANCER]: '#api_key_mancer',
-    [SECRET_KEYS.OPENAI]: '#api_key_openai',
-    [SECRET_KEYS.AI21]: '#api_key_ai21',
-    [SECRET_KEYS.VLLM]: '#api_key_vllm',
-    [SECRET_KEYS.APHRODITE]: '#api_key_aphrodite',
-    [SECRET_KEYS.TABBY]: '#api_key_tabby',
-    [SECRET_KEYS.MISTRALAI]: '#api_key_mistralai',
-    [SECRET_KEYS.TOGETHERAI]: '#api_key_togetherai',
-    [SECRET_KEYS.OOBA]: '#api_key_ooba',
-    [SECRET_KEYS.INFERMATICAI]: '#api_key_infermaticai',
-    [SECRET_KEYS.DREAMGEN]: '#api_key_dreamgen',
-    [SECRET_KEYS.KOBOLDCPP]: '#api_key_koboldcpp',
-    [SECRET_KEYS.LLAMACPP]: '#api_key_llamacpp',
-    [SECRET_KEYS.COHERE]: '#api_key_cohere',
-    [SECRET_KEYS.PERPLEXITY]: '#api_key_perplexity',
-    [SECRET_KEYS.GROQ]: '#api_key_groq',
-    [SECRET_KEYS.FEATHERLESS]: '#api_key_featherless',
-    [SECRET_KEYS.HUGGINGFACE]: '#api_key_huggingface',
-    [SECRET_KEYS.CHUTES]: '#api_key_chutes',
-    [SECRET_KEYS.ELECTRONHUB]: '#api_key_electronhub',
-    [SECRET_KEYS.GENERIC]: '#api_key_generic',
-    [SECRET_KEYS.DEEPSEEK]: '#api_key_deepseek',
-    [SECRET_KEYS.AIMLAPI]: '#api_key_aimlapi',
-    [SECRET_KEYS.XAI]: '#api_key_xai',
-    [SECRET_KEYS.MOONSHOT]: '#api_key_moonshot',
-    [SECRET_KEYS.FIREWORKS]: '#api_key_fireworks',
-    [SECRET_KEYS.COMETAPI]: '#api_key_cometapi',
-    [SECRET_KEYS.AZURE_OPENAI]: '#api_key_azure_openai',
-    [SECRET_KEYS.ZAI]: '#api_key_zai',
-    [SECRET_KEYS.SILICONFLOW]: '#api_key_siliconflow',
-    [SECRET_KEYS.MINIMAX]: '#api_key_minimax',
-    [SECRET_KEYS.POLLINATIONS]: '#api_key_pollinations',
-};
-
 const getLabel = () => moment().format('L LT');
 
 /**
@@ -168,54 +131,6 @@ export function resolveSecretKey() {
     }
 
     return null;
-}
-
-/**
- * Gets the label of a secret by its ID.
- * @param {string} id The ID of the secret to find.
- * @returns {string} The label of the secret with the given ID, or an empty string if not found.
- */
-export function getSecretLabelById(id) {
-    for (const key of Object.values(SECRET_KEYS)) {
-        const secrets = secret_state[key];
-        if (!Array.isArray(secrets)) {
-            continue;
-        }
-        const secret = secrets.find(s => s.id === id);
-        if (secret) {
-            return `${secret.label} (${secret.value})`;
-        }
-    }
-    return '';
-}
-
-export function updateSecretDisplay() {
-    const savedText = t`Key saved`;
-    const missingText = t`Missing key`;
-    for (const [secret_key, input_selector] of Object.entries(INPUT_MAP)) {
-        const validSecret = !!secret_state[secret_key];
-        const placeholder = validSecret ? savedText : missingText;
-        const label = getActiveSecretLabel(secret_key);
-        const placeholderWithLabel = label ? `${placeholder} (${label})` : placeholder;
-        $(input_selector).attr('placeholder', placeholderWithLabel);
-    }
-}
-
-/**
- * Gets the active secret label for a given key.
- * @param {string} key Gets the active secret label for a given key.
- * @returns {string} The label of the active secret, or '[No label]' if none is active.
- */
-function getActiveSecretLabel(key) {
-    const selectedSecret = secret_state[key];
-    if (Array.isArray(selectedSecret)) {
-        const activeSecret = selectedSecret.find(x => x.active);
-        if (!activeSecret) {
-            return '';
-        }
-        return activeSecret.label || activeSecret.value || t`[No label]`;
-    }
-    return '';
 }
 
 /**
@@ -279,8 +194,6 @@ export async function writeSecret(key, value, label, { allowEmpty } = {}) {
         }
 
         const { id } = await response.json();
-        // Clear the input field
-        $(INPUT_MAP[key]).val('').trigger('input');
         await readSecretState();
         await eventSource.emit(event_types.SECRET_WRITTEN, key);
         return id;
@@ -326,8 +239,6 @@ export async function readSecretState() {
 
         if (response.ok) {
             secret_state = await response.json();
-            updateSecretDisplay();
-            updateInputDataLists();
         }
     } catch {
         console.error('Could not read secrets file');
@@ -403,154 +314,6 @@ export async function renameSecret(key, id, label) {
         }
     } catch (error) {
         console.error(`Could not rename secret value: ${key}`, error);
-    }
-}
-
-/**
- * Updates the input data lists for secret keys for autocomplete functionality.
- */
-function updateInputDataLists() {
-    let container = document.getElementById('secrets_datalists');
-    if (!container) {
-        container = document.createElement('div');
-        container.id = 'secrets_datalists';
-        container.style.display = 'none';
-        document.body.appendChild(container);
-    }
-
-    for (const [key, inputSelector] of Object.entries(INPUT_MAP)) {
-        const inputElements = document.querySelectorAll(inputSelector);
-        if (inputElements.length === 0) {
-            console.warn(`No input elements found for key: ${key}`);
-            continue;
-        }
-
-        const dataListId = `${key}_datalist`;
-        let dataList = document.getElementById(dataListId);
-        if (!dataList) {
-            dataList = document.createElement('datalist');
-            dataList.id = dataListId;
-            container.appendChild(dataList);
-        }
-
-        // Clear existing options
-        dataList.innerHTML = '';
-
-        const secrets = secret_state[key];
-        if (!Array.isArray(secrets)) {
-            continue;
-        }
-
-        for (const secret of secrets) {
-            const option = document.createElement('option');
-            option.value = secret.id;
-            option.textContent = `${secret.label} (${secret.value})`;
-            dataList.appendChild(option);
-        }
-
-        // Set the input element to use the datalist
-        inputElements.forEach(element => {
-            element.setAttribute('list', dataListId);
-        });
-    }
-}
-
-/**
- * Opens the key manager dialog for a specific key.
- * @param {string} key Key for which to open the key manager dialog.
- */
-async function openKeyManagerDialog(key) {
-    const name = FRIENDLY_NAMES[key] || key;
-    const template = $(await renderTemplateAsync('secretKeyManager', { name, key }));
-    template.find('button[data-action="add-secret"]').on('click', async function () {
-        let label = '';
-        let result = POPUP_RESULT.CANCELLED;
-        const value = await Popup.show.input(t`Add Secret`, t`Secret value (can be empty):`, '', {
-            customInputs: [{
-                id: 'newSecretLabel',
-                type: 'text',
-                label: t`Label (optional):`,
-            }],
-            onClose: popup => {
-                if (popup.result) {
-                    label = popup.inputResults.get('newSecretLabel').toString().trim();
-                    result = popup.result;
-                }
-            },
-        });
-        if (!value) {
-            if (result !== POPUP_RESULT.AFFIRMATIVE) {
-                return;
-            }
-            const allowEmpty = await Popup.show.confirm(t`No value entered`, t`No value was entered for the secret. Do you want to add an empty secret?`);
-            if (!allowEmpty) {
-                return;
-            }
-        }
-        await writeSecret(key, value, label, { allowEmpty: true });
-        await renderSecretsList();
-    });
-
-    await renderSecretsList();
-    await callGenericPopup(template, POPUP_TYPE.TEXT, '', { wide: true, large: true, onOpen: scrollToActive });
-
-    async function renderSecretsList() {
-        const secrets = secret_state[key] ?? [];
-        const list = template.find('.secretKeyManagerList');
-        const previousScrollTop = list.scrollTop();
-
-        const emptyMessage = template.find('.secretKeyManagerListEmpty');
-        emptyMessage.toggle(secrets.length === 0);
-
-        const itemBlocks = [];
-        for (const secret of secrets) {
-            const itemTemplate = $(await renderTemplateAsync('secretKeyManagerListItem', secret));
-            itemTemplate.find('[data-action="copy-id"]').on('click', async function () {
-                await copyText(secret.id);
-                toastr.info(t`Secret ID copied to clipboard.`);
-            });
-            itemTemplate.find('button[data-action="rotate-secret"]').on('click', async function () {
-                await rotateSecret(key, secret.id);
-                await renderSecretsList();
-            });
-            itemTemplate.find('button[data-action="copy-secret"]').on('click', async function () {
-                const secretValue = await findSecret(key, secret.id);
-                if (secretValue === null) {
-                    toastr.error(t`The key exposure might be disabled by the server config.`, t`Failed to copy secret value`);
-                    return;
-                }
-                await copyText(secretValue);
-                toastr.info(t`Secret value copied to clipboard.`);
-            });
-            itemTemplate.find('button[data-action="rename-secret"]').on('click', async function () {
-                const label = await Popup.show.input(t`Rename Secret`, t`Enter new label for the secret:`, secret?.label || getLabel());
-                if (!label) {
-                    return;
-                }
-                await renameSecret(key, secret.id, label);
-                await renderSecretsList();
-            });
-            itemTemplate.find('button[data-action="delete-secret"]').on('click', async function () {
-                const confirm = await Popup.show.confirm(t`Delete Secret: ${secret?.label}`, t`Are you sure you want to delete this secret? This action cannot be undone.`);
-                if (!confirm) {
-                    return;
-                }
-                await deleteSecret(key, secret.id);
-                await renderSecretsList();
-            });
-            itemBlocks.push(itemTemplate);
-        }
-
-        list.empty().append(itemBlocks).scrollTop(previousScrollTop);
-    }
-
-    function scrollToActive() {
-        const list = template.find('.secretKeyManagerList');
-        const activeKey = list.find('.active');
-        if (activeKey.length > 0) {
-            const activeKeyScrollTop = activeKey.position().top + list.scrollTop() - list.height() / 2;
-            list.scrollTop(activeKeyScrollTop);
-        }
     }
 }
 
@@ -938,36 +701,5 @@ function registerSecretSlashCommands() {
 }
 
 export async function initSecrets() {
-    $(document).on('click', '.manage-api-keys', async function () {
-        const key = $(this).data('key');
-        if (!key || !Object.values(SECRET_KEYS).includes(key)) {
-            console.error('Invalid key for manage-api-keys:', key);
-            return;
-        }
-        await openKeyManagerDialog(key);
-    });
-    $(document).on('input', Object.values(INPUT_MAP).join(','), function () {
-        const id = $(this).attr('id');
-        const value = $(this).val();
-
-        // Find the key based on the entered value
-        for (const [key, inputSelector] of Object.entries(INPUT_MAP)) {
-            if (!value || !this.matches(inputSelector)) {
-                continue;
-            }
-            const secrets = secret_state[key];
-            if (!Array.isArray(secrets)) {
-                continue;
-            }
-            const secretMatch = secrets.find(secret => secret.id === value);
-            if (secretMatch) {
-                $(this).val('');
-                return rotateSecret(key, secretMatch.id);
-            }
-        }
-
-        const warningElement = $(`[data-for="${id}"]`);
-        warningElement.toggle(value.length > 0);
-    });
     registerSecretSlashCommands();
 }

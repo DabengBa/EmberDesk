@@ -21,7 +21,6 @@ const listSelectors = [
     '.list-group',
     '#rm_print_characters_block',
     '.tag_view_list_tags',
-    '.secretKeyManagerList',
     '.dataMaidCategoryContent',
     '#userList',
 ].join(', ');
@@ -31,7 +30,6 @@ const listItemSelectors = [
     '.list-group .list-group-item',
     '#rm_print_characters_block .entity_block',
     '.tag_view_list_tags .tag_view_item',
-    '.secretKeyManagerList .secretKeyManagerItem',
     '.dataMaidCategoryContent .dataMaidItem',
     '#userList .userSelect',
 ].join(', ');

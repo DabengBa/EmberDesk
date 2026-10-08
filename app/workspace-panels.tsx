@@ -62,7 +62,6 @@ import { RegexImportTarget } from './components/regex/RegexImportTarget';
 import { MacroBrowserPanel, type MacroBrowserProps } from './components/macros/MacroBrowser';
 import { WorldInfoPanel } from './components/panels/WorldInfoPanel';
 import { ChatComposer } from './components/composer/ChatComposer';
-import { ApiConnectionsPanel } from './components/api/ApiConnectionsPanel';
 import { AiConfigPanel } from './components/ai-config/AiConfigPanel';
 import { CharacterPopup } from './components/character-popup/CharacterPopup';
 import { RightNavPanel } from './components/right-nav/RightNavPanel';
@@ -2273,14 +2272,6 @@ export function mountWorldInfoPanel(container: HTMLElement) {
  */
 export function mountChatComposer(container: HTMLElement) {
     mountSmallPanel(container, <ChatComposer />);
-}
-
-/**
- * Mounts the API Connections drawer markup into #rm_api_block.
- * Synchronous commit: initOpenAI binds api_button_openai/model selects right after.
- */
-export function mountApiConnectionsPanel(container: HTMLElement) {
-    mountSmallPanel(container, <ApiConnectionsPanel />);
 }
 
 /**

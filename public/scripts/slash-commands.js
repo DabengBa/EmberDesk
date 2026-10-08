@@ -69,7 +69,7 @@ import { hideChatMessageRange } from './chats.js';
 import { getContext, saveMetadataDebounced } from './feature-settings.js';
 import { getRegexedString, regex_placement } from './extensions/regex/engine.js';
 
-import { chat_completion_sources, MINIMAX_ENDPOINT, oai_settings, promptManager, SILICONFLOW_ENDPOINT, ZAI_ENDPOINT } from './openai.js';
+import { chat_completion_sources, connectProviderConnection, custom_prompt_post_processing_types, getOpenAIModelList, oai_settings, promptManager, setOpenAIModel } from './openai.js';
 import { addEphemeralStoppingString, chat_styles, flushEphemeralStoppingStrings, playMessageSound, power_user } from './power-user.js';
 import { decodeTextTokens, getAvailableTokenizers, getFriendlyTokenizerName, getTextTokens, getTokenCountAsync, selectTokenizer } from './tokenizers.js';
 import { registerVariableCommands, resolveVariable } from './variables.js';
@@ -232,30 +232,18 @@ export const CONNECT_API_MAP = {};
 export const UNIQUE_APIS = [];
 
 function setupConnectAPIMap() {
-    /** @type {Record<string, ConnectAPIMap>} */
+    // Single-provider contract: only the OpenAI-compatible connection remains.
     const result = {
         'openai': {
             selected: 'openai',
-            button: '#api_button_openai',
             source: chat_completion_sources.OPENAI,
         },
         // OpenAI alias
         'oai': {
             selected: 'openai',
-            button: '#api_button_openai',
             source: chat_completion_sources.OPENAI,
         },
     };
-
-    // Fill connections map from chat_completion_sources
-    for (const chatCompletionSource of Object.values(chat_completion_sources)) {
-        if (result[chatCompletionSource]) continue;
-        result[chatCompletionSource] = {
-            selected: 'openai',
-            button: '#api_button_openai',
-            source: chatCompletionSource,
-        };
-    }
 
     Object.assign(CONNECT_API_MAP, result);
     UNIQUE_APIS.push(...new Set(Object.values(CONNECT_API_MAP).map(x => x.selected)));
@@ -293,23 +281,12 @@ export function initDefaultSlashCommands() {
                 return '';
             }
 
-            let connectionRequired = false;
-
-            if (apiConfig.source && oai_settings.chat_completion_source !== apiConfig.source) {
-                $(`#chat_completion_source option[value='${apiConfig.source}']`).prop('selected', true);
-                $('#chat_completion_source').trigger('change');
-                connectionRequired = true;
-            }
-
-            if (connectionRequired && apiConfig.button) {
-                $(apiConfig.button).trigger('click');
-            }
-
             const quiet = isTrueBoolean(args?.quiet?.toString());
             const toast = quiet ? jQuery() : toastr.info(t`API set to ${text}, trying to connect..`);
 
             try {
-                if (connectionRequired) {
+                if (online_status === 'no_connection') {
+                    void connectProviderConnection();
                     await waitUntilCondition(() => online_status !== 'no_connection', 5000, 100);
                 }
                 console.log('Connection successful');
@@ -3153,9 +3130,18 @@ export function initDefaultSlashCommands() {
     }));
 
 
-    const promptPostProcessingEnumProvider = () => Array
-        .from(document.getElementById('custom_prompt_post_processing').querySelectorAll('option'))
-        .map(option => new SlashCommandEnumValue(option.value || 'none', option.textContent, enumTypes.enum));
+    const promptPostProcessingLabels = {
+        [custom_prompt_post_processing_types.NONE]: 'None',
+        [custom_prompt_post_processing_types.MERGE]: 'Merge',
+        [custom_prompt_post_processing_types.MERGE_TOOLS]: 'Merge Tools',
+        [custom_prompt_post_processing_types.SEMI]: 'Semi',
+        [custom_prompt_post_processing_types.SEMI_TOOLS]: 'Semi Tools',
+        [custom_prompt_post_processing_types.STRICT]: 'Strict',
+        [custom_prompt_post_processing_types.STRICT_TOOLS]: 'Strict Tools',
+        [custom_prompt_post_processing_types.SINGLE]: 'Single',
+    };
+    const promptPostProcessingEnumProvider = () => Object.entries(promptPostProcessingLabels)
+        .map(([value, label]) => new SlashCommandEnumValue(value || 'none', label, enumTypes.enum));
     SlashCommandParser.addCommandObject(SlashCommand.fromProps({
         name: 'prompt-post-processing',
         aliases: ['ppp'],
@@ -3195,7 +3181,6 @@ export function initDefaultSlashCommands() {
 
             // 'none' value must be coerced to an empty string
             oai_settings.custom_prompt_post_processing = stringValue === 'none' ? '' : stringValue;
-            $('#custom_prompt_post_processing').val(oai_settings.custom_prompt_post_processing);
             saveSettingsDebounced();
 
             return oai_settings.custom_prompt_post_processing;
@@ -5591,80 +5576,26 @@ $(document).on('click', '[data-displayHelp]', function (e) {
 });
 
 /**
- * Retrieves the available model options based on the currently selected main API and its subtype
+ * Retrieves the available model options reported by the last provider status check.
+ * The single-provider contract keeps a free-text model field, so options are a
+ * suggestion list (exact match preferred, fuzzy fallback, verbatim allowed).
  * @param {boolean} quiet - Whether to suppress toasts
- *
- * @returns {{control: HTMLSelectElement|HTMLInputElement, options: HTMLOptionElement[]}?} An array of objects representing the available model options, or null if not supported
+ * @returns {{options: {value: string, text: string}[]?}} Available model options, or null if not supported
  */
 function getModelOptions(quiet) {
-    const nullResult = { control: null, options: null };
-    const modelSelectMap = [
-        { id: 'model_openai_select', api: 'openai', type: chat_completion_sources.OPENAI },
-        { id: 'model_ai21_select', api: 'openai', type: chat_completion_sources.AI21 },
-        { id: 'model_mistralai_select', api: 'openai', type: chat_completion_sources.MISTRALAI },
-        { id: 'model_cohere_select', api: 'openai', type: chat_completion_sources.COHERE },
-        { id: 'model_perplexity_select', api: 'openai', type: chat_completion_sources.PERPLEXITY },
-        { id: 'model_groq_select', api: 'openai', type: chat_completion_sources.GROQ },
-        { id: 'model_chutes_select', api: 'openai', type: chat_completion_sources.CHUTES },
-        { id: 'model_siliconflow_select', api: 'openai', type: chat_completion_sources.SILICONFLOW },
-        { id: 'model_minimax_select', api: 'openai', type: chat_completion_sources.MINIMAX },
-        { id: 'model_electronhub_select', api: 'openai', type: chat_completion_sources.ELECTRONHUB },
-        { id: 'model_deepseek_select', api: 'openai', type: chat_completion_sources.DEEPSEEK },
-        { id: 'model_aimlapi_select', api: 'openai', type: chat_completion_sources.AIMLAPI },
-        { id: 'model_xai_select', api: 'openai', type: chat_completion_sources.XAI },
-        { id: 'model_pollinations_select', api: 'openai', type: chat_completion_sources.POLLINATIONS },
-        { id: 'model_moonshot_select', api: 'openai', type: chat_completion_sources.MOONSHOT },
-        { id: 'model_fireworks_select', api: 'openai', type: chat_completion_sources.FIREWORKS },
-        { id: 'model_cometapi_select', api: 'openai', type: chat_completion_sources.COMETAPI },
-        { id: 'model_zai_select', api: 'openai', type: chat_completion_sources.ZAI },
-        { id: 'model_workers_ai_select', api: 'openai', type: chat_completion_sources.WORKERS_AI },
-    ];
+    const nullResult = { options: null };
 
-    function getSubType() {
-        switch (main_api) {
-            case 'openai':
-                return oai_settings.chat_completion_source;
-            default:
-                return null;
-        }
-    }
-
-    const apiSubType = getSubType();
-    const modelSelectItem = modelSelectMap.find(x => x.api == main_api && x.type == apiSubType)?.id;
-
-    if (!modelSelectItem) {
+    if (main_api !== 'openai' || oai_settings.chat_completion_source !== chat_completion_sources.OPENAI) {
         if (!quiet) toastr.info(t`Setting a model for your API is not supported or not implemented yet.`);
         return nullResult;
     }
 
-    const modelSelectControl = document.getElementById(modelSelectItem);
+    const options = getOpenAIModelList()
+        .map(model => ({ value: String(model?.id ?? ''), text: String(model?.id ?? '') }))
+        .filter(option => option.value)
+        .filter(onlyUnique);
 
-    if (!(modelSelectControl instanceof HTMLSelectElement) && !(modelSelectControl instanceof HTMLInputElement)) {
-        if (!quiet) toastr.error(t`Model select control not found: ${main_api}[${apiSubType}]`);
-        return nullResult;
-    }
-
-    /**
-     * Get options from a HTMLSelectElement or HTMLInputElement with a list.
-     * @param {HTMLSelectElement | HTMLInputElement} control Control containing the options
-     * @returns {HTMLOptionElement[]} Array of options
-     */
-    const getOptions = (control) => {
-        if (control instanceof HTMLSelectElement) {
-            return Array.from(control.options);
-        }
-
-        const valueOption = new Option(control.value, control.value);
-
-        if (control instanceof HTMLInputElement && control.list instanceof HTMLDataListElement) {
-            return [valueOption, ...Array.from(control.list.options)];
-        }
-
-        return [valueOption];
-    };
-
-    const options = getOptions(modelSelectControl).filter(x => x.value).filter(onlyUnique);
-    return { control: modelSelectControl, options };
+    return { options };
 }
 
 /**
@@ -5675,7 +5606,7 @@ function getModelOptions(quiet) {
  */
 function modelCallback(args, model) {
     const quiet = isTrueBoolean(args?.quiet);
-    const { control: modelSelectControl, options } = getModelOptions(quiet);
+    const { options } = getModelOptions(quiet);
 
     // If no model was found, the reason was already logged, we just return here
     if (options === null) {
@@ -5685,48 +5616,23 @@ function modelCallback(args, model) {
     model = String(model || '').trim();
 
     if (!model) {
-        return modelSelectControl.value;
+        return oai_settings.openai_model ?? '';
     }
 
     console.log('Set model to ' + model);
 
-    if (modelSelectControl instanceof HTMLInputElement) {
-        modelSelectControl.value = model;
-        $(modelSelectControl).trigger('input');
-        if (!quiet) toastr.success(t`Model set to "${model}"`);
-        return model;
+    let nextModel = model;
+    if (options.length) {
+        const fuse = new Fuse(options, { keys: ['text', 'value'] });
+        const fuzzySearchResult = fuse.search(model);
+        const exactValueMatch = options.find(x => x.value.trim().toLowerCase() === model.trim().toLowerCase());
+        const exactTextMatch = options.find(x => x.text.trim().toLowerCase() === model.trim().toLowerCase());
+        nextModel = exactValueMatch?.value ?? exactTextMatch?.value ?? fuzzySearchResult[0]?.item?.value ?? model;
     }
 
-    if (!options.length) {
-        if (!quiet) toastr.warning(t`No model options found. Check your API settings.`);
-        return '';
-    }
-
-    let newSelectedOption = null;
-
-    const fuse = new Fuse(options, { keys: ['text', 'value'] });
-    const fuzzySearchResult = fuse.search(model);
-
-    const exactValueMatch = options.find(x => x.value.trim().toLowerCase() === model.trim().toLowerCase());
-    const exactTextMatch = options.find(x => x.text.trim().toLowerCase() === model.trim().toLowerCase());
-
-    if (exactValueMatch) {
-        newSelectedOption = exactValueMatch;
-    } else if (exactTextMatch) {
-        newSelectedOption = exactTextMatch;
-    } else if (fuzzySearchResult.length) {
-        newSelectedOption = fuzzySearchResult[0].item;
-    }
-
-    if (newSelectedOption) {
-        modelSelectControl.value = newSelectedOption.value;
-        $(modelSelectControl).trigger('change');
-        if (!quiet) toastr.success(t`Model set to "${newSelectedOption.text}"`);
-        return newSelectedOption.value;
-    } else {
-        if (!quiet) toastr.warning(t`No model found with name "${model}"`);
-        return '';
-    }
+    setOpenAIModel(nextModel);
+    if (!quiet) toastr.success(t`Model set to "${nextModel}"`);
+    return nextModel;
 }
 
 /**
@@ -5897,103 +5803,21 @@ async function setApiUrlCallback({ api = null, connect = 'true', quiet = 'false'
     const isQuiet = isTrueBoolean(quiet);
     const autoConnect = isTrueBoolean(connect);
 
-    // Special handling for OpenAI with custom URL
+    // Single-provider contract: the only configurable endpoint is the OpenAI-compatible one.
     const isCurrentlyOpenai = main_api === 'openai' && oai_settings.chat_completion_source === chat_completion_sources.OPENAI;
-    if (api === chat_completion_sources.OPENAI || (!api && isCurrentlyOpenai)) {
+    if (api === chat_completion_sources.OPENAI || api === 'openai' || api === 'oai' || (!api && isCurrentlyOpenai)) {
         if (!url) {
             return oai_settings.custom_url ?? '';
         }
 
-        if (!isCurrentlyOpenai && autoConnect) {
-            toastr.warning(t`OpenAI API is not the currently selected API, so we cannot do an auto-connect. Consider switching to it via /api beforehand.`);
-            return '';
-        }
-
-        $('#openai_reverse_proxy').val(url).trigger('input');
+        oai_settings.custom_url = String(url);
+        saveSettingsDebounced();
 
         if (autoConnect) {
-            $('#api_button_openai').trigger('click');
+            void connectProviderConnection();
         }
 
         return url;
-    }
-
-    const isCurrentlyZAI = main_api === 'openai' && oai_settings.chat_completion_source === chat_completion_sources.ZAI;
-    if (api === chat_completion_sources.ZAI || (!api && isCurrentlyZAI)) {
-        if (!url) {
-            return oai_settings.zai_endpoint || ZAI_ENDPOINT.COMMON;
-        }
-
-        const permittedValues = Object.values(ZAI_ENDPOINT);
-        if (!permittedValues.includes(url)) {
-            if (!isQuiet) toastr.warning(t`Valid options are: ${permittedValues.join(', ')}`, t`ZAI endpoint '${url}' is not a valid option.`);
-            return '';
-        }
-
-        if (!isCurrentlyZAI && autoConnect) {
-            toastr.warning(t`Z.AI is not the currently selected API, so we cannot do an auto-connect. Consider switching to it via /api beforehand.`);
-            return '';
-        }
-
-        $('#zai_endpoint').val(url).trigger('input');
-
-        if (autoConnect) {
-            $('#api_button_openai').trigger('click');
-        }
-
-        return oai_settings.zai_endpoint || ZAI_ENDPOINT.COMMON;
-    }
-
-    const isCurrentlySiliconFlow = main_api === 'openai' && oai_settings.chat_completion_source === chat_completion_sources.SILICONFLOW;
-    if (api === chat_completion_sources.SILICONFLOW || (!api && isCurrentlySiliconFlow)) {
-        if (!url) {
-            return oai_settings.siliconflow_endpoint || SILICONFLOW_ENDPOINT.GLOBAL;
-        }
-
-        const permittedValues = Object.values(SILICONFLOW_ENDPOINT);
-        if (!permittedValues.includes(url)) {
-            if (!isQuiet) toastr.warning(t`Valid options are: ${permittedValues.join(', ')}`, t`SiliconFlow endpoint '${url}' is not a valid option.`);
-            return '';
-        }
-
-        if (!isCurrentlySiliconFlow && autoConnect) {
-            toastr.warning(t`SiliconFlow is not the currently selected API, so we cannot do an auto-connect. Consider switching to it via /api beforehand.`);
-            return '';
-        }
-
-        $('#siliconflow_endpoint').val(url).trigger('input');
-
-        if (autoConnect) {
-            $('#api_button_openai').trigger('click');
-        }
-
-        return oai_settings.siliconflow_endpoint || SILICONFLOW_ENDPOINT.GLOBAL;
-    }
-
-    const isCurrentlyMinimax = main_api === 'openai' && oai_settings.chat_completion_source === chat_completion_sources.MINIMAX;
-    if (api === chat_completion_sources.MINIMAX || (!api && isCurrentlyMinimax)) {
-        if (!url) {
-            return oai_settings.minimax_endpoint || MINIMAX_ENDPOINT.GLOBAL;
-        }
-
-        const permittedValues = Object.values(MINIMAX_ENDPOINT);
-        if (!permittedValues.includes(url)) {
-            if (!isQuiet) toastr.warning(t`Valid options are: ${permittedValues.join(', ')}`, t`MiniMax endpoint '${url}' is not a valid option.`);
-            return '';
-        }
-
-        if (!isCurrentlyMinimax && autoConnect) {
-            toastr.warning(t`MiniMax is not the currently selected API, so we cannot do an auto-connect. Consider switching to it via /api beforehand.`);
-            return '';
-        }
-
-        $('#minimax_endpoint').val(url).trigger('input');
-
-        if (autoConnect) {
-            $('#api_button_openai').trigger('click');
-        }
-
-        return oai_settings.minimax_endpoint || MINIMAX_ENDPOINT.GLOBAL;
     }
 
     // The requested API is not supported for server URL configuration

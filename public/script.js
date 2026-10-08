@@ -87,6 +87,8 @@ import {
     getChatCompletionModel,
     initOpenAI,
     mountPromptManagerPopup,
+    connectProviderConnection,
+    testProviderConnection,
 } from './scripts/openai.js';
 
 import {
@@ -406,7 +408,7 @@ const metadata_keys = {
 installPublicBrowserApi({ libs, getContext });
 
 const reactRuntimePort = createReactRuntimeProvider({
-    getContext,
+    getContext: () => ({ ...getContext(), providerStatus: online_status }),
     eventSource,
     eventTypes: event_types,
     commands: {
@@ -442,10 +444,20 @@ const reactRuntimePort = createReactRuntimeProvider({
                     && savedSettings
                     && typeof savedSettings === 'object'
                 ) {
+                    const previousModel = runtimeKey === 'chatCompletionSettings'
+                        ? runtimeSettings.openai_model
+                        : undefined;
                     Object.assign(runtimeSettings, savedSettings);
+                    if (runtimeKey === 'chatCompletionSettings'
+                        && previousModel !== undefined
+                        && runtimeSettings.openai_model !== previousModel) {
+                        void eventSource.emit(event_types.CHATCOMPLETION_MODEL_CHANGED, runtimeSettings.openai_model);
+                    }
                 }
             }
         },
+        connectProvider: () => connectProviderConnection(),
+        testProviderConnection: () => testProviderConnection(),
         // Drawer-content host id (e.g. 'left-nav-panel', 'AdvancedFormatting').
         // Settings overlay links use this to reach legacy-owned surfaces that
         // still live inside workspace drawers. The allowlist keeps the command
@@ -1024,7 +1036,6 @@ registerDomHandlersShellContext({
     messageEditDone: (...args) => messageEditDone(...args),
     messageEditMove: (...args) => messageEditMove(...args),
     mountAiConfigPanel: (...args) => mountAiConfigPanel(...args),
-    mountApiConnectionsPanel: (...args) => mountApiConnectionsPanel(...args),
     mountCharacterContextMenu: (...args) => mountCharacterContextMenu(...args),
     mountCharacterPopup: (...args) => mountCharacterPopup(...args),
     mountChatComposer: (...args) => mountChatComposer(...args),
@@ -1177,7 +1188,6 @@ const WORKSPACE_DRAWER_OPENED_STORAGE_KEYS = {
 // command. These are the legacy-owned surfaces the Settings overlay links to.
 const WORKSPACE_DRAWER_COMMAND_HOST_IDS = new Set([
     'left-nav-panel',
-    'rm_api_block',
     'AdvancedFormatting',
     'user-settings-block',
     'RegexPanel',
@@ -1235,7 +1245,6 @@ function openWorkspaceChildSlotHostImmediate(hostId) {
 function showWorkspaceChildSlotContent(selectedMenuId) {
     const normalizedMenuId = String(selectedMenuId ?? '').replace('#', '');
     const displayModes = {
-        rm_api_block: 'grid',
         rm_characters_block: 'flex',
     };
 
@@ -4519,7 +4528,7 @@ async function bootstrapWorkspace() {
         reloadMarkdownProcessor();
         applyBrowserFixes();
     }));
-    await measureStartupStage('mountApiConnectionsPanel', () => mountApiConnectionsPanel());
+
     await measureStartupStage('mountAiConfigPanel', () => mountAiConfigPanel());
     await measureStartupStage('mountCharacterPopup', () => mountCharacterPopup());
     await measureStartupStage('mountRightNavPanel', () => mountRightNavPanel());
@@ -4614,12 +4623,8 @@ export function displayOnlineStatus() {
     const sendTextareaHint = $('#send_textarea_hint');
 
     if (online_status == 'no_connection') {
-        $('.online_status_indicator').removeClass('success');
-        $('.online_status_text').text(translate('No connection...', 'api_no_connection'));
         sendTextareaHint.text(t`Type /? for commands. Send requires an API connection.`);
     } else {
-        $('.online_status_indicator').addClass('success');
-        $('.online_status_text').text(online_status);
         sendTextareaHint.text(t`Type /? for commands.`);
     }
 }
@@ -4640,21 +4645,6 @@ export function setAnimationDuration(ms = null) {
  */
 export function setActiveCharacter(entityOrKey) {
     active_character = entityOrKey ? getTagKeyForEntity(entityOrKey) : null;
-}
-
-export function startStatusLoading() {
-    $('.api_loading').show();
-    $('.api_button').addClass('disabled');
-}
-
-export function stopStatusLoading() {
-    $('.api_loading').hide();
-    $('.api_button').removeClass('disabled');
-}
-
-export function resultCheckStatus() {
-    displayOnlineStatus();
-    stopStatusLoading();
 }
 
 /**
@@ -7745,7 +7735,6 @@ export function changeMainAPI(api = null) {
         'openai': {
             apiStreaming: $('#NULL_SELECTOR'),
             apiSettings: $('#openai_settings'),
-            apiConnector: $('#api_connection_form'),
             apiPresets: $('#openai_api-presets'),
             apiRanges: $('#range_block_openai'),
         },
@@ -7761,7 +7750,6 @@ export function changeMainAPI(api = null) {
             continue;
         }
         apiObj.apiSettings.css('display', 'none');
-        apiObj.apiConnector.css('display', 'none');
         apiObj.apiRanges.css('display', 'none');
         apiObj.apiPresets.css('display', 'none');
         apiObj.apiStreaming.css('display', 'none');
@@ -7773,7 +7761,6 @@ export function changeMainAPI(api = null) {
 
     activeItem.apiStreaming.css('display', 'block');
     activeItem.apiSettings.css('display', 'block');
-    activeItem.apiConnector.css('display', 'block');
     activeItem.apiRanges.css('display', 'block');
     activeItem.apiPresets.css('display', 'block');
 
@@ -8744,7 +8731,6 @@ export async function displayPastChats(hightlightNames = []) {
 
 export function selectRightMenuWithAnimation(selectedMenuId) {
     const displayModes = {
-        'rm_api_block': 'grid',
         'rm_characters_block': 'flex',
     };
     const reactAuthoringOwnsPanel = selectedMenuId === 'rm_ch_create_block'
@@ -10036,34 +10022,6 @@ async function mountChatComposer() {
         sendForm.dataset.reactComposerMounted = 'true';
     } catch (error) {
         console.error('Failed to mount chat composer:', error);
-    }
-}
-
-/**
- * Mounts the React-owned API Connections drawer markup into #rm_api_block.
- * Must complete before initOpenAI (registerCoreModules stage): api_button_openai,
- * model selects, and secret-field inputs are bound from the preserved IDs.
- */
-async function mountApiConnectionsPanel() {
-    const drawerContent = document.getElementById('rm_api_block');
-    if (!drawerContent) {
-        console.warn('API connections drawer not found');
-        return;
-    }
-    if (drawerContent.dataset.reactApiPanelMounted === 'true') {
-        return;
-    }
-
-    const host = document.createElement('div');
-    host.id = 'emberdesk-react-api-connections-host';
-    drawerContent.replaceChildren(host);
-
-    try {
-        const module = await loadWorkspacePanelsModule();
-        module.mountApiConnectionsPanel(host);
-        drawerContent.dataset.reactApiPanelMounted = 'true';
-    } catch (error) {
-        console.error('Failed to mount api connections panel:', error);
     }
 }
 
