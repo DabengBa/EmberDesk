@@ -443,8 +443,7 @@ export const settingsCoverage = {
         'oai_settings.new_example_chat_prompt',
         'oai_settings.continue_nudge_prompt',
         'oai_settings.wi_format',
-        'oai_settings.scenario_format',
-        'oai_settings.personality_format',
+        'oai_settings.description_format',
         'oai_settings.names_behavior',
         // Complex managers / runtime-only surfaces
         'oai_settings.prompts',

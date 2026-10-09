@@ -5087,10 +5087,6 @@ h5 {
     align-items: center;
 }
 
-#personality_textarea {
-    width: 100%;
-}
-
 #mes_example_div {
     height: 100%;
     display: flex;

@@ -175,7 +175,6 @@ async function seedBaselineDataset({ baselineRoot, datasetProfile }) {
             data: {
                 name: `Perf Character ${index + 1}`,
                 description: `Description ${index + 1}`,
-                personality: `Personality ${index + 1}`,
                 scenario: `Scenario ${index + 1}`,
                 first_mes: `First ${index + 1}`,
                 mes_example: `Example ${index + 1}`,
@@ -989,9 +988,6 @@ async function invokeMainChatScenario(page, scenarioName, avatar, profileName) {
             if (activeCharacter && typeof activeCharacter === 'object') {
                 activeCharacter.description = typeof activeCharacter.description === 'string'
                     ? activeCharacter.description
-                    : '';
-                activeCharacter.personality = typeof activeCharacter.personality === 'string'
-                    ? activeCharacter.personality
                     : '';
                 activeCharacter.scenario = typeof activeCharacter.scenario === 'string'
                     ? activeCharacter.scenario

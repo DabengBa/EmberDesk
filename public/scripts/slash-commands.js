@@ -588,7 +588,7 @@ export function initDefaultSlashCommands() {
         }),
         SlashCommandNamedArgument.fromProps({
             name: 'description',
-            description: t`The character's description/personality definition`,
+            description: t`The character's description`,
             typeList: [ARGUMENT_TYPE.STRING],
             isRequired: requiredFields.includes('description'),
         }),
@@ -597,12 +597,6 @@ export function initDefaultSlashCommands() {
             description: t`The character's first message/greeting`,
             typeList: [ARGUMENT_TYPE.STRING],
             isRequired: requiredFields.includes('firstMessage'),
-        }),
-        SlashCommandNamedArgument.fromProps({
-            name: 'personality',
-            description: t`A brief description of the personality`,
-            typeList: [ARGUMENT_TYPE.STRING],
-            isRequired: requiredFields.includes('personality'),
         }),
         SlashCommandNamedArgument.fromProps({
             name: 'scenario',
@@ -745,7 +739,7 @@ export function initDefaultSlashCommands() {
                     <pre><code>/char-create name="Alice" description="A friendly AI assistant" firstMessage="Hello! How can I help you today?"</code></pre>
                 </li>
                 <li>
-                    <pre><code>/char-create name="Bob" description="A wise wizard" firstMessage="Greetings, traveler." personality="Wise, patient" scenario="A magical library" favorite=true</code></pre>
+                    <pre><code>/char-create name="Bob" description="A wise wizard" firstMessage="Greetings, traveler." scenario="A magical library" favorite=true</code></pre>
                 </li>
                 <li>
                     <pre><code>/char-create name="Clone" description="A clone" firstMessage="Hi!" avatar=prompt</code></pre>
@@ -789,8 +783,8 @@ export function initDefaultSlashCommands() {
                     ${t`Updates the currently selected character's description.`}
                 </li>
                 <li>
-                    <pre><code>/char-update char="Alice" personality="Cheerful and energetic" favorite=true</code></pre>
-                    ${t`Updates Alice's personality and marks her as a favorite.`}
+                    <pre><code>/char-update char="Alice" scenario="A new scenario" favorite=true</code></pre>
+                    ${t`Updates Alice's scenario and marks her as a favorite.`}
                 </li>
                 <li>
                     <pre><code>/imagine you | /char-update avatar="{{pipe}}"</code></pre>
@@ -865,7 +859,6 @@ export function initDefaultSlashCommands() {
                 enumList: [
                     new SlashCommandEnumValue('name', t`Character name`, enumTypes.enum),
                     new SlashCommandEnumValue('description', t`Character description`, enumTypes.enum),
-                    new SlashCommandEnumValue('personality', t`Character personality`, enumTypes.enum),
                     new SlashCommandEnumValue('scenario', t`Character scenario`, enumTypes.enum),
                     new SlashCommandEnumValue('first_mes', t`First message`, enumTypes.enum),
                     new SlashCommandEnumValue('mes_example', t`Message examples`, enumTypes.enum),
@@ -899,8 +892,8 @@ export function initDefaultSlashCommands() {
                     ${t`Outputs the current character's description.`}
                 </li>
                 <li>
-                    <pre><code>/char-get char="Alice" field=personality</code></pre>
-                    ${t`Returns Alice's personality field.`}
+                    <pre><code>/char-get char="Alice" field=scenario</code></pre>
+                    ${t`Returns Alice's scenario field.`}
                 </li>
                 <li>
                     <pre><code>/char-get char="Bob" return=object</code></pre>
@@ -4614,7 +4607,6 @@ async function createCharacterCallback(args) {
         ch_name: name.trim(),
         description: description,
         first_mes: firstMessage,
-        personality: args.personality ?? '',
         scenario: args.scenario ?? '',
         mes_example: args.messageExamples ?? '',
         creator_notes: args.creatorNotes ?? '',
@@ -4717,7 +4709,6 @@ async function updateCharacterCallback(args) {
         name: 'name',
         description: 'description',
         firstMessage: 'first_mes',
-        personality: 'personality',
         scenario: 'scenario',
         messageExamples: 'mes_example',
         creatorNotes: 'creator_notes',
@@ -4925,7 +4916,6 @@ async function getCharacterDataCallback(args) {
         avatar: character.avatar,
         name: character.name,
         description: character.description ?? character.data?.description ?? '',
-        personality: character.personality ?? character.data?.personality ?? '',
         scenario: character.scenario ?? character.data?.scenario ?? '',
         first_mes: character.first_mes ?? character.data?.first_mes ?? '',
         mes_example: character.mes_example ?? character.data?.mes_example ?? '',

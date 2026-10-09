@@ -96,7 +96,6 @@ function writeCharacterCardFile(directories, avatar, name, talkativeness = 0.5, 
         data: {
             name,
             description: `Description ${name}`,
-            personality: `Personality ${name}`,
             scenario: `Scenario ${name}`,
             first_mes: `First ${name}`,
             mes_example: `Example ${name}`,
@@ -124,7 +123,6 @@ function writeLegacyCharacterCardFile(directories, avatar, name, world, talkativ
     const payload = JSON.stringify({
         name,
         description: `Description ${name}`,
-        personality: `Personality ${name}`,
         scenario: `Scenario ${name}`,
         first_mes: `First ${name}`,
         mes_example: `Example ${name}`,
@@ -250,7 +248,6 @@ function createBuildRow(buildLog, options = {}) {
         const fullPayload = {
             name: `${fullNamePrefix} ${baseName}`,
             description: `Description ${baseName}`,
-            personality: `Personality ${baseName}`,
             first_mes: `First ${baseName}`,
             scenario: `Scenario ${baseName}`,
             mes_example: `Example ${baseName}`,
@@ -739,7 +736,6 @@ async function invokeCharacterCreate(directories, name, { file } = {}) {
         body: {
             ch_name: name,
             description: `Description ${name}`,
-            personality: `Personality ${name}`,
             scenario: `Scenario ${name}`,
             first_mes: `First ${name}`,
             mes_example: `Example ${name}`,
@@ -2014,7 +2010,6 @@ describe('character index', () => {
                         ...value,
                         name: value.data?.name ?? value.name,
                         description: value.data?.description ?? value.description ?? '',
-                        personality: value.data?.personality ?? value.personality ?? '',
                         scenario: value.data?.scenario ?? value.scenario ?? '',
                         first_mes: value.data?.first_mes ?? value.first_mes ?? '',
                         mes_example: value.data?.mes_example ?? value.mes_example ?? '',
@@ -2323,7 +2318,6 @@ describe('character index', () => {
             data: {
                 name: 'Imported Alpha',
                 description: 'Imported description',
-                personality: '',
                 scenario: '',
                 first_mes: '',
                 mes_example: '',
@@ -2879,14 +2873,12 @@ describe('character index', () => {
             avatar: 'alpha.png',
             name: 'Alpha One',
             description: 'Description Alpha One',
-            personality: 'Personality Alpha One',
             scenario: 'Scenario Alpha One',
             first_mes: 'First Alpha One',
             mes_example: 'Example Alpha One',
             data: expect.objectContaining({
                 name: 'Alpha One',
                 description: 'Description Alpha One',
-                personality: 'Personality Alpha One',
                 scenario: 'Scenario Alpha One',
                 first_mes: 'First Alpha One',
                 mes_example: 'Example Alpha One',

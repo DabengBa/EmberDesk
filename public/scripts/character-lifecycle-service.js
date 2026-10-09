@@ -238,13 +238,6 @@ export async function renameCharacter(name = null, { silent = false, renameChats
                 saveSettingsDebounced();
             }
 
-            // Char-bound Author's Notes
-            const charNote = state.feature_settings.note.chara?.find(x => x.name == oldName);
-            if (charNote) {
-                charNote.name = newName;
-                saveSettingsDebounced();
-            }
-
             // Update active character, if the current one was the currently active one
             if (state.active_character === oldAvatar) {
                 state.active_character = newAvatar;
@@ -363,7 +356,6 @@ export function select_selected_character(chid, { switchMenu = true } = {}) {
     $('#tags_textarea').val(Array.isArray(character.data?.tags) ? character.data.tags.join(', ') : '');
     $('#creator_textarea').val(character.data?.creator);
     $('#character_version_textarea').val(character.data?.character_version || '');
-    $('#personality_textarea').val(character.personality);
     $('#firstmessage_textarea').val(character.first_mes);
     $('#scenario_pole').val(character.scenario);
     $('#depth_prompt_prompt').val(character.data?.extensions?.depth_prompt?.prompt ?? '');
@@ -552,7 +544,6 @@ export async function createOrEditCharacter(e) {
                 { id: '#system_prompt_textarea', callback: value => state.create_save.system_prompt = value },
                 { id: '#tags_textarea', callback: value => state.create_save.tags = value },
                 { id: '#creator_textarea', callback: value => state.create_save.creator = value },
-                { id: '#personality_textarea', callback: value => state.create_save.personality = value },
                 { id: '#firstmessage_textarea', callback: value => state.create_save.first_message = value },
                 { id: '#scenario_pole', callback: value => state.create_save.scenario = value },
                 { id: '#depth_prompt_prompt', callback: value => state.create_save.depth_prompt_prompt = value },

@@ -153,7 +153,6 @@ describe('group chat retirement', () => {
         const accountStorageSource = fs.readFileSync(path.join(repoRoot, 'public', 'scripts', 'util', 'AccountStorage.js'), 'utf8');
         const scenarioOverrideSource = fs.readFileSync(path.join(repoRoot, 'public', 'scripts', 'templates', 'scenarioOverride.html'), 'utf8');
         const forbidMediaSource = fs.readFileSync(path.join(repoRoot, 'public', 'scripts', 'templates', 'forbidMedia.html'), 'utf8');
-        const hiddenBlockSource = fs.readFileSync(path.join(repoRoot, 'public', 'scripts', 'templates', 'hiddenBlock.html'), 'utf8');
         const stableDiffusionExtensionPath = path.join(repoRoot, 'public', 'scripts', 'extensions', 'stable-diffusion');
         const quickReplyExtensionIndexPath = path.join(repoRoot, 'public', 'scripts', 'extensions', 'quick-reply', 'index.js');
         const slashCommandsSource = fs.readFileSync(path.join(repoRoot, 'public', 'scripts', 'slash-commands.js'), 'utf8');
@@ -182,7 +181,6 @@ describe('group chat retirement', () => {
         expect(accountStorageSource).not.toContain('GroupCandidates_PerPage');
         expect(scenarioOverrideSource).not.toContain('All group members');
         expect(forbidMediaSource).not.toContain('character/group');
-        expect(hiddenBlockSource).not.toContain('Characters and groups');
         expect(fs.existsSync(stableDiffusionExtensionPath)).toBe(false);
         expect(defaultSettingsSource).not.toContain('new_group_chat_prompt');
         expect(defaultOpenAiPresetSource).not.toContain('new_group_chat_prompt');

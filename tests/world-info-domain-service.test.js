@@ -33,7 +33,7 @@ describe('world info domain and workbench services', () => {
             vectorized: true,
         };
 
-        expect(domain.getWorldInfoWorkbenchPositionLabel(entry)).toBe('角色定义前');
+        expect(domain.getWorldInfoWorkbenchPositionLabel(entry)).toBe('世界书');
         expect(domain.buildWorldInfoWorkbenchEntrySummary(entry)).toMatchObject({
             uid: '3',
             title: 'Hero',

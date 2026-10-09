@@ -147,7 +147,7 @@ export function registerCoreMacros() {
         exampleUsage: [
             '{{if description}}# Description\n{{description}}{{/if}}',
             '{{if charVersion}}{{charVersion}}{{else}}No version{{/if}}',
-            '{{if !personality}}No personality defined{{/if}}',
+            '{{if !description}}No description defined{{/if}}',
             '{{if {{getvar::showHeader}}}}# Header{{/if}}',
             '{{if .myvar}}Local var exists{{/if}}',
             '{{if $globalFlag}}Global flag is set{{/if}}',

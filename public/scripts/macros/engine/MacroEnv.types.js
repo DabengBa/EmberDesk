@@ -29,7 +29,6 @@
 /**
  * @typedef {Object} MacroEnvCharacter
  * @property {string} [description]
- * @property {string} [personality]
  * @property {string} [scenario]
  * @property {string} [charPrompt]
  * @property {string} [charInstruction]

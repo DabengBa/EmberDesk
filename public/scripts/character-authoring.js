@@ -9,7 +9,6 @@ const CHARACTER_FIELD_DEFAULTS = Object.freeze({
     name: '',
     avatar: '',
     description: '',
-    personality: '',
     scenario: '',
     firstMessage: '',
     exampleMessages: '',
@@ -109,7 +108,6 @@ function normalizeProjectedCharacterAuthoringDraft(draft = {}, options = {}) {
         name: normalizeString(draft.name),
         avatar: normalizeString(draft.avatar),
         description: normalizeString(draft.description),
-        personality: normalizeString(draft.personality),
         scenario: normalizeString(draft.scenario),
         firstMessage: normalizeString(draft.firstMessage),
         exampleMessages: normalizeString(draft.exampleMessages),
@@ -161,7 +159,6 @@ export function createCharacterAuthoringDraft(character = {}, options = {}) {
         name: normalizeString(data.name || character?.name || CHARACTER_FIELD_DEFAULTS.name),
         avatar: normalizeString(character?.avatar || CHARACTER_FIELD_DEFAULTS.avatar),
         description: normalizeString(data.description || character?.description || CHARACTER_FIELD_DEFAULTS.description),
-        personality: normalizeString(data.personality || character?.personality || CHARACTER_FIELD_DEFAULTS.personality),
         scenario: normalizeString(data.scenario || character?.scenario || CHARACTER_FIELD_DEFAULTS.scenario),
         firstMessage: normalizeString(data.first_mes || character?.first_mes || CHARACTER_FIELD_DEFAULTS.firstMessage),
         exampleMessages: normalizeString(data.mes_example || character?.mes_example || CHARACTER_FIELD_DEFAULTS.exampleMessages),
@@ -199,7 +196,6 @@ export function createCharacterAuthoringDraftFromCreateState(createState = {}, o
         data: {
             name: createState?.name,
             description: createState?.description,
-            personality: createState?.personality,
             scenario: createState?.scenario,
             first_mes: createState?.first_message,
             mes_example: createState?.mes_example,
@@ -257,7 +253,6 @@ export function createCharacterAuthoringSaveModel(draft) {
             name: normalizeString(draft?.name),
             avatar: normalizeString(draft?.avatar),
             description: normalizeString(draft?.description),
-            personality: normalizeString(draft?.personality),
             scenario: normalizeString(draft?.scenario),
             first_mes: normalizeString(draft?.firstMessage),
             mes_example: normalizeString(draft?.exampleMessages),
@@ -295,7 +290,6 @@ export function applyCharacterAuthoringDraftToCreateState(draft, createState = {
         system_prompt: saveModel.fields.system_prompt,
         tags: serializeTagList(saveModel.fields.tags),
         creator: saveModel.fields.creator,
-        personality: saveModel.fields.personality,
         first_message: saveModel.fields.first_mes,
         scenario: saveModel.fields.scenario,
         mes_example: saveModel.fields.mes_example,
@@ -381,7 +375,6 @@ export function buildCharacterAuthoringFormData(saveModel, meta = {}) {
 
     formData.set('ch_name', normalizeString(fields.name));
     formData.set('description', normalizeString(fields.description));
-    formData.set('personality', normalizeString(fields.personality));
     formData.set('scenario', normalizeString(fields.scenario));
     formData.set('first_mes', normalizeString(fields.first_mes));
     formData.set('mes_example', normalizeString(fields.mes_example));

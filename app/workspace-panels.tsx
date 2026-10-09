@@ -707,7 +707,6 @@ function AuthoringWorkspacePanel({
     const advancedChips = [
         stringDraft('systemPrompt').trim() ? { label: 'system prompt', field: 'systemPrompt' } : null,
         stringDraft('postHistoryInstructions').trim() ? { label: 'post-history', field: 'postHistoryInstructions' } : null,
-        stringDraft('personality').trim() ? { label: 'personality', field: 'personality' } : null,
         stringDraft('scenario').trim() ? { label: 'scenario', field: 'scenario' } : null,
         stringDraft('exampleMessages').trim() ? { label: 'examples', field: 'exampleMessages' } : null,
         (depthPrompt.prompt?.trim() || depthPrompt.depth != null) ? { label: `note@${depthPrompt.depth ?? 4}`, field: 'depthPrompt.prompt' } : null,
@@ -1051,15 +1050,6 @@ function AuthoringWorkspacePanel({
                                 </div>
                                 <div {...stylex.props(authoringStyles.advancedSubgroup)}>
                                     <h4 {...stylex.props(authoringStyles.subsectionLabel)}>Definition</h4>
-                                    <label {...stylex.props(authoringStyles.field)} htmlFor="authoring-personality" data-react-authoring-field="personality">
-                                        <AuthoringFieldLabel text="Personality" dirty={isFieldDirty('personality')} meta={stringDraft('personality').trim() ? `${stringDraft('personality').length} chars` : undefined} onExpand={() => setExpandedField({ key: 'personality', label: 'Personality' })} />
-                                        <AuthoringTextarea
-                                            id="authoring-personality"
-                                            rows={2}
-                                            value={stringDraft('personality')}
-                                            onChange={(event) => updateDraft({ personality: event.target.value })}
-                                        />
-                                    </label>
                                     <label {...stylex.props(authoringStyles.field)} htmlFor="authoring-scenario" data-react-authoring-field="scenario">
                                         <AuthoringFieldLabel text="Scenario" dirty={isFieldDirty('scenario')} meta={stringDraft('scenario').trim() ? `${stringDraft('scenario').length} chars` : undefined} onExpand={() => setExpandedField({ key: 'scenario', label: 'Scenario' })} />
                                         <AuthoringTextarea

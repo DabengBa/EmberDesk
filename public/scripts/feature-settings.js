@@ -76,12 +76,6 @@ export async function renderFeatureTemplateAsync(featureName, templateId, templa
  * Only keys owned by surviving first-party features are kept here.
  */
 export const feature_settings = {
-    note: {
-        default: '',
-        chara: [],
-        wiAddition: [],
-    },
-
     /** @type {import('./char-data.js').RegexScriptData[]} */
     regex: [],
     /** @type {import('./extensions/regex/index.js').RegexPreset[]} */

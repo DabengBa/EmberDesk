@@ -28,6 +28,7 @@ import {
     buildWorldInfoWorkbenchEntrySummary as domainBuildWorldInfoWorkbenchEntrySummary,
     buildWorldInfoWorkbenchEntryDetail as domainBuildWorldInfoWorkbenchEntryDetail,
     addMissingWorldInfoFields as domainAddMissingWorldInfoFields,
+    normalizeWorldInfoEntryPosition,
     sortWorldInfoEntries as domainSortWorldInfoEntries,
     wi_anchor_position,
     originalWIDataKeyMap,
@@ -689,7 +690,6 @@ const MAX_COMMENT_LENGTH = 100;
  * @typedef {object} WIGlobalScanData The chat-independent data to be scanned. Each of
  *     these fields can be enabled for scanning per entry.
  * @property {string} characterDescription Character description
- * @property {string} characterPersonality Character personality
  * @property {string} characterDepthPrompt Character depth prompt (sometimes referred to as character notes)
  * @property {string} scenario Character defined scenario
  * @property {string} creatorNotes Character creator notes
@@ -1916,6 +1916,16 @@ function registerWorldInfoSlashCommands() {
                 entry.characterFilter.isExclude = isTrueBoolean(value);
                 setWIOriginalDataValue(data, uid, 'character_filter', entry.characterFilter);
                 break;
+            case 'position': {
+                entry.position = normalizeWorldInfoEntryPosition(Number(value));
+                entry.role = entry.position === world_info_position.atDepth
+                    ? (entry.role ?? extension_prompt_roles.SYSTEM)
+                    : null;
+                setWIOriginalDataValue(data, uid, 'position', entry.position === world_info_position.after ? 'after_char' : 'before_char');
+                setWIOriginalDataValue(data, uid, 'extensions.position', entry.position);
+                setWIOriginalDataValue(data, uid, 'extensions.role', entry.role);
+                break;
+            }
             default:
                 if (Array.isArray(entry[field])) {
                     entry[field] = parseStringArray(value).filter(arrayFilter);
@@ -2080,14 +2090,13 @@ function registerWorldInfoSlashCommands() {
     };
 
     function getWiPositionString(entry) {
-        switch (entry.position) {
-            case world_info_position.before: return '↑Char';
-            case world_info_position.after: return '↓Char';
+        switch (normalizeWorldInfoEntryPosition(entry.position)) {
+            case world_info_position.before:
+                return 'WI';
             case world_info_position.EMTop: return '↑EM';
             case world_info_position.EMBottom: return '↓EM';
-            case world_info_position.ANTop: return '↑AT';
-            case world_info_position.ANBottom: return '↓AT';
             case world_info_position.atDepth: return `@D${enumIcons.getRoleIcon(entry.role)}`;
+            case world_info_position.outlet: return 'Outlet';
             default: return '<Unknown>';
         }
     }
@@ -3406,7 +3415,7 @@ async function updateEntryPositionFromSelect($select, entry, data, name, templat
     entry.position = position;
     entry.role = role;
 
-    setWIOriginalDataValue(data, uid, 'position', position == world_info_position.before ? 'before_char' : 'after_char');
+    setWIOriginalDataValue(data, uid, 'position', position === world_info_position.after ? 'after_char' : 'before_char');
     setWIOriginalDataValue(data, uid, 'extensions.position', position);
     setWIOriginalDataValue(data, uid, 'extensions.role', role);
 
@@ -3458,8 +3467,8 @@ export function renderCollapsedCard(name, data, entry) {
     commentInput.val(entry.comment).trigger('input', { skipReset: true, noSave: true });
     commentInput.on('click', e => e.stopPropagation());
 
-    // Position selector
-    if (entry.position === undefined) entry.position = world_info_position.before;
+    // Position selector (retired positions fold into the merged WI slot)
+    entry.position = normalizeWorldInfoEntryPosition(entry.position);
     const positionControl = template.find('.wi-card-position-control');
     positionControl.data('uid', entry.uid);
     selectEntryPositionOption(positionControl, entry);
@@ -3614,15 +3623,12 @@ function setupEditFormBindings(editTemplate, outlet, name, data, entry) {
     const $injectionContainer = editTemplate.find('[data-populate="injection"]');
     const $injectionControls = $('<div class="wi-injection-controls"></div>');
 
-    if (entry.position === undefined) entry.position = 0;
+    entry.position = normalizeWorldInfoEntryPosition(entry.position);
     const $posControl = $('<div class="world_entry_form_control"><small class="textAlignCenter" data-i18n="Position">Position</small></div>');
     const $posSelect = $(`<select name="position" class="text_pole widthNatural margin0">
-        <option value="0" data-role="">↑Char</option>
-        <option value="1" data-role="">↓Char</option>
+        <option value="0" data-role="">WI</option>
         <option value="5" data-role="">↑EM</option>
         <option value="6" data-role="">↓EM</option>
-        <option value="2" data-role="">↑AN</option>
-        <option value="3" data-role="">↓AN</option>
         <option value="4" data-role="0">@D ⚙️</option>
         <option value="4" data-role="1">@D 👤</option>
         <option value="4" data-role="2">@D 🤖</option>
@@ -3993,7 +3999,6 @@ function setupEditFormBindings(editTemplate, outlet, name, data, entry) {
 
     // Match checkboxes
     handleMatchCheckboxHelper({ template: editTemplate, entry, fieldName: 'matchCharacterDescription', data, name });
-    handleMatchCheckboxHelper({ template: editTemplate, entry, fieldName: 'matchCharacterPersonality', data, name });
     handleMatchCheckboxHelper({ template: editTemplate, entry, fieldName: 'matchCharacterDepthPrompt', data, name });
     handleMatchCheckboxHelper({ template: editTemplate, entry, fieldName: 'matchScenario', data, name });
     handleMatchCheckboxHelper({ template: editTemplate, entry, fieldName: 'matchCreatorNotes', data, name });
@@ -4156,7 +4161,7 @@ function getAutomationIdCallback(data) {
 function getOutletNameCallback(data) {
     return buildAutocompleteCallback({
         data,
-        collectValues: entry => entry.position === world_info_position.outlet && entry.outletName ? [entry.outletName] : [],
+        collectValues: entry => normalizeWorldInfoEntryPosition(entry.position) === world_info_position.outlet && entry.outletName ? [entry.outletName] : [],
     });
 }
 
@@ -4287,7 +4292,6 @@ export const newWorldInfoEntryDefinition = {
     excludeRecursion: { default: false, type: 'boolean' },
     preventRecursion: { default: false, type: 'boolean' },
     matchCharacterDescription: { default: false, type: 'boolean' },
-    matchCharacterPersonality: { default: false, type: 'boolean' },
     matchCharacterDepthPrompt: { default: false, type: 'boolean' },
     matchScenario: { default: false, type: 'boolean' },
     matchCreatorNotes: { default: false, type: 'boolean' },

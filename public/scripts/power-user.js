@@ -67,7 +67,7 @@ const MAX_RESPONSE_UNLOCKED = 64 * 1024;
 const unlockedMaxContextStep = 512;
 const maxContextMin = 512;
 
-const defaultStoryString = '{{#if system}}{{system}}\n{{/if}}{{#if description}}{{description}}\n{{/if}}{{#if personality}}{{char}}\'s personality: {{personality}}\n{{/if}}{{#if scenario}}Scenario: {{scenario}}\n{{/if}}';
+const defaultStoryString = '{{#if system}}{{system}}\n{{/if}}{{#if description}}{{description}}\n{{/if}}{{#if scenario}}Scenario: {{scenario}}\n{{/if}}';
 const defaultExampleSeparator = '***';
 const defaultChatStart = '***';
 const defaultToastPosition = 'toast-top-center';
@@ -1408,7 +1408,6 @@ export function fuzzySearchCharacters(searchValue, fuzzySearchCaches = null) {
         { name: 'data.description', weight: 3 },
         { name: 'data.mes_example', weight: 3 },
         { name: 'data.scenario', weight: 2 },
-        { name: 'data.personality', weight: 2 },
         { name: 'data.first_mes', weight: 2 },
         { name: 'data.creator_notes', weight: 2 },
         { name: 'data.creator', weight: 1 },
@@ -1530,7 +1529,6 @@ function validateStoryString(storyString, params) {
     }
 
     validateMissingField('description');
-    validateMissingField('personality');
     validateMissingField('scenario');
     // validateMissingField('system');
     validateMissingField('wiBefore', 'loreBefore');

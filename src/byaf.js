@@ -252,7 +252,6 @@ export class ByafParser {
             data: {
                 name: character?.name || character?.displayName || '',
                 description: ByafParser.replaceMacros(character?.persona),
-                personality: '',
                 scenario: ByafParser.replaceMacros(scenarios[0]?.narrative),
                 first_mes: ByafParser.replaceMacros(scenarios[0]?.firstMessages?.[0]?.text),
                 mes_example: ByafParser.formatExampleMessages(scenarios[0]?.exampleMessages),

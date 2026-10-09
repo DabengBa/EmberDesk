@@ -286,7 +286,6 @@ describe('thumbnail write-time pregeneration hooks', () => {
             body: {
                 ch_name: 'Tester',
                 description: '',
-                personality: '',
                 scenario: '',
                 first_mes: '',
                 mes_example: '',
@@ -332,7 +331,6 @@ describe('thumbnail write-time pregeneration hooks', () => {
             body: {
                 ch_name: 'Resilient',
                 description: '',
-                personality: '',
                 scenario: '',
                 first_mes: '',
                 mes_example: '',
@@ -378,7 +376,6 @@ describe('thumbnail write-time pregeneration hooks', () => {
             body: {
                 ch_name: 'Disabled',
                 description: '',
-                personality: '',
                 scenario: '',
                 first_mes: '',
                 mes_example: '',
@@ -463,7 +460,6 @@ describe('thumbnail write-time pregeneration hooks', () => {
                 avatar_url: 'Tester.png',
                 ch_name: 'Tester',
                 description: 'updated',
-                personality: '',
                 scenario: '',
                 first_mes: '',
                 mes_example: '',
@@ -506,7 +502,6 @@ describe('thumbnail write-time pregeneration hooks', () => {
                 avatar_url: 'Missing.png',
                 ch_name: 'Missing',
                 description: 'updated',
-                personality: '',
                 scenario: '',
                 first_mes: '',
                 mes_example: '',

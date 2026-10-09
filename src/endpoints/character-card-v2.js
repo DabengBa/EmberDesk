@@ -36,7 +36,6 @@ export function convertToV2(char, directories) {
         json_data: JSON.stringify(char),
         ch_name: char.name,
         description: char.description,
-        personality: char.personality,
         scenario: char.scenario,
         first_mes: char.first_mes,
         mes_example: char.mes_example,
@@ -66,10 +65,14 @@ export function readFromV2(char) {
     // If 'json_data' was already saved, don't let it propagate
     _.unset(char, 'json_data');
 
+    // The personality field is retired in EmberDesk; imported cards keep working
+    // because foreign `personality` payloads are simply dropped below.
+    _.unset(char, 'personality');
+    _.unset(char, 'data.personality');
+
     const fieldMappings = {
         name: 'name',
         description: 'description',
-        personality: 'personality',
         scenario: 'scenario',
         first_mes: 'first_mes',
         mes_example: 'mes_example',
@@ -131,6 +134,11 @@ export function charaFormatData(data, directories) {
     // Prevent erroneous 'json_data' recursive saving
     _.unset(char, 'json_data');
 
+    // The personality field is retired; drop any foreign payload that piggybacks
+    // on imported json_data instead of re-homing it onto the character.
+    _.unset(char, 'personality');
+    _.unset(char, 'data.personality');
+
     // Checks if data.alternate_greetings is an array, a string, or neither, and acts accordingly. (expected to be an array of strings)
     const getAlternateGreetings = data => {
         if (Array.isArray(data.alternate_greetings)) return data.alternate_greetings;
@@ -141,7 +149,6 @@ export function charaFormatData(data, directories) {
     // Spec V1 fields
     _.set(char, 'name', data.ch_name);
     _.set(char, 'description', data.description || '');
-    _.set(char, 'personality', data.personality || '');
     _.set(char, 'scenario', data.scenario || '');
     _.set(char, 'first_mes', data.first_mes || '');
     _.set(char, 'mes_example', data.mes_example || '');
@@ -160,7 +167,6 @@ export function charaFormatData(data, directories) {
     _.set(char, 'spec_version', '2.0');
     _.set(char, 'data.name', data.ch_name);
     _.set(char, 'data.description', data.description || '');
-    _.set(char, 'data.personality', data.personality || '');
     _.set(char, 'data.scenario', data.scenario || '');
     _.set(char, 'data.first_mes', data.first_mes || '');
     _.set(char, 'data.mes_example', data.mes_example || '');
@@ -268,7 +274,6 @@ export function convertWorldInfoToCharacterBook(name, entries) {
                 cooldown: entry.cooldown ?? null,
                 delay: entry.delay ?? null,
                 match_character_description: entry.matchCharacterDescription ?? false,
-                match_character_personality: entry.matchCharacterPersonality ?? false,
                 match_character_depth_prompt: entry.matchCharacterDepthPrompt ?? false,
                 match_scenario: entry.matchScenario ?? false,
                 match_creator_notes: entry.matchCreatorNotes ?? false,

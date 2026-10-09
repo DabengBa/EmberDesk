@@ -546,7 +546,6 @@ export async function bindLegacyShellHandlers() {
         '#post_history_instructions_textarea': function () { state.create_save.post_history_instructions = String($('#post_history_instructions_textarea').val()); },
         '#creator_textarea': function () { state.create_save.creator = String($('#creator_textarea').val()); },
         '#tags_textarea': function () { state.create_save.tags = String($('#tags_textarea').val()); },
-        '#personality_textarea': function () { state.create_save.personality = String($('#personality_textarea').val()); },
         '#scenario_pole': function () { state.create_save.scenario = String($('#scenario_pole').val()); },
         '#mes_example_textarea': function () { state.create_save.mes_example = String($('#mes_example_textarea').val()); },
         '#firstmessage_textarea': function () { state.create_save.first_message = String($('#firstmessage_textarea').val()); },
@@ -707,8 +706,6 @@ export async function bindLegacyShellHandlers() {
             button.trigger('focus');
         }
     });
-
-    /* $('#set_chat_character_settings').on('click', setScenarioOverride); */
 
     ///////////// OPTIMIZED LISTENERS FOR LEFT SIDE OPTIONS POPUP MENU //////////////////////
     // Delegated binding: the menu items are React-owned inside #options and can be

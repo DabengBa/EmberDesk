@@ -56,7 +56,6 @@ declare global {
         tainted?: boolean;
         integrity?: string;
         scenario?: string;
-        persona?: string;
         [key: string]: any;
     }
 

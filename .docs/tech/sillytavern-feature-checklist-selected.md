@@ -290,7 +290,7 @@ API Connections 面板。也可在扩展管理中关闭 Connection Manager。
 | 类 | 例子方向 |
 | --- | --- |
 | 名字与参与者 | 用户名、角色名、群成员 |
-| 卡与 Persona 字段 | description、personality、scenario 等 |
+| 卡与 Persona 字段 | description、scenario 等 |
 | 聊天历史 | 最近消息、条数相关 |
 | 时间日期 | 当前时间等 |
 | 变量 | 会话 / 全局变量 |

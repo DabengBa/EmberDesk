@@ -23,7 +23,7 @@ export const MacroCategory = Object.freeze({
     RANDOM: 'random',
     /** Participant names and name lists (user, char, group, notChar) */
     NAMES: 'names',
-    /** Character card fields and persona (description, personality, scenario, mesExamples, persona) */
+    /** Character card fields and retired tombstones (description, scenario, mesExamples, persona) */
     CHARACTER: 'character',
     /** Chat history, messages, and swipes */
     CHAT: 'chat',

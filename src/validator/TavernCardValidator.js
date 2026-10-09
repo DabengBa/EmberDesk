@@ -53,7 +53,7 @@ export class TavernCardValidator {
      * @returns {this is string[]}
      */
     validateV1() {
-        const requiredFields = ['name', 'description', 'personality', 'scenario', 'first_mes', 'mes_example'];
+        const requiredFields = ['name', 'description', 'scenario', 'first_mes', 'mes_example'];
         return requiredFields.every(field => {
             if (!Object.hasOwn(this.card, field)) {
                 this.#lastValidationError = field;
@@ -109,7 +109,7 @@ export class TavernCardValidator {
             return false;
         }
 
-        const requiredFields = ['name', 'description', 'personality', 'scenario', 'first_mes', 'mes_example', 'creator_notes', 'system_prompt', 'post_history_instructions', 'alternate_greetings', 'tags', 'creator', 'character_version', 'extensions'];
+        const requiredFields = ['name', 'description', 'scenario', 'first_mes', 'mes_example', 'creator_notes', 'system_prompt', 'post_history_instructions', 'alternate_greetings', 'tags', 'creator', 'character_version', 'extensions'];
         const isAllRequiredFieldsPresent = requiredFields.every(field => {
             if (!Object.hasOwn(data, field)) {
                 this.#lastValidationError = `data.${field}`;

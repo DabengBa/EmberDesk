@@ -73,9 +73,17 @@ export function registerEnvMacros() {
     MacroRegistry.registerMacro('charPersonality', {
         aliases: [{ alias: 'personality' }],
         category: MacroCategory.CHARACTER,
-        description: 'The character\'s personality.',
-        returns: 'Character personality.',
-        handler: ({ env }) => env.character.personality ?? '',
+        description: 'Deprecated. The character personality field was removed; always resolves to an empty string.',
+        returns: 'Empty string.',
+        handler: () => '',
+    });
+
+    MacroRegistry.registerMacro('personaDescription', {
+        aliases: [{ alias: 'persona' }],
+        category: MacroCategory.CHARACTER,
+        description: 'Deprecated. The persona system was retired; always resolves to an empty string.',
+        returns: 'Empty string.',
+        handler: () => '',
     });
 
     MacroRegistry.registerMacro('charScenario', {

@@ -45,7 +45,6 @@ export const NEW_WORLD_INFO_ENTRY_TEMPLATE = {
     excludeRecursion: false,
     preventRecursion: false,
     matchCharacterDescription: false,
-    matchCharacterPersonality: false,
     matchCharacterDepthPrompt: false,
     matchScenario: false,
     matchCreatorNotes: false,
@@ -88,7 +87,6 @@ export const WORLD_INFO_WORKBENCH_EDITABLE_FIELDS = new Set([
     'excludeRecursion',
     'preventRecursion',
     'matchCharacterDescription',
-    'matchCharacterPersonality',
     'matchCharacterDepthPrompt',
     'matchScenario',
     'matchCreatorNotes',
@@ -116,6 +114,25 @@ export const WORLD_INFO_WORKBENCH_EDITABLE_FIELDS = new Set([
 ]);
 
 /**
+ * Collapses retired positions (after-char and the Author's-Note slots) into the
+ * merged World Info position. Surviving positions pass through unchanged, and
+ * unknown values fall back to the merged position.
+ * @param {unknown} position
+ * @returns {number}
+ */
+export function normalizeWorldInfoEntryPosition(position) {
+    switch (Number(position)) {
+        case WORLD_INFO_POSITION.EMTop:
+        case WORLD_INFO_POSITION.EMBottom:
+        case WORLD_INFO_POSITION.atDepth:
+        case WORLD_INFO_POSITION.outlet:
+            return Number(position);
+        default:
+            return WORLD_INFO_POSITION.before;
+    }
+}
+
+/**
  * Human-readable injection position for workbench list/editor display.
  * @param {object} entry
  * @returns {string}
@@ -125,13 +142,11 @@ export function getWorldInfoWorkbenchPositionLabel(entry) {
         return '';
     }
 
-    switch (entry.position) {
-        case WORLD_INFO_POSITION.before: return '角色定义前';
-        case WORLD_INFO_POSITION.after: return '角色定义后';
+    switch (normalizeWorldInfoEntryPosition(entry.position)) {
+        case WORLD_INFO_POSITION.before:
+            return '世界书';
         case WORLD_INFO_POSITION.EMTop: return '示例消息顶部';
         case WORLD_INFO_POSITION.EMBottom: return '示例消息底部';
-        case WORLD_INFO_POSITION.ANTop: return '作者注释顶部';
-        case WORLD_INFO_POSITION.ANBottom: return '作者注释底部';
         case WORLD_INFO_POSITION.atDepth: return `按深度 ${entry.depth ?? DEFAULT_DEPTH}`;
         case WORLD_INFO_POSITION.outlet: return entry.outletName ? `出口: ${entry.outletName}` : '出口';
         default: return '未知位置';
@@ -186,7 +201,7 @@ export function buildWorldInfoWorkbenchEntryDetail(entry) {
         selectiveLogic: Number(entry.selectiveLogic ?? WORLD_INFO_LOGIC.AND_ANY),
         disable: Boolean(entry.disable),
         order: Number(entry.order ?? 100),
-        position: Number(entry.position ?? WORLD_INFO_POSITION.before),
+        position: normalizeWorldInfoEntryPosition(entry.position),
         role: Number(entry.role ?? 0),
         depth: Number(entry.depth ?? DEFAULT_DEPTH),
         probability: Number(entry.probability ?? 100),
@@ -208,7 +223,6 @@ export function buildWorldInfoWorkbenchEntryDetail(entry) {
         automationId: String(entry.automationId ?? ''),
         outletName: String(entry.outletName ?? ''),
         matchCharacterDescription: Boolean(entry.matchCharacterDescription),
-        matchCharacterPersonality: Boolean(entry.matchCharacterPersonality),
         matchCharacterDepthPrompt: Boolean(entry.matchCharacterDepthPrompt),
         matchScenario: Boolean(entry.matchScenario),
         matchCreatorNotes: Boolean(entry.matchCreatorNotes),
@@ -393,7 +407,6 @@ export const originalWIDataKeyMap = {
     'useGroupScoring': 'extensions.use_group_scoring',
     'caseSensitive': 'extensions.case_sensitive',
     'matchCharacterDescription': 'extensions.match_character_description',
-    'matchCharacterPersonality': 'extensions.match_character_personality',
     'matchCharacterDepthPrompt': 'extensions.match_character_depth_prompt',
     'matchScenario': 'extensions.match_scenario',
     'matchCreatorNotes': 'extensions.match_creator_notes',

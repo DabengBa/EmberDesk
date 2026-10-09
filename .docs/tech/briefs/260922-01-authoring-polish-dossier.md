@@ -13,7 +13,7 @@
 
 ### 契约锚点（不动清单）
 
-- `data-react-authoring-field`（name/avatar/favorite/tags/characterWorld/description/firstMessage/alternateGreetings/systemPrompt/postHistoryInstructions/personality/scenario/exampleMessages/depthPrompt.{prompt,depth,role}/creator/characterVersion/creatorNotes）
+- `data-react-authoring-field`（name/avatar/favorite/tags/characterWorld/description/firstMessage/alternateGreetings/systemPrompt/postHistoryInstructions/scenario/exampleMessages/depthPrompt.{prompt,depth,role}/creator/characterVersion/creatorNotes）
 - `data-react-authoring-owner` / `-mode` / `-dirty` / `data-react-authoring-section`
 - `#char-management-dropdown` 隐藏 select 是管理动作的兼容宿主：React `•••` 菜单打开时重读 live option（扩展后注入项可达）；`character_action_advanced` 被显式过滤——它是 React 已拥有字段的第二编辑器，不进菜单
 - save model：`public/scripts/character-authoring.js` 的 `CHARACTER_EXTENSION_FIELD_MAP`（world→characterWorld、depth_prompt→depthPrompt、fav→favorite、talkativeness）+ `createCharacterAuthoringSaveModel`
@@ -26,9 +26,9 @@
 - 信息架构按频率+风险分层：`basics`（hero）→ `content` → `advanced`（折叠）→ footer 危险区。
 - Hero 身份区：头像预览+换图遮罩（`#add_avatar_button` 桥上传）、大号 name input、favorite 星标切换、token/permanent chips（bridge 新增 `avatarUrl`/`tokenSummary`）。
 - 短字段成行（tags+world、depth+role、creator+version）；长字段整行 + `max-height` 封顶（`textareaAuto` 38vh / `textareaPreview` 9.5em）+ autogrow。
-- 折叠 `advanced`：`grid-template-rows 0fr→1fr` 动画 + `inert`/`aria-hidden`（DOM 常驻不破契约）；折叠头带内容 chips（`note@{depth}`/`v{version}`/system prompt/personality/scenario/examples/creator/notes），chip 可点击 → 展开+scrollIntoView+focus 直达字段。
+- 折叠 `advanced`：`grid-template-rows 0fr→1fr` 动画 + `inert`/`aria-hidden`（DOM 常驻不破契约）；折叠头带内容 chips（`note@{depth}`/`v{version}`/system prompt/scenario/examples/creator/notes），chip 可点击 → 展开+scrollIntoView+focus 直达字段。
 - 字段即编辑器：focus accent ring、脏字段圆点、`{{char}}/{{user}}` 宏 placeholder、label 侧字数 meta。
-- 居中编辑器：全部长文本字段（description/firstMessage/systemPrompt/postHistoryInstructions/personality/scenario/exampleMessages/depthPrompt.prompt/creatorNotes）label 挂展开图标 → `createPortal` 模态（Esc/遮罩/Ctrl+S/autoFocus）；`depthPrompt.prompt` 走 `getExpandedFieldValue`/`setExpandedFieldValue` 嵌套读写。
+- 居中编辑器：全部长文本字段（description/firstMessage/systemPrompt/postHistoryInstructions/scenario/exampleMessages/depthPrompt.prompt/creatorNotes）label 挂展开图标 → `createPortal` 模态（Esc/遮罩/Ctrl+S/autoFocus）；`depthPrompt.prompt` 走 `getExpandedFieldValue`/`setExpandedFieldValue` 嵌套读写。
 - 动作分层：create 模式唯一主钮 Create；edit 模式 autosave（900ms debounce）+ 状态点+文案（Saving…/N unsaved/Saved/失败重试）；World Info + `•••` 管理菜单右置；Delete 描边 ghost 危险钮沉左侧。
 - `AuthoringFieldLabel`/`AuthoringTextarea`/`AuthoringActionsMenu` 复用组件收敛重复。
 

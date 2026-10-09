@@ -254,20 +254,11 @@ export function AiConfigPanel() {
                         </div>
                         <div className="range-block">
                             <div className="range-block-title openai_restorable">
-                                <span data-i18n="Scenario Format Template">Scenario <code>{'{{'}scenario{'}}'}</code></span>
-                                <ContractIconButton id="scenario_format_restore" className="right_menu_button" label="Restore default format" nativeTitle title="Restore default format" icon={<i className="fa-solid fa-clock-rotate-left" aria-hidden="true" />} />
+                                <span data-i18n="Description Format Template">Description <code>{0}</code></span>
+                                <ContractIconButton id="description_format_restore" className="right_menu_button" label="Restore default format" nativeTitle title="Restore default format" icon={<i className="fa-solid fa-clock-rotate-left" aria-hidden="true" />} />
                             </div>
                             <div className="wide100p">
-                                <textarea id="scenario_format_textarea" className="text_pole textarea_compact autoSetHeight" rows={3} placeholder={"2014"}></textarea>
-                            </div>
-                        </div>
-                        <div className="range-block">
-                            <div className="range-block-title openai_restorable">
-                                <span data-i18n="Personality Format Template">Personality <code>{'{{'}personality{'}}'}</code></span>
-                                <ContractIconButton id="personality_format_restore" className="right_menu_button" label="Restore default format" nativeTitle title="Restore default format" icon={<i className="fa-solid fa-clock-rotate-left" aria-hidden="true" />} />
-                            </div>
-                            <div className="wide100p">
-                                <textarea id="personality_format_textarea" className="text_pole textarea_compact autoSetHeight" rows={3} placeholder={"2014"}></textarea>
+                                <textarea id="description_format_textarea" className="text_pole textarea_compact autoSetHeight" rows={3} placeholder={"2014"}></textarea>
                             </div>
                         </div>
                         <div className="range-block">

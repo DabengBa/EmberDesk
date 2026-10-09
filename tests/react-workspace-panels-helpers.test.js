@@ -380,7 +380,6 @@ describe('React workspace panels bridge helpers', () => {
         expect(workspacePanelSource).toContain('data-react-authoring-field="name"');
         expect(workspacePanelSource).toContain('data-react-authoring-field="description"');
         expect(workspacePanelSource).toContain('data-react-authoring-field="firstMessage"');
-        expect(workspacePanelSource).toContain('data-react-authoring-field="personality"');
         expect(workspacePanelSource).toContain('data-react-authoring-field="scenario"');
         expect(workspacePanelSource).toContain('data-react-authoring-field="exampleMessages"');
         expect(workspacePanelSource).toContain('data-react-authoring-field="creatorNotes"');

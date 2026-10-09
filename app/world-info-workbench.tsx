@@ -84,7 +84,6 @@ export interface WorldInfoWorkbenchEntryDetail {
     automationId: string;
     outletName: string;
     matchCharacterDescription: boolean;
-    matchCharacterPersonality: boolean;
     matchCharacterDepthPrompt: boolean;
     matchScenario: boolean;
     matchCreatorNotes: boolean;
@@ -134,12 +133,9 @@ const worldInfoPanelFormSchema = z.object({
 });
 
 const POSITION_OPTIONS = [
-    { value: 0, label: '角色定义前' },
-    { value: 1, label: '角色定义后' },
+    { value: 0, label: '世界书' },
     { value: 5, label: '示例消息顶部' },
     { value: 6, label: '示例消息底部' },
-    { value: 2, label: '作者注释顶部' },
-    { value: 3, label: '作者注释底部' },
     { value: 4, label: '按深度' },
     { value: 7, label: '出口' },
 ] as const;
@@ -195,7 +191,6 @@ function isAdvancedDefault(entry: WorldInfoWorkbenchEntryDetail | null | undefin
         timing: Boolean(entry.sticky || entry.cooldown || entry.delay || entry.delayUntilRecursion || entry.excludeRecursion || entry.preventRecursion),
         scope: Boolean(
             entry.matchCharacterDescription
-            || entry.matchCharacterPersonality
             || entry.matchCharacterDepthPrompt
             || entry.matchScenario
             || entry.matchCreatorNotes

@@ -9,6 +9,7 @@ import {
     buildWorldInfoEntryList,
     buildWorldInfoWorkbenchEntryDetail,
     buildWorldInfoWorkbenchEntrySummary,
+    normalizeWorldInfoEntryPosition,
     sortWorldInfoEntries,
 } from './world-info-domain.js';
 
@@ -358,11 +359,15 @@ export function createWorldInfoWorkbenchSession(deps) {
         }
 
         let changed = false;
-        for (const [field, value] of Object.entries(fields)) {
+        for (const [field, rawValue] of Object.entries(fields)) {
             if (!WORLD_INFO_WORKBENCH_EDITABLE_FIELDS.has(field)) {
                 continue;
             }
+            const value = field === 'position' ? normalizeWorldInfoEntryPosition(rawValue) : rawValue;
             entry[field] = value;
+            if (field === 'position' && value !== WORLD_INFO_POSITION.atDepth) {
+                entry.role = null;
+            }
             if (typeof deps.setOriginalDataValue === 'function') {
                 deps.setOriginalDataValue(data, entry.uid, field, value);
                 if (field === 'key') {
@@ -376,6 +381,7 @@ export function createWorldInfoWorkbenchSession(deps) {
                         value == WORLD_INFO_POSITION.before ? 'before_char' : 'after_char',
                     );
                     deps.setOriginalDataValue(data, entry.uid, 'extensions.position', value);
+                    deps.setOriginalDataValue(data, entry.uid, 'extensions.role', entry.role);
                 }
             }
             changed = true;

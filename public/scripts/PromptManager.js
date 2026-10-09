@@ -31,28 +31,18 @@ const registerPromptManagerMigration = () => {
     const migrate = (settings, savePreset = null, presetName = null) => {
         if ('Default' === presetName) return;
 
-        if (settings.main_prompt || settings.nsfw_prompt || settings.jailbreak_prompt) {
-            console.log('Running prompt manager configuration migration');
-            if (settings.prompts === undefined || settings.prompts.length === 0) settings.prompts = structuredClone(chatCompletionDefaultPrompts.prompts);
-
-            const findPrompt = (identifier) => settings.prompts.find(prompt => identifier === prompt.identifier);
-            if (settings.main_prompt) {
-                findPrompt('main').content = settings.main_prompt;
-                delete settings.main_prompt;
+        // The target prompts are retired; legacy flat fields are dropped so
+        // they don't keep round-tripping through settings.
+        const legacyKeys = ['main_prompt', 'nsfw_prompt', 'jailbreak_prompt', 'personality_format', 'scenario_format', 'group_nudge_prompt', 'new_group_chat_prompt'];
+        let touched = false;
+        for (const key of legacyKeys) {
+            if (key in settings) {
+                delete settings[key];
+                touched = true;
             }
-
-            if (settings.nsfw_prompt) {
-                findPrompt('nsfw').content = settings.nsfw_prompt;
-                delete settings.nsfw_prompt;
-            }
-
-            if (settings.jailbreak_prompt) {
-                findPrompt('jailbreak').content = settings.jailbreak_prompt;
-                delete settings.jailbreak_prompt;
-            }
-
-            if (savePreset && presetName) savePreset(presetName, settings, false);
         }
+
+        if (touched && savePreset && presetName) savePreset(presetName, settings, false);
     };
 
     eventSource.on(event_types.SETTINGS_LOADED_BEFORE, settings => migrate(settings));
@@ -286,26 +276,14 @@ class PromptManager {
     get promptSources() {
         return {
             charDescription: t`Character Description`,
-            charPersonality: t`Character Personality`,
-            scenario: t`Character Scenario`,
-            personaDescription: t`Persona Description`,
-            worldInfoBefore: t`World Info (↑Char)`,
-            worldInfoAfter: t`World Info (↓Char)`,
+            worldInfo: t`World Info`,
         };
     }
 
     constructor() {
-        this.systemPrompts = [
-            'main',
-            'nsfw',
-            'jailbreak',
-            'enhanceDefinitions',
-        ];
+        this.systemPrompts = [];
 
-        this.overridablePrompts = [
-            'main',
-            'jailbreak',
-        ];
+        this.overridablePrompts = [];
 
         this.overriddenPrompts = [];
 
@@ -323,12 +301,7 @@ class PromptManager {
             sortableDelay: 30,
             warningTokenThreshold: 1500,
             dangerTokenThreshold: 500,
-            defaultPrompts: {
-                main: '',
-                nsfw: '',
-                jailbreak: '',
-                enhanceDefinitions: '',
-            },
+            defaultPrompts: {},
         };
 
         // Chatcompletion configuration object
@@ -503,27 +476,6 @@ class PromptManager {
             const promptId = event.target.dataset.pmPrompt;
             const prompt = this.getPromptById(promptId);
             const isPulledPrompt = Object.keys(this.promptSources).includes(promptId);
-
-            switch (promptId) {
-                case 'main':
-                    prompt.name = 'Main Prompt';
-                    prompt.content = this.configuration.defaultPrompts.main;
-                    prompt.forbid_overrides = false;
-                    break;
-                case 'nsfw':
-                    prompt.name = 'Nsfw Prompt';
-                    prompt.content = this.configuration.defaultPrompts.nsfw;
-                    break;
-                case 'jailbreak':
-                    prompt.name = 'Jailbreak Prompt';
-                    prompt.content = this.configuration.defaultPrompts.jailbreak;
-                    prompt.forbid_overrides = false;
-                    break;
-                case 'enhanceDefinitions':
-                    prompt.name = 'Enhance Definitions';
-                    prompt.content = this.configuration.defaultPrompts.enhanceDefinitions;
-                    break;
-            }
 
             const nameField = /** @type {HTMLInputElement} */(document.getElementById(this.configuration.prefix + 'prompt_manager_popup_entry_form_name'));
             const roleField = /** @type {HTMLSelectElement} */(document.getElementById(this.configuration.prefix + 'prompt_manager_popup_entry_form_role'));
@@ -1008,19 +960,33 @@ class PromptManager {
      * @returns {void}
      */
     sanitizeServiceSettings() {
-        this.serviceSettings.prompts = this.serviceSettings.prompts ?? [];
-        this.serviceSettings.prompt_order = this.serviceSettings.prompt_order ?? [];
+        this.serviceSettings.prompts = Array.isArray(this.serviceSettings.prompts) ? this.serviceSettings.prompts : [];
+        this.serviceSettings.prompt_order = Array.isArray(this.serviceSettings.prompt_order) ? this.serviceSettings.prompt_order : [];
+
+        // Retired built-in identifiers are remapped or dropped on every load so
+        // presets authored against the old prompt set keep working.
+        this.#normalizeRetiredPromptIdentifiers();
 
         if ('global' === this.configuration.promptOrder.strategy) {
             const dummyCharacter = { id: this.configuration.promptOrder.dummyId };
             const promptOrder = this.getPromptOrderForCharacter(dummyCharacter);
 
-            if (0 === promptOrder.length) this.addPromptOrderForCharacter(dummyCharacter, promptManagerDefaultPromptOrder);
+            if (0 === promptOrder.length) {
+                // Fill the existing bucket in place when it survives with an
+                // empty order (e.g. all-retired foreign presets); pushing a
+                // duplicate bucket would be shadowed by the empty one.
+                const existingBucket = this.serviceSettings.prompt_order.find(list => String(list.character_id) === String(dummyCharacter.id));
+                if (existingBucket) {
+                    existingBucket.order = structuredClone(promptManagerDefaultPromptOrder);
+                } else {
+                    this.addPromptOrderForCharacter(dummyCharacter, promptManagerDefaultPromptOrder);
+                }
+            }
         }
 
         // Check whether the referenced prompts are present.
         if (this.serviceSettings.prompts.length === 0) {
-            this.setPrompts(chatCompletionDefaultPrompts.prompts);
+            this.setPrompts(structuredClone(chatCompletionDefaultPrompts.prompts));
         } else {
             this.checkForMissingPrompts(this.serviceSettings.prompts);
         }
@@ -1041,6 +1007,53 @@ class PromptManager {
     }
 
     /**
+     * Remaps or drops retired prompt identifiers in loaded settings.
+     * `worldInfoBefore`/`worldInfoAfter` collapse into the merged `worldInfo`
+     * marker; every other retired identifier is dropped from prompt orders and
+     * the prompt library so foreign presets are ignored gracefully.
+     */
+    #normalizeRetiredPromptIdentifiers() {
+        const RETIRED_IDENTIFIERS = new Set([
+            'main', 'nsfw', 'jailbreak', 'enhanceDefinitions',
+            'summary', 'authorsNote', 'vectorsMemory', 'vectorsDataBank', 'smartContext',
+            'scenario', 'personaDescription', 'charPersonality',
+            'worldInfoBefore', 'worldInfoAfter',
+        ]);
+        const MERGED_WORLD_INFO = new Set(['worldInfoBefore', 'worldInfoAfter']);
+
+        for (const orderList of this.serviceSettings.prompt_order) {
+            if (!Array.isArray(orderList?.order)) continue;
+            const seen = new Map();
+            orderList.order = orderList.order.flatMap(entry => {
+                if (!entry || typeof entry.identifier !== 'string') return [];
+                const identifier = MERGED_WORLD_INFO.has(entry.identifier) ? 'worldInfo' : entry.identifier;
+                if (RETIRED_IDENTIFIERS.has(identifier)) return [];
+                if (seen.has(identifier)) {
+                    // The merged worldInfo marker stays enabled when any of the
+                    // legacy before/after buckets had it enabled.
+                    if (identifier === 'worldInfo') seen.get(identifier).enabled ||= entry.enabled;
+                    return [];
+                }
+                const mapped = identifier === entry.identifier ? entry : { ...entry, identifier };
+                seen.set(identifier, mapped);
+                return [mapped];
+            });
+        }
+
+        let worldInfoCarried = this.serviceSettings.prompts.some(prompt => prompt?.identifier === 'worldInfo');
+        this.serviceSettings.prompts = this.serviceSettings.prompts.flatMap(prompt => {
+            if (!prompt || !RETIRED_IDENTIFIERS.has(prompt.identifier)) return [prompt];
+            // Transplant the first legacy WI marker onto the merged identifier
+            // so custom role/depth/order overrides survive the fold.
+            if (MERGED_WORLD_INFO.has(prompt.identifier) && !worldInfoCarried) {
+                worldInfoCarried = true;
+                return [{ ...prompt, identifier: 'worldInfo', name: 'World Info' }];
+            }
+            return [];
+        });
+    }
+
+    /**
      * Checks whether entries of a characters prompt order are orphaned
      * and if all mandatory system prompts for a character are present.
      *
@@ -1056,7 +1069,7 @@ class PromptManager {
         missingIdentifiers.forEach(identifier => {
             const defaultPrompt = chatCompletionDefaultPrompts.prompts.find(prompt => prompt?.identifier === identifier);
             if (defaultPrompt) {
-                prompts.push(defaultPrompt);
+                prompts.push(structuredClone(defaultPrompt));
                 this.log(`Missing system prompt: ${defaultPrompt.identifier}. Added default.`);
             }
         });
@@ -1088,11 +1101,7 @@ class PromptManager {
     isPromptEditAllowed(prompt) {
         const forceEditPrompts = [
             'charDescription',
-            'charPersonality',
-            'scenario',
-            'personaDescription',
-            'worldInfoBefore',
-            'worldInfoAfter',
+            'worldInfo',
         ];
         return forceEditPrompts.includes(prompt.identifier) || !prompt.marker;
     }
@@ -1105,12 +1114,7 @@ class PromptManager {
     isPromptToggleAllowed(prompt) {
         const forceTogglePrompts = [
             'charDescription',
-            'charPersonality',
-            'scenario',
-            'personaDescription',
-            'worldInfoBefore',
-            'worldInfoAfter',
-            'main',
+            'worldInfo',
             'chatHistory',
             'dialogueExamples',
         ];
@@ -1462,12 +1466,6 @@ class PromptManager {
 
             if (allowedTrigger) {
                 promptCollection.add(this.preparePrompt(prompt));
-            } else if (entry.identifier === 'main') {
-                // Some extensions require main prompt to be present for relative inserts.
-                // So we make a GMO-free vegan replacement.
-                const replacementPrompt = structuredClone(prompt);
-                replacementPrompt.content = '';
-                promptCollection.add(this.preparePrompt(replacementPrompt));
             }
         });
 
@@ -1801,6 +1799,9 @@ class PromptManager {
             throw new Error('Prompt order strategy not supported.');
         }
 
+        // Imported files may carry retired identifiers; normalize before saving.
+        this.sanitizeServiceSettings();
+
         toastr.success(t`Prompt import complete.`);
         this.saveServiceSettings().then(() => this.render());
     }
@@ -1939,31 +1940,10 @@ class PromptManager {
 const chatCompletionDefaultPrompts = {
     'prompts': [
         {
-            'name': 'Main Prompt',
-            'system_prompt': true,
-            'role': 'system',
-            'content': 'Write {{char}}\'s next reply in a fictional chat between {{charIfNotGroup}} and {{user}}.',
-            'identifier': 'main',
-        },
-        {
-            'name': 'Auxiliary Prompt',
-            'system_prompt': true,
-            'role': 'system',
-            'content': '',
-            'identifier': 'nsfw',
-        },
-        {
             'identifier': 'dialogueExamples',
             'name': 'Chat Examples',
             'system_prompt': true,
             'marker': true,
-        },
-        {
-            'name': 'Post-History Instructions',
-            'system_prompt': true,
-            'role': 'system',
-            'content': '',
-            'identifier': 'jailbreak',
         },
         {
             'identifier': 'chatHistory',
@@ -1972,46 +1952,14 @@ const chatCompletionDefaultPrompts = {
             'marker': true,
         },
         {
-            'identifier': 'worldInfoAfter',
-            'name': 'World Info (after)',
+            'identifier': 'worldInfo',
+            'name': 'World Info',
             'system_prompt': true,
             'marker': true,
-        },
-        {
-            'identifier': 'worldInfoBefore',
-            'name': 'World Info (before)',
-            'system_prompt': true,
-            'marker': true,
-        },
-        {
-            'identifier': 'enhanceDefinitions',
-            'role': 'system',
-            'name': 'Enhance Definitions',
-            'content': 'If you have more knowledge of {{char}}, add to the character\'s lore and personality to enhance them but keep the Character Sheet\'s definitions absolute.',
-            'system_prompt': true,
-            'marker': false,
         },
         {
             'identifier': 'charDescription',
             'name': 'Char Description',
-            'system_prompt': true,
-            'marker': true,
-        },
-        {
-            'identifier': 'charPersonality',
-            'name': 'Char Personality',
-            'system_prompt': true,
-            'marker': true,
-        },
-        {
-            'identifier': 'scenario',
-            'name': 'Scenario',
-            'system_prompt': true,
-            'marker': true,
-        },
-        {
-            'identifier': 'personaDescription',
-            'name': 'Persona Description',
             'system_prompt': true,
             'marker': true,
         },
@@ -2024,39 +1972,11 @@ const promptManagerDefaultPromptOrders = {
 
 const promptManagerDefaultPromptOrder = [
     {
-        'identifier': 'main',
-        'enabled': true,
-    },
-    {
-        'identifier': 'worldInfoBefore',
-        'enabled': true,
-    },
-    {
-        'identifier': 'personaDescription',
+        'identifier': 'worldInfo',
         'enabled': true,
     },
     {
         'identifier': 'charDescription',
-        'enabled': true,
-    },
-    {
-        'identifier': 'charPersonality',
-        'enabled': true,
-    },
-    {
-        'identifier': 'scenario',
-        'enabled': true,
-    },
-    {
-        'identifier': 'enhanceDefinitions',
-        'enabled': false,
-    },
-    {
-        'identifier': 'nsfw',
-        'enabled': true,
-    },
-    {
-        'identifier': 'worldInfoAfter',
         'enabled': true,
     },
     {
@@ -2065,10 +1985,6 @@ const promptManagerDefaultPromptOrder = [
     },
     {
         'identifier': 'chatHistory',
-        'enabled': true,
-    },
-    {
-        'identifier': 'jailbreak',
         'enabled': true,
     },
 ];

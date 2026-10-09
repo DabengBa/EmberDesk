@@ -100,18 +100,13 @@ export {
 
 let openai_messages_count = 0;
 
-const default_main_prompt = 'Write {{char}}\'s next reply in a fictional chat between {{char}} and {{user}}.';
-const default_nsfw_prompt = '';
-const default_jailbreak_prompt = '';
 const default_impersonation_prompt = '[Write your next reply from the point of view of {{user}}, using the chat history so far as a guideline for the writing style of {{user}}. Don\'t write as {{char}} or system. Don\'t describe actions of {{char}}.]';
-const default_enhance_definitions_prompt = 'If you have more knowledge of {{char}}, add to the character\'s lore and personality to enhance them but keep the Character Sheet\'s definitions absolute.';
 const default_wi_format = '{0}';
+const default_description_format = '{0}';
 const default_new_chat_prompt = '[Start a new Chat]';
 const default_new_example_chat_prompt = '[Example Chat]';
 const default_continue_nudge_prompt = '[Continue your last message without repeating its original content.]';
 const API_TEST_REQUEST_TIMEOUT_MS = 15000;
-const default_personality_format = '{{personality}}';
-const default_scenario_format = '{{scenario}}';
 
 const max_64k = 65535;
 const openai_max_stop_strings = 4;
@@ -236,8 +231,7 @@ export const settingsToUpdate = {
     new_example_chat_prompt: ['#newexamplechat_prompt_textarea', 'new_example_chat_prompt', false, false],
     continue_nudge_prompt: ['#continue_nudge_prompt_textarea', 'continue_nudge_prompt', false, false],
     wi_format: ['#wi_format_textarea', 'wi_format', false, false],
-    scenario_format: ['#scenario_format_textarea', 'scenario_format', false, false],
-    personality_format: ['#personality_format_textarea', 'personality_format', false, false],
+    description_format: ['#description_format_textarea', 'description_format', false, false],
     stream_openai: ['#stream_toggle', 'stream_openai', true, false],
     prompts: ['', 'prompts', false, false],
     prompt_order: ['', 'prompt_order', false, false],
@@ -273,8 +267,7 @@ const default_settings = {
     new_example_chat_prompt: default_new_example_chat_prompt,
     continue_nudge_prompt: default_continue_nudge_prompt,
     wi_format: default_wi_format,
-    scenario_format: default_scenario_format,
-    personality_format: default_personality_format,
+    description_format: default_description_format,
     openai_model: 'gpt-4-turbo',
     custom_model: '',
     custom_url: '',
@@ -429,12 +422,7 @@ function setupChatCompletionPromptManager(openAiSettings) {
         listIdentifier: 'completion_prompt_manager_list',
         toggleDisabled: [],
         sortableDelay: getSortableDelay(),
-        defaultPrompts: {
-            main: default_main_prompt,
-            nsfw: default_nsfw_prompt,
-            jailbreak: default_jailbreak_prompt,
-            enhanceDefinitions: default_enhance_definitions_prompt,
-        },
+        defaultPrompts: {},
         promptOrder: {
             strategy: 'global',
             dummyId: 100001,
@@ -617,7 +605,11 @@ async function populateChatHistory(messages, prompts, chatCompletion, type = nul
         return;
     }
 
-    chatCompletion.add(new MessageCollection('chatHistory'), prompts.index('chatHistory'));
+    // The collection may already exist: extension prompts anchor into it before
+    // the chat history is populated. Never overwrite it.
+    if (!chatCompletion.has('chatHistory')) {
+        chatCompletion.add(new MessageCollection('chatHistory'), prompts.index('chatHistory'));
+    }
 
     const newChatMessage = await Message.createAsync('system', substituteParams(oai_settings.new_chat_prompt), 'newMainChat');
     chatCompletion.reserveBudget(newChatMessage);
@@ -902,7 +894,7 @@ async function populateChatCompletion(prompts, chatCompletion, { bias, quietProm
         // We need the prompts array to determine a position for the source.
         if (false === prompts.has(source)) return;
 
-        if (promptManager.isPromptDisabledForActiveCharacter(source) && source !== 'main') {
+        if (promptManager.isPromptDisabledForActiveCharacter(source)) {
             promptManager.log(`Skipping prompt ${source} because it is disabled`);
             return;
         }
@@ -923,13 +915,8 @@ async function populateChatCompletion(prompts, chatCompletion, { bias, quietProm
 
     chatCompletion.reserveBudget(3); // every reply is primed with <|start|>assistant<|message|>
     // Character and world information
-    await addToChatCompletion('worldInfoBefore');
-    await addToChatCompletion('main');
-    await addToChatCompletion('worldInfoAfter');
+    await addToChatCompletion('worldInfo');
     await addToChatCompletion('charDescription');
-    await addToChatCompletion('charPersonality');
-    await addToChatCompletion('scenario');
-    await addToChatCompletion('personaDescription');
 
     // Collection of control prompts that will always be positioned last
     chatCompletion.setOverriddenPrompts(prompts.overriddenPrompts);
@@ -951,8 +938,7 @@ async function populateChatCompletion(prompts, chatCompletion, { bias, quietProm
 
     chatCompletion.reserveBudget(controlPrompts);
 
-    // Add ordered system and user prompts
-    const systemPrompts = ['nsfw', 'jailbreak'];
+    // Add ordered user prompts
     const userRelativePrompts = prompts.collection
         .filter((prompt) => false === prompt.system_prompt && prompt.injection_position !== INJECTION_POSITION.ABSOLUTE)
         .reduce((acc, prompt) => {
@@ -966,58 +952,52 @@ async function populateChatCompletion(prompts, chatCompletion, { bias, quietProm
             return acc;
         }, []);
 
-    for (const identifier of [...systemPrompts, ...userRelativePrompts]) {
+    for (const identifier of userRelativePrompts) {
         await addToChatCompletion(identifier);
     }
-
-    // Add enhance definition instruction
-    if (prompts.has('enhanceDefinitions')) await addToChatCompletion('enhanceDefinitions');
 
     // Bias
     if (bias && bias.trim().length) await addToChatCompletion('bias');
 
-    const injectToMain = async (/** @type {Prompt} */ prompt, /** @type {string|number} */ position) => {
-        if (chatCompletion.has('main')) {
-            const message = await Message.fromPromptAsync(prompt);
-            chatCompletion.insert(message, 'main', position);
+    // 'before' anchors to the top of the ordered prompt block; 'end' anchors
+    // just before the chat history (where the retired main prompt used to end).
+    // The chatHistory collection is created early so both anchors exist by the
+    // time extension prompts are injected.
+    const injectAnchored = async (/** @type {Prompt} */ prompt, /** @type {string|number} */ position) => {
+        const message = await Message.fromPromptAsync(prompt);
+        if (chatCompletion.has('chatHistory')) {
+            if (position === 'end') {
+                chatCompletion.insertAtStart(message, 'chatHistory');
+            } else {
+                const firstId = chatCompletion.getMessages().collection.find(c => c.identifier !== 'chatHistory')?.identifier ?? 'chatHistory';
+                chatCompletion.insertAtStart(message, firstId);
+            }
         } else {
-            // Convert the relative prompt to an injection and place it relative to main prompt
+            // Convert the relative prompt to an injection and place it relative to the chat history
             // Keeping prompts in the same order bucket will squash them together during in-chat injection
-            const indexOfMain = absolutePrompts.findIndex(p => p.identifier === 'main');
-            if (indexOfMain >= 0) {
-                const main = absolutePrompts[indexOfMain];
+            const indexOfChatHistory = absolutePrompts.findIndex(p => p.identifier === 'chatHistory');
+            if (indexOfChatHistory >= 0) {
+                const chatHistory = absolutePrompts[indexOfChatHistory];
                 const promptCopy = new Prompt(prompt);
-                promptCopy.role = main.role;
-                promptCopy.injection_position = main.injection_position;
-                promptCopy.injection_depth = main.injection_depth;
-                promptCopy.injection_order = main.injection_order;
-                const newIndex = position === 'end' ? indexOfMain + 1 : indexOfMain;
+                promptCopy.role = chatHistory.role;
+                promptCopy.injection_position = chatHistory.injection_position;
+                promptCopy.injection_depth = chatHistory.injection_depth;
+                promptCopy.injection_order = chatHistory.injection_order;
+                const newIndex = position === 'end' ? indexOfChatHistory : 0;
                 absolutePrompts.splice(newIndex, 0, promptCopy);
             }
         }
     };
 
-    const knownPrompts = [
-        'summary',
-        'authorsNote',
-        'vectorsMemory',
-        'vectorsDataBank',
-        'smartContext',
-    ];
-
-    // Known relative extension prompts
-    for (const key of knownPrompts) {
-        if (prompts.has(key)) {
-            const prompt = prompts.get(key);
-            if (prompt.position) {
-                await injectToMain(prompt, prompt.position);
-            }
-        }
+    // Create the chatHistory collection early so extension prompts can anchor
+    // relative to it before populateChatHistory fills it with chat messages.
+    if (prompts.has('chatHistory') && !chatCompletion.has('chatHistory')) {
+        chatCompletion.add(new MessageCollection('chatHistory'), prompts.index('chatHistory'));
     }
 
-    // Other relative extension prompts
+    // Relative extension prompts anchor around the chat history
     for (const prompt of prompts.collection.filter(p => p.extension && p.position)) {
-        await injectToMain(prompt, prompt.position);
+        await injectAnchored(prompt, prompt.position);
     }
 
     // Pre-allocation of tokens for tool data
@@ -1060,98 +1040,34 @@ async function populateChatCompletion(prompts, chatCompletion, { bias, quietProm
  * Combines system prompts with prompt manager prompts
  *
  * @param {Object} options - An object with optional settings.
- * @param {string} options.scenario - The scenario or context of the dialogue.
- * @param {string} options.charPersonality - Description of the character's personality.
  * @param {string} options.name2 - The second name to be used in the messages.
- * @param {string} options.worldInfoBefore - The world info to be added before the main conversation.
- * @param {string} options.worldInfoAfter - The world info to be added after the main conversation.
+ * @param {string} options.worldInfo - The merged world info block for the prompt.
  * @param {string} options.charDescription - Description of the character.
  * @param {string} options.quietPrompt - The quiet prompt to be used in the conversation.
  * @param {string} options.bias - The bias to be added in the conversation.
  * @param {Object} options.extensionPrompts - An object containing additional prompts.
- * @param {string} options.systemPromptOverride - Character card override of the main prompt
- * @param {string} options.jailbreakPromptOverride - Character card override of the PHI
  * @param {string} options.type - The type of generation that triggered the prompt
  * @returns {Promise<Object>} prompts - The prepared and merged system and user-defined prompts.
  */
-async function preparePromptsForChatCompletion({ scenario, charPersonality, name2: _name2, worldInfoBefore, worldInfoAfter, charDescription, quietPrompt, bias, extensionPrompts, systemPromptOverride, jailbreakPromptOverride, type }) {
-    const scenarioText = scenario && oai_settings.scenario_format ? substituteParams(oai_settings.scenario_format) : (scenario || '');
-    const charPersonalityText = charPersonality && oai_settings.personality_format ? substituteParams(oai_settings.personality_format) : (charPersonality || '');
+async function preparePromptsForChatCompletion({ name2: _name2, worldInfo, charDescription, quietPrompt, bias, extensionPrompts, type }) {
     const impersonationPrompt = oai_settings.impersonation_prompt ? substituteParams(oai_settings.impersonation_prompt) : '';
 
     // Create entries for system prompts
     const systemPrompts = [
         // Ordered prompts for which a marker should exist
-        { role: 'system', content: formatWorldInfo(worldInfoBefore), identifier: 'worldInfoBefore' },
-        { role: 'system', content: formatWorldInfo(worldInfoAfter), identifier: 'worldInfoAfter' },
-        { role: 'system', content: charDescription, identifier: 'charDescription' },
-        { role: 'system', content: charPersonalityText, identifier: 'charPersonality' },
-        { role: 'system', content: scenarioText, identifier: 'scenario' },
+        { role: 'system', content: formatWorldInfo(worldInfo), identifier: 'worldInfo' },
+        { role: 'system', content: formatWorldInfo(charDescription, { wiFormat: oai_settings.description_format }), identifier: 'charDescription' },
         // Unordered prompts without marker
         { role: 'system', content: impersonationPrompt, identifier: 'impersonate' },
         { role: 'system', content: quietPrompt, identifier: 'quietPrompt' },
         { role: 'assistant', content: bias, identifier: 'bias' },
     ];
 
-    // Tavern Extras - Summary
-    const summary = extensionPrompts['1_memory'];
-    if (summary && summary.value) systemPrompts.push({
-        role: getPromptRole(summary.role),
-        content: summary.value,
-        identifier: 'summary',
-        position: getPromptPosition(summary.position),
-    });
-
-    // Authors Note
-    const authorsNote = extensionPrompts['2_floating_prompt'];
-    if (authorsNote && authorsNote.value) systemPrompts.push({
-        role: getPromptRole(authorsNote.role),
-        content: authorsNote.value,
-        identifier: 'authorsNote',
-        position: getPromptPosition(authorsNote.position),
-    });
-
-    // Vectors Memory
-    const vectorsMemory = extensionPrompts['3_vectors'];
-    if (vectorsMemory && vectorsMemory.value) systemPrompts.push({
-        role: 'system',
-        content: vectorsMemory.value,
-        identifier: 'vectorsMemory',
-        position: getPromptPosition(vectorsMemory.position),
-    });
-
-    const vectorsDataBank = extensionPrompts['4_vectors_data_bank'];
-    if (vectorsDataBank && vectorsDataBank.value) systemPrompts.push({
-        role: getPromptRole(vectorsDataBank.role),
-        content: vectorsDataBank.value,
-        identifier: 'vectorsDataBank',
-        position: getPromptPosition(vectorsDataBank.position),
-    });
-
-    // Smart Context (ChromaDB)
-    const smartContext = extensionPrompts.chromadb;
-    if (smartContext && smartContext.value) systemPrompts.push({
-        role: 'system',
-        content: smartContext.value,
-        identifier: 'smartContext',
-        position: getPromptPosition(smartContext.position),
-    });
-
-    const knownExtensionPrompts = [
-        '1_memory',
-        '2_floating_prompt',
-        '3_vectors',
-        '4_vectors_data_bank',
-        'chromadb',
-        'QUIET_PROMPT',
-        'DEPTH_PROMPT',
-    ];
-
-    // Anything that is not a known extension prompt
+    // Anything that is not a chat-bound injection becomes a prompt entry
     for (const key in extensionPrompts) {
         if (Object.hasOwn(extensionPrompts, key)) {
             const prompt = extensionPrompts[key];
-            if (knownExtensionPrompts.includes(key)) continue;
+            if (['QUIET_PROMPT', 'DEPTH_PROMPT'].includes(key)) continue;
             if (!extensionPrompts[key].value) continue;
             if (![extension_prompt_types.BEFORE_PROMPT, extension_prompt_types.IN_PROMPT].includes(prompt.position)) continue;
 
@@ -1194,26 +1110,6 @@ async function preparePromptsForChatCompletion({ scenario, charPersonality, name
         else prompts.add(newPrompt);
     });
 
-    // Apply character-specific main prompt
-    const systemPrompt = prompts.get('main') ?? null;
-    const isSystemPromptDisabled = promptManager.isPromptDisabledForActiveCharacter('main');
-    if (systemPromptOverride && systemPrompt && systemPrompt.forbid_overrides !== true && !isSystemPromptDisabled) {
-        const mainOriginalContent = systemPrompt.content;
-        systemPrompt.content = systemPromptOverride;
-        const mainReplacement = promptManager.preparePrompt(systemPrompt, mainOriginalContent);
-        prompts.override(mainReplacement, prompts.index('main'));
-    }
-
-    // Apply character-specific jailbreak
-    const jailbreakPrompt = prompts.get('jailbreak') ?? null;
-    const isJailbreakPromptDisabled = promptManager.isPromptDisabledForActiveCharacter('jailbreak');
-    if (jailbreakPromptOverride && jailbreakPrompt && jailbreakPrompt.forbid_overrides !== true && !isJailbreakPromptDisabled) {
-        const jbOriginalContent = jailbreakPrompt.content;
-        jailbreakPrompt.content = jailbreakPromptOverride;
-        const jbReplacement = promptManager.preparePrompt(jailbreakPrompt, jbOriginalContent);
-        prompts.override(jbReplacement, prompts.index('jailbreak'));
-    }
-
     return prompts;
 }
 
@@ -1224,17 +1120,12 @@ async function preparePromptsForChatCompletion({ scenario, charPersonality, name
  * @param {Object} content - System prompts provided by SillyTavern
  * @param {string} content.name2 - The second name to be used in the messages.
  * @param {string} content.charDescription - Description of the character.
- * @param {string} content.charPersonality - Description of the character's personality.
- * @param {string} content.scenario - The scenario or context of the dialogue.
- * @param {string} content.worldInfoBefore - The world info to be added before the main conversation.
- * @param {string} content.worldInfoAfter - The world info to be added after the main conversation.
+ * @param {string} content.worldInfo - The merged world info block for the prompt.
  * @param {string} content.bias - The bias to be added in the conversation.
  * @param {string} content.type - The type of the chat, can be 'impersonate'.
  * @param {string} content.quietPrompt - The quiet prompt to be used in the conversation.
  * @param {string} content.quietImage - Image prompt for extras
  * @param {string} content.cyclePrompt - The last prompt used for chat message continuation.
- * @param {string} content.systemPromptOverride - The system prompt override.
- * @param {string} content.jailbreakPromptOverride - The jailbreak prompt override.
  * @param {object} content.extensionPrompts - An array of additional prompts.
  * @param {object[]} content.messages - An array of messages to be used as chat history.
  * @param {string[]} content.messageExamples - An array of messages to be used as dialogue examples.
@@ -1244,18 +1135,13 @@ async function preparePromptsForChatCompletion({ scenario, charPersonality, name
 export async function prepareOpenAIMessages({
     name2,
     charDescription,
-    charPersonality,
-    scenario,
-    worldInfoBefore,
-    worldInfoAfter,
+    worldInfo,
     bias,
     type,
     quietPrompt,
     quietImage,
     extensionPrompts,
     cyclePrompt,
-    systemPromptOverride,
-    jailbreakPromptOverride,
     messages,
     messageExamples,
 }, dryRun) {
@@ -1271,17 +1157,12 @@ export async function prepareOpenAIMessages({
     try {
         // Merge markers and ordered user prompts with system prompts
         const prompts = await preparePromptsForChatCompletion({
-            scenario,
-            charPersonality,
             name2,
-            worldInfoBefore,
-            worldInfoAfter,
+            worldInfo,
             charDescription,
             quietPrompt,
             bias,
             extensionPrompts,
-            systemPromptOverride,
-            jailbreakPromptOverride,
             type,
         });
 
@@ -1713,7 +1594,6 @@ class TokenHandler {
             'prompt': 0,
             'bias': 0,
             'nudge': 0,
-            'jailbreak': 0,
             'impersonate': 0,
             'examples': 0,
             'conversation': 0,
@@ -3328,13 +3208,8 @@ export function initOpenAI() {
         saveSettingsDebounced();
     });
 
-    $('#scenario_format_textarea').on('input', function () {
-        oai_settings.scenario_format = String($('#scenario_format_textarea').val());
-        saveSettingsDebounced();
-    });
-
-    $('#personality_format_textarea').on('input', function () {
-        oai_settings.personality_format = String($('#personality_format_textarea').val());
+    $('#description_format_textarea').on('input', function () {
+        oai_settings.description_format = String($('#description_format_textarea').val());
         saveSettingsDebounced();
     });
 
@@ -3374,15 +3249,9 @@ export function initOpenAI() {
         saveSettingsDebounced();
     });
 
-    $('#scenario_format_restore').on('click', function () {
-        oai_settings.scenario_format = default_scenario_format;
-        $('#scenario_format_textarea').val(oai_settings.scenario_format);
-        saveSettingsDebounced();
-    });
-
-    $('#personality_format_restore').on('click', function () {
-        oai_settings.personality_format = default_personality_format;
-        $('#personality_format_textarea').val(oai_settings.personality_format);
+    $('#description_format_restore').on('click', function () {
+        oai_settings.description_format = default_description_format;
+        $('#description_format_textarea').val(oai_settings.description_format);
         saveSettingsDebounced();
     });
 

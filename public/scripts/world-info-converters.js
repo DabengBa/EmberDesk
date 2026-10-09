@@ -1,6 +1,7 @@
+import { normalizeWorldInfoEntryPosition } from './world-info-domain.js';
+
 const WORLD_INFO_LOGIC_AND_ANY = 0;
 const WORLD_INFO_POSITION_BEFORE = 0;
-const WORLD_INFO_POSITION_AFTER = 1;
 const DEFAULT_DEPTH = 4;
 const DEFAULT_WEIGHT = 100;
 const SYSTEM_ROLE = 0;
@@ -23,7 +24,6 @@ function createDefaultWorldInfoEntry() {
         excludeRecursion: false,
         preventRecursion: false,
         matchCharacterDescription: false,
-        matchCharacterPersonality: false,
         matchCharacterDepthPrompt: false,
         matchScenario: false,
         matchCreatorNotes: false,
@@ -219,7 +219,7 @@ export function convertCharacterBook(characterBook) {
             constant: entry.constant || false,
             selective: entry.selective || false,
             order: entry.insertion_order,
-            position: entry.extensions?.position ?? (entry.position === 'before_char' ? WORLD_INFO_POSITION_BEFORE : WORLD_INFO_POSITION_AFTER),
+            position: normalizeWorldInfoEntryPosition(entry.extensions?.position),
             excludeRecursion: entry.extensions?.exclude_recursion ?? false,
             preventRecursion: entry.extensions?.prevent_recursion ?? false,
             delayUntilRecursion: entry.extensions?.delay_until_recursion ?? false,
@@ -245,7 +245,6 @@ export function convertCharacterBook(characterBook) {
             cooldown: entry.extensions?.cooldown ?? null,
             delay: entry.extensions?.delay ?? null,
             matchCharacterDescription: entry.extensions?.match_character_description ?? false,
-            matchCharacterPersonality: entry.extensions?.match_character_personality ?? false,
             matchCharacterDepthPrompt: entry.extensions?.match_character_depth_prompt ?? false,
             matchScenario: entry.extensions?.match_scenario ?? false,
             matchCreatorNotes: entry.extensions?.match_creator_notes ?? false,

@@ -27,7 +27,6 @@ const BASE_ENTRY_KEYS = [
     'keysecondary',
     'matchCharacterDepthPrompt',
     'matchCharacterDescription',
-    'matchCharacterPersonality',
     'matchCreatorNotes',
     'matchScenario',
     'matchWholeWords',
@@ -298,7 +297,6 @@ describe('world info converters', () => {
                         delay: 6,
                         match_persona_description: true,
                         match_character_description: true,
-                        match_character_personality: true,
                         match_character_depth_prompt: true,
                         match_scenario: true,
                         match_creator_notes: true,
@@ -347,7 +345,6 @@ describe('world info converters', () => {
             cooldown: 4,
             delay: 6,
             matchCharacterDescription: true,
-            matchCharacterPersonality: true,
             matchCharacterDepthPrompt: true,
             matchScenario: true,
             matchCreatorNotes: true,
@@ -382,7 +379,7 @@ describe('world info converters', () => {
             constant: false,
             selective: false,
             order: undefined,
-            position: 1,
+            position: 0,
             disable: false,
             addMemo: false,
             displayIndex: 0,
@@ -454,7 +451,7 @@ describe('world info converters', () => {
         });
 
         expect(converted.entries[0].position).toBe(0);
-        expect(converted.entries[1].position).toBe(1);
+        expect(converted.entries[1].position).toBe(0);
     });
 
     test('converts empty Character Book entries without synthetic rows', () => {

@@ -102,7 +102,6 @@ const renderStoryString = (...args) => shell().renderStoryString(...args);
 const setOpenAIMessageExamples = (...args) => shell().setOpenAIMessageExamples(...args);
 const setOpenAIMessages = (...args) => shell().setOpenAIMessages(...args);
 const shiftDownByOne = (...args) => shell().shiftDownByOne(...args);
-const shiftUpByOne = (...args) => shell().shiftUpByOne(...args);
 const parseReasoningInSwipes = (...args) => shell().parseReasoningInSwipes(...args);
 const applyStreamFadeIn = (...args) => shell().applyStreamFadeIn(...args);
 const countOccurrences = (...args) => shell().countOccurrences(...args);
@@ -676,13 +675,11 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
 
     let {
         description,
-        personality,
-        scenario,
         mesExamples,
         system,
-        jailbreak,
         charDepthPrompt,
         creatorNotes,
+        scenario,
     } = getCharacterCardFields();
 
     // Depth prompt (character-specific A/N)
@@ -690,7 +687,7 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
     const depthPromptText = charDepthPrompt || '';
     const depthPromptDepth = state.characters[state.this_chid]?.data?.extensions?.depth_prompt?.depth ?? state.depth_prompt_depth_default;
     const depthPromptRole = getExtensionPromptRoleByName(state.characters[state.this_chid]?.data?.extensions?.depth_prompt?.role ?? state.depth_prompt_role_default);
-    setExtensionPrompt(inject_ids.DEPTH_PROMPT, depthPromptText, state.extension_prompt_types.IN_CHAT, depthPromptDepth, state.feature_settings.note?.allowWIScan, depthPromptRole);
+    setExtensionPrompt(inject_ids.DEPTH_PROMPT, depthPromptText, state.extension_prompt_types.IN_CHAT, depthPromptDepth, false, depthPromptRole);
 
     // First message in fresh 1-on-1 chat reacts to user/character settings changes
     if (state.chat.length) {
@@ -781,13 +778,12 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
     /** @type {import('./world-info.js').WIGlobalScanData} */
     const globalScanData = {
         characterDescription: description,
-        characterPersonality: personality,
         characterDepthPrompt: charDepthPrompt,
-        scenario: scenario,
         creatorNotes: creatorNotes,
+        scenario: scenario,
         trigger: GENERATION_TYPE_TRIGGERS.includes(type) ? type : 'normal',
     };
-    const { worldInfoBefore, worldInfoAfter, worldInfoExamples, worldInfoDepth, outletEntries } = await getWorldInfoPrompt(chatForWI, this_max_context, dryRun, globalScanData);
+    const { worldInfo, worldInfoBefore, worldInfoAfter, worldInfoExamples, worldInfoDepth, outletEntries } = await getWorldInfoPrompt(chatForWI, this_max_context, dryRun, globalScanData);
     setExtensionPrompt(inject_ids.QUIET_PROMPT, '', state.extension_prompt_types.IN_PROMPT, 0, true);
 
     // Add message example WI
@@ -849,8 +845,6 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
 
     const storyStringParams = {
         description: description,
-        personality: personality,
-        scenario: scenario,
         system: system,
         char: state.name2,
         user: state.name1,
@@ -860,6 +854,7 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
         loreAfter: worldInfoAfter,
         anchorBefore: beforeScenarioAnchor.trim(),
         anchorAfter: afterScenarioAnchor.trim(),
+        scenario: scenario,
         mesExamples: mesExamplesArray.join(''),
         mesExamplesRaw: mesExamplesRawArray.join(''),
     };
@@ -879,25 +874,6 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
     let injectedIndices = [];
     if (state.main_api !== 'openai') {
         injectedIndices = await doChatInject(coreChat, isContinue);
-    }
-
-    if (state.main_api !== 'openai' && state.power_user.sysprompt.enabled) {
-        jailbreak = state.power_user.prefer_character_jailbreak && jailbreak
-            ? substituteParams(jailbreak, { original: state.power_user.sysprompt.post_history ?? '' })
-            : baseChatReplace(state.power_user.sysprompt.post_history);
-
-        // Only inject the jb if there is one
-        if (jailbreak) {
-            // When continuing generation of previous output, last user message precedes the message to continue
-            if (isContinue) {
-                coreChat.splice(coreChat.length - 1, 0, { mes: jailbreak, is_user: true });
-            } else {
-                // This operation will result in the injectedIndices indexes being off by one
-                coreChat.push({ mes: jailbreak, is_user: true });
-                // Add +1 to the elements to correct for the new PHI/Jailbreak message.
-                injectedIndices.forEach(shiftUpByOne);
-            }
-        }
     }
 
     let chat2 = [];
@@ -1251,12 +1227,9 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
             api: state.main_api,
             combinedPrompt: null,
             description,
-            personality,
-            scenario,
             char: state.name2,
             user: state.name1,
-            worldInfoBefore,
-            worldInfoAfter,
+            worldInfo,
             beforeScenarioAnchor,
             afterScenarioAnchor,
             storyString,
@@ -1265,7 +1238,6 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
             finalMesSend,
             generatedPromptCache,
             main: system,
-            jailbreak,
         };
 
         // Before returning the combined prompt, give available context related information to all subscribers.
@@ -1287,18 +1259,13 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
             let [prompt] = await prepareOpenAIMessages({
                 name2: state.name2,
                 charDescription: description,
-                charPersonality: personality,
-                scenario: scenario,
-                worldInfoBefore: worldInfoBefore,
-                worldInfoAfter: worldInfoAfter,
+                worldInfo: worldInfo,
                 extensionPrompts: state.extension_prompts,
                 bias: promptBias,
                 type: type,
                 quietPrompt: quiet_prompt,
                 quietImage: quietImage,
                 cyclePrompt: cyclePrompt,
-                systemPromptOverride: system,
-                jailbreakPromptOverride: jailbreak,
                 messages: oaiMessages,
                 messageExamples: oaiMessageExamples,
             }, dryRun);

@@ -393,17 +393,6 @@ import { getRequestHeaders, installAjaxCsrfPrefilter, loadCsrfToken } from './sc
 import { installPublicBrowserApi } from './scripts/public-api.js';
 import { createReactRuntimeProvider } from './scripts/react-runtime-provider.js';
 
-// Retired Author's Note slot key. The feature is gone, but the slot remains the
-// injection vehicle for World Info AN-position entries.
-const NOTE_MODULE_NAME = '2_floating_prompt';
-const metadata_keys = {
-    prompt: 'note_prompt',
-    interval: 'note_interval',
-    depth: 'note_depth',
-    position: 'note_position',
-    role: 'note_role',
-};
-
 // API OBJECT FOR EXTERNAL WIRING
 installPublicBrowserApi({ libs, getContext });
 
@@ -526,8 +515,6 @@ registerWorldInfoShellContext({
     get powerUserSettings() { return power_user; },
     featureSettings: feature_settings,
     toastr,
-    authorsNoteModuleName: NOTE_MODULE_NAME,
-    authorsNoteMetadataKeys: metadata_keys,
     showWarningToast: (message, title) => toastr.warning(message, title),
     openWorldInfoPanel: () => openWorkspaceShellWorldInfo(),
 });
@@ -2447,7 +2434,6 @@ function applyCharacterAuthoringSaveModel(saveModel = {}, { submit: _submit = tr
     setAuthoringInputValue('#character_name_pole', fields.name);
     setAuthoringInputValue('#avatar_url_pole', fields.avatar);
     setAuthoringInputValue('#description_textarea', fields.description);
-    setAuthoringInputValue('#personality_textarea', fields.personality);
     setAuthoringInputValue('#scenario_pole', fields.scenario);
     setAuthoringInputValue('#firstmessage_textarea', fields.first_mes);
     setAuthoringInputValue('#mes_example_textarea', fields.mes_example);
@@ -4337,7 +4323,6 @@ export let create_save = {
     system_prompt: '',
     tags: '',
     creator: '',
-    personality: '',
     first_message: '',
     /** @type {FileList|null} */
     avatar: null,
@@ -5880,7 +5865,11 @@ export function substituteParamsLegacy(content, _name1, _name2, _original, _grou
         environment.charPrompt = fields.system || '';
         environment.charInstruction = environment.charJailbreak = fields.jailbreak || '';
         environment.description = fields.description || '';
-        environment.personality = fields.personality || '';
+        // Tombstone: the personality card field is retired, but {{personality}}
+        // must keep resolving (to '') so legacy presets don't leak raw syntax.
+        environment.personality = '';
+        // Same for the retired persona system: {{persona}}/{{personaDescription}}.
+        environment.persona = environment.personaDescription = '';
         environment.scenario = fields.scenario || '';
         environment.mesExamples = () => {
             const mesExamplesArray = parseMesExamples(fields.mesExamples);
@@ -6237,7 +6226,6 @@ export function baseChatReplace(value, name1Override = null, name2Override = nul
  * @property {string} system System prompt
  * @property {string} mesExamples Message examples
  * @property {string} description Description
- * @property {string} personality Personality
  * @property {string} scenario Scenario
  * @property {string} jailbreak Jailbreak instructions
  * @property {string} version Character version
@@ -6306,10 +6294,6 @@ export function getCharacterCardFieldsLazy({ chid = undefined } = {}) {
             if (!character) return '';
             return baseChatReplace(character.description?.trim());
         },
-        personality: () => {
-            if (!character) return '';
-            return baseChatReplace(character.personality?.trim());
-        },
         scenario: () => {
             if (!character) return '';
             const scenarioText = chat_metadata.scenario || character.scenario || '';
@@ -6350,7 +6334,6 @@ export function getCharacterCardFields({ chid = undefined } = {}) {
         system: lazy.system,
         mesExamples: lazy.mesExamples,
         description: lazy.description,
-        personality: lazy.personality,
         scenario: lazy.scenario,
         jailbreak: lazy.jailbreak,
         version: lazy.version,
@@ -8874,7 +8857,6 @@ function select_rm_create({ switchMenu = true } = {}) {
     $('#tags_textarea').val(create_save.tags);
     $('#creator_textarea').val(create_save.creator);
     $('#character_version_textarea').val(create_save.character_version);
-    $('#personality_textarea').val(create_save.personality);
     $('#firstmessage_textarea').val(create_save.first_message);
     $('#scenario_pole').val(create_save.scenario);
     $('#depth_prompt_prompt').val(create_save.depth_prompt_prompt);

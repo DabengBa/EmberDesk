@@ -9,7 +9,7 @@ test.describe('MacroStoryString', () => {
     const storyStringTemplates = [
         {
             name: 'Default',
-            story_string: '{{#if system}}{{system}}\n{{/if}}{{#if description}}{{description}}\n{{/if}}{{#if personality}}{{char}}\'s personality: {{personality}}\n{{/if}}{{#if scenario}}Scenario: {{scenario}}\n{{/if}}{{#if persona}}{{persona}}\n{{/if}}',
+            story_string: '{{#if system}}{{system}}\n{{/if}}{{#if description}}{{description}}\n{{/if}}{{#if scenario}}Scenario: {{scenario}}\n{{/if}}{{#if persona}}{{persona}}\n{{/if}}',
         },
         {
             name: 'Minimal',
@@ -30,7 +30,6 @@ test.describe('MacroStoryString', () => {
 
             const context = {
                 description: 'character description',
-                personality: 'character personality',
                 persona: 'persona details',
                 scenario: 'scenario setup',
                 system: 'system instructions',

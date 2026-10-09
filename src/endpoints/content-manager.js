@@ -495,7 +495,6 @@ async function downloadChubCharacter(id, dependencies = {}) {
         data: {
             name: definition.name,
             description: definition.personality,
-            personality: definition.tavern_personality,
             scenario: definition.scenario,
             first_mes: definition.first_message,
             mes_example: definition.example_dialogs,
@@ -803,7 +802,6 @@ async function downloadPerchanceCharacter(slug, dependencies = {}) {
                 post_history_instructions: '',
                 system_prompt: '',
                 scenario: '',
-                personality: perchanceChar.reminderMessage || '',
                 extensions: {
                     perchance_data: {
                         slug: slug,

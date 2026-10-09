@@ -91,17 +91,6 @@ export function CharacterPopup() {
                 </div>
             </div>
             <hr />
-            <div id="personality_div">
-                <h4 className="flex-container alignItemsBaseline">
-                    <span data-i18n="Personality summary">Personality summary</span>
-                    <ContractIconButton className="editor_maximize right_menu_button" data-for="personality_textarea" label="Expand the editor" nativeTitle title="Expand the editor" icon={<i className="fa-solid fa-maximize" aria-hidden="true" />} />
-                    <a href="usage/core-concepts/characterdesign/#personality-summary" className="notes-link" target="_blank" rel="noreferrer" aria-label="Personality summary documentation"><span className="fa-solid fa-circle-question note-link-span" aria-hidden="true"></span></a>
-                </h4>
-                <textarea id="personality_textarea" name="personality" data-macros data-i18n="[placeholder](A brief description of the personality)" placeholder="(A brief description of the personality)" form="form_create" className="text_pole" autoComplete="off" rows={4}></textarea>
-                <div className="extension_token_counter">
-                    <span data-i18n="extension_token_counter">Tokens:</span> <span data-token-counter="personality_textarea" data-token-permanent="true">counting...</span>
-                </div>
-            </div>
             <div id="scenario_div">
                 <h4 className="flex-container alignItemsBaseline">
                     <span data-i18n="Scenario">Scenario</span>

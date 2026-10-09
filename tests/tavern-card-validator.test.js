@@ -1,10 +1,10 @@
 import { describe, test, expect } from '@jest/globals';
 import { TavernCardValidator } from '../src/validator/TavernCardValidator';
 
-const V1_FIELDS = ['name', 'description', 'personality', 'scenario', 'first_mes', 'mes_example'];
+const V1_FIELDS = ['name', 'description', 'scenario', 'first_mes', 'mes_example'];
 
 const V2_DATA_FIELDS = [
-    'name', 'description', 'personality', 'scenario', 'first_mes', 'mes_example',
+    'name', 'description', 'scenario', 'first_mes', 'mes_example',
     'creator_notes', 'system_prompt', 'post_history_instructions',
     'alternate_greetings', 'tags', 'creator', 'character_version', 'extensions',
 ];
@@ -78,6 +78,12 @@ describe('TavernCardValidator', () => {
                 expect(v.lastValidationError).toBe(field);
             });
         }
+
+        test('accepts card carrying the retired personality field', () => {
+            const card = { ...makeV1Card(), personality: 'legacy traits' };
+            const v = new TavernCardValidator(card);
+            expect(v.validateV1()).toBe(true);
+        });
     });
 
     describe('validateV2', () => {
@@ -118,6 +124,13 @@ describe('TavernCardValidator', () => {
                 expect(v.lastValidationError).toBe(`data.${field}`);
             });
         }
+
+        test('accepts card carrying the retired data.personality field', () => {
+            const card = makeV2Card();
+            card.data.personality = 'legacy traits';
+            const v = new TavernCardValidator(card);
+            expect(v.validateV2()).toBe(true);
+        });
 
         test('rejects non-array alternate_greetings', () => {
             const card = makeV2Card();

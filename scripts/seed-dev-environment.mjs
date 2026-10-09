@@ -221,7 +221,6 @@ async function seedCharacters(worldNames) {
             data: {
                 name,
                 description: randomParagraphs(2 + (index % 3)),
-                personality: randomSentence(22),
                 scenario: randomParagraphs(1 + (index % 2)),
                 first_mes: randomSentence(28),
                 mes_example: `${name}: ${randomSentence(18)}\nUser: ${randomSentence(16)}\n${name}: ${randomSentence(20)}`,

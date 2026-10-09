@@ -84,12 +84,6 @@ const regex_placement = new Proxy({}, {
 });
 
 
-const feature_settings = new Proxy({}, {
-    get(_target, property) {
-        return getWorldInfoShell().featureSettings[property];
-    },
-});
-
 const eventSource = new Proxy({}, {
     get(_target, property) {
         return getWorldInfoShellEventSourceProperty(property);
@@ -167,7 +161,6 @@ const extension_prompt_roles = new Proxy({}, {
  * @property {boolean} [matchWholeWords] If the scan should match whole words
  * @property {boolean} [useGroupScoring] If the scan should use group scoring
  * @property {boolean} [matchCharacterDescription] If the scan should match against the character description
- * @property {boolean} [matchCharacterPersonality] If the scan should match against the character personality
  * @property {boolean} [matchCharacterDepthPrompt] If the scan should match against the character depth prompt
  * @property {boolean} [matchScenario] If the scan should match against the character scenario
  * @property {boolean} [matchCreatorNotes] If the scan should match against the creator notes
@@ -198,13 +191,11 @@ const extension_prompt_roles = new Proxy({}, {
 
 /**
  * @typedef {object} WIPromptResult
- * @property {string} worldInfoString - Complete world info string
- * @property {string} worldInfoBefore - World info that goes before the prompt
- * @property {string} worldInfoAfter - World info that goes after the prompt
+ * @property {string} worldInfo - Merged world info for the single WI prompt marker
+ * @property {string} worldInfoBefore - World info that goes before the prompt (story-string bucket)
+ * @property {string} worldInfoAfter - World info that goes after the prompt (story-string bucket)
  * @property {Array} worldInfoExamples - Array of example entries
  * @property {Array} worldInfoDepth - Array of depth entries
- * @property {Array} anBefore - Array of entries before Author's Note
- * @property {Array} anAfter - Array of entries after Author's Note
  * @property {{[key: string]: string[]}} outletEntries - Array of entries to be added to an outlet
  */
 
@@ -214,8 +205,6 @@ const extension_prompt_roles = new Proxy({}, {
  * @property {string} worldInfoAfter The world info after the chat.
  * @property {any[]} EMEntries The entries for examples.
  * @property {any[]} WIDepthEntries The depth entries.
- * @property {any[]} ANBeforeEntries The entries before Author's Note.
- * @property {any[]} ANAfterEntries The entries after Author's Note.
  * @property {{[key: string]: string[]}} outletEntries - Array of entries to be added to an outlet
  * @property {Set<any>} allActivatedEntries All entries.
  */
@@ -233,7 +222,6 @@ const extension_prompt_roles = new Proxy({}, {
 const defaultGlobalScanData = Object.freeze({
     trigger: 'normal',
     characterDescription: '',
-    characterPersonality: '',
     characterDepthPrompt: '',
     scenario: '',
     creatorNotes: '',
@@ -344,9 +332,6 @@ export class WorldInfoBuffer {
 
         if (entry.matchCharacterDescription && this.#globalScanData.characterDescription) {
             result += JOINER + this.#globalScanData.characterDescription;
-        }
-        if (entry.matchCharacterPersonality && this.#globalScanData.characterPersonality) {
-            result += JOINER + this.#globalScanData.characterPersonality;
         }
         if (entry.matchCharacterDepthPrompt && this.#globalScanData.characterDepthPrompt) {
             result += JOINER + this.#globalScanData.characterDepthPrompt;
@@ -1102,7 +1087,7 @@ export async function checkWorldInfo(chat, maxContext, isDryRun, globalScanData 
     timedEffects.checkTimedEffects();
 
     if (sortedEntries.length === 0) {
-        return { worldInfoBefore: '', worldInfoAfter: '', WIDepthEntries: [], EMEntries: [], ANBeforeEntries: [], ANAfterEntries: [], outletEntries: {}, allActivatedEntries: new Set() };
+        return { worldInfoBefore: '', worldInfoAfter: '', WIDepthEntries: [], EMEntries: [], outletEntries: {}, allActivatedEntries: new Set() };
     }
 
     /** @type {number[]} Represents the delay levels for entries that are delayed until recursion */
@@ -1540,8 +1525,6 @@ export async function checkWorldInfo(chat, maxContext, isDryRun, globalScanData 
     const WIBeforeEntries = [];
     const WIAfterEntries = [];
     const EMEntries = [];
-    const ANTopEntries = [];
-    const ANBottomEntries = [];
     const WIDepthEntries = [];
     /** @type {{[key: string]: string[]}} */
     const WIOutletEntries = {};
@@ -1549,7 +1532,12 @@ export async function checkWorldInfo(chat, maxContext, isDryRun, globalScanData 
     // Appends from insertion order 999 to 1. Use unshift for this purpose
     // TODO (kingbri): Change to use WI Anchor positioning instead of separate top/bottom arrays
     [...allActivatedEntries.values()].sort(sortFn).forEach((entry) => {
-        const regexDepth = entry.position === world_info_position.atDepth ? (entry.depth ?? DEFAULT_DEPTH) : null;
+        // Coerce raw/string positions at the generation boundary so imported or
+        // script-written values can't silently drop. Unknown values fall back
+        // to the top of the merged World Info block.
+        const positionNumber = Number(entry.position);
+        const position = Number.isInteger(positionNumber) ? positionNumber : world_info_position.before;
+        const regexDepth = position === world_info_position.atDepth ? (entry.depth ?? DEFAULT_DEPTH) : null;
         const content = getRegexedString(entry.content, regex_placement.WORLD_INFO, { depth: regexDepth, isMarkdown: false, isPrompt: true });
 
         if (!content) {
@@ -1557,10 +1545,14 @@ export async function checkWorldInfo(chat, maxContext, isDryRun, globalScanData 
             return;
         }
 
-        switch (entry.position) {
+        switch (position) {
+            // Author's-Note positions are retired; they fold into the merged
+            // World Info block (top entries first, bottom entries last).
+            case world_info_position.ANTop:
             case world_info_position.before:
                 WIBeforeEntries.unshift(content);
                 break;
+            case world_info_position.ANBottom:
             case world_info_position.after:
                 WIAfterEntries.unshift(content);
                 break;
@@ -1573,12 +1565,6 @@ export async function checkWorldInfo(chat, maxContext, isDryRun, globalScanData 
                 EMEntries.unshift(
                     { position: wi_anchor_position.after, content: content },
                 );
-                break;
-            case world_info_position.ANTop:
-                ANTopEntries.unshift(content);
-                break;
-            case world_info_position.ANBottom:
-                ANBottomEntries.unshift(content);
                 break;
             case world_info_position.atDepth: {
                 const existingDepthIndex = WIDepthEntries.findIndex((e) => e.depth === (entry.depth ?? DEFAULT_DEPTH) && e.role === (entry.role ?? extension_prompt_roles.SYSTEM));
@@ -1606,22 +1592,14 @@ export async function checkWorldInfo(chat, maxContext, isDryRun, globalScanData 
                 break;
             }
             default:
+                console.warn(`[WI] Entry ${entry.uid} has unknown position ${entry.position}; folding into the merged World Info block.`, entry);
+                WIBeforeEntries.unshift(content);
                 break;
         }
     });
 
     const worldInfoBefore = WIBeforeEntries.length ? WIBeforeEntries.join('\n') : '';
     const worldInfoAfter = WIAfterEntries.length ? WIAfterEntries.join('\n') : '';
-
-    // The retired Author's Note slot ('2_floating_prompt') remains the injection
-    // vehicle for AN-position WI entries; stored per-chat note metadata is honored.
-    if (ANTopEntries.length || ANBottomEntries.length) {
-        const noteModule = getWorldInfoShell().authorsNoteModuleName;
-        const noteKeys = getWorldInfoShell().authorsNoteMetadataKeys;
-        const originalAN = context.extensionPrompts[noteModule]?.value ?? '';
-        const ANWithWI = `${ANTopEntries.join('\n')}\n${originalAN}\n${ANBottomEntries.join('\n')}`.replace(/(^\n)|(\n$)/g, '');
-        context.setExtensionPrompt(noteModule, ANWithWI, chat_metadata[noteKeys.position] ?? 1, chat_metadata[noteKeys.depth] ?? 4, feature_settings.note?.allowWIScan ?? false, chat_metadata[noteKeys.role] ?? extension_prompt_roles.SYSTEM);
-    }
 
     timedEffects.setTimedEffects(Array.from(allActivatedEntries.values()));
     buffer.resetExternalEffects();
@@ -1630,7 +1608,7 @@ export async function checkWorldInfo(chat, maxContext, isDryRun, globalScanData 
     console.log(`[WI] ${isDryRun ? 'Hypothetically adding' : 'Adding'} ${allActivatedEntries.size} entries to prompt`, Array.from(allActivatedEntries.values()));
     console.debug(`[WI] --- DONE${isDryRun ? ' (DRY RUN)' : ''} ---`);
 
-    return { worldInfoBefore, worldInfoAfter, EMEntries, WIDepthEntries, ANBeforeEntries: ANTopEntries, ANAfterEntries: ANBottomEntries, outletEntries: WIOutletEntries, allActivatedEntries: new Set(allActivatedEntries.values()) };
+    return { worldInfoBefore, worldInfoAfter, EMEntries, WIDepthEntries, outletEntries: WIOutletEntries, allActivatedEntries: new Set(allActivatedEntries.values()) };
 }
 
 /**
@@ -1835,12 +1813,12 @@ function filterByInclusionGroups(newEntries, allActivatedEntries, buffer, scanSt
  * @returns {Promise<WIPromptResult>} The world info string and depth.
  */
 export async function getWorldInfoPrompt(chat, maxContext, isDryRun, globalScanData) {
-    let worldInfoString = '', worldInfoBefore = '', worldInfoAfter = '';
-
     const activatedWorldInfo = await checkWorldInfo(chat, maxContext, isDryRun, globalScanData);
-    worldInfoBefore = activatedWorldInfo.worldInfoBefore;
-    worldInfoAfter = activatedWorldInfo.worldInfoAfter;
-    worldInfoString = worldInfoBefore + worldInfoAfter;
+    const worldInfoBefore = activatedWorldInfo.worldInfoBefore;
+    const worldInfoAfter = activatedWorldInfo.worldInfoAfter;
+    // The single `worldInfo` prompt marker injects both legacy buckets,
+    // before-entries first.
+    const worldInfo = [worldInfoBefore, worldInfoAfter].filter(Boolean).join('\n');
 
     if (!isDryRun && activatedWorldInfo.allActivatedEntries && activatedWorldInfo.allActivatedEntries.size > 0) {
         const arg = Array.from(activatedWorldInfo.allActivatedEntries.values());
@@ -1848,13 +1826,11 @@ export async function getWorldInfoPrompt(chat, maxContext, isDryRun, globalScanD
     }
 
     return {
-        worldInfoString,
+        worldInfo,
         worldInfoBefore,
         worldInfoAfter,
         worldInfoExamples: activatedWorldInfo.EMEntries ?? [],
         worldInfoDepth: activatedWorldInfo.WIDepthEntries ?? [],
-        anBefore: activatedWorldInfo.ANBeforeEntries ?? [],
-        anAfter: activatedWorldInfo.ANAfterEntries ?? [],
         outletEntries: activatedWorldInfo.outletEntries ?? {},
     };
 }
