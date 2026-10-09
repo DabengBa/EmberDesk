@@ -326,7 +326,7 @@ describe('chat workspace structure', () => {
         // settings field on the React-owned Providers tab.
         expectContainsMarkers(settingsSurface, [
             'name="providers.fallbackProviderModel"',
-            'label="Fallback Model"',
+            'label="备选模型"',
             'placeholder="gpt-4.1-mini"',
         ], { contractName: 'fallback provider model field' });
         expect(helpersSource).toContain("formPath: 'providers.fallbackProviderModel'");

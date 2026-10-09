@@ -1,17 +1,17 @@
 export const settingsTabDefinitions = [
     {
         id: 'providers',
-        label: 'Providers',
-        description: 'endpoint、API key、主模型与 fallback 模型。',
+        label: '服务',
+        description: 'endpoint、API key、主模型与备选模型。',
     },
     {
         id: 'userInterface',
-        label: 'User Interface',
+        label: '界面',
         description: '主题、布局、通知和工作区显示偏好。',
     },
     {
         id: 'advanced',
-        label: 'Advanced',
+        label: '高级',
         description: '模板、auto-swipe、tokenizer、reasoning 和 STscript power-user 设置。',
     },
 ];
@@ -20,60 +20,70 @@ export const providerSecretKeyBySource = {
     openai: 'api_key_openai',
 };
 
-export const promptPostProcessingOptions = [
-    { value: '', label: 'None' },
-    { value: 'merge_tools', label: 'Merge Tools' },
-    { value: 'semi_tools', label: 'Semi Tools' },
-    { value: 'strict_tools', label: 'Strict Tools' },
-    { value: 'merge', label: 'Merge' },
-    { value: 'semi', label: 'Semi' },
-    { value: 'strict', label: 'Strict' },
-    { value: 'single', label: 'Single' },
-];
-
 export const toastPositionOptions = [
-    { value: 'toast-top-left', label: 'Top Left' },
-    { value: 'toast-top-center', label: 'Top Center' },
-    { value: 'toast-top-right', label: 'Top Right' },
-    { value: 'toast-bottom-left', label: 'Bottom Left' },
-    { value: 'toast-bottom-center', label: 'Bottom Center' },
-    { value: 'toast-bottom-right', label: 'Bottom Right' },
+    { value: 'toast-top-left', label: '左上' },
+    { value: 'toast-top-center', label: '顶部居中' },
+    { value: 'toast-top-right', label: '右上' },
+    { value: 'toast-bottom-left', label: '左下' },
+    { value: 'toast-bottom-center', label: '底部居中' },
+    { value: 'toast-bottom-right', label: '右下' },
 ];
 
 export const avatarStyleOptions = [
-    { value: '0', label: 'Round' },
-    { value: '1', label: 'Rectangular' },
-    { value: '2', label: 'Square' },
-    { value: '3', label: 'Rounded' },
+    { value: '0', label: '圆形' },
+    { value: '1', label: '矩形' },
+    { value: '2', label: '方形' },
+    { value: '3', label: '圆角' },
 ];
 
 export const chatDisplayOptions = [
-    { value: '0', label: 'Default' },
-    { value: '1', label: 'Bubbles' },
-    { value: '2', label: 'Document' },
+    { value: '0', label: '默认' },
+    { value: '1', label: '气泡' },
+    { value: '2', label: '文档' },
 ];
 
 export const mediaDisplayOptions = [
-    { value: 'list', label: 'List' },
-    { value: 'gallery', label: 'Gallery' },
+    { value: 'list', label: '列表' },
+    { value: 'gallery', label: '画廊' },
 ];
 
 export const sendOnEnterOptions = [
-    { value: '-1', label: 'Disabled' },
-    { value: '0', label: 'Automatic' },
-    { value: '1', label: 'Enabled' },
+    { value: '-1', label: '禁用' },
+    { value: '0', label: '自动' },
+    { value: '1', label: '启用' },
 ];
 
 export const imageOverswipeOptions = [
-    { value: 'generate', label: 'Generate new' },
-    { value: 'rollover', label: 'Roll over' },
+    { value: 'generate', label: '生成新图' },
+    { value: 'rollover', label: '顺延切换' },
 ];
 
 export const tagImportSettingOptions = [
-    { value: '1', label: 'Ask' },
-    { value: '2', label: 'None' },
-    { value: '3', label: 'All' },
-    { value: '4', label: 'Existing' },
+    { value: '1', label: '询问' },
+    { value: '2', label: '不导入' },
+    { value: '3', label: '全部导入' },
+    { value: '4', label: '仅已有标签' },
+];
+
+// Mirrors TOKENIZER_OPTIONS in public/scripts/tokenizers.js (the retired
+// Advanced Formatting drawer's #tokenizer select). Values are stringified
+// tokenizer ids; the settings form coerces back to numbers on save.
+export const tokenizerOptions = [
+    { value: '99', label: '最佳匹配（推荐）' },
+    { value: '0', label: '无 / 估算' },
+    { value: '1', label: 'GPT-2' },
+    { value: '3', label: 'Llama 1/2' },
+    { value: '12', label: 'Llama 3' },
+    { value: '13', label: 'Gemma / Gemini' },
+    { value: '14', label: 'Jamba' },
+    { value: '15', label: 'Qwen2' },
+    { value: '16', label: 'Command-R' },
+    { value: '19', label: 'Command-A' },
+    { value: '7', label: 'Mistral V1' },
+    { value: '17', label: 'Mistral Nemo' },
+    { value: '8', label: 'Yi' },
+    { value: '11', label: 'Claude 1/2' },
+    { value: '18', label: 'DeepSeek V3' },
 ];
 
 export const defaultSettingsFormValues = {
@@ -81,7 +91,6 @@ export const defaultSettingsFormValues = {
         openaiModel: '',
         customUrl: '',
         fallbackProviderModel: '',
-        promptPostProcessing: '',
     },
     userInterface: {
         chatWidth: 50,
@@ -236,8 +245,6 @@ const fieldBindings = [
         // value must not silently re-enable it under "non-empty model = enabled".
         toForm: (value, settings) => (getValueAtPath(settings, 'oai_settings.fallback_provider_enabled') === false ? '' : value),
     },
-    { tab: 'providers', formPath: 'providers.promptPostProcessing', settingsPath: 'oai_settings.custom_prompt_post_processing' },
-
     { tab: 'userInterface', formPath: 'userInterface.chatWidth', settingsPath: 'power_user.chat_width' },
     { tab: 'userInterface', formPath: 'userInterface.fontScale', settingsPath: 'power_user.font_scale' },
     { tab: 'userInterface', formPath: 'userInterface.customCss', settingsPath: 'power_user.custom_css' },
@@ -376,7 +383,6 @@ const fieldBindings = [
 export const settingsOwnerInventory = {
     drawers: {
         userSettings: '#user-settings-block',
-        advancedFormatting: '#AdvancedFormatting',
     },
     specializedSurfaces: [
         'world_info_settings',
@@ -425,7 +431,6 @@ export const settingsCoverage = {
         'oai_settings.freq_pen_openai',
         'oai_settings.pres_pen_openai',
         'oai_settings.top_p_openai',
-        'oai_settings.function_calling',
         'oai_settings.show_thoughts',
         'oai_settings.reasoning_effort',
         'oai_settings.continue_prefill',
@@ -436,7 +441,6 @@ export const settingsCoverage = {
         'oai_settings.media_inlining',
         'oai_settings.inline_image_quality',
         'oai_settings.tool_reasoning_mode',
-        'oai_settings.tool_call_recurse_limit',
         'oai_settings.send_if_empty',
         'oai_settings.impersonation_prompt',
         'oai_settings.new_chat_prompt',

@@ -133,9 +133,8 @@ describe('React workspace panels bridge helpers', () => {
         expect(bridgeSource).toContain('panelModule.mountWorkspaceShellChrome');
         expect(workspacePanelSource).toContain('export function mountWorkspaceShellChrome');
         expect(workspacePanelSource).toContain('ReactWorkspaceShellChrome');
-        expect(workspacePanelSource).toContain('AI Config');
-        expect(workspacePanelSource).toContain('Formatting');
-        expect(workspacePanelSource).toContain('Character Library');
+        expect(workspacePanelSource).toContain('AI 响应配置');
+        expect(workspacePanelSource).toContain('角色库');
         expect(workspacePanelSource).not.toContain("{ action: 'openCharacterAuthoring'");
         expect(workspacePanelSource).not.toContain('Workspace ready');
         expect(workspacePanelSource).not.toContain('react-workspace-shell-status-dot');
@@ -144,10 +143,10 @@ describe('React workspace panels bridge helpers', () => {
         expect(workspacePanelSource).not.toContain('react-workspace-shell-status');
         expect(workspacePanelSource).not.toContain('react-workspace-panel-dock-status');
         expect(workspacePanelSource).not.toContain('No chat selected');
-        expect(workspacePanelSource).toContain('World Info');
+        expect(workspacePanelSource).toContain('世界书');
         expect(workspacePanelSource).not.toContain('Backgrounds');
         expect(workspacePanelSource).not.toContain('openExtensions');
-        expect(workspacePanelSource).toContain('Settings');
+        expect(workspacePanelSource).toContain('设置');
         expect(scriptSource).toContain("openAIConfig: () => openWorkspaceSettingsOverlay({ tab: 'providers', panelKind: 'aiConfig' })");
         expect(scriptSource).toContain("openWorkspaceSettingsOverlay");
         expect(scriptSource).toContain("tab: 'providers'");
@@ -165,16 +164,21 @@ describe('React workspace panels bridge helpers', () => {
         const workspacePanelStoreSource = read('app/stores/workspace-panel-store.js');
         const workspacePanelSource = read('app/workspace-panels.tsx');
 
+        // AI Config / Formatting / Settings were merged into a single 设置 nav
+        // entry; openAIConfig/openFormatting remain dispatchable commands that
+        // land on the matching overlay tabs.
         [
-            ['aiConfig', 'AI Config', 'openAIConfig'],
-            ['advancedFormatting', 'Formatting', 'openFormatting'],
-            ['settings', 'Settings', 'openSettings'],
-        ].forEach(([panelKind, label, action]) => {
+            ['aiConfig'],
+            ['advancedFormatting'],
+            ['settings'],
+        ].forEach(([panelKind]) => {
             expect(workspacePanelStoreSource).toContain(`'${panelKind}',`);
-            expect(workspacePanelSource).toContain(`{ command: '${action}'`);
-            expect(workspacePanelSource).toContain(`label: '${label}'`);
-            expect(workspacePanelSource).toContain(`panelKind: '${panelKind}'`);
         });
+        expect(workspacePanelSource).toContain("{ command: 'openSettings'");
+        expect(workspacePanelSource).toContain("label: '设置'");
+        expect(workspacePanelSource).toContain("panelKind: 'settings'");
+        expect(workspacePanelSource).not.toContain("{ command: 'openAIConfig',");
+        expect(workspacePanelSource).not.toContain("{ command: 'openFormatting',");
 
         expect(workspacePanelSource).toContain('recordWorkspacePanelDockIntent,');
         expect(workspacePanelSource).toContain('recordWorkspacePanelDockClose,');
@@ -207,8 +211,11 @@ describe('React workspace panels bridge helpers', () => {
         expect(workspacePanelSource).toContain('title={panelActionLabel}');
         expect(workspacePanelSource).toContain('aria-pressed={entry.panelKind ? isPanelEntryActive : undefined}');
         expect(workspacePanelSource).toContain('event.stopPropagation();');
-        expect(workspacePanelSource).toContain("if (entry.panelKind && isPanelEntryActive && dockSnapshot.activePanelStatus !== 'error' && !isDrawerPinned()) {");
-        expect(workspacePanelSource).toContain("void closePanel(entry);");
+        // A click during the deferred-close window must reopen (supersede), not
+        // queue a second close behind the pending one.
+        expect(workspacePanelSource).toContain('pendingCloseIntentRef.current !== entry.panelKind');
+        expect(workspacePanelSource).toContain("void closePanel(entry).finally(() => {");
+        expect(workspacePanelSource).toContain('void dispatchCommand(entry);');
         expect(workspacePanelSource).toContain('void dispatchCommand(entry);');
         expect(scriptSource).toContain('function getWorkspaceShellCommands()');
         expect(scriptSource).toContain('activateWorkspaceShellSlot,');

@@ -530,28 +530,37 @@ describe('mergeMessages', () => {
 describe('postProcessPrompt', () => {
     const names = makeNames('Bot', 'User');
 
-    test('NONE type returns messages unchanged', () => {
-        const messages = [{ role: 'user', content: 'hi' }];
-        expect(mod.postProcessPrompt(messages, '', names)).toBe(messages);
-    });
-
-    test('MERGE type merges consecutive same-role messages', () => {
+    test('always applies strict processing: merges same-role runs and demotes mid-prompt system messages', () => {
         const messages = [
-            { role: 'user', content: 'A' },
-            { role: 'user', content: 'B' },
+            { role: 'system', content: 'A' },
+            { role: 'system', content: 'B' },
+            { role: 'user', content: 'hi' },
+            { role: 'assistant', content: 'hello' },
+            { role: 'system', content: 'C' },
         ];
-        const result = mod.postProcessPrompt(messages, 'merge', names);
-        expect(result).toHaveLength(1);
+        const result = mod.postProcessPrompt(messages, names);
+        expect(result.map(m => m.role)).toEqual(['system', 'user', 'assistant', 'user']);
         expect(result[0].content).toBe('A\n\nB');
+        expect(result[3].content).toBe('C');
     });
 
-    test('deprecated CLAUDE type works same as MERGE', () => {
+    test('inserts a user placeholder when the prompt does not start with user or system', () => {
+        const messages = [{ role: 'assistant', content: 'A' }];
+        const result = mod.postProcessPrompt(messages, names);
+        expect(result[0].role).toBe('user');
+        expect(result[0].content).toBe('Let\'s get started.');
+        expect(result[1].role).toBe('assistant');
+    });
+
+    test('strips tool call fields and converts tool messages to user', () => {
         const messages = [
-            { role: 'user', content: 'A' },
-            { role: 'user', content: 'B' },
+            { role: 'user', content: 'hi' },
+            { role: 'assistant', content: 'calling', tool_calls: [{ id: 'x' }] },
+            { role: 'tool', content: 'result', tool_call_id: 'x' },
         ];
-        const result = mod.postProcessPrompt(messages, 'claude', names);
-        expect(result).toHaveLength(1);
+        const result = mod.postProcessPrompt(messages, names);
+        expect(result.every(m => m.role !== 'tool')).toBe(true);
+        expect(result.every(m => !('tool_calls' in m) && !('tool_call_id' in m))).toBe(true);
     });
 });
 

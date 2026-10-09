@@ -31,7 +31,6 @@ describe('API connections drawer retirement', () => {
             'providers.openaiModel',
             'providers.customUrl',
             'providers.fallbackProviderModel',
-            'providers.promptPostProcessing',
             'id="provider-connect-button"',
             'id="provider-test-button"',
         ];

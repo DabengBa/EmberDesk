@@ -2,7 +2,7 @@ import { DOMPurify } from '../lib.js';
 
 import { addOneMessage, chat, getGeneratingApi, getGeneratingModel, main_api, saveChatConditional, system_avatar, systemUserName } from '../script.js';
 import { eventSource, event_types } from './events.js';
-import { chat_completion_sources, custom_prompt_post_processing_types, getChatCompletionModel, model_list, oai_settings } from './openai.js';
+import { chat_completion_sources, getChatCompletionModel, model_list, oai_settings } from './openai.js';
 import { Popup } from './popup.js';
 import { SlashCommand } from './slash-commands/SlashCommand.js';
 import { ARGUMENT_TYPE, SlashCommandArgument, SlashCommandNamedArgument } from './slash-commands/SlashCommandArgument.js';
@@ -587,13 +587,6 @@ export class ToolManager {
         model = model ?? getChatCompletionModel(settings);
 
         if (main_api !== 'openai' || !settings.function_calling) {
-            return false;
-        }
-
-        // Post-processing will forcefully remove past tool calls from the prompt, making them useless
-        const { NONE, MERGE_TOOLS, SEMI_TOOLS, STRICT_TOOLS } = custom_prompt_post_processing_types;
-        const allowedPromptPostProcessing = [NONE, MERGE_TOOLS, SEMI_TOOLS, STRICT_TOOLS];
-        if (!allowedPromptPostProcessing.includes(settings.custom_prompt_post_processing)) {
             return false;
         }
 

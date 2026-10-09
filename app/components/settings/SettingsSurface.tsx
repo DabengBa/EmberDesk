@@ -17,6 +17,7 @@ import {
     saveProviderSecretField,
 } from '../../../public/scripts/provider-secret-field-state.js';
 import { SettingField } from '@/components/settings/SettingField';
+import { FormattingMasterActions, FormattingPresetRow } from '@/components/settings/TemplatePresetManager';
 import { SettingsSection } from '@/components/settings/SettingsSection';
 import { settingsStyles } from '@/styles/settings-surface.styles';
 import { SettingsTabs } from '@/components/settings/SettingsTabs';
@@ -30,7 +31,6 @@ import {
     imageOverswipeOptions,
     mediaDisplayOptions,
     parseSettingsPayload,
-    promptPostProcessingOptions,
     providerSecretKeyBySource,
     sendOnEnterOptions,
     settingsCoverage,
@@ -38,6 +38,7 @@ import {
     saveSettingsToRuntime,
     tagImportSettingOptions,
     toastPositionOptions,
+    tokenizerOptions,
 } from '@/lib/settings-helpers.js';
 
 const SAVE_STATUS_TIMEOUT_MS = 4000;
@@ -47,7 +48,6 @@ const settingsSchema = z.object({
         openaiModel: z.string(),
         customUrl: z.string(),
         fallbackProviderModel: z.string(),
-        promptPostProcessing: z.string(),
     }),
     userInterface: z.object({
         chatWidth: z.number().min(20, 'Chat Width 不能小于 20').max(100, 'Chat Width 不能大于 100'),
@@ -209,6 +209,20 @@ export type SettingsSurfaceProps = {
     runtime?: RuntimePort;
 };
 
+const SETTINGS_ACTIVE_TAB_KEY = 'emberdesk-settings-active-tab';
+
+function readStoredSettingsTab() {
+    if (typeof window === 'undefined') {
+        return null;
+    }
+    try {
+        const stored = window.sessionStorage.getItem(SETTINGS_ACTIVE_TAB_KEY);
+        return settingsTabDefinitions.some(tab => tab.id === stored) ? stored : null;
+    } catch {
+        return null;
+    }
+}
+
 function resolveInitialSettingsTab(initialTab?: string | null) {
     if (typeof initialTab === 'string' && settingsTabDefinitions.some(tab => tab.id === initialTab)) {
         return initialTab;
@@ -219,7 +233,7 @@ function resolveInitialSettingsTab(initialTab?: string | null) {
             return requestedTab as string;
         }
     }
-    return settingsTabDefinitions[0].id;
+    return readStoredSettingsTab() ?? settingsTabDefinitions[0].id;
 }
 
 // Overlay-only navigation into workspace drawers. Preset CRUD, the Prompt
@@ -230,14 +244,14 @@ function resolveInitialSettingsTab(initialTab?: string | null) {
 // overlay does not cover the drawer it just opened.
 const WORKSPACE_DRAWER_LINKS: Record<string, Array<{ target: string; label: string; hint: string }>> = {
     providers: [
-        { target: 'left-nav-panel', label: 'Open AI Response Configuration', hint: 'Preset 下拉与操作、采样滑条、Prompt Manager。' },
+        { target: 'left-nav-panel', label: '打开 AI 响应配置', hint: '预设下拉与操作、采样滑条、Prompt Manager。' },
     ],
     userInterface: [
-        { target: 'user-settings-block', label: 'Open User Settings', hint: '主题色、字体缩放、模糊与杂项开关。' },
+        { target: 'user-settings-block', label: '打开用户设置', hint: '主题色、字体缩放、模糊与杂项开关。' },
     ],
-    advanced: [
-        { target: 'AdvancedFormatting', label: 'Open Advanced Formatting', hint: 'System prompt / reasoning 预设操作与 master 导入导出。' },
-    ],
+    // The Advanced Formatting drawer is retired: its preset CRUD and master
+    // import/export live in this tab's preset rows and FormattingMasterActions.
+    advanced: [],
 };
 
 export function SettingsSurface({
@@ -265,7 +279,7 @@ export function SettingsSurface({
         () => runtime?.getSnapshot().provider?.status ?? 'no_connection',
         () => 'no_connection',
     );
-    const providerStatusLabel = providerStatus === 'no_connection' ? 'Not connected' : providerStatus;
+    const providerStatusLabel = providerStatus === 'no_connection' ? '未连接' : providerStatus;
     const canRunProviderActions = Boolean(
         runtime?.commands
         && typeof runtime.commands.connectProvider === 'function'
@@ -291,6 +305,13 @@ export function SettingsSurface({
     }
 
     const openSettingsTab = useCallback((tabId: string) => {
+        if (settingsTabDefinitions.some(tab => tab.id === tabId)) {
+            try {
+                window.sessionStorage.setItem(SETTINGS_ACTIVE_TAB_KEY, tabId);
+            } catch {
+                // sessionStorage may be unavailable in private contexts
+            }
+        }
         // Dense tab bodies are non-urgent; leave the shell responsive while they mount.
         startTransition(() => {
             setActiveTab(current => (current === tabId ? current : tabId));
@@ -463,7 +484,7 @@ export function SettingsSurface({
             await saveSettingsToRuntime(payload, runtime);
             await refetchSettings();
             setHasRevisionConflict(false);
-            setSaveStatus({ kind: 'success', message: 'Saved' });
+            setSaveStatus({ kind: 'success', message: '已保存' });
             try {
                 window.sessionStorage.setItem('emberdesk-settings-saved-at', String(Date.now()));
                 window.sessionStorage.setItem('emberdesk-settings-revision', String(parsedPayload.settingsRevision ?? ''));
@@ -582,11 +603,61 @@ export function SettingsSurface({
         }
 
         return [
-            { label: 'OpenAI Presets', value: Array.isArray(settingsData.openai_setting_names) ? settingsData.openai_setting_names.length : 0 },
+            { label: 'OpenAI 预设', value: Array.isArray(settingsData.openai_setting_names) ? settingsData.openai_setting_names.length : 0 },
         ];
     }, [settingsData]);
 
     const isBusy = saveMutation.isPending || secretsQuery.isPending || providerSecretMutation.isPending;
+
+    // File-backed formatting presets (system prompts / reasoning templates) ride
+    // the same /api/settings/get payload as the legacy shell. CRUD results from
+    // the formattingPreset runtime command refresh these lists in place.
+    const [formattingPresets, setFormattingPresets] = useState<{ sysprompt: Record<string, any>[]; reasoning: Record<string, any>[] }>({ sysprompt: [], reasoning: [] });
+    const payloadSyspromptPresets = settingsData?.sysprompt;
+    const payloadReasoningPresets = settingsData?.reasoning;
+    useEffect(() => {
+        setFormattingPresets({
+            sysprompt: Array.isArray(payloadSyspromptPresets) ? payloadSyspromptPresets : [],
+            reasoning: Array.isArray(payloadReasoningPresets) ? payloadReasoningPresets : [],
+        });
+    }, [payloadSyspromptPresets, payloadReasoningPresets]);
+
+    const handleFormattingPresetsChanged = useCallback((apiId: 'sysprompt' | 'reasoning', nextPresets: Record<string, any>[]) => {
+        setFormattingPresets(current => ({ ...current, [apiId]: nextPresets }));
+    }, []);
+
+    const presetNotice = useCallback((message: string) => {
+        setPageError('');
+        setSaveStatus({ kind: 'info', message });
+    }, []);
+    const presetError = useCallback((message: string) => {
+        setSaveStatus(null);
+        setPageError(message);
+    }, []);
+
+    const applySystemPromptPreset = useCallback((preset: Record<string, any>) => {
+        settingsForm.setFieldValue('advanced.systemPromptContent', String(preset?.content ?? ''));
+        settingsForm.setFieldValue('advanced.syspromptPostHistory', String(preset?.post_history ?? ''));
+        // The retired drawer's select-on-change enabled the system prompt.
+        settingsForm.setFieldValue('advanced.syspromptEnabled', true);
+    }, [settingsForm]);
+
+    const collectSystemPromptPreset = useCallback(() => ({
+        content: String(settingsForm.getFieldValue('advanced.systemPromptContent') ?? ''),
+        post_history: String(settingsForm.getFieldValue('advanced.syspromptPostHistory') ?? ''),
+    }), [settingsForm]);
+
+    const applyReasoningPreset = useCallback((preset: Record<string, any>) => {
+        settingsForm.setFieldValue('advanced.reasoningPrefix', String(preset?.prefix ?? ''));
+        settingsForm.setFieldValue('advanced.reasoningSuffix', String(preset?.suffix ?? ''));
+        settingsForm.setFieldValue('advanced.reasoningSeparator', String(preset?.separator ?? ''));
+    }, [settingsForm]);
+
+    const collectReasoningPreset = useCallback(() => ({
+        prefix: String(settingsForm.getFieldValue('advanced.reasoningPrefix') ?? ''),
+        suffix: String(settingsForm.getFieldValue('advanced.reasoningSuffix') ?? ''),
+        separator: String(settingsForm.getFieldValue('advanced.reasoningSeparator') ?? ''),
+    }), [settingsForm]);
 
     function clearTransientState() {
         saveMutation.reset();
@@ -650,13 +721,13 @@ export function SettingsSurface({
                             <div>
                                 {isOverlay ? (
                                     <h1 {...stylex.props(settingsStyles.pageTitle, settingsStyles.pageTitleOverlay)}>
-                                        {settingsTabDefinitions.find(tab => tab.id === activeTab)?.label ?? 'Settings'}
+                                        设置
                                     </h1>
                                 ) : (
                                     <>
-                                        <h1 {...stylex.props(settingsStyles.pageTitle)}>Settings</h1>
+                                        <h1 {...stylex.props(settingsStyles.pageTitle)}>设置</h1>
                                         <p {...stylex.props(settingsStyles.pageSummary)}>
-                                            Defaults, providers, workspace display, and power-user controls.
+                                            服务连接、界面偏好与高级参数的集中配置。
                                         </p>
                                     </>
                                 )}
@@ -665,7 +736,7 @@ export function SettingsSurface({
                                 <button
                                     type="button"
                                     {...stylex.props(settingsStyles.button, settingsStyles.buttonSecondary, settingsStyles.overlayClose)}
-                                    aria-label="Close settings"
+                                    aria-label="关闭设置"
                                     onClick={() => onRequestClose?.()}
                                 >
                                     <i className="fa-solid fa-xmark" aria-hidden="true" />
@@ -677,7 +748,7 @@ export function SettingsSurface({
                                     href="/"
                                     data-doc-id="page.chat_workspace"
                                 >
-                                    返回 Workspace
+                                    返回工作区
                                 </a>
                             )}
                         </div>
@@ -740,13 +811,13 @@ export function SettingsSurface({
                             {activeTab === 'providers' ? (
                             <div>
                                 <SettingsSection
-                                    title="Provider"
+                                    title="服务"
                                     description="一个 endpoint URL、一个 API key、一个主模型和一个可选 fallback 模型。"
                                 >
                                     <SettingField
                                         form={settingsForm}
                                         name="providers.customUrl"
-                                        label="Base URL"
+                                        label="接口地址"
                                         description="OpenAI-compatible endpoint；留空使用官方 api.openai.com。"
                                         placeholder="https://api.openai.com/v1"
                                         disabled={isBusy}
@@ -770,7 +841,7 @@ export function SettingsSurface({
                                                 type="password"
                                                 id="provider-secret-input"
                                                 name="provider-secret-input"
-                                                aria-label="Provider API Key"
+                                                aria-label="API Key"
                                                 {...stylex.props(settingsStyles.input, settingsStyles.inlineActionsInput)}
                                                 placeholder={unifiedKeyFieldState.placeholder}
                                                 value={providerSecretInput}
@@ -819,7 +890,7 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="providers.openaiModel"
-                                        label="Model"
+                                        label="模型"
                                         description="主生成模型。"
                                         placeholder="gpt-5.2"
                                         disabled={isBusy}
@@ -828,19 +899,9 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="providers.fallbackProviderModel"
-                                        label="Fallback Model"
+                                        label="备选模型"
                                         description="主请求失败时以同一 URL 与 API key 换用此模型重试；留空即关闭。"
                                         placeholder="gpt-4.1-mini"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="providers.promptPostProcessing"
-                                        label="Prompt Post-Processing"
-                                        description="发送前对 prompt 做角色合并规整，兼容严格的 OpenAI-compatible 端点。"
-                                        variant="select"
-                                        options={promptPostProcessingOptions}
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
                                     />
@@ -848,9 +909,9 @@ export function SettingsSurface({
                                         <div {...stylex.props(settingsStyles.inlinePanel)}>
                                             <div {...stylex.props(settingsStyles.inlineHeader)}>
                                                 <div>
-                                                    <h3 {...stylex.props(settingsStyles.sectionTitle)}>Connection</h3>
+                                                    <h3 {...stylex.props(settingsStyles.sectionTitle)}>连接</h3>
                                                     <p {...stylex.props(settingsStyles.mutedText, settingsStyles.sectionDescription)}>
-                                                        Connect 校验凭证并拉取模型列表；Test 发送一条探测请求。
+                                                        「连接」校验凭证并拉取模型列表；「测试」发送一条探测请求。
                                                     </p>
                                                 </div>
                                                 <span {...stylex.props(settingsStyles.pill)}>{providerStatusLabel}</span>
@@ -863,7 +924,7 @@ export function SettingsSurface({
                                                     disabled={providerActionBusy !== null}
                                                     onClick={() => { void handleProviderAction('connect'); }}
                                                 >
-                                                    {providerActionBusy === 'connect' ? 'Connecting…' : 'Connect'}
+                                                    {providerActionBusy === 'connect' ? '连接中…' : '连接'}
                                                 </button>
                                                 <button
                                                     type="button"
@@ -872,7 +933,7 @@ export function SettingsSurface({
                                                     disabled={providerActionBusy !== null}
                                                     onClick={() => { void handleProviderAction('test'); }}
                                                 >
-                                                    {providerActionBusy === 'test' ? 'Testing…' : 'Test'}
+                                                    {providerActionBusy === 'test' ? '测试中…' : '测试'}
                                                 </button>
                                             </div>
                                         </div>
@@ -884,13 +945,13 @@ export function SettingsSurface({
                             {activeTab === 'userInterface' ? (
                             <div>
                                 <SettingsSection
-                                    title="Workspace Preferences"
+                                    title="界面偏好"
                                     description="主题、布局、通知位置以及聊天显示密度。"
                                 >
                                     <SettingField
                                         form={settingsForm}
                                         name="userInterface.chatWidth"
-                                        label="Chat Width"
+                                        label="聊天宽度"
                                         description="聊天区域宽度百分比。"
                                         variant="number"
                                         min={20}
@@ -902,7 +963,7 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="userInterface.fontScale"
-                                        label="Font Scale"
+                                        label="字体缩放"
                                         description="聊天正文默认字号缩放。"
                                         variant="number"
                                         min={0.5}
@@ -914,7 +975,7 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="userInterface.toastrPosition"
-                                        label="Notification Position"
+                                        label="通知位置"
                                         description="toast 通知的默认出现位置。"
                                         variant="select"
                                         options={toastPositionOptions}
@@ -924,7 +985,7 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="userInterface.avatarStyle"
-                                        label="Avatar Style"
+                                        label="头像形状"
                                         description="角色头像的展示样式。"
                                         variant="select"
                                         selectValueType="number"
@@ -935,7 +996,7 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="userInterface.chatDisplay"
-                                        label="Chat Display"
+                                        label="消息样式"
                                         description="消息气泡的布局模式。"
                                         variant="select"
                                         selectValueType="number"
@@ -946,7 +1007,7 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="userInterface.customCss"
-                                        label="Custom CSS"
+                                        label="自定义 CSS"
                                         description="应用到整套 UI 的自定义 CSS。"
                                         variant="textarea"
                                         placeholder=".chat { color: white; }"
@@ -956,7 +1017,7 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="userInterface.fastUiMode"
-                                        label="Fast UI Mode"
+                                        label="极速界面模式"
                                         description="去除大部分 blur，换取更快渲染。"
                                         variant="toggle"
                                         disabled={isBusy}
@@ -965,7 +1026,7 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="userInterface.reducedMotion"
-                                        label="Reduced Motion"
+                                        label="减弱动效"
                                         description="减少动画与过渡效果。"
                                         variant="toggle"
                                         disabled={isBusy}
@@ -974,7 +1035,7 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="userInterface.noShadows"
-                                        label="No Text Shadows"
+                                        label="关闭文字阴影"
                                         description="去除文本阴影。"
                                         variant="toggle"
                                         disabled={isBusy}
@@ -983,7 +1044,7 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="userInterface.timerEnabled"
-                                        label="Message Timer"
+                                        label="消息计时"
                                         description="显示消息计时器。"
                                         variant="toggle"
                                         disabled={isBusy}
@@ -992,7 +1053,7 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="userInterface.timestampsEnabled"
-                                        label="Timestamps"
+                                        label="时间戳"
                                         description="显示消息时间戳。"
                                         variant="toggle"
                                         disabled={isBusy}
@@ -1001,7 +1062,7 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="userInterface.timestampModelIcon"
-                                        label="Model Icons"
+                                        label="模型图标"
                                         description="在时间戳旁显示模型图标。"
                                         variant="toggle"
                                         disabled={isBusy}
@@ -1010,7 +1071,7 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="userInterface.mesIDDisplayEnabled"
-                                        label="Message Numbers"
+                                        label="消息序号"
                                         description="显示消息编号。"
                                         variant="toggle"
                                         disabled={isBusy}
@@ -1019,7 +1080,7 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="userInterface.hideChatAvatarsEnabled"
-                                        label="Hide Chat Avatars"
+                                        label="隐藏聊天头像"
                                         description="隐藏聊天区头像。"
                                         variant="toggle"
                                         disabled={isBusy}
@@ -1028,7 +1089,7 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="userInterface.compactInputArea"
-                                        label="Compact Input Area"
+                                        label="紧凑输入区"
                                         description="使用更紧凑的输入区域。"
                                         variant="toggle"
                                         disabled={isBusy}
@@ -1037,8 +1098,8 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="userInterface.expandMessageActions"
-                                        label="Expand Message Actions"
-                                        description="Settings path binding for userInterface.expandMessageActions."
+                                        label="展开消息操作"
+                                        description="绑定到设置项 userInterface.expandMessageActions。"
                                         variant="toggle"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
@@ -1046,8 +1107,8 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="userInterface.enableZenSliders"
-                                        label="Enable Zen Sliders"
-                                        description="Settings path binding for userInterface.enableZenSliders."
+                                        label="启用 Zen 滑条"
+                                        description="绑定到设置项 userInterface.enableZenSliders。"
                                         variant="toggle"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
@@ -1055,8 +1116,8 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="userInterface.enableLabMode"
-                                        label="Enable Lab Mode"
-                                        description="Settings path binding for userInterface.enableLabMode."
+                                        label="启用实验模式"
+                                        description="绑定到设置项 userInterface.enableLabMode。"
                                         variant="toggle"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
@@ -1064,8 +1125,8 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="userInterface.messageTokenCountEnabled"
-                                        label="Message Token Count Enabled"
-                                        description="Settings path binding for userInterface.messageTokenCountEnabled."
+                                        label="显示消息 Token 数"
+                                        description="绑定到设置项 userInterface.messageTokenCountEnabled。"
                                         variant="toggle"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
@@ -1073,8 +1134,8 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="userInterface.showSwipeNumAllMessages"
-                                        label="Show Swipe Num All Messages"
-                                        description="Settings path binding for userInterface.showSwipeNumAllMessages."
+                                        label="所有消息显示 Swipe 序号"
+                                        description="绑定到设置项 userInterface.showSwipeNumAllMessages。"
                                         variant="toggle"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
@@ -1082,8 +1143,8 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="userInterface.hotswapEnabled"
-                                        label="Hotswap Enabled"
-                                        description="Settings path binding for userInterface.hotswapEnabled."
+                                        label="启用热切换"
+                                        description="绑定到设置项 userInterface.hotswapEnabled。"
                                         variant="toggle"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
@@ -1091,8 +1152,8 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="userInterface.zoomedAvatarMagnification"
-                                        label="Zoomed Avatar Magnification"
-                                        description="Settings path binding for userInterface.zoomedAvatarMagnification."
+                                        label="头像放大倍率"
+                                        description="绑定到设置项 userInterface.zoomedAvatarMagnification。"
                                         variant="toggle"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
@@ -1100,8 +1161,8 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="userInterface.bogusFolders"
-                                        label="Bogus Folders"
-                                        description="Settings path binding for userInterface.bogusFolders."
+                                        label="伪文件夹"
+                                        description="绑定到设置项 userInterface.bogusFolders。"
                                         variant="toggle"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
@@ -1109,8 +1170,8 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="userInterface.clickToEdit"
-                                        label="Click To Edit"
-                                        description="Settings path binding for userInterface.clickToEdit."
+                                        label="点击编辑"
+                                        description="绑定到设置项 userInterface.clickToEdit。"
                                         variant="toggle"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
@@ -1118,8 +1179,8 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="userInterface.mediaDisplay"
-                                        label="Media Display"
-                                        description="Settings path binding for userInterface.mediaDisplay."
+                                        label="媒体展示方式"
+                                        description="绑定到设置项 userInterface.mediaDisplay。"
                                         variant="select"
                                         options={mediaDisplayOptions}
                                         disabled={isBusy}
@@ -1128,8 +1189,8 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="userInterface.blurStrength"
-                                        label="Blur Strength"
-                                        description="Settings path binding for userInterface.blurStrength."
+                                        label="模糊强度"
+                                        description="绑定到设置项 userInterface.blurStrength。"
                                         variant="number"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
@@ -1137,8 +1198,8 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="userInterface.shadowWidth"
-                                        label="Shadow Width"
-                                        description="Settings path binding for userInterface.shadowWidth."
+                                        label="阴影宽度"
+                                        description="绑定到设置项 userInterface.shadowWidth。"
                                         variant="number"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
@@ -1146,88 +1207,88 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="userInterface.mainTextColor"
-                                        label="Main Text Color"
-                                        description="Settings path binding for userInterface.mainTextColor."
+                                        label="正文颜色"
+                                        description="绑定到设置项 userInterface.mainTextColor。"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
                                     />
                                     <SettingField
                                         form={settingsForm}
                                         name="userInterface.italicsTextColor"
-                                        label="Italics Text Color"
-                                        description="Settings path binding for userInterface.italicsTextColor."
+                                        label="斜体颜色"
+                                        description="绑定到设置项 userInterface.italicsTextColor。"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
                                     />
                                     <SettingField
                                         form={settingsForm}
                                         name="userInterface.underlineTextColor"
-                                        label="Underline Text Color"
-                                        description="Settings path binding for userInterface.underlineTextColor."
+                                        label="下划线颜色"
+                                        description="绑定到设置项 userInterface.underlineTextColor。"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
                                     />
                                     <SettingField
                                         form={settingsForm}
                                         name="userInterface.quoteTextColor"
-                                        label="Quote Text Color"
-                                        description="Settings path binding for userInterface.quoteTextColor."
+                                        label="引用颜色"
+                                        description="绑定到设置项 userInterface.quoteTextColor。"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
                                     />
                                     <SettingField
                                         form={settingsForm}
                                         name="userInterface.blurTintColor"
-                                        label="Blur Tint Color"
-                                        description="Settings path binding for userInterface.blurTintColor."
+                                        label="模糊蒙层颜色"
+                                        description="绑定到设置项 userInterface.blurTintColor。"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
                                     />
                                     <SettingField
                                         form={settingsForm}
                                         name="userInterface.chatTintColor"
-                                        label="Chat Tint Color"
-                                        description="Settings path binding for userInterface.chatTintColor."
+                                        label="聊天蒙层颜色"
+                                        description="绑定到设置项 userInterface.chatTintColor。"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
                                     />
                                     <SettingField
                                         form={settingsForm}
                                         name="userInterface.userMesBlurTintColor"
-                                        label="User Mes Blur Tint Color"
-                                        description="Settings path binding for userInterface.userMesBlurTintColor."
+                                        label="用户消息蒙层颜色"
+                                        description="绑定到设置项 userInterface.userMesBlurTintColor。"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
                                     />
                                     <SettingField
                                         form={settingsForm}
                                         name="userInterface.botMesBlurTintColor"
-                                        label="Bot Mes Blur Tint Color"
-                                        description="Settings path binding for userInterface.botMesBlurTintColor."
+                                        label="角色消息蒙层颜色"
+                                        description="绑定到设置项 userInterface.botMesBlurTintColor。"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
                                     />
                                     <SettingField
                                         form={settingsForm}
                                         name="userInterface.shadowColor"
-                                        label="Shadow Color"
-                                        description="Settings path binding for userInterface.shadowColor."
+                                        label="阴影颜色"
+                                        description="绑定到设置项 userInterface.shadowColor。"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
                                     />
                                     <SettingField
                                         form={settingsForm}
                                         name="userInterface.borderColor"
-                                        label="Border Color"
-                                        description="Settings path binding for userInterface.borderColor."
+                                        label="边框颜色"
+                                        description="绑定到设置项 userInterface.borderColor。"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
                                     />
                                     <SettingField
                                         form={settingsForm}
                                         name="userInterface.playMessageSound"
-                                        label="Play Message Sound"
-                                        description="Settings path binding for userInterface.playMessageSound."
+                                        label="播放消息音效"
+                                        description="绑定到设置项 userInterface.playMessageSound。"
                                         variant="toggle"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
@@ -1235,8 +1296,8 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="userInterface.playSoundUnfocused"
-                                        label="Play Sound Unfocused"
-                                        description="Settings path binding for userInterface.playSoundUnfocused."
+                                        label="后台播放音效"
+                                        description="绑定到设置项 userInterface.playSoundUnfocused。"
                                         variant="toggle"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
@@ -1244,8 +1305,8 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="userInterface.relaxedApiUrls"
-                                        label="Relaxed Api Urls"
-                                        description="Settings path binding for userInterface.relaxedApiUrls."
+                                        label="宽松 API 地址"
+                                        description="绑定到设置项 userInterface.relaxedApiUrls。"
                                         variant="toggle"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
@@ -1253,8 +1314,8 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="userInterface.worldImportDialog"
-                                        label="World Import Dialog"
-                                        description="Settings path binding for userInterface.worldImportDialog."
+                                        label="世界书导入对话框"
+                                        description="绑定到设置项 userInterface.worldImportDialog。"
                                         variant="toggle"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
@@ -1262,8 +1323,8 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="userInterface.enableAutoSelectInput"
-                                        label="Enable Auto Select Input"
-                                        description="Settings path binding for userInterface.enableAutoSelectInput."
+                                        label="自动选中输入"
+                                        description="绑定到设置项 userInterface.enableAutoSelectInput。"
                                         variant="toggle"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
@@ -1271,8 +1332,8 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="userInterface.enableMdHotkeys"
-                                        label="Enable Md Hotkeys"
-                                        description="Settings path binding for userInterface.enableMdHotkeys."
+                                        label="启用 Markdown 快捷键"
+                                        description="绑定到设置项 userInterface.enableMdHotkeys。"
                                         variant="toggle"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
@@ -1280,8 +1341,8 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="userInterface.restoreUserInput"
-                                        label="Restore User Input"
-                                        description="Settings path binding for userInterface.restoreUserInput."
+                                        label="恢复未发送输入"
+                                        description="绑定到设置项 userInterface.restoreUserInput。"
                                         variant="toggle"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
@@ -1289,8 +1350,8 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="userInterface.sendOnEnter"
-                                        label="Send On Enter"
-                                        description="Settings path binding for userInterface.sendOnEnter."
+                                        label="回车发送"
+                                        description="绑定到设置项 userInterface.sendOnEnter。"
                                         variant="select"
                                         selectValueType="number"
                                         options={sendOnEnterOptions}
@@ -1300,8 +1361,8 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="userInterface.continueOnSend"
-                                        label="Continue On Send"
-                                        description="Settings path binding for userInterface.continueOnSend."
+                                        label="发送后继续"
+                                        description="绑定到设置项 userInterface.continueOnSend。"
                                         variant="toggle"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
@@ -1309,8 +1370,8 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="userInterface.quickContinue"
-                                        label="Quick Continue"
-                                        description="Settings path binding for userInterface.quickContinue."
+                                        label="快捷续写"
+                                        description="绑定到设置项 userInterface.quickContinue。"
                                         variant="toggle"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
@@ -1318,8 +1379,8 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="userInterface.quickImpersonate"
-                                        label="Quick Impersonate"
-                                        description="Settings path binding for userInterface.quickImpersonate."
+                                        label="快捷扮演"
+                                        description="绑定到设置项 userInterface.quickImpersonate。"
                                         variant="toggle"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
@@ -1327,8 +1388,8 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="userInterface.gestures"
-                                        label="Gestures"
-                                        description="Settings path binding for userInterface.gestures."
+                                        label="手势操作"
+                                        description="绑定到设置项 userInterface.gestures。"
                                         variant="toggle"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
@@ -1336,8 +1397,8 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="userInterface.autoLoadChat"
-                                        label="Auto Load Chat"
-                                        description="Settings path binding for userInterface.autoLoadChat."
+                                        label="自动加载聊天"
+                                        description="绑定到设置项 userInterface.autoLoadChat。"
                                         variant="toggle"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
@@ -1345,8 +1406,8 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="userInterface.autoScrollChatToBottom"
-                                        label="Auto Scroll Chat To Bottom"
-                                        description="Settings path binding for userInterface.autoScrollChatToBottom."
+                                        label="自动滚动到底部"
+                                        description="绑定到设置项 userInterface.autoScrollChatToBottom。"
                                         variant="toggle"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
@@ -1354,8 +1415,8 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="userInterface.autoSaveMsgEdits"
-                                        label="Auto Save Msg Edits"
-                                        description="Settings path binding for userInterface.autoSaveMsgEdits."
+                                        label="自动保存消息编辑"
+                                        description="绑定到设置项 userInterface.autoSaveMsgEdits。"
                                         variant="toggle"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
@@ -1363,8 +1424,8 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="userInterface.confirmMessageDelete"
-                                        label="Confirm Message Delete"
-                                        description="Settings path binding for userInterface.confirmMessageDelete."
+                                        label="删除消息前确认"
+                                        description="绑定到设置项 userInterface.confirmMessageDelete。"
                                         variant="toggle"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
@@ -1372,8 +1433,8 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="userInterface.autoFixGeneratedMarkdown"
-                                        label="Auto Fix Generated Markdown"
-                                        description="Settings path binding for userInterface.autoFixGeneratedMarkdown."
+                                        label="自动修复 Markdown"
+                                        description="绑定到设置项 userInterface.autoFixGeneratedMarkdown。"
                                         variant="toggle"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
@@ -1381,8 +1442,8 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="userInterface.forbidExternalMedia"
-                                        label="Forbid External Media"
-                                        description="Settings path binding for userInterface.forbidExternalMedia."
+                                        label="禁止外部媒体"
+                                        description="绑定到设置项 userInterface.forbidExternalMedia。"
                                         variant="toggle"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
@@ -1390,8 +1451,8 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="userInterface.allowName1Display"
-                                        label="Allow Name1 Display"
-                                        description="Settings path binding for userInterface.allowName1Display."
+                                        label="允许显示 {{user}} 名"
+                                        description="绑定到设置项 userInterface.allowName1Display。"
                                         variant="toggle"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
@@ -1399,8 +1460,8 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="userInterface.allowName2Display"
-                                        label="Allow Name2 Display"
-                                        description="Settings path binding for userInterface.allowName2Display."
+                                        label="允许显示 {{char}} 名"
+                                        description="绑定到设置项 userInterface.allowName2Display。"
                                         variant="toggle"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
@@ -1408,8 +1469,8 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="userInterface.encodeTags"
-                                        label="Encode Tags"
-                                        description="Settings path binding for userInterface.encodeTags."
+                                        label="标签编码"
+                                        description="绑定到设置项 userInterface.encodeTags。"
                                         variant="toggle"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
@@ -1417,8 +1478,8 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="userInterface.consoleLogPrompts"
-                                        label="Console Log Prompts"
-                                        description="Settings path binding for userInterface.consoleLogPrompts."
+                                        label="控制台输出提示词"
+                                        description="绑定到设置项 userInterface.consoleLogPrompts。"
                                         variant="toggle"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
@@ -1426,8 +1487,8 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="userInterface.pinStyles"
-                                        label="Pin Styles"
-                                        description="Settings path binding for userInterface.pinStyles."
+                                        label="固定样式"
+                                        description="绑定到设置项 userInterface.pinStyles。"
                                         variant="toggle"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
@@ -1435,8 +1496,8 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="userInterface.fuzzySearch"
-                                        label="Fuzzy Search"
-                                        description="Settings path binding for userInterface.fuzzySearch."
+                                        label="模糊搜索"
+                                        description="绑定到设置项 userInterface.fuzzySearch。"
                                         variant="toggle"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
@@ -1444,8 +1505,8 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="userInterface.preferCharacterPrompt"
-                                        label="Prefer Character Prompt"
-                                        description="Settings path binding for userInterface.preferCharacterPrompt."
+                                        label="优先角色系统提示"
+                                        description="绑定到设置项 userInterface.preferCharacterPrompt。"
                                         variant="toggle"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
@@ -1453,8 +1514,8 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="userInterface.preferCharacterJailbreak"
-                                        label="Prefer Character Jailbreak"
-                                        description="Settings path binding for userInterface.preferCharacterJailbreak."
+                                        label="优先角色后注指令"
+                                        description="绑定到设置项 userInterface.preferCharacterJailbreak。"
                                         variant="toggle"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
@@ -1462,8 +1523,8 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="userInterface.neverResizeAvatars"
-                                        label="Never Resize Avatars"
-                                        description="Settings path binding for userInterface.neverResizeAvatars."
+                                        label="不压缩头像"
+                                        description="绑定到设置项 userInterface.neverResizeAvatars。"
                                         variant="toggle"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
@@ -1471,8 +1532,8 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="userInterface.showCardAvatarUrls"
-                                        label="Show Card Avatar Urls"
-                                        description="Settings path binding for userInterface.showCardAvatarUrls."
+                                        label="显示卡面头像地址"
+                                        description="绑定到设置项 userInterface.showCardAvatarUrls。"
                                         variant="toggle"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
@@ -1480,8 +1541,8 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="userInterface.spoilerFreeMode"
-                                        label="Spoiler Free Mode"
-                                        description="Settings path binding for userInterface.spoilerFreeMode."
+                                        label="防剧透模式"
+                                        description="绑定到设置项 userInterface.spoilerFreeMode。"
                                         variant="toggle"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
@@ -1489,8 +1550,8 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="userInterface.imageOverswipe"
-                                        label="Image Overswipe"
-                                        description="Settings path binding for userInterface.imageOverswipe."
+                                        label="图片滑动切换"
+                                        description="绑定到设置项 userInterface.imageOverswipe。"
                                         variant="select"
                                         options={imageOverswipeOptions}
                                         disabled={isBusy}
@@ -1499,16 +1560,16 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="userInterface.auxField"
-                                        label="Aux Field"
-                                        description="Settings path binding for userInterface.auxField."
+                                        label="辅助字段"
+                                        description="绑定到设置项 userInterface.auxField。"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
                                     />
                                     <SettingField
                                         form={settingsForm}
                                         name="userInterface.tagImportSetting"
-                                        label="Tag Import Setting"
-                                        description="Settings path binding for userInterface.tagImportSetting."
+                                        label="标签导入方式"
+                                        description="绑定到设置项 userInterface.tagImportSetting。"
                                         variant="select"
                                         selectValueType="number"
                                         options={tagImportSettingOptions}
@@ -1522,32 +1583,60 @@ export function SettingsSurface({
                             {activeTab === 'advanced' ? (
                             <div>
                                 <SettingsSection
-                                    title="Prompt, Templates, And Power-User Controls"
+                                    title="提示词、模板与高级控件"
                                     description="模板、stop strings、tokenizer、auto-swipe、auto-continue 和 STscript 设置。"
                                 >
+                                    <FormattingPresetRow
+                                        apiId="sysprompt"
+                                        label="系统提示预设"
+                                        runtime={runtime}
+                                        presets={formattingPresets.sysprompt}
+                                        onPresetsChanged={handleFormattingPresetsChanged}
+                                        form={settingsForm}
+                                        nameField="advanced.systemPromptName"
+                                        collectPreset={collectSystemPromptPreset}
+                                        applyPreset={applySystemPromptPreset}
+                                        disabled={isBusy}
+                                        onNotice={presetNotice}
+                                        onError={presetError}
+                                    />
                                     <SettingField
                                         form={settingsForm}
                                         name="advanced.systemPromptName"
-                                        label="System Prompt Name"
+                                        label="系统提示名称"
                                         description="当前默认 system prompt preset 名称。"
-                                        placeholder="Neutral - Chat"
+                                        placeholder="默认 - 聊天"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
                                     />
                                     <SettingField
                                         form={settingsForm}
                                         name="advanced.systemPromptContent"
-                                        label="System Prompt Content"
+                                        label="系统提示内容"
                                         description="默认 system prompt 正文。"
                                         variant="textarea"
-                                        placeholder="Write {{char}}'s next reply..."
+                                        placeholder="写一个 {{char}} 的回复示例…"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
+                                    />
+                                    <FormattingPresetRow
+                                        apiId="reasoning"
+                                        label="推理模板预设"
+                                        runtime={runtime}
+                                        presets={formattingPresets.reasoning}
+                                        onPresetsChanged={handleFormattingPresetsChanged}
+                                        form={settingsForm}
+                                        nameField="advanced.reasoningName"
+                                        collectPreset={collectReasoningPreset}
+                                        applyPreset={applyReasoningPreset}
+                                        disabled={isBusy}
+                                        onNotice={presetNotice}
+                                        onError={presetError}
                                     />
                                     <SettingField
                                         form={settingsForm}
                                         name="advanced.reasoningName"
-                                        label="Reasoning Template"
+                                        label="推理模板"
                                         description="当前 reasoning template 名称。"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
@@ -1555,7 +1644,7 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="advanced.reasoningPrefix"
-                                        label="Reasoning Prefix"
+                                        label="推理前缀"
                                         description="reasoning block 前缀。"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
@@ -1563,7 +1652,7 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="advanced.reasoningSuffix"
-                                        label="Reasoning Suffix"
+                                        label="推理后缀"
                                         description="reasoning block 后缀。"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
@@ -1571,7 +1660,7 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="advanced.reasoningSeparator"
-                                        label="Reasoning Separator"
+                                        label="推理分隔符"
                                         description="reasoning 与正文之间的分隔。"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
@@ -1579,7 +1668,7 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="advanced.reasoningMaxAdditions"
-                                        label="Reasoning Max Additions"
+                                        label="推理最大附加数"
                                         description="单次 prompt 中最多附加多少 reasoning blocks。"
                                         variant="number"
                                         min={0}
@@ -1590,7 +1679,7 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="advanced.customStoppingStrings"
-                                        label="Custom Stopping Strings"
+                                        label="自定义停止符"
                                         description="stop strings 的原始字符串表示。"
                                         variant="textarea"
                                         placeholder='["END"]'
@@ -1600,18 +1689,18 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="advanced.tokenizer"
-                                        label="Tokenizer"
-                                        description="保留 legacy numeric tokenizer ID。"
-                                        variant="number"
-                                        min={0}
-                                        step={1}
+                                        label="分词器"
+                                        description="token 计数所用的 tokenizer。"
+                                        variant="select"
+                                        selectValueType="number"
+                                        options={tokenizerOptions}
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
                                     />
                                     <SettingField
                                         form={settingsForm}
                                         name="advanced.autoSwipeMinimumLength"
-                                        label="Auto-Swipe Min Length"
+                                        label="自动 Swipe 最小长度"
                                         description="短于该长度的回复会触发 auto-swipe。"
                                         variant="number"
                                         min={0}
@@ -1622,17 +1711,17 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="advanced.autoSwipeBlacklist"
-                                        label="Auto-Swipe Blacklist"
+                                        label="自动 Swipe 黑名单"
                                         description="逗号分隔的黑名单词条。"
                                         variant="textarea"
-                                        placeholder="bad, retry"
+                                        placeholder="如 bad, retry"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
                                     />
                                     <SettingField
                                         form={settingsForm}
                                         name="advanced.autoSwipeBlacklistThreshold"
-                                        label="Auto-Swipe Threshold"
+                                        label="自动 Swipe 阈值"
                                         description="至少命中多少次黑名单才触发 auto-swipe。"
                                         variant="number"
                                         min={0}
@@ -1643,7 +1732,7 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="advanced.autoContinueTargetLength"
-                                        label="Auto-Continue Target"
+                                        label="自动续写目标长度"
                                         description="auto-continue 目标长度。"
                                         variant="number"
                                         min={0}
@@ -1654,7 +1743,7 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="advanced.chatTruncation"
-                                        label="Messages To Load"
+                                        label="每次加载消息数"
                                         description="默认加载的消息数量。"
                                         variant="number"
                                         min={0}
@@ -1665,7 +1754,7 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="advanced.streamingFps"
-                                        label="Streaming FPS"
+                                        label="流式刷新率"
                                         description="流式更新的帧率。"
                                         variant="number"
                                         min={1}
@@ -1676,7 +1765,7 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="advanced.smoothStreamingSpeed"
-                                        label="Smooth Streaming Speed"
+                                        label="平滑流式速度"
                                         description="smooth streaming 的速度值。"
                                         variant="number"
                                         min={0}
@@ -1687,7 +1776,7 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="advanced.stscriptMatching"
-                                        label="STscript Matching"
+                                        label="STscript 匹配"
                                         description="STscript autocomplete 的匹配模式。"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
@@ -1695,7 +1784,7 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="advanced.stscriptAutocompleteState"
-                                        label="STscript Autocomplete State"
+                                        label="STscript 自动补全"
                                         description="0=disabled, 1=min length, 2=always。"
                                         variant="number"
                                         min={0}
@@ -1707,7 +1796,7 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="advanced.stscriptAutocompleteStyle"
-                                        label="STscript Autocomplete Style"
+                                        label="STscript 补全样式"
                                         description="autocomplete 面板样式。"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
@@ -1715,7 +1804,7 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="advanced.stscriptAutocompleteSelect"
-                                        label="STscript Select Keys"
+                                        label="STscript 选择键"
                                         description="用于选择 autocomplete 项的 key mask。"
                                         variant="number"
                                         min={0}
@@ -1726,7 +1815,7 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="advanced.stscriptAutocompleteFontScale"
-                                        label="STscript Font Scale"
+                                        label="STscript 字体缩放"
                                         description="autocomplete 字号缩放。"
                                         variant="number"
                                         min={0.5}
@@ -1738,7 +1827,7 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="advanced.stscriptAutocompleteWidthLeft"
-                                        label="STscript Width Left"
+                                        label="STscript 左侧宽度"
                                         description="左侧 autocomplete 宽度档位。"
                                         variant="number"
                                         min={0}
@@ -1750,7 +1839,7 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="advanced.stscriptAutocompleteWidthRight"
-                                        label="STscript Width Right"
+                                        label="STscript 右侧宽度"
                                         description="右侧 autocomplete 宽度档位。"
                                         variant="number"
                                         min={0}
@@ -1762,7 +1851,7 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="advanced.autoSwipe"
-                                        label="Auto-Swipe"
+                                        label="自动 Swipe"
                                         description="启用 auto-swipe。"
                                         variant="toggle"
                                         disabled={isBusy}
@@ -1771,7 +1860,7 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="advanced.customStoppingStringsMacro"
-                                        label="Stop Strings Macro"
+                                        label="停止符宏"
                                         description="允许在 stop strings 中展开 macro。"
                                         variant="toggle"
                                         disabled={isBusy}
@@ -1780,7 +1869,7 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="advanced.experimentalMacroEngine"
-                                        label="Experimental Macro Engine"
+                                        label="实验性宏引擎"
                                         description="使用新的 macro engine。"
                                         variant="toggle"
                                         disabled={isBusy}
@@ -1789,7 +1878,7 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="advanced.autoContinueEnabled"
-                                        label="Auto-Continue"
+                                        label="自动续写"
                                         description="达到目标长度前自动继续生成。"
                                         variant="toggle"
                                         disabled={isBusy}
@@ -1798,7 +1887,7 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="advanced.autoContinueAllowChatCompletions"
-                                        label="Allow Auto-Continue On Chat Completions"
+                                        label="聊天补全允许自动续写"
                                         description="允许 chat-completion path 使用 auto-continue。"
                                         variant="toggle"
                                         disabled={isBusy}
@@ -1807,7 +1896,7 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="advanced.syspromptEnabled"
-                                        label="System Prompt Enabled"
+                                        label="启用系统提示"
                                         description="启用 system prompt。"
                                         variant="toggle"
                                         disabled={isBusy}
@@ -1816,7 +1905,7 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="advanced.syspromptPostHistory"
-                                        label="System Prompt Post-History"
+                                        label="系统提示置于历史后"
                                         description="system prompt 的 post-history 文本。"
                                         variant="textarea"
                                         disabled={isBusy}
@@ -1825,7 +1914,7 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="advanced.reasoningAutoParse"
-                                        label="Reasoning Auto Parse"
+                                        label="自动解析推理"
                                         description="自动从回复中解析 reasoning block。"
                                         variant="toggle"
                                         disabled={isBusy}
@@ -1834,7 +1923,7 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="advanced.reasoningAddToPrompts"
-                                        label="Reasoning Add To Prompts"
+                                        label="推理加入提示词"
                                         description="把已有 reasoning block 回填进后续 prompt。"
                                         variant="toggle"
                                         disabled={isBusy}
@@ -1843,7 +1932,7 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="advanced.reasoningAutoExpand"
-                                        label="Reasoning Auto Expand"
+                                        label="推理自动展开"
                                         description="自动展开 reasoning block。"
                                         variant="toggle"
                                         disabled={isBusy}
@@ -1852,7 +1941,7 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="advanced.reasoningShowHidden"
-                                        label="Reasoning Show Hidden"
+                                        label="显示隐藏推理"
                                         description="显示隐藏 reasoning 的时长信息。"
                                         variant="toggle"
                                         disabled={isBusy}
@@ -1861,7 +1950,7 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="advanced.smoothStreaming"
-                                        label="Smooth Streaming"
+                                        label="平滑流式"
                                         description="启用 smooth streaming。"
                                         variant="toggle"
                                         disabled={isBusy}
@@ -1870,7 +1959,7 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="advanced.smoothStreamingNoThink"
-                                        label="Smooth Streaming No Think"
+                                        label="平滑流式跳过思考段"
                                         description="在 reasoning block 中绕过 smooth streaming。"
                                         variant="toggle"
                                         disabled={isBusy}
@@ -1879,7 +1968,7 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="advanced.streamFadeIn"
-                                        label="Stream Fade In"
+                                        label="流式淡入"
                                         description="启用流式文字淡入。"
                                         variant="toggle"
                                         disabled={isBusy}
@@ -1888,7 +1977,7 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="advanced.stscriptAutocompleteAutoHide"
-                                        label="STscript Auto-Hide"
+                                        label="STscript 自动隐藏"
                                         description="autocomplete 在失焦时自动隐藏。"
                                         variant="toggle"
                                         disabled={isBusy}
@@ -1897,7 +1986,7 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="advanced.stscriptAutocompleteShowInAllMacroFields"
-                                        label="STscript Show In All Macro Fields"
+                                        label="在所有宏字段显示 STscript"
                                         description="在所有 macro 字段中显示 autocomplete。"
                                         variant="toggle"
                                         disabled={isBusy}
@@ -1906,7 +1995,7 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="advanced.stscriptParserFlagStrictEscaping"
-                                        label="STscript Strict Escaping"
+                                        label="STscript 严格转义"
                                         description="启用严格 escaping parser flag。"
                                         variant="toggle"
                                         disabled={isBusy}
@@ -1915,7 +2004,7 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="advanced.stscriptParserFlagReplaceGetvar"
-                                        label="STscript Replace Getvar"
+                                        label="STscript 替换 getvar"
                                         description="启用 replace-getvar parser flag。"
                                         variant="toggle"
                                         disabled={isBusy}
@@ -1924,8 +2013,8 @@ export function SettingsSurface({
                                                                     <SettingField
                                         form={settingsForm}
                                         name="advanced.collapseNewlines"
-                                        label="Collapse Newlines"
-                                        description="Settings path binding for advanced.collapseNewlines."
+                                        label="折叠空行"
+                                        description="绑定到设置项 advanced.collapseNewlines。"
                                         variant="toggle"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
@@ -1933,8 +2022,8 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="advanced.alwaysForceName2"
-                                        label="Always Force Name2"
-                                        description="Settings path binding for advanced.alwaysForceName2."
+                                        label="强制显示 {{char}} 名"
+                                        description="绑定到设置项 advanced.alwaysForceName2。"
                                         variant="toggle"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
@@ -1942,8 +2031,8 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="advanced.trimSentences"
-                                        label="Trim Sentences"
-                                        description="Settings path binding for advanced.trimSentences."
+                                        label="裁剪句子"
+                                        description="绑定到设置项 advanced.trimSentences。"
                                         variant="toggle"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
@@ -1951,8 +2040,8 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="advanced.trimSpaces"
-                                        label="Trim Spaces"
-                                        description="Settings path binding for advanced.trimSpaces."
+                                        label="裁剪空格"
+                                        description="绑定到设置项 advanced.trimSpaces。"
                                         variant="toggle"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
@@ -1960,8 +2049,8 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="advanced.singleLine"
-                                        label="Single Line"
-                                        description="Settings path binding for advanced.singleLine."
+                                        label="单行模式"
+                                        description="绑定到设置项 advanced.singleLine。"
                                         variant="toggle"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
@@ -1969,16 +2058,16 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="advanced.markdownEscapeStrings"
-                                        label="Markdown Escape Strings"
-                                        description="Settings path binding for advanced.markdownEscapeStrings."
+                                        label="Markdown 转义字符串"
+                                        description="绑定到设置项 advanced.markdownEscapeStrings。"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
                                     />
                                     <SettingField
                                         form={settingsForm}
                                         name="advanced.userPromptBias"
-                                        label="User Prompt Bias"
-                                        description="Settings path binding for advanced.userPromptBias."
+                                        label="用户提示偏移"
+                                        description="绑定到设置项 advanced.userPromptBias。"
                                         variant="textarea"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
@@ -1986,8 +2075,8 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="advanced.showUserPromptBias"
-                                        label="Show User Prompt Bias"
-                                        description="Settings path binding for advanced.showUserPromptBias."
+                                        label="显示用户提示偏移"
+                                        description="绑定到设置项 advanced.showUserPromptBias。"
                                         variant="toggle"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
@@ -1995,11 +2084,19 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="advanced.tokenPadding"
-                                        label="Token Padding"
-                                        description="Settings path binding for advanced.tokenPadding."
+                                        label="Token 补齐"
+                                        description="绑定到设置项 advanced.tokenPadding。"
                                         variant="number"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
+                                    />
+                                    <FormattingMasterActions
+                                        runtime={runtime}
+                                        form={settingsForm}
+                                        onPresetsChanged={handleFormattingPresetsChanged}
+                                        disabled={isBusy}
+                                        onNotice={presetNotice}
+                                        onError={presetError}
                                     />
 </SettingsSection>
                             </div>
@@ -2007,7 +2104,7 @@ export function SettingsSurface({
 
                             {isOverlay && (WORKSPACE_DRAWER_LINKS[activeTab]?.length ?? 0) > 0 ? (
                                 <SettingsSection
-                                    title="Workspace Panels"
+                                    title="工作区面板"
                                     description="本页未覆盖的高级控件仍在对应的工作区抽屉中维护；点击后此面板会关闭。"
                                 >
                                     {(WORKSPACE_DRAWER_LINKS[activeTab] ?? []).map(link => (
@@ -2051,7 +2148,7 @@ export function SettingsSurface({
 
                 <aside {...stylex.props(settingsStyles.side)}>
                     <section {...stylex.props(settingsStyles.sidePanel)}>
-                        <h2 {...stylex.props(settingsStyles.sectionTitle)}>Payload Summary</h2>
+                        <h2 {...stylex.props(settingsStyles.sectionTitle)}>负载摘要</h2>
                         <div {...stylex.props(settingsStyles.metrics)}>
                             {payloadSummary.map(item => (
                                 <div key={item.label} {...stylex.props(settingsStyles.metric)}>
@@ -2065,9 +2162,9 @@ export function SettingsSurface({
                     <section {...stylex.props(settingsStyles.sidePanel)}>
                         <div {...stylex.props(settingsStyles.inlineHeader)}>
                             <div>
-                                <h2 {...stylex.props(settingsStyles.sectionTitle)}>Diagnostics</h2>
+                                <h2 {...stylex.props(settingsStyles.sectionTitle)}>诊断</h2>
                                 <p {...stylex.props(settingsStyles.mutedText, settingsStyles.sectionDescription)}>
-                                    Field ownership for debugging.
+                                    字段归属调试信息。
                                 </p>
                             </div>
                             <button
@@ -2096,7 +2193,7 @@ export function SettingsSurface({
                                 </div>
 
                                 <div {...stylex.props(settingsStyles.diagnosticsGroup)}>
-                                    <h3 {...stylex.props(settingsStyles.diagnosticsTitle)}>Legacy-owned</h3>
+                                    <h3 {...stylex.props(settingsStyles.diagnosticsTitle)}>遗留字段</h3>
                                     <ul {...stylex.props(settingsStyles.diagnosticsList)}>
                                             {settingsCoverage.legacyOwned.map(path => (
                                             <li key={path}>{path}</li>

@@ -100,18 +100,6 @@ export function AiConfigPanel() {
                         <div className="config-section-header"><span data-i18n="Features">功能</span></div>
                         <div className="features-grid">
                             <div className="range-block" data-source="openai">
-                                <label htmlFor="openai_function_calling" className="checkbox_label widthFreeExpand">
-                                    <input id="openai_function_calling" type="checkbox" />
-                                    <span data-i18n="Enable function calling">Function Calling</span>
-                                </label>
-                                <div id="tool_call_recurse_limit_block" className="wide100p" style={{ "marginTop": "4px" }}>
-                                    <div className="range-block-title"><small data-i18n="Tool Call Recurse Limit">Recurse Limit</small></div>
-                                    <div className="wide100p">
-                                        <input type="number" id="tool_call_recurse_limit" className="text_pole" min="1" max="50" step="1" />
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="range-block" data-source="openai">
                                 <label htmlFor="openai_media_inlining" className="checkbox_label widthFreeExpand">
                                     <input id="openai_media_inlining" type="checkbox" />
                                     <span data-i18n="Send inline media">Inline Media</span>

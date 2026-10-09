@@ -10,7 +10,7 @@ import { macros, MacroCategory } from './macros/macro-system.js';
 import { chat_completion_sources, getChatCompletionModel, oai_settings } from './openai.js';
 import { Popup } from './popup.js';
 import { performFuzzySearch, power_user } from './power-user.js';
-import { getPresetManager } from './preset-manager.js';
+import { saveFormattingPreset } from './preset-manager.js';
 import { SlashCommand } from './slash-commands/SlashCommand.js';
 import { ARGUMENT_TYPE, SlashCommandArgument, SlashCommandNamedArgument } from './slash-commands/SlashCommandArgument.js';
 import { commonEnumProviders, enumIcons } from './slash-commands/SlashCommandCommonEnumsProvider.js';
@@ -35,20 +35,26 @@ export const reasoning_templates = [];
 export const DEFAULT_REASONING_TEMPLATE = 'Think XML';
 
 /**
- * @type {Record<string, JQuery<HTMLElement>>} List of UI elements for reasoning settings
- * @readonly
+ * Applies a reasoning template to the live power_user settings.
+ * The Advanced Formatting drawer that once owned these controls is retired;
+ * the React Settings surface calls this through its preset row, and the
+ * slash command selects templates the same way.
+ * @param {object} template Reasoning template preset
  */
-const UI = {
-    $select: $('#reasoning_select'),
-    $suffix: $('#reasoning_suffix'),
-    $prefix: $('#reasoning_prefix'),
-    $separator: $('#reasoning_separator'),
-    $autoParse: $('#reasoning_auto_parse'),
-    $autoExpand: $('#reasoning_auto_expand'),
-    $showHidden: $('#reasoning_show_hidden'),
-    $addToPrompts: $('#reasoning_add_to_prompts'),
-    $maxAdditions: $('#reasoning_max_additions'),
-};
+function applyReasoningTemplate(template) {
+    power_user.reasoning.name = template.name;
+    power_user.reasoning.prefix = template.prefix;
+    power_user.reasoning.suffix = template.suffix;
+    power_user.reasoning.separator = template.separator;
+}
+
+/**
+ * Applies the current show_hidden setting to the chat container attribute.
+ * Exported so React-driven settings saves can re-apply the live side effect.
+ */
+export function applyReasoningVisibility() {
+    $('#chat').attr('data-show-hidden-reasoning', power_user.reasoning.show_hidden ? 'true' : null);
+}
 
 /**
  * Enum representing the type of the reasoning for a message (where it came from)
@@ -76,8 +82,9 @@ function getMessageFromJquery(element) {
 
 /**
  * Toggles the auto-expand state of reasoning blocks.
+ * Exported so React-driven settings saves can re-apply the live side effect.
  */
-function toggleReasoningAutoExpand() {
+export function toggleReasoningAutoExpand() {
     const reasoningBlocks = document.querySelectorAll('details.mes_reasoning_details');
     reasoningBlocks.forEach((block) => {
         if (block instanceof HTMLDetailsElement) {
@@ -745,76 +752,8 @@ export class PromptReasoning {
 }
 
 function loadReasoningSettings() {
-    UI.$addToPrompts.prop('checked', power_user.reasoning.add_to_prompts);
-    UI.$addToPrompts.on('change', function () {
-        power_user.reasoning.add_to_prompts = !!$(this).prop('checked');
-        saveSettingsDebounced();
-    });
-
-    UI.$prefix.val(power_user.reasoning.prefix);
-    UI.$prefix.on('input', function () {
-        power_user.reasoning.prefix = String($(this).val());
-        saveSettingsDebounced();
-    });
-
-    UI.$suffix.val(power_user.reasoning.suffix);
-    UI.$suffix.on('input', function () {
-        power_user.reasoning.suffix = String($(this).val());
-        saveSettingsDebounced();
-    });
-
-    UI.$separator.val(power_user.reasoning.separator);
-    UI.$separator.on('input', function () {
-        power_user.reasoning.separator = String($(this).val());
-        saveSettingsDebounced();
-    });
-
-    UI.$maxAdditions.val(power_user.reasoning.max_additions);
-    UI.$maxAdditions.on('input', function () {
-        power_user.reasoning.max_additions = Number($(this).val());
-        saveSettingsDebounced();
-    });
-
-    UI.$autoParse.prop('checked', power_user.reasoning.auto_parse);
-    UI.$autoParse.on('change', function () {
-        power_user.reasoning.auto_parse = !!$(this).prop('checked');
-        saveSettingsDebounced();
-    });
-
-    UI.$autoExpand.prop('checked', power_user.reasoning.auto_expand);
-    UI.$autoExpand.on('change', function () {
-        power_user.reasoning.auto_expand = !!$(this).prop('checked');
-        toggleReasoningAutoExpand();
-        saveSettingsDebounced();
-    });
     toggleReasoningAutoExpand();
-
-    UI.$showHidden.prop('checked', power_user.reasoning.show_hidden);
-    UI.$showHidden.on('change', function () {
-        power_user.reasoning.show_hidden = !!$(this).prop('checked');
-        $('#chat').attr('data-show-hidden-reasoning', power_user.reasoning.show_hidden ? 'true' : null);
-        saveSettingsDebounced();
-    });
-    $('#chat').attr('data-show-hidden-reasoning', power_user.reasoning.show_hidden ? 'true' : null);
-
-    UI.$select.on('change', async function () {
-        const name = String($(this).val());
-        const template = reasoning_templates.find(p => p.name === name);
-        if (!template) {
-            return;
-        }
-
-        UI.$prefix.val(template.prefix);
-        UI.$suffix.val(template.suffix);
-        UI.$separator.val(template.separator);
-
-        power_user.reasoning.name = name;
-        power_user.reasoning.prefix = template.prefix;
-        power_user.reasoning.suffix = template.suffix;
-        power_user.reasoning.separator = template.separator;
-
-        saveSettingsDebounced();
-    });
+    applyReasoningVisibility();
 }
 
 function selectReasoningTemplateCallback(args, name) {
@@ -837,7 +776,11 @@ function selectReasoningTemplateCallback(args, name) {
         foundName = result[0].item;
     }
 
-    UI.$select.val(foundName).trigger('change');
+    const template = reasoning_templates.find(p => p.name === foundName);
+    if (template) {
+        applyReasoningTemplate(template);
+        saveSettingsDebounced();
+    }
     if (!quiet) toastr.success(`Reasoning template "${foundName}" selected`);
     return foundName;
 }
@@ -1622,10 +1565,6 @@ export async function loadReasoningTemplates(data) {
         reasoning_templates.splice(0, reasoning_templates.length, ...data.reasoning);
     }
 
-    for (const template of reasoning_templates) {
-        $('<option>').val(template.name).text(template.name).appendTo(UI.$select);
-    }
-
     // No template name, need to migrate
     if (power_user.reasoning.name === undefined) {
         const defaultTemplate = reasoning_templates.find(p => p.name === DEFAULT_REASONING_TEMPLATE);
@@ -1639,7 +1578,7 @@ export async function loadReasoningTemplates(data) {
                     suffix: power_user.reasoning.suffix,
                     separator: power_user.reasoning.separator,
                 };
-                await getPresetManager('reasoning')?.savePreset(data.name, data);
+                await saveFormattingPreset('reasoning', data.name, data);
                 power_user.reasoning.name = data.name;
             } else {
                 power_user.reasoning.name = defaultTemplate.name;
@@ -1651,8 +1590,6 @@ export async function loadReasoningTemplates(data) {
 
         saveSettingsDebounced();
     }
-
-    UI.$select.val(power_user.reasoning.name);
 }
 
 /**

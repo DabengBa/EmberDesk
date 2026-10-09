@@ -10,7 +10,7 @@ related: [page.api_configuration, page.chat_workspace, feature.chat_completion_s
 
 ## ID 解释
 
-`page.settings` represents the sole React owner for authenticated provider/API, UI, formatting, and power-user settings at `/settings`. It covers the three tabs, secret workflows, provider Connect/Test actions and status, revision-aware save, and diagnostics. Generation defaults (sampling, reasoning, continue, prompt formats) are owned by the AI Response Configuration drawer instead. It does not host World Info or Backgrounds workflows; the legacy Persona Management surface and the API Connections drawer (`rm_api_block`) are retired.
+`page.settings` represents the sole React owner for authenticated provider/API, UI, formatting, and power-user settings at `/settings`. It covers the three tabs, secret workflows, provider Connect/Test actions and status, formatting preset CRUD (system prompts / reasoning templates) and master formatting import/export, revision-aware save, and diagnostics. Generation defaults (sampling, continue, prompt formats) are owned by the AI Response Configuration drawer instead. It does not host World Info or Backgrounds workflows; the legacy Persona Management surface, the API Connections drawer (`rm_api_block`), and the Advanced Formatting drawer (`AdvancedFormatting`) are retired.
 
 ## Page Purpose
 
@@ -19,13 +19,13 @@ Authenticated users complete supported settings work on `/settings` instead of w
 ## Page Structure (UI Layout)
 
 1. **Header**: Settings title, short summary, and a return link to [Chat Workspace](page.chat_workspace).
-2. **Tabs**: Providers, User Interface, Advanced.
-3. **Providers tab**: the provider contract — base URL, API key, primary model, fallback model, and prompt post-processing — on the single OpenAI-compatible source, plus the Connect/Test actions and the live connection-status pill routed through the runtime command port. The fallback model reuses the same URL and key; there is no fallback credential, reverse-proxy field, or connection-profile picker on this surface.
+2. **Tabs**: 服务 (Providers), 界面 (User Interface), 高级 (Advanced).
+3. **Providers tab**: the provider contract — base URL, API key, primary model, and fallback model — on the single OpenAI-compatible source, plus the Connect/Test actions and the live connection-status pill routed through the runtime command port. The fallback model reuses the same URL and key; there is no fallback credential, reverse-proxy field, or connection-profile picker on this surface. Prompt post-processing is not a field: the server always applies strict normalization before forwarding chat-completion requests.
 4. **User Interface tab**: layout density, colors, chat display, message visibility, and workspace interaction preferences previously edited in the user-settings drawer.
-5. **Advanced tab**: system-prompt/reasoning templates, tokenizer, custom stopping strings, Start Reply With, auto-swipe/continue, streaming, and STscript controls previously edited under Advanced Formatting. Retired instruct-mode and context-template fields are absent; stored `power_user.instruct`/`power_user.context` keys remain inert historical data.
+5. **Advanced tab**: system-prompt/reasoning templates, tokenizer, custom stopping strings, Start Reply With, auto-swipe/continue, streaming, and STscript controls previously edited under Advanced Formatting — plus the preset selector/action rows (update, save-as, rename, import, export, restore, delete) for system prompts and reasoning templates, and the master formatting import/export that round-trips `{sysprompt, reasoning, srw}` sections and accepts legacy single-section files. Retired instruct-mode and context-template fields are absent; stored `power_user.instruct`/`power_user.context` keys remain inert historical data.
 6. **Diagnostics sidebar**: optional ownership ledger and payload summary for debugging.
 7. **Save bar**: submits a compatibility payload derived from the loaded document while rewriting only the React-bound fields the user changed; save stays disabled until the form is dirty.
-8. **Workspace panels section (overlay only)**: the in-workspace overlay ends the Providers, User Interface, and Advanced tabs with links that close the overlay and open the matching legacy drawer for surfaces outside React coverage — AI Response Configuration (preset actions, sampling sliders, Prompt Manager), User Settings and Advanced Formatting (system-prompt/reasoning preset actions and master import/export). The retired API Connections drawer no longer appears here.
+8. **Workspace panels section (overlay only)**: the in-workspace overlay ends the Providers and User Interface tabs with links that close the overlay and open the matching legacy drawer for surfaces outside React coverage — AI Response Configuration (preset actions, sampling sliders, Prompt Manager) and User Settings. The Advanced tab has no drawer link: the retired API Connections and Advanced Formatting drawers no longer appear here, and formatting preset actions plus master import/export live inline in the tab.
 
 ## Page-Level Semantic IDs
 
@@ -33,7 +33,7 @@ Authenticated users complete supported settings work on `/settings` instead of w
 - `feature.custom_base_url`: the single base URL and unified key in Providers.
 - `feature.fallback_provider`: the model-only fallback field in Providers.
 - `page.api_configuration`: retired workspace drawer; generation defaults (presets, sampling, reasoning, continue, prompt formats) live in the separate AI Response Configuration drawer that this page no longer duplicates.
-- `page.chat_workspace`: workspace shell mounts Settings / AI Config / Formatting as this shared surface's overlay variant.
+- `page.chat_workspace`: workspace shell mounts this shared surface's overlay variant through a single Chinese `设置` entry.
 
 ## Included Features
 
@@ -45,7 +45,7 @@ Authenticated users complete supported settings work on `/settings` instead of w
 
 - **Sole-owner route state**: authenticated `/settings` always serves the React settings shell when the React app build exists.
 - **Missing-build state**: absent `app/dist` returns HTTP 503 with rebuild instructions; there is no redirect into workspace legacy settings drawers.
-- **Workspace navigation state**: shell Settings / AI Config / Formatting open the same React Settings surface as an in-workspace overlay (AI Config → Providers tab, Formatting → Advanced tab) without leaving `/`. Direct `/settings` and `/settings?tab=...` remain full-page mounts for deep links, refresh, and share; retired `?tab=general` links fall back to the first tab.
+- **Workspace navigation state**: the shell's single `设置` entry opens the React Settings surface as an in-workspace overlay on the last-used tab without leaving `/`. The `openAIConfig`/`openFormatting` compatibility commands remain dispatchable (landing on 服务/高级 respectively) for deep links and external callers. Direct `/settings` and `/settings?tab=...` remain full-page mounts for deep links, refresh, and share; retired `?tab=general` links fall back to the first tab.
 - **Generation defaults state**: preset selection, context/token limits, sampling, reasoning, continue, prompt-format, and names-behavior values (`oai_settings.*` generation keys) are edited only in the AI Response Configuration drawer. React Settings loads and saves them untouched as part of the document.
 - **Auth state**: unauthenticated users are redirected to login.
 - **Dirty / busy / error states**: save is disabled until dirty; save/secret actions expose busy and error feedback without fake success.
@@ -61,7 +61,7 @@ Authenticated users complete supported settings work on `/settings` instead of w
 
 - Primary daily entry: workspace shell overlay on [Chat Workspace](page.chat_workspace).
 - Deep-link / full-page entry: `/settings` for authenticated users.
-- Workspace chrome: Settings / AI Config / Formatting open the overlay with the matching tab.
+- Workspace chrome: the single `设置` entry opens the overlay on the last-used tab (session memory); the `openAIConfig`/`openFormatting` commands still land on 服务/高级 as compatibility aliases.
 - Full-page return: header link back to [Chat Workspace](page.chat_workspace); overlay uses a close control instead.
 
 ## Canonical Settings Document Authority

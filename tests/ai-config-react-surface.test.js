@@ -30,7 +30,7 @@ describe('AI Response Configuration drawer React surface', () => {
             'labModeWarning', 'ai_response_configuration', 'respective-presets-block',
             'openai_api-presets', 'settings_preset_openai', 'temp_openai',
             'top_p_openai', 'freq_pen_openai', 'pres_pen_openai',
-            'n_openai', 'openai_function_calling',
+            'n_openai',
             'impersonation_prompt_textarea', 'newchat_prompt_textarea',
             'newexamplechat_prompt_textarea', 'continue_nudge_prompt_textarea',
             'continue_postfix', 'continue_prefill', 'names_behavior',

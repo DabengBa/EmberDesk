@@ -1,6 +1,6 @@
 import { localforage } from '../lib.js';
-import { characters, main_api, this_chid } from '../script.js';
-import { power_user, registerDebugFunction } from './power-user.js';
+import { characters, main_api, saveSettingsDebounced, this_chid } from '../script.js';
+import { forceCharacterEditorTokenize, power_user, registerDebugFunction } from './power-user.js';
 import { oai_settings } from './openai.js';
 import { getStringHash } from './utils.js';
 export { BYTES_PER_TOKEN as CHARACTERS_PER_TOKEN_RATIO };
@@ -170,12 +170,35 @@ async function resetTokenCache() {
  * Gets all tokenizers available to the user.
  * @returns {Tokenizer[]} Tokenizer info.
  */
+/**
+ * Static tokenizer option list. The retired Advanced Formatting drawer owned a
+ * #tokenizer select whose options were the source of truth for these labels;
+ * the React Settings surface now edits power_user.tokenizer, so the option
+ * list lives here as data.
+ */
+const TOKENIZER_OPTIONS = [
+    { tokenizerId: tokenizers.BEST_MATCH, tokenizerName: 'Best match (recommended)' },
+    { tokenizerId: tokenizers.NONE, tokenizerName: 'None / Estimated' },
+    { tokenizerId: tokenizers.GPT2, tokenizerName: 'GPT-2' },
+    { tokenizerId: tokenizers.LLAMA, tokenizerName: 'Llama 1/2' },
+    { tokenizerId: tokenizers.LLAMA3, tokenizerName: 'Llama 3' },
+    { tokenizerId: tokenizers.GEMMA, tokenizerName: 'Gemma / Gemini' },
+    { tokenizerId: tokenizers.JAMBA, tokenizerName: 'Jamba' },
+    { tokenizerId: tokenizers.QWEN2, tokenizerName: 'Qwen2' },
+    { tokenizerId: tokenizers.COMMAND_R, tokenizerName: 'Command-R' },
+    { tokenizerId: tokenizers.COMMAND_A, tokenizerName: 'Command-A' },
+    { tokenizerId: tokenizers.MISTRAL, tokenizerName: 'Mistral V1' },
+    { tokenizerId: tokenizers.NEMO, tokenizerName: 'Mistral Nemo' },
+    { tokenizerId: tokenizers.YI, tokenizerName: 'Yi' },
+    { tokenizerId: tokenizers.CLAUDE, tokenizerName: 'Claude 1/2' },
+    { tokenizerId: tokenizers.DEEPSEEK, tokenizerName: 'DeepSeek V3' },
+];
+
 export function getAvailableTokenizers() {
-    const tokenizerOptions = $('#tokenizer').find('option').toArray();
-    return tokenizerOptions.map(tokenizerOption => ({
-        tokenizerId: Number(tokenizerOption.value),
-        tokenizerKey: Object.entries(tokenizers).find(([_, value]) => value === Number(tokenizerOption.value))[0].toLocaleLowerCase(),
-        tokenizerName: tokenizerOption.text,
+    return TOKENIZER_OPTIONS.map(option => ({
+        tokenizerId: option.tokenizerId,
+        tokenizerKey: Object.entries(tokenizers).find(([_, value]) => value === option.tokenizerId)[0].toLocaleLowerCase(),
+        tokenizerName: option.tokenizerName,
     }));
 }
 
@@ -190,7 +213,9 @@ export function selectTokenizer(tokenizerId) {
             console.warn('Failed to find tokenizer with id', tokenizerId);
             return;
         }
-        $('#tokenizer').val(tokenizer.tokenizerId).trigger('change');
+        power_user.tokenizer = tokenizer.tokenizerId;
+        forceCharacterEditorTokenize();
+        saveSettingsDebounced();
         toastr.info(`Tokenizer: "${tokenizer.tokenizerName}" selected`);
     }
 }
@@ -205,13 +230,12 @@ export function getFriendlyTokenizerName(forApi) {
         forApi = main_api;
     }
 
-    const tokenizerOption = $('#tokenizer').find(':selected');
-    let tokenizerId = Number(tokenizerOption.val());
-    let tokenizerName = tokenizerOption.text();
+    let tokenizerId = power_user.tokenizer;
+    let tokenizerName = TOKENIZER_OPTIONS.find(option => option.tokenizerId === tokenizerId)?.tokenizerName ?? '';
 
     if (forApi !== 'openai' && tokenizerId === tokenizers.BEST_MATCH) {
         tokenizerId = tokenizers.NONE;
-        tokenizerName = $(`#tokenizer option[value="${tokenizerId}"]`).text();
+        tokenizerName = TOKENIZER_OPTIONS.find(option => option.tokenizerId === tokenizerId)?.tokenizerName ?? '';
     }
 
     tokenizerName = forApi == 'openai'
@@ -222,7 +246,7 @@ export function getFriendlyTokenizerName(forApi) {
         ? tokenizers.OPENAI
         : tokenizerId;
 
-    const tokenizerKey = Object.entries(tokenizers).find(([_, value]) => value === tokenizerId)[0].toLocaleLowerCase();
+    const tokenizerKey = Object.entries(tokenizers).find(([_, value]) => value === tokenizerId)?.[0]?.toLocaleLowerCase() ?? 'none';
 
     return { tokenizerName, tokenizerKey, tokenizerId };
 }

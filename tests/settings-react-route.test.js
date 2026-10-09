@@ -174,10 +174,10 @@ describe('settings React route flag', () => {
         expect(routeSource).toContain('const [showDiagnostics, setShowDiagnostics] = useState(false);');
         expect(routeSource).toContain('window.setTimeout(() => {');
         expect(routeSource).toContain('setSaveStatus(null);');
-        expect(routeSource).toContain("setSaveStatus({ kind: 'success', message: 'Saved' });");
+        expect(routeSource).toContain("setSaveStatus({ kind: 'success', message: '已保存' });");
         expect(routeSource).toContain("window.sessionStorage.setItem('emberdesk-settings-saved-at'");
         expect(routeSource).toContain('setSaveStatus({ kind:');
-        expect(routeSource).toContain('Diagnostics');
+        expect(routeSource).toContain('诊断');
         expect(routeSource).toContain('{showDiagnostics && (');
         expect(routeSource).toContain('onClick={() => setShowDiagnostics(value => !value)}');
         expect(routeSource).not.toContain('<h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-zinc-300">Coverage</h2>');
@@ -213,9 +213,8 @@ describe('settings React route flag', () => {
             'oai_settings.openai_model',
             'oai_settings.custom_url',
             'oai_settings.fallback_provider_model',
-            'oai_settings.custom_prompt_post_processing',
         ]));
-        expect(helperModule.settingsCoverage.reactOwned.providers).toHaveLength(4);
+        expect(helperModule.settingsCoverage.reactOwned.providers).toHaveLength(3);
         expect(helperModule.settingsCoverage.reactOwned.userInterface).toContain('power_user.custom_css');
         expect(helperModule.settingsCoverage.reactOwned.advanced).toContain('power_user.auto_swipe');
         expect(helperModule.settingsCoverage.reactOwned.advanced).toContain('power_user.stscript.autocomplete.state');
@@ -340,13 +339,11 @@ describe('settings React route flag', () => {
                     top_p_openai: 0.9,
                     top_k_openai: 12,
                     enable_web_search: true,
-                    function_calling: true,
                     show_thoughts: true,
                     reasoning_effort: 'medium',
                     continue_prefill: true,
                     continue_postfix: '\n',
                     squash_system_messages: true,
-                    custom_prompt_post_processing: 'merge_tools',
                     fallback_provider_enabled: true,
                     fallback_provider_base_url: 'https://fallback.example.com/v1',
                     fallback_provider_model: 'gpt-4.1-mini',
@@ -468,10 +465,8 @@ describe('settings React route flag', () => {
         expect(merged.oai_settings.openai_max_context).toBe(4095);
         expect(merged.oai_settings.openai_max_tokens).toBe(300);
         expect(merged.oai_settings.temp_openai).toBe(0.7);
-        expect(merged.oai_settings.function_calling).toBe(true);
         expect(merged.oai_settings.reasoning_effort).toBe('medium');
         expect(merged.oai_settings.continue_prefill).toBe(true);
-        expect(merged.oai_settings.custom_prompt_post_processing).toBe('merge_tools');
         expect(merged.power_user.custom_css).toBe('.chat { color: gold; }');
         expect(merged.power_user.toastr_position).toBe('toast-bottom-right');
         expect(merged.power_user.auto_swipe).toBe(false);
@@ -561,9 +556,10 @@ describe('settings React route flag', () => {
         const helperModule = await import(`../app/lib/settings-helpers.js?settingsInventory=${Date.now()}-${Math.random()}`);
 
         expect(helperModule.settingsOwnerInventory.drawers.userSettings).toBe('#user-settings-block');
-        expect(helperModule.settingsOwnerInventory.drawers.advancedFormatting).toBe('#AdvancedFormatting');
-        // The retired API Connections drawer is no longer part of the inventory.
+        // The retired API Connections and Advanced Formatting drawers are no
+        // longer part of the inventory.
         expect(helperModule.settingsOwnerInventory.drawers.apiConfiguration).toBeUndefined();
+        expect(helperModule.settingsOwnerInventory.drawers.advancedFormatting).toBeUndefined();
         expect(helperModule.settingsOwnerInventory.specializedSurfaces).toEqual(expect.arrayContaining([
             'world_info_settings',
             'feature_settings',
@@ -860,15 +856,18 @@ describe('settings React route flag', () => {
         // resolves to openWorkspaceChildSlotHostImmediate on the drawer host id.
         for (const target of [
             'left-nav-panel',
-            'AdvancedFormatting',
             'user-settings-block',
         ]) {
             expect(routeSource).toContain(`'${target}'`);
             expect(indexHtml).toContain(`id="${target}" class="drawer-content`);
         }
-        // The retired API Connections drawer is gone from both surfaces.
+        // The retired API Connections and Advanced Formatting drawers are gone
+        // from both surfaces; formatting preset CRUD moved into the advanced
+        // settings tab itself.
         expect(routeSource).not.toContain("'rm_api_block'");
+        expect(routeSource).not.toContain("'AdvancedFormatting'");
         expect(indexHtml).not.toContain('id="rm_api_block"');
+        expect(indexHtml).not.toContain('id="AdvancedFormatting"');
 
         expect(routeSource).toContain('runtime?.commands.openWorkspaceDrawer(link.target)');
         expect(routeSource).toContain('onRequestClose?.()');
@@ -884,12 +883,12 @@ describe('settings React route flag', () => {
         expect(scriptSource).toContain('rejected unknown drawer host id');
         for (const target of [
             'left-nav-panel',
-            'AdvancedFormatting',
             'user-settings-block',
         ]) {
             expect(scriptSource).toContain(`'${target}'`);
         }
         expect(scriptSource).not.toContain("'rm_api_block'");
+        expect(scriptSource).not.toContain("'AdvancedFormatting'");
     });
 
     test('redirects unauthenticated /settings requests to /login', async () => {

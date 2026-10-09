@@ -132,19 +132,6 @@ const continue_postfix_types = {
     DOUBLE_NEWLINE: '\n\n',
 };
 
-export const custom_prompt_post_processing_types = {
-    NONE: '',
-    /** @deprecated Use MERGE instead. */
-    CLAUDE: 'claude',
-    MERGE: 'merge',
-    MERGE_TOOLS: 'merge_tools',
-    SEMI: 'semi',
-    SEMI_TOOLS: 'semi_tools',
-    STRICT: 'strict',
-    STRICT_TOOLS: 'strict_tools',
-    SINGLE: 'single',
-};
-
 export const reasoning_effort_types = {
     auto: 'auto',
     low: 'low',
@@ -210,7 +197,7 @@ const sensitiveFields = [
  * @type {Record<string, [string, string, boolean, boolean]>}
  */
 export const settingsToUpdate = {
-    // Provider-owned fields (source/model/url/post-processing/fallback) are
+    // Provider-owned fields (source/model/url/fallback) are
     // edited by the React Settings surface; their selectors stay NULL so preset
     // save/load keeps working without the retired API Connections drawer DOM.
     chat_completion_source: ['#NULL_SELECTOR', 'chat_completion_source', false, true],
@@ -221,7 +208,6 @@ export const settingsToUpdate = {
     openai_model: ['#NULL_SELECTOR', 'openai_model', false, true],
     tool_reasoning_mode: ['#tool_reasoning_mode', 'tool_reasoning_mode', false, false],
     custom_url: ['#NULL_SELECTOR', 'custom_url', false, true],
-    custom_prompt_post_processing: ['#NULL_SELECTOR', 'custom_prompt_post_processing', false, true],
     openai_max_context: ['#openai_max_context', 'openai_max_context', false, false],
     openai_max_tokens: ['#openai_max_tokens', 'openai_max_tokens', false, false],
     names_behavior: ['#names_behavior', 'names_behavior', false, false],
@@ -240,8 +226,6 @@ export const settingsToUpdate = {
     inline_image_quality: ['#openai_inline_image_quality', 'inline_image_quality', false, false],
     continue_prefill: ['#continue_prefill', 'continue_prefill', true, false],
     continue_postfix: ['#continue_postfix', 'continue_postfix', false, false],
-    function_calling: ['#openai_function_calling', 'function_calling', true, false],
-    tool_call_recurse_limit: ['#tool_call_recurse_limit', 'tool_call_recurse_limit', false, false],
     show_thoughts: ['#openai_show_thoughts', 'show_thoughts', true, false],
     reasoning_effort: ['#openai_reasoning_effort', 'reasoning_effort', false, false],
     verbosity: ['#openai_verbosity', 'verbosity', false, false],
@@ -277,11 +261,8 @@ const default_settings = {
     media_inlining: true,
     inline_image_quality: 'auto',
     continue_prefill: false,
-    function_calling: false,
-    tool_call_recurse_limit: 5,
     names_behavior: character_names_behavior.DEFAULT,
     continue_postfix: continue_postfix_types.SPACE,
-    custom_prompt_post_processing: custom_prompt_post_processing_types.NONE,
     show_thoughts: true,
     reasoning_effort: reasoning_effort_types.high,
     verbosity: verbosity_levels.auto,
@@ -1401,7 +1382,6 @@ export async function createGenerationParameters(settings, model, type, messages
         'char_name': name2,
         'include_reasoning': Boolean(settings.show_thoughts),
         'reasoning_effort': getReasoningEffort(settings, model),
-        'custom_prompt_post_processing': settings.custom_prompt_post_processing,
         'verbosity': getVerbosity(settings),
     };
 
@@ -2427,12 +2407,14 @@ export class ChatCompletion {
  */
 function migrateChatCompletionSettings(settings) {
     delete settings.max_context_unlocked;
+    delete settings.custom_prompt_post_processing;
+    delete settings.function_calling;
+    delete settings.tool_call_recurse_limit;
 
     const migrateMap = [
         { oldKey: 'names_in_completion', oldValue: true, newKey: 'names_behavior', newValue: character_names_behavior.COMPLETION },
         { oldKey: 'chat_completion_source', oldValue: 'palm', newKey: 'chat_completion_source', newValue: 'openai' },
         { oldKey: 'chat_completion_source', oldValue: 'makersuite', newKey: 'chat_completion_source', newValue: 'openai' },
-        { oldKey: 'custom_prompt_post_processing', oldValue: custom_prompt_post_processing_types.CLAUDE, newKey: 'custom_prompt_post_processing', newValue: custom_prompt_post_processing_types.MERGE },
         { oldKey: 'image_inlining', oldValue: false, newKey: 'media_inlining', newValue: false },
         { oldKey: 'image_inlining', oldValue: true, newKey: 'media_inlining', newValue: true },
         { oldKey: 'video_inlining', oldValue: true, newKey: 'media_inlining', newValue: true },
@@ -2561,7 +2543,6 @@ function loadOpenAISettings(data, settings) {
     setNamesBehaviorControls();
     setContinuePostfixControls();
     setToolReasoningControls();
-    ToolManager.RECURSE_LIMIT = oai_settings.tool_call_recurse_limit;
 
     syncSegmentedFromSelect('openai_reasoning_effort');
     syncSegmentedFromSelect('openai_verbosity');
@@ -3088,7 +3069,6 @@ function apiKeyCallback(_, value) {
 
 function updateFeatureSupportFlags() {
     const featureFlags = {
-        openai_function_calling_supported: ToolManager.isToolCallingSupported(),
         openai_image_inlining_supported: isImageInliningSupported(),
         openai_video_inlining_supported: isVideoInliningSupported(),
         openai_audio_inlining_supported: isAudioInliningSupported(),
@@ -3273,18 +3253,6 @@ export function initOpenAI() {
 
     $('#continue_prefill').on('input', function () {
         oai_settings.continue_prefill = !!$(this).prop('checked');
-        saveSettingsDebounced();
-    });
-
-    $('#openai_function_calling').on('input', function () {
-        oai_settings.function_calling = !!$(this).prop('checked');
-        updateFeatureSupportFlags();
-        saveSettingsDebounced();
-    });
-
-    $('#tool_call_recurse_limit').on('input', function () {
-        oai_settings.tool_call_recurse_limit = Number($(this).val());
-        ToolManager.RECURSE_LIMIT = oai_settings.tool_call_recurse_limit;
         saveSettingsDebounced();
     });
 

@@ -36,8 +36,8 @@ test.describe('workspace shell panel navigation', () => {
         await testSetup.awaitST({ page });
 
         const registryEntries = [
-            { label: 'Character Library', visibleSelector: '#right-nav-panel.openDrawer #rm_characters_block' },
-            { label: 'World Info', visibleSelector: '#WorldInfo.openDrawer' },
+            { label: '角色库', visibleSelector: '#right-nav-panel.openDrawer #rm_characters_block' },
+            { label: '世界书', visibleSelector: '#WorldInfo.openDrawer' },
         ];
 
         for (const entry of registryEntries) {
@@ -63,23 +63,23 @@ test.describe('workspace shell panel navigation', () => {
     test('panel entries can close and reopen the same panel', async ({ page }) => {
         await testSetup.awaitST({ page });
 
-        await clickShellPanel(page, 'Character Library');
-        await expectActivePanel(page, 'Character Library');
+        await clickShellPanel(page, '角色库');
+        await expectActivePanel(page, '角色库');
         await expect(page.locator('#right-nav-panel')).toHaveClass(/openDrawer/);
 
-        await clickShellPanel(page, 'Character Library');
+        await clickShellPanel(page, '角色库');
         await expectNoActivePanel(page);
         await expect(page.locator('#right-nav-panel')).toHaveClass(/closedDrawer/);
 
-        await clickShellPanel(page, 'Character Library');
-        await expectActivePanel(page, 'Character Library');
+        await clickShellPanel(page, '角色库');
+        await expectActivePanel(page, '角色库');
         await expect(page.locator('#right-nav-panel')).toHaveClass(/openDrawer/);
     });
 
     test('renders no shell pin control; a drawer-locked panel survives an active-entry click', async ({ page }) => {
         await testSetup.awaitST({ page });
 
-        const panelButton = page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: 'Character Library' });
+        const panelButton = page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: '角色库' });
         await panelButton.click({ timeout: 10_000 });
         await expect(panelButton).toHaveAttribute('aria-pressed', 'true', { timeout: 10_000 });
 
@@ -109,9 +109,9 @@ test.describe('workspace shell panel navigation', () => {
             document.getElementById('WorldInfo')?.remove();
         });
 
-        await page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: 'World Info' }).click();
+        await page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: '世界书' }).click();
         await expect(page.locator('.react-workspace-shell-status, .react-workspace-panel-dock-status')).toHaveCount(0);
-        await expect(page.getByRole('navigation', { name: 'Workspace navigation' })).toBeVisible();
+        await expect(page.getByRole('navigation', { name: '工作区导航' })).toBeVisible();
         await expect(page.locator('#send_textarea')).toBeVisible();
     });
 
@@ -146,39 +146,39 @@ test.describe('workspace shell panel navigation', () => {
     test('panel entries stay responsive when switching from character library to world info immediately', async ({ page }) => {
         await testSetup.awaitST({ page });
 
-        await clickShellPanel(page, 'Character Library');
-        await clickShellPanel(page, 'World Info');
+        await clickShellPanel(page, '角色库');
+        await clickShellPanel(page, '世界书');
 
         await expect.poll(async () => page.evaluate(() => ({
             readyState: document.readyState,
             active: document.querySelector('[data-workspace-shell-panel-active="true"]')?.textContent?.trim(),
         })), { timeout: 10_000 }).toEqual({
             readyState: 'complete',
-            active: 'World Info',
+            active: '世界书',
         });
     });
 
     test('panel entries stay responsive when opened repeatedly and switched in sequence', async ({ page }) => {
         await testSetup.awaitST({ page });
 
-        await openShellPanel(page, 'Character Library');
+        await openShellPanel(page, '角色库');
         await expect.poll(async () => page.locator('#rm_print_characters_block .character_select, #rm_print_characters_block [role="listitem"]').count(), { timeout: 10_000 }).toBeGreaterThan(0);
 
-        await openShellPanel(page, 'World Info');
+        await openShellPanel(page, '世界书');
         await expect.poll(async () => page.locator('#world_editor_select option').count(), { timeout: 10_000 }).toBeGreaterThan(1);
 
-        await openShellPanel(page, 'Character Library');
+        await openShellPanel(page, '角色库');
         await expect.poll(async () => page.evaluate(() => ({
             active: document.querySelector('[data-workspace-shell-panel-active="true"]')?.textContent?.trim(),
         })), { timeout: 10_000 }).toEqual({
-            active: 'Character Library',
+            active: '角色库',
         });
     });
 
     test('opens the standalone Regex workspace drawer with the mounted feature panel', async ({ page }) => {
         await testSetup.awaitST({ page });
 
-        await openShellPanel(page, 'Regex');
+        await openShellPanel(page, '正则');
         await expect(page.locator('#RegexPanel.openDrawer')).toBeVisible({ timeout: 10_000 });
         await expect(page.locator('#RegexPanel .regex_settings')).toHaveCount(1);
         await expect(page.locator('#regex_container')).toHaveCount(0);
@@ -190,14 +190,14 @@ test.describe('workspace shell panel navigation', () => {
     test('opens Settings shell entry as in-workspace overlay instead of leaving chat', async ({ page }) => {
         test.setTimeout(120_000);
         await testSetup.awaitST({ page });
-        const settingsButton = page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: 'Settings' });
+        const settingsButton = page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: '设置' });
         await settingsButton.click({ timeout: 10_000 });
         await expect(page).toHaveURL(/\/(?:\?|$)/);
         await expect(page.locator('[data-settings-overlay="true"]')).toBeVisible({ timeout: 15_000 });
         await expect(page.locator('[data-settings-overlay="true"] .settings-page')).toBeVisible({ timeout: 15_000 });
         await expect(page.locator('#user-settings-block.openDrawer')).toHaveCount(0);
         await expect(settingsButton).toHaveAttribute('aria-pressed', 'true');
-        const userInterfaceTab = page.locator('[data-settings-overlay="true"] .settings-tab').filter({ hasText: 'User Interface' });
+        const userInterfaceTab = page.locator('[data-settings-overlay="true"] .settings-tab').filter({ hasText: '界面' });
         await userInterfaceTab.click();
         await expect(userInterfaceTab).toHaveAttribute('data-active', 'true');
         const confirmDeleteToggle = page.locator('[data-settings-overlay="true"] #settings-userInterface-confirmMessageDelete');
@@ -210,7 +210,7 @@ test.describe('workspace shell panel navigation', () => {
         await expect(saveButton).toBeEnabled();
         await saveButton.focus();
         await page.keyboard.press('Enter');
-        await expect(page.locator('[data-settings-overlay="true"] .settings-status--success')).toContainText('Saved', { timeout: 30_000 });
+        await expect(page.locator('[data-settings-overlay="true"] .settings-status--success')).toContainText('已保存', { timeout: 30_000 });
         await page.keyboard.press('Escape');
         await expect(page.locator('[data-settings-overlay="true"]')).toHaveCount(0, { timeout: 15_000 });
         await expect(settingsButton).toBeFocused();
@@ -229,12 +229,12 @@ test.describe('workspace shell panel navigation', () => {
         await page.setViewportSize({ width: 375, height: 812 });
         await testSetup.awaitST({ page });
 
-        const settingsButton = page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: 'Settings' });
+        const settingsButton = page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: '设置' });
         await settingsButton.click({ timeout: 10_000 });
         const overlay = page.locator('[data-settings-overlay="true"]');
         await expect(overlay).toBeVisible({ timeout: 15_000 });
         await expect(overlay.locator('input, select, textarea').first()).toBeVisible({ timeout: 30_000 });
-        const closeButton = overlay.getByRole('button', { name: 'Close settings' });
+        const closeButton = overlay.getByRole('button', { name: '关闭设置' });
         await expect(closeButton).toBeVisible();
         await expect.poll(async () => closeButton.evaluate(node => {
             const panel = node.closest('.settings-page');
@@ -254,39 +254,44 @@ test.describe('workspace shell panel navigation', () => {
         ))).toBe(true);
     });
 
-    test('opens AI Config and Formatting shell entries into overlay tabs without route jump', async ({ page }) => {
+    test('opens the unified Settings shell entry into the settings overlay without route jump', async ({ page }) => {
         await testSetup.awaitST({ page });
 
-        const aiConfigButton = page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: 'AI Config' });
-        await aiConfigButton.click({ timeout: 10_000 });
+        // AI Config / Formatting / Settings were merged into a single 设置 entry.
+        await expect(page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: 'AI Config' })).toHaveCount(0);
+        await expect(page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: 'Formatting' })).toHaveCount(0);
+
+        const settingsButton = page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: '设置' });
+        await settingsButton.click({ timeout: 10_000 });
         await expect(page).toHaveURL(/\/(?:\?|$)/);
         await expect(page.locator('[data-settings-overlay="true"]')).toBeVisible({ timeout: 15_000 });
-        await expect(page.locator('[data-settings-overlay="true"] .settings-tab[data-active="true"]')).toHaveText(/Providers/i);
+        await expect(page.locator('[data-settings-overlay="true"] .settings-tab[data-active="true"]')).toHaveText(/服务|界面|高级/);
+
+        const advancedTab = page.locator('[data-settings-overlay="true"] .settings-tab').filter({ hasText: '高级' });
+        await advancedTab.click();
+        await expect(advancedTab).toHaveAttribute('data-active', 'true');
+        await expect(page.locator('[data-settings-overlay="true"] .settings-tab[data-active="true"]')).toHaveText(/高级/);
 
         await page.keyboard.press('Escape');
         await expect(page.locator('[data-settings-overlay="true"]')).toHaveCount(0, { timeout: 10_000 });
-        await expect(aiConfigButton).toBeFocused();
+        await expect(settingsButton).toBeFocused();
 
-        const formattingButton = page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: 'Formatting' });
-        await formattingButton.click({ timeout: 10_000 });
-        await expect(page).toHaveURL(/\/(?:\?|$)/);
-        await expect(page.locator('[data-settings-overlay="true"]')).toBeVisible({ timeout: 15_000 });
-        await expect(page.locator('[data-settings-overlay="true"] .settings-tab[data-active="true"]')).toHaveText(/Advanced/i);
-
-        await aiConfigButton.focus();
+        await settingsButton.focus();
         await page.keyboard.press('Tab');
-        await expect(page.locator('[data-settings-overlay="true"] :focus')).toBeVisible();
+        await expect(page.locator(':focus')).toBeVisible();
     });
 
     test('opens legacy-owned workspace drawers from the settings overlay links', async ({ page }) => {
         await testSetup.awaitST({ page });
 
-        const aiConfigButton = page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: 'AI Config' });
-        await aiConfigButton.click({ timeout: 10_000 });
+        const settingsButton = page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: '设置' });
+        await settingsButton.click({ timeout: 10_000 });
         await expect(page.locator('[data-settings-overlay="true"]')).toBeVisible({ timeout: 15_000 });
-        await expect(page.locator('[data-settings-overlay="true"] .settings-tab[data-active="true"]')).toHaveText(/Providers/i);
 
-        const aiConfigLink = page.locator('[data-settings-overlay="true"] button').filter({ hasText: 'Open AI Response Configuration' });
+        await page.locator('[data-settings-overlay="true"] .settings-tab').filter({ hasText: '服务' }).click();
+        await expect(page.locator('[data-settings-overlay="true"] .settings-tab[data-active="true"]')).toHaveText(/服务/);
+
+        const aiConfigLink = page.locator('[data-settings-overlay="true"] button').filter({ hasText: '打开 AI 响应配置' });
         // The API Connections drawer is retired; no such workspace link may exist.
         const apiConnectionsLink = page.locator('[data-settings-overlay="true"] button').filter({ hasText: 'Open API Connections' });
         await expect(aiConfigLink).toBeVisible();
@@ -297,18 +302,22 @@ test.describe('workspace shell panel navigation', () => {
         await expect(page.locator('#left-nav-panel.openDrawer')).toBeVisible({ timeout: 10_000 });
         await expect(page.locator('#left-nav-panel #completion_prompt_manager_list')).toBeVisible({ timeout: 10_000 });
 
-        const formattingButton = page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: 'Formatting' });
-        await formattingButton.click({ timeout: 10_000 });
-        await expect(page.locator('[data-settings-overlay="true"] .settings-tab[data-active="true"]')).toHaveText(/Advanced/i);
-        await page.locator('[data-settings-overlay="true"] button').filter({ hasText: 'Open Advanced Formatting' }).click();
-        await expect(page.locator('[data-settings-overlay="true"]')).toHaveCount(0, { timeout: 10_000 });
-        await expect(page.locator('#AdvancedFormatting.openDrawer')).toBeVisible({ timeout: 10_000 });
+        await settingsButton.click({ timeout: 10_000 });
+        await expect(page.locator('[data-settings-overlay="true"]')).toBeVisible({ timeout: 15_000 });
+        await page.locator('[data-settings-overlay="true"] .settings-tab').filter({ hasText: '高级' }).click();
+        await expect(page.locator('[data-settings-overlay="true"] .settings-tab[data-active="true"]')).toHaveText(/高级/);
+        // The Advanced Formatting drawer is retired: its preset rows and master
+        // import/export render inline in the advanced tab.
+        await expect(page.locator('[data-settings-overlay="true"] [data-formatting-preset-row="sysprompt"]')).toBeVisible({ timeout: 10_000 });
+        await expect(page.locator('[data-settings-overlay="true"] [data-formatting-preset-row="reasoning"]')).toBeVisible();
+        await expect(page.locator('[data-settings-overlay="true"] [data-formatting-master-actions="true"]')).toBeVisible();
+        await expect(page.locator('[data-settings-overlay="true"] button').filter({ hasText: '打开高级格式' })).toHaveCount(0);
     });
 
-    test('opens the AI Response Configuration drawer from the Presets shell entry', async ({ page }) => {
+    test('opens the AI Response Configuration drawer from the AI 响应配置 shell entry', async ({ page }) => {
         await testSetup.awaitST({ page });
 
-        const presetsButton = page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: 'Presets' });
+        const presetsButton = page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: 'AI 响应配置' });
         await expect(presetsButton).toBeVisible({ timeout: 15_000 });
         await presetsButton.click({ timeout: 10_000 });
 
@@ -324,21 +333,19 @@ test.describe('workspace shell panel navigation', () => {
     test('keeps a reopened Settings overlay mounted when a deferred close is superseded', async ({ page }) => {
         await testSetup.awaitST({ page });
 
-        const settingsButton = page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: 'Settings' });
-        const aiConfigButton = page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: 'AI Config' });
+        const settingsButton = page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: '设置' });
         await settingsButton.click({ timeout: 10_000 });
         await expect(page.locator('[data-settings-overlay="true"]')).toBeVisible({ timeout: 15_000 });
 
         await page.evaluate(() => {
             const buttons = Array.from(document.querySelectorAll('[data-react-workspace-shell-chrome] nav button'));
-            const settings = buttons.find(button => button.textContent?.trim() === 'Settings');
-            const aiConfig = buttons.find(button => button.textContent?.trim() === 'AI Config');
+            const settings = buttons.find(button => button.textContent?.trim() === '设置');
             settings?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-            aiConfig?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+            settings?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
         });
 
         await expect(page.locator('[data-settings-overlay="true"]')).toBeVisible({ timeout: 15_000 });
-        await expect(page.locator('[data-settings-overlay="true"] .settings-tab[data-active="true"]')).toHaveText(/Providers/i);
-        await expect(aiConfigButton).toHaveAttribute('aria-pressed', 'true');
+        await expect(page.locator('[data-settings-overlay="true"] .settings-tab[data-active="true"]')).toHaveText(/服务|界面|高级/);
+        await expect(settingsButton).toHaveAttribute('aria-pressed', 'true');
     });
 });

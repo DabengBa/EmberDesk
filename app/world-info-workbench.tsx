@@ -11,6 +11,7 @@ import {
     getWorldInfoPanelStatus,
 } from './lib/world-info-workbench-helpers';
 import { worldInfoWorkbenchStyles as s } from '@/styles/world-info-workbench.styles';
+import { TagChipInput } from '@/components/fields/TagChipInput';
 import type { WorldInfoCommands } from './compat/workspace-commands';
 
 function parseFiniteNumber(value: string): number | undefined {
@@ -149,13 +150,6 @@ const SELECTIVE_LOGIC_OPTIONS = [
 
 const MAX_KEYWORD_CHIPS = 4;
 
-function splitKeywords(value: string): string[] {
-    return String(value || '')
-        .split(',')
-        .map(part => part.trim())
-        .filter(Boolean);
-}
-
 /** Split a joined keyword summary back into chip tokens for list display. */
 function keywordChips(entry: WorldInfoReactEntrySummary): string[] {
     if (entry.constant) {
@@ -249,68 +243,17 @@ function KeywordField({
     field: string;
     onCommit: (values: string[]) => void;
 }) {
-    const [pending, setPending] = useState('');
-    const boxRef = useRef<HTMLDivElement>(null);
-
-    const commit = (raw: string) => {
-        const parts = splitKeywords(raw);
-        if (parts.length > 0) {
-            onCommit([...values, ...parts]);
-        }
-        setPending('');
-    };
-
     return (
         <div {...stylex.props(s.field)}>
             <span {...stylex.props(s.fieldLabel)}>{label}</span>
-            <div
-                {...stylex.props(s.pillBox)}
-                ref={boxRef}
-                role="presentation"
-                onClick={() => boxRef.current?.querySelector('input')?.focus()}
-            >
-                {values.map((keyword, index) => (
-                    <span key={`${index}-${keyword}`} {...stylex.props(s.pill)}>
-                        {keyword}
-                        <button
-                            type="button"
-                            {...stylex.props(s.pillRemove)}
-                            aria-label={`移除关键词 ${keyword}`}
-                            onMouseDown={event => event.preventDefault()}
-                            onClick={event => {
-                                event.stopPropagation();
-                                onCommit(values.filter((_, i) => i !== index));
-                            }}
-                        >
-                            ×
-                        </button>
-                    </span>
-                ))}
-                <input
-                    {...stylex.props(s.pillInput)}
-                    value={pending}
-                    aria-label={`${label}（回车或逗号添加）`}
-                    data-world-info-react-field={field}
-                    placeholder={values.length === 0 ? '输入关键词，回车添加' : ''}
-                    onChange={event => {
-                        const value = event.target.value;
-                        if (value.includes(',')) {
-                            commit(value);
-                        } else {
-                            setPending(value);
-                        }
-                    }}
-                    onKeyDown={event => {
-                        if (event.key === 'Enter') {
-                            event.preventDefault();
-                            commit(pending);
-                        } else if (event.key === 'Backspace' && pending === '' && values.length > 0) {
-                            onCommit(values.slice(0, -1));
-                        }
-                    }}
-                    onBlur={event => commit(event.target.value)}
-                />
-            </div>
+            <TagChipInput
+                values={values}
+                placeholder="输入关键词，回车添加"
+                inputAriaLabel={`${label}（回车或逗号添加）`}
+                removeAriaLabel={keyword => `移除关键词 ${keyword}`}
+                inputProps={{ 'data-world-info-react-field': field }}
+                onCommit={onCommit}
+            />
         </div>
     );
 }
@@ -546,6 +489,8 @@ function EntryEditor({
 }) {
     const [draft, setDraft] = useState(entry);
     const [draftEntry, setDraftEntry] = useState(entry);
+    const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+    const saveSeqRef = useRef(0);
     const [contentModalOpen, setContentModalOpen] = useState(false);
     const titleInputRef = useRef<HTMLInputElement>(null);
     const contentInputRef = useRef<HTMLTextAreaElement>(null);
@@ -597,7 +542,19 @@ function EntryEditor({
 
     const saveFields = (fields: Record<string, unknown>) => {
         setDraft(current => current ? { ...current, ...fields } as WorldInfoWorkbenchEntryDetail : current);
-        void commands.updateEntryFields(entry.uid, fields);
+        const seq = ++saveSeqRef.current;
+        setSaveState('saving');
+        Promise.resolve(commands.updateEntryFields(entry.uid, fields))
+            .then(result => {
+                if (seq === saveSeqRef.current) {
+                    setSaveState(result === false ? 'error' : 'saved');
+                }
+            })
+            .catch(() => {
+                if (seq === saveSeqRef.current) {
+                    setSaveState('error');
+                }
+            });
     };
 
     const insertMacro = (macro: string, targetRef: RefObject<HTMLTextAreaElement | null> = contentInputRef) => {
@@ -938,12 +895,17 @@ function EntryEditor({
                 <i className={iconClass('fa-folder-tree', s.buttonIconSlot)} aria-hidden="true" />
                 移动 / 复制
             </button>
-            <span {...stylex.props(s.statusMeta)}>
+            <span {...stylex.props(s.statusMeta)} aria-live="polite">
                 <span
-                    {...stylex.props(s.statusDot, draft.disable ? s.statusDotOff : draft.constant ? s.statusDotConstant : null)}
+                    {...stylex.props(s.statusDot, saveState === 'error' ? s.statusDotError : draft.disable ? s.statusDotOff : draft.constant ? s.statusDotConstant : null)}
                     aria-hidden="true"
                 />
                 UID {entry.uid} · {(draft.content ?? '').length} 字符
+                {saveState !== 'idle' ? (
+                    <span {...stylex.props(saveState === 'error' ? s.saveStateError : null)}>
+                        {' · '}{saveState === 'saving' ? '保存中…' : saveState === 'error' ? '保存失败' : '已保存'}
+                    </span>
+                ) : null}
             </span>
             <button
                 type="button"

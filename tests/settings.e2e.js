@@ -63,7 +63,7 @@ async function saveSettingsDocument(page, settings, settingsRevision) {
 async function openSettings(page) {
     await page.goto('/settings');
     await expect(page.locator('.settings-page')).toBeVisible({ timeout: 60_000 });
-    await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByRole('heading', { name: '设置' })).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText('正在加载当前设置...')).toHaveCount(0, { timeout: 60_000 });
 }
 
@@ -79,48 +79,63 @@ test.describe('React settings sole-owner page', () => {
         // Generation defaults moved to the AI Response Configuration drawer;
         // the React surface owns only Providers, User Interface, and Advanced.
         await expect(page.getByRole('button', { name: 'General', exact: true })).toHaveCount(0);
-        await expect(page.getByRole('button', { name: 'Providers', exact: true })).toBeVisible();
-        await expect(page.getByRole('button', { name: 'User Interface', exact: true })).toBeVisible();
-        await expect(page.getByRole('button', { name: 'Advanced', exact: true })).toBeVisible();
+        await expect(page.getByRole('button', { name: '服务', exact: true })).toBeVisible();
+        await expect(page.getByRole('button', { name: '界面', exact: true })).toBeVisible();
+        await expect(page.getByRole('button', { name: '高级', exact: true })).toBeVisible();
         await expect(page.locator('.settings-workspace-link')).toBeVisible();
 
-        await selectTab(page, 'Providers');
+        await selectTab(page, '服务');
         await expect(page.getByText('API Key', { exact: true })).toBeVisible();
         await expect(page.locator('#provider-secret-input')).toBeVisible();
         await expect(page.locator('#fallback-provider-secret-input')).toHaveCount(0);
 
-        await selectTab(page, 'Advanced');
-        await expect(page.getByRole('heading', { name: /Prompt|Templates|Power-User/i })).toBeVisible({ timeout: 15_000 });
+        await selectTab(page, '高级');
+        await expect(page.getByRole('heading', { name: /提示词|模板|高级控件/ })).toBeVisible({ timeout: 15_000 });
 
-        await selectTab(page, 'User Interface');
-        const cssField = page.getByRole('textbox', { name: /Custom CSS/ });
+        await selectTab(page, '界面');
+        const cssField = page.getByRole('textbox', { name: /自定义 CSS/ });
         await expect(cssField).toBeVisible({ timeout: 30_000 });
         await cssField.fill('.e2e { color: red; }');
 
         const saveButton = page.locator('button[type="submit"]');
-        await expect(saveButton).toBeEnabled({ timeout: 30_000 });
-        await saveButton.click();
-        await expect(page.locator('.settings-status--success')).toContainText('Saved', { timeout: 30_000 });
+        // fullyParallel shares one settings document; a concurrent save from
+        // another test can bump the revision mid-flight. On a conflict banner,
+        // reload the persisted document and re-apply the draft before retrying.
+        for (let attempt = 0; attempt < 3; attempt++) {
+            await expect(saveButton).toBeEnabled({ timeout: 30_000 });
+            await saveButton.click();
+            const conflicted = await Promise.race([
+                page.locator('.settings-status--success').waitFor({ state: 'visible', timeout: 30_000 }).then(() => false),
+                page.getByText(/本地草稿仍保留/).waitFor({ state: 'visible', timeout: 30_000 }).then(() => true),
+            ]);
+            if (!conflicted) {
+                break;
+            }
+            await page.getByRole('button', { name: '重新加载当前设置', exact: true }).click();
+            await expect(page.getByText(/本地草稿仍保留/)).toHaveCount(0, { timeout: 30_000 });
+            await cssField.fill('.e2e { color: red; }');
+        }
+        await expect(page.locator('.settings-status--success')).toContainText('已保存', { timeout: 30_000 });
 
         const after = await getSettingsPayload(page);
         expect(after.settings?.power_user?.custom_css).toBe('.e2e { color: red; }');
         expect(JSON.stringify(after.settings)).not.toMatch(/BEGIN PRIVATE KEY/);
         await page.reload();
         await openSettings(page);
-        await selectTab(page, 'User Interface');
+        await selectTab(page, '界面');
         // fullyParallel shares one settings document across tests, so compare the
         // hydrated field against the live persisted value instead of a literal.
         const persisted = await getSettingsPayload(page);
         const persistedCss = String(persisted.settings?.power_user?.custom_css ?? '');
-        await expect(page.getByRole('textbox', { name: /Custom CSS/ })).toHaveValue(persistedCss, { timeout: 30_000 });
+        await expect(page.getByRole('textbox', { name: /自定义 CSS/ })).toHaveValue(persistedCss, { timeout: 30_000 });
     });
 
     test('surfaces revision conflicts without fake success', async ({ page }) => {
         await testSetup.awaitST({ page });
         await openSettings(page);
 
-        await selectTab(page, 'User Interface');
-        const cssField = page.getByRole('textbox', { name: /Custom CSS/ });
+        await selectTab(page, '界面');
+        const cssField = page.getByRole('textbox', { name: /自定义 CSS/ });
         const draftCss = `/* Local draft ${Date.now()} */`;
         await cssField.fill(draftCss);
 

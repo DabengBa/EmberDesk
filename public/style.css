@@ -6533,20 +6533,7 @@ body:has(#character_popup.open) #top-settings-holder:has(.drawer-content.openDra
     width: max-content;
 }
 
-#AdvancedFormatting .autoSetHeight {
-    overflow-wrap: anywhere;
-}
 
-#SystemPromptColumn summary,
-#InstructSequencesColumn summary {
-    font-size: 0.95em;
-    cursor: pointer;
-}
-
-#SystemPromptColumn details,
-#InstructSequencesColumn details:not(:last-of-type) {
-    margin-bottom: 5px;
-}
 
 /* Constrict the scroll of alternate greetings to only the dynamic form section */
 .alternate_grettings {

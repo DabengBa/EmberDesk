@@ -93,7 +93,7 @@ export function createReactRuntimeProvider({
         throw new TypeError('React runtime provider requires named commands');
     }
 
-    const commandNames = ['submitMessage', 'stopGeneration', 'retryMessage', 'loadEarlier', 'saveSettings', 'openWorkspaceDrawer', 'connectProvider', 'testProviderConnection'];
+    const commandNames = ['submitMessage', 'stopGeneration', 'retryMessage', 'loadEarlier', 'saveSettings', 'openWorkspaceDrawer', 'connectProvider', 'testProviderConnection', 'formattingPreset'];
     for (const commandName of commandNames) {
         if (typeof commands[commandName] !== 'function') {
             throw new TypeError(`React runtime provider requires command ${commandName}`);
@@ -131,6 +131,7 @@ export function createReactRuntimeProvider({
             openWorkspaceDrawer: hostId => Promise.resolve(commands.openWorkspaceDrawer(hostId)),
             connectProvider: () => Promise.resolve(commands.connectProvider()),
             testProviderConnection: () => Promise.resolve(commands.testProviderConnection()),
+            formattingPreset: request => Promise.resolve(commands.formattingPreset(request)),
         }),
     };
 }

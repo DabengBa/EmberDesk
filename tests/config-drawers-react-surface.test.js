@@ -1,70 +1,90 @@
 import { describe, expect, test } from '@jest/globals';
 import { readRepoFile } from './helpers/frontend-compatibility-contract.js';
 
-describe('small configuration drawers React surface (Wave A)', () => {
-    const cases = [];
+describe('retired Advanced Formatting drawer', () => {
+    test('drawer host, mount adapter, and panel component are gone', () => {
+        const indexHtml = readRepoFile('public/index.html');
+        const adapter = readRepoFile('public/scripts/power-user.js');
+        const workspacePanels = readRepoFile('app/workspace-panels.tsx');
+        const script = readRepoFile('public/script.js');
 
-    const advancedFormatting = {
-        name: 'Advanced Formatting (sysprompt/reasoning)',
-        shellId: 'AdvancedFormatting',
-        component: 'app/components/panels/AdvancedFormattingPanel.tsx',
-        adapter: 'public/scripts/power-user.js',
-        mountFn: 'mountAdvancedFormattingPanel',
-        ids: [
-            'sysprompt_content',
-            'sysprompt_post_history',
-            'custom_stopping_strings',
-            'reasoning_prefix',
-        ],
-    };
-
-    for (const c of [...cases, advancedFormatting]) {
-        test(`${c.name}: React owns content, legacy shell stays`, () => {
-            const component = readRepoFile(c.component);
-            const indexHtml = readRepoFile('public/index.html');
-            const adapter = readRepoFile(c.adapter);
-            const workspacePanels = readRepoFile('app/workspace-panels.tsx');
-
-            for (const id of c.ids) {
-                expect(component).toContain(`id="${id}"`);
-                expect(indexHtml).not.toContain(`id="${id}"`);
-            }
-            expect(indexHtml).toContain(`id="${c.shellId}"`);
-            expect(adapter).toContain(`export async function ${c.mountFn}(`);
-            expect(adapter).toContain('loadWorkspacePanelsModule');
-            expect(adapter).toContain(`module.${c.mountFn}(host)`);
-            expect(workspacePanels).toContain(`export function ${c.mountFn}(`);
-        });
-    }
-
-    test('preset-manager action rows collapse into ⋮ floating menus', () => {
-        const component = readRepoFile('app/components/panels/AdvancedFormattingPanel.tsx');
-        const menu = readRepoFile('app/components/preset-manager/PresetManagerActionsMenu.tsx');
-        // Rows keep only the select + hidden file input + menu trigger.
-        expect(component).toContain('PresetManagerActionsMenu apiId="sysprompt"');
-        expect(component).toContain('PresetManagerActionsMenu apiId="reasoning"');
-        expect(component).toContain('data-preset-manager-file="sysprompt"');
-        expect(component).toContain('data-preset-manager-file="reasoning"');
-        // Selects must carry data-preset-manager-for: registerPresetManagers()
-        // scans `select[data-preset-manager-for]`, so the html2jsx-mangled
-        // htmlFor variant would leave both managers permanently unregistered.
-        expect(component).toContain('data-preset-manager-for="sysprompt"');
-        expect(component).toContain('data-preset-manager-for="reasoning"');
-        expect(component).not.toContain('data-preset-manager-htmlFor');
-        expect(component).not.toContain('data-preset-manager-update=');
-        // Menu emits the delegated data-preset-manager-* contract attrs.
-        for (const action of ['update', 'new', 'rename', 'import', 'export', 'restore', 'delete']) {
-            expect(menu).toContain(`data-preset-manager-${action}`);
-        }
-        expect(menu).toContain('preset-menu-danger');
-        expect(menu).toContain('aria-haspopup="menu"');
-        expect(menu).toContain('event.key === \'Escape\'');
-        // preset-manager.js keeps the document-delegated handlers.
-        const presetManager = readRepoFile('public/scripts/preset-manager.js');
-        expect(presetManager).toContain('$(document).on(\'click\', \'[data-preset-manager-delete]\'');
+        expect(indexHtml).not.toContain('id="AdvancedFormatting"');
+        expect(indexHtml).not.toContain('id="advanced-formatting-button"');
+        expect(adapter).not.toContain('mountAdvancedFormattingPanel');
+        expect(workspacePanels).not.toContain('AdvancedFormattingPanel');
+        expect(script).not.toContain('mountAdvancedFormattingPanel()');
     });
 
-    test('all three mounts run before getSettings', () => {
+    test('retired drawer element ids are not rebound by legacy modules', () => {
+        const powerUser = readRepoFile('public/scripts/power-user.js');
+        const sysprompt = readRepoFile('public/scripts/sysprompt.js');
+        const reasoning = readRepoFile('public/scripts/reasoning.js');
+
+        for (const source of [powerUser, sysprompt, reasoning]) {
+            expect(source).not.toContain('#sysprompt_select');
+            expect(source).not.toContain('#sysprompt_content');
+            expect(source).not.toContain('#reasoning_select');
+            expect(source).not.toContain('#tokenizer');
+            expect(source).not.toContain('#start_reply_with');
+        }
+    });
+
+    test('tokenizer options are data-driven, not DOM-discovered', () => {
+        const tokenizers = readRepoFile('public/scripts/tokenizers.js');
+        expect(tokenizers).toContain('TOKENIZER_OPTIONS');
+        expect(tokenizers).not.toContain("$('#tokenizer')");
+        expect(tokenizers).not.toContain("$('#tokenizer').find('option')");
+    });
+});
+
+describe('formatting presets in the React Settings surface', () => {
+    test('preset rows and master import/export live in the advanced settings tab', () => {
+        const surface = readRepoFile('app/components/settings/SettingsSurface.tsx');
+        const rows = readRepoFile('app/components/settings/TemplatePresetManager.tsx');
+
+        expect(surface).toContain('apiId="sysprompt"');
+        expect(surface).toContain('apiId="reasoning"');
+        expect(surface).toContain('FormattingMasterActions');
+        expect(surface).not.toContain("target: 'AdvancedFormatting'");
+
+        expect(rows).toContain('commands?.formattingPreset');
+        expect(rows).toContain("action: 'save'");
+        expect(rows).toContain("action: 'rename'");
+        expect(rows).toContain("action: 'delete'");
+        expect(rows).toContain("action: 'restore'");
+    });
+
+    test('legacy preset-manager keeps formatting CRUD helpers and openai delegation', () => {
+        const presetManager = readRepoFile('public/scripts/preset-manager.js');
+
+        for (const helper of [
+            'getFormattingPresetList',
+            'syncFormattingPresetList',
+            'saveFormattingPreset',
+            'deleteFormattingPreset',
+            'restoreFormattingPreset',
+        ]) {
+            expect(presetManager).toContain(`export `);
+            expect(presetManager).toContain(helper);
+        }
+        // The surviving openai preset select still uses delegated actions.
+        expect(presetManager).toContain('$(document).on(\'click\', \'[data-preset-manager-delete]\'');
+        expect(presetManager).not.toContain('af_master');
+        expect(presetManager).not.toContain('performMasterImport');
+        expect(presetManager).not.toContain('performMasterExport');
+    });
+
+    test('runtime command contract: formattingPreset is end-to-end', () => {
+        const provider = readRepoFile('public/scripts/react-runtime-provider.js');
+        const script = readRepoFile('public/script.js');
+        const port = readRepoFile('app/compat/runtime-port.ts');
+
+        expect(provider).toContain("'formattingPreset'");
+        expect(script).toContain('formattingPreset: async (request)');
+        expect(port).toContain('formattingPreset(request: FormattingPresetRequest)');
+    });
+
+    test('config drawer mounts still run before getSettings', () => {
         const script = readRepoFile('public/script.js');
         const stageIndex = script.indexOf("measureStartupStage('mountConfigDrawers'");
         const settingsIndex = script.indexOf('await getSettings(initLoaderHandle)');

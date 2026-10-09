@@ -18,7 +18,7 @@ Give users one modern, compact workspace frame for current context and primary n
 ## Current Ownership
 
 - The React shell always mounts for `/`; there is no shell product flag, strict-mode switch, inline workspace feature payload, or same-version legacy shell fallback.
-- Registry entries route Settings, AI Config, and Formatting to React Settings. Character Library, World Info, Main Chat, and the Presets entry (AI Response Configuration drawer) use declared child-slot contracts. The former global Background Library entry is retired; active chat backgrounds remain chat context rather than a shell panel.
+- The unified `设置` registry entry routes to React Settings; the `openAIConfig`/`openFormatting` compatibility commands still land on the 服务/高级 tabs. `角色库` (Character Library), `世界书` (World Info), Main Chat, and the `AI 响应配置` entry (AI Response Configuration drawer) use declared child-slot contracts. The former global Background Library entry is retired; active chat backgrounds remain chat context rather than a shell panel.
 - A child slot declares a stable key, mount target, accessible name, content owner, and bounded feature-local capabilities. Legacy drawer classes are not shell state inputs.
 - A slot failure is recovered locally without removing shell navigation, chat rows, composer reachability, slash commands, regex support, or shared browser-library providers.
 - Release rollback is deployment of a prior application version. A missing React shell bundle is a release-gate failure, not a reason to restore legacy chrome.
@@ -27,9 +27,9 @@ Give users one modern, compact workspace frame for current context and primary n
 
 - Opening `/` shows the React-owned workspace chrome instead of competing legacy and React top navigation.
 - The chrome summarizes the current context in understandable terms for no active chat, temporary Assistant chat, normal character chat, and character chat.
-- Primary entries for AI Config, Presets, Formatting, Character Library, World Info, and Settings are reachable by role/name and use the existing workspace behavior or the shared Settings overlay. The retired Background Library has no replacement navigation entry.
-- Settings opens the React [Settings](page.settings) surface as an in-workspace overlay; `/settings` remains a deep-link full-page mount of the same owner.
-- AI Config opens Settings overlay on the Providers tab and Formatting opens Settings overlay on the Advanced tab; provider, secret, and formatting fields are edited on the same React Settings surface rather than in workspace drawers.
+- Primary entries `AI 响应配置`, `角色库`, `世界书`, `正则`, and `设置` are reachable by role/name and use the existing workspace behavior or the shared Settings overlay. The retired Background Library has no replacement navigation entry.
+- `设置` opens the React [Settings](page.settings) surface as an in-workspace overlay on the last-used tab; `/settings` remains a deep-link full-page mount of the same owner.
+- `openAIConfig`/`openFormatting` remain dispatchable compatibility commands that open the overlay on the 服务/高级 tabs; provider, secret, and formatting fields are edited on the same React Settings surface rather than in workspace drawers.
 - Character Library owns entry into the React character creation and editing surface, so character authoring is not a separate top-level navigation concern.
 - The main-chat outer layout can be React shell-owned through existing `#chat`, `#send_form`, and `#nonQRFormItems` containers so the chat canvas, composer/action rail, and local generation status feel coordinated without wrapping or moving message rows.
 - Primary entries publish transient React dock state so the shell can show the active entry while the existing facades continue to own panel behavior and local error recovery.
@@ -49,7 +49,7 @@ The shell is a final-wave surface. It may remove its legacy chrome and drawer-co
 ## Semantic Interaction IDs
 
 - `feature.next_workspace_shell`: the overall same-entry React chrome owner state.
-- `feature.next_workspace_shell.primary_navigation`: the AI Config, Formatting, Character Library, World Info, Settings entry set. The former Backgrounds entry is retired.
+- `feature.next_workspace_shell.primary_navigation`: the `AI 响应配置`, `角色库`, `世界书`, `正则`, `设置` entry set. The former Backgrounds entry is retired, and the AI Config/Formatting/Settings triple is merged into `设置`.
 - `feature.next_workspace_shell.context_summary`: the current character/assistant/no-chat summary.
 - `feature.next_workspace_shell.main_chat_layout`: the main-chat layout/status ownership markers on existing chat and composer containers.
 - `feature.next_workspace_shell.panel_dock`: the transient active panel state for the registry-backed workspace entries.
@@ -59,10 +59,10 @@ The shell is a final-wave surface. It may remove its legacy chrome and drawer-co
 
 - As a workspace user, open `/`; EmberDesk must show one React chrome with current context and primary entries, and failure is old and new top navigation competing for the same job.
 - As a user switching from no chat to a character or temporary Assistant chat, continue using the workspace; the chrome summary must update to a clear state without requiring a refresh, and failure is a stale or misleading current-context label.
-- As a user opening AI Config, Formatting, Character Library, World Info, Regex, Settings, from the chrome, use the named entry; EmberDesk must open the established surface or route while preserving protected DOM and panel locations, and failure is a visible button that does nothing or clears legacy panel content. The retired Background Library must remain absent rather than exposing a dead entry.
+- As a user opening `AI 响应配置`, `角色库`, `世界书`, `正则`, or `设置` from the chrome, use the named entry; EmberDesk must open the established surface or route while preserving protected DOM and panel locations, and failure is a visible button that does nothing or clears legacy panel content. The retired Background Library must remain absent rather than exposing a dead entry.
 - As a user opening, closing, and reopening the same registry-backed entry, click the same named entry repeatedly; EmberDesk must show the surface, hide it when the owner closes, and show it again on the next click, and failure is an entry that cannot reopen after a close.
 - As a user switching between registry-backed entries, use the named entries; EmberDesk must mark the active panel locally, keep panel loading/error/fallback state scoped to the panel/dock surface, and preserve pinned or locked drawers instead of closing them as incidental navigation cleanup.
-- As a user editing legacy-owned AI Config or Formatting fields, switch to another shell panel and back; the entered field values remain in the legacy drawer, and failure is the shell reset, remount, or replacement of those settings while only changing panel focus.
+- As a user editing legacy-owned AI response fields, switch to another shell panel and back; the entered field values remain in the legacy drawer, and failure is the shell reset, remount, or replacement of those settings while only changing panel focus. Formatting fields are React-owned in the Settings overlay's advanced tab (the Advanced Formatting drawer is retired).
 - As a user retrying from an empty or failed shell-owned surface, use the local recovery action shown on that surface; EmberDesk must recover only the affected panel or main-chat area and must not turn that local problem into a full-workspace blocker.
 
 ## Feature-Specific Evidence
@@ -88,6 +88,6 @@ The shell is a final-wave surface. It may remove its legacy chrome and drawer-co
 ## Boundaries
 
 - Startup readiness and initial overlay behavior belong to [Workspace Startup Bootstrap](feature.startup_bootstrap).
-- AI Config, Formatting, Character Library, World Info, Settings, and Character Authoring retain their own feature contracts after the shell opens them. Active chat backgrounds and avatar media remain workspace capabilities; the global Background Library is retired.
+- `AI 响应配置`, `角色库`, `世界书`, `设置`, and Character Authoring retain their own feature contracts after the shell opens them. Active chat backgrounds and avatar media remain workspace capabilities; the global Background Library is retired.
 - Message rendering, composer behavior, slash parser, regex engine, and provider transport are not owned by this feature.
 - Main-chat shell ownership is limited to outer layout/status placement; row rendering, row actions, slash command execution, and provider transport remain governed by their feature contracts.

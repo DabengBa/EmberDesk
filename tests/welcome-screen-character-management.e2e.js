@@ -8,7 +8,7 @@ test.describe('welcome screen shortcuts', () => {
 
         const characterLibraryButton = page
             .locator('[data-react-workspace-shell-chrome] nav button')
-            .filter({ hasText: 'Character Library' });
+            .filter({ hasText: '角色库' });
 
         await expect(characterLibraryButton).toBeVisible({ timeout: 10_000 });
         await characterLibraryButton.click();

@@ -48,17 +48,17 @@ describe('React state stores', () => {
     test('declares explicit child-slot contracts without making legacy drawer state shell authority', () => {
         expect(WORKSPACE_SHELL_CHILD_SLOTS).toEqual(expect.objectContaining({
             characterLibrary: expect.objectContaining({
-                accessibleName: 'Character Library',
+                accessibleName: '角色库',
                 contentOwner: 'character-library',
                 mountTarget: '#rm_print_characters_block',
             }),
             worldInfo: expect.objectContaining({
-                accessibleName: 'World Info',
+                accessibleName: '世界书',
                 contentOwner: 'world-info-workbench',
                 mountTarget: '#WorldInfo',
             }),
             mainChat: expect.objectContaining({
-                accessibleName: 'Main Chat',
+                accessibleName: '主聊天',
                 contentOwner: 'main-chat',
                 mountTarget: '#chat, #send_form, #nonQRFormItems',
             }),
@@ -66,12 +66,12 @@ describe('React state stores', () => {
 
         expect(() => getWorkspaceShellChildSlot('extensionsHost')).toThrow('Unsupported workspace shell child slot');
         expect(getWorkspaceShellChildSlot('aiConfigDrawer')).toEqual(expect.objectContaining({
-            accessibleName: 'AI Response Configuration',
+            accessibleName: 'AI 响应配置',
             contentOwner: 'ai-config',
             mountTarget: '#left-nav-panel',
         }));
         expect(getWorkspaceShellChildSlot('regex')).toEqual(expect.objectContaining({
-            accessibleName: 'Regex',
+            accessibleName: '正则',
             contentOwner: 'regex',
             mountTarget: '#RegexPanel',
         }));

@@ -250,10 +250,11 @@ describe('world info card rendering', () => {
     test('world info drawer keeps the remaining top menu drawers in the top bar', () => {
         const indexHtml = read('public/index.html');
 
-        // sys-settings-button hosted the retired rm_api_block drawer; it is gone.
+        // sys-settings-button hosted the retired rm_api_block drawer, and
+        // advanced-formatting-button hosted the retired AdvancedFormatting
+        // drawer; both are gone.
         expect(getTopSettingsDrawerIds(indexHtml)).toEqual([
             'ai-config-button',
-            'advanced-formatting-button',
             'WI-SP-button',
             'user-settings-button',
             'regex-panel-button',

@@ -69,7 +69,7 @@ import { hideChatMessageRange } from './chats.js';
 import { getContext, saveMetadataDebounced } from './feature-settings.js';
 import { getRegexedString, regex_placement } from './extensions/regex/engine.js';
 
-import { chat_completion_sources, connectProviderConnection, custom_prompt_post_processing_types, getOpenAIModelList, oai_settings, promptManager, setOpenAIModel } from './openai.js';
+import { chat_completion_sources, connectProviderConnection, getOpenAIModelList, oai_settings, promptManager, setOpenAIModel } from './openai.js';
 import { addEphemeralStoppingString, chat_styles, flushEphemeralStoppingStrings, playMessageSound, power_user } from './power-user.js';
 import { decodeTextTokens, getAvailableTokenizers, getFriendlyTokenizerName, getTextTokens, getTokenCountAsync, selectTokenizer } from './tokenizers.js';
 import { registerVariableCommands, resolveVariable } from './variables.js';
@@ -3122,63 +3122,6 @@ export function initDefaultSlashCommands() {
         helpString: t`Copies the provided text to the OS clipboard. Returns an empty string.`,
     }));
 
-
-    const promptPostProcessingLabels = {
-        [custom_prompt_post_processing_types.NONE]: 'None',
-        [custom_prompt_post_processing_types.MERGE]: 'Merge',
-        [custom_prompt_post_processing_types.MERGE_TOOLS]: 'Merge Tools',
-        [custom_prompt_post_processing_types.SEMI]: 'Semi',
-        [custom_prompt_post_processing_types.SEMI_TOOLS]: 'Semi Tools',
-        [custom_prompt_post_processing_types.STRICT]: 'Strict',
-        [custom_prompt_post_processing_types.STRICT_TOOLS]: 'Strict Tools',
-        [custom_prompt_post_processing_types.SINGLE]: 'Single',
-    };
-    const promptPostProcessingEnumProvider = () => Object.entries(promptPostProcessingLabels)
-        .map(([value, label]) => new SlashCommandEnumValue(value || 'none', label, enumTypes.enum));
-    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
-        name: 'prompt-post-processing',
-        aliases: ['ppp'],
-        helpString: `
-            <div>
-                ${t`Sets a "Prompt Post-Processing" type. Gets the current selection if no value is provided.`}
-            </div>
-            <div>
-                <strong>${t`Examples:`}</strong>
-            </div>
-            <ul>
-                <li><pre><code class="language-stscript">/prompt-post-processing | /echo</code></pre></li>
-                <li><pre><code class="language-stscript">/prompt-post-processing single</code></pre></li>
-            </ul>
-        `,
-        namedArgumentList: [],
-        unnamedArgumentList: [
-            SlashCommandArgument.fromProps({
-                description: t`value`,
-                typeList: [ARGUMENT_TYPE.STRING],
-                acceptsMultiple: false,
-                isRequired: true,
-                forceEnum: true,
-                enumProvider: promptPostProcessingEnumProvider,
-            }),
-        ],
-        callback: (_args, value) => {
-            const stringValue = String(value ?? '').trim().toLowerCase();
-            if (!stringValue) {
-                return oai_settings.custom_prompt_post_processing || 'none';
-            }
-
-            const validValues = promptPostProcessingEnumProvider().map(option => option.value);
-            if (!validValues.includes(stringValue)) {
-                throw new Error(t`Invalid value "${stringValue}". Valid values are: ${validValues.join(', ')}`);
-            }
-
-            // 'none' value must be coerced to an empty string
-            oai_settings.custom_prompt_post_processing = stringValue === 'none' ? '' : stringValue;
-            saveSettingsDebounced();
-
-            return oai_settings.custom_prompt_post_processing;
-        },
-    }));
 
     SlashCommandParser.addCommandObject(SlashCommand.fromProps({
         name: 'reroll-pick',

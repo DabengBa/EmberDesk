@@ -14,7 +14,7 @@ import { eventSource, event_types } from './events.js';
 import { getRequestHeaders } from './request-context.js';
 import { t } from './i18n.js';
 import { oai_settings, openai_setting_names, openai_settings } from './openai.js';
-import { POPUP_RESULT, POPUP_TYPE, Popup } from './popup.js';
+import { Popup } from './popup.js';
 import { power_user } from './power-user.js';
 import { reasoning_templates } from './reasoning.js';
 import { SlashCommand } from './slash-commands/SlashCommand.js';
@@ -23,7 +23,6 @@ import { enumIcons } from './slash-commands/SlashCommandCommonEnumsProvider.js';
 import { SlashCommandEnumValue, enumTypes } from './slash-commands/SlashCommandEnumValue.js';
 import { SlashCommandParser } from './slash-commands/SlashCommandParser.js';
 import { system_prompts } from './sysprompt.js';
-import { renderTemplateAsync } from './templates.js';
 
 import { download, ensurePlainObject, equalsIgnoreCaseAndAccents, getSanitizedFilename, parseJsonFile, waitUntilCondition } from './utils.js';
 
@@ -91,189 +90,122 @@ function registerPresetManagers() {
     });
 }
 
+/**
+ * Returns the live preset list for an Advanced Formatting apiId
+ * ('sysprompt' | 'reasoning'). The arrays are the same objects slash commands
+ * and prompt assembly enumerate, so in-place updates stay visible in-session.
+ * @param {string} apiId API id
+ * @returns {object[]|null} Live preset array, or null for a non-formatting apiId
+ */
+export function getFormattingPresetList(apiId) {
+    switch (apiId) {
+        case 'sysprompt':
+            return system_prompts;
+        case 'reasoning':
+            return reasoning_templates;
+        default:
+            return null;
+    }
+}
+
+/**
+ * Replaces a formatting preset list's contents in place, keeping array identity
+ * stable for live-binding consumers.
+ * @param {string} apiId API id
+ * @param {object[]} presets New preset list
+ */
+export function syncFormattingPresetList(apiId, presets) {
+    const list = getFormattingPresetList(apiId);
+    if (!list) {
+        return;
+    }
+    list.splice(0, list.length, ...(Array.isArray(presets) ? presets : []));
+}
+
+/**
+ * Saves a formatting preset to disk and upserts it into the in-memory list.
+ * Shared by the React settings surface (via the formattingPreset runtime
+ * command) and legacy migrations.
+ * @param {string} apiId 'sysprompt' | 'reasoning'
+ * @param {string} name Preset name
+ * @param {object} preset Preset payload
+ * @returns {Promise<string>} The sanitized saved preset name
+ */
+export async function saveFormattingPreset(apiId, name, preset) {
+    const response = await fetch('/api/presets/save', {
+        method: 'POST',
+        headers: getRequestHeaders(),
+        body: JSON.stringify({ preset, name, apiId }),
+    });
+
+    if (!response.ok) {
+        throw new Error('Formatting preset could not be saved');
+    }
+
+    const data = await response.json();
+    const savedName = data.name;
+    const list = getFormattingPresetList(apiId);
+    if (list) {
+        const savedPreset = { ...preset, name: savedName };
+        const index = list.findIndex(entry => entry?.name === savedName);
+        if (index >= 0) {
+            list[index] = savedPreset;
+        } else {
+            list.push(savedPreset);
+        }
+    }
+    return savedName;
+}
+
+/**
+ * Deletes a formatting preset from disk and from the in-memory list.
+ * @param {string} apiId 'sysprompt' | 'reasoning'
+ * @param {string} name Preset name
+ * @returns {Promise<boolean>} True when the server deleted the preset
+ */
+export async function deleteFormattingPreset(apiId, name) {
+    const response = await fetch('/api/presets/delete', {
+        method: 'POST',
+        headers: getRequestHeaders(),
+        body: JSON.stringify({ name, apiId }),
+    });
+
+    if (!response.ok) {
+        return false;
+    }
+
+    const list = getFormattingPresetList(apiId);
+    const index = list?.findIndex(entry => entry?.name === name) ?? -1;
+    if (index >= 0) {
+        list.splice(index, 1);
+    }
+    return true;
+}
+
+/**
+ * Fetches the default (factory) version of a formatting preset.
+ * @param {string} apiId 'sysprompt' | 'reasoning'
+ * @param {string} name Preset name
+ * @returns {Promise<{isDefault: boolean, preset: object}|null>} Restore payload
+ */
+export async function restoreFormattingPreset(apiId, name) {
+    const response = await fetch('/api/presets/restore', {
+        method: 'POST',
+        headers: getRequestHeaders(),
+        body: JSON.stringify({ name, apiId }),
+    });
+
+    if (!response.ok) {
+        return null;
+    }
+
+    return await response.json();
+}
+
 class PresetManager {
     constructor(select, apiId) {
         this.select = select;
         this.apiId = apiId;
-    }
-
-    static masterSections = {
-        'sysprompt': {
-            name: 'System Prompt',
-            getData: () => {
-                const manager = getPresetManager('sysprompt');
-                const name = manager.getSelectedPresetName();
-                return manager.getPresetSettings(name);
-            },
-            setData: (data) => {
-                const manager = getPresetManager('sysprompt');
-                const name = data.name;
-                return manager.savePreset(name, data);
-            },
-            isValid: (data) => PresetManager.isPossiblySystemPromptData(data),
-        },
-        'reasoning': {
-            name: 'Reasoning Formatting',
-            getData: () => {
-                const manager = getPresetManager('reasoning');
-                const name = manager.getSelectedPresetName();
-                return manager.getPresetSettings(name);
-            },
-            setData: (data) => {
-                const manager = getPresetManager('reasoning');
-                const name = data.name;
-                return manager.savePreset(name, data);
-            },
-            isValid: (data) => PresetManager.isPossiblyReasoningData(data),
-        },
-        'srw': {
-            name: 'Start Reply With',
-            getData: () => {
-                return {
-                    value: power_user.user_prompt_bias ?? '',
-                    show: power_user.show_user_prompt_bias ?? false,
-                };
-            },
-            setData: (data) => {
-                power_user.user_prompt_bias = data.value ?? '';
-                power_user.show_user_prompt_bias = data.show ?? false;
-                $('#start_reply_with').val(power_user.user_prompt_bias);
-                $('#chat-show-reply-prefix-checkbox').prop('checked', power_user.show_user_prompt_bias);
-                return saveSettingsDebounced();
-            },
-            isValid: (data) => PresetManager.isPossiblyStartReplyWithData(data),
-        },
-    };
-
-    static isPossiblySystemPromptData(data) {
-        const sysPromptProps = ['name', 'content'];
-        return data && sysPromptProps.every(prop => Object.keys(data).includes(prop));
-    }
-
-    static isPossiblyReasoningData(data) {
-        const reasoningProps = ['name', 'prefix', 'suffix', 'separator'];
-        return data && reasoningProps.every(prop => Object.keys(data).includes(prop));
-    }
-
-    static isPossiblyStartReplyWithData(data) {
-        return data && 'value' in data && 'show' in data;
-    }
-
-    /**
-     * Imports master settings from JSON data.
-     * @param {object} data Data to import
-     * @param {string} fileName File name
-     * @returns {Promise<void>}
-     */
-    static async performMasterImport(data, _fileName) {
-        if (!data || typeof data !== 'object') {
-            toastr.error(t`Invalid data provided for master import`);
-            return;
-        }
-
-        // Check for legacy file imports
-        // 1. System Prompt
-        if (this.isPossiblySystemPromptData(data)) {
-            toastr.info(t`Importing as system prompt...`, t`System prompt detected`);
-            return await getPresetManager('sysprompt').savePreset(data.name, data);
-        }
-
-
-        // 2. Reasoning Template
-        if (this.isPossiblyReasoningData(data)) {
-            toastr.info(t`Importing as reasoning template...`, t`Reasoning template detected`);
-            return await getPresetManager('reasoning').savePreset(data.name, data);
-        }
-
-        const validSections = [];
-        for (const [key, section] of Object.entries(this.masterSections)) {
-            if (key in data && section.isValid(data[key])) {
-                validSections.push(key);
-            }
-        }
-
-        if (validSections.length === 0) {
-            toastr.error(t`No valid sections found in imported data`);
-            return;
-        }
-
-        const sectionNames = validSections.reduce((acc, key) => {
-            acc[key] = { key: key, name: this.masterSections[key].name, preset: data[key]?.name || '' };
-            return acc;
-        }, {});
-
-        const html = $(await renderTemplateAsync('masterImport', { sections: sectionNames }));
-        const popup = new Popup(html, POPUP_TYPE.CONFIRM, '', {
-            okButton: t`Import`,
-            cancelButton: t`Cancel`,
-        });
-
-        const result = await popup.show();
-
-        // Import cancelled
-        if (result !== POPUP_RESULT.AFFIRMATIVE) {
-            return;
-        }
-
-        const importedSections = [];
-        const confirmedSections = html.find('input:checked').map((_, el) => el instanceof HTMLInputElement && el.value).get();
-
-        if (confirmedSections.length === 0) {
-            toastr.info(t`No sections selected for import`);
-            return;
-        }
-
-        for (const section of confirmedSections) {
-            const sectionData = data[section];
-            const masterSection = this.masterSections[section];
-            if (sectionData && masterSection) {
-                await masterSection.setData(sectionData);
-                importedSections.push(masterSection.name);
-            }
-        }
-
-        toastr.success(t`Imported ${importedSections.length} settings: ${importedSections.join(', ')}`);
-    }
-
-    /**
-     * Exports master settings to JSON data.
-     * @returns {Promise<string>} JSON data
-     */
-    static async performMasterExport() {
-        const sectionNames = Object.entries(this.masterSections).reduce((acc, [key, section]) => {
-            acc[key] = { key: key, name: section.name, checked: !['srw'].includes(key) };
-            return acc;
-        }, {});
-        const html = $(await renderTemplateAsync('masterExport', { sections: sectionNames }));
-
-        const popup = new Popup(html, POPUP_TYPE.CONFIRM, '', {
-            okButton: t`Export`,
-            cancelButton: t`Cancel`,
-        });
-
-        const result = await popup.show();
-
-        // Export cancelled
-        if (result !== POPUP_RESULT.AFFIRMATIVE) {
-            return;
-        }
-
-        const confirmedSections = html.find('input:checked').map((_, el) => el instanceof HTMLInputElement && el.value).get();
-        const data = {};
-
-        if (confirmedSections.length === 0) {
-            toastr.info(t`No sections selected for export`);
-            return;
-        }
-
-        for (const section of confirmedSections) {
-            const masterSection = this.masterSections[section];
-            if (masterSection) {
-                data[section] = masterSection.getData();
-            }
-        }
-
-        return JSON.stringify(data, null, 4);
     }
 
     /**
@@ -340,7 +272,7 @@ class PresetManager {
         const name = selected.text();
         await this.savePreset(name, null, option);
 
-        const successToast = !this.isAdvancedFormatting() ? t`Preset updated` : t`Template updated`;
+        const successToast = t`Preset updated`;
         toastr.success(successToast);
     }
 
@@ -349,8 +281,8 @@ class PresetManager {
      */
     async savePresetAs() {
         const inputValue = this.getSelectedPresetName();
-        const popupText = !this.isAdvancedFormatting() ? '<h4>' + t`Hint: Use a character name to bind preset to a specific chat.` + '</h4>' : '';
-        const headerText = !this.isAdvancedFormatting() ? t`Preset name:` : t`Template name:`;
+        const popupText = '<h4>' + t`Hint: Use a character name to bind preset to a specific chat.` + '</h4>';
+        const headerText = t`Preset name:`;
         const name = await Popup.show.input(headerText, popupText, inputValue);
         if (!name) {
             console.log('Preset name not provided');
@@ -359,7 +291,7 @@ class PresetManager {
 
         await this.savePreset(name);
 
-        const successToast = !this.isAdvancedFormatting() ? t`Preset saved` : t`Template saved`;
+        const successToast = t`Preset saved`;
         toastr.success(successToast);
     }
 
@@ -454,54 +386,26 @@ class PresetManager {
     }
 
     /**
-     * Returns true if the API is keyed, meaning it uses a name to identify presets.
-     */
-    isKeyedApi() {
-        return this.isAdvancedFormatting();
-    }
-
-    /**
-     * Returns true if the API is from Advanced Formatting group.
-     */
-    isAdvancedFormatting() {
-        return ['sysprompt', 'reasoning'].includes(this.apiId);
-    }
-
-    /**
      * Updates the preset list with a new or existing preset.
      * @param {string} name Name of the preset
      * @param {object} preset Preset object
      */
     updateList(name, preset) {
         const { presets, preset_names } = this.getPresetList();
-        const presetExists = this.isKeyedApi() ? preset_names.includes(name) : Object.keys(preset_names).includes(name);
+        const presetExists = Object.keys(preset_names).includes(name);
 
         if (presetExists) {
-            if (this.isKeyedApi()) {
-                presets[preset_names.indexOf(name)] = preset;
-                $(this.select).find(`option[value="${name}"]`).prop('selected', true);
-                $(this.select).val(name).trigger('change');
-            } else {
-                const value = preset_names[name];
-                presets[value] = preset;
-                $(this.select).find(`option[value="${value}"]`).prop('selected', true);
-                $(this.select).val(value).trigger('change');
-            }
+            const value = preset_names[name];
+            presets[value] = preset;
+            $(this.select).find(`option[value="${value}"]`).prop('selected', true);
+            $(this.select).val(value).trigger('change');
         } else {
             presets.push(preset);
             const value = presets.length - 1;
-
-            if (this.isKeyedApi()) {
-                preset_names[value] = name;
-                const option = $('<option></option>', { value: name, text: name, selected: true });
-                $(this.select).append(option);
-                $(this.select).val(name).trigger('change');
-            } else {
-                preset_names[name] = value;
-                const option = $('<option></option>', { value: value, text: name, selected: true });
-                $(this.select).append(option);
-                $(this.select).val(value).trigger('change');
-            }
+            preset_names[name] = value;
+            const option = $('<option></option>', { value: value, text: name, selected: true });
+            $(this.select).append(option);
+            $(this.select).val(value).trigger('change');
         }
     }
 
@@ -592,7 +496,7 @@ class PresetManager {
             }
         }
 
-        if (!this.isAdvancedFormatting() && this.apiId !== 'openai') {
+        if (this.apiId !== 'openai') {
             settings.genamt = amount_gen;
             settings.max_length = max_context;
         }
@@ -634,8 +538,8 @@ class PresetManager {
      * @param {string} [name] Name of the preset to delete.
      */
     async deletePreset(name) {
-        const { preset_names, presets } = this.getPresetList();
-        const value = name ? (this.isKeyedApi() ? this.findPreset(name) : name) : this.getSelectedPreset();
+        const { preset_names } = this.getPresetList();
+        const value = name || this.getSelectedPreset();
         const nameToDelete = name || this.getSelectedPresetName();
 
         if (value == 'gui') {
@@ -643,16 +547,9 @@ class PresetManager {
             return;
         }
 
-        if (this.isKeyedApi()) {
-            $(this.select).find(`option[value="${value}"]`).remove();
-            const index = preset_names.indexOf(nameToDelete);
-            preset_names.splice(index, 1);
-            presets.splice(index, 1);
-        } else {
-            const index = preset_names[nameToDelete];
-            $(this.select).find(`option[value="${index}"]`).remove();
-            delete preset_names[nameToDelete];
-        }
+        const index = preset_names[nameToDelete];
+        $(this.select).find(`option[value="${index}"]`).remove();
+        delete preset_names[nameToDelete];
 
         // switch in UI only when deleting currently selected preset
         const switchPresets = !name || this.getSelectedPresetName() == name;
@@ -686,7 +583,7 @@ class PresetManager {
         });
 
         if (!response.ok) {
-            const errorToast = !this.isAdvancedFormatting() ? t`Failed to restore default preset` : t`Failed to restore default template`;
+            const errorToast = t`Failed to restore default preset`;
             toastr.error(errorToast);
             return;
         }
@@ -905,11 +802,11 @@ export async function initPresetManager() {
             return;
         }
 
-        const popupHeader = !presetManager.isAdvancedFormatting() ? t`Rename preset` : t`Rename template`;
+        const popupHeader = t`Rename preset`;
         const oldName = presetManager.getSelectedPresetName();
         const newName = await getSanitizedFilename(await Popup.show.input(popupHeader, t`Enter a new name:`, oldName) || '');
         if (!newName || oldName === newName) {
-            console.debug(!presetManager.isAdvancedFormatting() ? 'Preset rename cancelled' : 'Template rename cancelled');
+            console.debug('Preset rename cancelled');
             return;
         }
         if (equalsIgnoreCaseAndAccents(oldName, newName)) {
@@ -929,7 +826,7 @@ export async function initPresetManager() {
             return;
         }
 
-        const successToast = !presetManager.isAdvancedFormatting() ? t`Preset renamed` : t`Template renamed`;
+        const successToast = t`Preset renamed`;
         toastr.success(successToast);
     });
 
@@ -975,7 +872,7 @@ export async function initPresetManager() {
         data.name = name;
 
         await presetManager.savePreset(name, data);
-        const successToast = !presetManager.isAdvancedFormatting() ? t`Preset imported` : t`Template imported`;
+        const successToast = t`Preset imported`;
         toastr.success(successToast);
         e.target.value = null;
     });
@@ -989,7 +886,7 @@ export async function initPresetManager() {
             return;
         }
 
-        const headerText = !presetManager.isAdvancedFormatting() ? t`Delete this preset?` : t`Delete this template?`;
+        const headerText = t`Delete this preset?`;
         const confirm = await Popup.show.confirm(headerText, t`This action is irreversible and your current settings will be overwritten.`);
         if (!confirm) {
             return;
@@ -999,11 +896,11 @@ export async function initPresetManager() {
         const result = await presetManager.deletePreset();
 
         if (result) {
-            const successToast = !presetManager.isAdvancedFormatting() ? t`Preset deleted` : t`Template deleted`;
+            const successToast = t`Preset deleted`;
             toastr.success(successToast);
             await eventSource.emit(event_types.PRESET_DELETED, { apiId, name });
         } else {
-            const warningToast = !presetManager.isAdvancedFormatting() ? t`Preset was not deleted from server` : t`Template was not deleted from server`;
+            const warningToast = t`Preset was not deleted from server`;
             toastr.warning(warningToast);
         }
 
@@ -1033,14 +930,12 @@ export async function initPresetManager() {
 
         if (data.isDefault) {
             if (Object.keys(data.preset).length === 0) {
-                const errorToast = !presetManager.isAdvancedFormatting() ? t`Default preset cannot be restored` : t`Default template cannot be restored`;
+                const errorToast = t`Default preset cannot be restored`;
                 toastr.error(errorToast);
                 return;
             }
 
-            const confirmText = !presetManager.isAdvancedFormatting()
-                ? t`Resetting a <b>default preset</b> will restore the default settings.`
-                : t`Resetting a <b>default template</b> will restore the default settings.`;
+            const confirmText = t`Resetting a <b>default preset</b> will restore the default settings.`;
             const confirm = await Popup.show.confirm(t`Are you sure?`, confirmText);
             if (!confirm) {
                 return;
@@ -1050,12 +945,10 @@ export async function initPresetManager() {
             await presetManager.savePreset(name, data.preset);
             const option = presetManager.findPreset(name);
             presetManager.selectPreset(option);
-            const successToast = !presetManager.isAdvancedFormatting() ? t`Default preset restored` : t`Default template restored`;
+            const successToast = t`Default preset restored`;
             toastr.success(successToast);
         } else {
-            const confirmText = !presetManager.isAdvancedFormatting()
-                ? t`Resetting a <b>custom preset</b> will restore to the last saved state.`
-                : t`Resetting a <b>custom template</b> will restore to the last saved state.`;
+            const confirmText = t`Resetting a <b>custom preset</b> will restore to the last saved state.`;
             const confirm = await Popup.show.confirm(t`Are you sure?`, confirmText);
             if (!confirm) {
                 return;
@@ -1063,39 +956,8 @@ export async function initPresetManager() {
 
             const option = presetManager.findPreset(name);
             presetManager.selectPreset(option);
-            const successToast = !presetManager.isAdvancedFormatting() ? t`Preset restored` : t`Template restored`;
+            const successToast = t`Preset restored`;
             toastr.success(successToast);
         }
-    });
-
-    $('#af_master_import').on('click', () => {
-        $('#af_master_import_file').trigger('click');
-    });
-
-    $('#af_master_import_file').on('change', async function (e) {
-        if (!(e.target instanceof HTMLInputElement)) {
-            return;
-        }
-        const file = e.target.files[0];
-
-        if (!file) {
-            return;
-        }
-
-        const data = await parseJsonFile(file);
-        const fileName = file.name.replace('.json', '');
-        await PresetManager.performMasterImport(data, fileName);
-        e.target.value = null;
-    });
-
-    $('#af_master_export').on('click', async () => {
-        const data = await PresetManager.performMasterExport();
-
-        if (!data) {
-            return;
-        }
-
-        const shortDate = new Date().toISOString().split('T')[0];
-        download(data, `ST-formatting-${shortDate}.json`, 'application/json');
     });
 }

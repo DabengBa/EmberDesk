@@ -3,19 +3,6 @@ import { getConfigValue } from './util.js';
 
 const PROMPT_PLACEHOLDER = getConfigValue('promptPlaceholder', 'Let\'s get started.');
 
-export const PROMPT_PROCESSING_TYPE = {
-    NONE: '',
-    /** @deprecated Use MERGE instead. */
-    CLAUDE: 'claude',
-    MERGE: 'merge',
-    MERGE_TOOLS: 'merge_tools',
-    SEMI: 'semi',
-    SEMI_TOOLS: 'semi_tools',
-    STRICT: 'strict',
-    STRICT_TOOLS: 'strict_tools',
-    SINGLE: 'single',
-};
-
 /**
  * @typedef {object} PromptNames
  * @property {string} charName Character name
@@ -53,32 +40,16 @@ export function addAssistantPrefix(prompt, tools, property) {
 }
 
 /**
- * Applies a post-processing step to the generated messages.
+ * Applies the fixed strict post-processing step to the generated messages:
+ * consecutive same-role messages are merged, mid-prompt system messages are
+ * demoted to user, and a user placeholder is inserted if the prompt does not
+ * start with a user or system message.
  * @param {object[]} messages Messages to post-process
- * @param {string} type Prompt conversion type
  * @param {PromptNames} names Prompt names
- * @returns
+ * @returns {object[]} Transformed messages
  */
-export function postProcessPrompt(messages, type, names) {
-    switch (type) {
-        case PROMPT_PROCESSING_TYPE.MERGE:
-        case PROMPT_PROCESSING_TYPE.CLAUDE:
-            return mergeMessages(messages, names, { strict: false, placeholders: false, single: false, tools: false });
-        case PROMPT_PROCESSING_TYPE.MERGE_TOOLS:
-            return mergeMessages(messages, names, { strict: false, placeholders: false, single: false, tools: true });
-        case PROMPT_PROCESSING_TYPE.SEMI:
-            return mergeMessages(messages, names, { strict: true, placeholders: false, single: false, tools: false });
-        case PROMPT_PROCESSING_TYPE.SEMI_TOOLS:
-            return mergeMessages(messages, names, { strict: true, placeholders: false, single: false, tools: true });
-        case PROMPT_PROCESSING_TYPE.STRICT:
-            return mergeMessages(messages, names, { strict: true, placeholders: true, single: false, tools: false });
-        case PROMPT_PROCESSING_TYPE.STRICT_TOOLS:
-            return mergeMessages(messages, names, { strict: true, placeholders: true, single: false, tools: true });
-        case PROMPT_PROCESSING_TYPE.SINGLE:
-            return mergeMessages(messages, names, { strict: true, placeholders: false, single: true, tools: false });
-        default:
-            return messages;
-    }
+export function postProcessPrompt(messages, names) {
+    return mergeMessages(messages, names, { strict: true, placeholders: true, single: false, tools: false });
 }
 
 /**

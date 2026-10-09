@@ -1,6 +1,23 @@
 import * as stylex from '@stylexjs/stylex';
+import type { TextareaHTMLAttributes } from 'react';
 import { getFieldErrorMessage, getValueAtPath } from '@/lib/settings-helpers.js';
+import { useAutosizeTextareaRef } from '@/lib/autosize-textarea';
 import { settingsStyles } from '@/styles/settings-surface.styles';
+
+function SettingTextarea({
+    value,
+    ...rest
+}: { value: string } & Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, 'value'>) {
+    const ref = useAutosizeTextareaRef<HTMLTextAreaElement>(value);
+    return (
+        <textarea
+            ref={ref}
+            {...stylex.props(settingsStyles.input, settingsStyles.textarea)}
+            value={value}
+            {...rest}
+        />
+    );
+}
 
 type SettingOption = {
     value: string;
@@ -64,10 +81,9 @@ export function SettingField({
                                 )}
 
                                 {variant === 'textarea' && (
-                                    <textarea
+                                    <SettingTextarea
                                         id={fieldId}
                                         name={name}
-                                        {...stylex.props(settingsStyles.input, settingsStyles.textarea)}
                                         value={String(currentValue ?? '')}
                                         placeholder={placeholder}
                                         disabled={disabled}

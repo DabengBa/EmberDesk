@@ -1155,12 +1155,10 @@ export async function loadPowerUserSettings(settings, data) {
         delete power_user[key];
     }
 
-    $('#single_line').prop('checked', power_user.single_line);
     $('#relaxed_api_urls').prop('checked', power_user.relaxed_api_urls);
     $('#world_import_dialog').prop('checked', power_user.world_import_dialog);
     $('#enable_auto_select_input').prop('checked', power_user.enable_auto_select_input);
     $('#enable_md_hotkeys').prop('checked', power_user.enable_md_hotkeys);
-    $('#trim_spaces').prop('checked', power_user.trim_spaces);
     $('#continue_on_send').prop('checked', power_user.continue_on_send);
     $('#quick_continue').prop('checked', power_user.quick_continue);
     $('#quick_impersonate').prop('checked', power_user.quick_continue);
@@ -1171,8 +1169,6 @@ export async function loadPowerUserSettings(settings, data) {
     $('#auto_swipe_minimum_length').val(power_user.auto_swipe_minimum_length);
     $('#auto_swipe_blacklist').val(power_user.auto_swipe_blacklist.join(', '));
     $('#auto_swipe_blacklist_threshold').val(power_user.auto_swipe_blacklist_threshold);
-    $('#custom_stopping_strings').text(power_user.custom_stopping_strings);
-    $('#custom_stopping_strings_macro').prop('checked', power_user.custom_stopping_strings_macro);
     $('#fuzzy_search_checkbox').prop('checked', power_user.fuzzy_search);
     $('#encode_tags').prop('checked', power_user.encode_tags);
     $('#experimental_macro_engine').prop('checked', power_user.experimental_macro_engine);
@@ -1184,17 +1180,10 @@ export async function loadPowerUserSettings(settings, data) {
     $('#auto_scroll_chat_to_bottom').prop('checked', power_user.auto_scroll_chat_to_bottom);
     $('#bogus_folders').prop('checked', power_user.bogus_folders);
     $('#zoomed_avatar_magnification').prop('checked', power_user.zoomed_avatar_magnification);
-    $(`#tokenizer option[value="${power_user.tokenizer}"]`).prop('selected', true);
     $(`#send_on_enter option[value=${power_user.send_on_enter}]`).prop('selected', true);
     $('#confirm_message_delete').prop('checked', power_user.confirm_message_delete !== undefined ? !!power_user.confirm_message_delete : true);
     $('#spoiler_free_mode').prop('checked', power_user.spoiler_free_mode);
-    $('#collapse-newlines-checkbox').prop('checked', power_user.collapse_newlines);
-    $('#always-force-name2-checkbox').prop('checked', power_user.always_force_name2);
-    $('#trim_sentences_checkbox').prop('checked', power_user.trim_sentences);
-    $('#markdown_escape_strings').val(power_user.markdown_escape_strings);
     $('#noShadowsmode').prop('checked', power_user.noShadows);
-    $('#start_reply_with').text(power_user.user_prompt_bias);
-    $('#chat-show-reply-prefix-checkbox').prop('checked', power_user.show_user_prompt_bias);
     $('#auto_continue_enabled').prop('checked', power_user.auto_continue.enabled);
     $('#auto_continue_allow_chat_completions').prop('checked', power_user.auto_continue.allow_chat_completions);
     $('#auto_continue_target_length').val(power_user.auto_continue.target_length);
@@ -1227,7 +1216,6 @@ export async function loadPowerUserSettings(settings, data) {
     $(`#chat_display option[value=${power_user.chat_display}]`).prop('selected', true).trigger('change');
     $(`#toastr_position option[value=${power_user.toastr_position}]`).prop('selected', true).trigger('change');
     $('#chat_width_slider').val(power_user.chat_width);
-    $('#token_padding').val(power_user.token_padding);
     $('#aux_field').val(power_user.aux_field);
     $('#tag_import_setting').val(power_user.tag_import_setting);
 
@@ -1915,47 +1903,6 @@ jQuery(() => {
     });
 
     // Settings that go to settings.json
-    $('#collapse-newlines-checkbox').on('change', function () {
-        power_user.collapse_newlines = !!$(this).prop('checked');
-        saveSettingsDebounced();
-    });
-
-    // include newline is the child of trim sentences
-    // if include newline is checked, trim sentences must be checked
-    // if trim sentences is unchecked, include newline must be unchecked
-    $('#trim_sentences_checkbox').on('change', function () {
-        power_user.trim_sentences = !!$(this).prop('checked');
-        saveSettingsDebounced();
-    });
-
-    $('#single_line').on('input', function () {
-        const value = !!$(this).prop('checked');
-        power_user.single_line = value;
-        saveSettingsDebounced();
-    });
-
-    $('#always-force-name2-checkbox').on('change', function () {
-        power_user.always_force_name2 = !!$(this).prop('checked');
-        saveSettingsDebounced();
-    });
-
-    $('#markdown_escape_strings').on('input', function () {
-        power_user.markdown_escape_strings = String($(this).val());
-        saveSettingsDebounced();
-        reloadMarkdownProcessor();
-    });
-
-    $('#start_reply_with').on('input', function () {
-        power_user.user_prompt_bias = String($(this).val());
-        saveSettingsDebounced();
-    });
-
-    $('#chat-show-reply-prefix-checkbox').on('change', function () {
-        power_user.show_user_prompt_bias = !!$(this).prop('checked');
-        reloadCurrentChat();
-        saveSettingsDebounced();
-    });
-
     $('#auto_continue_enabled').on('change', function () {
         power_user.auto_continue.enabled = $(this).prop('checked');
         saveSettingsDebounced();
@@ -2246,15 +2193,6 @@ jQuery(() => {
         saveSettingsDebounced();
     });
 
-    $('#tokenizer').on('change', function () {
-        const value = $(this).find(':selected').val();
-        power_user.tokenizer = Number(value);
-        saveSettingsDebounced();
-
-        // Trigger character editor re-tokenize
-        forceCharacterEditorTokenize();
-    });
-
     $('#send_on_enter').on('change', function () {
         const value = $(this).find(':selected').val();
         power_user.send_on_enter = Number(value);
@@ -2284,11 +2222,6 @@ jQuery(() => {
     $('#allow_name2_display').on('input', function () {
         power_user.allow_name2_display = !!$(this).prop('checked');
         reloadCurrentChat();
-        saveSettingsDebounced();
-    });
-
-    $('#token_padding').on('input', function () {
-        power_user.token_padding = Number($(this).val());
         saveSettingsDebounced();
     });
 
@@ -2407,12 +2340,6 @@ jQuery(() => {
         saveSettingsDebounced();
     });
 
-    $('#trim_spaces').on('input', function () {
-        const value = !!$(this).prop('checked');
-        power_user.trim_spaces = value;
-        saveSettingsDebounced();
-    });
-
     $('#relaxed_api_urls').on('input', function () {
         const value = !!$(this).prop('checked');
         power_user.relaxed_api_urls = value;
@@ -2450,15 +2377,6 @@ jQuery(() => {
         $(this).toggleClass('fa-eye fa-eye-slash');
     });
 
-    $('#custom_stopping_strings').on('input', function () {
-        power_user.custom_stopping_strings = String($(this).val()).trim();
-        saveSettingsDebounced();
-    });
-
-    $('#custom_stopping_strings_macro').on('change', function () {
-        power_user.custom_stopping_strings_macro = !!$(this).prop('checked');
-        saveSettingsDebounced();
-    });
 
     $('#fuzzy_search_checkbox').on('input', function () {
         power_user.fuzzy_search = !!$(this).prop('checked');
@@ -2933,7 +2851,6 @@ jQuery(() => {
                 parsedValue[index] = String(item);
             });
             power_user.custom_stopping_strings = JSON.stringify(parsedValue);
-            $('#custom_stopping_strings').val(power_user.custom_stopping_strings);
             saveSettingsDebounced();
 
             return power_user.custom_stopping_strings;
@@ -2980,7 +2897,6 @@ jQuery(() => {
             }
 
             power_user.user_prompt_bias = String(value ?? '');
-            $('#start_reply_with').val(power_user.user_prompt_bias);
             saveSettingsDebounced();
 
             return power_user.user_prompt_bias;
@@ -3016,30 +2932,3 @@ export async function mountPowerUserPanel() {
     }
 }
 
-/**
- * Mounts the React-owned Advanced Formatting drawer content.
- * Must run before getSettings(): loadPowerUserSettings binds every element
- * ID that the React surface preserves.
- */
-export async function mountAdvancedFormattingPanel() {
-    const drawerContent = document.getElementById('AdvancedFormatting');
-    if (!drawerContent) {
-        console.warn('Advanced Formatting drawer not found');
-        return;
-    }
-    if (drawerContent.dataset.reactAdvancedFormattingMounted === 'true') {
-        return;
-    }
-
-    const host = document.createElement('div');
-    host.id = 'emberdesk-react-advanced-formatting-host';
-    drawerContent.replaceChildren(host);
-
-    try {
-        const module = await loadWorkspacePanelsModule();
-        module.mountAdvancedFormattingPanel(host);
-        drawerContent.dataset.reactAdvancedFormattingMounted = 'true';
-    } catch (error) {
-        console.error('Failed to mount advanced formatting panel:', error);
-    }
-}

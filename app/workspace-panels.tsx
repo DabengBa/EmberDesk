@@ -1,4 +1,4 @@
-import { Fragment, StrictMode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ChangeEvent, type ReactElement, type ReactNode, type TextareaHTMLAttributes } from 'react';
+import { Fragment, StrictMode, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ChangeEvent, type ReactElement, type ReactNode, type TextareaHTMLAttributes } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { createPortal, flushSync } from 'react-dom';
 import { QueryClient, QueryClientProvider, useMutation, useQuery } from '@tanstack/react-query';
@@ -52,9 +52,10 @@ import { SettingsSurface } from './components/settings/SettingsSurface';
 import { ChatBackupsBrowser, type ChatBackupsCommands } from './components/chat-backups/ChatBackupsBrowser';
 import { DataMaidDialog } from './components/data-maid/DataMaidDialog';
 import { PowerUserPanel } from './components/power-user/PowerUserPanel';
-import { AdvancedFormattingPanel } from './components/panels/AdvancedFormattingPanel';
 import { PromptManagerPopup } from './components/panels/PromptManagerPopup';
 import { TagManagement } from './components/tags/TagManagement';
+import { TagChipInput } from './components/fields/TagChipInput';
+import { useAutosizeTextareaRef } from './lib/autosize-textarea';
 import { RegexEditor } from './components/regex/RegexEditor';
 import { RegexSettingsPanel } from './components/regex/RegexSettingsPanel';
 import { RegexDebugger } from './components/regex/RegexDebugger';
@@ -571,16 +572,7 @@ function AuthoringTextarea({
     xstyle?: StyleXStyles;
     onChange: (event: ChangeEvent<HTMLTextAreaElement>) => void;
 } & Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, 'value' | 'onChange' | 'rows'>) {
-    const ref = useRef<HTMLTextAreaElement | null>(null);
-
-    useLayoutEffect(() => {
-        const element = ref.current;
-        if (!element) {
-            return;
-        }
-        element.style.height = 'auto';
-        element.style.height = `${element.scrollHeight}px`;
-    }, [value]);
+    const ref = useAutosizeTextareaRef<HTMLTextAreaElement>(value);
 
     return (
         <textarea
@@ -594,6 +586,8 @@ function AuthoringTextarea({
         />
     );
 }
+
+
 
 function AuthoringWorkspacePanel({
     kind,
@@ -690,9 +684,9 @@ function AuthoringWorkspacePanel({
     const nameValue = stringDraft('name');
     const descriptionValue = stringDraft('description');
     const firstMessageValue = stringDraft('firstMessage');
-    const tagsText = Array.isArray(draft.tags)
-        ? draft.tags.filter((tag): tag is string => typeof tag === 'string').join(', ')
-        : '';
+    const tagsList = Array.isArray(draft.tags)
+        ? draft.tags.filter((tag): tag is string => typeof tag === 'string')
+        : [];
 
     const depthPrompt = draft.depthPrompt && typeof draft.depthPrompt === 'object'
         ? draft.depthPrompt as { prompt?: string; depth?: number | null; role?: string | number | null }
@@ -705,14 +699,14 @@ function AuthoringWorkspacePanel({
     const dirtyFieldSet = new Set(authoringSession.dirtyFields);
     const isFieldDirty = (key: string) => dirtyFieldSet.has(key);
     const advancedChips = [
-        stringDraft('systemPrompt').trim() ? { label: 'system prompt', field: 'systemPrompt' } : null,
-        stringDraft('postHistoryInstructions').trim() ? { label: 'post-history', field: 'postHistoryInstructions' } : null,
-        stringDraft('scenario').trim() ? { label: 'scenario', field: 'scenario' } : null,
-        stringDraft('exampleMessages').trim() ? { label: 'examples', field: 'exampleMessages' } : null,
-        (depthPrompt.prompt?.trim() || depthPrompt.depth != null) ? { label: `note@${depthPrompt.depth ?? 4}`, field: 'depthPrompt.prompt' } : null,
-        stringDraft('creator').trim() ? { label: 'creator', field: 'creator' } : null,
-        stringDraft('characterVersion').trim() ? { label: `v${stringDraft('characterVersion').trim()}`, field: 'characterVersion' } : null,
-        stringDraft('creatorNotes').trim() ? { label: 'notes', field: 'creatorNotes' } : null,
+        stringDraft('systemPrompt').trim() ? { label: 'System prompt', field: 'systemPrompt' } : null,
+        stringDraft('postHistoryInstructions').trim() ? { label: 'Post-history', field: 'postHistoryInstructions' } : null,
+        stringDraft('scenario').trim() ? { label: 'Scenario', field: 'scenario' } : null,
+        stringDraft('exampleMessages').trim() ? { label: 'Examples', field: 'exampleMessages' } : null,
+        (depthPrompt.prompt?.trim() || depthPrompt.depth != null) ? { label: `Depth note @${depthPrompt.depth ?? 4}`, field: 'depthPrompt.prompt' } : null,
+        stringDraft('creator').trim() ? { label: 'Creator', field: 'creator' } : null,
+        stringDraft('characterVersion').trim() ? { label: `Version ${stringDraft('characterVersion').trim()}`, field: 'characterVersion' } : null,
+        stringDraft('creatorNotes').trim() ? { label: 'Notes', field: 'creatorNotes' } : null,
     ].filter((chip): chip is { label: string; field: string } => chip !== null);
     const greetings = Array.isArray(draft.alternateGreetings)
         ? draft.alternateGreetings.filter((greeting): greeting is string => typeof greeting === 'string')
@@ -800,6 +794,28 @@ function AuthoringWorkspacePanel({
             >
                 <header {...stylex.props(authoringStyles.panelHeader)}>
                     <div {...stylex.props(authoringStyles.panelKicker)}>{bridgeState.mode === 'edit' ? 'Editing' : 'Creating'}</div>
+                    {!isCreateMode ? (
+                        <span {...stylex.props(authoringStyles.footerStatus, authoringStyles.headerStatus)} aria-live="polite">
+                            <i
+                                {...stylex.props(
+                                    authoringStyles.footerDot,
+                                    authoringCommandMutation.isError
+                                        ? authoringStyles.footerDotError
+                                        : (authoringCommandMutation.isPending || authoringSession.dirty)
+                                            ? authoringStyles.footerDotBusy
+                                            : null,
+                                )}
+                                aria-hidden="true"
+                            />
+                            {authoringCommandMutation.isPending
+                                ? 'Saving…'
+                                : authoringCommandMutation.isError
+                                    ? 'Save failed — next change retries'
+                                    : authoringSession.dirty
+                                        ? `${dirtyFieldSet.size} unsaved`
+                                        : 'Saved'}
+                        </span>
+                    ) : null}
                 </header>
                 {unsupportedFields.length > 0 ? (
                     <output {...stylex.props(authoringStyles.panelWarning)}>
@@ -877,11 +893,13 @@ function AuthoringWorkspacePanel({
                                     </button>
                                     {tokenTotal ? (
                                         <span
-                                            {...stylex.props(authoringStyles.metaChip)}
-                                            title={`${tokenTotal} tokens${tokenPermanent ? ` (${tokenPermanent} permanent)` : ''} — last counted on save`}
+                                            {...stylex.props(authoringStyles.metaChip, authoringSession.dirty ? authoringStyles.metaChipStale : null)}
+                                            title={authoringSession.dirty
+                                                ? `${tokenTotal} tokens as of last save — recounts on next save`
+                                                : `${tokenTotal} tokens${tokenPermanent ? ` (${tokenPermanent} permanent)` : ''} — last counted on save`}
                                         >
                                             <i className="fa-solid fa-coins" aria-hidden="true" />
-                                            {tokenTotal} tokens
+                                            {authoringSession.dirty ? `~${tokenTotal}` : tokenTotal} tokens
                                         </span>
                                     ) : null}
                                 </div>
@@ -889,21 +907,14 @@ function AuthoringWorkspacePanel({
                         </div>
                         <div {...stylex.props(authoringStyles.fieldRow)}>
                             <div {...stylex.props(authoringStyles.fieldRowItem)}>
-                                <label {...stylex.props(authoringStyles.field)} data-react-authoring-field="tags">
+                                <div {...stylex.props(authoringStyles.field)} data-react-authoring-field="tags">
                                     <AuthoringFieldLabel text="Tags" dirty={isFieldDirty('tags')} />
-                                    <input
-                                        className="text_pole"
-                                        {...stylex.props(authoringStyles.control)}
-                                        value={tagsText}
-                                        onChange={(event) => updateDraft({
-                                            tags: event.target.value
-                                                .split(',')
-                                                .map(tag => tag.trim())
-                                                .filter(Boolean),
-                                        })}
-                                        placeholder="Comma-separated tags"
+                                    <TagChipInput
+                                        values={tagsList}
+                                        placeholder="Type a tag, press Enter"
+                                        onCommit={next => updateDraft({ tags: next })}
                                     />
-                                </label>
+                                </div>
                             </div>
                             <div {...stylex.props(authoringStyles.fieldRowItem)}>
                                 <label {...stylex.props(authoringStyles.field)} data-react-authoring-field="characterWorld">
@@ -967,6 +978,11 @@ function AuthoringWorkspacePanel({
                                 <i className="fa-solid fa-pen-to-square" aria-hidden="true" />
                                 {greetings.length > 0 ? 'Manage greetings' : 'Add alternate greetings'}
                             </button>
+                            {greetings.length > 0 ? (
+                                <p {...stylex.props(authoringStyles.greetingPreview)} title={greetings[0]}>
+                                    {greetings[0]}
+                                </p>
+                            ) : null}
                         </div>
                     </div>
                     <section {...stylex.props(authoringStyles.advancedSection)} data-react-authoring-section="advanced">
@@ -1004,8 +1020,8 @@ function AuthoringWorkspacePanel({
                                         <button
                                             type="button"
                                             {...stylex.props(authoringStyles.advancedChipButton)}
-                                            title="Expand advanced section"
-                                            onClick={() => setAdvancedOpen(true)}
+                                            title={`Show ${advancedChips.length - 3} more — jump to ${advancedChips[3].label}`}
+                                            onClick={() => jumpToAdvancedField(advancedChips[3].field)}
                                         >
                                             +{advancedChips.length - 3}
                                         </button>
@@ -1186,28 +1202,7 @@ function AuthoringWorkspacePanel({
                         >
                             Create
                         </button>
-                    ) : (
-                        <span {...stylex.props(authoringStyles.footerStatus)} aria-live="polite">
-                            <i
-                                {...stylex.props(
-                                    authoringStyles.footerDot,
-                                    authoringCommandMutation.isError
-                                        ? authoringStyles.footerDotError
-                                        : (authoringCommandMutation.isPending || authoringSession.dirty)
-                                            ? authoringStyles.footerDotBusy
-                                            : null,
-                                )}
-                                aria-hidden="true"
-                            />
-                            {authoringCommandMutation.isPending
-                                ? 'Saving…'
-                                : authoringCommandMutation.isError
-                                    ? 'Save failed — next change retries'
-                                    : authoringSession.dirty
-                                        ? `${dirtyFieldSet.size} unsaved`
-                                        : 'Saved'}
-                        </span>
-                    )}
+                    ) : null}
                     <div {...stylex.props(authoringStyles.footerTools)}>
                         <button
                             type="button"
@@ -1441,13 +1436,11 @@ function WorkspacePanelRoot({
 }
 
 const workspaceShellNavigationEntries: WorkspaceShellNavigationEntry[] = [
-    { command: 'openAIConfig', icon: 'fa-sliders', label: 'AI Config', panelKind: 'aiConfig' },
-    { command: 'openAIConfigDrawer', icon: 'fa-bookmark', label: 'Presets', panelKind: 'aiConfigDrawer', slotKey: 'aiConfigDrawer' },
-    { command: 'openFormatting', icon: 'fa-font', label: 'Formatting', panelKind: 'advancedFormatting' },
-    { command: 'openCharacterLibrary', icon: 'fa-address-book', label: 'Character Library', panelKind: 'characterLibrary', slotKey: 'characterLibrary' },
-    { command: 'openWorldInfo', icon: 'fa-book-atlas', label: 'World Info', panelKind: 'worldInfo', slotKey: 'worldInfo' },
-    { command: 'openRegex', icon: 'fa-code', label: 'Regex', panelKind: 'regex', slotKey: 'regex' },
-    { command: 'openSettings', icon: 'fa-gear', label: 'Settings', panelKind: 'settings' },
+    { command: 'openAIConfigDrawer', icon: 'fa-bookmark', label: 'AI 响应配置', panelKind: 'aiConfigDrawer', slotKey: 'aiConfigDrawer' },
+    { command: 'openCharacterLibrary', icon: 'fa-address-book', label: '角色库', panelKind: 'characterLibrary', slotKey: 'characterLibrary' },
+    { command: 'openWorldInfo', icon: 'fa-book-atlas', label: '世界书', panelKind: 'worldInfo', slotKey: 'worldInfo' },
+    { command: 'openRegex', icon: 'fa-code', label: '正则', panelKind: 'regex', slotKey: 'regex' },
+    { command: 'openSettings', icon: 'fa-gear', label: '设置', panelKind: 'settings' },
 ];
 
 function asWorkspacePanelDockDispatchResult(result: unknown): WorkspacePanelDockDispatchResult {
@@ -1565,6 +1558,11 @@ function ReactWorkspaceShellChrome({
     const status = state.status ?? (state.activeContext === 'none' ? 'empty' : 'success');
     const dockSnapshot = useWorkspacePanelDockSnapshot();
     const panelDispatchSequenceRef = useRef(0);
+    // A close intent queues a deferred unmount behind setTimeout; while it is
+    // pending the dock snapshot still reports the panel as active, so a second
+    // click in that window must mean "reopen" (supersede the close), not a
+    // second close that would outlive the reopen.
+    const pendingCloseIntentRef = useRef<string | null>(null);
 
     const dispatchCommand = useCallback(async (entry: WorkspaceShellNavigationEntry) => {
         const dispatchSequence = panelDispatchSequenceRef.current + 1;
@@ -1640,7 +1638,7 @@ function ReactWorkspaceShellChrome({
             <section {...stylex.props(workspaceShellStyles.context)} aria-label="Current workspace context">
                 <div {...stylex.props(workspaceShellStyles.title)}>{contextTitle}</div>
             </section>
-            <nav {...stylex.props(workspaceShellStyles.nav)} aria-label="Workspace navigation">
+            <nav {...stylex.props(workspaceShellStyles.nav)} aria-label="工作区导航">
                 {workspaceShellNavigationEntries.map(entry => {
                     const isPanelEntryActive = Boolean(entry.panelKind && dockSnapshot.activePanelKind === entry.panelKind);
                     const childSlot = entry.slotKey ? getWorkspaceShellChildSlot(entry.slotKey) : null;
@@ -1670,9 +1668,18 @@ function ReactWorkspaceShellChrome({
                                 onClick={(event) => {
                                     event.preventDefault();
                                     event.stopPropagation();
-                                    if (entry.panelKind && isPanelEntryActive && dockSnapshot.activePanelStatus !== 'error' && !isDrawerPinned()) {
+                                    if (entry.panelKind
+                                        && isPanelEntryActive
+                                        && pendingCloseIntentRef.current !== entry.panelKind
+                                        && dockSnapshot.activePanelStatus !== 'error'
+                                        && !isDrawerPinned()) {
+                                        pendingCloseIntentRef.current = entry.panelKind;
                                         window.setTimeout(() => {
-                                            void closePanel(entry);
+                                            void closePanel(entry).finally(() => {
+                                                if (pendingCloseIntentRef.current === entry.panelKind) {
+                                                    pendingCloseIntentRef.current = null;
+                                                }
+                                            });
                                         }, 0);
                                         return;
                                     }
@@ -2179,15 +2186,6 @@ function mountSmallPanel(container: HTMLElement, element: ReactElement) {
             </Theme>
         </StrictMode>,
     ));
-}
-
-/**
- * Mounts the Advanced Formatting drawer content (sysprompt/reasoning/tokenizer).
- * Presentation-only: power-user.js keeps behavior ownership via the
- * preserved element IDs.
- */
-export function mountAdvancedFormattingPanel(container: HTMLElement) {
-    mountSmallPanel(container, <AdvancedFormattingPanel />);
 }
 
 /**

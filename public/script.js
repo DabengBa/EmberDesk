@@ -62,7 +62,6 @@ import {
     loadMovingUIState,
     getCustomStoppingStrings,
     renderStoryString,
-    mountAdvancedFormattingPanel,
     sortEntitiesList,
     registerDebugFunction,
     flushEphemeralStoppingStrings,
@@ -195,7 +194,14 @@ import { ensurePanel, registerPanelHook } from './scripts/deferred-panels.js';
 import { getCharacterCardTagId } from './scripts/deferred-panel-replays.js';
 import { BulkEditOverlay } from './scripts/BulkEditOverlay.js';
 import { appendFileContent, hasPendingFileAttachment, populateFileAttachment, decodeStyleTags, encodeStyleTags, isExternalMediaAllowed, preserveNeutralChat, restoreNeutralChat, formatCreatorNotes, initChatUtilities, addDOMPurifyHooks } from './scripts/chats.js';
-import { getPresetManager, initPresetManager } from './scripts/preset-manager.js';
+import {
+    deleteFormattingPreset,
+    getFormattingPresetList,
+    getPresetManager,
+    initPresetManager,
+    restoreFormattingPreset,
+    saveFormattingPreset,
+} from './scripts/preset-manager.js';
 import { evaluateMacros, getLastMessageId, initMacros } from './scripts/macros.js';
 import { setUserControls } from './scripts/user.js';
 import { POPUP_RESULT, POPUP_TYPE, Popup, callGenericPopup, fixToastrForDialogs } from './scripts/popup.js';
@@ -227,7 +233,7 @@ import { applyBrowserFixes } from './scripts/browser-fixes.js';
 import { initSettingsSearch } from './scripts/setting-search.js';
 import { initBulkEdit } from './scripts/bulk-edit.js';
 import { getContext } from './scripts/st-context.js';
-import { extractReasoningFromData, extractReasoningSignatureFromData, initReasoning, parseReasoningInSwipes, PromptReasoning, ReasoningHandler, removeReasoningFromString, updateReasoningUI } from './scripts/reasoning.js';
+import { applyReasoningVisibility, extractReasoningFromData, extractReasoningSignatureFromData, initReasoning, parseReasoningInSwipes, PromptReasoning, ReasoningHandler, removeReasoningFromString, toggleReasoningAutoExpand, updateReasoningUI } from './scripts/reasoning.js';
 import { accountStorage } from './scripts/util/AccountStorage.js';
 import { initDataMaid } from './scripts/data-maid.js';
 
@@ -436,18 +442,99 @@ const reactRuntimePort = createReactRuntimeProvider({
                     const previousModel = runtimeKey === 'chatCompletionSettings'
                         ? runtimeSettings.openai_model
                         : undefined;
+                    // React-owned power_user fields carry legacy DOM-change side
+                    // effects (the retired Advanced Formatting drawer used to run
+                    // them on input). Diff them here so a React save applies the
+                    // same live behavior.
+                    const previousPowerUser = runtimeKey === 'powerUserSettings'
+                        ? {
+                            tokenizer: runtimeSettings.tokenizer,
+                            markdown_escape_strings: runtimeSettings.markdown_escape_strings,
+                            show_user_prompt_bias: runtimeSettings.show_user_prompt_bias,
+                            reasoning_auto_expand: runtimeSettings.reasoning?.auto_expand,
+                            reasoning_show_hidden: runtimeSettings.reasoning?.show_hidden,
+                        }
+                        : null;
                     Object.assign(runtimeSettings, savedSettings);
                     if (runtimeKey === 'chatCompletionSettings'
                         && previousModel !== undefined
                         && runtimeSettings.openai_model !== previousModel) {
                         void eventSource.emit(event_types.CHATCOMPLETION_MODEL_CHANGED, runtimeSettings.openai_model);
                     }
+                    if (previousPowerUser) {
+                        if (runtimeSettings.tokenizer !== previousPowerUser.tokenizer) {
+                            forceCharacterEditorTokenize();
+                        }
+                        if (runtimeSettings.markdown_escape_strings !== previousPowerUser.markdown_escape_strings) {
+                            reloadMarkdownProcessor();
+                        }
+                        if (runtimeSettings.show_user_prompt_bias !== previousPowerUser.show_user_prompt_bias) {
+                            void reloadCurrentChat();
+                        }
+                        if (runtimeSettings.reasoning?.auto_expand !== previousPowerUser.reasoning_auto_expand) {
+                            toggleReasoningAutoExpand();
+                        }
+                        if (runtimeSettings.reasoning?.show_hidden !== previousPowerUser.reasoning_show_hidden) {
+                            applyReasoningVisibility();
+                        }
+                    }
                 }
             }
         },
+        // CRUD for Advanced Formatting presets (system prompt / reasoning
+        // template). The React Settings overlay owns the UI; this command keeps
+        // the file-backed preset lists, slash-command enums, and PRESET_* event
+        // contracts in one legacy implementation.
+        formattingPreset: async (request) => {
+            const { action, apiId, name, newName, preset } = request ?? {};
+            if (apiId !== 'sysprompt' && apiId !== 'reasoning') {
+                throw new Error(`Unsupported formatting preset API: ${String(apiId)}`);
+            }
+
+            let restored = null;
+            switch (action) {
+                case 'save': {
+                    await saveFormattingPreset(apiId, name ?? preset?.name, preset);
+                    break;
+                }
+                case 'rename': {
+                    if (!name || !newName) {
+                        throw new Error('Preset rename requires name and newName');
+                    }
+                    const oldPreset = getFormattingPresetList(apiId)?.find(entry => entry?.name === name);
+                    const mergedPreset = {
+                        ...(preset ?? {}),
+                        ...(oldPreset?.extensions ? { extensions: oldPreset.extensions } : {}),
+                    };
+                    await eventSource.emit(event_types.PRESET_RENAMED_BEFORE, { apiId, oldName: name, newName });
+                    await saveFormattingPreset(apiId, newName, mergedPreset);
+                    await deleteFormattingPreset(apiId, name);
+                    await eventSource.emit(event_types.PRESET_RENAMED, { apiId, oldName: name, newName });
+                    break;
+                }
+                case 'delete': {
+                    if (await deleteFormattingPreset(apiId, name)) {
+                        await eventSource.emit(event_types.PRESET_DELETED, { apiId, name });
+                    }
+                    break;
+                }
+                case 'restore': {
+                    restored = await restoreFormattingPreset(apiId, name);
+                    if (restored?.isDefault && restored.preset && typeof restored.preset === 'object' && Object.keys(restored.preset).length > 0) {
+                        await deleteFormattingPreset(apiId, name);
+                        await saveFormattingPreset(apiId, name, restored.preset);
+                    }
+                    break;
+                }
+                default:
+                    throw new Error(`Unknown formatting preset action: ${String(action)}`);
+            }
+
+            return { presets: [...(getFormattingPresetList(apiId) ?? [])], restored };
+        },
         connectProvider: () => connectProviderConnection(),
         testProviderConnection: () => testProviderConnection(),
-        // Drawer-content host id (e.g. 'left-nav-panel', 'AdvancedFormatting').
+        // Drawer-content host id (e.g. 'left-nav-panel', 'user-settings-block').
         // Settings overlay links use this to reach legacy-owned surfaces that
         // still live inside workspace drawers. The allowlist keeps the command
         // from turning into generic "open any element by id" DOM access.
@@ -1175,7 +1262,6 @@ const WORKSPACE_DRAWER_OPENED_STORAGE_KEYS = {
 // command. These are the legacy-owned surfaces the Settings overlay links to.
 const WORKSPACE_DRAWER_COMMAND_HOST_IDS = new Set([
     'left-nav-panel',
-    'AdvancedFormatting',
     'user-settings-block',
     'RegexPanel',
 ]);
@@ -4540,7 +4626,6 @@ async function bootstrapWorkspace() {
     await measureStartupStage('initSystemMessages', () => initSystemMessages());
     await measureStartupStage('mountPowerUserPanel', () => mountPowerUserPanel());
     await measureStartupStage('mountConfigDrawers', () => Promise.all([
-        mountAdvancedFormattingPanel(),
         mountPromptManagerPopup(),
         mountWorldInfoPanel(),
     ]));

@@ -22,6 +22,19 @@ export interface SettingsDocument {
     readonly [key: string]: unknown;
 }
 
+export interface FormattingPresetRequest {
+    action: 'save' | 'rename' | 'delete' | 'restore';
+    apiId: 'sysprompt' | 'reasoning';
+    name?: string;
+    newName?: string;
+    preset?: Record<string, unknown>;
+}
+
+export interface FormattingPresetResult {
+    presets: Record<string, unknown>[];
+    restored: { isDefault: boolean; preset: Record<string, unknown> } | null;
+}
+
 export interface RuntimeCommands {
     submitMessage(input: string): Promise<void>;
     stopGeneration(): void;
@@ -31,6 +44,7 @@ export interface RuntimeCommands {
     openWorkspaceDrawer(hostId: string): Promise<void>;
     connectProvider(): Promise<void>;
     testProviderConnection(): Promise<void>;
+    formattingPreset(request: FormattingPresetRequest): Promise<FormattingPresetResult>;
 }
 
 export interface RuntimePort {

@@ -19,7 +19,7 @@ export function SettingsTabs({ tabs, activeTab, onChange, showDescription = true
 
     return (
         <div {...stylex.props(settingsStyles.tabs)}>
-            <div {...stylex.props(settingsStyles.tabsList)} aria-label="Settings sections">
+            <div {...stylex.props(settingsStyles.tabsList)} aria-label="设置分区">
                 {tabs.map(tab => {
                     const isActive = tab.id === activeTab;
                     return (

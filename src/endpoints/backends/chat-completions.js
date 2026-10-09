@@ -21,7 +21,6 @@ import {
     getPromptNames,
     embedOpenRouterMedia,
     postProcessPrompt,
-    PROMPT_PROCESSING_TYPE,
 } from '../../prompt-converters.js';
 
 import { readSecret, SECRET_KEYS } from '../secrets.js';
@@ -96,13 +95,8 @@ router.post('/generate', async function (request, response) {
     try {
         if (!request.body) return response.status(400).send({ error: true });
 
-        const postProcessingType = request.body.custom_prompt_post_processing;
-        if (Array.isArray(request.body.messages) && postProcessingType) {
-            console.info('Applying custom prompt post-processing of type', postProcessingType);
-            request.body.messages = postProcessPrompt(
-                request.body.messages,
-                postProcessingType,
-                getPromptNames(request));
+        if (Array.isArray(request.body.messages)) {
+            request.body.messages = postProcessPrompt(request.body.messages, getPromptNames(request));
         }
 
         if (request.body.json_schema?.value) {
@@ -268,21 +262,3 @@ const multimodalModels = express.Router();
 
 
 router.use('/multimodal-models', multimodalModels);
-
-router.post('/process', async function (request, response) {
-    try {
-        if (!Array.isArray(request.body.messages)) {
-            return response.status(400).send({ error: 'Invalid messages format' });
-        }
-
-        if (!Object.values(PROMPT_PROCESSING_TYPE).includes(request.body.type)) {
-            return response.status(400).send({ error: 'Unknown processing type' });
-        }
-
-        const messages = postProcessPrompt(request.body.messages, request.body.type, getPromptNames(request));
-        return response.send({ messages });
-    } catch (error) {
-        console.error(error);
-        return response.sendStatus(500);
-    }
-});

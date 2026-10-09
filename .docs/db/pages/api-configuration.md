@@ -14,11 +14,11 @@ related: [page.settings, page.chat_workspace, feature.custom_base_url, feature.c
 
 ## Page Purpose
 
-Document the retirement of the API Connections drawer. All remaining provider work — base URL, API key, model, fallback model, prompt post-processing, Connect/Test actions, and connection status — is owned by the Providers tab of [Settings](page.settings), opened from the workspace shell AI Config entry as an overlay or deep-linked at `/settings?tab=providers`. Generation defaults (presets, sampling, reasoning, continue, prompt formats) live in the separate AI Response Configuration drawer (`#left-nav-panel`, shell Presets entry).
+Document the retirement of the API Connections drawer. All remaining provider work — base URL, API key, model, fallback model, Connect/Test actions, and connection status — is owned by the Providers tab of [Settings](page.settings), opened from the workspace shell AI Config entry as an overlay or deep-linked at `/settings?tab=providers`. Generation defaults (presets, sampling, reasoning, continue, prompt formats) live in the separate AI Response Configuration drawer (`#left-nav-panel`, shell Presets entry).
 
 ## Retired Structure
 
-The drawer previously exposed the primary connection path (model datalist, unified masked API key, base URL), the fallback model section, prompt post-processing, Connect/Cancel/Test actions with an online-status indicator, and the connection-profile controls injected by the connection-manager feature. None of that DOM exists anymore; provider state flows through the runtime command port (`connectProvider` / `testProviderConnection`) into the React Providers tab.
+The drawer previously exposed the primary connection path (model datalist, unified masked API key, base URL), the fallback model section, prompt post-processing, Connect/Cancel/Test actions with an online-status indicator, and the connection-profile controls injected by the connection-manager feature. None of that DOM exists anymore; provider state flows through the runtime command port (`connectProvider` / `testProviderConnection`) into the React Providers tab. Prompt post-processing is now fixed server-side behavior (always `strict`), not a provider field.
 
 ## Page-Level Semantic IDs
 
@@ -26,7 +26,7 @@ The drawer previously exposed the primary connection path (model datalist, unifi
 - `feature.connection_profile`: retired; the profile system is gone.
 - `feature.chat_completion_select`: provider/model selection, now on [Settings](page.settings).
 - `feature.fallback_provider`: the model-only fallback field, now on [Settings](page.settings).
-- `page.settings`: sole product owner for provider fields, secrets, connection actions, and prompt post-processing.
+- `page.settings`: sole product owner for provider fields, secrets, and connection actions.
 
 ## Included Features
 

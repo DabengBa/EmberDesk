@@ -3,10 +3,7 @@
 
     #UI-Theme-Block,
     #UI-Customization,
-    #power-user-options-block,
-    #ContextSettings,
-    #InstructSettingsColumn,
-    #InstructSequencesColumn {
+    #power-user-options-block {
         flex-basis: 100%;
     }
 

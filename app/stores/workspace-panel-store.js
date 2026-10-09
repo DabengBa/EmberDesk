@@ -24,37 +24,37 @@ export const WORKSPACE_PANEL_DOCK_KINDS = Object.freeze([
  */
 export const WORKSPACE_SHELL_CHILD_SLOTS = Object.freeze({
     characterLibrary: Object.freeze({
-        accessibleName: 'Character Library',
+        accessibleName: '角色库',
         allowedCapabilities: Object.freeze(['selectCharacter', 'refreshLibrary']),
         contentOwner: 'character-library',
         mountTarget: '#rm_print_characters_block',
     }),
     worldInfo: Object.freeze({
-        accessibleName: 'World Info',
+        accessibleName: '世界书',
         allowedCapabilities: Object.freeze(['refreshWorldInfo', 'openWorldEditor']),
         contentOwner: 'world-info-workbench',
         mountTarget: '#WorldInfo',
     }),
     characterAuthoring: Object.freeze({
-        accessibleName: 'Character Authoring',
+        accessibleName: '角色编辑',
         allowedCapabilities: Object.freeze(['editCharacter']),
         contentOwner: 'character-authoring',
         mountTarget: '#rm_ch_create_block',
     }),
     aiConfigDrawer: Object.freeze({
-        accessibleName: 'AI Response Configuration',
+        accessibleName: 'AI 响应配置',
         allowedCapabilities: Object.freeze(['selectPreset', 'managePresets']),
         contentOwner: 'ai-config',
         mountTarget: '#left-nav-panel',
     }),
     regex: Object.freeze({
-        accessibleName: 'Regex',
+        accessibleName: '正则',
         allowedCapabilities: Object.freeze(['editRegexScripts', 'openRegexEditor', 'openRegexDebugger']),
         contentOwner: 'regex',
         mountTarget: '#RegexPanel',
     }),
     mainChat: Object.freeze({
-        accessibleName: 'Main Chat',
+        accessibleName: '主聊天',
         allowedCapabilities: Object.freeze(['loadMoreMessages', 'submitComposer']),
         contentOwner: 'main-chat',
         mountTarget: '#chat, #send_form, #nonQRFormItems',

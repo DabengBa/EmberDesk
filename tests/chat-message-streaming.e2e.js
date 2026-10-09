@@ -11,7 +11,7 @@ const mobileViewports = [
 ];
 
 async function openCharacterLibrary(page) {
-    const panelButton = page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: 'Character Library' }).first();
+    const panelButton = page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: '角色库' }).first();
     await expect(panelButton).toBeVisible({ timeout: 10_000 });
     await panelButton.click({ timeout: 10_000 });
     await expect(panelButton).toHaveAttribute('aria-pressed', 'true', { timeout: 10_000 });

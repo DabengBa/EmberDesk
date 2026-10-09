@@ -490,9 +490,6 @@ textarea:disabled {
     filter: brightness(0.5);
 }
 
-#AdvancedFormatting .disabled {
-    filter: brightness(0.5);
-}
 
 .debug-red {
     border: 1px solid red !important;

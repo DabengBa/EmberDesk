@@ -69,7 +69,7 @@ async function seedFrontendChat(page) {
 }
 
 async function openCharacterLibrary(page) {
-    const panelButton = page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: 'Character Library' }).first();
+    const panelButton = page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: '角色库' }).first();
     await expect(panelButton).toBeVisible({ timeout: 10_000 });
     await panelButton.click({ timeout: 10_000 });
     await expect(page.locator('#right-nav-panel.openDrawer #rm_characters_block')).toBeVisible({ timeout: 10_000 });
