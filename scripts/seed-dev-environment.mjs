@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
+import zlib from 'node:zlib';
 
 import storage from 'node-persist';
 
@@ -55,7 +56,40 @@ const dataRoot = path.resolve(repoRoot, options.dataRoot ?? defaultDataRoot);
 const configPath = path.resolve(repoRoot, options.configPath ?? path.join(repoRoot, 'config.dev-local.yaml'));
 const seededUserHandle = options.userHandle ?? DEFAULT_USER.handle;
 const userRoot = path.join(dataRoot, seededUserHandle);
-const defaultAvatarBuffer = fs.readFileSync(new URL('../public/img/ai4.png', import.meta.url));
+const avatarPngCache = new Map();
+
+// Minimal PNG writer: solid hue background plus a two-tone digit label so every
+// seeded character gets a visually distinct avatar without image dependencies.
+// These constants must initialize before the top-level seeding awaits below.
+const AVATAR_SIZE = 192;
+const DIGIT_GLYPHS = {
+    '0': [0x0e, 0x11, 0x13, 0x15, 0x19, 0x11, 0x0e],
+    '1': [0x04, 0x0c, 0x04, 0x04, 0x04, 0x04, 0x0e],
+    '2': [0x0e, 0x11, 0x01, 0x02, 0x04, 0x08, 0x1f],
+    '3': [0x1e, 0x01, 0x01, 0x0e, 0x01, 0x01, 0x1e],
+    '4': [0x02, 0x06, 0x0a, 0x12, 0x1f, 0x02, 0x02],
+    '5': [0x1f, 0x10, 0x1e, 0x01, 0x01, 0x11, 0x0e],
+    '6': [0x06, 0x08, 0x10, 0x1e, 0x11, 0x11, 0x0e],
+    '7': [0x1f, 0x01, 0x02, 0x04, 0x08, 0x08, 0x08],
+    '8': [0x0e, 0x11, 0x11, 0x0e, 0x11, 0x11, 0x0e],
+    '9': [0x0e, 0x11, 0x11, 0x0f, 0x01, 0x02, 0x0c],
+};
+const DIGIT_SCALE = 14;
+const DIGIT_WIDTH = 5;
+const DIGIT_HEIGHT = 7;
+const DIGIT_GAP = 8;
+
+const PNG_CRC_TABLE = (() => {
+    const table = new Int32Array(256);
+    for (let n = 0; n < 256; n++) {
+        let c = n;
+        for (let k = 0; k < 8; k++) {
+            c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
+        }
+        table[n] = c;
+    }
+    return table;
+})();
 const defaultSettingsPath = path.join(repoRoot, 'default', 'content', SETTINGS_FILE);
 const defaultSettings = JSON.parse(fs.readFileSync(defaultSettingsPath, 'utf8'));
 const USER_KEY_PREFIX = 'user:';
@@ -69,11 +103,11 @@ for (const dir of Object.values(directories)) {
 }
 
 await seedBootstrapContent();
-await seedSettings();
 await seedUserAccount();
 
 const worldNames = await seedWorlds();
 const characterRecords = await seedCharacters(worldNames);
+await seedSettings(characterRecords[0]?.avatar ?? '');
 await seedGroups(characterRecords);
 await writeDevConfig();
 
@@ -93,11 +127,15 @@ const summary = {
 
 process.stdout.write(`${JSON.stringify(summary, null, 2)}\n`);
 
-async function seedSettings() {
+async function seedSettings(activeCharacterAvatar) {
     const settings = structuredClone(defaultSettings);
     settings.firstRun = false;
-    settings.active_character = '';
+    settings.active_character = activeCharacterAvatar;
     settings.active_group = null;
+    settings.power_user = settings.power_user || {};
+    // Auto-open the seeded active character so first paint exercises real chat
+    // history rather than an empty chat with only the greeting.
+    settings.power_user.auto_load_chat = true;
     settings.world_info = settings.world_info || {};
     settings.world_info.globalSelect = [];
     await fs.promises.writeFile(
@@ -215,14 +253,26 @@ async function seedCharacters(worldNames) {
             randomSentence(18 + greetingIndex * 4),
         );
 
+        const chatFileNames = Array.from(
+            { length: profile.chatsPerCharacter },
+            (_, chatIndex) => `${name} Session ${String(chatIndex + 1).padStart(2, '0')}.jsonl`,
+        );
+        // Card `data.chat` holds the current chat basename (no .jsonl), which is
+        // what opens a real conversation instead of starting an empty one.
+        const currentChatName = path.basename(chatFileNames[chatFileNames.length - 1], '.jsonl');
+
         const characterPayload = {
             spec: 'chara_card_v2',
             spec_version: '2.0',
+            // Top-level `chat` holds the current chat basename (no .jsonl); the
+            // card reader maps it to character.chat, which opens that session
+            // instead of starting an empty chat.
+            chat: currentChatName,
             data: {
                 name,
                 description: randomParagraphs(2 + (index % 3)),
                 scenario: randomParagraphs(1 + (index % 2)),
-                first_mes: randomSentence(28),
+                first_mes: randomChatMessage(index, 2),
                 mes_example: `${name}: ${randomSentence(18)}\nUser: ${randomSentence(16)}\n${name}: ${randomSentence(20)}`,
                 creator_notes: randomParagraphs(1),
                 tags: [`tag-${index % 8}`, `domain-${index % 5}`],
@@ -245,7 +295,7 @@ async function seedCharacters(worldNames) {
 
         fs.writeFileSync(
             path.join(directories.characters, avatar),
-            writeCharacterCardPngData(defaultAvatarBuffer, JSON.stringify(characterPayload)),
+            writeCharacterCardPngData(createAvatarPng(index), JSON.stringify(characterPayload)),
         );
 
         const chatFolder = path.join(directories.chats, path.parse(avatar).name);
@@ -253,11 +303,10 @@ async function seedCharacters(worldNames) {
 
         const chatFiles = [];
         for (let chatIndex = 0; chatIndex < profile.chatsPerCharacter; chatIndex++) {
-            const chatName = `${name} Session ${String(chatIndex + 1).padStart(2, '0')}.jsonl`;
+            const chatName = chatFileNames[chatIndex];
             const chatHeader = {
                 chat_metadata: {
                     scenario: randomSentence(12),
-                    mes_example: randomSentence(10),
                     system_prompt: randomSentence(14),
                     integrity: `seed-${index + 1}-${chatIndex + 1}`,
                 },
@@ -273,7 +322,7 @@ async function seedCharacters(worldNames) {
                     name: isUser ? 'User' : name,
                     is_user: isUser,
                     is_system: false,
-                    mes: randomSentence(24 + (messageIndex % 10)),
+                    mes: randomChatMessage(index + chatIndex + messageIndex),
                     send_date: new Date(startedAt + messageIndex * 45000).toISOString(),
                 }));
             }
@@ -328,7 +377,7 @@ async function seedGroups(characterRecords) {
                     name: sender,
                     is_user: sender === 'User',
                     is_system: false,
-                    mes: randomSentence(18 + (messageIndex % 8)),
+                    mes: randomChatMessage(index + messageIndex),
                     send_date: new Date(startedAt + messageIndex * 60000).toISOString(),
                 };
 
@@ -379,6 +428,7 @@ async function writeDevConfig() {
         'port: 8000',
         'browserLaunch:',
         '  enabled: false',
+        'enableUserAccounts: true',
         'whitelistMode: false',
         'extensions:',
         '  enabled: true',
@@ -438,6 +488,127 @@ function buildAvatarThumbnailUrl(avatar) {
 
 function randomParagraphs(count) {
     return Array.from({ length: count }, () => randomSentence(28 + Math.floor(rng() * 16))).join('\n\n');
+}
+
+/**
+ * Multi-paragraph chat body mixing narration, italic action beats, and quoted
+ * dialogue so message rendering exercises line breaks and inline markup.
+ * @param {number} variantSeed Extra entropy so repeated calls differ
+ * @param {number} [maxParagraphs]
+ */
+function randomChatMessage(variantSeed, maxParagraphs = 3) {
+    const paragraphCount = 1 + Math.floor(rng() * maxParagraphs);
+    const parts = [];
+    for (let index = 0; index < paragraphCount; index++) {
+        const roll = rng();
+        const wordCount = 14 + Math.floor(rng() * 22) + (variantSeed % 5);
+        const sentence = randomSentence(wordCount).slice(0, -1);
+        if (roll < 0.18) {
+            parts.push(`*${sentence}*`);
+        } else if (roll < 0.36) {
+            parts.push(`"${sentence}," they said.`);
+        } else {
+            parts.push(`${sentence}.`);
+        }
+    }
+    return parts.join('\n\n');
+}
+
+function crc32(buffer) {
+    let c = 0xffffffff;
+    for (const byte of buffer) {
+        c = PNG_CRC_TABLE[(c ^ byte) & 0xff] ^ (c >>> 8);
+    }
+    return (c ^ 0xffffffff) >>> 0;
+}
+
+function pngChunk(type, data) {
+    const length = Buffer.alloc(4);
+    length.writeUInt32BE(data.length);
+    const body = Buffer.concat([Buffer.from(type, 'ascii'), data]);
+    const crc = Buffer.alloc(4);
+    crc.writeUInt32BE(crc32(body));
+    return Buffer.concat([length, body, crc]);
+}
+
+function hslToRgb(hue, saturation, lightness) {
+    const s = saturation;
+    const l = lightness;
+    const c = (1 - Math.abs(2 * l - 1)) * s;
+    const hp = ((hue % 360) + 360) % 360 / 60;
+    const x = c * (1 - Math.abs((hp % 2) - 1));
+    const [r, g, b] = hp < 1 ? [c, x, 0]
+        : hp < 2 ? [x, c, 0]
+        : hp < 3 ? [0, c, x]
+        : hp < 4 ? [0, x, c]
+        : hp < 5 ? [x, 0, c]
+        : [c, 0, x];
+    const m = l - c / 2;
+    return [Math.round((r + m) * 255), Math.round((g + m) * 255), Math.round((b + m) * 255)];
+}
+
+function createAvatarPng(index) {
+    if (avatarPngCache.has(index)) {
+        return avatarPngCache.get(index);
+    }
+
+    const hue = (index * 47) % 360;
+    const [bgR, bgG, bgB] = hslToRgb(hue, 0.55, 0.42);
+    const [fgR, fgG, fgB] = hslToRgb(hue + 180, 0.35, 0.88);
+    const pixels = Buffer.alloc(AVATAR_SIZE * AVATAR_SIZE * 3);
+    for (let offset = 0; offset < pixels.length; offset += 3) {
+        pixels[offset] = bgR;
+        pixels[offset + 1] = bgG;
+        pixels[offset + 2] = bgB;
+    }
+
+    const label = String(index + 1);
+    const glyphWidth = DIGIT_WIDTH * DIGIT_SCALE;
+    const glyphHeight = DIGIT_HEIGHT * DIGIT_SCALE;
+    const totalWidth = label.length * glyphWidth + (label.length - 1) * DIGIT_GAP;
+    const startX = Math.floor((AVATAR_SIZE - totalWidth) / 2);
+    const startY = Math.floor((AVATAR_SIZE - glyphHeight) / 2);
+
+    for (let digitIndex = 0; digitIndex < label.length; digitIndex++) {
+        const glyph = DIGIT_GLYPHS[label[digitIndex]];
+        for (let row = 0; row < DIGIT_HEIGHT; row++) {
+            for (let col = 0; col < DIGIT_WIDTH; col++) {
+                if (!(glyph[row] & (1 << (DIGIT_WIDTH - 1 - col)))) {
+                    continue;
+                }
+                const px = startX + digitIndex * (glyphWidth + DIGIT_GAP) + col * DIGIT_SCALE;
+                const py = startY + row * DIGIT_SCALE;
+                for (let yy = 0; yy < DIGIT_SCALE; yy++) {
+                    for (let xx = 0; xx < DIGIT_SCALE; xx++) {
+                        const offset = ((py + yy) * AVATAR_SIZE + (px + xx)) * 3;
+                        pixels[offset] = fgR;
+                        pixels[offset + 1] = fgG;
+                        pixels[offset + 2] = fgB;
+                    }
+                }
+            }
+        }
+    }
+
+    const rawScanlines = Buffer.alloc(AVATAR_SIZE * (AVATAR_SIZE * 3 + 1));
+    for (let y = 0; y < AVATAR_SIZE; y++) {
+        pixels.copy(rawScanlines, y * (AVATAR_SIZE * 3 + 1) + 1, y * AVATAR_SIZE * 3, (y + 1) * AVATAR_SIZE * 3);
+    }
+
+    const ihdr = Buffer.alloc(13);
+    ihdr.writeUInt32BE(AVATAR_SIZE, 0);
+    ihdr.writeUInt32BE(AVATAR_SIZE, 4);
+    ihdr[8] = 8; // bit depth
+    ihdr[9] = 2; // truecolor RGB
+
+    const png = Buffer.concat([
+        Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+        pngChunk('IHDR', ihdr),
+        pngChunk('IDAT', zlib.deflateSync(rawScanlines)),
+        pngChunk('IEND', Buffer.alloc(0)),
+    ]);
+    avatarPngCache.set(index, png);
+    return png;
 }
 
 function randomSentence(wordCount) {

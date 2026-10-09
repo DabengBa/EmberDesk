@@ -331,6 +331,47 @@ export function CharacterLibraryPanel({ bridge, state }: { bridge: CharacterLibr
     const totalSize = virtualizer.getTotalSize();
     const showVirtualRows = !state.renderPlan.showEmptyBlock;
 
+    // The scroll container collapses while the character editor is open, so the
+    // browser clamps scrollTop to 0 without firing a scroll event the
+    // virtualizer can observe. Its remembered scrollOffset then renders rows
+    // for a stale scroll position, leaving a large empty strip above them.
+    // Restore the element's scroll offset when it regains a visible size (the
+    // ResizeObserver fires on the display:none -> visible transition), and once
+    // on mount in case the element already shrank back while hidden.
+    useEffect(() => {
+        const scrollElement = scrollElementRef.current;
+        if (!scrollElement || typeof ResizeObserver === 'undefined') {
+            return;
+        }
+        const restoreScrollOffset = () => {
+            const rememberedOffset = virtualizer.scrollOffset;
+            if (typeof rememberedOffset !== 'number' || scrollElement.clientHeight === 0) {
+                return;
+            }
+            if (Math.abs(scrollElement.scrollTop - rememberedOffset) <= 1) {
+                return;
+            }
+            // Prefer the remembered position so users return to where they
+            // were. If the element cannot physically reach it (content shrank
+            // or fits the viewport), the scrollTop write clamps without firing
+            // a scroll event — and scrollToOffset() cannot help either, since
+            // it only writes the DOM and relies on that same event to update
+            // the internal offset. Sync scrollOffset directly so the rendered
+            // window follows the element's real position instead of leaving an
+            // empty strip where the skipped rows should be.
+            scrollElement.scrollTop = rememberedOffset;
+            if (Math.abs(scrollElement.scrollTop - rememberedOffset) > 1) {
+                virtualizer.scrollOffset = scrollElement.scrollTop;
+                virtualizer.scrollAdjustments = 0;
+                virtualizer.measure();
+            }
+        };
+        const observer = new ResizeObserver(restoreScrollOffset);
+        observer.observe(scrollElement);
+        restoreScrollOffset();
+        return () => observer.disconnect();
+    }, [virtualizer, state.scrollElement]);
+
     return (
         <>
             {/* The character/folder rows render as native <button> elements so

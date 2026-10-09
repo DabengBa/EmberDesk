@@ -4844,7 +4844,11 @@ function getCharacterListCurrentPage() {
 }
 
 function getCharacterListCurrentPageSize() {
-    return Math.max(Number(accountStorage.getItem('Characters_PerPage')) || per_page_default, 1);
+    const storedSize = Math.max(Number(accountStorage.getItem('Characters_PerPage')) || per_page_default, 1);
+    // A stored value outside the fixed option set desynchronizes the range
+    // label (computed from the stored size) from the size-changer <select>,
+    // which can only display one of the known options. Clamp to the default.
+    return CHARACTER_LIST_PAGE_SIZE_OPTIONS.includes(storedSize) ? storedSize : per_page_default;
 }
 
 async function reconcileCharacterListAfterDelete(options) {
