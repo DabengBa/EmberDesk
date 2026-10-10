@@ -156,7 +156,8 @@ describe('settings React route flag', () => {
         expect(routeSource).not.toContain('api_key_openai_fallback');
         expect(routeSource).toContain('openaiModel: z.string(),');
         expect(routeSource).not.toContain('theme: z.string(),');
-        expect(routeSource).toContain('systemPromptName: z.string(),');
+        expect(routeSource).not.toContain('systemPromptName');
+        expect(routeSource).not.toContain('reasoningName');
         expect(routeSource).toContain('systemPromptContent: z.string(),');
         expect(routeSource).not.toContain('contextPreset');
         expect(routeSource).not.toContain('instructPreset');
@@ -379,11 +380,9 @@ describe('settings React route flag', () => {
                 customStoppingStrings: 'END',
                 tokenizer: 42,
                 smoothStreaming: false,
-                systemPromptName: 'Custom',
                 systemPromptContent: 'Updated prompt',
                 syspromptEnabled: true,
                 syspromptPostHistory: 'later',
-                reasoningName: 'Custom',
                 reasoningAutoParse: false,
                 reasoningAddToPrompts: false,
                 reasoningAutoExpand: false,
@@ -406,9 +405,14 @@ describe('settings React route flag', () => {
         expect(merged.power_user.custom_css).toBe('.chat { color: white; }');
         expect(merged.power_user.custom_stopping_strings).toBe('END');
         expect(merged.power_user.tokenizer).toBe(42);
+        // chat_truncation stays a live data field (no UI): the fixed default
+        // drives the long-chat initial window and the JSON value still loads.
+        expect(merged.power_user.chat_truncation).toBe(120);
         // Retired power_user keys are stripped from the saved payload.
         expect(merged.power_user.auto_continue).toBeUndefined();
-        expect(merged.power_user.sysprompt.name).toBe('Custom');
+        // Named presets are retired; stored preset names are stripped on save.
+        expect(merged.power_user.sysprompt.name).toBeUndefined();
+        expect(merged.power_user.reasoning.name).toBeUndefined();
         expect(merged.power_user.sysprompt.content).toBe('Updated prompt');
         expect(merged.power_user.context.preset).toBe('Default');
         expect(merged.oai_settings.preset_settings_openai).toBe('RecoveredRuins');

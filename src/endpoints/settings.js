@@ -634,8 +634,6 @@ router.post('/get', async (request, response) => {
         { fileContents: textgenerationwebui_presets, fileNames: textgenerationwebui_preset_names },
         world_names,
         quickReplyPresets,
-        sysprompt,
-        reasoning,
     ] = await Promise.all([
         getCachedPayload(dirs.novelAI_Settings, () => readPresetsFromDirectoryAsync(dirs.novelAI_Settings, presetOpts(dirs.novelAI_Settings))),
         getCachedPayload(dirs.openAI_Settings, () => readPresetsFromDirectoryAsync(dirs.openAI_Settings, presetOpts(dirs.openAI_Settings))),
@@ -643,8 +641,6 @@ router.post('/get', async (request, response) => {
         getCachedPayload(dirs.textGen_Settings, () => readPresetsFromDirectoryAsync(dirs.textGen_Settings, presetOpts(dirs.textGen_Settings))),
         listCanonicalWorldNamesOrEmpty(request),
         getCachedPayload(dirs.quickreplies, () => readAndParseFromDirectoryAsync(dirs.quickreplies)),
-        getCachedPayload(dirs.sysprompt, () => readAndParseFromDirectoryAsync(dirs.sysprompt)),
-        getCachedPayload(dirs.reasoning, () => readAndParseFromDirectoryAsync(dirs.reasoning)),
     ]);
 
     response.send({
@@ -660,8 +656,6 @@ router.post('/get', async (request, response) => {
         openai_settings,
         openai_setting_names,
         quickReplyPresets,
-        sysprompt,
-        reasoning,
         enable_accounts: ENABLE_ACCOUNTS,
         request_compression: {
             enabled: ENABLE_REQUEST_COMPRESSION,

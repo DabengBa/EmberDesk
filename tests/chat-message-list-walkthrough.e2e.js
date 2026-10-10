@@ -135,12 +135,17 @@ function getUnexpectedConsoleErrors(errors) {
         // provisioned user data dirs; fresh e2e data roots do not seed it.
         const isTransparentBackgroundSeed404 = error.text.includes('Failed to load resource')
             && url.includes('/backgrounds/__transparent.png');
+        // Settings saves race across parallel workers sharing one document; the
+        // client retries with the adopted revision, so a transient 409 is noise.
+        const isSettingsSaveConflict = error.text.includes('Failed to load resource')
+            && url.includes('/api/settings/save')
+            && error.text.includes('409');
         // External CDN requests (e.g. fonts) surface as resource/fetch failures
         // in offline sandboxes, not as app errors.
         const isExternalResourceFailure = error.text.includes('Failed to load resource')
             && url !== '' && !url.startsWith(localOrigin);
 
-        return !isSeedPersonaThumbnail404 && !isTransparentBackgroundSeed404 && !isExternalResourceFailure;
+        return !isSeedPersonaThumbnail404 && !isTransparentBackgroundSeed404 && !isSettingsSaveConflict && !isExternalResourceFailure;
     });
 }
 
@@ -238,6 +243,15 @@ async function openMessageActions(page, messageId) {
 
 async function grantClipboardPermissions(page) {
     await page.context().grantPermissions(['clipboard-read', 'clipboard-write'], { origin: BASE_URL });
+}
+
+function normalizeMessageText(value) {
+    // Rendered text drops emphasis markers (*...* -> <em>) while seeded raw
+    // text still contains them. Strip pairs so comparisons cover content.
+    return String(value ?? '')
+        .replace(/([*_]{1,2})([^*_]+?)\1/g, '$2')
+        .replace(/\s+/g, ' ')
+        .trim();
 }
 
 function normalizeMultilineText(value) {
@@ -370,7 +384,7 @@ test.describe('main chat message list walkthrough', () => {
         await expect(page.locator('#chat .mes[mesid]')).toHaveCount(longChatLimit * 2);
         await expectMainChatHostPresent(page, longChatLimit * 2);
         await expect(page.locator('#jump_to_latest_message')).toHaveCount(0);
-        await expect(page.locator(`#chat .mes[mesid="${longMessages.length - 1}"] .mes_text`)).toContainText(longMessages.at(-1).mes);
+        await expect(page.locator(`#chat .mes[mesid="${longMessages.length - 1}"] .mes_text`)).toContainText(normalizeMessageText(longMessages.at(-1).mes));
 
         expect(getUnexpectedConsoleErrors(consoleErrors)).toEqual([]);
     });

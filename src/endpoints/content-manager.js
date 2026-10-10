@@ -67,8 +67,6 @@ export const CONTENT_TYPES = {
     NOVEL_PRESET: 'novel_preset',
     MOVING_UI: 'moving_ui',
     QUICK_REPLIES: 'quick_replies',
-    SYSPROMPT: 'sysprompt',
-    REASONING: 'reasoning',
     ERROR_PAGE: 'error_page',
     STYLESHEET: 'stylesheet',
 };
@@ -105,7 +103,7 @@ export function getDefaultPresets(directories) {
         const presets = [];
 
         for (const contentItem of contentIndex) {
-            if (contentItem.type.endsWith('_preset') || ['sysprompt', 'reasoning'].includes(contentItem.type)) {
+            if (contentItem.type.endsWith('_preset')) {
                 contentItem.name = path.parse(contentItem.filename).name;
                 contentItem.folder = getUserTargetByType(contentItem.type, directories);
                 presets.push(contentItem);
@@ -370,10 +368,6 @@ export function getUserTargetByType(type, directories) {
             return directories.movingUI;
         case CONTENT_TYPES.QUICK_REPLIES:
             return directories.quickreplies;
-        case CONTENT_TYPES.SYSPROMPT:
-            return directories.sysprompt;
-        case CONTENT_TYPES.REASONING:
-            return directories.reasoning;
         default:
             return null;
     }

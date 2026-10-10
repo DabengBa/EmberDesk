@@ -47,11 +47,9 @@ export const defaultSettingsFormValues = {
         customStoppingStrings: '',
         tokenizer: 99,
         smoothStreaming: false,
-        systemPromptName: '',
         systemPromptContent: '',
         syspromptEnabled: true,
         syspromptPostHistory: '',
-        reasoningName: 'Default',
         reasoningAutoParse: false,
         reasoningAddToPrompts: false,
         reasoningAutoExpand: false,
@@ -85,11 +83,9 @@ const fieldBindings = [
     { tab: 'advanced', formPath: 'advanced.customStoppingStrings', settingsPath: 'power_user.custom_stopping_strings' },
     { tab: 'advanced', formPath: 'advanced.tokenizer', settingsPath: 'power_user.tokenizer' },
     { tab: 'advanced', formPath: 'advanced.smoothStreaming', settingsPath: 'power_user.smooth_streaming' },
-    { tab: 'advanced', formPath: 'advanced.systemPromptName', settingsPath: 'power_user.sysprompt.name' },
     { tab: 'advanced', formPath: 'advanced.systemPromptContent', settingsPath: 'power_user.sysprompt.content' },
     { tab: 'advanced', formPath: 'advanced.syspromptEnabled', settingsPath: 'power_user.sysprompt.enabled' },
     { tab: 'advanced', formPath: 'advanced.syspromptPostHistory', settingsPath: 'power_user.sysprompt.post_history' },
-    { tab: 'advanced', formPath: 'advanced.reasoningName', settingsPath: 'power_user.reasoning.name' },
     { tab: 'advanced', formPath: 'advanced.reasoningAutoParse', settingsPath: 'power_user.reasoning.auto_parse' },
     { tab: 'advanced', formPath: 'advanced.reasoningAddToPrompts', settingsPath: 'power_user.reasoning.add_to_prompts' },
     { tab: 'advanced', formPath: 'advanced.reasoningAutoExpand', settingsPath: 'power_user.reasoning.auto_expand' },
@@ -374,7 +370,7 @@ export function buildSettingsSavePayload(baseSettings, formValues, { settingsRev
             'image_overswipe', 'aux_field', 'tag_import_setting',
             'auto_swipe', 'auto_swipe_minimum_length', 'auto_swipe_blacklist',
             'auto_swipe_blacklist_threshold', 'custom_stopping_strings_macro',
-            'experimental_macro_engine', 'auto_continue', 'chat_truncation',
+            'experimental_macro_engine', 'auto_continue',
             'streaming_fps', 'smooth_streaming_no_think', 'smooth_streaming_speed',
             'stream_fade_in', 'collapse_newlines', 'trim_sentences', 'single_line',
             'markdown_escape_strings', 'show_user_prompt_bias',
@@ -385,6 +381,13 @@ export function buildSettingsSavePayload(baseSettings, formValues, { settingsRev
             'message_token_count_enabled',
         ]) {
             delete powerUser[key];
+        }
+        // Named preset selection is retired; the stored preset name is inert junk.
+        if (powerUser.sysprompt && typeof powerUser.sysprompt === 'object') {
+            delete powerUser.sysprompt.name;
+        }
+        if (powerUser.reasoning && typeof powerUser.reasoning === 'object') {
+            delete powerUser.reasoning.name;
         }
         const autocomplete = powerUser.stscript?.autocomplete;
         if (autocomplete && typeof autocomplete === 'object') {

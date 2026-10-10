@@ -17,7 +17,6 @@ import {
     saveProviderSecretField,
 } from '../../../public/scripts/provider-secret-field-state.js';
 import { SettingField } from '@/components/settings/SettingField';
-import { FormattingMasterActions, FormattingPresetRow } from '@/components/settings/TemplatePresetManager';
 import { SettingsSection } from '@/components/settings/SettingsSection';
 import { settingsStyles } from '@/styles/settings-surface.styles';
 import { SettingsTabs } from '@/components/settings/SettingsTabs';
@@ -46,11 +45,9 @@ const settingsSchema = z.object({
         customStoppingStrings: z.string(),
         tokenizer: z.number().int().min(0, 'Tokenizer 值必须为非负整数'),
         smoothStreaming: z.boolean(),
-        systemPromptName: z.string(),
         systemPromptContent: z.string(),
         syspromptEnabled: z.boolean(),
         syspromptPostHistory: z.string(),
-        reasoningName: z.string(),
         reasoningAutoParse: z.boolean(),
         reasoningAddToPrompts: z.boolean(),
         reasoningAutoExpand: z.boolean(),
@@ -139,8 +136,8 @@ const WORKSPACE_DRAWER_LINKS: Record<string, Array<{ target: string; label: stri
     providers: [
         { target: 'left-nav-panel', label: '打开 AI 响应配置', hint: '预设下拉与操作、采样滑条、Prompt Manager。' },
     ],
-    // The Advanced Formatting drawer is retired: its preset CRUD and master
-    // import/export live in this tab's preset rows and FormattingMasterActions.
+    // The Advanced Formatting drawer is retired; the formatting preset feature
+    // has since been removed entirely.
     advanced: [
         { target: 'user-settings-block', label: '打开用户设置', hint: '账户、语言、调试菜单、清理与前端渲染帧等工具。' },
     ],
@@ -501,56 +498,6 @@ export function SettingsSurface({
 
     const isBusy = saveMutation.isPending || secretsQuery.isPending || providerSecretMutation.isPending;
 
-    // File-backed formatting presets (system prompts / reasoning templates) ride
-    // the same /api/settings/get payload as the legacy shell. CRUD results from
-    // the formattingPreset runtime command refresh these lists in place.
-    const [formattingPresets, setFormattingPresets] = useState<{ sysprompt: Record<string, any>[]; reasoning: Record<string, any>[] }>({ sysprompt: [], reasoning: [] });
-    const payloadSyspromptPresets = settingsData?.sysprompt;
-    const payloadReasoningPresets = settingsData?.reasoning;
-    useEffect(() => {
-        setFormattingPresets({
-            sysprompt: Array.isArray(payloadSyspromptPresets) ? payloadSyspromptPresets : [],
-            reasoning: Array.isArray(payloadReasoningPresets) ? payloadReasoningPresets : [],
-        });
-    }, [payloadSyspromptPresets, payloadReasoningPresets]);
-
-    const handleFormattingPresetsChanged = useCallback((apiId: 'sysprompt' | 'reasoning', nextPresets: Record<string, any>[]) => {
-        setFormattingPresets(current => ({ ...current, [apiId]: nextPresets }));
-    }, []);
-
-    const presetNotice = useCallback((message: string) => {
-        setPageError('');
-        setSaveStatus({ kind: 'info', message });
-    }, []);
-    const presetError = useCallback((message: string) => {
-        setSaveStatus(null);
-        setPageError(message);
-    }, []);
-
-    const applySystemPromptPreset = useCallback((preset: Record<string, any>) => {
-        settingsForm.setFieldValue('advanced.systemPromptContent', String(preset?.content ?? ''));
-        settingsForm.setFieldValue('advanced.syspromptPostHistory', String(preset?.post_history ?? ''));
-        // The retired drawer's select-on-change enabled the system prompt.
-        settingsForm.setFieldValue('advanced.syspromptEnabled', true);
-    }, [settingsForm]);
-
-    const collectSystemPromptPreset = useCallback(() => ({
-        content: String(settingsForm.getFieldValue('advanced.systemPromptContent') ?? ''),
-        post_history: String(settingsForm.getFieldValue('advanced.syspromptPostHistory') ?? ''),
-    }), [settingsForm]);
-
-    const applyReasoningPreset = useCallback((preset: Record<string, any>) => {
-        settingsForm.setFieldValue('advanced.reasoningPrefix', String(preset?.prefix ?? ''));
-        settingsForm.setFieldValue('advanced.reasoningSuffix', String(preset?.suffix ?? ''));
-        settingsForm.setFieldValue('advanced.reasoningSeparator', String(preset?.separator ?? ''));
-    }, [settingsForm]);
-
-    const collectReasoningPreset = useCallback(() => ({
-        prefix: String(settingsForm.getFieldValue('advanced.reasoningPrefix') ?? ''),
-        suffix: String(settingsForm.getFieldValue('advanced.reasoningSuffix') ?? ''),
-        separator: String(settingsForm.getFieldValue('advanced.reasoningSeparator') ?? ''),
-    }), [settingsForm]);
-
     function clearTransientState() {
         saveMutation.reset();
         setSaveStatus(null);
@@ -841,29 +788,6 @@ export function SettingsSurface({
                                     title="提示词、模板与高级控件"
                                     description="模板、stop strings、tokenizer 和 STscript 设置。"
                                 >
-                                    <FormattingPresetRow
-                                        apiId="sysprompt"
-                                        label="系统提示预设"
-                                        runtime={runtime}
-                                        presets={formattingPresets.sysprompt}
-                                        onPresetsChanged={handleFormattingPresetsChanged}
-                                        form={settingsForm}
-                                        nameField="advanced.systemPromptName"
-                                        collectPreset={collectSystemPromptPreset}
-                                        applyPreset={applySystemPromptPreset}
-                                        disabled={isBusy}
-                                        onNotice={presetNotice}
-                                        onError={presetError}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.systemPromptName"
-                                        label="系统提示名称"
-                                        description="当前默认 system prompt preset 名称。"
-                                        placeholder="默认 - 聊天"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
                                     <SettingField
                                         form={settingsForm}
                                         name="advanced.systemPromptContent"
@@ -871,28 +795,6 @@ export function SettingsSurface({
                                         description="默认 system prompt 正文。"
                                         variant="textarea"
                                         placeholder="写一个 {{char}} 的回复示例…"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <FormattingPresetRow
-                                        apiId="reasoning"
-                                        label="推理模板预设"
-                                        runtime={runtime}
-                                        presets={formattingPresets.reasoning}
-                                        onPresetsChanged={handleFormattingPresetsChanged}
-                                        form={settingsForm}
-                                        nameField="advanced.reasoningName"
-                                        collectPreset={collectReasoningPreset}
-                                        applyPreset={applyReasoningPreset}
-                                        disabled={isBusy}
-                                        onNotice={presetNotice}
-                                        onError={presetError}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.reasoningName"
-                                        label="推理模板"
-                                        description="当前 reasoning template 名称。"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
                                     />
@@ -1071,14 +973,7 @@ export function SettingsSurface({
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
                                     />
-                                    <FormattingMasterActions
-                                        runtime={runtime}
-                                        form={settingsForm}
-                                        onPresetsChanged={handleFormattingPresetsChanged}
-                                        disabled={isBusy}
-                                        onNotice={presetNotice}
-                                        onError={presetError}
-                                    />
+                                    
 </SettingsSection>
                             </div>
                             ) : null}

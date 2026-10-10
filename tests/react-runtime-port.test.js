@@ -25,9 +25,8 @@ describe('React runtime provider', () => {
                 loadEarlier: () => undefined,
                 saveSettings: () => undefined,
                 openWorkspaceDrawer: () => undefined,
-                formattingPreset: () => undefined,
-            connectProvider: () => undefined,
-            testProviderConnection: () => undefined,
+                connectProvider: () => undefined,
+                testProviderConnection: () => undefined,
             },
         });
 
@@ -52,7 +51,6 @@ describe('React runtime provider', () => {
             loadEarlier: jest.fn(),
             saveSettings: jest.fn(),
             openWorkspaceDrawer: jest.fn(),
-            formattingPreset: jest.fn(),
             connectProvider: jest.fn(),
             testProviderConnection: jest.fn(),
         };
@@ -102,7 +100,6 @@ describe('React runtime provider', () => {
         runtime.commands.openWorkspaceDrawer('left-nav-panel');
         await runtime.commands.connectProvider();
         await runtime.commands.testProviderConnection();
-        await runtime.commands.formattingPreset({ action: 'save', apiId: 'sysprompt', name: 'A', preset: {} });
 
         expect(commands.submitMessage).toHaveBeenCalledWith('hello');
         expect(commands.stopGeneration).toHaveBeenCalledTimes(1);
@@ -112,7 +109,6 @@ describe('React runtime provider', () => {
         expect(commands.openWorkspaceDrawer).toHaveBeenCalledWith('left-nav-panel');
         expect(commands.connectProvider).toHaveBeenCalledTimes(1);
         expect(commands.testProviderConnection).toHaveBeenCalledTimes(1);
-        expect(commands.formattingPreset).toHaveBeenCalledWith({ action: 'save', apiId: 'sysprompt', name: 'A', preset: {} });
     });
 
     test('subscribes only to named lifecycle events and detaches them', () => {
@@ -139,9 +135,8 @@ describe('React runtime provider', () => {
                 loadEarlier: () => undefined,
                 saveSettings: () => undefined,
                 openWorkspaceDrawer: () => undefined,
-                formattingPreset: () => undefined,
-            connectProvider: () => undefined,
-            testProviderConnection: () => undefined,
+                connectProvider: () => undefined,
+                testProviderConnection: () => undefined,
             },
         });
         const listener = jest.fn();
@@ -194,9 +189,8 @@ describe('React runtime provider', () => {
                 loadEarlier: () => undefined,
                 saveSettings: () => undefined,
                 openWorkspaceDrawer: () => undefined,
-                formattingPreset: () => undefined,
-            connectProvider: () => undefined,
-            testProviderConnection: () => undefined,
+                connectProvider: () => undefined,
+                testProviderConnection: () => undefined,
             },
         });
         const initialSnapshot = runtime.getSnapshot();

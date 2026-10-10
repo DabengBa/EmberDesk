@@ -191,12 +191,8 @@ import { getCharacterCardTagId } from './scripts/deferred-panel-replays.js';
 import { BulkEditOverlay } from './scripts/BulkEditOverlay.js';
 import { appendFileContent, hasPendingFileAttachment, populateFileAttachment, decodeStyleTags, encodeStyleTags, isExternalMediaAllowed, preserveNeutralChat, restoreNeutralChat, formatCreatorNotes, initChatUtilities, addDOMPurifyHooks } from './scripts/chats.js';
 import {
-    deleteFormattingPreset,
-    getFormattingPresetList,
     getPresetManager,
     initPresetManager,
-    restoreFormattingPreset,
-    saveFormattingPreset,
 } from './scripts/preset-manager.js';
 import { getLastMessageId, initMacros } from './scripts/macros.js';
 import { setUserControls } from './scripts/user.js';
@@ -465,57 +461,6 @@ const reactRuntimePort = createReactRuntimeProvider({
                     }
                 }
             }
-        },
-        // CRUD for Advanced Formatting presets (system prompt / reasoning
-        // template). The React Settings overlay owns the UI; this command keeps
-        // the file-backed preset lists, slash-command enums, and PRESET_* event
-        // contracts in one legacy implementation.
-        formattingPreset: async (request) => {
-            const { action, apiId, name, newName, preset } = request ?? {};
-            if (apiId !== 'sysprompt' && apiId !== 'reasoning') {
-                throw new Error(`Unsupported formatting preset API: ${String(apiId)}`);
-            }
-
-            let restored = null;
-            switch (action) {
-                case 'save': {
-                    await saveFormattingPreset(apiId, name ?? preset?.name, preset);
-                    break;
-                }
-                case 'rename': {
-                    if (!name || !newName) {
-                        throw new Error('Preset rename requires name and newName');
-                    }
-                    const oldPreset = getFormattingPresetList(apiId)?.find(entry => entry?.name === name);
-                    const mergedPreset = {
-                        ...(preset ?? {}),
-                        ...(oldPreset?.extensions ? { extensions: oldPreset.extensions } : {}),
-                    };
-                    await eventSource.emit(event_types.PRESET_RENAMED_BEFORE, { apiId, oldName: name, newName });
-                    await saveFormattingPreset(apiId, newName, mergedPreset);
-                    await deleteFormattingPreset(apiId, name);
-                    await eventSource.emit(event_types.PRESET_RENAMED, { apiId, oldName: name, newName });
-                    break;
-                }
-                case 'delete': {
-                    if (await deleteFormattingPreset(apiId, name)) {
-                        await eventSource.emit(event_types.PRESET_DELETED, { apiId, name });
-                    }
-                    break;
-                }
-                case 'restore': {
-                    restored = await restoreFormattingPreset(apiId, name);
-                    if (restored?.isDefault && restored.preset && typeof restored.preset === 'object' && Object.keys(restored.preset).length > 0) {
-                        await deleteFormattingPreset(apiId, name);
-                        await saveFormattingPreset(apiId, name, restored.preset);
-                    }
-                    break;
-                }
-                default:
-                    throw new Error(`Unknown formatting preset action: ${String(action)}`);
-            }
-
-            return { presets: [...(getFormattingPresetList(apiId) ?? [])], restored };
         },
         connectProvider: () => connectProviderConnection(),
         testProviderConnection: () => testProviderConnection(),
@@ -3132,7 +3077,7 @@ function getMainChatReactVisibleWindow(projectedChat) {
         };
     }
 
-    const configuredLimit = 100;
+    const configuredLimit = Number(power_user?.chat_truncation);
     const defaultStartIndex = Number.isInteger(configuredLimit) && configuredLimit > 0
         ? Math.max(totalMessageCount - configuredLimit, 0)
         : 0;
@@ -7694,7 +7639,7 @@ async function applyStartupSettingsCore(data, initLoaderHandle = null) {
         loadOpenAISettings(data, settings.oai_settings ?? settings);
 
         // Load power user settings
-        await loadPowerUserSettings(settings, data);
+        await loadPowerUserSettings(settings);
 
         // Apply theme toggles from power user settings
         applyPowerUserSettings();

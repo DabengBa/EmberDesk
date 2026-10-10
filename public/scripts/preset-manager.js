@@ -15,14 +15,11 @@ import { getRequestHeaders } from './request-context.js';
 import { t } from './i18n.js';
 import { oai_settings, openai_setting_names, openai_settings } from './openai.js';
 import { Popup } from './popup.js';
-import { power_user } from './power-user.js';
-import { reasoning_templates } from './reasoning.js';
 import { SlashCommand } from './slash-commands/SlashCommand.js';
 import { ARGUMENT_TYPE, SlashCommandArgument } from './slash-commands/SlashCommandArgument.js';
 import { enumIcons } from './slash-commands/SlashCommandCommonEnumsProvider.js';
 import { SlashCommandEnumValue, enumTypes } from './slash-commands/SlashCommandEnumValue.js';
 import { SlashCommandParser } from './slash-commands/SlashCommandParser.js';
-import { system_prompts } from './sysprompt.js';
 
 import { download, ensurePlainObject, equalsIgnoreCaseAndAccents, getSanitizedFilename, parseJsonFile, waitUntilCondition } from './utils.js';
 
@@ -88,118 +85,6 @@ function registerPresetManagers() {
             presetManagers[apiId] = new PresetManager($(e), apiId);
         }
     });
-}
-
-/**
- * Returns the live preset list for an Advanced Formatting apiId
- * ('sysprompt' | 'reasoning'). The arrays are the same objects slash commands
- * and prompt assembly enumerate, so in-place updates stay visible in-session.
- * @param {string} apiId API id
- * @returns {object[]|null} Live preset array, or null for a non-formatting apiId
- */
-export function getFormattingPresetList(apiId) {
-    switch (apiId) {
-        case 'sysprompt':
-            return system_prompts;
-        case 'reasoning':
-            return reasoning_templates;
-        default:
-            return null;
-    }
-}
-
-/**
- * Replaces a formatting preset list's contents in place, keeping array identity
- * stable for live-binding consumers.
- * @param {string} apiId API id
- * @param {object[]} presets New preset list
- */
-export function syncFormattingPresetList(apiId, presets) {
-    const list = getFormattingPresetList(apiId);
-    if (!list) {
-        return;
-    }
-    list.splice(0, list.length, ...(Array.isArray(presets) ? presets : []));
-}
-
-/**
- * Saves a formatting preset to disk and upserts it into the in-memory list.
- * Shared by the React settings surface (via the formattingPreset runtime
- * command) and legacy migrations.
- * @param {string} apiId 'sysprompt' | 'reasoning'
- * @param {string} name Preset name
- * @param {object} preset Preset payload
- * @returns {Promise<string>} The sanitized saved preset name
- */
-export async function saveFormattingPreset(apiId, name, preset) {
-    const response = await fetch('/api/presets/save', {
-        method: 'POST',
-        headers: getRequestHeaders(),
-        body: JSON.stringify({ preset, name, apiId }),
-    });
-
-    if (!response.ok) {
-        throw new Error('Formatting preset could not be saved');
-    }
-
-    const data = await response.json();
-    const savedName = data.name;
-    const list = getFormattingPresetList(apiId);
-    if (list) {
-        const savedPreset = { ...preset, name: savedName };
-        const index = list.findIndex(entry => entry?.name === savedName);
-        if (index >= 0) {
-            list[index] = savedPreset;
-        } else {
-            list.push(savedPreset);
-        }
-    }
-    return savedName;
-}
-
-/**
- * Deletes a formatting preset from disk and from the in-memory list.
- * @param {string} apiId 'sysprompt' | 'reasoning'
- * @param {string} name Preset name
- * @returns {Promise<boolean>} True when the server deleted the preset
- */
-export async function deleteFormattingPreset(apiId, name) {
-    const response = await fetch('/api/presets/delete', {
-        method: 'POST',
-        headers: getRequestHeaders(),
-        body: JSON.stringify({ name, apiId }),
-    });
-
-    if (!response.ok) {
-        return false;
-    }
-
-    const list = getFormattingPresetList(apiId);
-    const index = list?.findIndex(entry => entry?.name === name) ?? -1;
-    if (index >= 0) {
-        list.splice(index, 1);
-    }
-    return true;
-}
-
-/**
- * Fetches the default (factory) version of a formatting preset.
- * @param {string} apiId 'sysprompt' | 'reasoning'
- * @param {string} name Preset name
- * @returns {Promise<{isDefault: boolean, preset: object}|null>} Restore payload
- */
-export async function restoreFormattingPreset(apiId, name) {
-    const response = await fetch('/api/presets/restore', {
-        method: 'POST',
-        headers: getRequestHeaders(),
-        body: JSON.stringify({ name, apiId }),
-    });
-
-    if (!response.ok) {
-        return null;
-    }
-
-    return await response.json();
 }
 
 class PresetManager {
@@ -368,16 +253,6 @@ class PresetManager {
                 preset_names = openai_setting_names;
                 settings = oai_settings;
                 break;
-            case 'sysprompt':
-                presets = system_prompts;
-                preset_names = system_prompts.map(x => x.name);
-                settings = power_user.sysprompt;
-                break;
-            case 'reasoning':
-                presets = reasoning_templates;
-                preset_names = reasoning_templates.map(x => x.name);
-                settings = power_user.reasoning;
-                break;
             default:
                 console.warn(`Unknown API ID ${api}`);
         }
@@ -416,21 +291,8 @@ class PresetManager {
      */
     getPresetSettings(name) {
         function getSettingsByApiId(apiId) {
-            switch (apiId) {
-                case 'sysprompt': {
-                    const sysprompt_preset = structuredClone(power_user.sysprompt);
-                    sysprompt_preset.name = name || power_user.sysprompt.preset;
-                    return sysprompt_preset;
-                }
-                case 'reasoning': {
-                    const reasoning_preset = structuredClone(power_user.reasoning);
-                    reasoning_preset.name = name || power_user.reasoning.preset;
-                    return reasoning_preset;
-                }
-                default:
-                    console.warn(`Unknown API ID ${apiId}`);
-                    return {};
-            }
+            console.warn(`Unknown API ID ${apiId}`);
+            return {};
         }
 
         const filteredKeys = [

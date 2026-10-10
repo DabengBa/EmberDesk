@@ -3929,8 +3929,7 @@ textarea:focus-visible {
 }
 
 #creator_notes_spoiler:empty,
-#creator_notes_empty,
-#creators_note_desc_hidden {
+#creator_notes_empty {
     display: none;
 }
 

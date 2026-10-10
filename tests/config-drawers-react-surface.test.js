@@ -37,24 +37,18 @@ describe('retired Advanced Formatting drawer', () => {
     });
 });
 
-describe('formatting presets in the React Settings surface', () => {
-    test('preset rows and master import/export live in the advanced settings tab', () => {
+describe('retired formatting preset managers', () => {
+    test('preset rows and master import/export are gone from the settings surface', () => {
         const surface = readRepoFile('app/components/settings/SettingsSurface.tsx');
-        const rows = readRepoFile('app/components/settings/TemplatePresetManager.tsx');
 
-        expect(surface).toContain('apiId="sysprompt"');
-        expect(surface).toContain('apiId="reasoning"');
-        expect(surface).toContain('FormattingMasterActions');
-        expect(surface).not.toContain("target: 'AdvancedFormatting'");
-
-        expect(rows).toContain('commands?.formattingPreset');
-        expect(rows).toContain("action: 'save'");
-        expect(rows).toContain("action: 'rename'");
-        expect(rows).toContain("action: 'delete'");
-        expect(rows).toContain("action: 'restore'");
+        expect(surface).not.toContain('apiId="sysprompt"');
+        expect(surface).not.toContain('apiId="reasoning"');
+        expect(surface).not.toContain('FormattingPresetRow');
+        expect(surface).not.toContain('FormattingMasterActions');
+        expect(surface).not.toContain('TemplatePresetManager');
     });
 
-    test('legacy preset-manager keeps formatting CRUD helpers and openai delegation', () => {
+    test('legacy preset-manager keeps openai delegation only', () => {
         const presetManager = readRepoFile('public/scripts/preset-manager.js');
 
         for (const helper of [
@@ -64,8 +58,7 @@ describe('formatting presets in the React Settings surface', () => {
             'deleteFormattingPreset',
             'restoreFormattingPreset',
         ]) {
-            expect(presetManager).toContain(`export `);
-            expect(presetManager).toContain(helper);
+            expect(presetManager).not.toContain(helper);
         }
         // The surviving openai preset select still uses delegated actions.
         expect(presetManager).toContain('$(document).on(\'click\', \'[data-preset-manager-delete]\'');
@@ -74,14 +67,14 @@ describe('formatting presets in the React Settings surface', () => {
         expect(presetManager).not.toContain('performMasterExport');
     });
 
-    test('runtime command contract: formattingPreset is end-to-end', () => {
+    test('runtime command contract has no formattingPreset bridge', () => {
         const provider = readRepoFile('public/scripts/react-runtime-provider.js');
         const script = readRepoFile('public/script.js');
         const port = readRepoFile('app/compat/runtime-port.ts');
 
-        expect(provider).toContain("'formattingPreset'");
-        expect(script).toContain('formattingPreset: async (request)');
-        expect(port).toContain('formattingPreset(request: FormattingPresetRequest)');
+        expect(provider).not.toContain('formattingPreset');
+        expect(script).not.toContain('formattingPreset');
+        expect(port).not.toContain('formattingPreset');
     });
 
     test('config drawer mounts still run before getSettings', () => {

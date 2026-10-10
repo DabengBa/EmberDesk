@@ -29,7 +29,6 @@ import {
     getCookieSessionName,
     ensurePublicDirectoriesExist,
     getUserDirectoriesList,
-    migrateSystemPrompts,
     migrateUserData,
     requireLoginMiddleware,
     setUserDataMiddleware,
@@ -491,7 +490,6 @@ async function initDataPhase() {
     await startupProfiler.measure('setDnsResolutionOrder', () => Promise.resolve(setDnsResolutionOrder()));
     await startupProfiler.measure('ensurePublicDirectoriesExist', () => ensurePublicDirectoriesExist());
     await startupProfiler.measure('migrateUserData', () => migrateUserData());
-    await startupProfiler.measure('migrateSystemPrompts', () => migrateSystemPrompts());
     await startupProfiler.measure('migratePublicOverrides', () => migratePublicOverrides());
     await startupProfiler.measure('verifySecuritySettings', () => verifySecuritySettings());
 }

@@ -2,15 +2,14 @@ import {
     moment,
 } from '../lib.js';
 import { getComposerValue, setComposerValue } from './main-chat-composer-service.js';
-import { chat, closeMessageEditor, main_api, messageFormatting, saveChatConditional, saveChatDebounced, saveSettingsDebounced, substituteParams, syncMesToSwipe, updateMessageBlock } from '../script.js';
+import { chat, closeMessageEditor, main_api, messageFormatting, saveChatConditional, saveChatDebounced, substituteParams, syncMesToSwipe, updateMessageBlock } from '../script.js';
 import { eventSource, event_types } from './events.js';
 import { getRegexedString, regex_placement } from './extensions/regex/engine.js';
 import { getCurrentLocale, t, translate } from './i18n.js';
 import { macros, MacroCategory } from './macros/macro-system.js';
 import { chat_completion_sources, getChatCompletionModel, oai_settings } from './openai.js';
 import { Popup } from './popup.js';
-import { performFuzzySearch, power_user } from './power-user.js';
-import { saveFormattingPreset } from './preset-manager.js';
+import { power_user } from './power-user.js';
 import { SlashCommand } from './slash-commands/SlashCommand.js';
 import { ARGUMENT_TYPE, SlashCommandArgument, SlashCommandNamedArgument } from './slash-commands/SlashCommandArgument.js';
 import { commonEnumProviders, enumIcons } from './slash-commands/SlashCommandCommonEnumsProvider.js';
@@ -25,27 +24,6 @@ import { copyText, escapeRegex, isFalseBoolean, isTrueBoolean, setDatasetPropert
  * @property {string} suffix - Reasoning suffix
  * @property {string} separator - Reasoning separator
  */
-
-/**
- * @type {ReasoningTemplate[]} List of reasoning templates
- */
-export const reasoning_templates = [];
-
-export const DEFAULT_REASONING_TEMPLATE = 'Think XML';
-
-/**
- * Applies a reasoning template to the live power_user settings.
- * The Advanced Formatting drawer that once owned these controls is retired;
- * the React Settings surface calls this through its preset row, and the
- * slash command selects templates the same way.
- * @param {object} template Reasoning template preset
- */
-function applyReasoningTemplate(template) {
-    power_user.reasoning.name = template.name;
-    power_user.reasoning.prefix = template.prefix;
-    power_user.reasoning.suffix = template.suffix;
-    power_user.reasoning.separator = template.separator;
-}
 
 /**
  * Applies the current show_hidden setting to the chat container attribute.
@@ -751,35 +729,6 @@ function loadReasoningSettings() {
     applyReasoningVisibility();
 }
 
-function selectReasoningTemplateCallback(args, name) {
-    if (!name) {
-        return power_user.reasoning.name ?? '';
-    }
-
-    const quiet = isTrueBoolean(args?.quiet);
-    const templateNames = reasoning_templates.map(preset => preset.name);
-    let foundName = templateNames.find(x => x.toLowerCase() === name.toLowerCase());
-
-    if (!foundName) {
-        const result = performFuzzySearch('reasoning-templates', templateNames, [], name);
-
-        if (result.length === 0) {
-            if (!quiet) toastr.warning(`Reasoning template "${name}" not found`);
-            return '';
-        }
-
-        foundName = result[0].item;
-    }
-
-    const template = reasoning_templates.find(p => p.name === foundName);
-    if (template) {
-        applyReasoningTemplate(template);
-        saveSettingsDebounced();
-    }
-    if (!quiet) toastr.success(`Reasoning template "${foundName}" selected`);
-    return foundName;
-}
-
 function registerReasoningSlashCommands() {
     SlashCommandParser.addCommandObject(SlashCommand.fromProps({
         name: 'reasoning-get',
@@ -957,42 +906,6 @@ function registerReasoningSlashCommands() {
             const { formatted } = formatReasoning(reasoning, content);
             return formatted;
         },
-    }));
-    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
-        name: 'reasoning-template',
-        aliases: ['reasoning-formatting', 'reasoning-preset'],
-        callback: selectReasoningTemplateCallback,
-        returns: 'template name',
-        namedArgumentList: [
-            SlashCommandNamedArgument.fromProps({
-                name: 'quiet',
-                description: 'Suppress the toast message on template change',
-                typeList: [ARGUMENT_TYPE.BOOLEAN],
-                defaultValue: 'false',
-                enumList: commonEnumProviders.boolean('trueFalse')(),
-            }),
-        ],
-        unnamedArgumentList: [
-            SlashCommandArgument.fromProps({
-                description: 'reasoning template name',
-                typeList: [ARGUMENT_TYPE.STRING],
-                enumProvider: () => reasoning_templates.map(x => new SlashCommandEnumValue(x.name, null, enumTypes.enum, enumIcons.preset)),
-            }),
-        ],
-        helpString: `
-            <div>
-                Selects a reasoning template by name, using fuzzy search to find the closest match.
-                Gets the current template if no name is provided.
-            </div>
-            <div>
-                <strong>Example:</strong>
-                <ul>
-                    <li>
-                        <pre><code class="language-stscript">/reasoning-template DeepSeek</code></pre>
-                    </li>
-                </ul>
-            </div>
-            `,
     }));
 
     /**
@@ -1328,18 +1241,6 @@ export function removeReasoningFromString(str) {
 }
 
 /**
- * Returns the reasoning template object from its name
- * @param {string} name of the template
- * @returns {ReasoningTemplate} the reasoning template object
- * @throws {Error}
- */
-export function getReasoningTemplateByName(name) {
-    const template = reasoning_templates.find(p => p.name === name);
-    if (!template) throw new Error(`Unknown reasoning template name: "${name}"`);
-    return template;
-}
-
-/**
  * Parses reasoning from a string using the power user reasoning settings or optional template.
  * @typedef {Object} ParsedReasoning
  * @property {string} reasoning Reasoning block
@@ -1351,7 +1252,7 @@ export function getReasoningTemplateByName(name) {
  * @returns {ParsedReasoning|null} Parsed reasoning block and message content
  */
 export function parseReasoningFromString(str, { strict = true } = {}, template = null) {
-    template = template ?? power_user.reasoning;  // if no template given, use the currently selected template
+    template = template ?? power_user.reasoning;  // if no template given, use the active reasoning settings
 
     // Both prefix and suffix must be defined
     if (!template.prefix || !template.suffix) {
@@ -1529,44 +1430,6 @@ function registerReasoningAppEvents() {
 
         setComposerValue(removeReasoningFromString(currentValue));
     });
-}
-
-/**
- * Loads reasoning templates from the settings data.
- * @param {object} data Settings data
- * @param {ReasoningTemplate[]} data.reasoning Reasoning templates
- * @returns {Promise<void>}
- */
-export async function loadReasoningTemplates(data) {
-    if (data.reasoning !== undefined) {
-        reasoning_templates.splice(0, reasoning_templates.length, ...data.reasoning);
-    }
-
-    // No template name, need to migrate
-    if (power_user.reasoning.name === undefined) {
-        const defaultTemplate = reasoning_templates.find(p => p.name === DEFAULT_REASONING_TEMPLATE);
-        if (defaultTemplate) {
-            // If the reasoning settings were modified - migrate them to a custom template
-            if (power_user.reasoning.prefix !== defaultTemplate.prefix || power_user.reasoning.suffix !== defaultTemplate.suffix || power_user.reasoning.separator !== defaultTemplate.separator) {
-                /** @type {ReasoningTemplate} */
-                const data = {
-                    name: '[Migrated] Custom',
-                    prefix: power_user.reasoning.prefix,
-                    suffix: power_user.reasoning.suffix,
-                    separator: power_user.reasoning.separator,
-                };
-                await saveFormattingPreset('reasoning', data.name, data);
-                power_user.reasoning.name = data.name;
-            } else {
-                power_user.reasoning.name = defaultTemplate.name;
-            }
-        } else {
-            // Template not found (deleted or content check skipped - leave blank)
-            power_user.reasoning.name = '';
-        }
-
-        saveSettingsDebounced();
-    }
 }
 
 /**

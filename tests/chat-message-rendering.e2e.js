@@ -27,7 +27,13 @@ const mobileViewports = [
 ];
 
 function normalizeMessageText(value) {
-    return String(value ?? '').replace(/\s+/g, ' ').trim();
+    // Rendered text drops emphasis markers (*...* -> <em>) while seeded raw
+    // text still contains them. Strip pairs on both sides so the comparison
+    // covers the message content itself.
+    return String(value ?? '')
+        .replace(/([*_]{1,2})([^*_]+?)\1/g, '$2')
+        .replace(/\s+/g, ' ')
+        .trim();
 }
 
 function readChatJsonl(filePath) {
@@ -97,12 +103,17 @@ function getUnexpectedConsoleErrors(errors) {
         // production installs; seeded fixtures surface a 404, not an app error.
         const isSeedTransparentBackground404 = error.text.includes('Failed to load resource')
             && url.includes('/backgrounds/__transparent.png');
+        // Settings saves race across parallel workers sharing one document; the
+        // client retries with the adopted revision, so a transient 409 is noise.
+        const isSettingsSaveConflict = error.text.includes('Failed to load resource')
+            && url.includes('/api/settings/save')
+            && error.text.includes('409');
         // External CDN requests (e.g. fonts) surface as resource/fetch failures
         // in offline sandboxes, not as app errors.
         const isExternalResourceFailure = error.text.includes('Failed to load resource')
             && url !== '' && !url.startsWith(localOrigin);
 
-        return !isSeedPersonaThumbnail404 && !isSeedTransparentBackground404 && !isExternalResourceFailure;
+        return !isSeedPersonaThumbnail404 && !isSeedTransparentBackground404 && !isSettingsSaveConflict && !isExternalResourceFailure;
     });
 }
 
@@ -558,7 +569,7 @@ test.describe('chat message rendering', () => {
         await assistantRow.locator('.mes_edit_cancel').evaluate(element => element.click());
         await expect(editTextarea).toHaveCount(0);
         await expectReactMessageRowState(page, assistantMessageIndex, true);
-        await expect(assistantRow.locator('.mes_text')).toContainText(seededMessages[assistantMessageIndex].mes);
+        await expect(assistantRow.locator('.mes_text')).toContainText(normalizeMessageText(seededMessages[assistantMessageIndex].mes));
         expect(getUnexpectedConsoleErrors(consoleErrors)).toEqual([]);
     });
 

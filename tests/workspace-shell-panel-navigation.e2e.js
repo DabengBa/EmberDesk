@@ -306,11 +306,10 @@ test.describe('workspace shell panel navigation', () => {
         await expect(page.locator('[data-settings-overlay="true"]')).toBeVisible({ timeout: 15_000 });
         await page.locator('[data-settings-overlay="true"] .settings-tab').filter({ hasText: '高级' }).click();
         await expect(page.locator('[data-settings-overlay="true"] .settings-tab[data-active="true"]')).toHaveText(/高级/);
-        // The Advanced Formatting drawer is retired: its preset rows and master
-        // import/export render inline in the advanced tab.
-        await expect(page.locator('[data-settings-overlay="true"] [data-formatting-preset-row="sysprompt"]')).toBeVisible({ timeout: 10_000 });
-        await expect(page.locator('[data-settings-overlay="true"] [data-formatting-preset-row="reasoning"]')).toBeVisible();
-        await expect(page.locator('[data-settings-overlay="true"] [data-formatting-master-actions="true"]')).toBeVisible();
+        // Named formatting presets are retired: the advanced tab edits the
+        // active system prompt and reasoning values directly.
+        await expect(page.locator('[data-settings-overlay="true"] [data-formatting-preset-row]')).toHaveCount(0);
+        await expect(page.locator('[data-settings-overlay="true"] [data-formatting-master-actions]')).toHaveCount(0);
         await expect(page.locator('[data-settings-overlay="true"] button').filter({ hasText: '打开高级格式' })).toHaveCount(0);
     });
 

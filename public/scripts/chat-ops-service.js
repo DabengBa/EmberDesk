@@ -7,7 +7,6 @@ import { refreshSwipeButtons } from './generation-service.js';
 import { runDeleteCharacterClosePreflight } from './delete-character-preflight.js';
 import { requireChatOpsShellContext } from './chat-ops-shell-context.js';
 
-const CHAT_TRUNCATION_MESSAGES = 100;
 
 function shell() {
     return requireChatOpsShellContext();
@@ -128,10 +127,10 @@ export async function deleteCharacterChatByName(characterId, fileName) {
 export async function loadEarlierChatMessages(messagesToLoad = null) {
     if (isReactMainChatOwner()) {
         const visibleWindow = getMainChatReactVisibleWindow(state.reactMainChatProjectionCleared ? [] : state.chat);
-        const configuredCount = CHAT_TRUNCATION_MESSAGES;
+        const configuredCount = Number(state.power_user?.chat_truncation);
         const count = Number.isInteger(messagesToLoad) && messagesToLoad > 0
             ? messagesToLoad
-            : Number.isInteger(configuredCount) && configuredCount > 0
+            : configuredCount > 0
                 ? configuredCount
                 : state.chat.length;
         state.mainChatVisibleStartIndices.set(getCurrentChatId(), Math.max(
@@ -148,7 +147,7 @@ export async function loadEarlierChatMessages(messagesToLoad = null) {
     const firstDisplayedMesId = state.chatElement.children('.mes').first().attr('mesid');
     const firstDisplayedMessage = state.chatElement.children('.mes').first();
     let messageId = Number(firstDisplayedMesId);
-    let count = messagesToLoad || CHAT_TRUNCATION_MESSAGES;
+    let count = messagesToLoad || state.power_user.chat_truncation || Number.MAX_SAFE_INTEGER;
 
     // If there are no messages displayed, or the message somehow has no mesid, we default to one higher than last message id,
     // so the first "new" message being shown will be the last available message
@@ -209,7 +208,7 @@ export async function printMessages() {
     }
 
     let startIndex = 0;
-    let count = CHAT_TRUNCATION_MESSAGES;
+    let count = state.power_user.chat_truncation || Number.MAX_SAFE_INTEGER;
 
     if (state.chat.length > count) {
         startIndex = state.chat.length - count;

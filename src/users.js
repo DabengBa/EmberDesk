@@ -22,7 +22,6 @@ export {
 
 export {
     migrateUserData,
-    migrateSystemPrompts,
     migratePublicOverrides,
 } from './user-migrations.js';
 

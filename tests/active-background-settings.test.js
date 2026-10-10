@@ -33,19 +33,6 @@ function loadPureFunction(functionName) {
     return new Function(`${defaultSettingsSource};\n${functionSource}; return ${functionName};`)();
 }
 
-function loadPowerUserFunction(functionName, powerUser) {
-    const functionSource = extractFunctionSource(powerUserSource, functionName);
-    const calls = [];
-    const $ = selector => Object.fromEntries([
-        ['hide', () => calls.push([selector, 'hide'])],
-        ['show', () => calls.push([selector, 'show'])],
-        ['addClass', value => calls.push([selector, 'addClass', value])],
-        ['removeClass', value => calls.push([selector, 'removeClass', value])],
-    ]);
-    const fn = new Function('$', 'power_user', `${functionSource}; return ${functionName};`)($, powerUser);
-    return { fn, calls };
-}
-
 function loadBackgroundDomFunction(functionName, metadata, globalUrl) {
     const functionSource = extractFunctionSource(scriptSource, functionName);
     const calls = [];
@@ -120,29 +107,6 @@ describe('active background settings', () => {
         expect(scriptSource).toContain('$(\'#bg1\').css(\'background-image\', resolveActiveBackgroundUrl(chat_metadata, background_settings.url));');
         expect(scriptSource).not.toContain('sortOrder:');
         expect(scriptSource).not.toContain('thumbnailColumns:');
-    });
-
-    test('restores ordinary spoiler initialization for saved true and false values', () => {
-        const startupTail = powerUserSource.slice(powerUserSource.indexOf('await loadReasoningTemplates(data);'));
-        expect(startupTail).toMatch(/await loadReasoningTemplates\(data\);[\s\S]*?switchSpoilerMode\(\);[\s\S]*?loadCharListState\(\);/);
-
-        const enabled = loadPowerUserFunction('switchSpoilerMode', { spoiler_free_mode: true });
-        enabled.fn();
-        expect(enabled.calls).toEqual([
-            ['#descriptionWrapper', 'hide'],
-            ['#firstMessageWrapper', 'hide'],
-            ['#spoiler_free_desc', 'addClass', 'flex1'],
-            ['#creators_note_desc_hidden', 'show'],
-        ]);
-
-        const disabled = loadPowerUserFunction('switchSpoilerMode', { spoiler_free_mode: false });
-        disabled.fn();
-        expect(disabled.calls).toEqual([
-            ['#descriptionWrapper', 'show'],
-            ['#firstMessageWrapper', 'show'],
-            ['#spoiler_free_desc', 'removeClass', 'flex1'],
-            ['#creators_note_desc_hidden', 'hide'],
-        ]);
     });
 
     test('restores Image Gallery translations', () => {

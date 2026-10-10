@@ -101,7 +101,7 @@ import { timestampToMoment, uuidv4, importFromExternalUrl } from './utils.js';
 import { addGlobalVariable, addLocalVariable, decrementGlobalVariable, decrementLocalVariable, deleteGlobalVariable, deleteLocalVariable, existsGlobalVariable, existsLocalVariable, getGlobalVariable, getLocalVariable, incrementGlobalVariable, incrementLocalVariable, setGlobalVariable, setLocalVariable } from './variables.js';
 import { convertCharacterBook, getWorldInfoPrompt, loadWorldInfo, reloadEditor, saveWorldInfo, updateWorldInfoList, world_names } from './world-info.js';
 import { ChatCompletionService } from './custom-request.js';
-import { updateReasoningUI, parseReasoningFromString, getReasoningTemplateByName } from './reasoning.js';
+import { updateReasoningUI, parseReasoningFromString } from './reasoning.js';
 import { IGNORE_SYMBOL } from './constants.js';
 import { macros } from './macros/macro-system.js';
 
@@ -290,7 +290,6 @@ export function getContext() {
         ChatCompletionService,
         updateReasoningUI,
         parseReasoningFromString,
-        getReasoningTemplateByName,
         unshallowCharacter,
         unshallowGroupMembers: rejectRetiredGroupChatOperation,
         symbols: {

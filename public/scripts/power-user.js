@@ -43,7 +43,6 @@ import { commonEnumProviders, enumIcons } from './slash-commands/SlashCommandCom
 import { POPUP_TYPE, callGenericPopup, fixToastrForDialogs } from './popup.js';
 import { loadSystemPrompts } from './sysprompt.js';
 import { accountStorage } from './util/AccountStorage.js';
-import { DEFAULT_REASONING_TEMPLATE, loadReasoningTemplates } from './reasoning.js';
 import { loadWorkspacePanelsModule } from './workspace-panels-react-bridge.js';
 import { DEFAULT_FRONTEND_FRAME_SETTINGS, normalizeFrontendFramesSettings } from './frontend-frame.js';
 
@@ -131,13 +130,11 @@ export const power_user = {
 
     sysprompt: {
         enabled: true,
-        name: 'Neutral - Chat',
         content: 'Write {{char}}\'s next reply in a fictional chat between {{char}} and {{user}}.',
         post_history: '',
     },
 
     reasoning: {
-        name: DEFAULT_REASONING_TEMPLATE,
         auto_parse: false,
         add_to_prompts: false,
         auto_expand: false,
@@ -148,6 +145,7 @@ export const power_user = {
         max_additions: 1,
     },
 
+    chat_truncation: 100,
     custom_stopping_strings: '',
     servers: [],
     show_tag_filters: false,
@@ -311,7 +309,7 @@ function getExampleMessagesBehavior() {
 }
 
 //MARK: loadPowerUser
-export async function loadPowerUserSettings(settings, data) {
+export async function loadPowerUserSettings(settings) {
     const defaultStscript = structuredClone(power_user.stscript);
     // Load from settings.json
     if (settings.power_user !== undefined) {
@@ -342,7 +340,7 @@ export async function loadPowerUserSettings(settings, data) {
             'image_overswipe', 'aux_field', 'tag_import_setting',
             'auto_swipe', 'auto_swipe_minimum_length', 'auto_swipe_blacklist',
             'auto_swipe_blacklist_threshold', 'custom_stopping_strings_macro',
-            'experimental_macro_engine', 'auto_continue', 'chat_truncation',
+            'experimental_macro_engine', 'auto_continue',
             'streaming_fps', 'smooth_streaming_no_think', 'smooth_streaming_speed',
             'stream_fade_in', 'collapse_newlines', 'trim_sentences', 'single_line',
             'markdown_escape_strings', 'show_user_prompt_bias',
@@ -411,8 +409,7 @@ export async function loadPowerUserSettings(settings, data) {
     $(`#character_sort_order option[data-order="${power_user.sort_order}"][data-field="${power_user.sort_field}"]`).prop('selected', true);
     switchReducedMotion();
     reloadMarkdownProcessor();
-    await loadSystemPrompts(data);
-    await loadReasoningTemplates(data);
+    await loadSystemPrompts();
     loadCharListState();
     applyToastrPosition();
 }

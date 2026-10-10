@@ -23,10 +23,6 @@ function getPresetSettingsByAPI(apiId, directories) {
             return { folder: directories.novelAI_Settings, extension: '.json' };
         case 'openai':
             return { folder: directories.openAI_Settings, extension: '.json' };
-        case 'sysprompt':
-            return { folder: directories.sysprompt, extension: '.json' };
-        case 'reasoning':
-            return { folder: directories.reasoning, extension: '.json' };
         default:
             return { folder: null, extension: null };
     }
