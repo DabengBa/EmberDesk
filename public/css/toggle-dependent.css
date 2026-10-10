@@ -269,15 +269,6 @@ body.noShadows * {
     text-shadow: none !important;
 }
 
-label[for="trim_spaces"]:has(input:checked) i.warning {
-    display: none;
-}
-
-label[for="trim_spaces"]:not(:has(input:checked)) small {
-    color: var(--warning);
-    opacity: 1;
-}
-
 #mistralai_other_models:empty {
     display: none;
 }

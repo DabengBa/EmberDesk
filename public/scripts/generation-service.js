@@ -1,5 +1,5 @@
 import { eventSource, event_types } from './events.js';
-import { GENERATION_TYPE_TRIGGERS, OVERSWIPE_BEHAVIOR, SWIPE_DIRECTION, SWIPE_SOURCE, SWIPE_STATE, inject_ids } from './constants.js';
+import { GENERATION_TYPE_TRIGGERS, OVERSWIPE_BEHAVIOR, SWIPE_DIRECTION, SWIPE_SOURCE, SWIPE_STATE, TOKEN_PADDING, inject_ids } from './constants.js';
 import { executeGenerationAttempts, createGenerationCommandPlan } from './chat-generation-command-service.js';
 import {
     getGenerationFailureDecision,
@@ -621,7 +621,7 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
         deactivateSendButtons();
     }
 
-    let { messageBias, promptBias, isUserPromptBias } = getBiasStrings(textareaText, type);
+    let { messageBias, promptBias } = getBiasStrings(textareaText, type);
 
     //*********************************
     //PRE FORMATING STRING
@@ -736,9 +736,7 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
 
     console.log(`Core/all messages: ${coreChat.length}/${state.chat.length}`);
 
-    if ((promptBias && !isUserPromptBias) || state.power_user.always_force_name2) {
-        force_name2 = true;
-    }
+    force_name2 = true;
 
     if (isImpersonate) {
         force_name2 = false;
@@ -893,7 +891,7 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
             modifyLastPromptLine(''),
             cyclePrompt,
         ].join('').replace(/\r/gm, '');
-        return getTokenCountAsync(encodeString, state.power_user.token_padding);
+        return getTokenCountAsync(encodeString, TOKEN_PADDING);
     }
 
     // Force pinned examples into the context
@@ -1113,7 +1111,7 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
             modifyLastPromptLine(''),
             generatedPromptCache,
         ].join('').replace(/\r/gm, '');
-        let thisPromptContextSize = await getTokenCountAsync(prompt, state.power_user.token_padding);
+        let thisPromptContextSize = await getTokenCountAsync(prompt, TOKEN_PADDING);
 
         if (thisPromptContextSize > this_max_context) {        //if the prepared prompt is larger than the max context size...
             if (count_exm_add > 0) {                            // ..and we have example messages..
@@ -1523,9 +1521,7 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
 
         reasoning = getRegexedString(reasoning, state.regex_placement.REASONING);
 
-        if (state.power_user.trim_spaces) {
-            reasoning = reasoning.trim();
-        }
+        reasoning = reasoning.trim();
 
         if (isContinue) {
             continue_mag = promptReasoning.removePrefix(continue_mag);

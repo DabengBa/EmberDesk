@@ -27,12 +27,8 @@
         "trusted_workers_only": false
     },
     "power_user": {
-        "tokenizer": 99,
-        "token_padding": 64,
         "pin_examples": false,
         "strip_examples": false,
-        "always_force_name2": true,
-        "user_prompt_bias": "",
         "sort_field": "name",
         "sort_order": "asc",
         "sort_rule": null,
@@ -40,7 +36,6 @@
         "movingUIState": {},
         "movingUIPreset": "Default",
         "max_context_unlocked": false,
-        "trim_spaces": true,
         "instruct": {
             "enabled": false,
             "preset": "Alpaca",
@@ -68,9 +63,7 @@
             "example_separator": "***",
             "use_stop_strings": true
         },
-        "custom_stopping_strings": "",
-        "ui_mode": 1,
-        "stscript": {}
+        "ui_mode": 1
     },
     "feature_settings": {
         "connectionManager": {

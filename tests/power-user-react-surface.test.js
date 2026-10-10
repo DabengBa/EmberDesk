@@ -14,14 +14,20 @@ describe('power-user settings drawer React surface (Wave A)', () => {
             'settingsSearch',
             'swipes-checkbox',
             'example_messages_behavior',
-            'smooth_streaming',
-            'stscript_autocomplete_state',
-            'stscript_matching',
             'reload_chat',
             'debug_menu',
             'data_maid_button',
         ]) {
             expect(panel).toContain(`id="${id}"`);
+        }
+
+        // Retired controls are gone from the drawer markup.
+        for (const id of [
+            'smooth_streaming',
+            'stscript_autocomplete_state',
+            'stscript_matching',
+        ]) {
+            expect(panel).not.toContain(`id="${id}"`);
         }
 
         // The drawer-content element stays as the mount shell.

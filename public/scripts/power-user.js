@@ -29,7 +29,6 @@ import {
 import { favsToHotswap } from './RossAscends-mods.js';
 
 import { tag_map, tag_sort_mode, tags } from './tags.js';
-import { tokenizers } from './tokenizers.js';
 import { renderTemplateAsync } from './templates.js';
 
 import { debounce, delay, getStringHash, isTrueBoolean, shuffle, sortMoments, stringToRange, timestampToMoment } from './utils.js';
@@ -37,7 +36,6 @@ import { FILTER_TYPES, fuzzySearchCategories } from './filters.js';
 import { SlashCommandParser } from './slash-commands/SlashCommandParser.js';
 import { SlashCommand } from './slash-commands/SlashCommand.js';
 import { ARGUMENT_TYPE, SlashCommandArgument, SlashCommandNamedArgument } from './slash-commands/SlashCommandArgument.js';
-import { AUTOCOMPLETE_STATE } from './autocomplete/AutoComplete.js';
 import { SlashCommandEnumValue, enumTypes } from './slash-commands/SlashCommandEnumValue.js';
 import { commonEnumProviders, enumIcons } from './slash-commands/SlashCommandCommonEnumsProvider.js';
 import { POPUP_TYPE, callGenericPopup, fixToastrForDialogs } from './popup.js';
@@ -65,13 +63,8 @@ const defaultToastPosition = 'toast-top-center';
 
 export const power_user = {
     charListGrid: false,
-    tokenizer: tokenizers.BEST_MATCH,
-    token_padding: 64,
     pin_examples: false,
     strip_examples: false,
-    always_force_name2: false,
-    user_prompt_bias: '',
-    smooth_streaming: false,
 
     frontend_frames: { ...DEFAULT_FRONTEND_FRAME_SETTINGS },
 
@@ -83,7 +76,6 @@ export const power_user = {
     // once at load for compatibility, then stripped on the next save.
     custom_css: '',
 
-    trim_spaces: true,
     tag_sort_mode: tag_sort_mode.MANUAL,
 
     instruct: {
@@ -128,15 +120,8 @@ export const power_user = {
     },
 
     chat_truncation: 100,
-    custom_stopping_strings: '',
     servers: [],
     show_tag_filters: false,
-    stscript: {
-        matching: 'fuzzy',
-        autocomplete: {
-            state: AUTOCOMPLETE_STATE.ALWAYS,
-        },
-    },
     auto_connect: true,
     external_media_allowed_overrides: [],
     external_media_forbidden_overrides: [],
@@ -292,7 +277,6 @@ function getExampleMessagesBehavior() {
 
 //MARK: loadPowerUser
 export async function loadPowerUserSettings(settings) {
-    const defaultStscript = structuredClone(power_user.stscript);
     // Load from settings.json
     if (settings.power_user !== undefined) {
         if (Object.hasOwn(settings.power_user, 'auto_sort_tags') && !Object.hasOwn(settings.power_user, 'tag_sort_mode')) {
@@ -340,22 +324,6 @@ export async function loadPowerUserSettings(settings) {
     // settings.power_user is shallow-merged, so rebuild nested objects against defaults
     power_user.frontend_frames = normalizeFrontendFramesSettings(power_user.frontend_frames);
 
-    if (power_user.stscript === undefined) {
-        power_user.stscript = defaultStscript;
-    } else {
-        // Only the autocomplete on/off state survives the retirement of the
-        // style/geometry/parser knobs; everything else snaps back to defaults.
-        power_user.stscript.autocomplete = { state: power_user.stscript.autocomplete?.state ?? defaultStscript.autocomplete.state };
-        delete power_user.stscript.parser;
-        delete power_user.stscript.autocomplete_style;
-    }
-
-
-    // Retired remote/proprietary tokenizers (NERD/NERD2/API_CURRENT/API_KOBOLD/LEGACY) fold back to best-match
-    if (!Object.values(tokenizers).includes(power_user.tokenizer)) {
-        power_user.tokenizer = tokenizers.BEST_MATCH;
-    }
-
     // Clean up old/legacy settings
     if (power_user.import_card_tags !== undefined) {
         delete power_user.import_card_tags;
@@ -378,6 +346,14 @@ export async function loadPowerUserSettings(settings) {
     delete power_user.sysprompt;
     delete power_user.reasoning;
 
+    // Retired advanced-tab controls are fixed at runtime: tokenizer always
+    // best-match, padding 64, name2/trim always on, no bias/stop-string fields.
+    for (const key of ['tokenizer', 'token_padding', 'always_force_name2',
+        'user_prompt_bias', 'smooth_streaming', 'trim_spaces',
+        'custom_stopping_strings', 'stscript']) {
+        delete power_user[key];
+    }
+
     $('#example_messages_behavior').val(getExampleMessagesBehavior());
     $(`#example_messages_behavior option[value="${getExampleMessagesBehavior()}"]`).prop('selected', true);
 
@@ -388,11 +364,6 @@ export async function loadPowerUserSettings(settings) {
     $('#frontend_frames_skip_highlight').prop('checked', power_user.frontend_frames.skip_highlight);
     $('#frontend_frames_use_blob_url').prop('checked', power_user.frontend_frames.use_blob_url);
     $('#frontend_frames_allow_streaming').prop('checked', power_user.frontend_frames.allow_streaming);
-    $('#stscript_autocomplete_state').val(power_user.stscript.autocomplete.state).trigger('input');
-    $('#stscript_matching').val(power_user.stscript.matching ?? 'fuzzy');
-
-    $('#smooth_streaming').prop('checked', power_user.smooth_streaming);
-
     $(`#character_sort_order option[data-order="${power_user.sort_order}"][data-field="${power_user.sort_field}"]`).prop('selected', true);
     switchReducedMotion();
     reloadMarkdownProcessor();
@@ -818,37 +789,9 @@ export function flushEphemeralStoppingStrings() {
  * @returns {string[]} An array of custom stopping strings
  */
 export function getCustomStoppingStrings(limit = undefined) {
-    function getPermanent() {
-        try {
-            // If there's no custom stopping strings, return an empty array
-            if (!power_user.custom_stopping_strings) {
-                return [];
-            }
-
-            // Parse the JSON string
-            let strings = JSON.parse(power_user.custom_stopping_strings);
-
-            // Make sure it's an array
-            if (!Array.isArray(strings)) {
-                return [];
-            }
-
-            // Make sure all the elements are strings and non-empty.
-            strings = strings.filter(s => typeof s === 'string' && s.length > 0);
-
-            strings = strings.map(x => substituteParams(x));
-
-            return strings;
-        } catch (error) {
-            // If there's an error, return an empty array
-            console.warn('Error parsing custom stopping strings:', error);
-            return [];
-        }
-    }
-
-    const permanent = getPermanent();
-    const ephemeral = EPHEMERAL_STOPPING_STRINGS;
-    const strings = [...permanent, ...ephemeral];
+    // Only ephemeral (command-injected) stopping strings remain; the
+    // persistent custom stopping strings setting was retired.
+    const strings = [...EPHEMERAL_STOPPING_STRINGS];
 
     // Apply the limit. If limit is 0, return all strings.
     if (limit > 0) {
@@ -912,11 +855,6 @@ jQuery(() => {
         saveSettingsDebounced();
     });
 
-    $('#smooth_streaming').on('input', function () {
-        power_user.smooth_streaming = !!$(this).prop('checked');
-        saveSettingsDebounced();
-    });
-
     $('#character_sort_order').on('change', function () {
         const field = String($(this).find(':selected').data('field'));
         // Save sort order, but do not save search sorting, as this is a temporary sorting option
@@ -977,17 +915,6 @@ jQuery(() => {
 
     $('#debug_menu').on('click', function () {
         showDebugMenu();
-    });
-
-    $('#stscript_autocomplete_state').on('input', function () {
-        power_user.stscript.autocomplete.state = Number($(this).val());
-        saveSettingsDebounced();
-    });
-
-    $('#stscript_matching').on('change', function () {
-        const value = $(this).find(':selected').val();
-        power_user.stscript.matching = String(value);
-        saveSettingsDebounced();
     });
 
     $(document).on('click', '#debug_table [data-debug-function]', function () {
@@ -1160,114 +1087,6 @@ jQuery(() => {
                 </ul>
             </div>
         `,
-    }));
-    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
-        name: 'stop-strings',
-        aliases: ['stopping-strings', 'custom-stopping-strings', 'custom-stop-strings'],
-        helpString: `
-            <div>
-                Sets a list of custom stopping strings. Gets the list if no value is provided.
-                Use a "force" argument to force set an empty value.
-            </div>
-            <div>
-                <strong>Examples:</strong>
-            </div>
-            <ul>
-                <li>Force set an empty value: <pre><code class="language-stscript">/stop-strings force="true" {{noop}}</code></pre></li>
-                <li>Value must be a JSON-serialized array: <pre><code class="language-stscript">/stop-strings ["goodbye", "farewell"]</code></pre></li>
-                <li>Pipe characters must be escaped with a backslash: <pre><code class="language-stscript">/stop-strings ["left\\|right"]</code></pre></li>
-            </ul>
-        `,
-        returns: ARGUMENT_TYPE.LIST,
-        namedArgumentList: [
-            SlashCommandNamedArgument.fromProps({
-                name: 'force',
-                description: 'force set a value if empty',
-                typeList: [ARGUMENT_TYPE.BOOLEAN],
-                defaultValue: 'false',
-                enumList: commonEnumProviders.boolean('trueFalse')(),
-            }),
-        ],
-        unnamedArgumentList: [
-            SlashCommandArgument.fromProps({
-                description: 'list of strings',
-                typeList: [ARGUMENT_TYPE.LIST],
-                acceptsMultiple: false,
-                isRequired: false,
-            }),
-        ],
-        callback: (args, value) => {
-            const force = isTrueBoolean(String(args?.force ?? false));
-            value = String(value ?? '').trim();
-
-            // Skip processing if no value and not forced
-            if (!force && !value) {
-                return power_user.custom_stopping_strings;
-            }
-
-            // Use empty array for forced empty value
-            if (force && !value) {
-                value = JSON.stringify([]);
-            }
-
-            const parsedValue = ((x) => { try { return JSON.parse(x.toString()); } catch { return null; } })(value);
-            if (!parsedValue || !Array.isArray(parsedValue)) {
-                throw new Error('Invalid list format. The value must be a JSON-serialized array of strings.');
-            }
-            parsedValue.forEach((item, index) => {
-                parsedValue[index] = String(item);
-            });
-            power_user.custom_stopping_strings = JSON.stringify(parsedValue);
-            saveSettingsDebounced();
-
-            return power_user.custom_stopping_strings;
-        },
-    }));
-    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
-        name: 'start-reply-with',
-        helpString: `
-            <div>
-                Sets a "Start Reply With". Gets the current value if no value is provided.
-                Use a "force" argument to force set an empty value.
-            </div>
-            <div>
-                <strong>Examples:</strong>
-            </div>
-            <ul>
-                <li>Set the field value: <pre><code class="language-stscript">/start-reply-with Sure!</code></pre></li>
-                <li>Force set an empty value: <pre><code class="language-stscript">/start-reply-with force="true" {{noop}}</code></pre></li>
-            </ul>
-        `,
-        namedArgumentList: [
-            SlashCommandNamedArgument.fromProps({
-                name: 'force',
-                description: 'force set a value if empty',
-                typeList: [ARGUMENT_TYPE.BOOLEAN],
-                defaultValue: 'false',
-                enumList: commonEnumProviders.boolean('trueFalse')(),
-            }),
-        ],
-        unnamedArgumentList: [
-            SlashCommandArgument.fromProps({
-                description: 'value',
-                typeList: [ARGUMENT_TYPE.STRING],
-                acceptsMultiple: false,
-                isRequired: false,
-            }),
-        ],
-        callback: (args, value) => {
-            const force = isTrueBoolean(String(args?.force ?? false));
-
-            // Skip processing if no value and not forced
-            if (!force && !value) {
-                return power_user.user_prompt_bias;
-            }
-
-            power_user.user_prompt_bias = String(value ?? '');
-            saveSettingsDebounced();
-
-            return power_user.user_prompt_bias;
-        },
     }));
 });
 

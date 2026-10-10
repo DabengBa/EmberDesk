@@ -188,3 +188,7 @@ export const SWIPE_STATE = {
 export const REASONING_PREFIX = '<think>';
 export const REASONING_SUFFIX = '</think>';
 export const REASONING_SEPARATOR = '\n';
+
+// Fixed padding compensating for API-side message format overhead that local
+// token counting cannot observe (retired power_user.token_padding setting).
+export const TOKEN_PADDING = 64;

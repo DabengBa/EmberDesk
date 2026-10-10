@@ -132,11 +132,12 @@ describe('settings React route flag', () => {
         expect(routeSource).not.toContain("{activeTab === 'general' ? (");
         expect(routeSource).toContain("{activeTab === 'providers' ? (");
         expect(routeSource).not.toContain("{activeTab === 'userInterface' ? (");
-        expect(routeSource).toContain("{activeTab === 'advanced' ? (");
+        // The advanced tab is retired; only the providers tab remains.
+        expect(routeSource).not.toContain("{activeTab === 'advanced' ? (");
         expect(routeSource).toContain('name="providers.customUrl"');
         expect(routeSource).toContain('name="providers.fallbackProviderModel"');
         expect(routeSource).not.toContain('name="userInterface.customCss"');
-        expect(routeSource).toContain('name="advanced.tokenizer"');
+        expect(routeSource).not.toContain('name="advanced.tokenizer"');
         expect(routeSource).not.toContain("{activeTab === 'general' && (");
         expect(routeSource).not.toContain("{activeTab === 'providers' && (");
 
@@ -202,8 +203,8 @@ describe('settings React route flag', () => {
         expect(settingFieldSource).toContain('checked={Boolean(currentValue)}');
         expect(settingFieldSource).not.toContain('checked={Boolean(field.state.value)}');
 
-        // Providers + Advanced only; the interface tab is retired.
-        expect(helperModule.settingsTabDefinitions).toHaveLength(2);
+        // Providers only; the interface and advanced tabs are retired.
+        expect(helperModule.settingsTabDefinitions).toHaveLength(1);
         // Single-provider contract: the provider picker is retired.
         expect(helperModule.providerOptions).toBeUndefined();
         expect(helperModule.providerSecretKeyBySource.claude).toBeUndefined();
@@ -222,8 +223,8 @@ describe('settings React route flag', () => {
         expect(helperModule.settingsCoverage.reactOwned.providers).toHaveLength(3);
         // The interface tab is retired; UI keys are stripped from saved payloads.
         expect(helperModule.settingsCoverage.reactOwned.userInterface).toBeUndefined();
-        expect(helperModule.settingsCoverage.reactOwned.advanced).toContain('power_user.tokenizer');
-        expect(helperModule.settingsCoverage.reactOwned.advanced).toContain('power_user.stscript.autocomplete.state');
+        // The advanced tab is retired entirely; no react-owned advanced paths.
+        expect(helperModule.settingsCoverage.reactOwned.advanced).toBeUndefined();
         expect(helperModule.settingsCoverage.legacyOwned).toContain('world_info_settings');
         expect(helperModule.settingsCoverage.legacyOwned).toContain('feature_settings');
         expect(helperModule.settingsCoverage.legacyOwned).toContain('preset_settings');
@@ -369,22 +370,13 @@ describe('settings React route flag', () => {
         expect(defaults.providers.fallbackProviderEnabled).toBeUndefined();
         expect(defaults.providers.fallbackProviderModel).toBe('gpt-4.1-mini');
         expect(defaults.userInterface).toBeUndefined();
-        expect(defaults.advanced.autoSwipe).toBeUndefined();
-        expect(defaults.advanced.stscriptAutocompleteFontScale).toBeUndefined();
-        expect(defaults.advanced.stscriptAutocompleteState).not.toBeUndefined();
+        expect(defaults.advanced).toBeUndefined();
 
         const merged = helperModule.buildSettingsSavePayload(parsed.settings, {
             providers: {
                 openaiModel: 'gpt-5.2',
                 customUrl: 'https://custom.example.com/v1',
                 fallbackProviderModel: 'gpt-4.1',
-            },
-            advanced: {
-                customStoppingStrings: 'END',
-                tokenizer: 42,
-                smoothStreaming: false,
-                stscriptMatching: 'exact',
-                stscriptAutocompleteState: 1,
             },
         });
 
@@ -395,8 +387,10 @@ describe('settings React route flag', () => {
         expect(merged.power_user.font_scale).toBeUndefined();
         // Stored legacy custom CSS keeps round-tripping invisibly; no UI remains.
         expect(merged.power_user.custom_css).toBe('.chat { color: white; }');
-        expect(merged.power_user.custom_stopping_strings).toBe('END');
-        expect(merged.power_user.tokenizer).toBe(42);
+        // Retired advanced-tab keys are stripped from the saved payload.
+        expect(merged.power_user.custom_stopping_strings).toBeUndefined();
+        expect(merged.power_user.tokenizer).toBeUndefined();
+        expect(merged.power_user.smooth_streaming).toBeUndefined();
         // chat_truncation stays a live data field (no UI): the fixed default
         // drives the long-chat initial window and the JSON value still loads.
         expect(merged.power_user.chat_truncation).toBe(120);
@@ -437,8 +431,7 @@ describe('settings React route flag', () => {
         expect(merged.power_user.instruct.skip_examples).toBe(true);
         expect(merged.power_user.instruct.activation_regex).toBe('/llama/i');
         expect(merged.power_user.context.story_string).toBe('Story');
-        expect(merged.power_user.stscript.autocomplete.state).toBe(1);
-        expect(merged.power_user.stscript.parser).toBeUndefined();
+        expect(merged.power_user.stscript).toBeUndefined();
     });
 
 
@@ -541,8 +534,15 @@ describe('settings React route flag', () => {
         for (const path of [
             'power_user.token_padding',
             'power_user.user_prompt_bias',
+            'power_user.custom_stopping_strings',
+            'power_user.tokenizer',
+            'power_user.stscript',
+            'power_user.trim_spaces',
+            'power_user.always_force_name2',
+            'power_user.smooth_streaming',
         ]) {
-            expect(reactPaths).toContain(path);
+            // Advanced-tab keys are retired: neither react-owned nor legacy-owned.
+            expect(reactPaths).not.toContain(path);
             expect(helperModule.settingsCoverage.legacyOwned).not.toContain(path);
         }
 
@@ -597,12 +597,11 @@ describe('settings React route flag', () => {
         const defaults = helperModule.buildSettingsFormDefaults(fixture);
         expect(defaults.general).toBeUndefined();
         expect(defaults.userInterface).toBeUndefined();
-        expect(defaults.advanced.collapseNewlines).toBeUndefined();
-        expect(defaults.advanced.tokenPadding).toBe(32);
+        expect(defaults.advanced).toBeUndefined();
 
         // Mutate a single field only.
         const singleEdit = structuredClone(defaults);
-        singleEdit.advanced.tokenPadding = 64;
+        singleEdit.providers.openaiModel = 'gpt-5.2';
         const saved = helperModule.buildSettingsSavePayload(fixture, singleEdit);
 
         expect(saved.untouched).toEqual({ keep: true, nested: { a: 1 } });
@@ -620,11 +619,11 @@ describe('settings React route flag', () => {
         expect(saved.power_user.expand_message_actions).toBeUndefined();
         // Retired interface key: stripped rather than round-tripped.
         expect(saved.power_user.send_on_enter).toBeUndefined();
-        expect(saved.power_user.token_padding).toBe(64);
-        expect(saved.power_user.stscript.parser).toBeUndefined();
-        expect(saved.power_user.stscript.autocomplete.state).toBe(2);
-        expect(saved.power_user.stscript.autocomplete.style).toBeUndefined();
-        expect(saved.power_user.user_prompt_bias).toBe('start-with');
+        // Retired advanced-tab keys are stripped rather than round-tripped.
+        expect(saved.power_user.token_padding).toBeUndefined();
+        expect(saved.power_user.stscript).toBeUndefined();
+        expect(saved.power_user.user_prompt_bias).toBeUndefined();
+        expect(saved.oai_settings.openai_model).toBe('gpt-5.2');
         expect(saved.power_user.collapse_newlines).toBeUndefined();
 
         // Full identity round-trip with no form edits preserves unknown enums/values.
@@ -687,15 +686,16 @@ describe('settings React route flag', () => {
         };
         const baseline = helperModule.buildSettingsFormDefaults(fixture);
         const edited = structuredClone(baseline);
-        edited.advanced.tokenPadding = 128;
+        edited.providers.openaiModel = 'gpt-5.2';
         const saved = helperModule.buildSettingsSavePayload(fixture, edited, {
             baselineFormValues: baseline,
         });
 
         expect(saved).toEqual({
             untouched: { keep: true },
-            power_user: {
-                token_padding: 128,
+            oai_settings: {
+                chat_completion_source: 'openai',
+                openai_model: 'gpt-5.2',
             },
         });
     });

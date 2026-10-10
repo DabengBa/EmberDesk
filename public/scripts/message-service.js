@@ -996,31 +996,19 @@ export function scrollChatToBottom({ waitForFrame } = {}) {
  * @param {boolean} [options.isContinue] Whether this is a continued message
  * @param {boolean} [options.displayIncompleteSentences] Whether to keep incomplete sentences at the end.
  * @param {array} [options.stoppingStrings] Array of stopping strings.
- * @param {boolean} [options.includeUserPromptBias] Whether to permit prepending the user prompt bias at the beginning.
  * @param {boolean} [options.trimNames] Whether to allow trimming "{{char}}:" or "{{user}}:" from the beginning.
  * @param {boolean} [options.trimWrongNames] Whether to allow deleting responses prefixed by the incorrect name, depending on isImpersonate
  *
  * @returns {string} The formatted message
  */
-export function cleanUpMessage({ getMessage, isImpersonate, isContinue, displayIncompleteSentences = false, stoppingStrings = null, includeUserPromptBias = true, trimNames = true, trimWrongNames = true } = {}) {
+export function cleanUpMessage({ getMessage, isImpersonate, isContinue, displayIncompleteSentences = false, stoppingStrings = null, trimNames = true, trimWrongNames = true } = {}) {
     if (arguments.length > 0 && typeof arguments[0] !== 'object') {
         console.trace('cleanUpMessage called with positional arguments. Please use an object instead.');
-        [getMessage, isImpersonate, isContinue, displayIncompleteSentences, stoppingStrings, includeUserPromptBias, trimNames, trimWrongNames] = arguments;
+        [getMessage, isImpersonate, isContinue, displayIncompleteSentences, stoppingStrings, trimNames, trimWrongNames] = arguments;
     }
 
     if (!getMessage) {
         return '';
-    }
-
-    // Add the prompt bias before anything else
-    if (
-        includeUserPromptBias &&
-        state.power_user.user_prompt_bias &&
-        !isImpersonate &&
-        !isContinue &&
-        state.power_user.user_prompt_bias.length !== 0
-    ) {
-        getMessage = substituteParams(state.power_user.user_prompt_bias) + getMessage;
     }
 
     // Allow for caching of stopping strings. getStoppingStrings is an expensive function, especially with macros
@@ -1100,7 +1088,7 @@ export function cleanUpMessage({ getMessage, isImpersonate, isContinue, displayI
     }
 
 
-    if (state.power_user.trim_spaces && !state.PromptReasoning.getLatestPrefix()) {
+    if (!state.PromptReasoning.getLatestPrefix()) {
         getMessage = getMessage.trim();
     }
 
@@ -1253,9 +1241,7 @@ export async function saveReply({ type, getMessage, fromStreaming = false, title
         newMessage.extra.reasoning = reasoning;
         newMessage.extra.reasoning_duration = null;
         newMessage.extra.reasoning_signature = reasoningSignature;
-        if (state.power_user.trim_spaces) {
-            getMessage = getMessage.trim();
-        }
+        getMessage = getMessage.trim();
         newMessage.mes = getMessage;
         newMessage.title = title;
         newMessage.gen_started = state.generation_started;

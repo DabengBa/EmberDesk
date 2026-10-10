@@ -52,7 +52,7 @@ export const FIRST_PARTY_SCRIPT_JS_IMPORT_CONTRACT = Object.freeze([
     contractEntry('swipe-picker.js', '/script.js', ['chat', 'deleteSwipe', 'ensureSwipes', 'isMessageSwipeable', 'isSwipingAllowed', 'swipe', 'syncMesToSwipe']),
     contractEntry('system-messages.js', '../script.js', ['addOneMessage', 'chat', 'setSendButtonState', 'system_avatar', 'systemUserName']),
     contractEntry('tags.js', '../script.js', ['characters', 'saveSettingsDebounced', 'this_chid', 'menu_type', 'entitiesFilter', 'printCharactersDebounced', 'buildAvatarList', 'DEFAULT_PRINT_TIMEOUT', 'printCharacters']),
-    contractEntry('tokenizers.js', '../script.js', ['characters', 'main_api', 'saveSettingsDebounced', 'this_chid']),
+    contractEntry('tokenizers.js', '../script.js', ['characters', 'main_api', 'this_chid']),
     contractEntry('tool-calling.js', '../script.js', ['addOneMessage', 'chat', 'getGeneratingApi', 'getGeneratingModel', 'main_api', 'saveChatConditional', 'system_avatar', 'systemUserName']),
     contractEntry('util/AccountStorage.js', '../../script.js', ['saveSettingsDebounced']),
     contractEntry('utils.js', '../script.js', ['characters', 'processDroppedFiles', 'this_chid']),

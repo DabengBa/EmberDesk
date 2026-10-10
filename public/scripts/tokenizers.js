@@ -1,7 +1,8 @@
 import { localforage } from '../lib.js';
-import { characters, main_api, saveSettingsDebounced, this_chid } from '../script.js';
-import { forceCharacterEditorTokenize, power_user, registerDebugFunction } from './power-user.js';
+import { characters, main_api, this_chid } from '../script.js';
+import { registerDebugFunction } from './power-user.js';
 import { oai_settings } from './openai.js';
+import { TOKEN_PADDING } from './constants.js';
 import { getStringHash } from './utils.js';
 export { BYTES_PER_TOKEN as CHARACTERS_PER_TOKEN_RATIO };
 
@@ -171,10 +172,8 @@ async function resetTokenCache() {
  * @returns {Tokenizer[]} Tokenizer info.
  */
 /**
- * Static tokenizer option list. The retired Advanced Formatting drawer owned a
- * #tokenizer select whose options were the source of truth for these labels;
- * the React Settings surface now edits power_user.tokenizer, so the option
- * list lives here as data.
+ * Static tokenizer option list used for friendly-name lookups. Manual
+ * tokenizer selection was retired; the runtime always uses BEST_MATCH.
  */
 const TOKENIZER_OPTIONS = [
     { tokenizerId: tokenizers.BEST_MATCH, tokenizerName: 'Best match (recommended)' },
@@ -194,32 +193,6 @@ const TOKENIZER_OPTIONS = [
     { tokenizerId: tokenizers.DEEPSEEK, tokenizerName: 'DeepSeek V3' },
 ];
 
-export function getAvailableTokenizers() {
-    return TOKENIZER_OPTIONS.map(option => ({
-        tokenizerId: option.tokenizerId,
-        tokenizerKey: Object.entries(tokenizers).find(([_, value]) => value === option.tokenizerId)[0].toLocaleLowerCase(),
-        tokenizerName: option.tokenizerName,
-    }));
-}
-
-/**
- * Selects tokenizer if not already selected.
- * @param {number} tokenizerId Tokenizer ID.
- */
-export function selectTokenizer(tokenizerId) {
-    if (tokenizerId !== power_user.tokenizer) {
-        const tokenizer = getAvailableTokenizers().find(tokenizer => tokenizer.tokenizerId === tokenizerId);
-        if (!tokenizer) {
-            console.warn('Failed to find tokenizer with id', tokenizerId);
-            return;
-        }
-        power_user.tokenizer = tokenizer.tokenizerId;
-        forceCharacterEditorTokenize();
-        saveSettingsDebounced();
-        toastr.info(`Tokenizer: "${tokenizer.tokenizerName}" selected`);
-    }
-}
-
 /**
  * Gets the friendly name of the current tokenizer.
  * @param {string} forApi API to get the tokenizer for. Defaults to the main API.
@@ -230,7 +203,7 @@ export function getFriendlyTokenizerName(forApi) {
         forApi = main_api;
     }
 
-    let tokenizerId = power_user.tokenizer;
+    let tokenizerId = tokenizers.BEST_MATCH;
     let tokenizerName = TOKENIZER_OPTIONS.find(option => option.tokenizerId === tokenizerId)?.tokenizerName ?? '';
 
     if (forApi !== 'openai' && tokenizerId === tokenizers.BEST_MATCH) {
@@ -308,10 +281,10 @@ export async function getTokenCountAsync(str, padding = undefined) {
         return 0;
     }
 
-    let tokenizerType = power_user.tokenizer;
+    let tokenizerType = tokenizers.BEST_MATCH;
 
     if (main_api === 'openai') {
-        if (padding === power_user.token_padding) {
+        if (padding === TOKEN_PADDING) {
             // For main "shadow" prompt building
             tokenizerType = tokenizers.NONE;
         } else {
@@ -359,10 +332,10 @@ export function getTokenCount(str, padding = undefined) {
         return 0;
     }
 
-    let tokenizerType = power_user.tokenizer;
+    let tokenizerType = tokenizers.BEST_MATCH;
 
     if (main_api === 'openai') {
-        if (padding === power_user.token_padding) {
+        if (padding === TOKEN_PADDING) {
             // For main "shadow" prompt building
             tokenizerType = tokenizers.NONE;
         } else {

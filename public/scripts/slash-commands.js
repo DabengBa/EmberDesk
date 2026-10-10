@@ -70,14 +70,14 @@ import { getContext, saveMetadataDebounced } from './feature-settings.js';
 import { getRegexedString, regex_placement } from './extensions/regex/engine.js';
 
 import { chat_completion_sources, connectProviderConnection, getOpenAIModelList, oai_settings, promptManager, setOpenAIModel } from './openai.js';
-import { addEphemeralStoppingString, flushEphemeralStoppingStrings, power_user } from './power-user.js';
-import { decodeTextTokens, getAvailableTokenizers, getFriendlyTokenizerName, getTextTokens, getTokenCountAsync, selectTokenizer } from './tokenizers.js';
+import { addEphemeralStoppingString, flushEphemeralStoppingStrings } from './power-user.js';
+import { decodeTextTokens, getFriendlyTokenizerName, getTextTokens, getTokenCountAsync } from './tokenizers.js';
 import { registerVariableCommands, resolveVariable } from './variables.js';
 import { registerActionLoaderSlashCommands } from './action-loader-slashcommands.js';
 import { SlashCommandClosure } from './slash-commands/SlashCommandClosure.js';
 import { SlashCommandClosureResult } from './slash-commands/SlashCommandClosureResult.js';
 import { ARGUMENT_TYPE, SlashCommandArgument, SlashCommandNamedArgument } from './slash-commands/SlashCommandArgument.js';
-import { AutoComplete, AUTOCOMPLETE_STATE } from './autocomplete/AutoComplete.js';
+import { AutoComplete } from './autocomplete/AutoComplete.js';
 import { SlashCommand } from './slash-commands/SlashCommand.js';
 import { SlashCommandAbortController } from './slash-commands/SlashCommandAbortController.js';
 import { SlashCommandNamedArgumentAssignment } from './slash-commands/SlashCommandNamedArgumentAssignment.js';
@@ -2737,28 +2737,6 @@ export function initDefaultSlashCommands() {
         `,
     }));
     SlashCommandParser.addCommandObject(SlashCommand.fromProps({
-        name: 'tokenizer',
-        callback: selectTokenizerCallback,
-        returns: t`current tokenizer`,
-        unnamedArgumentList: [
-            SlashCommandArgument.fromProps({
-                description: t`tokenizer name`,
-                typeList: [ARGUMENT_TYPE.STRING],
-                enumList: getAvailableTokenizers().map(tokenizer =>
-                    new SlashCommandEnumValue(tokenizer.tokenizerKey, tokenizer.tokenizerName, enumTypes.enum, enumIcons.default)),
-            }),
-        ],
-        helpString: `
-            <div>
-                ${t`Selects tokenizer by name. Gets the current tokenizer if no name is provided.`}
-            </div>
-            <div>
-                <strong>${t`Available tokenizers:`}</strong>
-                <pre><code>${getAvailableTokenizers().map(t => t.tokenizerKey).join(', ')}</code></pre>
-            </div>
-        `,
-    }));
-    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
         name: 'upper',
         aliases: ['uppercase', 'to-upper'],
         callback: (_, text) => typeof text === 'string' ? text.toUpperCase() : '',
@@ -5341,8 +5319,6 @@ export async function promptQuietForLoudResponse(who, text) {
         // We don't need to modify the text
     }
 
-    //text = `${text}${power_user.instruct.enabled ? '' : '\n'}${(power_user.always_force_name2 && who != 'raw') ? characters[character_id].name + ":" : ""}`
-
     let reply = await generateQuietPrompt({ quietPrompt: text, quietToLoud: true });
     text = await getRegexedString(reply, regex_placement.SLASH_COMMAND);
 
@@ -5710,27 +5686,6 @@ async function setApiUrlCallback({ api = null, connect = 'true', quiet = 'false'
     return '';
 }
 
-async function selectTokenizerCallback(_, name) {
-    if (!name) {
-        return getAvailableTokenizers().find(tokenizer => tokenizer.tokenizerId === power_user.tokenizer)?.tokenizerKey ?? '';
-    }
-
-    const tokenizers = getAvailableTokenizers();
-    const fuse = new Fuse(tokenizers, { keys: ['tokenizerKey', 'tokenizerName'] });
-    const result = fuse.search(name);
-
-    if (result.length === 0) {
-        toastr.warning(t`Tokenizer "${name}" not found`);
-        return '';
-    }
-
-    /** @type {import('./tokenizers.js').Tokenizer} */
-    const foundTokenizer = result[0].item;
-    selectTokenizer(foundTokenizer.tokenizerId);
-
-    return foundTokenizer.tokenizerKey;
-}
-
 export let isExecutingCommandsFromChatInput = false;
 export let commandsFromChatInputAbortController;
 
@@ -6031,7 +5986,7 @@ export async function setSlashCommandAutoComplete(textarea, isFloating = false) 
     const parser = new SlashCommandParser();
     const ac = new AutoComplete(
         textarea,
-        () => ac.text[0] == '/' && (power_user.stscript.autocomplete.state === AUTOCOMPLETE_STATE.ALWAYS || power_user.stscript.autocomplete.state === AUTOCOMPLETE_STATE.MIN_LENGTH && ac.text.length > 2),
+        () => ac.text[0] == '/',
         async (text, index) => await parser.getNameAt(text, index),
         isFloating,
     );

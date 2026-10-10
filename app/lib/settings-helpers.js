@@ -4,55 +4,17 @@ export const settingsTabDefinitions = [
         label: '服务',
         description: 'endpoint、API key、主模型与备选模型。',
     },
-
-    {
-        id: 'advanced',
-        label: '高级',
-        description: 'Stop strings、tokenizer 和 STscript power-user 设置。',
-    },
 ];
 
 export const providerSecretKeyBySource = {
     openai: 'api_key_openai',
 };
 
-// Mirrors TOKENIZER_OPTIONS in public/scripts/tokenizers.js (the retired
-// Advanced Formatting drawer's #tokenizer select). Values are stringified
-// tokenizer ids; the settings form coerces back to numbers on save.
-export const tokenizerOptions = [
-    { value: '99', label: '最佳匹配（推荐）' },
-    { value: '0', label: '无 / 估算' },
-    { value: '1', label: 'GPT-2' },
-    { value: '3', label: 'Llama 1/2' },
-    { value: '12', label: 'Llama 3' },
-    { value: '13', label: 'Gemma / Gemini' },
-    { value: '14', label: 'Jamba' },
-    { value: '15', label: 'Qwen2' },
-    { value: '16', label: 'Command-R' },
-    { value: '19', label: 'Command-A' },
-    { value: '7', label: 'Mistral V1' },
-    { value: '17', label: 'Mistral Nemo' },
-    { value: '8', label: 'Yi' },
-    { value: '11', label: 'Claude 1/2' },
-    { value: '18', label: 'DeepSeek V3' },
-];
-
 export const defaultSettingsFormValues = {
     providers: {
         openaiModel: '',
         customUrl: '',
         fallbackProviderModel: '',
-    },
-    advanced: {
-        customStoppingStrings: '',
-        tokenizer: 99,
-        smoothStreaming: false,
-        stscriptMatching: 'fuzzy',
-        stscriptAutocompleteState: 2,
-        alwaysForceName2: false,
-        trimSpaces: true,
-        userPromptBias: '',
-        tokenPadding: 64,
     },
 };
 
@@ -68,16 +30,6 @@ const fieldBindings = [
         // value must not silently re-enable it under "non-empty model = enabled".
         toForm: (value, settings) => (getValueAtPath(settings, 'oai_settings.fallback_provider_enabled') === false ? '' : value),
     },
-
-    { tab: 'advanced', formPath: 'advanced.customStoppingStrings', settingsPath: 'power_user.custom_stopping_strings' },
-    { tab: 'advanced', formPath: 'advanced.tokenizer', settingsPath: 'power_user.tokenizer' },
-    { tab: 'advanced', formPath: 'advanced.smoothStreaming', settingsPath: 'power_user.smooth_streaming' },
-    { tab: 'advanced', formPath: 'advanced.stscriptMatching', settingsPath: 'power_user.stscript.matching' },
-    { tab: 'advanced', formPath: 'advanced.stscriptAutocompleteState', settingsPath: 'power_user.stscript.autocomplete.state' },
-    { tab: 'advanced', formPath: 'advanced.alwaysForceName2', settingsPath: 'power_user.always_force_name2' },
-    { tab: 'advanced', formPath: 'advanced.trimSpaces', settingsPath: 'power_user.trim_spaces' },
-    { tab: 'advanced', formPath: 'advanced.userPromptBias', settingsPath: 'power_user.user_prompt_bias' },
-    { tab: 'advanced', formPath: 'advanced.tokenPadding', settingsPath: 'power_user.token_padding' },
 ];
 
 
@@ -357,6 +309,10 @@ export function buildSettingsSavePayload(baseSettings, formValues, { settingsRev
             'compact_input_area', 'media_display', 'send_on_enter',
             'auto_fix_generated_markdown', 'forbid_external_media',
             'message_token_count_enabled',
+            // Retired advanced-tab controls; runtime uses fixed constants.
+            'custom_stopping_strings', 'tokenizer', 'token_padding',
+            'smooth_streaming', 'always_force_name2', 'trim_spaces',
+            'user_prompt_bias', 'stscript',
         ]) {
             delete powerUser[key];
         }
@@ -364,17 +320,6 @@ export function buildSettingsSavePayload(baseSettings, formValues, { settingsRev
         // runtime uses fixed markers and card/Prompt Manager prompts.
         delete powerUser.sysprompt;
         delete powerUser.reasoning;
-        const autocomplete = powerUser.stscript?.autocomplete;
-        if (autocomplete && typeof autocomplete === 'object') {
-            for (const key of [
-                'autoHide', 'style', 'select', 'showInAllMacroFields', 'font', 'width',
-            ]) {
-                delete autocomplete[key];
-            }
-        }
-        if (powerUser.stscript && typeof powerUser.stscript === 'object') {
-            delete powerUser.stscript.parser;
-        }
     }
 
     if (settingsRevision != null && Number.isFinite(Number(settingsRevision))) {

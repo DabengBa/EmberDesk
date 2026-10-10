@@ -197,20 +197,25 @@ test.describe('workspace shell panel navigation', () => {
         await expect(page.locator('[data-settings-overlay="true"] .settings-page')).toBeVisible({ timeout: 15_000 });
         await expect(page.locator('#user-settings-block.openDrawer')).toHaveCount(0);
         await expect(settingsButton).toHaveAttribute('aria-pressed', 'true');
-        const advancedTab = page.locator('[data-settings-overlay="true"] .settings-tab').filter({ hasText: '高级' });
-        await advancedTab.click();
-        await expect(advancedTab).toHaveAttribute('data-active', 'true');
-        const smoothStreamingToggle = page.locator('[data-settings-overlay="true"] #settings-advanced-smoothStreaming');
-        await expect(smoothStreamingToggle).toBeVisible();
-        const shouldSmoothStream = !(await smoothStreamingToggle.isChecked());
-        await smoothStreamingToggle.focus();
-        await page.keyboard.press('Space');
-        await expect(smoothStreamingToggle).toHaveJSProperty('checked', shouldSmoothStream);
+        // The advanced tab is retired; the overlay is a single providers page
+        // with no tab strip.
+        await expect(page.locator('[data-settings-overlay="true"] .settings-tab')).toHaveCount(0);
+        const modelField = page.locator('[data-settings-overlay="true"] #settings-providers-fallbackProviderModel');
+        await expect(modelField).toBeVisible();
+        // The fallback model is auxiliary: editing it dirties the form without
+        // touching fields sibling tests depend on. Restore it before closing.
+        const originalFallback = await modelField.inputValue();
+        await modelField.fill('e2e-shell-fallback');
         const saveButton = page.locator('[data-settings-overlay="true"] button[type="submit"]');
         await expect(saveButton).toBeEnabled();
         await saveButton.focus();
         await page.keyboard.press('Enter');
         await expect(page.locator('[data-settings-overlay="true"] .settings-status--success')).toContainText('已保存', { timeout: 30_000 });
+        await modelField.fill(originalFallback);
+        if (await saveButton.isEnabled()) {
+            await saveButton.click();
+            await expect(page.locator('[data-settings-overlay="true"] .settings-status--success')).toContainText('已保存', { timeout: 30_000 });
+        }
         await page.keyboard.press('Escape');
         await expect(page.locator('[data-settings-overlay="true"]')).toHaveCount(0, { timeout: 15_000 });
         await expect(settingsButton).toBeFocused();
@@ -265,12 +270,9 @@ test.describe('workspace shell panel navigation', () => {
         await settingsButton.click({ timeout: 10_000 });
         await expect(page).toHaveURL(/\/(?:\?|$)/);
         await expect(page.locator('[data-settings-overlay="true"]')).toBeVisible({ timeout: 15_000 });
-        await expect(page.locator('[data-settings-overlay="true"] .settings-tab[data-active="true"]')).toHaveText(/服务|高级/);
-
-        const advancedTab = page.locator('[data-settings-overlay="true"] .settings-tab').filter({ hasText: '高级' });
-        await advancedTab.click();
-        await expect(advancedTab).toHaveAttribute('data-active', 'true');
-        await expect(page.locator('[data-settings-overlay="true"] .settings-tab[data-active="true"]')).toHaveText(/高级/);
+        // Single-tab settings: no tab strip, providers fields render directly.
+        await expect(page.locator('[data-settings-overlay="true"] .settings-tab')).toHaveCount(0);
+        await expect(page.locator('[data-settings-overlay="true"] #settings-providers-openaiModel')).toBeVisible({ timeout: 15_000 });
 
         await page.keyboard.press('Escape');
         await expect(page.locator('[data-settings-overlay="true"]')).toHaveCount(0, { timeout: 10_000 });
@@ -288,8 +290,7 @@ test.describe('workspace shell panel navigation', () => {
         await settingsButton.click({ timeout: 10_000 });
         await expect(page.locator('[data-settings-overlay="true"]')).toBeVisible({ timeout: 15_000 });
 
-        await page.locator('[data-settings-overlay="true"] .settings-tab').filter({ hasText: '服务' }).click();
-        await expect(page.locator('[data-settings-overlay="true"] .settings-tab[data-active="true"]')).toHaveText(/服务/);
+        await expect(page.locator('[data-settings-overlay="true"] .settings-tab')).toHaveCount(0);
 
         const aiConfigLink = page.locator('[data-settings-overlay="true"] button').filter({ hasText: '打开 AI 响应配置' });
         // The API Connections drawer is retired; no such workspace link may exist.
@@ -304,13 +305,12 @@ test.describe('workspace shell panel navigation', () => {
 
         await settingsButton.click({ timeout: 10_000 });
         await expect(page.locator('[data-settings-overlay="true"]')).toBeVisible({ timeout: 15_000 });
-        await page.locator('[data-settings-overlay="true"] .settings-tab').filter({ hasText: '高级' }).click();
-        await expect(page.locator('[data-settings-overlay="true"] .settings-tab[data-active="true"]')).toHaveText(/高级/);
-        // Named formatting presets are retired: the advanced tab edits the
-        // active system prompt and reasoning values directly.
+        // Named formatting presets and the advanced tab are retired; the user
+        // settings drawer link lives on the single providers page.
         await expect(page.locator('[data-settings-overlay="true"] [data-formatting-preset-row]')).toHaveCount(0);
         await expect(page.locator('[data-settings-overlay="true"] [data-formatting-master-actions]')).toHaveCount(0);
         await expect(page.locator('[data-settings-overlay="true"] button').filter({ hasText: '打开高级格式' })).toHaveCount(0);
+        await expect(page.locator('[data-settings-overlay="true"] button').filter({ hasText: '打开用户设置' })).toBeVisible();
     });
 
     test('opens the AI Response Configuration drawer from the AI 响应配置 shell entry', async ({ page }) => {
@@ -344,7 +344,8 @@ test.describe('workspace shell panel navigation', () => {
         });
 
         await expect(page.locator('[data-settings-overlay="true"]')).toBeVisible({ timeout: 15_000 });
-        await expect(page.locator('[data-settings-overlay="true"] .settings-tab[data-active="true"]')).toHaveText(/服务|高级/);
+        await expect(page.locator('[data-settings-overlay="true"] .settings-tab')).toHaveCount(0);
+        await expect(page.locator('[data-settings-overlay="true"] #settings-providers-openaiModel')).toBeVisible({ timeout: 15_000 });
         await expect(settingsButton).toHaveAttribute('aria-pressed', 'true');
     });
 });

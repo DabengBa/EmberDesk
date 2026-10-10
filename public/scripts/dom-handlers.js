@@ -1005,9 +1005,7 @@ export async function bindLegacyShellHandlers() {
         const this_edit_mes_element = $(this).closest('.mes');
         clone.mes = this_edit_mes_element.find('.edit_textarea').val().toString();
 
-        if (state.power_user.trim_spaces) {
-            clone.mes = clone.mes.trim();
-        }
+        clone.mes = clone.mes.trim();
 
         state.chat.splice(Number(state.this_edit_mes_id) + 1, 0, clone);
         const newMessageElement = updateMessageElement(clone);

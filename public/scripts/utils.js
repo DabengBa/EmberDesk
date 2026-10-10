@@ -10,7 +10,7 @@ import { getContext } from './feature-settings.js';
 import { characters, processDroppedFiles, this_chid } from '../script.js';
 import { getRequestHeaders } from './request-context.js';
 import { isMobile } from './RossAscends-mods.js';
-import { collapseNewlines, power_user } from './power-user.js';
+import { collapseNewlines } from './power-user.js';
 import { debounce_timeout } from './constants.js';
 import { Popup, POPUP_RESULT, POPUP_TYPE } from './popup.js';
 import { SlashCommandClosure } from './slash-commands/SlashCommandClosure.js';
@@ -860,7 +860,7 @@ export function trimSpaces(input) {
     if (!input || typeof input !== 'string') {
         return input;
     }
-    return power_user.trim_spaces ? input.trim() : input;
+    return input.trim();
 }
 
 /**

@@ -43,12 +43,6 @@ export function PowerUserPanel() {
                                 <ContractButton id="debug_menu" className="menu_button whitespacenowrap" label="Debug Menu" />
                                 <ContractButton id="data_maid_button" className="menu_button whitespacenowrap" label="Clean-Up" title="Find and delete backups, unused chats, files, images, etc." nativeTitle />
                             </div>
-                            <label id="smooth_streaming_control" className="checkbox_label" htmlFor="smooth_streaming">
-                                <input id="smooth_streaming" type="checkbox" />
-                                <small className="flex-container alignItemsBaseline" data-i18n="Smooth Streaming">
-                                    Smooth Streaming
-                                </small>
-                            </label>
                         </div>
                     </div>
                     <div name="UserSettingsThirdColumn" id="power-user-options-block" className="flex-container wide100p flex1">
@@ -73,36 +67,6 @@ export function PowerUserPanel() {
                                         <input id="swipes-checkbox" type="checkbox" />
                                         <small data-i18n="Swipes">Swipes</small><i className="fa-solid fa-desktop"  /><i className="fa-solid fa-mobile-screen-button"  />
                                     </label>
-                                </div>
-                            </div>
-                            <div name="AutoCompleteToggle" className="inline-drawer wide100p flexFlowColumn">
-                                <div className="inline-drawer-toggle inline-drawer-header userSettingsInnerExpandable" title="Options for the various autocomplete input boxes.">
-                                    <b><span data-i18n="AutoComplete Settings">AutoComplete Settings</span></b>
-                                    <div className="fa-solid fa-circle-chevron-down inline-drawer-icon down"></div>
-                                </div>
-                                <div className="inline-drawer-content">
-                                    <div className="flex1" title="When to show the autocomplete for slash commands and macros." data-i18n="[title]When to show the autocomplete for slash commands and macros.">
-                                        <label htmlFor="stscript_autocomplete_state">
-                                            <small data-i18n="Visibility">Visibility</small>
-                                        </label>
-                                        <select id="stscript_autocomplete_state">
-                                            <option value="0" data-i18n="Don't show">Don't show</option>
-                                            <option value="1" data-i18n="Input length > 1">Input length &gt; 1</option>
-                                            <option value="2" data-i18n="Always show">Always show</option>
-                                        </select>
-                                    </div>
-                                    <div className="flex-container">
-                                        <div className="flex1" title="Determines how entries are found for autocomplete." data-i18n="[title]Determines how entries are found for autocomplete.">
-                                            <label htmlFor="stscript_matching">
-                                                <small data-i18n="Autocomplete Matching">Matching</small>
-                                            </label>
-                                            <select id="stscript_matching">
-                                                <option data-i18n="Starts with" value="strict">Starts with</option>
-                                                <option data-i18n="Includes" value="includes">Includes</option>
-                                                <option data-i18n="Fuzzy" value="fuzzy">Fuzzy</option>
-                                            </select>
-                                        </div>
-                                    </div>
                                 </div>
                             </div>
                             <div name="FrontendFramesToggle" className="inline-drawer wide100p flexFlowColumn">

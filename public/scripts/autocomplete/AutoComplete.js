@@ -1,4 +1,3 @@
-import { power_user } from '../power-user.js';
 import { debounce, escapeRegex } from '../utils.js';
 import { AutoCompleteOption } from './AutoCompleteOption.js';
 import { AutoCompleteFuzzyScore } from './AutoCompleteFuzzyScore.js';
@@ -73,7 +72,8 @@ export class AutoComplete {
     /**@type {(item:AutoCompleteOption)=>any}*/ onSelect;
 
     get matchType() {
-        return power_user.stscript.matching ?? 'fuzzy';
+        // Fixed since the stscript matching setting was retired.
+        return 'fuzzy';
     }
 
     get autoHide() {

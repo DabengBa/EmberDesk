@@ -30,7 +30,6 @@ import {
     settingsCoverage,
     settingsTabDefinitions,
     saveSettingsToRuntime,
-    tokenizerOptions,
 } from '@/lib/settings-helpers.js';
 
 const SAVE_STATUS_TIMEOUT_MS = 4000;
@@ -40,17 +39,6 @@ const settingsSchema = z.object({
         openaiModel: z.string(),
         customUrl: z.string(),
         fallbackProviderModel: z.string(),
-    }),
-    advanced: z.object({
-        customStoppingStrings: z.string(),
-        tokenizer: z.number().int().min(0, 'Tokenizer 值必须为非负整数'),
-        smoothStreaming: z.boolean(),
-        stscriptMatching: z.string(),
-        stscriptAutocompleteState: z.number().int().min(0).max(2),
-        alwaysForceName2: z.boolean(),
-        trimSpaces: z.boolean(),
-        userPromptBias: z.string(),
-        tokenPadding: z.coerce.number(),
     }),
 });
 
@@ -124,10 +112,6 @@ function resolveInitialSettingsTab(initialTab?: string | null) {
 const WORKSPACE_DRAWER_LINKS: Record<string, Array<{ target: string; label: string; hint: string }>> = {
     providers: [
         { target: 'left-nav-panel', label: '打开 AI 响应配置', hint: '预设下拉与操作、采样滑条、Prompt Manager。' },
-    ],
-    // The Advanced Formatting drawer is retired; the formatting preset feature
-    // has since been removed entirely.
-    advanced: [
         { target: 'user-settings-block', label: '打开用户设置', hint: '账户、语言、调试菜单、清理与前端渲染帧等工具。' },
     ],
 };
@@ -457,6 +441,12 @@ export function SettingsSurface({
             return;
         }
 
+        if (!settingsForm.state.isPristine) {
+            // A background refetch must not clobber an in-progress draft.
+            setIsSettingsFormReady(true);
+            return;
+        }
+
         const nextDefaults = buildSettingsFormDefaults(parsedPayload.settings);
         settingsForm.reset(nextDefaults, { keepDefaultValues: true });
         setPageError('');
@@ -555,7 +545,7 @@ export function SettingsSurface({
                                     <>
                                         <h1 {...stylex.props(settingsStyles.pageTitle)}>设置</h1>
                                         <p {...stylex.props(settingsStyles.pageSummary)}>
-                                            服务连接与高级参数的集中配置。
+                                            服务连接与模型配置的集中管理。
                                         </p>
                                     </>
                                 )}
@@ -770,103 +760,6 @@ export function SettingsSurface({
                             </div>
                             ) : null}
 
-
-                            {activeTab === 'advanced' ? (
-                            <div>
-                                <SettingsSection
-                                    title="提示词与高级控件"
-                                    description="Stop strings、tokenizer 和 STscript 设置。"
-                                >
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.customStoppingStrings"
-                                        label="自定义停止符"
-                                        description="stop strings 的原始字符串表示。"
-                                        variant="textarea"
-                                        placeholder='["END"]'
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.tokenizer"
-                                        label="分词器"
-                                        description="token 计数所用的 tokenizer。"
-                                        variant="select"
-                                        selectValueType="number"
-                                        options={tokenizerOptions}
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.stscriptMatching"
-                                        label="STscript 匹配"
-                                        description="STscript autocomplete 的匹配模式。"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.stscriptAutocompleteState"
-                                        label="STscript 自动补全"
-                                        description="0=disabled, 1=min length, 2=always。"
-                                        variant="number"
-                                        min={0}
-                                        max={2}
-                                        step={1}
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.smoothStreaming"
-                                        label="平滑流式"
-                                        description="启用 smooth streaming。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.alwaysForceName2"
-                                        label="强制显示 {{char}} 名"
-                                        description="绑定到设置项 advanced.alwaysForceName2。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.trimSpaces"
-                                        label="裁剪空格"
-                                        description="绑定到设置项 advanced.trimSpaces。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.userPromptBias"
-                                        label="用户提示偏移"
-                                        description="绑定到设置项 advanced.userPromptBias。"
-                                        variant="textarea"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.tokenPadding"
-                                        label="Token 补齐"
-                                        description="绑定到设置项 advanced.tokenPadding。"
-                                        variant="number"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    
-</SettingsSection>
-                            </div>
-                            ) : null}
 
                             {isOverlay && (WORKSPACE_DRAWER_LINKS[activeTab]?.length ?? 0) > 0 ? (
                                 <SettingsSection

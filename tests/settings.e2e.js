@@ -67,35 +67,33 @@ async function openSettings(page) {
     await expect(page.getByText('正在加载当前设置...')).toHaveCount(0, { timeout: 60_000 });
 }
 
-async function selectTab(page, label) {
-    await page.getByRole('button', { name: label, exact: true }).click();
-}
 
 test.describe('React settings sole-owner page', () => {
-    test('covers provider/ui/advanced domains, secret isolation, and reload persistence', async ({ page }) => {
+    test('covers provider domain, secret isolation, and reload persistence', async ({ page }) => {
         await testSetup.awaitST({ page });
         await openSettings(page);
 
         // Generation defaults moved to the AI Response Configuration drawer;
-        // the React surface owns only Providers and Advanced. The interface tab
-        // is retired: its preferences are fixed runtime constants.
+        // the React surface owns only Providers. The interface and advanced
+        // tabs are retired: their preferences are fixed runtime constants.
         await expect(page.getByRole('button', { name: 'General', exact: true })).toHaveCount(0);
-        await expect(page.getByRole('button', { name: '服务', exact: true })).toBeVisible();
         await expect(page.getByRole('button', { name: '界面', exact: true })).toHaveCount(0);
-        await expect(page.getByRole('button', { name: '高级', exact: true })).toBeVisible();
+        await expect(page.getByRole('button', { name: '高级', exact: true })).toHaveCount(0);
         await expect(page.locator('.settings-workspace-link')).toBeVisible();
 
-        await selectTab(page, '服务');
         await expect(page.getByText('API Key', { exact: true })).toBeVisible();
         await expect(page.locator('#provider-secret-input')).toBeVisible();
         await expect(page.locator('#fallback-provider-secret-input')).toHaveCount(0);
 
-        await selectTab(page, '高级');
-        await expect(page.getByRole('heading', { name: /提示词|模板|高级控件/ })).toBeVisible({ timeout: 15_000 });
-
-        const biasField = page.getByRole('textbox', { name: /用户提示偏移/ });
-        await expect(biasField).toBeVisible({ timeout: 30_000 });
-        await biasField.fill('e2e-bias');
+        // The fallback model is auxiliary: editing it proves the save path
+        // without touching the primary model other tests depend on.
+        const modelField = page.locator('#settings-providers-fallbackProviderModel');
+        await expect(modelField).toBeVisible({ timeout: 30_000 });
+        const originalValue = String((await getSettingsPayload(page)).settings?.oai_settings?.fallback_provider_model ?? '');
+        // Unique per run: a sibling test may persist a snapshot that already
+        // contains our draft value, which would leave the form pristine.
+        const fallbackValue = `e2e-fallback-${Date.now()}`;
+        await modelField.fill(fallbackValue);
 
         const saveButton = page.locator('button[type="submit"]');
         // fullyParallel shares one settings document; a concurrent save from
@@ -103,7 +101,8 @@ test.describe('React settings sole-owner page', () => {
         // reload the persisted document and re-apply the draft before retrying.
         for (let attempt = 0; attempt < 3; attempt++) {
             await expect(saveButton).toBeEnabled({ timeout: 30_000 });
-            await saveButton.click();
+            await saveButton.focus();
+            await page.keyboard.press('Enter');
             const conflicted = await Promise.race([
                 page.locator('.settings-status--success').waitFor({ state: 'visible', timeout: 30_000 }).then(() => false),
                 page.getByText(/本地草稿仍保留/).waitFor({ state: 'visible', timeout: 30_000 }).then(() => true),
@@ -113,48 +112,65 @@ test.describe('React settings sole-owner page', () => {
             }
             await page.getByRole('button', { name: '重新加载当前设置', exact: true }).click();
             await expect(page.getByText(/本地草稿仍保留/)).toHaveCount(0, { timeout: 30_000 });
-            await biasField.fill('e2e-bias');
+            await modelField.fill(fallbackValue);
         }
         await expect(page.locator('.settings-status--success')).toContainText('已保存', { timeout: 30_000 });
 
         const after = await getSettingsPayload(page);
-        expect(after.settings?.power_user?.user_prompt_bias).toBe('e2e-bias');
+        expect(after.settings?.oai_settings?.fallback_provider_model).toBe(fallbackValue);
         expect(JSON.stringify(after.settings)).not.toMatch(/BEGIN PRIVATE KEY/);
+        // Retired advanced-tab keys never come back through a React save.
+        expect(after.settings?.power_user?.user_prompt_bias).toBeUndefined();
+        expect(after.settings?.power_user?.tokenizer).toBeUndefined();
         await page.reload();
         await openSettings(page);
-        await selectTab(page, '高级');
         // fullyParallel shares one settings document across tests, so compare the
         // hydrated field against the live persisted value instead of a literal.
         const persisted = await getSettingsPayload(page);
-        const persistedBias = String(persisted.settings?.power_user?.user_prompt_bias ?? '');
-        await expect(page.getByRole('textbox', { name: /用户提示偏移/ })).toHaveValue(persistedBias, { timeout: 30_000 });
+        const persistedModel = String(persisted.settings?.oai_settings?.fallback_provider_model ?? '');
+        await expect(page.locator('#settings-providers-fallbackProviderModel')).toHaveValue(persistedModel, { timeout: 30_000 });
+
+        // Restore the fallback model so sibling tests see the original document.
+        const restore = structuredClone(persisted.settings);
+        restore.oai_settings = { ...(restore.oai_settings || {}), fallback_provider_model: originalValue };
+        const restored = await saveSettingsDocument(page, restore, persisted.settingsRevision);
+        expect(restored.status).toBeLessThan(400);
     });
 
     test('surfaces revision conflicts without fake success', async ({ page }) => {
         await testSetup.awaitST({ page });
         await openSettings(page);
 
-        await selectTab(page, '高级');
-        const biasField = page.getByRole('textbox', { name: /用户提示偏移/ });
-        const draftBias = `Local draft ${Date.now()}`;
-        await biasField.fill(draftBias);
+        const modelField = page.locator('#settings-providers-openaiModel');
+        const draftModel = `Local draft ${Date.now()}`;
+        await modelField.fill(draftModel);
 
-        const initial = await getSettingsPayload(page);
-        const concurrentSettings = structuredClone(initial.settings);
-        concurrentSettings.power_user = {
-            ...(concurrentSettings.power_user || {}),
-            custom_css: `/* Concurrent-${Date.now()} */`,
-        };
-        const concurrent = await saveSettingsDocument(page, concurrentSettings, initial.settingsRevision);
-        expect(concurrent.status).toBeLessThan(400);
+        // Sibling tests share the settings document; another save may bump the
+        // revision before our concurrent write lands. Retry with a fresh
+        // revision so the test only proves the conflict path deterministically.
+        let currentRevision = null;
+        for (let attempt = 0; attempt < 3; attempt++) {
+            const initial = await getSettingsPayload(page);
+            const concurrentSettings = structuredClone(initial.settings);
+            concurrentSettings.power_user = {
+                ...(concurrentSettings.power_user || {}),
+                custom_css: `/* Concurrent-${Date.now()} */`,
+            };
+            const concurrent = await saveSettingsDocument(page, concurrentSettings, initial.settingsRevision);
+            if (concurrent.status === 409) {
+                continue;
+            }
+            expect(concurrent.status).toBeLessThan(400);
+            break;
+        }
 
         const afterConcurrent = await getSettingsPayload(page);
-        const currentRevision = afterConcurrent.settingsRevision;
+        currentRevision = afterConcurrent.settingsRevision;
 
         if (currentRevision == null) {
             // File-authority / compat LWW path: server may not enforce revision yet.
             // Still prove the React page remains usable and does not show fake success banners.
-            await expect(biasField).toHaveValue(draftBias);
+            await expect(modelField).toHaveValue(draftModel);
             await expect(page.locator('.settings-status--success')).toHaveCount(0);
             return;
         }
@@ -164,7 +180,7 @@ test.describe('React settings sole-owner page', () => {
         await saveButton.click();
 
         await expect(page.getByText(/本地草稿仍保留/)).toBeVisible({ timeout: 30_000 });
-        await expect(biasField).toHaveValue(draftBias);
+        await expect(modelField).toHaveValue(draftModel);
         await expect(page.getByRole('button', { name: '重新加载当前设置', exact: true })).toBeVisible();
         await expect(saveButton).toBeDisabled();
     });

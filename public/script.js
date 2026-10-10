@@ -1470,7 +1470,9 @@ function getWorkspaceShellCommands() {
         deactivateWorkspaceShellSlot,
         setWorkspaceShellSlotPinned,
         openAIConfig: () => openWorkspaceSettingsOverlay({ tab: 'providers', panelKind: 'aiConfig' }),
-        openFormatting: () => openWorkspaceSettingsOverlay({ tab: 'advanced', panelKind: 'advancedFormatting' }),
+        // The advanced tab is retired; the compatibility command now opens the
+        // single providers/settings tab.
+        openFormatting: () => openWorkspaceSettingsOverlay({ tab: 'providers', panelKind: 'advancedFormatting' }),
         openCharacterLibrary: openWorkspaceShellCharacterLibrary,
         openWorldInfo: openWorkspaceShellWorldInfo,
         openSettings: () => openWorkspaceSettingsOverlay({ tab: null, panelKind: 'settings' }),
@@ -6432,7 +6434,6 @@ export async function generateRaw({ prompt = '', api = null, instructOverride = 
         isImpersonate: false,
         isContinue: false,
         displayIncompleteSentences: true,
-        includeUserPromptBias: false,
         trimNames: trimNames,
         trimWrongNames: trimNames,
     });
@@ -6733,8 +6734,8 @@ export function getBiasStrings(textareaText, type) {
         }
     }
 
-    promptBias = messageBias || promptBias || power_user.user_prompt_bias || '';
-    const isUserPromptBias = promptBias === power_user.user_prompt_bias;
+    promptBias = messageBias || promptBias || '';
+    const isUserPromptBias = false;
 
     // Substitute params for everything
     messageBias = substituteParams(messageBias);
@@ -7844,9 +7845,7 @@ function applyMessageEditText(messageId, inputText) {
     );
 
 
-    if (power_user.trim_spaces) {
-        text = text.trim();
-    }
+    text = text.trim();
 
     const bias = substituteParams(extractMessageBias(text));
     text = substituteParams(text);
@@ -7945,9 +7944,7 @@ async function duplicateMainChatMessage(messageId) {
     if (editState?.editing && typeof editState.editText === 'string') {
         clone.mes = editState.editText;
     }
-    if (power_user.trim_spaces) {
-        clone.mes = String(clone.mes ?? '').trim();
-    }
+    clone.mes = String(clone.mes ?? '').trim();
 
     chat.splice(normalizedMessageId + 1, 0, clone);
     shiftMainChatMessageUiStateAfterSplice(normalizedMessageId + 1, 1);

@@ -11,8 +11,7 @@
  * - Dynamically added elements are automatically initialized via MutationObserver
  */
 
-import { power_user } from '../power-user.js';
-import { AutoComplete, AUTOCOMPLETE_STATE } from './AutoComplete.js';
+import { AutoComplete } from './AutoComplete.js';
 import { findMacroAtCursor, findUnclosedScopes, getMacroAutoCompleteAt } from './MacroAutoCompleteHelper.js';
 
 /** Custom attribute name used to mark elements that support macro autocomplete */
@@ -74,30 +73,20 @@ function shouldActivateMacroAutocomplete(text, cursorPos, { isForced = false, au
         return false;
     }
 
-    // Check if autocomplete is enabled at all
-    if (power_user.stscript.autocomplete.state === AUTOCOMPLETE_STATE.DISABLED) {
-        return false;
-    }
-
-    // Determine if we should show normally based on mode and settings
-    // ALWAYS mode: always show, DEFAULT mode: respect global setting
+    // Determine if we should show normally based on mode
+    // ALWAYS mode: always show, DEFAULT mode: same as ALWAYS (setting retired)
     const alwaysShow = autocompleteMode === MACRO_AUTOCOMPLETE_MODE.ALWAYS;
     const shouldShowNormally = isForced || alwaysShow;
 
-    // Whether setting says autocomplete should only activate after typing {{ and two characters after that
-    // Ctrl+Space (isForced) overrides this restriction
-    const onlyAfter2 = !isForced && power_user.stscript.autocomplete.state === AUTOCOMPLETE_STATE.MIN_LENGTH;
-
     // Check if we're right after {{ (just typed the second brace)
     if (cursorPos >= 2 && text.slice(cursorPos - 2, cursorPos) === '{{') {
-        return shouldShowNormally && !onlyAfter2;
+        return shouldShowNormally;
     }
 
     // Check if we're inside a macro
     const macro = findMacroAtCursor(text, cursorPos);
     if (macro !== null) {
-        if (!shouldShowNormally) return false;
-        return !onlyAfter2 || (macro.content.trim()).length >= 2;
+        return shouldShowNormally;
     }
 
     // Check if we're in scoped content of an unclosed scoped macro

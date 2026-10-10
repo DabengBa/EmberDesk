@@ -150,8 +150,8 @@ describe('React workspace panels bridge helpers', () => {
         expect(scriptSource).toContain("openAIConfig: () => openWorkspaceSettingsOverlay({ tab: 'providers', panelKind: 'aiConfig' })");
         expect(scriptSource).toContain("openWorkspaceSettingsOverlay");
         expect(scriptSource).toContain("tab: 'providers'");
-        expect(scriptSource).toContain("openFormatting: () => openWorkspaceSettingsOverlay({ tab: 'advanced', panelKind: 'advancedFormatting' })");
-        expect(scriptSource).toContain("tab: 'advanced'");
+        expect(scriptSource).toContain("openFormatting: () => openWorkspaceSettingsOverlay({ tab: 'providers', panelKind: 'advancedFormatting' })");
+        expect(scriptSource).toContain("tab: 'providers'");
         expect(scriptSource).toContain("openSettings: () => openWorkspaceSettingsOverlay({ tab: null, panelKind: 'settings' })");
         expect(scriptSource).not.toContain("window.location.assign('/settings");
         expect(scriptSource).not.toContain("await openWorkspaceShellDrawer('user-settings-block');");
@@ -261,7 +261,7 @@ describe('React workspace panels bridge helpers', () => {
         expect(scriptSource).toContain("return createWorkspaceShellPanelResult('worldInfo', worldInfoMount);");
         expect(scriptSource).toContain("openAIConfig: () => openWorkspaceSettingsOverlay({ tab: 'providers', panelKind: 'aiConfig' })");
         expect(scriptSource).toContain("openWorkspaceSettingsOverlay");
-        expect(scriptSource).toContain("openFormatting: () => openWorkspaceSettingsOverlay({ tab: 'advanced', panelKind: 'advancedFormatting' })");
+        expect(scriptSource).toContain("openFormatting: () => openWorkspaceSettingsOverlay({ tab: 'providers', panelKind: 'advancedFormatting' })");
         expect(scriptSource).toContain("openSettings: () => openWorkspaceSettingsOverlay({ tab: null, panelKind: 'settings' })");
         expect(scriptSource).not.toContain("window.location.assign('/settings');");
         expect(scriptSource).not.toContain("openWorkspaceShellDrawer('user-settings-block')");

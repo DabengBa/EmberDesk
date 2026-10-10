@@ -1124,12 +1124,6 @@ test.describe('chat message streaming', () => {
         await testSetup.awaitST({ page });
         await selectCharacterInFreshChat(page, characterName);
 
-        await page.evaluate(async () => {
-            const { power_user } = await import('/scripts/power-user.js');
-            const { AUTOCOMPLETE_STATE } = await import('/scripts/autocomplete/AutoComplete.js');
-            power_user.stscript.autocomplete.state = AUTOCOMPLETE_STATE.ALWAYS;
-        });
-
         const composer = page.getByRole('textbox', { name: 'Chat message' });
         await composer.focus();
         await composer.pressSequentially('/e');
