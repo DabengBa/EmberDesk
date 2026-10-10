@@ -77,10 +77,11 @@ test.describe('React settings sole-owner page', () => {
         await openSettings(page);
 
         // Generation defaults moved to the AI Response Configuration drawer;
-        // the React surface owns only Providers, User Interface, and Advanced.
+        // the React surface owns only Providers and Advanced. The interface tab
+        // is retired: its preferences are fixed runtime constants.
         await expect(page.getByRole('button', { name: 'General', exact: true })).toHaveCount(0);
         await expect(page.getByRole('button', { name: '服务', exact: true })).toBeVisible();
-        await expect(page.getByRole('button', { name: '界面', exact: true })).toBeVisible();
+        await expect(page.getByRole('button', { name: '界面', exact: true })).toHaveCount(0);
         await expect(page.getByRole('button', { name: '高级', exact: true })).toBeVisible();
         await expect(page.locator('.settings-workspace-link')).toBeVisible();
 
@@ -92,10 +93,9 @@ test.describe('React settings sole-owner page', () => {
         await selectTab(page, '高级');
         await expect(page.getByRole('heading', { name: /提示词|模板|高级控件/ })).toBeVisible({ timeout: 15_000 });
 
-        await selectTab(page, '界面');
-        const cssField = page.getByRole('textbox', { name: /自定义 CSS/ });
-        await expect(cssField).toBeVisible({ timeout: 30_000 });
-        await cssField.fill('.e2e { color: red; }');
+        const biasField = page.getByRole('textbox', { name: /用户提示偏移/ });
+        await expect(biasField).toBeVisible({ timeout: 30_000 });
+        await biasField.fill('e2e-bias');
 
         const saveButton = page.locator('button[type="submit"]');
         // fullyParallel shares one settings document; a concurrent save from
@@ -113,31 +113,31 @@ test.describe('React settings sole-owner page', () => {
             }
             await page.getByRole('button', { name: '重新加载当前设置', exact: true }).click();
             await expect(page.getByText(/本地草稿仍保留/)).toHaveCount(0, { timeout: 30_000 });
-            await cssField.fill('.e2e { color: red; }');
+            await biasField.fill('e2e-bias');
         }
         await expect(page.locator('.settings-status--success')).toContainText('已保存', { timeout: 30_000 });
 
         const after = await getSettingsPayload(page);
-        expect(after.settings?.power_user?.custom_css).toBe('.e2e { color: red; }');
+        expect(after.settings?.power_user?.user_prompt_bias).toBe('e2e-bias');
         expect(JSON.stringify(after.settings)).not.toMatch(/BEGIN PRIVATE KEY/);
         await page.reload();
         await openSettings(page);
-        await selectTab(page, '界面');
+        await selectTab(page, '高级');
         // fullyParallel shares one settings document across tests, so compare the
         // hydrated field against the live persisted value instead of a literal.
         const persisted = await getSettingsPayload(page);
-        const persistedCss = String(persisted.settings?.power_user?.custom_css ?? '');
-        await expect(page.getByRole('textbox', { name: /自定义 CSS/ })).toHaveValue(persistedCss, { timeout: 30_000 });
+        const persistedBias = String(persisted.settings?.power_user?.user_prompt_bias ?? '');
+        await expect(page.getByRole('textbox', { name: /用户提示偏移/ })).toHaveValue(persistedBias, { timeout: 30_000 });
     });
 
     test('surfaces revision conflicts without fake success', async ({ page }) => {
         await testSetup.awaitST({ page });
         await openSettings(page);
 
-        await selectTab(page, '界面');
-        const cssField = page.getByRole('textbox', { name: /自定义 CSS/ });
-        const draftCss = `/* Local draft ${Date.now()} */`;
-        await cssField.fill(draftCss);
+        await selectTab(page, '高级');
+        const biasField = page.getByRole('textbox', { name: /用户提示偏移/ });
+        const draftBias = `Local draft ${Date.now()}`;
+        await biasField.fill(draftBias);
 
         const initial = await getSettingsPayload(page);
         const concurrentSettings = structuredClone(initial.settings);
@@ -154,7 +154,7 @@ test.describe('React settings sole-owner page', () => {
         if (currentRevision == null) {
             // File-authority / compat LWW path: server may not enforce revision yet.
             // Still prove the React page remains usable and does not show fake success banners.
-            await expect(cssField).toHaveValue(draftCss);
+            await expect(biasField).toHaveValue(draftBias);
             await expect(page.locator('.settings-status--success')).toHaveCount(0);
             return;
         }
@@ -164,7 +164,7 @@ test.describe('React settings sole-owner page', () => {
         await saveButton.click();
 
         await expect(page.getByText(/本地草稿仍保留/)).toBeVisible({ timeout: 30_000 });
-        await expect(cssField).toHaveValue(draftCss);
+        await expect(biasField).toHaveValue(draftBias);
         await expect(page.getByRole('button', { name: '重新加载当前设置', exact: true })).toBeVisible();
         await expect(saveButton).toBeDisabled();
     });

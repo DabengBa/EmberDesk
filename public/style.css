@@ -654,8 +654,7 @@ input[type='checkbox']:focus-visible {
     padding: 8px;
 }
 
-.mes .mes_timer,
-.mes .tokenCounterDisplay {
+.mes .mes_timer {
     cursor: default;
     opacity: 0.7;
     font-size: calc(var(--mainFontSize) * 0.9);
@@ -5770,16 +5769,8 @@ body:not(.caption) .mes_img_caption {
     background-color: color-mix(in srgb, var(--SmartThemeBlurTintColor) 72%, var(--black70a) 28%);
 }
 
-#user-settings-block [name="MiscellaneousToggles"],
-#CustomCSS-block,
-#CustomCSS-textAreaBlock {
+#user-settings-block [name="MiscellaneousToggles"] {
     display: contents;
-}
-
-#customCSS {
-    flex: 1 1 auto;
-    min-height: 20vh;
-    min-height: 20dvh;
 }
 
 #ui_language_select {

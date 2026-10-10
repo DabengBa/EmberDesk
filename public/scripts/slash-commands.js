@@ -70,7 +70,7 @@ import { getContext, saveMetadataDebounced } from './feature-settings.js';
 import { getRegexedString, regex_placement } from './extensions/regex/engine.js';
 
 import { chat_completion_sources, connectProviderConnection, getOpenAIModelList, oai_settings, promptManager, setOpenAIModel } from './openai.js';
-import { addEphemeralStoppingString, chat_styles, flushEphemeralStoppingStrings, power_user } from './power-user.js';
+import { addEphemeralStoppingString, flushEphemeralStoppingStrings, power_user } from './power-user.js';
 import { decodeTextTokens, getAvailableTokenizers, getFriendlyTokenizerName, getTextTokens, getTokenCountAsync, selectTokenizer } from './tokenizers.js';
 import { registerVariableCommands, resolveVariable } from './variables.js';
 import { registerActionLoaderSlashCommands } from './action-loader-slashcommands.js';
@@ -1262,24 +1262,6 @@ export function initDefaultSlashCommands() {
             </ul>
         </div>
     `,
-    }));
-    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
-        name: 'single',
-        callback: setStoryModeCallback,
-        aliases: ['story'],
-        helpString: t`Sets the message style to single document mode without names or avatars visible.`,
-    }));
-    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
-        name: 'bubble',
-        callback: setBubbleModeCallback,
-        aliases: ['bubbles'],
-        helpString: t`Sets the message style to bubble chat mode.`,
-    }));
-    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
-        name: 'flat',
-        callback: setFlatModeCallback,
-        aliases: ['default'],
-        helpString: t`Sets the message style to flat chat mode.`,
     }));
     SlashCommandParser.addCommandObject(SlashCommand.fromProps({
         name: 'continue',
@@ -5015,21 +4997,6 @@ export async function generateSystemMessage(args, prompt) {
     toastr.clear(toast);
 
     return await sendNarratorMessage(args, getRegexedString(message, regex_placement.SLASH_COMMAND));
-}
-
-function setStoryModeCallback() {
-    $('#chat_display').val(chat_styles.DOCUMENT).trigger('change');
-    return '';
-}
-
-function setBubbleModeCallback() {
-    $('#chat_display').val(chat_styles.BUBBLES).trigger('change');
-    return '';
-}
-
-function setFlatModeCallback() {
-    $('#chat_display').val(chat_styles.DEFAULT).trigger('change');
-    return '';
 }
 
 async function setNarratorName(_, text) {

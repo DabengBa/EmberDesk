@@ -56,7 +56,6 @@ import { scanImportedCharacter, showUnifiedImportConfirm, applyImportChoices, bu
 import {
     collapseNewlines,
     loadPowerUserSettings,
-    fixMarkdown,
     power_user,
     loadMovingUIState,
     getCustomStoppingStrings,
@@ -957,7 +956,6 @@ registerMessageShellContext({
     encodeStyleTags: (...args) => encodeStyleTags(...args),
     escapeHtml: (...args) => escapeHtml(...args),
     escapeRegex: (...args) => escapeRegex(...args),
-    fixMarkdown: (...args) => fixMarkdown(...args),
     getGeneratingApi: (...args) => getGeneratingApi(...args),
     getGeneratingModel: (...args) => getGeneratingModel(...args),
     getMessageTimeStamp: (...args) => getMessageTimeStamp(...args),
@@ -5483,10 +5481,6 @@ async function replaceAssistantRecoveryMessage(messageId, { type, getMessage, ti
     message.extra.reasoning_signature = reasoningSignature;
     await processImageAttachment(message, { imageUrls });
 
-    if (power_user.message_token_count_enabled) {
-        const tokenCountText = (reasoningState.reasoning || '') + message.mes;
-        message.extra.token_count = await getTokenCountAsync(tokenCountText, 0);
-    }
 
     if (!isReactMainChatOwner()) {
         updateMessageElement(message, {
@@ -6872,9 +6866,6 @@ export async function sendMessageAsUser(messageText, messageBias, insertAt = nul
         },
     };
 
-    if (power_user.message_token_count_enabled) {
-        message.extra.token_count = await getTokenCountAsync(message.mes, 0);
-    }
 
     if (messageBias) {
         message.extra.bias = messageBias;

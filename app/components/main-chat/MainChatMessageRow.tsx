@@ -379,9 +379,6 @@ export function MainChatMessageRow({
                     )}
                 </div>
                 <div className="mes_timer" title={message.timerTitle || undefined}>{message.timer}</div>
-                <div className="tokenCounterDisplay">
-                    {message.tokenCount !== null ? `${message.tokenCount}t` : ''}
-                </div>
             </div>
             <div
                 className="swipe_left fa-solid fa-chevron-left"

@@ -25,12 +25,9 @@ import type { RuntimePort } from '@/compat/runtime-port';
 import {
     buildSettingsFormDefaults,
     buildSettingsSavePayload,
-    chatDisplayOptions,
     defaultSettingsFormValues,
-    mediaDisplayOptions,
     parseSettingsPayload,
     providerSecretKeyBySource,
-    sendOnEnterOptions,
     settingsCoverage,
     settingsTabDefinitions,
     saveSettingsToRuntime,
@@ -44,22 +41,6 @@ const settingsSchema = z.object({
         openaiModel: z.string(),
         customUrl: z.string(),
         fallbackProviderModel: z.string(),
-    }),
-    userInterface: z.object({
-        chatWidth: z.number().min(20, 'Chat Width 不能小于 20').max(100, 'Chat Width 不能大于 100'),
-        fontScale: z.number().min(0.5, 'Font Scale 不能小于 0.5').max(2, 'Font Scale 不能大于 2'),
-        customCss: z.string(),
-        fastUiMode: z.boolean(),
-        reducedMotion: z.boolean(),
-        noShadows: z.boolean(),
-        chatDisplay: z.coerce.number().int().min(0).max(2),
-        timestampsEnabled: z.boolean(),
-        compactInputArea: z.boolean(),
-        mediaDisplay: z.string(),
-        sendOnEnter: z.coerce.number(),
-        autoFixGeneratedMarkdown: z.boolean(),
-        forbidExternalMedia: z.boolean(),
-        messageTokenCountEnabled: z.boolean(),
     }),
     advanced: z.object({
         customStoppingStrings: z.string(),
@@ -158,12 +139,11 @@ const WORKSPACE_DRAWER_LINKS: Record<string, Array<{ target: string; label: stri
     providers: [
         { target: 'left-nav-panel', label: '打开 AI 响应配置', hint: '预设下拉与操作、采样滑条、Prompt Manager。' },
     ],
-    userInterface: [
-        { target: 'user-settings-block', label: '打开用户设置', hint: '主题色、字体缩放、模糊与杂项开关。' },
-    ],
     // The Advanced Formatting drawer is retired: its preset CRUD and master
     // import/export live in this tab's preset rows and FormattingMasterActions.
-    advanced: [],
+    advanced: [
+        { target: 'user-settings-block', label: '打开用户设置', hint: '账户、语言、调试菜单、清理与前端渲染帧等工具。' },
+    ],
 };
 
 export function SettingsSurface({
@@ -639,7 +619,7 @@ export function SettingsSurface({
                                     <>
                                         <h1 {...stylex.props(settingsStyles.pageTitle)}>设置</h1>
                                         <p {...stylex.props(settingsStyles.pageSummary)}>
-                                            服务连接、界面偏好与高级参数的集中配置。
+                                            服务连接与高级参数的集中配置。
                                         </p>
                                     </>
                                 )}
@@ -854,153 +834,6 @@ export function SettingsSurface({
                             </div>
                             ) : null}
 
-                            {activeTab === 'userInterface' ? (
-                            <div>
-                                <SettingsSection
-                                    title="界面偏好"
-                                    description="主题、布局以及聊天显示密度。"
-                                >
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="userInterface.chatWidth"
-                                        label="聊天宽度"
-                                        description="聊天区域宽度百分比。"
-                                        variant="number"
-                                        min={20}
-                                        max={100}
-                                        step={1}
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="userInterface.fontScale"
-                                        label="字体缩放"
-                                        description="聊天正文默认字号缩放。"
-                                        variant="number"
-                                        min={0.5}
-                                        max={2}
-                                        step={0.05}
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="userInterface.chatDisplay"
-                                        label="消息样式"
-                                        description="消息气泡的布局模式。"
-                                        variant="select"
-                                        selectValueType="number"
-                                        options={chatDisplayOptions}
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="userInterface.customCss"
-                                        label="自定义 CSS"
-                                        description="应用到整套 UI 的自定义 CSS。"
-                                        variant="textarea"
-                                        placeholder=".chat { color: white; }"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="userInterface.fastUiMode"
-                                        label="极速界面模式"
-                                        description="去除大部分 blur，换取更快渲染。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="userInterface.reducedMotion"
-                                        label="减弱动效"
-                                        description="减少动画与过渡效果。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="userInterface.noShadows"
-                                        label="关闭文字阴影"
-                                        description="去除文本阴影。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="userInterface.timestampsEnabled"
-                                        label="时间戳"
-                                        description="显示消息时间戳。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="userInterface.compactInputArea"
-                                        label="紧凑输入区"
-                                        description="使用更紧凑的输入区域。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="userInterface.messageTokenCountEnabled"
-                                        label="显示消息 Token 数"
-                                        description="绑定到设置项 userInterface.messageTokenCountEnabled。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="userInterface.mediaDisplay"
-                                        label="媒体展示方式"
-                                        description="绑定到设置项 userInterface.mediaDisplay。"
-                                        variant="select"
-                                        options={mediaDisplayOptions}
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="userInterface.sendOnEnter"
-                                        label="回车发送"
-                                        description="绑定到设置项 userInterface.sendOnEnter。"
-                                        variant="select"
-                                        selectValueType="number"
-                                        options={sendOnEnterOptions}
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="userInterface.autoFixGeneratedMarkdown"
-                                        label="自动修复 Markdown"
-                                        description="绑定到设置项 userInterface.autoFixGeneratedMarkdown。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="userInterface.forbidExternalMedia"
-                                        label="禁止外部媒体"
-                                        description="绑定到设置项 userInterface.forbidExternalMedia。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-</SettingsSection>
-                            </div>
-                            ) : null}
 
                             {activeTab === 'advanced' ? (
                             <div>

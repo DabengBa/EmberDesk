@@ -32,7 +32,7 @@ import { tag_map, tag_sort_mode, tags } from './tags.js';
 import { tokenizers } from './tokenizers.js';
 import { renderTemplateAsync } from './templates.js';
 
-import { countOccurrences, debounce, delay, getStringHash, isOdd, isTrueBoolean, shuffle, sortMoments, stringToRange, timestampToMoment } from './utils.js';
+import { debounce, delay, getStringHash, isTrueBoolean, shuffle, sortMoments, stringToRange, timestampToMoment } from './utils.js';
 import { FILTER_TYPES, fuzzySearchCategories } from './filters.js';
 import { SlashCommandParser } from './slash-commands/SlashCommandParser.js';
 import { SlashCommand } from './slash-commands/SlashCommand.js';
@@ -44,8 +44,6 @@ import { POPUP_TYPE, callGenericPopup, fixToastrForDialogs } from './popup.js';
 import { loadSystemPrompts } from './sysprompt.js';
 import { accountStorage } from './util/AccountStorage.js';
 import { DEFAULT_REASONING_TEMPLATE, loadReasoningTemplates } from './reasoning.js';
-import { MEDIA_DISPLAY } from './constants.js';
-import { t } from './i18n.js';
 import { loadWorkspacePanelsModule } from './workspace-panels-react-bridge.js';
 import { DEFAULT_FRONTEND_FRAME_SETTINGS, normalizeFrontendFramesSettings } from './frontend-frame.js';
 
@@ -66,18 +64,6 @@ const defaultExampleSeparator = '***';
 const defaultChatStart = '***';
 const defaultToastPosition = 'toast-top-center';
 
-export const chat_styles = {
-    DEFAULT: 0,
-    BUBBLES: 1,
-    DOCUMENT: 2,
-};
-
-export const send_on_enter_options = {
-    DISABLED: -1,
-    AUTO: 0,
-    ENABLED: 1,
-};
-
 
 export const power_user = {
     charListGrid: false,
@@ -89,25 +75,16 @@ export const power_user = {
     user_prompt_bias: '',
     smooth_streaming: false,
 
-    fast_ui_mode: true,
-    chat_display: chat_styles.DEFAULT,
-    chat_width: 50,
-
     frontend_frames: { ...DEFAULT_FRONTEND_FRAME_SETTINGS },
 
     sort_field: 'name',
     sort_order: 'asc',
     sort_rule: null,
-    font_scale: 1,
 
+    // Retired from the settings surface; stored legacy CSS is still applied
+    // once at load for compatibility, then stripped on the next save.
     custom_css: '',
 
-    noShadows: false,
-
-    auto_fix_generated_markdown: true,
-    send_on_enter: send_on_enter_options.AUTO,
-    timestamps_enabled: true,
-    message_token_count_enabled: false,
     trim_spaces: true,
     tag_sort_mode: tag_sort_mode.MANUAL,
 
@@ -180,13 +157,9 @@ export const power_user = {
             state: AUTOCOMPLETE_STATE.ALWAYS,
         },
     },
-    reduced_motion: false,
-    compact_input_area: true,
     auto_connect: true,
-    forbid_external_media: true,
     external_media_allowed_overrides: [],
     external_media_forbidden_overrides: [],
-    media_display: MEDIA_DISPLAY.LIST,
 };
 
 /** @type {ContextSettings[]} */
@@ -211,138 +184,28 @@ export function collapseNewlines(x) {
     return x.replaceAll(/\n+/g, '\n');
 }
 
-/**
- * Fix formatting problems in markdown.
- * @param {string} text Text to be processed.
- * @param {boolean} forDisplay Whether the text is being processed for display.
- * @returns {string} Processed text.
- * @example
- * "^example * text*\n" // "^example *text*\n"
- *  "^*example * text\n"// "^*example* text\n"
- * "^example *text *\n" // "^example *text*\n"
- * "^* example * text\n" // "^*example* text\n"
- * // take note that the side you move the asterisk depends on where its pairing is
- * // i.e. both of the following strings have the same broken asterisk ' * ',
- * // but you move the first to the left and the second to the right, to match the non-broken asterisk
- * "^example * text*\n" // "^*example * text\n"
- * // and you HAVE to handle the cases where multiple pairs of asterisks exist in the same line
- * "^example * text* * harder problem *\n" // "^example *text* *harder problem*\n"
- */
-export function fixMarkdown(text, forDisplay) {
-    // Find pairs of formatting characters and capture the text in between them
-    const format = /([*_]{1,2})([\s\S]*?)\1/gm;
-    let matches = [];
-    let match;
-    while ((match = format.exec(text)) !== null) {
-        matches.push(match);
-    }
-
-    // Iterate through the matches and replace adjacent spaces immediately beside formatting characters
-    let newText = text;
-    for (let i = matches.length - 1; i >= 0; i--) {
-        let matchText = matches[i][0];
-        let replacementText = matchText.replace(/(\*|_)([\t \u00a0\u1680\u2000-\u200a\u202f\u205f\u3000\ufeff]+)|([\t \u00a0\u1680\u2000-\u200a\u202f\u205f\u3000\ufeff]+)(\*|_)/g, '$1$4');
-        newText = newText.slice(0, matches[i].index) + replacementText + newText.slice(matches[i].index + matchText.length);
-    }
-
-    // Don't auto-fix asterisks if this is a message clean-up procedure.
-    // It botches the continue function. Apply this to display only.
-    if (!forDisplay) {
-        return newText;
-    }
-
-    const splitText = newText.split('\n');
-
-    // Fix asterisks, and quotes that are not paired
-    for (let index = 0; index < splitText.length; index++) {
-        const line = splitText[index];
-        const charsToCheck = ['*', '"'];
-        for (const char of charsToCheck) {
-            if (line.includes(char) && isOdd(countOccurrences(line, char))) {
-                splitText[index] = line.trimEnd() + char;
-            }
-        }
-    }
-
-    newText = splitText.join('\n');
-
-    return newText;
-}
-
-function switchTimestamps() {
-    $('body').toggleClass('no-timestamps', !power_user.timestamps_enabled);
-    $('#messageTimestampsEnabled').prop('checked', power_user.timestamps_enabled);
-}
-
-function switchTokenCount() {
-    $('body').toggleClass('no-tokenCount', !power_user.message_token_count_enabled);
-    $('#messageTokensEnabled').prop('checked', power_user.message_token_count_enabled);
-}
-
+// The interface-density toggles are retired; the body classes are fixed to the
+// shipped defaults (timestamps on, token count off, compact input, no blur,
+// no shadows). Reduced motion still follows the OS preference.
 function switchReducedMotion() {
     const osReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (osReduced) {
-        power_user.reduced_motion = true;
-    }
-    jQuery.fx.off = power_user.reduced_motion;
-    const overrideDuration = power_user.reduced_motion ? 0 : ANIMATION_DURATION_DEFAULT;
-    setAnimationDuration(overrideDuration);
-    $('#reduced_motion').prop('checked', power_user.reduced_motion);
-    $('#reduced_motion').prop('disabled', osReduced);
-    $('#reduced_motion').closest('label').attr('title',
-        osReduced
-            ? t`Controlled by your operating system's reduced motion setting`
-            : t`Disable animations and transitions`,
-    );
-    $('body').toggleClass('reduced-motion', power_user.reduced_motion);
+    jQuery.fx.off = osReduced;
+    setAnimationDuration(osReduced ? 0 : ANIMATION_DURATION_DEFAULT);
+    $('body').toggleClass('reduced-motion', osReduced);
 }
 
-function switchCompactInputArea() {
-    $('#send_form').toggleClass('compact', power_user.compact_input_area);
-    $('#compact_input_area').prop('checked', power_user.compact_input_area);
-}
-
-function switchUiMode() {
-    $('body').toggleClass('no-blur', power_user.fast_ui_mode);
-    $('#fast_ui_mode').prop('checked', power_user.fast_ui_mode);
-}
-
-function applyNoShadows() {
-    $('body').toggleClass('noShadows', power_user.noShadows);
-    $('#noShadowsmode').prop('checked', power_user.noShadows);
+function switchFixedInterfaceClasses() {
+    $('body').removeClass('no-timestamps');
+    $('#send_form').addClass('compact');
+    $('body').addClass('no-blur');
+    $('body').addClass('noShadows');
     scrollChatToBottom();
 }
 
 function applyChatDisplay() {
-    if ([null, undefined].includes(power_user.chat_display)) {
-        console.debug('applyChatDisplay: saw no chat display type defined');
-        power_user.chat_display = chat_styles.DEFAULT;
-    }
-    console.debug(`poweruser.chat_display ${power_user.chat_display}`);
-    $('#chat_display').val(power_user.chat_display).prop('selected', true);
-
-    switch (power_user.chat_display) {
-        case 0: {
-            console.debug('applying default chat');
-            $('body').removeClass('bubblechat');
-            $('body').removeClass('documentstyle');
-            break;
-        }
-        case 1: {
-            console.debug('applying bubblechat');
-            $('body').addClass('bubblechat');
-            $('body').removeClass('documentstyle');
-            break;
-        }
-        case 2: {
-            console.debug('applying document style');
-            $('body').removeClass('bubblechat');
-            $('body').addClass('documentstyle');
-            break;
-        }
-    }
-    // Mirror the class for StyleX surfaces (when.ancestor only supports [attr] selectors).
-    document.body.toggleAttribute('data-bubblechat', power_user.chat_display === 1);
+    $('body').removeClass('bubblechat');
+    $('body').removeClass('documentstyle');
+    document.body.removeAttribute('data-bubblechat');
 }
 
 function applyToastrPosition() {
@@ -350,28 +213,11 @@ function applyToastrPosition() {
     fixToastrForDialogs();
 }
 
-function applyChatWidth(type) {
-    if (type === 'forced') {
-        let r = document.documentElement;
-        r.style.setProperty('--sheldWidth', `${power_user.chat_width}vw`);
-        $('#chat_width_slider').val(power_user.chat_width);
-        //document.documentElement.style.setProperty('--sheldWidth', power_user.chat_width);
-    } else {
-        //this is to prevent the slider from updating page in real time
-        $('#chat_width_slider').off('mouseup touchend').on('mouseup touchend', async () => {
-            // This is a hack for Firefox to let it render before applying the block width.
-            // Otherwise it takes the incorrect slider position with the new value AFTER the resizing.
-            await delay(1);
-            document.documentElement.style.setProperty('--sheldWidth', `${power_user.chat_width}vw`);
-            await delay(1);
-        });
-    }
-
-    $('#chat_width_slider_counter').val(power_user.chat_width);
+function applyChatWidth() {
+    document.documentElement.style.setProperty('--sheldWidth', '50vw');
 }
 
 function applyCustomCSS() {
-    $('#customCSS').val(power_user.custom_css);
     var styleId = 'custom-style';
     var style = document.getElementById(styleId);
     if (!style) {
@@ -383,44 +229,8 @@ function applyCustomCSS() {
     style.innerHTML = power_user.custom_css;
 }
 
-function applyFontScale(type) {
-    //this is to allow forced setting on page load, theme swap, etc
-    if (type === 'forced') {
-        document.documentElement.style.setProperty('--fontScale', String(power_user.font_scale));
-    } else {
-        //this is to prevent the slider from updating page in real time
-        $('#font_scale').off('mouseup touchend').on('mouseup touchend', () => {
-            document.documentElement.style.setProperty('--fontScale', String(power_user.font_scale));
-        });
-    }
-
-    $('#font_scale_counter').val(power_user.font_scale);
-    $('#font_scale').val(power_user.font_scale);
-}
-
-/**
- * Checks if the chat needs to be reloaded to apply media display settings.
- * @returns {boolean} True if the chat needs reload to apply media display settings
- */
-function isMediaDisplayReloadNeeded() {
-    // A user is not currently in a chat.
-    const chatId = getCurrentChatId();
-    if (!chatId) {
-        return false;
-    }
-
-    const firstDisplayedIndex = getFirstDisplayedMessageId();
-    const hasUnprocessedMediaMessages = chat.some((message, index) => {
-        // Skip messages that are not currently displayed
-        if (index < firstDisplayedIndex) {
-            return false;
-        }
-        const hasMediaAttachments = Array.isArray(message?.extra?.media) && message.extra.media.length > 0;
-        const lacksMediaDisplay = !message?.extra?.media_display;
-        return hasMediaAttachments && lacksMediaDisplay;
-    });
-
-    return hasUnprocessedMediaMessages;
+function applyFontScale() {
+    document.documentElement.style.setProperty('--fontScale', '1');
 }
 
 /**
@@ -440,13 +250,12 @@ async function showDebugMenu() {
 }
 
 export function applyPowerUserSettings() {
-    switchUiMode();
-    applyFontScale('forced');
-    applyChatWidth('forced');
+    applyFontScale();
+    applyChatWidth();
     applyCustomCSS();
-    applyNoShadows();
-    switchTimestamps();
-    switchTokenCount();
+    applyChatDisplay();
+    switchReducedMotion();
+    switchFixedInterfaceClasses();
 }
 
 export function applyStylePins() {
@@ -537,6 +346,11 @@ export async function loadPowerUserSettings(settings, data) {
             'streaming_fps', 'smooth_streaming_no_think', 'smooth_streaming_speed',
             'stream_fade_in', 'collapse_newlines', 'trim_sentences', 'single_line',
             'markdown_escape_strings', 'show_user_prompt_bias',
+            'chat_width', 'font_scale', 'fast_ui_mode', 'reduced_motion',
+            'noShadows', 'chat_display', 'timestamps_enabled',
+            'compact_input_area', 'media_display', 'send_on_enter',
+            'auto_fix_generated_markdown', 'forbid_external_media',
+            'message_token_count_enabled',
         ]) {
             delete settings.power_user[key];
         }
@@ -556,14 +370,6 @@ export async function loadPowerUserSettings(settings, data) {
         delete power_user.stscript.autocomplete_style;
     }
 
-
-    if (typeof power_user.chat_display !== 'number') {
-        power_user.chat_display = chat_styles.DEFAULT;
-    }
-
-    if (typeof power_user.chat_width !== 'number') {
-        power_user.chat_width = 50;
-    }
 
     // Retired remote/proprietary tokenizers (NERD/NERD2/API_CURRENT/API_KOBOLD/LEGACY) fold back to best-match
     if (!Object.values(tokenizers).includes(power_user.tokenizer)) {
@@ -590,9 +396,6 @@ export async function loadPowerUserSettings(settings, data) {
     $('#example_messages_behavior').val(getExampleMessagesBehavior());
     $(`#example_messages_behavior option[value="${getExampleMessagesBehavior()}"]`).prop('selected', true);
 
-    $('#auto_fix_generated_markdown').prop('checked', power_user.auto_fix_generated_markdown);
-    $(`#send_on_enter option[value=${power_user.send_on_enter}]`).prop('selected', true);
-    $('#noShadowsmode').prop('checked', power_user.noShadows);
     $('#frontend_frames_enabled').prop('checked', power_user.frontend_frames.enabled);
     $('#frontend_frames_depth').val(power_user.frontend_frames.depth);
     $('#frontend_frames_depth_ignore_hidden').prop('checked', power_user.frontend_frames.depth_ignore_hidden);
@@ -600,25 +403,13 @@ export async function loadPowerUserSettings(settings, data) {
     $('#frontend_frames_skip_highlight').prop('checked', power_user.frontend_frames.skip_highlight);
     $('#frontend_frames_use_blob_url').prop('checked', power_user.frontend_frames.use_blob_url);
     $('#frontend_frames_allow_streaming').prop('checked', power_user.frontend_frames.allow_streaming);
-    $('#messageTimestampsEnabled').prop('checked', power_user.timestamps_enabled);
-    $(`#chat_display option[value=${power_user.chat_display}]`).prop('selected', true).trigger('change');
-    $('#chat_width_slider').val(power_user.chat_width);
-
     $('#stscript_autocomplete_state').val(power_user.stscript.autocomplete.state).trigger('input');
     $('#stscript_matching').val(power_user.stscript.matching ?? 'fuzzy');
 
     $('#smooth_streaming').prop('checked', power_user.smooth_streaming);
 
-    $('#font_scale').val(power_user.font_scale);
-    $('#font_scale_counter').val(power_user.font_scale);
-
-    $('#reduced_motion').prop('checked', power_user.reduced_motion);
-    $('#forbid_external_media').prop('checked', power_user.forbid_external_media);
-    $('#media_display').val(power_user.media_display);
-
     $(`#character_sort_order option[data-order="${power_user.sort_order}"][data-field="${power_user.sort_field}"]`).prop('selected', true);
     switchReducedMotion();
-    switchCompactInputArea();
     reloadMarkdownProcessor();
     await loadSystemPrompts(data);
     await loadReasoningTemplates(data);
@@ -1138,52 +929,10 @@ jQuery(() => {
         saveSettingsDebounced();
     });
 
-    $('#fast_ui_mode').on('change', function () {
-        power_user.fast_ui_mode = $(this).prop('checked');
-        switchUiMode();
-        saveSettingsDebounced();
-    });
-
-    $('#customCSS').on('input', () => {
-        power_user.custom_css = String($('#customCSS').val());
-        saveSettingsDebounced();
-        applyCustomCSS();
-    });
-
-    $('#noShadowsmode').on('change', function () {
-        power_user.noShadows = $(this).prop('checked');
-        applyNoShadows();
-        saveSettingsDebounced();
-    });
-
-    $('#chat_display').on('change', function () {
-        const value = $(this).find(':selected').val();
-        power_user.chat_display = Number(value);
-        applyChatDisplay();
-        saveSettingsDebounced();
-    });
-
-    $('#chat_width_slider').on('input', function (e, data) {
-        const applyMode = data?.forced ? 'forced' : 'normal';
-        power_user.chat_width = Number($(this).val());
-        applyChatWidth(applyMode);
-        saveSettingsDebounced();
-        setHotswapsDebounced();
-    });
-
     $('#smooth_streaming').on('input', function () {
         power_user.smooth_streaming = !!$(this).prop('checked');
         saveSettingsDebounced();
     });
-
-    $('input[name="font_scale"]').on('input', async function (e, data) {
-        const applyMode = data?.forced ? 'forced' : 'normal';
-        power_user.font_scale = Number($(this).val());
-        $('#font_scale_counter').val(power_user.font_scale);
-        applyFontScale(applyMode);
-        saveSettingsDebounced();
-    });
-
 
     $('#character_sort_order').on('change', function () {
         const field = String($(this).find(':selected').data('field'));
@@ -1197,18 +946,6 @@ jQuery(() => {
         saveSettingsDebounced();
     });
 
-    $('#auto_fix_generated_markdown').on('input', function () {
-        power_user.auto_fix_generated_markdown = !!$(this).prop('checked');
-        reloadCurrentChat();
-        saveSettingsDebounced();
-    });
-
-    $('#send_on_enter').on('change', function () {
-        const value = $(this).find(':selected').val();
-        power_user.send_on_enter = Number(value);
-        saveSettingsDebounced();
-    });
-
     $('#reload_chat').on('click', async function () {
         const currentChatId = getCurrentChatId();
         if (currentChatId !== undefined && currentChatId !== null) {
@@ -1217,21 +954,6 @@ jQuery(() => {
             await reloadCurrentChat();
         }
     });
-
-    $('#messageTimestampsEnabled').on('input', function () {
-        const value = !!$(this).prop('checked');
-        power_user.timestamps_enabled = value;
-        switchTimestamps();
-        saveSettingsDebounced();
-    });
-
-    $('#messageTokensEnabled').on('input', function () {
-        const value = !!$(this).prop('checked');
-        power_user.message_token_count_enabled = value;
-        switchTokenCount();
-        saveSettingsDebounced();
-    });
-
 
     $('#frontend_frames_enabled').on('input', function () {
         power_user.frontend_frames.enabled = !!$(this).prop('checked');
@@ -1283,32 +1005,6 @@ jQuery(() => {
         const value = $(this).find(':selected').val();
         power_user.stscript.matching = String(value);
         saveSettingsDebounced();
-    });
-
-    $('#reduced_motion').on('input', function () {
-        power_user.reduced_motion = !!$(this).prop('checked');
-        switchReducedMotion();
-        saveSettingsDebounced();
-    });
-
-    $('#compact_input_area').on('input', function () {
-        power_user.compact_input_area = !!$(this).prop('checked');
-        switchCompactInputArea();
-        saveSettingsDebounced();
-    });
-
-    $('#forbid_external_media').on('input', function () {
-        power_user.forbid_external_media = !!$(this).prop('checked');
-        saveSettingsDebounced();
-        reloadCurrentChat();
-    });
-
-    $('#media_display').on('input', async function () {
-        power_user.media_display = $(this).val().toString();
-        saveSettingsDebounced();
-        if (isMediaDisplayReloadNeeded()) {
-            await reloadCurrentChat();
-        }
     });
 
     $(document).on('click', '#debug_table [data-debug-function]', function () {

@@ -27,14 +27,12 @@ const delay = (...args) => shell().delay(...args);
 const encodeStyleTags = (...args) => shell().encodeStyleTags(...args);
 const escapeHtml = (...args) => shell().escapeHtml(...args);
 const escapeRegex = (...args) => shell().escapeRegex(...args);
-const fixMarkdown = (...args) => shell().fixMarkdown(...args);
 const getGeneratingApi = (...args) => shell().getGeneratingApi(...args);
 const getGeneratingModel = (...args) => shell().getGeneratingModel(...args);
 const getMessageTimeStamp = (...args) => shell().getMessageTimeStamp(...args);
 const getRegexedString = (...args) => shell().getRegexedString(...args);
 const getStoppingStrings = (...args) => shell().getStoppingStrings(...args);
 const getThumbnailUrl = (...args) => shell().getThumbnailUrl(...args);
-const getTokenCountAsync = (...args) => shell().getTokenCountAsync(...args);
 const humanFileSize = (...args) => shell().humanFileSize(...args);
 const isDataURL = (...args) => shell().isDataURL(...args);
 const isReactMainChatOwner = (...args) => shell().isReactMainChatOwner(...args);
@@ -121,10 +119,6 @@ export function messageFormatting(mes, ch_name, isSystem, isUser, messageId, san
             isMarkdown: true,
             depth: depth,
         });
-    }
-
-    if (state.power_user.auto_fix_generated_markdown) {
-        mes = fixMarkdown(mes, true);
     }
 
 
@@ -407,7 +401,7 @@ export function ensureMessageMediaIsArray(mes) {
  * @returns {MEDIA_DISPLAY} Media display setting
  */
 export function getMediaDisplay(mes) {
-    const value = mes?.extra?.media_display || state.power_user.media_display || MEDIA_DISPLAY.LIST;
+    const value = mes?.extra?.media_display || MEDIA_DISPLAY.LIST;
     return Object.values(MEDIA_DISPLAY).includes(value) ? value : MEDIA_DISPLAY.LIST;
 }
 
@@ -875,7 +869,6 @@ export function updateMessageElement(mes, { messageId = state.chat.length - 1, m
     messageElement.find('.avatar img').attr('src', rowPopulation.avatarSrc);
     messageElement.find('.ch_name .name_text').text(rowPopulation.displayName);
     messageElement.find('.timestamp').text(rowPopulation.timestampText).attr('title', rowPopulation.timestampTitle);
-    if (rowPopulation.tokenCountText) messageElement.find('.tokenCounterDisplay').text(rowPopulation.tokenCountText);
     if (rowPopulation.messageTitle) messageElement.attr('title', rowPopulation.messageTitle);
     if (rowPopulation.timer.value) messageElement.find('.mes_timer').attr('title', rowPopulation.timer.title).text(rowPopulation.timer.value);
 
@@ -1092,9 +1085,6 @@ export function cleanUpMessage({ getMessage, isImpersonate, isContinue, displayI
         getMessage = getMessage.trim();
     }
 
-    if (state.power_user.auto_fix_generated_markdown) {
-        getMessage = fixMarkdown(getMessage, false);
-    }
 
     if (trimNames) {
         // If this is an impersonation, trim "{{user}}:" from the beginning
@@ -1209,10 +1199,7 @@ export async function saveReply({ type, getMessage, fromStreaming = false, title
             lastMessage.extra.reasoning_duration = null;
             lastMessage.extra.reasoning_signature = reasoningSignature;
             await processImageAttachment(lastMessage, { imageUrls });
-            if (state.power_user.message_token_count_enabled) {
-                const tokenCountText = (reasoning || '') + lastMessage.mes;
-                lastMessage.extra.token_count = await getTokenCountAsync(tokenCountText, 0);
-            }
+
             const chat_id = (state.chat.length - 1);
             if (!fromStreaming) await eventSource.emit(event_types.MESSAGE_RECEIVED, chat_id, type);
             addOneMessage(state.chat[chat_id], { type: 'swipe' });
@@ -1233,10 +1220,7 @@ export async function saveReply({ type, getMessage, fromStreaming = false, title
         lastMessage.extra.reasoning_duration = null;
         lastMessage.extra.reasoning_signature = reasoningSignature;
         await processImageAttachment(lastMessage, { imageUrls });
-        if (state.power_user.message_token_count_enabled) {
-            const tokenCountText = (reasoning || '') + lastMessage.mes;
-            lastMessage.extra.token_count = await getTokenCountAsync(tokenCountText, 0);
-        }
+
         const chat_id = (state.chat.length - 1);
         if (!fromStreaming) await eventSource.emit(event_types.MESSAGE_RECEIVED, chat_id, type);
         addOneMessage(state.chat[chat_id], { type: 'swipe' });
@@ -1254,10 +1238,7 @@ export async function saveReply({ type, getMessage, fromStreaming = false, title
         lastMessage.extra.reasoning_signature = reasoningSignature;
         await processImageAttachment(lastMessage, { imageUrls });
         // We don't know if the reasoning duration extended, so we don't update it here on purpose.
-        if (state.power_user.message_token_count_enabled) {
-            const tokenCountText = (reasoning || '') + lastMessage.mes;
-            lastMessage.extra.token_count = await getTokenCountAsync(tokenCountText, 0);
-        }
+
         const chat_id = (state.chat.length - 1);
         if (!fromStreaming) await eventSource.emit(event_types.MESSAGE_RECEIVED, chat_id, type);
         addOneMessage(state.chat[chat_id], { type: 'swipe' });
@@ -1283,10 +1264,6 @@ export async function saveReply({ type, getMessage, fromStreaming = false, title
         newMessage.gen_started = state.generation_started;
         newMessage.gen_finished = generationFinished;
 
-        if (state.power_user.message_token_count_enabled) {
-            const tokenCountText = (reasoning || '') + newMessage.mes;
-            newMessage.extra.token_count = await getTokenCountAsync(tokenCountText, 0);
-        }
 
         await processImageAttachment(newMessage, { imageUrls });
         const chat_id = (state.chat.length - 1);

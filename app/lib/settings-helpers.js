@@ -4,11 +4,7 @@ export const settingsTabDefinitions = [
         label: '服务',
         description: 'endpoint、API key、主模型与备选模型。',
     },
-    {
-        id: 'userInterface',
-        label: '界面',
-        description: '主题、布局和工作区显示偏好。',
-    },
+
     {
         id: 'advanced',
         label: '高级',
@@ -19,23 +15,6 @@ export const settingsTabDefinitions = [
 export const providerSecretKeyBySource = {
     openai: 'api_key_openai',
 };
-
-export const chatDisplayOptions = [
-    { value: '0', label: '默认' },
-    { value: '1', label: '气泡' },
-    { value: '2', label: '文档' },
-];
-
-export const mediaDisplayOptions = [
-    { value: 'list', label: '列表' },
-    { value: 'gallery', label: '画廊' },
-];
-
-export const sendOnEnterOptions = [
-    { value: '-1', label: '禁用' },
-    { value: '0', label: '自动' },
-    { value: '1', label: '启用' },
-];
 
 // Mirrors TOKENIZER_OPTIONS in public/scripts/tokenizers.js (the retired
 // Advanced Formatting drawer's #tokenizer select). Values are stringified
@@ -63,22 +42,6 @@ export const defaultSettingsFormValues = {
         openaiModel: '',
         customUrl: '',
         fallbackProviderModel: '',
-    },
-    userInterface: {
-        chatWidth: 50,
-        fontScale: 1,
-        customCss: '',
-        fastUiMode: true,
-        reducedMotion: false,
-        noShadows: false,
-        chatDisplay: 0,
-        timestampsEnabled: true,
-        compactInputArea: true,
-        mediaDisplay: 'list',
-        sendOnEnter: 0,
-        autoFixGeneratedMarkdown: true,
-        forbidExternalMedia: false,
-        messageTokenCountEnabled: false,
     },
     advanced: {
         customStoppingStrings: '',
@@ -118,20 +81,6 @@ const fieldBindings = [
         // value must not silently re-enable it under "non-empty model = enabled".
         toForm: (value, settings) => (getValueAtPath(settings, 'oai_settings.fallback_provider_enabled') === false ? '' : value),
     },
-    { tab: 'userInterface', formPath: 'userInterface.chatWidth', settingsPath: 'power_user.chat_width' },
-    { tab: 'userInterface', formPath: 'userInterface.fontScale', settingsPath: 'power_user.font_scale' },
-    { tab: 'userInterface', formPath: 'userInterface.customCss', settingsPath: 'power_user.custom_css' },
-    { tab: 'userInterface', formPath: 'userInterface.fastUiMode', settingsPath: 'power_user.fast_ui_mode' },
-    { tab: 'userInterface', formPath: 'userInterface.reducedMotion', settingsPath: 'power_user.reduced_motion' },
-    { tab: 'userInterface', formPath: 'userInterface.noShadows', settingsPath: 'power_user.noShadows' },
-    { tab: 'userInterface', formPath: 'userInterface.chatDisplay', settingsPath: 'power_user.chat_display' },
-    { tab: 'userInterface', formPath: 'userInterface.timestampsEnabled', settingsPath: 'power_user.timestamps_enabled' },
-    { tab: 'userInterface', formPath: 'userInterface.compactInputArea', settingsPath: 'power_user.compact_input_area' },
-    { tab: 'userInterface', formPath: 'userInterface.mediaDisplay', settingsPath: 'power_user.media_display' },
-    { tab: 'userInterface', formPath: 'userInterface.sendOnEnter', settingsPath: 'power_user.send_on_enter' },
-    { tab: 'userInterface', formPath: 'userInterface.autoFixGeneratedMarkdown', settingsPath: 'power_user.auto_fix_generated_markdown' },
-    { tab: 'userInterface', formPath: 'userInterface.forbidExternalMedia', settingsPath: 'power_user.forbid_external_media' },
-    { tab: 'userInterface', formPath: 'userInterface.messageTokenCountEnabled', settingsPath: 'power_user.message_token_count_enabled' },
 
     { tab: 'advanced', formPath: 'advanced.customStoppingStrings', settingsPath: 'power_user.custom_stopping_strings' },
     { tab: 'advanced', formPath: 'advanced.tokenizer', settingsPath: 'power_user.tokenizer' },
@@ -429,6 +378,11 @@ export function buildSettingsSavePayload(baseSettings, formValues, { settingsRev
             'streaming_fps', 'smooth_streaming_no_think', 'smooth_streaming_speed',
             'stream_fade_in', 'collapse_newlines', 'trim_sentences', 'single_line',
             'markdown_escape_strings', 'show_user_prompt_bias',
+            'chat_width', 'font_scale', 'fast_ui_mode',
+            'reduced_motion', 'noShadows', 'chat_display', 'timestamps_enabled',
+            'compact_input_area', 'media_display', 'send_on_enter',
+            'auto_fix_generated_markdown', 'forbid_external_media',
+            'message_token_count_enabled',
         ]) {
             delete powerUser[key];
         }

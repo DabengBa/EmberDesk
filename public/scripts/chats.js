@@ -809,8 +809,8 @@ async function openExternalMediaOverridesDialog() {
     }
 
     const template = $(await renderTemplateAsync('forbidMedia'));
-    template.find('.forbid_media_global_state_forbidden').toggle(power_user.forbid_external_media);
-    template.find('.forbid_media_global_state_allowed').toggle(!power_user.forbid_external_media);
+    template.find('.forbid_media_global_state_forbidden').toggle(true);
+    template.find('.forbid_media_global_state_allowed').toggle(false);
 
     if (power_user.external_media_allowed_overrides.includes(entityId)) {
         template.find('#forbid_media_override_allowed').prop('checked', true);
@@ -830,7 +830,7 @@ export function getCurrentEntityId() {
 export function isExternalMediaAllowed() {
     const entityId = getCurrentEntityId();
     if (!entityId) {
-        return !power_user.forbid_external_media;
+        return false;
     }
 
     if (power_user.external_media_allowed_overrides.includes(entityId)) {
@@ -841,7 +841,8 @@ export function isExternalMediaAllowed() {
         return false;
     }
 
-    return !power_user.forbid_external_media;
+    // External media is forbidden by default; per-entity overrides above win.
+    return false;
 }
 
 /**

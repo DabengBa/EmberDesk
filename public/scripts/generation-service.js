@@ -136,8 +136,6 @@ export class GenerationStreamSession {
         this.messageTextDom = null;
         /** @type {HTMLElement} */
         this.messageTimerDom = null;
-        /** @type {HTMLElement} */
-        this.messageTokenCounterDom = null;
         this.type = type;
         this.force_name2 = forceName2;
         this.isStopped = false;
@@ -184,7 +182,6 @@ export class GenerationStreamSession {
             this.messageDom = document.querySelector(`#chat .mes[mesid="${messageId}"]`);
             this.messageTextDom = this.messageDom?.querySelector('.mes_text');
             this.messageTimerDom = this.messageDom?.querySelector('.mes_timer');
-            this.messageTokenCounterDom = this.messageDom?.querySelector('.tokenCounterDisplay');
         }
         if (continueOnReasoning) {
             await this.reasoningHandler.process(messageId, false, this.promptReasoning);
@@ -283,16 +280,6 @@ export class GenerationStreamSession {
             await this.reasoningHandler.process(messageId, mesChanged, this.promptReasoning);
             processedText = state.chat[messageId].mes;
 
-            // Token count update.
-            const tokenCountText = this.reasoningHandler.reasoning + processedText;
-            const currentTokenCount = isFinal && state.power_user.message_token_count_enabled ? await getTokenCountAsync(tokenCountText, 0) : 0;
-            if (currentTokenCount) {
-                state.chat[messageId].extra.token_count = currentTokenCount;
-                if (this.messageTokenCounterDom instanceof HTMLElement) {
-                    this.messageTokenCounterDom.textContent = `${currentTokenCount}t`;
-                }
-            }
-
             if ((this.type == 'swipe' || this.type === 'continue') && Array.isArray(state.chat[messageId].swipes)) {
                 state.chat[messageId].swipes[state.chat[messageId].swipe_id] = processedText;
                 state.chat[messageId].swipe_info[state.chat[messageId].swipe_id] = {
@@ -317,7 +304,7 @@ export class GenerationStreamSession {
                     this.messageTextDom.innerHTML = formattedText;
                 }
 
-                const timePassed = formatGenerationTimer(this.timeStarted, currentTime, currentTokenCount, this.reasoningHandler.getDuration(), this.timeToFirstToken);
+                const timePassed = formatGenerationTimer(this.timeStarted, currentTime, 0, this.reasoningHandler.getDuration(), this.timeToFirstToken);
                 if (this.messageTimerDom instanceof HTMLElement) {
                     this.messageTimerDom.textContent = timePassed.timerValue;
                     this.messageTimerDom.title = timePassed.timerTitle;
@@ -2087,7 +2074,6 @@ export async function swipe(event, direction, {
             thisMesDiv.find('.mes_text').html('...');
             // resets the timer
             thisMesDiv.find('.mes_timer').html('');
-            thisMesDiv.find('.tokenCounterDisplay').text('');
             updateReasoningUI(thisMesDiv, { reset: true });
         } else {
             //console.log('showing previously generated swipe candidate, or "..."');
@@ -2097,17 +2083,6 @@ export async function swipe(event, direction, {
             const scroll = (mesId == state.chat.length - 1);
             //The swipe buttons will be refreshed in endSwipe(), refreshing them now will cause flickering.
             addOneMessage(state.chat[mesId], { type: 'swipe', forceId: mesId, scroll: scroll, showSwipes: false });
-
-            if (state.power_user.message_token_count_enabled) {
-                if (!state.chat[mesId].extra) {
-                    state.chat[mesId].extra = {};
-                }
-
-                const tokenCountText = (state.chat[mesId]?.extra?.reasoning || '') + state.chat[mesId].mes;
-                const tokenCount = await getTokenCountAsync(tokenCountText, 0);
-                state.chat[mesId].extra.token_count = tokenCount;
-                thisMesDiv.find('.tokenCounterDisplay').text(`${tokenCount}t`);
-            }
         }
 
         //Animate expanding to the new message height.

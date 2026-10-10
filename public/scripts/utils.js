@@ -2814,7 +2814,7 @@ export function setupScrollToTop({ scrollContainerId, buttonId, drawerId, visibi
         e.preventDefault();
         e.stopPropagation();
 
-        const userPrefersReduced = power_user.reduced_motion;
+        const userPrefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
         scrollContainer.scrollTo({ top: 0, behavior: userPrefersReduced ? 'auto' : 'smooth' });
     };
     btn.addEventListener('click', onActivate);

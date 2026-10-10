@@ -16,7 +16,6 @@ export function buildChatMessageRenderDescriptor(message, { messageId, timestamp
     const isUser = Boolean(message?.is_user);
     const isSystem = Boolean(message?.is_system);
     const forcedAvatar = Boolean(message?.force_avatar);
-    const tokenCount = extra.token_count;
 
     const flags = {
         hasForcedAvatar: forcedAvatar,
@@ -54,7 +53,6 @@ export function buildChatMessageRenderDescriptor(message, { messageId, timestamp
         },
         display: {
             name: message?.name,
-            tokenCount,
             timestamp,
         },
         classes: {
@@ -85,15 +83,12 @@ export function buildChatMessageRowPopulation(descriptor, {
     timerValue = '',
     timerTitle = '',
 } = {}) {
-    const tokenCount = descriptor.display.tokenCount;
-
     return {
         attributes: descriptor.attributes,
         avatarSrc: avatarImg,
         displayName: descriptor.display.name,
         timestampText: descriptor.display.timestamp,
         timestampTitle,
-        tokenCountText: tokenCount ? `${tokenCount}t` : '',
         messageTitle,
         timer: {
             value: timerValue || '',

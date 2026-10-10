@@ -21,7 +21,6 @@ import {
 import { eventSource, event_types } from './events.js';
 import {
     power_user,
-    send_on_enter_options,
 } from './power-user.js';
 
 import {
@@ -136,18 +135,8 @@ export function isMobile() {
 }
 
 export function shouldSendOnEnter() {
-    if (!power_user) {
-        return false;
-    }
-
-    switch (power_user.send_on_enter) {
-        case send_on_enter_options.DISABLED:
-            return false;
-        case send_on_enter_options.AUTO:
-            return !isMobile();
-        case send_on_enter_options.ENABLED:
-            return true;
-    }
+    // Enter-to-send is fixed to "automatic": enabled on desktop, off on mobile.
+    return !isMobile();
 }
 
 /**

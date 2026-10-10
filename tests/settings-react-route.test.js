@@ -101,9 +101,9 @@ describe('settings React route flag', () => {
         const helperModule = await import(`../app/lib/settings-helpers.js?settingsHelpers=${Date.now()}-${Math.random()}`);
 
         expect(routeSource).not.toContain('waifuMode');
-        expect(helperModule.settingsFormFieldPaths).not.toContain('userInterface.waifuMode');
-        expect(helperModule.settingsCoverage.reactOwned.userInterface).not.toContain('power_user.waifuMode');
-        expect(helperModule.defaultSettingsFormValues.userInterface).not.toHaveProperty('waifuMode');
+        expect(helperModule.settingsFormFieldPaths.some(path => path.startsWith('userInterface.'))).toBe(false);
+        expect(helperModule.settingsCoverage.reactOwned.userInterface).toBeUndefined();
+        expect(helperModule.defaultSettingsFormValues.userInterface).toBeUndefined();
         expect(indexSource).not.toContain('id="waifuMode"');
         expect(indexSource).toContain('id="bg1"');
         expect(indexSource).not.toContain('id="rm_group_hidemutedsprites"');
@@ -131,15 +131,15 @@ describe('settings React route flag', () => {
         expect(routeSource).toContain('settingsStyles.tabPanelOverlay');
         expect(routeSource).not.toContain("{activeTab === 'general' ? (");
         expect(routeSource).toContain("{activeTab === 'providers' ? (");
-        expect(routeSource).toContain("{activeTab === 'userInterface' ? (");
+        expect(routeSource).not.toContain("{activeTab === 'userInterface' ? (");
         expect(routeSource).toContain("{activeTab === 'advanced' ? (");
         expect(routeSource).toContain('name="providers.customUrl"');
         expect(routeSource).toContain('name="providers.fallbackProviderModel"');
-        expect(routeSource).toContain('name="userInterface.customCss"');
+        expect(routeSource).not.toContain('name="userInterface.customCss"');
         expect(routeSource).toContain('name="advanced.tokenizer"');
         expect(routeSource).not.toContain("{activeTab === 'general' && (");
         expect(routeSource).not.toContain("{activeTab === 'providers' && (");
-        expect(routeSource).not.toContain("{activeTab === 'userInterface' && (");
+
         expect(routeSource).not.toContain("{activeTab === 'advanced' && (");
         // Four-field provider contract: URL, key, model, fallback model only.
         expect(routeSource).not.toContain('chatCompletionSource: z.enum(');
@@ -198,7 +198,8 @@ describe('settings React route flag', () => {
         expect(settingFieldSource).toContain('checked={Boolean(currentValue)}');
         expect(settingFieldSource).not.toContain('checked={Boolean(field.state.value)}');
 
-        expect(helperModule.settingsTabDefinitions).toHaveLength(3);
+        // Providers + Advanced only; the interface tab is retired.
+        expect(helperModule.settingsTabDefinitions).toHaveLength(2);
         // Single-provider contract: the provider picker is retired.
         expect(helperModule.providerOptions).toBeUndefined();
         expect(helperModule.providerSecretKeyBySource.claude).toBeUndefined();
@@ -215,7 +216,8 @@ describe('settings React route flag', () => {
             'oai_settings.fallback_provider_model',
         ]));
         expect(helperModule.settingsCoverage.reactOwned.providers).toHaveLength(3);
-        expect(helperModule.settingsCoverage.reactOwned.userInterface).toContain('power_user.custom_css');
+        // The interface tab is retired; UI keys are stripped from saved payloads.
+        expect(helperModule.settingsCoverage.reactOwned.userInterface).toBeUndefined();
         expect(helperModule.settingsCoverage.reactOwned.advanced).toContain('power_user.tokenizer');
         expect(helperModule.settingsCoverage.reactOwned.advanced).toContain('power_user.stscript.autocomplete.state');
         expect(helperModule.settingsCoverage.legacyOwned).toContain('world_info_settings');
@@ -362,7 +364,7 @@ describe('settings React route flag', () => {
         // Legacy enabled flag is honored on read; the toggle itself is retired.
         expect(defaults.providers.fallbackProviderEnabled).toBeUndefined();
         expect(defaults.providers.fallbackProviderModel).toBe('gpt-4.1-mini');
-        expect(defaults.userInterface.customCss).toBe('.chat { color: white; }');
+        expect(defaults.userInterface).toBeUndefined();
         expect(defaults.advanced.autoSwipe).toBeUndefined();
         expect(defaults.advanced.stscriptAutocompleteFontScale).toBeUndefined();
         expect(defaults.advanced.stscriptAutocompleteState).not.toBeUndefined();
@@ -372,17 +374,6 @@ describe('settings React route flag', () => {
                 openaiModel: 'gpt-5.2',
                 customUrl: 'https://custom.example.com/v1',
                 fallbackProviderModel: 'gpt-4.1',
-            },
-            userInterface: {
-                chatWidth: 72,
-                fontScale: 1.15,
-                customCss: '.chat { color: gold; }',
-                fastUiMode: false,
-                reducedMotion: false,
-                noShadows: false,
-                chatDisplay: 2,
-                timestampsEnabled: false,
-                compactInputArea: false,
             },
             advanced: {
                 customStoppingStrings: 'END',
@@ -409,8 +400,10 @@ describe('settings React route flag', () => {
         expect(merged.untouched.keep).toBe(true);
         expect(merged.preset_settings).toBe('LegacyTextGenPreset');
         expect(merged.power_user.theme).toBe('Dark Lite');
-        expect(merged.power_user.chat_width).toBe(72);
-        expect(merged.power_user.font_scale).toBe(1.15);
+        expect(merged.power_user.chat_width).toBeUndefined();
+        expect(merged.power_user.font_scale).toBeUndefined();
+        // Stored legacy custom CSS keeps round-tripping invisibly; no UI remains.
+        expect(merged.power_user.custom_css).toBe('.chat { color: white; }');
         expect(merged.power_user.custom_stopping_strings).toBe('END');
         expect(merged.power_user.tokenizer).toBe(42);
         // Retired power_user keys are stripped from the saved payload.
@@ -440,7 +433,7 @@ describe('settings React route flag', () => {
         expect(merged.oai_settings.temp_openai).toBe(0.7);
         expect(merged.oai_settings.reasoning_effort).toBe('medium');
         expect(merged.oai_settings.continue_prefill).toBe(true);
-        expect(merged.power_user.custom_css).toBe('.chat { color: gold; }');
+        expect(merged.power_user.custom_css).toBe('.chat { color: white; }');
         expect(merged.power_user.toastr_position).toBeUndefined();
         expect(merged.power_user.auto_swipe).toBeUndefined();
         expect(merged.power_user.auto_swipe_blacklist).toBeUndefined();
@@ -514,10 +507,8 @@ describe('settings React route flag', () => {
                 send_on_enter: '-1',
             },
         });
-        expect(defaults.userInterface.avatarStyle).toBeUndefined();
-        expect(defaults.userInterface.chatDisplay).toBe(2);
-        expect(defaults.userInterface.sendOnEnter).toBe(-1);
-        expect(defaults.userInterface.tagImportSetting).toBeUndefined();
+        // Interface keys are retired: they produce no form state at all.
+        expect(defaults.userInterface).toBeUndefined();
     });
 
     test('owner inventory covers drawer fields with lossless single-field save round-trip', async () => {
@@ -548,6 +539,12 @@ describe('settings React route flag', () => {
         for (const path of [
             'power_user.send_on_enter',
             'power_user.message_token_count_enabled',
+        ]) {
+            // Interface keys are retired: neither react-owned nor legacy-owned.
+            expect(reactPaths).not.toContain(path);
+            expect(helperModule.settingsCoverage.legacyOwned).not.toContain(path);
+        }
+        for (const path of [
             'power_user.token_padding',
             'power_user.user_prompt_bias',
         ]) {
@@ -605,14 +602,13 @@ describe('settings React route flag', () => {
 
         const defaults = helperModule.buildSettingsFormDefaults(fixture);
         expect(defaults.general).toBeUndefined();
-        expect(defaults.userInterface.mainTextColor).toBeUndefined();
-        expect(defaults.userInterface.sendOnEnter).toBe(-1);
+        expect(defaults.userInterface).toBeUndefined();
         expect(defaults.advanced.collapseNewlines).toBeUndefined();
         expect(defaults.advanced.tokenPadding).toBe(32);
 
         // Mutate a single field only.
         const singleEdit = structuredClone(defaults);
-        singleEdit.userInterface.sendOnEnter = 1;
+        singleEdit.advanced.tokenPadding = 64;
         const saved = helperModule.buildSettingsSavePayload(fixture, singleEdit);
 
         expect(saved.untouched).toEqual({ keep: true, nested: { a: 1 } });
@@ -628,12 +624,13 @@ describe('settings React route flag', () => {
         expect(saved.oai_settings.assistant_prefill).toBe('legacy-prefill');
         expect(saved.power_user.main_text_color).toBeUndefined();
         expect(saved.power_user.expand_message_actions).toBeUndefined();
-        expect(saved.power_user.send_on_enter).toBe(1);
+        // Retired interface key: stripped rather than round-tripped.
+        expect(saved.power_user.send_on_enter).toBeUndefined();
+        expect(saved.power_user.token_padding).toBe(64);
         expect(saved.power_user.stscript.parser).toBeUndefined();
         expect(saved.power_user.stscript.autocomplete.state).toBe(2);
         expect(saved.power_user.stscript.autocomplete.style).toBeUndefined();
         expect(saved.power_user.user_prompt_bias).toBe('start-with');
-        expect(saved.power_user.token_padding).toBe(32);
         expect(saved.power_user.collapse_newlines).toBeUndefined();
 
         // Full identity round-trip with no form edits preserves unknown enums/values.
@@ -696,7 +693,7 @@ describe('settings React route flag', () => {
         };
         const baseline = helperModule.buildSettingsFormDefaults(fixture);
         const edited = structuredClone(baseline);
-        edited.userInterface.chatWidth = 42;
+        edited.advanced.tokenPadding = 128;
         const saved = helperModule.buildSettingsSavePayload(fixture, edited, {
             baselineFormValues: baseline,
         });
@@ -704,7 +701,7 @@ describe('settings React route flag', () => {
         expect(saved).toEqual({
             untouched: { keep: true },
             power_user: {
-                chat_width: 42,
+                token_padding: 128,
             },
         });
     });

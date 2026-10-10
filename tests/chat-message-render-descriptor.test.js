@@ -49,7 +49,7 @@ describe('chat message render descriptor', () => {
             },
             display: expect.objectContaining({
                 name: 'Ember',
-                tokenCount: 42,
+                timestamp: 'June 8, 2026 8:00 AM',
             }),
         }));
     });
@@ -198,7 +198,6 @@ describe('chat message render descriptor', () => {
             displayName: 'Ember',
             timestampText: 'June 8, 2026 8:00 AM',
             timestampTitle: 'openai - gpt-4o-mini',
-            tokenCountText: '17t',
             messageTitle: 'Pinned response',
             timer: {
                 value: '1.2s',

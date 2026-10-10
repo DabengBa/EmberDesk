@@ -197,15 +197,15 @@ test.describe('workspace shell panel navigation', () => {
         await expect(page.locator('[data-settings-overlay="true"] .settings-page')).toBeVisible({ timeout: 15_000 });
         await expect(page.locator('#user-settings-block.openDrawer')).toHaveCount(0);
         await expect(settingsButton).toHaveAttribute('aria-pressed', 'true');
-        const userInterfaceTab = page.locator('[data-settings-overlay="true"] .settings-tab').filter({ hasText: '界面' });
-        await userInterfaceTab.click();
-        await expect(userInterfaceTab).toHaveAttribute('data-active', 'true');
-        const confirmDeleteToggle = page.locator('[data-settings-overlay="true"] #settings-userInterface-confirmMessageDelete');
-        await expect(confirmDeleteToggle).toBeVisible();
-        const shouldConfirmDelete = !(await confirmDeleteToggle.isChecked());
-        await confirmDeleteToggle.focus();
+        const advancedTab = page.locator('[data-settings-overlay="true"] .settings-tab').filter({ hasText: '高级' });
+        await advancedTab.click();
+        await expect(advancedTab).toHaveAttribute('data-active', 'true');
+        const smoothStreamingToggle = page.locator('[data-settings-overlay="true"] #settings-advanced-smoothStreaming');
+        await expect(smoothStreamingToggle).toBeVisible();
+        const shouldSmoothStream = !(await smoothStreamingToggle.isChecked());
+        await smoothStreamingToggle.focus();
         await page.keyboard.press('Space');
-        await expect(confirmDeleteToggle).toHaveJSProperty('checked', shouldConfirmDelete);
+        await expect(smoothStreamingToggle).toHaveJSProperty('checked', shouldSmoothStream);
         const saveButton = page.locator('[data-settings-overlay="true"] button[type="submit"]');
         await expect(saveButton).toBeEnabled();
         await saveButton.focus();
@@ -265,7 +265,7 @@ test.describe('workspace shell panel navigation', () => {
         await settingsButton.click({ timeout: 10_000 });
         await expect(page).toHaveURL(/\/(?:\?|$)/);
         await expect(page.locator('[data-settings-overlay="true"]')).toBeVisible({ timeout: 15_000 });
-        await expect(page.locator('[data-settings-overlay="true"] .settings-tab[data-active="true"]')).toHaveText(/服务|界面|高级/);
+        await expect(page.locator('[data-settings-overlay="true"] .settings-tab[data-active="true"]')).toHaveText(/服务|高级/);
 
         const advancedTab = page.locator('[data-settings-overlay="true"] .settings-tab').filter({ hasText: '高级' });
         await advancedTab.click();
@@ -345,7 +345,7 @@ test.describe('workspace shell panel navigation', () => {
         });
 
         await expect(page.locator('[data-settings-overlay="true"]')).toBeVisible({ timeout: 15_000 });
-        await expect(page.locator('[data-settings-overlay="true"] .settings-tab[data-active="true"]')).toHaveText(/服务|界面|高级/);
+        await expect(page.locator('[data-settings-overlay="true"] .settings-tab[data-active="true"]')).toHaveText(/服务|高级/);
         await expect(settingsButton).toHaveAttribute('aria-pressed', 'true');
     });
 });

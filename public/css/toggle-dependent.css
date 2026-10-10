@@ -24,8 +24,7 @@ body:not(.tts) #ttsExtensionNarrateAll {
     display: none;
 }
 
-body.no-timestamps .timestamp,
-body.no-tokenCount .tokenCounterDisplay {
+body.no-timestamps .timestamp {
     display: none !important;
 }
 

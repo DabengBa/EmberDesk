@@ -33,20 +33,12 @@
         "strip_examples": false,
         "always_force_name2": true,
         "user_prompt_bias": "",
-        "fast_ui_mode": true,
-        "chat_display": 0,
-        "chat_width": 50,
         "sort_field": "name",
         "sort_order": "asc",
         "sort_rule": null,
-        "font_scale": 1,
         "movingUI": false,
         "movingUIState": {},
         "movingUIPreset": "Default",
-        "noShadows": true,
-        "auto_fix_generated_markdown": false,
-        "send_on_enter": 0,
-        "timestamps_enabled": true,
         "max_context_unlocked": false,
         "trim_spaces": true,
         "instruct": {
@@ -83,7 +75,6 @@
         },
         "custom_stopping_strings": "",
         "ui_mode": 1,
-        "forbid_external_media": true,
         "stscript": {}
     },
     "feature_settings": {
