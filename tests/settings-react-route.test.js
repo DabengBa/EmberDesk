@@ -158,7 +158,10 @@ describe('settings React route flag', () => {
         expect(routeSource).not.toContain('theme: z.string(),');
         expect(routeSource).not.toContain('systemPromptName');
         expect(routeSource).not.toContain('reasoningName');
-        expect(routeSource).toContain('systemPromptContent: z.string(),');
+        expect(routeSource).not.toContain('systemPromptContent');
+        expect(routeSource).not.toContain('syspromptEnabled');
+        expect(routeSource).not.toContain('reasoningAutoParse');
+        expect(routeSource).not.toContain('reasoningPrefix');
         expect(routeSource).not.toContain('contextPreset');
         expect(routeSource).not.toContain('instructPreset');
         expect(routeSource).toContain("fetch('/api/settings/get', {");
@@ -380,17 +383,6 @@ describe('settings React route flag', () => {
                 customStoppingStrings: 'END',
                 tokenizer: 42,
                 smoothStreaming: false,
-                systemPromptContent: 'Updated prompt',
-                syspromptEnabled: true,
-                syspromptPostHistory: 'later',
-                reasoningAutoParse: false,
-                reasoningAddToPrompts: false,
-                reasoningAutoExpand: false,
-                reasoningShowHidden: false,
-                reasoningPrefix: '[',
-                reasoningSuffix: ']',
-                reasoningSeparator: ' ',
-                reasoningMaxAdditions: 1,
                 stscriptMatching: 'exact',
                 stscriptAutocompleteState: 1,
             },
@@ -410,10 +402,10 @@ describe('settings React route flag', () => {
         expect(merged.power_user.chat_truncation).toBe(120);
         // Retired power_user keys are stripped from the saved payload.
         expect(merged.power_user.auto_continue).toBeUndefined();
-        // Named presets are retired; stored preset names are stripped on save.
-        expect(merged.power_user.sysprompt.name).toBeUndefined();
-        expect(merged.power_user.reasoning.name).toBeUndefined();
-        expect(merged.power_user.sysprompt.content).toBe('Updated prompt');
+        // Global system prompt and configurable reasoning template are
+        // retired; stored objects are stripped from the saved payload.
+        expect(merged.power_user.sysprompt).toBeUndefined();
+        expect(merged.power_user.reasoning).toBeUndefined();
         expect(merged.power_user.context.preset).toBe('Default');
         expect(merged.oai_settings.preset_settings_openai).toBe('RecoveredRuins');
         expect(merged.oai_settings.chat_completion_source).toBe('openai');
@@ -445,8 +437,6 @@ describe('settings React route flag', () => {
         expect(merged.power_user.instruct.skip_examples).toBe(true);
         expect(merged.power_user.instruct.activation_regex).toBe('/llama/i');
         expect(merged.power_user.context.story_string).toBe('Story');
-        expect(merged.power_user.sysprompt.post_history).toBe('later');
-        expect(merged.power_user.reasoning.max_additions).toBe(1);
         expect(merged.power_user.stscript.autocomplete.state).toBe(1);
         expect(merged.power_user.stscript.parser).toBeUndefined();
     });

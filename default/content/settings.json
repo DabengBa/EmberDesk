@@ -61,11 +61,6 @@
             "user_alignment_message": "",
             "system_same_as_user": false
         },
-        "sysprompt": {
-            "enabled": true,
-            "name": "Neutral - Chat",
-            "content": "Write {{char}}'s next reply in a fictional chat between {{char}} and {{user}}."
-        },
         "context": {
             "preset": "Default",
             "story_string": "{{#if system}}{{system}}\n{{/if}}{{#if wiBefore}}{{wiBefore}}\n{{/if}}{{#if description}}{{description}}\n{{/if}}{{#if scenario}}Scenario: {{scenario}}\n{{/if}}{{#if wiAfter}}{{wiAfter}}\n{{/if}}",

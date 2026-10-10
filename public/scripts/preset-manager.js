@@ -336,18 +336,10 @@ class PresetManager {
             'vertexai_model',
             'assistant_prefill',
             'assistant_impersonation',
-            'use_sysprompt',
             'top_k_openai',
             'request_images',
             'request_image_resolution',
             'request_image_aspect_ratio',
-
-            // Reasoning exclusions
-            'auto_parse',
-            'add_to_prompts',
-            'auto_expand',
-            'show_hidden',
-            'max_additions',
         ];
         /** @type {Record<string, any>} */
         const settings = Object.assign({}, getSettingsByApiId(this.apiId));

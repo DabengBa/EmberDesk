@@ -802,18 +802,6 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
         console.log('skipping WIAN');
     }
 
-    // Prepare the system prompt for Text Completion APIs
-    if (state.main_api !== 'openai') {
-        if (state.power_user.sysprompt.enabled) {
-            system = system
-                ? substituteParams(system, { original: state.power_user.sysprompt.content ?? '' })
-                : baseChatReplace(state.power_user.sysprompt.content);
-        } else {
-            // Nullify if it's not enabled
-            system = '';
-        }
-    }
-
     // Collect before / after story string injections
     const beforeScenarioAnchor = await getExtensionPrompt(state.extension_prompt_types.BEFORE_PROMPT);
     const afterScenarioAnchor = await getExtensionPrompt(state.extension_prompt_types.IN_PROMPT);

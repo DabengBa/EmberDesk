@@ -17,10 +17,9 @@ describe('retired Advanced Formatting drawer', () => {
 
     test('retired drawer element ids are not rebound by legacy modules', () => {
         const powerUser = readRepoFile('public/scripts/power-user.js');
-        const sysprompt = readRepoFile('public/scripts/sysprompt.js');
         const reasoning = readRepoFile('public/scripts/reasoning.js');
 
-        for (const source of [powerUser, sysprompt, reasoning]) {
+        for (const source of [powerUser, reasoning]) {
             expect(source).not.toContain('#sysprompt_select');
             expect(source).not.toContain('#sysprompt_content');
             expect(source).not.toContain('#reasoning_select');

@@ -1,6 +1,7 @@
 import {
     moment,
 } from '../lib.js';
+import { REASONING_PREFIX, REASONING_SUFFIX, REASONING_SEPARATOR } from './constants.js';
 import { getComposerValue, setComposerValue } from './main-chat-composer-service.js';
 import { chat, closeMessageEditor, main_api, messageFormatting, saveChatConditional, saveChatDebounced, substituteParams, syncMesToSwipe, updateMessageBlock } from '../script.js';
 import { eventSource, event_types } from './events.js';
@@ -9,7 +10,6 @@ import { getCurrentLocale, t, translate } from './i18n.js';
 import { macros, MacroCategory } from './macros/macro-system.js';
 import { chat_completion_sources, getChatCompletionModel, oai_settings } from './openai.js';
 import { Popup } from './popup.js';
-import { power_user } from './power-user.js';
 import { SlashCommand } from './slash-commands/SlashCommand.js';
 import { ARGUMENT_TYPE, SlashCommandArgument, SlashCommandNamedArgument } from './slash-commands/SlashCommandArgument.js';
 import { commonEnumProviders, enumIcons } from './slash-commands/SlashCommandCommonEnumsProvider.js';
@@ -25,13 +25,11 @@ import { copyText, escapeRegex, isFalseBoolean, isTrueBoolean, setDatasetPropert
  * @property {string} separator - Reasoning separator
  */
 
-/**
- * Applies the current show_hidden setting to the chat container attribute.
- * Exported so React-driven settings saves can re-apply the live side effect.
- */
-export function applyReasoningVisibility() {
-    $('#chat').attr('data-show-hidden-reasoning', power_user.reasoning.show_hidden ? 'true' : null);
-}
+const FIXED_REASONING_TEMPLATE = Object.freeze({
+    prefix: REASONING_PREFIX,
+    suffix: REASONING_SUFFIX,
+    separator: REASONING_SEPARATOR,
+});
 
 /**
  * Enum representing the type of the reasoning for a message (where it came from)
@@ -55,19 +53,6 @@ function getMessageFromJquery(element) {
     const messageId = Number(messageBlock.attr('mesid'));
     const message = chat[messageId];
     return { messageId: messageId, message, messageBlock };
-}
-
-/**
- * Toggles the auto-expand state of reasoning blocks.
- * Exported so React-driven settings saves can re-apply the live side effect.
- */
-export function toggleReasoningAutoExpand() {
-    const reasoningBlocks = document.querySelectorAll('details.mes_reasoning_details');
-    reasoningBlocks.forEach((block) => {
-        if (block instanceof HTMLDetailsElement) {
-            block.open = power_user.reasoning.auto_expand;
-        }
-    });
 }
 
 /**
@@ -315,10 +300,6 @@ export class ReasoningHandler {
         }
 
         this.updateDom(messageId);
-
-        if (power_user.reasoning.auto_expand && this.state !== ReasoningState.Hidden) {
-            this.messageReasoningDetailsDom.open = true;
-        }
     }
 
     /**
@@ -410,11 +391,6 @@ export class ReasoningHandler {
      * @returns {boolean} Whether the message has changed after reasoning parsing
      */
     #autoParseReasoningFromMessage(messageId, mesChanged, promptReasoning) {
-        if (!power_user.reasoning.auto_parse)
-            return;
-        if (!power_user.reasoning.prefix || !power_user.reasoning.suffix)
-            return mesChanged;
-
         /** @type {ChatMessage} */
         const message = chat[messageId];
         if (!message) return mesChanged;
@@ -429,7 +405,7 @@ export class ReasoningHandler {
 
         if (this.state === ReasoningState.None || this.#isHiddenReasoningModel) {
             // If streamed message starts with the opening, cut it out and put all inside reasoning
-            if (parseTarget.startsWith(power_user.reasoning.prefix) && parseTarget.length > power_user.reasoning.prefix.length) {
+            if (parseTarget.startsWith(REASONING_PREFIX) && parseTarget.length > REASONING_PREFIX.length) {
                 this.#isParsingReasoning = true;
 
                 // Manually set starting state here, as we might already have received the ending suffix
@@ -443,13 +419,13 @@ export class ReasoningHandler {
             return mesChanged;
 
         // If we are in manual parsing mode, all currently streaming mes tokens will go to the reasoning block
-        this.reasoning = parseTarget.slice(power_user.reasoning.prefix.length);
+        this.reasoning = parseTarget.slice(REASONING_PREFIX.length);
         message.mes = '';
 
         // If the reasoning contains the ending suffix, we cut that off and continue as message streaming
-        if (this.reasoning.includes(power_user.reasoning.suffix)) {
-            this.reasoning = this.reasoning.slice(0, this.reasoning.indexOf(power_user.reasoning.suffix));
-            this.#parsingReasoningMesStartIndex = parseTarget.indexOf(power_user.reasoning.suffix) + power_user.reasoning.suffix.length;
+        if (this.reasoning.includes(REASONING_SUFFIX)) {
+            this.reasoning = this.reasoning.slice(0, this.reasoning.indexOf(REASONING_SUFFIX));
+            this.#parsingReasoningMesStartIndex = parseTarget.indexOf(REASONING_SUFFIX) + REASONING_SUFFIX.length;
             message.mes = trimSpaces(parseTarget.slice(this.#parsingReasoningMesStartIndex));
             this.#isParsingReasoning = false;
         }
@@ -634,8 +610,6 @@ export class PromptReasoning {
         PromptReasoning.#LATEST = this;
 
         /** @type {number} */
-        this.counter = 0;
-        /** @type {number} */
         this.prefixLength = -1;
         /** @type {string} */
         this.prefixReasoning = '';
@@ -649,18 +623,17 @@ export class PromptReasoning {
 
     /**
      * Checks if the limit of reasoning additions has been reached.
+     * Stored reasoning is never re-injected into prompts, so only the
+     * in-progress prefix message is ever processed.
      * @returns {boolean} True if the limit of reasoning additions has been reached, false otherwise.
      */
     isLimitReached() {
-        if (!power_user.reasoning.add_to_prompts) {
-            return true;
-        }
-
-        return this.counter >= power_user.reasoning.max_additions;
+        return true;
     }
 
     /**
-     * Add reasoning to a message according to the power user settings.
+     * Add reasoning to a message. Only the in-progress prefix message gets its
+     * reasoning formatted back in; history re-injection was retired.
      * @param {string} content Message content
      * @param {string} reasoning Message reasoning
      * @param {boolean} isPrefix Whether this is the last message prefix
@@ -668,8 +641,7 @@ export class PromptReasoning {
      * @returns {string} Message content with reasoning
      */
     addToMessage(content, reasoning, isPrefix, duration) {
-        // Disabled or reached limit of additions
-        if (!isPrefix && (!power_user.reasoning.add_to_prompts || this.counter >= power_user.reasoning.max_additions)) {
+        if (!isPrefix) {
             return content;
         }
 
@@ -678,36 +650,24 @@ export class PromptReasoning {
             return content;
         }
 
-        // Increment the counter
-        this.counter++;
-
-        // Substitute macros in variable parts
-        const prefix = substituteParams(power_user.reasoning.prefix || '');
-        const separator = substituteParams(power_user.reasoning.separator || '');
-        const suffix = substituteParams(power_user.reasoning.suffix || '');
-
         // Combine parts with reasoning only
-        if (isPrefix && !content) {
-            const formattedReasoning = `${prefix}${reasoning}`;
-            if (isPrefix) {
-                this.prefixReasoning = reasoning;
-                this.prefixReasoningFormatted = formattedReasoning;
-                this.prefixLength = formattedReasoning.length;
-                this.prefixDuration = duration;
-                this.prefixIncomplete = true;
-            }
-            return formattedReasoning;
-        }
-
-        // Combine parts with reasoning and content
-        const formattedReasoning = `${prefix}${reasoning}${suffix}${separator}`;
-        if (isPrefix) {
+        if (!content) {
+            const formattedReasoning = `${REASONING_PREFIX}${reasoning}`;
             this.prefixReasoning = reasoning;
             this.prefixReasoningFormatted = formattedReasoning;
             this.prefixLength = formattedReasoning.length;
             this.prefixDuration = duration;
-            this.prefixIncomplete = false;
+            this.prefixIncomplete = true;
+            return formattedReasoning;
         }
+
+        // Combine parts with reasoning and content
+        const formattedReasoning = `${REASONING_PREFIX}${reasoning}${REASONING_SUFFIX}${REASONING_SEPARATOR}`;
+        this.prefixReasoning = reasoning;
+        this.prefixReasoningFormatted = formattedReasoning;
+        this.prefixLength = formattedReasoning.length;
+        this.prefixDuration = duration;
+        this.prefixIncomplete = false;
         return `${formattedReasoning}${content}`;
     }
 
@@ -722,11 +682,6 @@ export class PromptReasoning {
         }
         return content;
     }
-}
-
-function loadReasoningSettings() {
-    toggleReasoningAutoExpand();
-    applyReasoningVisibility();
 }
 
 function registerReasoningSlashCommands() {
@@ -844,10 +799,6 @@ function registerReasoningSlashCommands() {
                 return '';
             }
 
-            if (!power_user.reasoning.prefix || !power_user.reasoning.suffix) {
-                toastr.warning(t`Both prefix and suffix must be set in the Reasoning Formatting settings.`, t`Reasoning Parse`);
-                return value;
-            }
             if (typeof args.return !== 'string' || !['reasoning', 'content'].includes(args.return)) {
                 toastr.warning(t`Invalid return type '${args.return}', defaulting to 'reasoning'.`, t`Reasoning Parse`);
             }
@@ -892,11 +843,6 @@ function registerReasoningSlashCommands() {
         callback: (args, value) => {
             const reasoning = String(args?.reasoning ?? '');
             const content = String(value ?? '');
-
-            if (!power_user.reasoning.prefix || !power_user.reasoning.suffix) {
-                toastr.warning(t`Both prefix and suffix must be set in the Reasoning Formatting settings.`, t`Reasoning Format`);
-                return '';
-            }
 
             if (!reasoning) {
                 toastr.warning(t`Reasoning argument is required.`, t`Reasoning Format`);
@@ -987,17 +933,17 @@ function registerReasoningMacros() {
     macros.register('reasoningPrefix', {
         category: MacroCategory.PROMPTS,
         description: t`The prefix string used before reasoning blocks`,
-        handler: () => power_user.reasoning.prefix,
+        handler: () => REASONING_PREFIX,
     });
     macros.register('reasoningSuffix', {
         category: MacroCategory.PROMPTS,
         description: t`The suffix string used after reasoning blocks`,
-        handler: () => power_user.reasoning.suffix,
+        handler: () => REASONING_SUFFIX,
     });
     macros.register('reasoningSeparator', {
         category: MacroCategory.PROMPTS,
         description: t`The separator between thinking content and response`,
-        handler: () => power_user.reasoning.separator,
+        handler: () => REASONING_SEPARATOR,
     });
 }
 
@@ -1232,10 +1178,6 @@ function setReasoningEventHandlers() {
  * @returns {string} Output string
  */
 export function removeReasoningFromString(str) {
-    if (!power_user.reasoning.auto_parse) {
-        return str;
-    }
-
     const parsedReasoning = parseReasoningFromString(str);
     return parsedReasoning?.content ?? str;
 }
@@ -1248,11 +1190,11 @@ export function removeReasoningFromString(str) {
  * @param {string} str Content of the message
  * @param {Object} options Optional arguments
  * @param {boolean} [options.strict=true] Whether the reasoning block **has** to be at the beginning of the provided string (excluding whitespaces), or can be anywhere in it
- * @param {ReasoningTemplate} template Optional reasoning template to use instead of power_user.reasoning
+ * @param {ReasoningTemplate} template Optional reasoning template to use instead of the fixed markers
  * @returns {ParsedReasoning|null} Parsed reasoning block and message content
  */
 export function parseReasoningFromString(str, { strict = true } = {}, template = null) {
-    template = template ?? power_user.reasoning;  // if no template given, use the active reasoning settings
+    template = template ?? FIXED_REASONING_TEMPLATE;  // if no template given, use the fixed reasoning markers
 
     // Both prefix and suffix must be defined
     if (!template.prefix || !template.suffix) {
@@ -1290,11 +1232,11 @@ export function parseReasoningFromString(str, { strict = true } = {}, template =
  * @property {string} contentOnly The content without reasoning
  * @param {string} reasoning The reasoning/thinking text
  * @param {string} content The main content/response text
- * @param {ReasoningTemplate} [template=null] Optional template to use. Defaults to power_user.reasoning
+ * @param {ReasoningTemplate} [template=null] Optional template to use. Defaults to the fixed markers
  * @returns {FormattedReasoning} Object containing both formatted (reasoning + content) and contentOnly
  */
 export function formatReasoning(reasoning, content, template = null) {
-    template = template ?? power_user.reasoning;
+    template = template ?? FIXED_REASONING_TEMPLATE;
 
     // If no reasoning provided, return content only
     if (!reasoning || !template.prefix || !template.suffix) {
@@ -1324,10 +1266,6 @@ export function formatReasoning(reasoning, content, template = null) {
  * @property {string?} reasoning_signature Encrypted signature of the reasoning text
  */
 export function parseReasoningInSwipes(swipes, swipeInfoArray, duration) {
-    if (!power_user.reasoning.auto_parse) {
-        return;
-    }
-
     // Something ain't right, don't parse
     if (!Array.isArray(swipes) || !Array.isArray(swipeInfoArray) || swipes.length !== swipeInfoArray.length) {
         return;
@@ -1346,10 +1284,6 @@ export function parseReasoningInSwipes(swipes, swipeInfoArray, duration) {
 
 function registerReasoningAppEvents() {
     const eventHandler = (/** @type {string} */ type, /** @type {number} */ idx) => {
-        if (!power_user.reasoning.auto_parse) {
-            return;
-        }
-
         console.debug('[Reasoning] Auto-parsing reasoning block for message', idx);
         const prefix = type === event_types.MESSAGE_RECEIVED ? PromptReasoning.getLatestPrefix() : '';
         const message = chat[idx];
@@ -1416,10 +1350,6 @@ function registerReasoningAppEvents() {
     }
 
     eventSource.makeFirst(event_types.IMPERSONATE_READY, async () => {
-        if (!power_user.reasoning.auto_parse) {
-            return;
-        }
-
         console.debug('[Reasoning] Auto-parsing reasoning block for impersonation');
 
         const currentValue = getComposerValue();
@@ -1436,7 +1366,6 @@ function registerReasoningAppEvents() {
  * Initializes reasoning settings and event handlers.
  */
 export function initReasoning() {
-    loadReasoningSettings();
     setReasoningEventHandlers();
     registerReasoningSlashCommands();
     registerReasoningMacros();

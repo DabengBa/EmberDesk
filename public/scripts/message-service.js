@@ -1,6 +1,6 @@
 import { buildChatMessageRenderDescriptor, buildChatMessageRowPopulation } from './chat-message-render-descriptor.js';
 import { buildChatMessageRichBodyRender } from './chat-message-render-service.js';
-import { MEDIA_DISPLAY, MEDIA_TYPE, SCROLL_BEHAVIOR, debounce_timeout } from './constants.js';
+import { MEDIA_DISPLAY, MEDIA_TYPE, REASONING_PREFIX, REASONING_SUFFIX, SCROLL_BEHAVIOR, debounce_timeout } from './constants.js';
 import { eventSource, event_types } from './events.js';
 import { isFrontendContent } from './frontend-frame.js';
 import { requireMessageShellContext } from './message-shell-context.js';
@@ -123,10 +123,7 @@ export function messageFormatting(mes, ch_name, isSystem, isUser, messageId, san
 
 
     // Make sure reasoning strings are always shown, even if they include "<" or ">"
-    [state.power_user.reasoning.prefix, state.power_user.reasoning.suffix].forEach((reasoningString) => {
-        if (!reasoningString || !reasoningString.trim().length) {
-            return;
-        }
+    [REASONING_PREFIX, REASONING_SUFFIX].forEach((reasoningString) => {
         // Only replace the first occurrence of the reasoning string
         if (mes.includes(reasoningString)) {
             mes = mes.replace(reasoningString, escapeHtml(reasoningString));

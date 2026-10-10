@@ -45,17 +45,6 @@ const settingsSchema = z.object({
         customStoppingStrings: z.string(),
         tokenizer: z.number().int().min(0, 'Tokenizer 值必须为非负整数'),
         smoothStreaming: z.boolean(),
-        systemPromptContent: z.string(),
-        syspromptEnabled: z.boolean(),
-        syspromptPostHistory: z.string(),
-        reasoningAutoParse: z.boolean(),
-        reasoningAddToPrompts: z.boolean(),
-        reasoningAutoExpand: z.boolean(),
-        reasoningShowHidden: z.boolean(),
-        reasoningPrefix: z.string(),
-        reasoningSuffix: z.string(),
-        reasoningSeparator: z.string(),
-        reasoningMaxAdditions: z.number().int().min(0),
         stscriptMatching: z.string(),
         stscriptAutocompleteState: z.number().int().min(0).max(2),
         alwaysForceName2: z.boolean(),
@@ -785,54 +774,9 @@ export function SettingsSurface({
                             {activeTab === 'advanced' ? (
                             <div>
                                 <SettingsSection
-                                    title="提示词、模板与高级控件"
-                                    description="模板、stop strings、tokenizer 和 STscript 设置。"
+                                    title="提示词与高级控件"
+                                    description="Stop strings、tokenizer 和 STscript 设置。"
                                 >
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.systemPromptContent"
-                                        label="系统提示内容"
-                                        description="默认 system prompt 正文。"
-                                        variant="textarea"
-                                        placeholder="写一个 {{char}} 的回复示例…"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.reasoningPrefix"
-                                        label="推理前缀"
-                                        description="reasoning block 前缀。"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.reasoningSuffix"
-                                        label="推理后缀"
-                                        description="reasoning block 后缀。"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.reasoningSeparator"
-                                        label="推理分隔符"
-                                        description="reasoning 与正文之间的分隔。"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.reasoningMaxAdditions"
-                                        label="推理最大附加数"
-                                        description="单次 prompt 中最多附加多少 reasoning blocks。"
-                                        variant="number"
-                                        min={0}
-                                        step={1}
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
                                     <SettingField
                                         form={settingsForm}
                                         name="advanced.customStoppingStrings"
@@ -871,60 +815,6 @@ export function SettingsSurface({
                                         min={0}
                                         max={2}
                                         step={1}
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.syspromptEnabled"
-                                        label="启用系统提示"
-                                        description="启用 system prompt。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.syspromptPostHistory"
-                                        label="系统提示置于历史后"
-                                        description="system prompt 的 post-history 文本。"
-                                        variant="textarea"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.reasoningAutoParse"
-                                        label="自动解析推理"
-                                        description="自动从回复中解析 reasoning block。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.reasoningAddToPrompts"
-                                        label="推理加入提示词"
-                                        description="把已有 reasoning block 回填进后续 prompt。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.reasoningAutoExpand"
-                                        label="推理自动展开"
-                                        description="自动展开 reasoning block。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.reasoningShowHidden"
-                                        label="显示隐藏推理"
-                                        description="显示隐藏 reasoning 的时长信息。"
-                                        variant="toggle"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
                                     />

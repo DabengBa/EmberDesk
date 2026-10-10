@@ -8,7 +8,7 @@ export const settingsTabDefinitions = [
     {
         id: 'advanced',
         label: '高级',
-        description: '模板、tokenizer、reasoning 和 STscript power-user 设置。',
+        description: 'Stop strings、tokenizer 和 STscript power-user 设置。',
     },
 ];
 
@@ -47,17 +47,6 @@ export const defaultSettingsFormValues = {
         customStoppingStrings: '',
         tokenizer: 99,
         smoothStreaming: false,
-        systemPromptContent: '',
-        syspromptEnabled: true,
-        syspromptPostHistory: '',
-        reasoningAutoParse: false,
-        reasoningAddToPrompts: false,
-        reasoningAutoExpand: false,
-        reasoningShowHidden: false,
-        reasoningPrefix: '<think>',
-        reasoningSuffix: '</think>',
-        reasoningSeparator: '\n',
-        reasoningMaxAdditions: 1,
         stscriptMatching: 'fuzzy',
         stscriptAutocompleteState: 2,
         alwaysForceName2: false,
@@ -83,17 +72,6 @@ const fieldBindings = [
     { tab: 'advanced', formPath: 'advanced.customStoppingStrings', settingsPath: 'power_user.custom_stopping_strings' },
     { tab: 'advanced', formPath: 'advanced.tokenizer', settingsPath: 'power_user.tokenizer' },
     { tab: 'advanced', formPath: 'advanced.smoothStreaming', settingsPath: 'power_user.smooth_streaming' },
-    { tab: 'advanced', formPath: 'advanced.systemPromptContent', settingsPath: 'power_user.sysprompt.content' },
-    { tab: 'advanced', formPath: 'advanced.syspromptEnabled', settingsPath: 'power_user.sysprompt.enabled' },
-    { tab: 'advanced', formPath: 'advanced.syspromptPostHistory', settingsPath: 'power_user.sysprompt.post_history' },
-    { tab: 'advanced', formPath: 'advanced.reasoningAutoParse', settingsPath: 'power_user.reasoning.auto_parse' },
-    { tab: 'advanced', formPath: 'advanced.reasoningAddToPrompts', settingsPath: 'power_user.reasoning.add_to_prompts' },
-    { tab: 'advanced', formPath: 'advanced.reasoningAutoExpand', settingsPath: 'power_user.reasoning.auto_expand' },
-    { tab: 'advanced', formPath: 'advanced.reasoningShowHidden', settingsPath: 'power_user.reasoning.show_hidden' },
-    { tab: 'advanced', formPath: 'advanced.reasoningPrefix', settingsPath: 'power_user.reasoning.prefix' },
-    { tab: 'advanced', formPath: 'advanced.reasoningSuffix', settingsPath: 'power_user.reasoning.suffix' },
-    { tab: 'advanced', formPath: 'advanced.reasoningSeparator', settingsPath: 'power_user.reasoning.separator' },
-    { tab: 'advanced', formPath: 'advanced.reasoningMaxAdditions', settingsPath: 'power_user.reasoning.max_additions' },
     { tab: 'advanced', formPath: 'advanced.stscriptMatching', settingsPath: 'power_user.stscript.matching' },
     { tab: 'advanced', formPath: 'advanced.stscriptAutocompleteState', settingsPath: 'power_user.stscript.autocomplete.state' },
     { tab: 'advanced', formPath: 'advanced.alwaysForceName2', settingsPath: 'power_user.always_force_name2' },
@@ -382,13 +360,10 @@ export function buildSettingsSavePayload(baseSettings, formValues, { settingsRev
         ]) {
             delete powerUser[key];
         }
-        // Named preset selection is retired; the stored preset name is inert junk.
-        if (powerUser.sysprompt && typeof powerUser.sysprompt === 'object') {
-            delete powerUser.sysprompt.name;
-        }
-        if (powerUser.reasoning && typeof powerUser.reasoning === 'object') {
-            delete powerUser.reasoning.name;
-        }
+        // Global system prompt and configurable reasoning template are retired;
+        // runtime uses fixed markers and card/Prompt Manager prompts.
+        delete powerUser.sysprompt;
+        delete powerUser.reasoning;
         const autocomplete = powerUser.stscript?.autocomplete;
         if (autocomplete && typeof autocomplete === 'object') {
             for (const key of [

@@ -41,7 +41,6 @@ import { AUTOCOMPLETE_STATE } from './autocomplete/AutoComplete.js';
 import { SlashCommandEnumValue, enumTypes } from './slash-commands/SlashCommandEnumValue.js';
 import { commonEnumProviders, enumIcons } from './slash-commands/SlashCommandCommonEnumsProvider.js';
 import { POPUP_TYPE, callGenericPopup, fixToastrForDialogs } from './popup.js';
-import { loadSystemPrompts } from './sysprompt.js';
 import { accountStorage } from './util/AccountStorage.js';
 import { loadWorkspacePanelsModule } from './workspace-panels-react-bridge.js';
 import { DEFAULT_FRONTEND_FRAME_SETTINGS, normalizeFrontendFramesSettings } from './frontend-frame.js';
@@ -126,23 +125,6 @@ export const power_user = {
         story_string_position: extension_prompt_types.IN_PROMPT,
         story_string_role: extension_prompt_roles.SYSTEM,
         story_string_depth: 1,
-    },
-
-    sysprompt: {
-        enabled: true,
-        content: 'Write {{char}}\'s next reply in a fictional chat between {{char}} and {{user}}.',
-        post_history: '',
-    },
-
-    reasoning: {
-        auto_parse: false,
-        add_to_prompts: false,
-        auto_expand: false,
-        show_hidden: false,
-        prefix: '<think>',
-        suffix: '</think>',
-        separator: '\n',
-        max_additions: 1,
     },
 
     chat_truncation: 100,
@@ -391,6 +373,11 @@ export async function loadPowerUserSettings(settings) {
         delete power_user[key];
     }
 
+    // Global system prompt and configurable reasoning template were retired;
+    // runtime uses fixed reasoning markers and card/Prompt Manager prompts.
+    delete power_user.sysprompt;
+    delete power_user.reasoning;
+
     $('#example_messages_behavior').val(getExampleMessagesBehavior());
     $(`#example_messages_behavior option[value="${getExampleMessagesBehavior()}"]`).prop('selected', true);
 
@@ -409,7 +396,6 @@ export async function loadPowerUserSettings(settings) {
     $(`#character_sort_order option[data-order="${power_user.sort_order}"][data-field="${power_user.sort_field}"]`).prop('selected', true);
     switchReducedMotion();
     reloadMarkdownProcessor();
-    await loadSystemPrompts();
     loadCharListState();
     applyToastrPosition();
 }

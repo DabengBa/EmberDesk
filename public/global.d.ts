@@ -12,7 +12,6 @@ declare global {
     // Custom types
     type InstructSettings = typeof power_user.instruct;
     type ContextSettings = typeof power_user.context;
-    type ReasoningSettings = typeof power_user.reasoning;
     type ChatCompletionSettings = typeof oai_settings;
     type WorldInfoSettings = ReturnType<typeof getWorldInfoSettings>;
     type MessageTimestamp = string | number | Date;

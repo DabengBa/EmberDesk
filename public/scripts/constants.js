@@ -182,3 +182,9 @@ export const SWIPE_STATE = {
     SWIPING: 'swiping',
     EDITING: 'editing',
 };
+
+// Reasoning blocks are always parsed with these fixed markers; the
+// configurable template surface was retired.
+export const REASONING_PREFIX = '<think>';
+export const REASONING_SUFFIX = '</think>';
+export const REASONING_SEPARATOR = '\n';

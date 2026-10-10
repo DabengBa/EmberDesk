@@ -28,7 +28,6 @@ export function registerInstructMacros() {
     }
 
     const instEnabled = () => !!power_user.instruct.enabled;
-    const sysEnabled = () => !!power_user.sysprompt.enabled;
 
     // Instruct template macros
     registerSimple(['instructStoryStringPrefix'], () => power_user.instruct.story_string_prefix, instEnabled, 'Instruct story string prefix.');
@@ -53,21 +52,14 @@ export function registerInstructMacros() {
     registerSimple(['instructFirstUserPrefix', 'instructFirstInput'], () => power_user.instruct.first_input_sequence || power_user.instruct.input_sequence, instEnabled, 'Instruct first user / input prefix sequence.');
     registerSimple(['instructLastUserPrefix', 'instructLastInput'], () => power_user.instruct.last_input_sequence || power_user.instruct.input_sequence, instEnabled, 'Instruct last user / input prefix sequence.');
 
-    // System prompt macros
-    registerSimple(['defaultSystemPrompt', 'instructSystem', 'instructSystemPrompt'], () => power_user.sysprompt.content, sysEnabled, 'Default system prompt.');
+    // System prompt macros — the global default was retired; these resolve to
+    // inert stored instruct values or the character card prompt.
+    registerSimple(['defaultSystemPrompt', 'instructSystem', 'instructSystemPrompt'], () => power_user.instruct.system_prompt, instEnabled, 'Default system prompt.');
 
     MacroRegistry.registerMacro('systemPrompt', {
         category: MacroCategory.PROMPTS,
-        description: 'Active system prompt text (optionally overridden by character prompt)',
-        handler: ({ env }) => {
-            const isEnabled = !!power_user.sysprompt.enabled;
-            if (!isEnabled) return '';
-
-            if (env.character.charPrompt) {
-                return env.character.charPrompt;
-            }
-            return power_user.sysprompt.content ?? '';
-        },
+        description: 'Active system prompt text from the character card',
+        handler: ({ env }) => env.character.charPrompt ?? '',
     });
 
     // Context template macros
@@ -164,13 +156,13 @@ export function getInstructMacros(env) {
         // System prompt macros
         {
             key: 'systemPrompt',
-            value: env.charPrompt ? env.charPrompt : power_user.sysprompt.content,
-            enabled: power_user.sysprompt.enabled,
+            value: env.charPrompt ?? '',
+            enabled: true,
         },
         {
             key: 'defaultSystemPrompt|instructSystem|instructSystemPrompt',
-            value: power_user.sysprompt.content,
-            enabled: power_user.sysprompt.enabled,
+            value: power_user.instruct.system_prompt,
+            enabled: power_user.instruct.enabled,
         },
         // Context template macros
         {

@@ -204,7 +204,6 @@ import { INTERACTABLE_CONTROL_CLASS, initKeyboard } from './scripts/keyboard.js'
 import { buildCascadeSectionHtml, showDeleteConfirmWithCascade, showWorldInfoCascadeDialog } from './scripts/world-cascade-dialog.js';
 import { initDynamicStyles } from './scripts/dynamic-styles.js';
 import { AbortReason } from './scripts/util/AbortReason.js';
-import { initSystemPrompts } from './scripts/sysprompt.js';
 import {
     buildMainChatRowLifecycleContract,
     buildMainChatWindowingContract,
@@ -224,7 +223,7 @@ import { applyBrowserFixes } from './scripts/browser-fixes.js';
 import { initSettingsSearch } from './scripts/setting-search.js';
 import { initBulkEdit } from './scripts/bulk-edit.js';
 import { getContext } from './scripts/st-context.js';
-import { applyReasoningVisibility, extractReasoningFromData, extractReasoningSignatureFromData, initReasoning, parseReasoningInSwipes, PromptReasoning, ReasoningHandler, removeReasoningFromString, toggleReasoningAutoExpand, updateReasoningUI } from './scripts/reasoning.js';
+import { extractReasoningFromData, extractReasoningSignatureFromData, initReasoning, parseReasoningInSwipes, PromptReasoning, ReasoningHandler, removeReasoningFromString, updateReasoningUI } from './scripts/reasoning.js';
 import { accountStorage } from './scripts/util/AccountStorage.js';
 import { initDataMaid } from './scripts/data-maid.js';
 
@@ -435,29 +434,17 @@ const reactRuntimePort = createReactRuntimeProvider({
                     // effects (the retired Advanced Formatting drawer used to run
                     // them on input). Diff them here so a React save applies the
                     // same live behavior.
-                    const previousPowerUser = runtimeKey === 'powerUserSettings'
-                        ? {
-                            tokenizer: runtimeSettings.tokenizer,
-                            reasoning_auto_expand: runtimeSettings.reasoning?.auto_expand,
-                            reasoning_show_hidden: runtimeSettings.reasoning?.show_hidden,
-                        }
-                        : null;
+                    const previousTokenizer = runtimeKey === 'powerUserSettings'
+                        ? runtimeSettings.tokenizer
+                        : undefined;
                     Object.assign(runtimeSettings, savedSettings);
                     if (runtimeKey === 'chatCompletionSettings'
                         && previousModel !== undefined
                         && runtimeSettings.openai_model !== previousModel) {
                         void eventSource.emit(event_types.CHATCOMPLETION_MODEL_CHANGED, runtimeSettings.openai_model);
                     }
-                    if (previousPowerUser) {
-                        if (runtimeSettings.tokenizer !== previousPowerUser.tokenizer) {
-                            forceCharacterEditorTokenize();
-                        }
-                        if (runtimeSettings.reasoning?.auto_expand !== previousPowerUser.reasoning_auto_expand) {
-                            toggleReasoningAutoExpand();
-                        }
-                        if (runtimeSettings.reasoning?.show_hidden !== previousPowerUser.reasoning_show_hidden) {
-                            applyReasoningVisibility();
-                        }
+                    if (previousTokenizer !== undefined && runtimeSettings.tokenizer !== previousTokenizer) {
+                        forceCharacterEditorTokenize();
                     }
                 }
             }
@@ -4531,7 +4518,6 @@ async function bootstrapWorkspace() {
         initChatUtilities();
         initDefaultSlashCommands();
         initOpenAI();
-        initSystemPrompts();
     }));
     await measureStartupStage('registerExtensionSlashCommands', () => Promise.resolve().then(() => {
         ToolManager.initToolSlashCommands();

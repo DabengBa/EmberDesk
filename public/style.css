@@ -502,8 +502,8 @@ input[type='checkbox']:focus-visible {
     background-color: color-mix(in srgb, var(--SmartThemeQuoteColor) 33%, var(--SmartThemeBlurTintColor) 66%);
 }
 
-/** If hidden reasoning should not be shown, we hide all blocks that don't have content */
-#chat:not([data-show-hidden-reasoning="true"]):not(:has(.reasoning_edit_textarea)) .mes:has(.mes_reasoning:empty) .mes_reasoning_details {
+/** Reasoning blocks without content are always hidden */
+#chat:not(:has(.reasoning_edit_textarea)) .mes:has(.mes_reasoning:empty) .mes_reasoning_details {
     display: none;
 }
 

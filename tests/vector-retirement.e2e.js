@@ -6,6 +6,7 @@ test.describe('built-in vector retirement', () => {
         await page.locator('#handle').fill(process.env.PLAYWRIGHT_USER ?? 'playwright-e2e');
         await page.getByRole('textbox', { name: '密码' }).fill(process.env.PLAYWRIGHT_PASSWORD ?? 'playwright');
         await page.getByRole('button', { name: '登录' }).click();
+        await page.waitForURL('**/', { timeout: 30000 });
         await page.waitForFunction('document.getElementById("preloader") === null', { timeout: 0 });
     });
 
