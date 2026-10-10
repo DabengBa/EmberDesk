@@ -949,15 +949,6 @@ test.describe('chat message streaming', () => {
         const lastVisibleMessageIdBeforeSeedGeneration = await getLastVisibleMessageId(page);
         await startGeneration(page, 'Create an assistant row for visible continue transport.');
         await waitForGeneration(page);
-        await page.evaluate(async () => {
-            const { power_user } = await import('/scripts/power-user.js');
-            power_user.quick_continue = true;
-            const continueButton = document.getElementById('mes_continue');
-            if (continueButton instanceof HTMLElement) {
-                continueButton.classList.remove('displayNone');
-                continueButton.style.display = '';
-            }
-        });
 
         const continuedMessageId = assistantMessageIdForGeneration(lastVisibleMessageIdBeforeSeedGeneration);
         await installStreamingFetchStub(page, {
@@ -966,8 +957,8 @@ test.describe('chat message streaming', () => {
             keepOpenAfterChunks: true,
         });
 
-        await expect(page.locator('#mes_continue')).toBeVisible();
-        await page.locator('#mes_continue').click();
+        // Quick-continue is retired; continue runs through the options-menu entry.
+        await page.evaluate(() => document.getElementById('option_continue')?.click());
 
         const continuedRow = page.locator(`#chat .mes[mesid="${continuedMessageId}"]`);
         await expectMainChatTransportMarkersRetired(page);

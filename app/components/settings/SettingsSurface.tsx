@@ -23,12 +23,10 @@ import { settingsStyles } from '@/styles/settings-surface.styles';
 import { SettingsTabs } from '@/components/settings/SettingsTabs';
 import type { RuntimePort } from '@/compat/runtime-port';
 import {
-    avatarStyleOptions,
     buildSettingsFormDefaults,
     buildSettingsSavePayload,
     chatDisplayOptions,
     defaultSettingsFormValues,
-    imageOverswipeOptions,
     mediaDisplayOptions,
     parseSettingsPayload,
     providerSecretKeyBySource,
@@ -36,8 +34,6 @@ import {
     settingsCoverage,
     settingsTabDefinitions,
     saveSettingsToRuntime,
-    tagImportSettingOptions,
-    toastPositionOptions,
     tokenizerOptions,
 } from '@/lib/settings-helpers.js';
 
@@ -56,89 +52,19 @@ const settingsSchema = z.object({
         fastUiMode: z.boolean(),
         reducedMotion: z.boolean(),
         noShadows: z.boolean(),
-        toastrPosition: z.string(),
-        avatarStyle: z.coerce.number().int().min(0).max(3),
         chatDisplay: z.coerce.number().int().min(0).max(2),
-        timerEnabled: z.boolean(),
         timestampsEnabled: z.boolean(),
-        timestampModelIcon: z.boolean(),
-        mesIDDisplayEnabled: z.boolean(),
-        hideChatAvatarsEnabled: z.boolean(),
         compactInputArea: z.boolean(),
-        expandMessageActions: z.boolean(),
-
-        enableZenSliders: z.boolean(),
-        enableLabMode: z.boolean(),
-        messageTokenCountEnabled: z.boolean(),
-        showSwipeNumAllMessages: z.boolean(),
-        hotswapEnabled: z.boolean(),
-        zoomedAvatarMagnification: z.boolean(),
-        bogusFolders: z.boolean(),
-        clickToEdit: z.boolean(),
         mediaDisplay: z.string(),
-        blurStrength: z.coerce.number(),
-        shadowWidth: z.coerce.number(),
-        mainTextColor: z.string(),
-        italicsTextColor: z.string(),
-        underlineTextColor: z.string(),
-        quoteTextColor: z.string(),
-        blurTintColor: z.string(),
-        chatTintColor: z.string(),
-        userMesBlurTintColor: z.string(),
-        botMesBlurTintColor: z.string(),
-        shadowColor: z.string(),
-        borderColor: z.string(),
-        playMessageSound: z.boolean(),
-        playSoundUnfocused: z.boolean(),
-        relaxedApiUrls: z.boolean(),
-        worldImportDialog: z.boolean(),
-        enableAutoSelectInput: z.boolean(),
-        enableMdHotkeys: z.boolean(),
-        restoreUserInput: z.boolean(),
         sendOnEnter: z.coerce.number(),
-        continueOnSend: z.boolean(),
-        quickContinue: z.boolean(),
-        quickImpersonate: z.boolean(),
-        gestures: z.boolean(),
-        autoLoadChat: z.boolean(),
-        autoScrollChatToBottom: z.boolean(),
-        autoSaveMsgEdits: z.boolean(),
-        confirmMessageDelete: z.boolean(),
         autoFixGeneratedMarkdown: z.boolean(),
         forbidExternalMedia: z.boolean(),
-        allowName1Display: z.boolean(),
-        allowName2Display: z.boolean(),
-        encodeTags: z.boolean(),
-        consoleLogPrompts: z.boolean(),
-        pinStyles: z.boolean(),
-        fuzzySearch: z.boolean(),
-        preferCharacterPrompt: z.boolean(),
-        preferCharacterJailbreak: z.boolean(),
-        neverResizeAvatars: z.boolean(),
-        showCardAvatarUrls: z.boolean(),
-        spoilerFreeMode: z.boolean(),
-        imageOverswipe: z.string(),
-        auxField: z.string(),
-        tagImportSetting: z.coerce.number(),
+        messageTokenCountEnabled: z.boolean(),
     }),
     advanced: z.object({
-        autoSwipe: z.boolean(),
-        autoSwipeMinimumLength: z.number().int().min(0),
-        autoSwipeBlacklist: z.string(),
-        autoSwipeBlacklistThreshold: z.number().int().min(0),
         customStoppingStrings: z.string(),
         tokenizer: z.number().int().min(0, 'Tokenizer 值必须为非负整数'),
-        customStoppingStringsMacro: z.boolean(),
-        experimentalMacroEngine: z.boolean(),
-        autoContinueEnabled: z.boolean(),
-        autoContinueAllowChatCompletions: z.boolean(),
-        autoContinueTargetLength: z.number().int().min(0),
-        chatTruncation: z.coerce.number().int().min(0),
-        streamingFps: z.number().int().min(1),
         smoothStreaming: z.boolean(),
-        smoothStreamingNoThink: z.boolean(),
-        smoothStreamingSpeed: z.number().int().min(0),
-        streamFadeIn: z.boolean(),
         systemPromptName: z.string(),
         systemPromptContent: z.string(),
         syspromptEnabled: z.boolean(),
@@ -154,23 +80,9 @@ const settingsSchema = z.object({
         reasoningMaxAdditions: z.number().int().min(0),
         stscriptMatching: z.string(),
         stscriptAutocompleteState: z.number().int().min(0).max(2),
-        stscriptAutocompleteAutoHide: z.boolean(),
-        stscriptAutocompleteStyle: z.string(),
-        stscriptAutocompleteSelect: z.number().int().min(0),
-        stscriptAutocompleteShowInAllMacroFields: z.boolean(),
-        stscriptAutocompleteFontScale: z.number().min(0.5).max(2),
-        stscriptAutocompleteWidthLeft: z.number().int().min(0).max(2),
-        stscriptAutocompleteWidthRight: z.number().int().min(0).max(2),
-        stscriptParserFlagStrictEscaping: z.boolean(),
-        stscriptParserFlagReplaceGetvar: z.boolean(),
-        collapseNewlines: z.boolean(),
         alwaysForceName2: z.boolean(),
-        trimSentences: z.boolean(),
         trimSpaces: z.boolean(),
-        singleLine: z.boolean(),
-        markdownEscapeStrings: z.string(),
         userPromptBias: z.string(),
-        showUserPromptBias: z.boolean(),
         tokenPadding: z.coerce.number(),
     }),
 });
@@ -946,7 +858,7 @@ export function SettingsSurface({
                             <div>
                                 <SettingsSection
                                     title="界面偏好"
-                                    description="主题、布局、通知位置以及聊天显示密度。"
+                                    description="主题、布局以及聊天显示密度。"
                                 >
                                     <SettingField
                                         form={settingsForm}
@@ -969,27 +881,6 @@ export function SettingsSurface({
                                         min={0.5}
                                         max={2}
                                         step={0.05}
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="userInterface.toastrPosition"
-                                        label="通知位置"
-                                        description="toast 通知的默认出现位置。"
-                                        variant="select"
-                                        options={toastPositionOptions}
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="userInterface.avatarStyle"
-                                        label="头像形状"
-                                        description="角色头像的展示样式。"
-                                        variant="select"
-                                        selectValueType="number"
-                                        options={avatarStyleOptions}
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
                                     />
@@ -1043,45 +934,9 @@ export function SettingsSurface({
                                     />
                                     <SettingField
                                         form={settingsForm}
-                                        name="userInterface.timerEnabled"
-                                        label="消息计时"
-                                        description="显示消息计时器。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
                                         name="userInterface.timestampsEnabled"
                                         label="时间戳"
                                         description="显示消息时间戳。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="userInterface.timestampModelIcon"
-                                        label="模型图标"
-                                        description="在时间戳旁显示模型图标。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="userInterface.mesIDDisplayEnabled"
-                                        label="消息序号"
-                                        description="显示消息编号。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="userInterface.hideChatAvatarsEnabled"
-                                        label="隐藏聊天头像"
-                                        description="隐藏聊天区头像。"
                                         variant="toggle"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
@@ -1097,81 +952,9 @@ export function SettingsSurface({
                                     />
                                     <SettingField
                                         form={settingsForm}
-                                        name="userInterface.expandMessageActions"
-                                        label="展开消息操作"
-                                        description="绑定到设置项 userInterface.expandMessageActions。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="userInterface.enableZenSliders"
-                                        label="启用 Zen 滑条"
-                                        description="绑定到设置项 userInterface.enableZenSliders。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="userInterface.enableLabMode"
-                                        label="启用实验模式"
-                                        description="绑定到设置项 userInterface.enableLabMode。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
                                         name="userInterface.messageTokenCountEnabled"
                                         label="显示消息 Token 数"
                                         description="绑定到设置项 userInterface.messageTokenCountEnabled。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="userInterface.showSwipeNumAllMessages"
-                                        label="所有消息显示 Swipe 序号"
-                                        description="绑定到设置项 userInterface.showSwipeNumAllMessages。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="userInterface.hotswapEnabled"
-                                        label="启用热切换"
-                                        description="绑定到设置项 userInterface.hotswapEnabled。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="userInterface.zoomedAvatarMagnification"
-                                        label="头像放大倍率"
-                                        description="绑定到设置项 userInterface.zoomedAvatarMagnification。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="userInterface.bogusFolders"
-                                        label="伪文件夹"
-                                        description="绑定到设置项 userInterface.bogusFolders。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="userInterface.clickToEdit"
-                                        label="点击编辑"
-                                        description="绑定到设置项 userInterface.clickToEdit。"
                                         variant="toggle"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
@@ -1188,245 +971,12 @@ export function SettingsSurface({
                                     />
                                     <SettingField
                                         form={settingsForm}
-                                        name="userInterface.blurStrength"
-                                        label="模糊强度"
-                                        description="绑定到设置项 userInterface.blurStrength。"
-                                        variant="number"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="userInterface.shadowWidth"
-                                        label="阴影宽度"
-                                        description="绑定到设置项 userInterface.shadowWidth。"
-                                        variant="number"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="userInterface.mainTextColor"
-                                        label="正文颜色"
-                                        description="绑定到设置项 userInterface.mainTextColor。"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="userInterface.italicsTextColor"
-                                        label="斜体颜色"
-                                        description="绑定到设置项 userInterface.italicsTextColor。"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="userInterface.underlineTextColor"
-                                        label="下划线颜色"
-                                        description="绑定到设置项 userInterface.underlineTextColor。"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="userInterface.quoteTextColor"
-                                        label="引用颜色"
-                                        description="绑定到设置项 userInterface.quoteTextColor。"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="userInterface.blurTintColor"
-                                        label="模糊蒙层颜色"
-                                        description="绑定到设置项 userInterface.blurTintColor。"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="userInterface.chatTintColor"
-                                        label="聊天蒙层颜色"
-                                        description="绑定到设置项 userInterface.chatTintColor。"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="userInterface.userMesBlurTintColor"
-                                        label="用户消息蒙层颜色"
-                                        description="绑定到设置项 userInterface.userMesBlurTintColor。"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="userInterface.botMesBlurTintColor"
-                                        label="角色消息蒙层颜色"
-                                        description="绑定到设置项 userInterface.botMesBlurTintColor。"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="userInterface.shadowColor"
-                                        label="阴影颜色"
-                                        description="绑定到设置项 userInterface.shadowColor。"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="userInterface.borderColor"
-                                        label="边框颜色"
-                                        description="绑定到设置项 userInterface.borderColor。"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="userInterface.playMessageSound"
-                                        label="播放消息音效"
-                                        description="绑定到设置项 userInterface.playMessageSound。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="userInterface.playSoundUnfocused"
-                                        label="后台播放音效"
-                                        description="绑定到设置项 userInterface.playSoundUnfocused。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="userInterface.relaxedApiUrls"
-                                        label="宽松 API 地址"
-                                        description="绑定到设置项 userInterface.relaxedApiUrls。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="userInterface.worldImportDialog"
-                                        label="世界书导入对话框"
-                                        description="绑定到设置项 userInterface.worldImportDialog。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="userInterface.enableAutoSelectInput"
-                                        label="自动选中输入"
-                                        description="绑定到设置项 userInterface.enableAutoSelectInput。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="userInterface.enableMdHotkeys"
-                                        label="启用 Markdown 快捷键"
-                                        description="绑定到设置项 userInterface.enableMdHotkeys。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="userInterface.restoreUserInput"
-                                        label="恢复未发送输入"
-                                        description="绑定到设置项 userInterface.restoreUserInput。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
                                         name="userInterface.sendOnEnter"
                                         label="回车发送"
                                         description="绑定到设置项 userInterface.sendOnEnter。"
                                         variant="select"
                                         selectValueType="number"
                                         options={sendOnEnterOptions}
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="userInterface.continueOnSend"
-                                        label="发送后继续"
-                                        description="绑定到设置项 userInterface.continueOnSend。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="userInterface.quickContinue"
-                                        label="快捷续写"
-                                        description="绑定到设置项 userInterface.quickContinue。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="userInterface.quickImpersonate"
-                                        label="快捷扮演"
-                                        description="绑定到设置项 userInterface.quickImpersonate。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="userInterface.gestures"
-                                        label="手势操作"
-                                        description="绑定到设置项 userInterface.gestures。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="userInterface.autoLoadChat"
-                                        label="自动加载聊天"
-                                        description="绑定到设置项 userInterface.autoLoadChat。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="userInterface.autoScrollChatToBottom"
-                                        label="自动滚动到底部"
-                                        description="绑定到设置项 userInterface.autoScrollChatToBottom。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="userInterface.autoSaveMsgEdits"
-                                        label="自动保存消息编辑"
-                                        description="绑定到设置项 userInterface.autoSaveMsgEdits。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="userInterface.confirmMessageDelete"
-                                        label="删除消息前确认"
-                                        description="绑定到设置项 userInterface.confirmMessageDelete。"
-                                        variant="toggle"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
                                     />
@@ -1448,134 +998,6 @@ export function SettingsSurface({
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
                                     />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="userInterface.allowName1Display"
-                                        label="允许显示 {{user}} 名"
-                                        description="绑定到设置项 userInterface.allowName1Display。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="userInterface.allowName2Display"
-                                        label="允许显示 {{char}} 名"
-                                        description="绑定到设置项 userInterface.allowName2Display。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="userInterface.encodeTags"
-                                        label="标签编码"
-                                        description="绑定到设置项 userInterface.encodeTags。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="userInterface.consoleLogPrompts"
-                                        label="控制台输出提示词"
-                                        description="绑定到设置项 userInterface.consoleLogPrompts。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="userInterface.pinStyles"
-                                        label="固定样式"
-                                        description="绑定到设置项 userInterface.pinStyles。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="userInterface.fuzzySearch"
-                                        label="模糊搜索"
-                                        description="绑定到设置项 userInterface.fuzzySearch。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="userInterface.preferCharacterPrompt"
-                                        label="优先角色系统提示"
-                                        description="绑定到设置项 userInterface.preferCharacterPrompt。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="userInterface.preferCharacterJailbreak"
-                                        label="优先角色后注指令"
-                                        description="绑定到设置项 userInterface.preferCharacterJailbreak。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="userInterface.neverResizeAvatars"
-                                        label="不压缩头像"
-                                        description="绑定到设置项 userInterface.neverResizeAvatars。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="userInterface.showCardAvatarUrls"
-                                        label="显示卡面头像地址"
-                                        description="绑定到设置项 userInterface.showCardAvatarUrls。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="userInterface.spoilerFreeMode"
-                                        label="防剧透模式"
-                                        description="绑定到设置项 userInterface.spoilerFreeMode。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="userInterface.imageOverswipe"
-                                        label="图片滑动切换"
-                                        description="绑定到设置项 userInterface.imageOverswipe。"
-                                        variant="select"
-                                        options={imageOverswipeOptions}
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="userInterface.auxField"
-                                        label="辅助字段"
-                                        description="绑定到设置项 userInterface.auxField。"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="userInterface.tagImportSetting"
-                                        label="标签导入方式"
-                                        description="绑定到设置项 userInterface.tagImportSetting。"
-                                        variant="select"
-                                        selectValueType="number"
-                                        options={tagImportSettingOptions}
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
 </SettingsSection>
                             </div>
                             ) : null}
@@ -1584,7 +1006,7 @@ export function SettingsSurface({
                             <div>
                                 <SettingsSection
                                     title="提示词、模板与高级控件"
-                                    description="模板、stop strings、tokenizer、auto-swipe、auto-continue 和 STscript 设置。"
+                                    description="模板、stop strings、tokenizer 和 STscript 设置。"
                                 >
                                     <FormattingPresetRow
                                         apiId="sysprompt"
@@ -1699,82 +1121,6 @@ export function SettingsSurface({
                                     />
                                     <SettingField
                                         form={settingsForm}
-                                        name="advanced.autoSwipeMinimumLength"
-                                        label="自动 Swipe 最小长度"
-                                        description="短于该长度的回复会触发 auto-swipe。"
-                                        variant="number"
-                                        min={0}
-                                        step={1}
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.autoSwipeBlacklist"
-                                        label="自动 Swipe 黑名单"
-                                        description="逗号分隔的黑名单词条。"
-                                        variant="textarea"
-                                        placeholder="如 bad, retry"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.autoSwipeBlacklistThreshold"
-                                        label="自动 Swipe 阈值"
-                                        description="至少命中多少次黑名单才触发 auto-swipe。"
-                                        variant="number"
-                                        min={0}
-                                        step={1}
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.autoContinueTargetLength"
-                                        label="自动续写目标长度"
-                                        description="auto-continue 目标长度。"
-                                        variant="number"
-                                        min={0}
-                                        step={1}
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.chatTruncation"
-                                        label="每次加载消息数"
-                                        description="默认加载的消息数量。"
-                                        variant="number"
-                                        min={0}
-                                        step={1}
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.streamingFps"
-                                        label="流式刷新率"
-                                        description="流式更新的帧率。"
-                                        variant="number"
-                                        min={1}
-                                        step={1}
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.smoothStreamingSpeed"
-                                        label="平滑流式速度"
-                                        description="smooth streaming 的速度值。"
-                                        variant="number"
-                                        min={0}
-                                        step={1}
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
                                         name="advanced.stscriptMatching"
                                         label="STscript 匹配"
                                         description="STscript autocomplete 的匹配模式。"
@@ -1790,106 +1136,6 @@ export function SettingsSurface({
                                         min={0}
                                         max={2}
                                         step={1}
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.stscriptAutocompleteStyle"
-                                        label="STscript 补全样式"
-                                        description="autocomplete 面板样式。"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.stscriptAutocompleteSelect"
-                                        label="STscript 选择键"
-                                        description="用于选择 autocomplete 项的 key mask。"
-                                        variant="number"
-                                        min={0}
-                                        step={1}
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.stscriptAutocompleteFontScale"
-                                        label="STscript 字体缩放"
-                                        description="autocomplete 字号缩放。"
-                                        variant="number"
-                                        min={0.5}
-                                        max={2}
-                                        step={0.01}
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.stscriptAutocompleteWidthLeft"
-                                        label="STscript 左侧宽度"
-                                        description="左侧 autocomplete 宽度档位。"
-                                        variant="number"
-                                        min={0}
-                                        max={2}
-                                        step={1}
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.stscriptAutocompleteWidthRight"
-                                        label="STscript 右侧宽度"
-                                        description="右侧 autocomplete 宽度档位。"
-                                        variant="number"
-                                        min={0}
-                                        max={2}
-                                        step={1}
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.autoSwipe"
-                                        label="自动 Swipe"
-                                        description="启用 auto-swipe。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.customStoppingStringsMacro"
-                                        label="停止符宏"
-                                        description="允许在 stop strings 中展开 macro。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.experimentalMacroEngine"
-                                        label="实验性宏引擎"
-                                        description="使用新的 macro engine。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.autoContinueEnabled"
-                                        label="自动续写"
-                                        description="达到目标长度前自动继续生成。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.autoContinueAllowChatCompletions"
-                                        label="聊天补全允许自动续写"
-                                        description="允许 chat-completion path 使用 auto-continue。"
-                                        variant="toggle"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
                                     />
@@ -1958,81 +1204,9 @@ export function SettingsSurface({
                                     />
                                     <SettingField
                                         form={settingsForm}
-                                        name="advanced.smoothStreamingNoThink"
-                                        label="平滑流式跳过思考段"
-                                        description="在 reasoning block 中绕过 smooth streaming。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.streamFadeIn"
-                                        label="流式淡入"
-                                        description="启用流式文字淡入。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.stscriptAutocompleteAutoHide"
-                                        label="STscript 自动隐藏"
-                                        description="autocomplete 在失焦时自动隐藏。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.stscriptAutocompleteShowInAllMacroFields"
-                                        label="在所有宏字段显示 STscript"
-                                        description="在所有 macro 字段中显示 autocomplete。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.stscriptParserFlagStrictEscaping"
-                                        label="STscript 严格转义"
-                                        description="启用严格 escaping parser flag。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.stscriptParserFlagReplaceGetvar"
-                                        label="STscript 替换 getvar"
-                                        description="启用 replace-getvar parser flag。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.collapseNewlines"
-                                        label="折叠空行"
-                                        description="绑定到设置项 advanced.collapseNewlines。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
                                         name="advanced.alwaysForceName2"
                                         label="强制显示 {{char}} 名"
                                         description="绑定到设置项 advanced.alwaysForceName2。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.trimSentences"
-                                        label="裁剪句子"
-                                        description="绑定到设置项 advanced.trimSentences。"
                                         variant="toggle"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
@@ -2048,36 +1222,10 @@ export function SettingsSurface({
                                     />
                                     <SettingField
                                         form={settingsForm}
-                                        name="advanced.singleLine"
-                                        label="单行模式"
-                                        description="绑定到设置项 advanced.singleLine。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.markdownEscapeStrings"
-                                        label="Markdown 转义字符串"
-                                        description="绑定到设置项 advanced.markdownEscapeStrings。"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
                                         name="advanced.userPromptBias"
                                         label="用户提示偏移"
                                         description="绑定到设置项 advanced.userPromptBias。"
                                         variant="textarea"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="advanced.showUserPromptBias"
-                                        label="显示用户提示偏移"
-                                        description="绑定到设置项 advanced.showUserPromptBias。"
-                                        variant="toggle"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
                                     />

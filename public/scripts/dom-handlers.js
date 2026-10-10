@@ -65,7 +65,6 @@ const isReactMainChatOwner = (...args) => shell().isReactMainChatOwner(...args);
 const isValidUrl = (...args) => shell().isValidUrl(...args);
 const loadEarlierChatMessages = (...args) => shell().loadEarlierChatMessages(...args);
 const messageEdit = (...args) => shell().messageEdit(...args);
-const messageEditAuto = (...args) => shell().messageEditAuto(...args);
 const messageEditCancel = (...args) => shell().messageEditCancel(...args);
 const messageEditDone = (...args) => shell().messageEditDone(...args);
 const messageEditMove = (...args) => shell().messageEditMove(...args);
@@ -153,14 +152,14 @@ export async function bindLegacyShellHandlers() {
     $('#send_textarea').on('focusin focus click', () => {
         S_TAPreviouslyFocused = true;
     });
-    $('#send_but, #option_regenerate, #option_continue, #mes_continue, #mes_impersonate').on('click', () => {
+    $('#send_but, #option_regenerate, #option_continue').on('click', () => {
         if (S_TAPreviouslyFocused) {
             $('#send_textarea').trigger('focus');
         }
     });
     $(document).on('click', event => {
         if ($(':focus').attr('id') !== 'send_textarea') {
-            var validIDs = ['options_button', 'send_but', 'mes_impersonate', 'mes_continue', 'send_textarea', 'option_regenerate', 'option_continue'];
+            var validIDs = ['options_button', 'send_but', 'send_textarea', 'option_regenerate', 'option_continue'];
             if (!validIDs.includes($(event.target).attr('id'))) {
                 S_TAPreviouslyFocused = false;
             }
@@ -199,14 +198,6 @@ export async function bindLegacyShellHandlers() {
     });
 
     initCharacterSearch();
-
-    $('#mes_impersonate').on('click', function () {
-        $('#option_impersonate').trigger('click');
-    });
-
-    $('#mes_continue').on('click', function () {
-        $('#option_continue').trigger('click');
-    });
 
     const userInputGenerateMutex = new state.SimpleMutex(sendTextareaMessage);
     $('#send_but').on('click', async function () {
@@ -961,14 +952,9 @@ export async function bindLegacyShellHandlers() {
         }
     });
 
-    $(document).on('input', '#curEditTextarea', function () {
-        if (state.power_user.auto_save_msg_edits === true) {
-            messageEditAuto($(this));
-        }
-    });
 
     state.mainChatMessageActionsController = createChatMessageActionsController(document, {
-        getExpandMessageActions: () => state.power_user.expand_message_actions,
+        getExpandMessageActions: () => false,
         animationDuration: state.animation_duration,
         animationEasing: state.animation_easing,
         onReactOwnedOutsideClick: () => {
@@ -1038,8 +1024,8 @@ export async function bindLegacyShellHandlers() {
         const message = state.chat[state.this_edit_mes_id];
         const selectedSwipe = message.swipe_id ?? undefined;
         const swipesArray = Array.isArray(message.swipes) ? message.swipes : [];
-        const canDeleteSwipe = state.power_user.confirm_message_delete && !fromSlashCommand && !message.is_user && swipesArray.length > 1 && state.this_edit_mes_id === state.chat.length - 1 && selectedSwipe !== undefined;
-        await deleteMessage(Number(state.this_edit_mes_id), canDeleteSwipe ? selectedSwipe : undefined, state.power_user.confirm_message_delete && fromSlashCommand !== true);
+        const canDeleteSwipe = !fromSlashCommand && !message.is_user && swipesArray.length > 1 && state.this_edit_mes_id === state.chat.length - 1 && selectedSwipe !== undefined;
+        await deleteMessage(Number(state.this_edit_mes_id), canDeleteSwipe ? selectedSwipe : undefined, fromSlashCommand !== true);
     });
 
     $(document).on('click', '.mes_edit_done', async function () {
@@ -1310,10 +1296,6 @@ export async function bindLegacyShellHandlers() {
             }
             $(`.zoomed_avatar[forChar="${charname}"]`).css('display', 'flex');
 
-            if (state.power_user.zoomed_avatar_magnification) {
-                $('.zoomed_avatar_container').izoomify();
-            }
-
             $('.zoomed_avatar, .zoomed_avatar .dragClose').on('click touchend', (e) => {
                 if (e.target.closest('.dragClose')) {
                     $(`.zoomed_avatar[forChar="${charname}"]`).fadeOut(state.animation_duration, () => {
@@ -1346,26 +1328,11 @@ export async function bindLegacyShellHandlers() {
     $(document).on('click', '.open_alternate_greetings', openAlternateGreetings);
     /* $('#set_character_world').on('click', openCharacterWorldPopup); */
 
-    $(document).on('focus', 'input.auto-select, textarea.auto-select', function () {
-        if (!state.power_user.enable_auto_select_input) return;
-        const control = $(this)[0];
-        if (control instanceof HTMLInputElement || control instanceof HTMLTextAreaElement) {
-            control.select();
-            console.debug('Auto-selecting content of input control', control);
-        }
-    });
-
     $(document).on('keydown', function (e) {
         if (e.key === 'Escape' && !e.originalEvent.isComposing) {
             const isEditVisible = $('#curEditTextarea').is(':visible') || $('.reasoning_edit_textarea').length > 0;
-            if (isEditVisible && state.power_user.auto_save_msg_edits === false) {
+            if (isEditVisible) {
                 closeMessageEditor('all');
-                $('#send_textarea').trigger('focus');
-                return;
-            }
-            if (isEditVisible && state.power_user.auto_save_msg_edits === true) {
-                state.chatElement.find(`.mes[mesid="${state.this_edit_mes_id}"] .mes_edit_done`).trigger('click');
-                closeMessageEditor('reasoning');
                 $('#send_textarea').trigger('focus');
                 return;
             }

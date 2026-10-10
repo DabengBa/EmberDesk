@@ -184,7 +184,7 @@ export function RightNavPanel() {
                                         </span>
                                     </div>
                                 </div>
-                                <textarea id="description_textarea" className="mdHotkeys" data-macros data-i18n="[placeholder]Description" placeholder="Description" name="description"></textarea>
+                                <textarea id="description_textarea" data-macros data-i18n="[placeholder]Description" placeholder="Description" name="description"></textarea>
                                 <div className="extension_token_counter">
                                     <span data-i18n="extension_token_counter">Tokens:</span> <span data-token-counter="description_textarea" data-token-permanent="true">counting...</span>
                                 </div>
@@ -200,7 +200,7 @@ export function RightNavPanel() {
                                     </div>
                                     <ContractButton className="menu_button menu_button_icon open_alternate_greetings margin0" label="Alt. Greetings" ariaLabel="Alternate greetings" title="Click to set additional greeting messages" nativeTitle icon={<i className="fa-solid fa-message" aria-hidden="true" />} />
                                 </div>
-                                <textarea id="firstmessage_textarea" className="mdHotkeys" data-macros data-i18n="[placeholder]First message" placeholder="First message" name="first_mes"></textarea>
+                                <textarea id="firstmessage_textarea" data-macros data-i18n="[placeholder]First message" placeholder="First message" name="first_mes"></textarea>
                                 <div className="extension_token_counter">
                                     <span data-i18n="extension_token_counter">Tokens:</span> <span data-token-counter="firstmessage_textarea">counting...</span>
                                 </div>

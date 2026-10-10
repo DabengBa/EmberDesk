@@ -70,7 +70,7 @@ import { getContext, saveMetadataDebounced } from './feature-settings.js';
 import { getRegexedString, regex_placement } from './extensions/regex/engine.js';
 
 import { chat_completion_sources, connectProviderConnection, getOpenAIModelList, oai_settings, promptManager, setOpenAIModel } from './openai.js';
-import { addEphemeralStoppingString, chat_styles, flushEphemeralStoppingStrings, playMessageSound, power_user } from './power-user.js';
+import { addEphemeralStoppingString, chat_styles, flushEphemeralStoppingStrings, power_user } from './power-user.js';
 import { decodeTextTokens, getAvailableTokenizers, getFriendlyTokenizerName, getTextTokens, getTokenCountAsync, selectTokenizer } from './tokenizers.js';
 import { registerVariableCommands, resolveVariable } from './variables.js';
 import { registerActionLoaderSlashCommands } from './action-loader-slashcommands.js';
@@ -3166,17 +3166,6 @@ export function initDefaultSlashCommands() {
     }));
 
     SlashCommandParser.addCommandObject(SlashCommand.fromProps({
-        name: 'beep',
-        aliases: ['ding'],
-        returns: t`an empty string`,
-        callback: async () => {
-            playMessageSound({ force: true });
-            return '';
-        },
-        helpString: t`Plays the message received sound effect.`,
-    }));
-
-    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
         name: 'array-wrap',
         aliases: ['list-wrap'],
         returns: t`unnamed argument value wrapped into an array`,
@@ -4470,18 +4459,14 @@ async function uploadCharacterAvatar(avatarKey, base64Data, { resizePrompt = fal
 
     // Handle resize prompt
     if (resizePrompt) {
-        if (power_user.never_resize_avatars) {
-            toastr.warning(t`Avatar resizing is disabled in settings. The image will be uploaded as-is.`);
-        } else {
-            const dlg = new Popup(t`Set the crop position of the avatar image`, POPUP_TYPE.CROP, '', { cropImage: base64Data });
-            const croppedImage = await dlg.show();
-            if (!croppedImage) {
-                // User cancelled the crop dialog
-                return false;
-            }
-            // The dialog returns the already-cropped image
-            finalImageData = String(croppedImage);
+        const dlg = new Popup(t`Set the crop position of the avatar image`, POPUP_TYPE.CROP, '', { cropImage: base64Data });
+        const croppedImage = await dlg.show();
+        if (!croppedImage) {
+            // User cancelled the crop dialog
+            return false;
         }
+        // The dialog returns the already-cropped image
+        finalImageData = String(croppedImage);
     }
 
     try {

@@ -36,9 +36,12 @@ test.describe('chat message layout', () => {
                         ${localStatusMarkup}
                         <textarea id="send_textarea" aria-label="Send a message"></textarea>
                         <button id="send_but" type="button" aria-label="Send message">Send</button>
+                        <button id="options_button" type="button" aria-label="Options">Options</button>
                         <button id="mes_stop" class="mes_stop" type="button" aria-label="Abort request">Stop</button>
-                        <button id="mes_continue" type="button" aria-label="Continue last message">Continue</button>
                     </form>
+                    <div id="options" style="display: block;">
+                        <button id="option_continue" type="button">Continue</button>
+                    </div>
                 </body>
             </html>
         `);
@@ -79,7 +82,10 @@ test.describe('chat message layout', () => {
 
         const messageActions = page.getByRole('button', { name: 'Message Actions' });
         await expect(messageActions).toBeVisible();
-        await page.locator('body').evaluate(element => element.classList.add('expandMessageActions'));
+        await page.locator('.extraMesButtons').evaluate(element => {
+                element.classList.add('visible');
+                element.style.display = 'flex';
+            });
         await expect(page.getByRole('button', { name: 'Copy' })).toBeVisible();
         await expect(page.getByRole('button', { name: 'Edit' })).toBeVisible();
         await expect(page.getByRole('button', { name: 'Create branch' })).toBeVisible();
@@ -97,14 +103,20 @@ test.describe('chat message layout', () => {
 
             await expect(page.getByRole('textbox', { name: 'Send a message' })).toBeVisible();
             await expect(page.getByRole('button', { name: 'Send message' })).toBeVisible();
-            await expect(page.getByRole('button', { name: 'Continue last message' })).toBeVisible();
+
+            await expect(page.locator('#options_button')).toBeVisible();
+            // Quick-continue is retired; continue runs through the options menu.
+            await expect(page.locator('#option_continue')).toBeVisible();
 
             const messageActions = page.getByRole('button', { name: 'Message Actions' });
             await expect(messageActions).toBeVisible();
             await messageActions.focus();
             await expect(messageActions).toBeFocused();
 
-            await page.locator('body').evaluate(element => element.classList.add('expandMessageActions'));
+            await page.locator('.extraMesButtons').evaluate(element => {
+                element.classList.add('visible');
+                element.style.display = 'flex';
+            });
             await expect(page.getByRole('button', { name: 'Copy' })).toBeVisible();
             await expect(page.getByRole('button', { name: 'Edit' })).toBeVisible();
             await expect(page.getByRole('button', { name: 'Create branch' })).toBeVisible();

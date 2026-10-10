@@ -53,6 +53,7 @@ export {
     removeTagFromMap,
 };
 
+const DEFAULT_TAG_TEXT_COLOR = getComputedStyle(document.documentElement).getPropertyValue('--SmartThemeBodyColor').trim();
 const CHARACTER_FILTER_SELECTOR = '#rm_characters_block .rm_tag_filter';
 const TAG_TEMPLATE = $('#tag_template .tag');
 const FOLDER_TEMPLATE = $('#bogus_folder_template .bogus_folder_select');
@@ -502,13 +503,6 @@ function filterByFav(filterHelper) {
  * @param {FilterHelper} filterHelper Instance of FilterHelper class.
  */
 function filterByFolder(filterHelper) {
-    if (!power_user.bogus_folders) {
-        $('#bogus_folders').prop('checked', true).trigger('input');
-        onViewTagsListClick();
-        flashHighlight($('#tag_view_list .tag_as_folder, #tag_view_list .tag_folder_indicator'));
-        return;
-    }
-
     applyActionableTagFilter.call(this, filterHelper, ACTIONABLE_TAGS.FOLDER, FILTER_TYPES.FOLDER, ACTIONABLE_FILTER_STORAGE_KEYS.FOLDER);
 }
 
@@ -903,8 +897,7 @@ async function handleTagImport(character, { importSetting = null } = {}) {
     const folderTags = getOpenBogusFolders();
 
     // Choose the setting for this dialog. First check override, then saved setting or finally use "ASK".
-    const setting = importSetting ? importSetting :
-        Object.values(tag_import_setting).find(setting => setting === power_user.tag_import_setting) ?? tag_import_setting.ASK;
+    const setting = importSetting ?? tag_import_setting.ASK;
 
     switch (setting) {
         case tag_import_setting.ALL:
@@ -939,13 +932,6 @@ async function showTagImportPopup(character, existingTags, newTags, folderTags) 
         ALL: { result: 3, text: 'Import All' },
         EXISTING: { result: 4, text: 'Import Existing' },
     };
-    const buttonSettingsMap = {
-        [POPUP_RESULT.AFFIRMATIVE]: tag_import_setting.ASK,
-        [importButtons.NONE.result]: tag_import_setting.NONE,
-        [importButtons.ALL.result]: tag_import_setting.ALL,
-        [importButtons.EXISTING.result]: tag_import_setting.ONLY_EXISTING,
-    };
-
     const popupContent = $(await renderTemplateAsync('charTagImport', { charName: character.name }));
 
     // Print tags after popup is shown, so that events can be added
@@ -955,22 +941,9 @@ async function showTagImportPopup(character, existingTags, newTags, folderTags) 
 
     if (folderTags.length === 0) popupContent.find('#folder_tags_block').hide();
 
-    function onCloseRemember(/** @type {Popup} */ popup) {
-        if (popup.result && popup.inputResults.get('import_remember_option')) {
-            const setting = buttonSettingsMap[popup.result];
-            if (!setting) return;
-            power_user.tag_import_setting = setting;
-            $('#tag_import_setting').val(power_user.tag_import_setting);
-            saveSettingsDebounced();
-            console.log('Remembered tag import setting:', Object.entries(tag_import_setting).find(x => x[1] === setting)[0], setting);
-        }
-    }
-
     const result = await callGenericPopup(popupContent, POPUP_TYPE.TEXT, null, {
         wider: true, okButton: 'Import', cancelButton: true,
         customButtons: Object.values(importButtons),
-        customInputs: [{ id: 'import_remember_option', label: 'Remember my choice', tooltip: 'Remember the chosen import option\nIf anything besides \'Cancel\' is selected, this dialog will not show up anymore.\nTo change this, go to the settings and modify "Tag Import Option".\n\nIf the "Import" option is chosen, the global setting will stay on "Ask".' }],
-        onClose: onCloseRemember,
     });
     if (!result) {
         return [];
@@ -1301,7 +1274,7 @@ export function expandCharacterTagFilterList() {
  */
 export function createCharacterTagFilterViewState(filterHelper) {
     const actionTags = Object.values(ACTIONABLE_TAGS);
-    actionTags.find(x => x == ACTIONABLE_TAGS.FOLDER).name = power_user.bogus_folders ? 'Show only folders' : 'Enable \'Tags as Folder\'\n\nAllows characters to be grouped in folders by their assigned tags.\nTags have to be explicitly chosen as folder to show up.\n\nClick here to start';
+    actionTags.find(x => x == ACTIONABLE_TAGS.FOLDER).name = 'Show only folders';
 
     const toChipModel = (tag) => {
         const isActionableFilter = 'filter_state' in tag;
@@ -1353,20 +1326,18 @@ export function createCharacterTagFilterViewState(filterHelper) {
         }
     }
 
-    const drilldownTags = power_user.bogus_folders
-        ? getOpenBogusFolders().map(tag => ({
-            id: String(tag.id),
-            name: String(tag.name ?? ''),
-            title: tag.title ? String(tag.title) : '',
-            icon: '',
-            className: tag.class ? String(tag.class) : '',
-            color: tag.color ?? '',
-            color2: tag.color2 ?? '',
-            actionable: false,
-            removable: true,
-            filterState: null,
-        }))
-        : [];
+    const drilldownTags = getOpenBogusFolders().map(tag => ({
+        id: String(tag.id),
+        name: String(tag.name ?? ''),
+        title: tag.title ? String(tag.title) : '',
+        icon: '',
+        className: tag.class ? String(tag.class) : '',
+        color: tag.color ?? '',
+        color2: tag.color2 ?? '',
+        actionable: false,
+        removable: true,
+        filterState: null,
+    }));
 
     const tagFilterData = filterHelper.getFilterData(FILTER_TYPES.TAG) ?? { selected: [], excluded: [] };
 
@@ -1568,7 +1539,7 @@ function printTagFilters(type = tag_filter_type.character) {
 
     // Print all action tags. (Rework 'Folder' button to some kind of onboarding if no folders are enabled yet)
     let actionTags = Object.values(ACTIONABLE_TAGS);
-    actionTags.find(x => x == ACTIONABLE_TAGS.FOLDER).name = power_user.bogus_folders ? 'Show only folders' : 'Enable \'Tags as Folder\'\n\nAllows characters to be grouped in folders by their assigned tags.\nTags have to be explicitly chosen as folder to show up.\n\nClick here to start';
+    actionTags.find(x => x == ACTIONABLE_TAGS.FOLDER).name = 'Show only folders';
 
     printTagList($(FILTER_SELECTOR), { empty: false, sort: false, tags: actionTags, tagActionSelector: tag => tag.action, tagOptions: { isGeneralList: true } });
 
@@ -1585,7 +1556,7 @@ function printTagFilters(type = tag_filter_type.character) {
     // Print bogus folder navigation
     const bogusDrilldown = $(FILTER_SELECTOR).siblings('.rm_tag_bogus_drilldown');
     bogusDrilldown.empty();
-    if (power_user.bogus_folders && bogusDrilldown.length > 0) {
+    if (bogusDrilldown.length > 0) {
         const navigatedTags = getOpenBogusFolders();
         printTagList(bogusDrilldown, { tags: navigatedTags, tagOptions: { removable: true } });
     }
@@ -1706,7 +1677,7 @@ async function onViewTagsListClick() {
     const tagManagementHost = $(document.createElement('div'));
     html.append(tagManagementHost);
     const workspacePanels = await loadWorkspacePanelsModule();
-    workspacePanels.mountTagManagement(tagManagementHost.get(0), { bogusFolders: Boolean(power_user.bogus_folders) });
+    workspacePanels.mountTagManagement(tagManagementHost.get(0), { bogusFolders: true });
 
     const tagContainer = $('<div class="tag_view_list_tags ui-sortable"></div>');
     html.append(tagContainer);
@@ -2009,17 +1980,13 @@ function appendViewTagToList(list, tag, count) {
     const colorPickerId = tag.id + '-tag-color';
     const colorPicker2Id = tag.id + '-tag-color2';
 
-    if (!power_user.bogus_folders) {
-        template.find('.tag_as_folder').hide();
-    }
-
     const primaryColorPicker = $('<toolcool-color-picker></toolcool-color-picker>')
         .addClass('tag-color')
         .attr({ id: colorPickerId, color: tag.color || 'rgba(0, 0, 0, 0.5)', 'data-default-color': 'rgba(0, 0, 0, 0.5)' });
 
     const secondaryColorPicker = $('<toolcool-color-picker></toolcool-color-picker>')
         .addClass('tag-color2')
-        .attr({ id: colorPicker2Id, color: tag.color2 || power_user.main_text_color, 'data-default-color': power_user.main_text_color });
+        .attr({ id: colorPicker2Id, color: tag.color2 || DEFAULT_TAG_TEXT_COLOR, 'data-default-color': DEFAULT_TAG_TEXT_COLOR });
 
     template.find('.tag_view_color_picker[data-value="color"]').append(primaryColorPicker)
         .append($('<div class="fas fa-link fa-xs link_icon right_menu_button" title="Link to theme color"></div>'));

@@ -1,7 +1,6 @@
 import { characters, converter, substituteParams } from '../script.js';
 import { accountStorage } from './util/AccountStorage.js';
 import { callGenericPopup, POPUP_RESULT, POPUP_TYPE } from './popup.js';
-import { power_user } from './power-user.js';
 import { tag_import_setting } from './tags.js';
 import { isScopedScriptsAllowed, allowScopedScripts } from './extensions/regex/engine.js';
 import { importEmbeddedWorldInfo, world_names } from './world-info.js';
@@ -93,8 +92,8 @@ function getStyleContentsFromMarkdown(text) {
  * @returns {Promise<Object|null>} User choices, or null if cancelled
  */
 export async function showUnifiedImportConfirm(results) {
-    const showTags = results.some(r => r.hasTags) && power_user.tag_import_setting === tag_import_setting.ASK;
-    const showWorldBook = results.some(r => r.hasWorldBook) && power_user.world_import_dialog !== false;
+    const showTags = results.some(r => r.hasTags);
+    const showWorldBook = results.some(r => r.hasWorldBook);
     const showRegex = results.some(r => r.hasRegexScripts);
     const showCSS = results.some(r => r.hasCreatorNotesCSS);
 

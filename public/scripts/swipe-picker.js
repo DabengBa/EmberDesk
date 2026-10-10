@@ -2,7 +2,6 @@ import { branchChat } from './chat-branch.js';
 import { SWIPE_DIRECTION, SWIPE_SOURCE } from './constants.js';
 import { t } from './i18n.js';
 import { callGenericPopup, Popup, POPUP_RESULT, POPUP_TYPE } from './popup.js';
-import { power_user } from './power-user.js';
 import { isMobile } from './RossAscends-mods.js';
 import { getTokenCountAsync } from './tokenizers.js';
 import { addLongPressEvent, clamp, copyText, timestampToMoment } from './utils.js';
@@ -208,7 +207,7 @@ async function openSwipePicker(messageId) {
                             ? selectedSwipeId
                             : Math.min(selectedSwipeId, message.swipes.length - 2);
 
-                    if (power_user.confirm_message_delete) {
+                    {
                         const result = await callGenericPopup(t`Are you sure you want to delete swipe #${index + 1}?`, POPUP_TYPE.CONFIRM, null, {
                             okButton: t`Delete Swipe`,
                             cancelButton: t`Cancel`,

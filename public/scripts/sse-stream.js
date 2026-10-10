@@ -3,6 +3,7 @@ import { delay } from './utils.js';
 
 // Symbol for not primary swipe error
 const NOT_PRIMARY = Symbol('not_primary_swipe');
+const SMOOTH_STREAMING_SPEED = 50;
 
 /**
  * A stream which handles Server-Sent Events from a binary ReadableStream like you get from the fetch API.
@@ -90,7 +91,7 @@ function getDelay(s) {
         return 0;
     }
 
-    const speedFactor = Math.max(100 - power_user.smooth_streaming_speed, 1);
+    const speedFactor = Math.max(100 - SMOOTH_STREAMING_SPEED, 1);
     const defaultDelayMs = speedFactor * 0.4;
     const punctuationDelayMs = defaultDelayMs * 25;
 
@@ -298,7 +299,7 @@ export class SmoothEventSourceStream extends EventSourceStream {
                     }
 
                     for await (const parsed of parseStreamData(json)) {
-                        if (!(power_user.smooth_streaming_no_think && parsed.reasoning) && hasFocus) await delay(getDelay(lastStr));
+                        if (hasFocus) await delay(getDelay(lastStr));
                         controller.enqueue(new MessageEvent(event.type, { data: JSON.stringify(parsed.data) }));
                         lastStr = parsed.chunk;
                     }

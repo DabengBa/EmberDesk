@@ -62,8 +62,7 @@ export class MacroBrowser {
 
 /**
  * Gets the macro help content.
- * If experimental_macro_engine is enabled, returns a placeholder for the browser.
- * Otherwise returns the static template content.
+ * Returns a placeholder that is replaced with the macro browser.
  *
  * @returns {string} HTML string for help content
  */

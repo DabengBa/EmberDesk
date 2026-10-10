@@ -17,7 +17,6 @@ export function AiConfigPanel() {
                         <div className="checked fa-solid fa-lock right_menu_button"></div>
                     </label>
                 </div>
-                <div id="labModeWarning" className="redWarningBG textAlignCenter displayNone" data-i18n="MAD LAB MODE ON">MAD LAB MODE ON</div>
                 <div className="scrollableInner">
                     <div className="flex-container flexNoGap" id="ai_response_configuration">
                         <div id="respective-presets-block" className="width100p">

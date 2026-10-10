@@ -378,7 +378,6 @@ export function MainChatMessageRow({
                         />
                     )}
                 </div>
-                <div className="mesIDDisplay">#{message.id}</div>
                 <div className="mes_timer" title={message.timerTitle || undefined}>{message.timer}</div>
                 <div className="tokenCounterDisplay">
                     {message.tokenCount !== null ? `${message.tokenCount}t` : ''}
@@ -632,7 +631,7 @@ export function MainChatMessageRow({
                 {message.editing ? (
                     <textarea
                         id="curEditTextarea"
-                        className="edit_textarea mdHotkeys"
+                        className="edit_textarea"
                         value={message.editText}
                         onChange={event => {
                             void commands?.updateMessageEdit(numericMessageId, event.target.value);

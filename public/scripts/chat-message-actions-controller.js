@@ -19,7 +19,9 @@ const GENERIC_MESSAGE_ACTION_CLASSES = new Set([
 ]);
 
 function getDefaultExpandMessageActionsState() {
-    return globalThis.document?.body?.classList?.contains?.('expandMessageActions') === true;
+    // The "always expand message actions" setting is retired; actions open via
+    // the hint menu only. Kept as a stable dependency-override seam for tests.
+    return false;
 }
 
 function isElementLike(value) {

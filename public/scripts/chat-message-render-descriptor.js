@@ -93,7 +93,6 @@ export function buildChatMessageRowPopulation(descriptor, {
         displayName: descriptor.display.name,
         timestampText: descriptor.display.timestamp,
         timestampTitle,
-        messageIdText: `#${descriptor.messageId}`,
         tokenCountText: tokenCount ? `${tokenCount}t` : '',
         messageTitle,
         timer: {

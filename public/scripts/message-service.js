@@ -21,8 +21,6 @@ const state = new Proxy({}, {
 });
 
 const applyCharacterTagsToMessageDivs = (...args) => shell().applyCharacterTagsToMessageDivs(...args);
-const canUseNegativeLookbehind = (...args) => shell().canUseNegativeLookbehind(...args);
-const collapseNewlines = (...args) => shell().collapseNewlines(...args);
 const copyText = (...args) => shell().copyText(...args);
 const decodeStyleTags = (...args) => shell().decodeStyleTags(...args);
 const delay = (...args) => shell().delay(...args);
@@ -50,7 +48,6 @@ const scheduleMainChatMessageListPanelRefresh = (...args) => shell().scheduleMai
 const substituteParams = (...args) => shell().substituteParams(...args);
 const t = (...args) => shell().t(...args);
 const timestampToMoment = (...args) => shell().timestampToMoment(...args);
-const trimToEndSentence = (...args) => shell().trimToEndSentence(...args);
 const updateEditArrowClasses = (...args) => shell().updateEditArrowClasses(...args);
 const updateReasoningUI = (...args) => shell().updateReasoningUI(...args);
 const updateSwipeCounter = (...args) => shell().updateSwipeCounter(...args);
@@ -94,11 +91,6 @@ export function messageFormatting(mes, ch_name, isSystem, isUser, messageId, san
         isSystem = false;
     }
 
-    // Prompt bias replacement should be applied on the raw message
-    const replacedPromptBias = state.power_user.user_prompt_bias && substituteParams(state.power_user.user_prompt_bias);
-    if (!state.power_user.show_user_prompt_bias && ch_name && !isUser && !isSystem && replacedPromptBias && mes.startsWith(replacedPromptBias)) {
-        mes = mes.slice(replacedPromptBias.length);
-    }
 
     if (!isSystem) {
         function getRegexPlacement() {
@@ -135,11 +127,6 @@ export function messageFormatting(mes, ch_name, isSystem, isUser, messageId, san
         mes = fixMarkdown(mes, true);
     }
 
-    if (!isSystem && state.power_user.encode_tags) {
-        mes = canUseNegativeLookbehind()
-            ? mes.replaceAll('<', '&lt;').replace(new RegExp('(?<!^|\\n\\s*)>', 'g'), '&gt;')
-            : mes.replaceAll('<', '&lt;').replaceAll('>', '&gt;');
-    }
 
     // Make sure reasoning strings are always shown, even if they include "<" or ">"
     [state.power_user.reasoning.prefix, state.power_user.reasoning.suffix].forEach((reasoningString) => {
@@ -154,11 +141,9 @@ export function messageFormatting(mes, ch_name, isSystem, isUser, messageId, san
 
     if (!isSystem) {
         // Save double quotes in tags as a special character to prevent them from being encoded
-        if (!state.power_user.encode_tags) {
-            mes = mes.replace(/<([^>]+)>/g, function (_, contents) {
-                return '<' + contents.replace(/"/g, '\ufffe') + '>';
-            });
-        }
+        mes = mes.replace(/<([^>]+)>/g, function (_, contents) {
+            return '<' + contents.replace(/"/g, '\ufffe') + '>';
+        });
 
         mes = mes.replace(
             /<style>[\s\S]*?<\/style>|```[\s\S]*?```|~~~[\s\S]*?~~~|``[\s\S]*?``|`[\s\S]*?`|(".*?")|(\u201C.*?\u201D)|(\u00AB.*?\u00BB)|(\u300C.*?\u300D)|(\u300E.*?\u300F)|(\uFF02.*?\uFF02)/gim,
@@ -189,9 +174,7 @@ export function messageFormatting(mes, ch_name, isSystem, isUser, messageId, san
         );
 
         // Restore double quotes in tags
-        if (!state.power_user.encode_tags) {
-            mes = mes.replace(/\ufffe/g, '"');
-        }
+        mes = mes.replace(/\ufffe/g, '"');
 
         mes = mes.replaceAll('\\begin{align*}', '$$');
         mes = mes.replaceAll('\\end{align*}', '$$');
@@ -209,7 +192,7 @@ export function messageFormatting(mes, ch_name, isSystem, isUser, messageId, san
         });
     }
 
-    if (!state.power_user.allow_name2_display && ch_name && !isUser && !isSystem) {
+    if (ch_name && !isUser && !isSystem) {
         mes = mes.replace(new RegExp(`(^|\n)${escapeRegex(ch_name)}:`, 'g'), '$1');
     }
 
@@ -252,36 +235,6 @@ export function createModelIcon(apiName, modelName = '') {
  * @param {JQuery<HTMLElement>} mes - The message element containing the timestamp where the icon should be inserted or replaced.
  * @param {ChatMessageExtra} extra - Contains the API and model details.
  */
-function insertSVGIcon(mes, extra) {
-    const apiName = extra?.api || '';
-
-    if (!apiName) {
-        return;
-    }
-
-    const insertOrReplaceSVG = (image, className, targetSelector, insertBefore) => {
-        image.onload = async function () {
-            let existingSVG = insertBefore ? mes.find(targetSelector).prev(`.${className}`) : mes.find(targetSelector).next(`.${className}`);
-            if (existingSVG.length) {
-                existingSVG.replaceWith(image);
-            } else {
-                if (insertBefore) mes.find(targetSelector).before(image);
-                else mes.find(targetSelector).after(image);
-            }
-            await state.SVGInject(image);
-        };
-    };
-
-    const insertIcon = (className, targetSelector, insertBefore) => {
-        const image = createModelIcon(apiName, extra?.model);
-        image.classList.add(className);
-        insertOrReplaceSVG(image, className, targetSelector, insertBefore);
-    };
-
-    insertIcon('timestamp-icon', '.timestamp');
-    insertIcon('thinking-icon', '.mes_reasoning_header_title', true);
-}
-
 /**
  * Re-renders a message block with updated content.
  * @param {number} messageId Message ID
@@ -922,7 +875,6 @@ export function updateMessageElement(mes, { messageId = state.chat.length - 1, m
     messageElement.find('.avatar img').attr('src', rowPopulation.avatarSrc);
     messageElement.find('.ch_name .name_text').text(rowPopulation.displayName);
     messageElement.find('.timestamp').text(rowPopulation.timestampText).attr('title', rowPopulation.timestampTitle);
-    messageElement.find('.mesIDDisplay').text(rowPopulation.messageIdText);
     if (rowPopulation.tokenCountText) messageElement.find('.tokenCounterDisplay').text(rowPopulation.tokenCountText);
     if (rowPopulation.messageTitle) messageElement.attr('title', rowPopulation.messageTitle);
     if (rowPopulation.timer.value) messageElement.find('.mes_timer').attr('title', rowPopulation.timer.title).text(rowPopulation.timer.value);
@@ -933,9 +885,6 @@ export function updateMessageElement(mes, { messageId = state.chat.length - 1, m
 
     updateReasoningUI(messageElement);
 
-    if (state.power_user.timestamp_model_icon && mes.extra?.api) {
-        insertSVGIcon(messageElement, mes.extra);
-    }
 
     if (rowPopulation.classes.smallSysMes) {
         messageElement.addClass('smallSysMes');
@@ -1027,10 +976,6 @@ export function formatGenerationTimer(gen_started, gen_finished, tokenCount, rea
  * @param {boolean} [options.waitForFrame] If true, waits for the animation frame before scrolling
  */
 export function scrollChatToBottom({ waitForFrame } = {}) {
-    if (!state.power_user.auto_scroll_chat_to_bottom) {
-        return;
-    }
-
     const doScroll = () => {
         const position = state.chatElement[0].scrollHeight;
         state.chatElement.scrollTop(position);
@@ -1108,10 +1053,6 @@ export function cleanUpMessage({ getMessage, isImpersonate, isContinue, displayI
     // Regex uses vars, so add before formatting
     getMessage = getRegexedString(getMessage, isImpersonate ? state.regex_placement.USER_INPUT : state.regex_placement.AI_OUTPUT);
 
-    if (state.power_user.collapse_newlines) {
-        getMessage = collapseNewlines(getMessage);
-    }
-
     // trailing invisible whitespace before every newlines, on a multiline string
     // "trailing whitespace on newlines       \nevery line of the string    \n?sample text" ->
     // "trailing whitespace on newlines\nevery line of the string\nsample text"
@@ -1123,9 +1064,7 @@ export function cleanUpMessage({ getMessage, isImpersonate, isContinue, displayI
         // Also delete any trailing text that starts with the wrong name.
         // This only occurs if the corresponding "power_user.allow_nameX_display" is false.
 
-        let wrongName = isImpersonate
-            ? (!state.power_user.allow_name2_display ? state.name2 : '')  // char
-            : (!state.power_user.allow_name1_display ? state.name1 : '');  // user
+        let wrongName = isImpersonate ? state.name2 : state.name1;
 
         if (wrongName) {
             // If the message starts with the wrong name, delete the entire response
@@ -1146,10 +1085,8 @@ export function cleanUpMessage({ getMessage, isImpersonate, isContinue, displayI
     if (getMessage.indexOf('<|endoftext|>') != -1) {
         getMessage = getMessage.substring(0, getMessage.indexOf('<|endoftext|>'));
     }
-    if (!state.power_user.allow_name2_display) {
-        const name2Escaped = escapeRegex(state.name2);
-        getMessage = getMessage.replace(new RegExp(`(^|\n)${name2Escaped}:\\s*`, 'g'), '$1');
-    }
+    const name2Escaped = escapeRegex(state.name2);
+    getMessage = getMessage.replace(new RegExp(`(^|\n)${name2Escaped}:\\s*`, 'g'), '$1');
 
     if (isImpersonate) {
         getMessage = getMessage.trim();
@@ -1163,9 +1100,7 @@ export function cleanUpMessage({ getMessage, isImpersonate, isContinue, displayI
         // If this is an impersonation, trim "{{user}}:" from the beginning
         // If this isn't an impersonation, trim "{{char}}:" from the beginning.
         // Only applied when the corresponding "power_user.allow_nameX_display" is false.
-        const nameToTrim2 = isImpersonate
-            ? (!state.power_user.allow_name1_display ? state.name1 : '')  // user
-            : (!state.power_user.allow_name2_display ? state.name2 : '');  // char
+        const nameToTrim2 = isImpersonate ? state.name1 : state.name2;
 
         if (nameToTrim2 && getMessage.startsWith(nameToTrim2 + ':')) {
             getMessage = getMessage.replace(nameToTrim2 + ':', '');
@@ -1177,9 +1112,6 @@ export function cleanUpMessage({ getMessage, isImpersonate, isContinue, displayI
         getMessage = getMessage.trim();
     }
 
-    if (!displayIncompleteSentences && state.power_user.trim_sentences) {
-        getMessage = trimToEndSentence(getMessage);
-    }
 
     if (state.power_user.trim_spaces && !state.PromptReasoning.getLatestPrefix()) {
         getMessage = getMessage.trim();

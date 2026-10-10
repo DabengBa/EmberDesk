@@ -240,7 +240,7 @@ describe('React runtime boundary', () => {
         expect(rowSource).toContain('commands?.moveMessage(numericMessageId,');
         expect(scriptSource).toContain('copyMessage: messageId => copyMainChatMessage(messageId)');
         expect(scriptSource).toContain('duplicateMessage: messageId => duplicateMainChatMessage(messageId)');
-        expect(scriptSource).toContain('power_user.confirm_message_delete === true');
+        expect(scriptSource).toContain('deleteMessage(\n                messageId,\n                undefined,\n                true,');
         expect(scriptSource).toContain('moveMessage: (messageId, direction) =>');
     });
 

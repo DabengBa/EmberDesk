@@ -150,7 +150,7 @@ export function CharacterPopup() {
                         </a>
                     </h5>
                 </div>
-                <textarea id="mes_example_textarea" className="flexGrow mdHotkeys" name="mes_example" data-macros data-i18n="[placeholder](Examples of chat dialog. Begin each example with START on a new line.)" placeholder="(Examples of chat dialog. Begin each example with <START> on a new line.)" form="form_create" rows={6}></textarea>
+                <textarea id="mes_example_textarea" className="flexGrow" name="mes_example" data-macros data-i18n="[placeholder](Examples of chat dialog. Begin each example with START on a new line.)" placeholder="(Examples of chat dialog. Begin each example with <START> on a new line.)" form="form_create" rows={6}></textarea>
                 <div className="extension_token_counter">
                     <span data-i18n="extension_token_counter">Tokens:</span> <span data-token-counter="mes_example_textarea">counting...</span>
                 </div>

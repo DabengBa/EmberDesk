@@ -5,7 +5,6 @@ import { DOMPurify } from '../lib.js';
 import { eventSource, event_types } from './events.js';
 import { is_send_press, main_api, substituteParams } from '../script.js';
 import { Message, MessageCollection, TokenHandler } from './openai.js';
-import { power_user } from './power-user.js';
 import { debounce, waitUntilCondition, escapeHtml, uuidv4 } from './utils.js';
 import { debounce_timeout } from './constants.js';
 import { renderTemplateAsync } from './templates.js';
@@ -1912,7 +1911,7 @@ class PromptManager {
      * @param output
      */
     log(output) {
-        if (power_user.console_log_prompts) console.log('[PromptManager] ' + output);
+        console.debug('[PromptManager] ' + output);
     }
 
     /**
@@ -1921,7 +1920,7 @@ class PromptManager {
      * @param identifier
      */
     profileStart(identifier) {
-        if (power_user.console_log_prompts) console.time(identifier);
+        console.debug('[PromptManager] profileStart', identifier);
     }
 
     /**
@@ -1930,10 +1929,7 @@ class PromptManager {
      * @param identifier
      */
     profileEnd(identifier) {
-        if (power_user.console_log_prompts) {
-            this.log('Profiling of "' + identifier + '" finished. Result below.');
-            console.timeEnd(identifier);
-        }
+        this.log('Profiling of "' + identifier + '" finished. Result below.');
     }
 }
 

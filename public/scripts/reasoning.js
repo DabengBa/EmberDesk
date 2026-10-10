@@ -16,7 +16,6 @@ import { ARGUMENT_TYPE, SlashCommandArgument, SlashCommandNamedArgument } from '
 import { commonEnumProviders, enumIcons } from './slash-commands/SlashCommandCommonEnumsProvider.js';
 import { enumTypes, SlashCommandEnumValue } from './slash-commands/SlashCommandEnumValue.js';
 import { SlashCommandParser } from './slash-commands/SlashCommandParser.js';
-import { applyStreamFadeIn } from './util/stream-fadein.js';
 import { copyText, escapeRegex, isFalseBoolean, isTrueBoolean, setDatasetProperty, stringToRange, trimSpaces } from './utils.js';
 
 /**
@@ -533,11 +532,7 @@ export class ReasoningHandler {
         const reasoning = trimSpaces(this.reasoningDisplayText ?? this.reasoning);
         const displayReasoning = messageFormatting(reasoning, '', false, false, messageId, {}, true);
 
-        if (power_user.stream_fade_in) {
-            applyStreamFadeIn(this.messageReasoningContentDom, displayReasoning);
-        } else {
-            this.messageReasoningContentDom.innerHTML = displayReasoning;
-        }
+        this.messageReasoningContentDom.innerHTML = displayReasoning;
 
         // Update tooltip for hidden reasoning edit
         /** @type {HTMLElement} */
@@ -1315,24 +1310,6 @@ function setReasoningEventHandlers() {
 
         await copyText(reasoning);
         toastr.info(t`Copied!`, '', { timeOut: 2000 });
-    });
-
-    $(document).on('input', '.reasoning_edit_textarea', function () {
-        if (isReactMainChatMessageRow(this)) {
-            return;
-        }
-        if (!power_user.auto_save_msg_edits) {
-            return;
-        }
-
-        const { message, messageBlock } = getMessageFromJquery(this);
-        if (!message?.extra) {
-            return;
-        }
-
-        updateReasoningFromValue(message, String($(this).val()));
-        updateReasoningUI(messageBlock);
-        saveChatDebounced();
     });
 }
 

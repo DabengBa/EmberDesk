@@ -56,7 +56,6 @@ import { scanImportedCharacter, showUnifiedImportConfirm, applyImportChoices, bu
 import {
     collapseNewlines,
     loadPowerUserSettings,
-    playMessageSound,
     fixMarkdown,
     power_user,
     loadMovingUIState,
@@ -68,7 +67,6 @@ import {
     resetMovableStyles,
     forceCharacterEditorTokenize,
     applyPowerUserSettings,
-    generatedTextFiltered,
     applyStylePins,
     mountPowerUserPanel,
 } from './scripts/power-user.js';
@@ -180,14 +178,13 @@ import {
     createGenerationCommand,
     createGenerationRequestEnvelope,
 } from './scripts/chat-generation-command-service.js';
-import { markdownExclusionExt } from './scripts/showdown-exclusion.js';
 import { markdownUnderscoreExt } from './scripts/showdown-underscore.js';
 
 import { registerPromptManagerMigration } from './scripts/PromptManager.js';
 import { getRegexedString, regex_placement } from './scripts/extensions/regex/engine.js';
 import { FILTER_STATES, FILTER_TYPES, FilterHelper, isFilterState } from './scripts/filters.js';
 import { initLocales, t, translate } from './scripts/i18n.js';
-import { getFriendlyTokenizerName, getTokenCount, getTokenCountAsync, initTokenizers, saveTokenCache } from './scripts/tokenizers.js';
+import { getFriendlyTokenizerName, getTokenCountAsync, initTokenizers, saveTokenCache } from './scripts/tokenizers.js';
 import { loader } from './scripts/action-loader.js';
 import { createSingleFlightTask, resolvePersistedCurrentVersion, resolveStartupSettingsPlan } from './scripts/startup-helpers.js';
 import { ensurePanel, registerPanelHook } from './scripts/deferred-panels.js';
@@ -202,7 +199,7 @@ import {
     restoreFormattingPreset,
     saveFormattingPreset,
 } from './scripts/preset-manager.js';
-import { evaluateMacros, getLastMessageId, initMacros } from './scripts/macros.js';
+import { getLastMessageId, initMacros } from './scripts/macros.js';
 import { setUserControls } from './scripts/user.js';
 import { POPUP_RESULT, POPUP_TYPE, Popup, callGenericPopup, fixToastrForDialogs } from './scripts/popup.js';
 import { renderTemplate, renderTemplateAsync } from './scripts/templates.js';
@@ -211,7 +208,6 @@ import { DragAndDropHandler } from './scripts/dragdrop.js';
 import { INTERACTABLE_CONTROL_CLASS, initKeyboard } from './scripts/keyboard.js';
 import { buildCascadeSectionHtml, showDeleteConfirmWithCascade, showWorldInfoCascadeDialog } from './scripts/world-cascade-dialog.js';
 import { initDynamicStyles } from './scripts/dynamic-styles.js';
-import { initInputMarkdown } from './scripts/input-md-formatting.js';
 import { AbortReason } from './scripts/util/AbortReason.js';
 import { initSystemPrompts } from './scripts/sysprompt.js';
 import {
@@ -240,14 +236,12 @@ import { initDataMaid } from './scripts/data-maid.js';
 import { getSystemMessageByType, initSystemMessages, SAFETY_CHAT, sendSystemMessage, system_message_types, system_messages } from './scripts/system-messages.js';
 import { event_types, eventSource } from './scripts/events.js';
 import { initAccessibility } from './scripts/a11y.js';
-import { applyStreamFadeIn } from './scripts/util/stream-fadein.js';
 import { initDomHandlers, bindLegacyShellHandlers } from './scripts/dom-handlers.js';
 import { AudioPlayer } from './scripts/audio-player.js';
 import { SimpleMutex } from './scripts/util/SimpleMutex.js';
 import { MacroEnvBuilder } from './scripts/macros/engine/MacroEnvBuilder.js';
 import { MacroEngine } from './scripts/macros/engine/MacroEngine.js';
 import { addChatBackupsBrowser } from './scripts/chat-backups.js';
-import { onboardingExperimentalMacroEngine } from './scripts/macros/engine/MacroDiagnostics.js';
 import { compressRequest, setRequestCompressionConfig } from './scripts/request-compression.js';
 import { canJumpToSwipeForMessage, canOpenSwipePickerForMessage, initSwipePicker } from './scripts/swipe-picker.js';
 import {
@@ -449,8 +443,6 @@ const reactRuntimePort = createReactRuntimeProvider({
                     const previousPowerUser = runtimeKey === 'powerUserSettings'
                         ? {
                             tokenizer: runtimeSettings.tokenizer,
-                            markdown_escape_strings: runtimeSettings.markdown_escape_strings,
-                            show_user_prompt_bias: runtimeSettings.show_user_prompt_bias,
                             reasoning_auto_expand: runtimeSettings.reasoning?.auto_expand,
                             reasoning_show_hidden: runtimeSettings.reasoning?.show_hidden,
                         }
@@ -464,12 +456,6 @@ const reactRuntimePort = createReactRuntimeProvider({
                     if (previousPowerUser) {
                         if (runtimeSettings.tokenizer !== previousPowerUser.tokenizer) {
                             forceCharacterEditorTokenize();
-                        }
-                        if (runtimeSettings.markdown_escape_strings !== previousPowerUser.markdown_escape_strings) {
-                            reloadMarkdownProcessor();
-                        }
-                        if (runtimeSettings.show_user_prompt_bias !== previousPowerUser.show_user_prompt_bias) {
-                            void reloadCurrentChat();
                         }
                         if (runtimeSettings.reasoning?.auto_expand !== previousPowerUser.reasoning_auto_expand) {
                             toggleReasoningAutoExpand();
@@ -710,7 +696,6 @@ registerGenerationShellContext({
     showStopButton: (...args) => showStopButton(...args),
     substituteParams: (...args) => substituteParams(...args),
     swipe: (...args) => swipe(...args),
-    triggerAutoContinue: (...args) => triggerAutoContinue(...args),
     unblockGeneration: (...args) => unblockGeneration(...args),
     unshallowCharacter: (...args) => unshallowCharacter(...args),
     addCopyToCodeBlocks: (...args) => addCopyToCodeBlocks(...args),
@@ -734,8 +719,7 @@ registerGenerationShellContext({
     hasPendingFileAttachment: (...args) => hasPendingFileAttachment(...args),
     sendSystemMessage: (...args) => sendSystemMessage(...args),
     collapseNewlines: (...args) => collapseNewlines(...args),
-    generatedTextFiltered: (...args) => generatedTextFiltered(...args),
-    playMessageSound: (...args) => playMessageSound(...args),
+
     prepareOpenAIMessages: (...args) => prepareOpenAIMessages(...args),
     renderStoryString: (...args) => renderStoryString(...args),
 
@@ -744,7 +728,7 @@ registerGenerationShellContext({
     shiftDownByOne: (...args) => shiftDownByOne(...args),
     shiftUpByOne: (...args) => shiftUpByOne(...args),
     parseReasoningInSwipes: (...args) => parseReasoningInSwipes(...args),
-    applyStreamFadeIn: (...args) => applyStreamFadeIn(...args),
+
     countOccurrences: (...args) => countOccurrences(...args),
     isOdd: (...args) => isOdd(...args),
     delay: (...args) => delay(...args),
@@ -1105,7 +1089,7 @@ registerDomHandlersShellContext({
     loadEarlierChatMessages: (...args) => loadEarlierChatMessages(...args),
     loadMovingUIState: (...args) => loadMovingUIState(...args),
     messageEdit: (...args) => messageEdit(...args),
-    messageEditAuto: (...args) => messageEditAuto(...args),
+
     messageEditCancel: (...args) => messageEditCancel(...args),
     messageEditDone: (...args) => messageEditDone(...args),
     messageEditMove: (...args) => messageEditMove(...args),
@@ -1951,7 +1935,7 @@ function getMainChatGenerationControlBridgeState() {
     const hasFailure = reactOwner
         ? Boolean(recoveryUi?.failure?.noticeVisible || recoveryUi?.failure?.retryVisible)
         : Boolean(failureNotice || failureRetry);
-    const continueSurface = isMainChatGenerationControlElementVisible(document.getElementById('mes_continue')) ? 'legacy' : 'hidden';
+    const continueSurface = 'hidden';
     const shouldPreferStoppedTerminal = shouldPreferStoppedMainChatTerminalSnapshot(
         hasFailure ? 'error' : streamingProcessor?.isStopped ? 'stopped' : null,
     );
@@ -2926,7 +2910,6 @@ function bindMainChatReactComposerCommandPort() {
     const sendTextarea = document.getElementById('send_textarea');
     const sendButton = document.getElementById('send_but');
     const stopButton = document.getElementById('mes_stop');
-    const continueButton = document.getElementById('mes_continue');
     const regenerateButton = document.getElementById('option_regenerate');
 
     if (!(sendTextarea instanceof HTMLTextAreaElement) || !(sendButton instanceof HTMLElement)) {
@@ -2934,7 +2917,7 @@ function bindMainChatReactComposerCommandPort() {
     }
 
     const isGenerationFocusTarget = target => {
-        return [sendButton, stopButton, continueButton, regenerateButton].some(control => (
+        return [sendButton, stopButton, regenerateButton].some(control => (
             control instanceof HTMLElement
             && (target === control || control.contains(target))
         ));
@@ -2993,12 +2976,6 @@ function bindMainChatReactComposerCommandPort() {
         event.stopPropagation();
         stopVisibleGeneration();
     };
-    const handleContinueButtonClick = event => {
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        event.stopPropagation();
-        dispatchGeneration('continueLast');
-    };
     const handleRegenerateButtonClick = event => {
         event.preventDefault();
         event.stopImmediatePropagation();
@@ -3022,7 +2999,6 @@ function bindMainChatReactComposerCommandPort() {
     sendTextarea.addEventListener('focus', handleComposerFocus, true);
     sendButton.addEventListener('click', handleSendButtonClick, true);
     stopButton?.addEventListener('click', handleStopButtonClick, true);
-    continueButton?.addEventListener('click', handleContinueButtonClick, true);
     regenerateButton?.addEventListener('click', handleRegenerateButtonClick, true);
     document.addEventListener('focusin', handleDocumentFocusIn, true);
 
@@ -3031,7 +3007,6 @@ function bindMainChatReactComposerCommandPort() {
         sendTextarea.removeEventListener('focus', handleComposerFocus, true);
         sendButton.removeEventListener('click', handleSendButtonClick, true);
         stopButton?.removeEventListener('click', handleStopButtonClick, true);
-        continueButton?.removeEventListener('click', handleContinueButtonClick, true);
         regenerateButton?.removeEventListener('click', handleRegenerateButtonClick, true);
         document.removeEventListener('focusin', handleDocumentFocusIn, true);
         mainChatComposerFocusRestoreRequested = false;
@@ -3159,7 +3134,7 @@ function getMainChatReactVisibleWindow(projectedChat) {
         };
     }
 
-    const configuredLimit = Number(power_user?.chat_truncation);
+    const configuredLimit = 100;
     const defaultStartIndex = Number.isInteger(configuredLimit) && configuredLimit > 0
         ? Math.max(totalMessageCount - configuredLimit, 0)
         : 0;
@@ -3270,7 +3245,7 @@ function getMainChatMessageListReactBridgeState() {
             canOpen: canOpenSwipePickerForMessage(messageId),
             canJump: canJumpToSwipeForMessage(messageId),
         }),
-        modelIconEnabled: power_user.timestamp_model_icon === true,
+        modelIconEnabled: false,
         visibleMessageIds,
         composer: {
             value: getComposerValue(),
@@ -3394,7 +3369,7 @@ function getMainChatMessageListReactCommands() {
             deleteMessage: messageId => deleteMessage(
                 messageId,
                 undefined,
-                power_user.confirm_message_delete === true,
+                true,
             ),
             moveMessage: (messageId, direction) => messageEditMove(
                 messageId,
@@ -3777,8 +3752,8 @@ function enrichCharacterLibraryPageEntities(pageEntities) {
                     avatarUrl,
                 },
                 tags: getCharacterLibraryEntityTags(entity.id),
-                auxFieldName: power_user.aux_field || 'character_version',
-                showAvatarUrl: Boolean(power_user.show_card_avatar_urls),
+                auxFieldName: 'character_version',
+                showAvatarUrl: false,
             };
         }
         return entity;
@@ -3921,7 +3896,7 @@ export async function syncReactCharacterLibraryToolbarState() {
                     pageEntities,
                     renderPlan: createCharacterListPageRenderPlan({
                         pageEntities,
-                        includeBackBlock: Boolean(power_user?.bogus_folders && typeof isBogusFolderOpen === 'function' && isBogusFolderOpen()),
+                        includeBackBlock: Boolean(typeof isBogusFolderOpen === 'function' && isBogusFolderOpen()),
                         totalCharacters: Array.isArray(characters) ? characters.length : 0,
                         hasActiveFilter: Boolean(entitiesFilter?.hasAnyFilter?.()),
                     }),
@@ -4367,10 +4342,6 @@ export function reloadMarkdownProcessor() {
         extensions: [markdownUnderscoreExt()],
     });
 
-    // Inject the dinkus extension after creating the converter
-    // Maybe move this into power_user init?
-    converter.addExtension(markdownExclusionExt(), 'exclusion');
-
     return converter;
 }
 
@@ -4646,7 +4617,6 @@ async function bootstrapWorkspace() {
         registerPanelHook('world-info-body', _replayWorldInfoSettings);
         initWorldInfo();
         initRossMods();
-        initInputMarkdown();
         initSettingsSearch();
         initBulkEdit();
         initReasoning();
@@ -4774,7 +4744,7 @@ export function updateCharacterRow(chid, patch) {
 
     // Only patch in unfiltered main list, no bogus-folder drilldown
     if (entitiesFilter.hasAnyFilter()) return false;
-    if (power_user.bogus_folders && isBogusFolderOpen()) return false;
+    if (isBogusFolderOpen()) return false;
 
     if ('fav' in patch) {
         const isFav = patch.fav || patch.fav === 'true';
@@ -4899,7 +4869,7 @@ async function renderCharacterListPage(entitySnapshot, { requestedPage = undefin
     const pageEntities = getCharacterListPageEntities(entitySnapshot, currentPage, pageSize);
     const renderPlan = createCharacterListPageRenderPlan({
         pageEntities,
-        includeBackBlock: power_user.bogus_folders && isBogusFolderOpen(),
+        includeBackBlock: isBogusFolderOpen(),
         totalCharacters: characters.length,
         hasActiveFilter: entitiesFilter.hasAnyFilter(),
     });
@@ -4951,7 +4921,7 @@ async function reconcileCharacterListAfterDelete(options) {
         const hasActiveFilter = entitiesFilter.hasAnyFilter();
         const isBulkEdit = $('#rm_print_characters_block').hasClass('bulk_select');
         const isBulkDeleteContext = deleteContext?.source === 'bulk';
-        const isBogusFolderOpenNow = power_user.bogus_folders && isBogusFolderOpen();
+        const isBogusFolderOpenNow = isBogusFolderOpen();
         const plan = isBulkDeleteContext
             ? createCharacterBulkDeletePagePlan({
                 afterSnapshot,
@@ -5062,7 +5032,7 @@ export function getEntitiesList({ doFilter = false, doSort = true } = {}) {
     let entities = [
         ...characters.map((item, index) => characterToEntity(item, index)),
         // Group chat retirement: do not surface group entities in the library list.
-        ...(power_user.bogus_folders ? tags.filter(isBogusFolder).sort(compareTagsForSort).map(item => tagToEntity(item)) : []),
+        ...tags.filter(isBogusFolder).sort(compareTagsForSort).map(item => tagToEntity(item)),
     ];
 
     // We need to do multiple filter runs in a specific order, otherwise different settings might override each other
@@ -5849,19 +5819,7 @@ export async function sendTextareaMessage() {
     hideSwipeButtons(); //Swipe buttons must be hidden now, otherwise concurrent generations are possible.
 
     let generateType = 'normal';
-    // "Continue on send" is activated when the user hits "send" (or presses enter) on an empty chat box, and the last
-    // message was sent from a character (not the user or the system).
     const textareaText = getComposerValue();
-    const lastMessage = chat[chat.length - 1];
-    if (power_user.continue_on_send &&
-        !hasPendingFileAttachment() &&
-        !textareaText &&
-        chat.length &&
-        !lastMessage.is_user &&
-        !lastMessage.is_system
-    ) {
-        generateType = 'continue';
-    }
 
     if (textareaText && this_chid === undefined && name2 !== neutralCharacterName) {
         await newAssistantChat({ temporary: false });
@@ -5900,90 +5858,15 @@ export function substituteParamsLegacy(content, _name1, _name2, _original, _grou
         return '';
     }
 
-    // If experimental macro engine is enabled, use it. This code will be cleaned up in the future.
-    if (power_user?.experimental_macro_engine) {
-        return substituteParams(content, {
-            name1Override: _name1,
-            name2Override: _name2,
-            original: _original,
-            groupOverride: _group,
-            replaceCharacterCard: _replaceCharacterCard ?? true,
-            dynamicMacros: additionalMacro ?? {},
-            postProcessFn: postProcessFn ?? ((x) => x),
-        });
-    }
-
-    // Try to roughly detect experimental macro features to show the onboarding if needed.
-    // This does not have to be 100% accurate, only best effort what we can quickly check.
-    // Only do this if the warning wasn't shown yet, to prevent needless regex checks.
-    if (accountStorage.getItem('slash_command_experimental_engine_warning_shown') !== 'true') {
-        let feature = /** @type {string|null} */ (null);
-        if (/{{\s*if/.test(content)) feature = '{{if}} macro';
-        else if (/{{\s*\//.test(content)) feature = 'scoped macro';
-        else if (/{{\s*[!?~#/]/.test(content)) feature = 'macro flags';
-        else if (/{{\s*[.$]/.test(content)) feature = 'variable shorthands';
-        else if (/\{\{(?:(?!\}\}).)*\{\{(?=[\s\S]*?\}\}[\s\S]*?\}\})/.test(content)) feature = 'nested macro';
-        else if (/{{(?:greeting|charFirstMessage)(?:::\d+)?}}/i.test(content)) feature = 'greeting macro';
-
-        if (feature) void onboardingExperimentalMacroEngine(feature);
-    }
-
-    const environment = {};
-
-    if (typeof _original === 'string') {
-        let originalSubstituted = false;
-        environment.original = () => {
-            if (originalSubstituted) {
-                return '';
-            }
-
-            originalSubstituted = true;
-            return _original;
-        };
-    }
-
-    const getGroupValue = (includeMuted) => {
-        void includeMuted;
-        return typeof _group === 'string' ? _group : (_name2 ?? name2);
-    };
-
-    const getNotCharValue = () => _name1 ?? name1;
-
-    if (_replaceCharacterCard) {
-        const fields = getCharacterCardFields();
-        environment.charPrompt = fields.system || '';
-        environment.charInstruction = environment.charJailbreak = fields.jailbreak || '';
-        environment.description = fields.description || '';
-        // Tombstone: the personality card field is retired, but {{personality}}
-        // must keep resolving (to '') so legacy presets don't leak raw syntax.
-        environment.personality = '';
-        // Same for the retired persona system: {{persona}}/{{personaDescription}}.
-        environment.persona = environment.personaDescription = '';
-        environment.scenario = fields.scenario || '';
-        environment.mesExamples = () => {
-            const mesExamplesArray = parseMesExamples(fields.mesExamples);
-            return mesExamplesArray.join('');
-        };
-        environment.mesExamplesRaw = fields.mesExamples || '';
-        environment.charVersion = fields.version || '';
-        environment.char_version = fields.version || '';
-        environment.charDepthPrompt = fields.charDepthPrompt || '';
-        environment.creatorNotes = fields.creatorNotes || '';
-    }
-
-    // Must be substituted last so that they're replaced inside {{description}}
-    environment.user = _name1 ?? name1;
-    environment.char = _name2 ?? name2;
-    environment.group = environment.charIfNotGroup = getGroupValue(true);
-    environment.groupNotMuted = getGroupValue(false);
-    environment.notChar = getNotCharValue();
-    environment.model = getGeneratingModel();
-
-    if (additionalMacro && typeof additionalMacro === 'object') {
-        Object.assign(environment, additionalMacro);
-    }
-
-    return evaluateMacros(content, environment, postProcessFn);
+    return substituteParams(content, {
+        name1Override: _name1,
+        name2Override: _name2,
+        original: _original,
+        groupOverride: _group,
+        replaceCharacterCard: _replaceCharacterCard ?? true,
+        dynamicMacros: additionalMacro ?? {},
+        postProcessFn: postProcessFn ?? ((x) => x),
+    });
 }
 
 /** @typedef {import('./scripts/macros/engine/MacroRegistry.js').MacroHandler} MacroHandler */
@@ -6017,11 +5900,6 @@ export function substituteParams(content, options = {}) {
     const isOptionsObject = options && typeof options === 'object' && !Array.isArray(options);
     if (!isOptionsObject) {
         return substituteParamsLegacy.call(this, ...arguments);
-    }
-
-    // Keep the new macro engine behind a feature switch for now
-    if (!power_user?.experimental_macro_engine) {
-        return substituteParamsLegacy(content, options.name1Override, options.name2Override, options.original, options.groupOverride, options.replaceCharacterCard, options.dynamicMacros, options.postProcessFn);
     }
 
     const ctx = /** @type {import('./scripts/macros/engine/MacroEnvBuilder.js').MacroEnvRawContext} */ ({
@@ -6301,10 +6179,6 @@ export function baseChatReplace(value, name1Override = null, name2Override = nul
     if (typeof value === 'string' && value.length > 0) {
         value = substituteParams(value, { name1Override, name2Override, replaceCharacterCard: false });
 
-        if (power_user.collapse_newlines) {
-            value = collapseNewlines(value);
-        }
-
         value = value.replace(/\r/g, '');
     }
     return value;
@@ -6364,11 +6238,11 @@ export function getCharacterCardFieldsLazy({ chid = undefined } = {}) {
         system: () => {
             if (!character) return '';
             const systemPrompt = chat_metadata.system_prompt || character.data?.system_prompt || '';
-            return power_user.prefer_character_prompt ? baseChatReplace(systemPrompt.trim()) : '';
+            return baseChatReplace(systemPrompt.trim());
         },
         jailbreak: () => {
             if (!character) return '';
-            return power_user.prefer_character_jailbreak ? baseChatReplace(character.data?.post_history_instructions?.trim()) : '';
+            return baseChatReplace(character.data?.post_history_instructions?.trim());
         },
         version: () => character?.data?.character_version ?? '',
         charDepthPrompt: () => {
@@ -6908,85 +6782,6 @@ function unblockGeneration(type) {
 
 export function getNextMessageId(type) {
     return type == 'swipe' ? chat.length - 1 : chat.length;
-}
-
-/**
- * Determines if the message should be auto-continued.
- * @param {string} messageChunk Current message chunk
- * @param {boolean} isImpersonate Is the user impersonation
- * @returns {boolean} Whether the message should be auto-continued
- */
-export function shouldAutoContinue(messageChunk, isImpersonate) {
-    if (!power_user.auto_continue.enabled) {
-        console.debug('Auto-continue is disabled by user.');
-        return false;
-    }
-
-    if (typeof messageChunk !== 'string') {
-        console.debug('Not triggering auto-continue because message chunk is not a string');
-        return false;
-    }
-
-    if (isImpersonate) {
-        console.log('Continue for impersonation is not implemented yet');
-        return false;
-    }
-
-    if (is_send_press) {
-        console.debug('Auto-continue is disabled because a message is currently being sent.');
-        return false;
-    }
-
-    if (abortController && abortController.signal.aborted) {
-        console.debug('Auto-continue is not triggered because the generation was stopped.');
-        return false;
-    }
-
-    if (power_user.auto_continue.target_length <= 0) {
-        console.log('Auto-continue target length is 0, not triggering auto-continue');
-        return false;
-    }
-
-    if (main_api === 'openai' && !power_user.auto_continue.allow_chat_completions) {
-        console.log('Auto-continue for OpenAI is disabled by user.');
-        return false;
-    }
-
-    const textareaText = getComposerValue();
-    const USABLE_LENGTH = 5;
-
-    if (textareaText.length > 0) {
-        console.log('Not triggering auto-continue because user input is not empty');
-        return false;
-    }
-
-    if (messageChunk.trim().length > USABLE_LENGTH && chat.length) {
-        const lastMessage = chat[chat.length - 1];
-        const messageLength = getTokenCount(lastMessage.mes);
-        const shouldAutoContinue = messageLength < power_user.auto_continue.target_length;
-
-        if (shouldAutoContinue) {
-            console.log(`Triggering auto-continue. Message tokens: ${messageLength}. Target tokens: ${power_user.auto_continue.target_length}. Message chunk: ${messageChunk}`);
-            return true;
-        } else {
-            console.log(`Not triggering auto-continue. Message tokens: ${messageLength}. Target tokens: ${power_user.auto_continue.target_length}`);
-            return false;
-        }
-    } else {
-        console.log('Last generated chunk was empty, not triggering auto-continue');
-        return false;
-    }
-}
-
-/**
- * Triggers auto-continue if the message meets the criteria.
- * @param {string} messageChunk Current message chunk
- * @param {boolean} isImpersonate Is the user impersonation
- */
-export function triggerAutoContinue(messageChunk, isImpersonate) {
-    if (shouldAutoContinue(messageChunk, isImpersonate)) {
-        $('#option_continue').trigger('click');
-    }
 }
 
 export function getBiasStrings(textareaText, type) {
@@ -7619,7 +7414,7 @@ async function read_avatar_load(input) {
         const file = input.files[0];
         const fileData = await getBase64Async(file);
 
-        if (!power_user.never_resize_avatars) {
+        {
             const dlg = new Popup('Set the crop position of the avatar image', POPUP_TYPE.CROP, '', { cropImage: fileData });
             const croppedImage = await dlg.show();
 
@@ -7629,8 +7424,6 @@ async function read_avatar_load(input) {
 
             crop_data = dlg.cropData;
             $('#avatar_load_preview').attr('src', String(croppedImage));
-        } else {
-            $('#avatar_load_preview').attr('src', fileData);
         }
 
         if (menu_type == 'create') {
@@ -7950,8 +7743,6 @@ async function applyStartupSettingsCore(data, initLoaderHandle = null) {
 
         selected_button = settings.selected_button;
 
-        // TODO: Move me into bootstrapWorkspace when experimental toggle is removed
-        // power_user.experimental_macro_engine
         initMacros();
 
         // Lazy migration: feature_settings replaced extension_settings; the old
@@ -8190,24 +7981,6 @@ function openMessageDelete(fromSlashCommand) {
     is_delete_mode = true;
 }
 
-function messageEditAuto(div) {
-    const { mesBlock, text, mes, bias } = updateMessage(div);
-
-    mesBlock.find('.mes_text').val('');
-    mesBlock.find('.mes_text').val(messageFormatting(
-        text,
-        this_edit_mes_chname,
-        mes.is_system,
-        mes.is_user,
-        this_edit_mes_id,
-        {},
-        false,
-    ));
-    mesBlock.find('.mes_bias').empty();
-    mesBlock.find('.mes_bias').append(messageFormatting(bias, '', false, false, -1, {}, false));
-    saveChatDebounced();
-}
-
 function startMainChatMessageEdit(messageId) {
     const normalizedMessageId = Number(messageId);
     const message = chat[normalizedMessageId];
@@ -8376,16 +8149,6 @@ function updateMainChatMessageReasoningEdit(messageId, text) {
         reasoningEditing: true,
         reasoningEditText,
     });
-    if (power_user.auto_save_msg_edits) {
-        message.extra ??= {};
-        message.extra.reasoning = getRegexedString(
-            reasoningEditText,
-            regex_placement.REASONING,
-            { isEdit: true },
-        );
-        message.extra.reasoning_type = message.extra.reasoning_type ? 'edited' : 'manual';
-        saveChatDebounced();
-    }
     return true;
 }
 
@@ -8532,7 +8295,7 @@ export async function messageEdit(editMessageId) {
 
     const editTextArea = document.createElement('textarea');
     editTextArea.id = 'curEditTextarea';
-    editTextArea.className = 'edit_textarea mdHotkeys';
+    editTextArea.className = 'edit_textarea';
     editTextArea.dataset.macros = '';
     messageText.append(editTextArea);
 
@@ -9481,7 +9244,7 @@ export async function processDroppedFiles(files, data = new Map()) {
  */
 async function importCharactersTags(avatarFileNames, { importSetting = null } = {}) {
     await getCharacters();
-    const effectiveSetting = importSetting ?? power_user.tag_import_setting;
+    const effectiveSetting = importSetting ?? tag_import_setting.ASK;
     if (effectiveSetting === tag_import_setting.NONE) return;
     for (let i = 0; i < avatarFileNames.length; i++) {
         const importedCharacter = characters.find(character => character.avatar === avatarFileNames[i]);

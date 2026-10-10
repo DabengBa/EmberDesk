@@ -92,11 +92,6 @@ export const MEDIA_DISPLAY = {
  * @readonly
  * @enum {string}
  */
-export const IMAGE_OVERSWIPE = {
-    GENERATE: 'generate',
-    ROLLOVER: 'rollover',
-};
-
 /**
  * @readonly
  */
@@ -174,7 +169,6 @@ export const SWIPE_SOURCE = {
     DELETE: 'delete',
     KEYBOARD: 'keyboard',
     BACK: 'back',
-    AUTO_SWIPE: 'auto_swipe',
     SLASH_COMMAND: 'slash_command',
     SWIPE_PICKER: 'swipe_picker',
 };

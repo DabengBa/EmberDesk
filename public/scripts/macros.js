@@ -1,14 +1,11 @@
 import { Handlebars, moment, seedrandom, droll } from '../lib.js';
 import { chat, chat_metadata, getMaxPromptTokens, getMaxContextTokens, getMaxResponseTokens, getCurrentChatId, substituteParams, extension_prompts } from '../script.js';
-import { eventSource, event_types } from './events.js';
 import { timestampToMoment, isDigitsOnly, getStringHash, escapeRegex, uuidv4 } from './utils.js';
 import { getInstructMacros } from './macros/definitions/instruct-macros.js';
 import { getVariableMacros } from './variables.js';
-import { isMobile } from './RossAscends-mods.js';
 import { inject_ids } from './constants.js';
 import { getComposerValue } from './main-chat-composer-service.js';
 import { initRegisterMacros, macros as macroSystem } from './macros/macro-system.js';
-import { power_user } from './power-user.js';
 
 /**
  * @typedef Macro
@@ -42,18 +39,6 @@ Handlebars.registerHelper('helperMissing', function () {
  */
 export class MacrosParser {
     /**
-     * A map of registered macros.
-     * @type {Map<string, string|MacroFunction>}
-     */
-    static #macros = new Map();
-
-    /**
-     * A map of macro descriptions.
-     * @type {Map<string, string>}
-     */
-    static #descriptions = new Map();
-
-    /**
      * Logs a deprecation warning for MacrosParser APIs, pointing callers to
      * the new macro engine registration surface.
      *
@@ -80,10 +65,6 @@ export class MacrosParser {
      * @returns {void}
      */
     static #registerMacroInNewEngine(key, value, description) {
-        if (!power_user.experimental_macro_engine) {
-            return;
-        }
-
         // Like the old MacrosParser, we explicitly allow overriding macros, and only warn
         if (macroSystem.registry.hasMacro(key)) {
             console.warn(`Macro ${key} is already registered`);
@@ -125,10 +106,6 @@ export class MacrosParser {
      * @returns {void}
      */
     static #unregisterMacroInNewEngine(key) {
-        if (!power_user.experimental_macro_engine) {
-            return;
-        }
-
         macroSystem.registry.unregisterMacro(key);
     }
 
@@ -137,17 +114,10 @@ export class MacrosParser {
      * @returns {IterableIterator<CustomMacro>}
      */
     static [Symbol.iterator] = function* () {
-        // When experimental macro engine is active, yield from the new registry
-        if (power_user.experimental_macro_engine) {
-            // Exclude hidden aliases for consistency with autocomplete behavior
-            for (const def of macroSystem.registry.getAllMacros({ excludeHiddenAliases: true })) {
-                yield { key: def.name, description: def.description || '' };
-            }
-            return;
-        }
-
-        for (const macro of MacrosParser.#macros.keys()) {
-            yield { key: macro, description: MacrosParser.#descriptions.get(macro) };
+        // The new macro engine is the only registry; yield from it.
+        // Exclude hidden aliases for consistency with autocomplete behavior
+        for (const def of macroSystem.registry.getAllMacros({ excludeHiddenAliases: true })) {
+            yield { key: def.name, description: def.description || '' };
         }
     };
 
@@ -158,7 +128,7 @@ export class MacrosParser {
      */
     static get(key) {
         MacrosParser.#logDeprecated('get', 'macros.registry.getMacro (from scripts/macros/macro-system.js)', arguments);
-        return MacrosParser.#macros.get(key);
+        return macroSystem.registry.getMacro(key);
     }
 
     /**
@@ -168,11 +138,7 @@ export class MacrosParser {
      */
     static has(key) {
         MacrosParser.#logDeprecated('has', 'macros.registry.hasMacro (from scripts/macros/macro-system.js)', arguments);
-        if (power_user.experimental_macro_engine) {
-            return macroSystem.registry.hasMacro(key);
-        }
-
-        return MacrosParser.#macros.has(key);
+        return macroSystem.registry.hasMacro(key);
     }
 
     /**
@@ -204,19 +170,6 @@ export class MacrosParser {
         }
 
         MacrosParser.#registerMacroInNewEngine(key, value, description);
-        if (power_user.experimental_macro_engine) {
-            return;
-        }
-
-        if (this.#macros.has(key)) {
-            console.warn(`Macro ${key} is already registered`);
-        }
-
-        this.#macros.set(key, value);
-
-        if (typeof description === 'string' && description) {
-            this.#descriptions.set(key, description);
-        }
     }
 
     /**
@@ -237,39 +190,7 @@ export class MacrosParser {
             throw new Error('Macro key must not be empty or whitespace only');
         }
 
-        if (power_user.experimental_macro_engine) {
-            MacrosParser.#unregisterMacroInNewEngine(key);
-            return;
-        }
-
-        const deleted = this.#macros.delete(key);
-
-        if (!deleted) {
-            console.warn(`Macro ${key} was not registered`);
-        }
-
-        this.#descriptions.delete(key);
-    }
-
-    /**
-     * Populate the env object with macro values from the current context.
-     * @param {EnvObject} env Env object for the current evaluation context
-     * @returns {void}
-     */
-    static populateEnv(env) {
-        if (!env || typeof env !== 'object') {
-            console.warn('Env object is not provided');
-            return;
-        }
-
-        // No macros are registered
-        if (this.#macros.size === 0) {
-            return;
-        }
-
-        for (const [key, value] of this.#macros) {
-            env[key] = value;
-        }
+        MacrosParser.#unregisterMacroInNewEngine(key);
     }
 
     /**
@@ -743,33 +664,6 @@ export function evaluateMacros(content, env, postProcessFn) {
 }
 
 export function initMacros() {
-    // Only manually register those is new macro engine is not on. In the new one, they are already registered automatically
-    if (!power_user.experimental_macro_engine) {
-        function initLastGenerationType() {
-            let lastGenerationType = '';
-
-            MacrosParser.registerMacro('lastGenerationType',
-                () => lastGenerationType,
-                'Returns the type of the last generation (e.g., "normal", "swipe", "continue", "impersonate", "quiet").',
-            );
-
-            eventSource.on(event_types.GENERATION_STARTED, (type, _params, isDryRun) => {
-                if (isDryRun) return;
-                lastGenerationType = type || 'normal';
-            });
-
-            eventSource.on(event_types.CHAT_CHANGED, () => {
-                lastGenerationType = '';
-            });
-        }
-
-        MacrosParser.registerMacro('isMobile',
-            () => String(isMobile()),
-            'Returns "true" if the user is on a mobile device, "false" otherwise.',
-        );
-        initLastGenerationType();
-    }
-
     // TODO: Needs to be moved once old macros are deprecated and removed
     initRegisterMacros();
 }

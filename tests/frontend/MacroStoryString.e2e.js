@@ -26,7 +26,6 @@ test.describe('MacroStoryString', () => {
             const { substituteParams, extension_prompt_types } = await import('./script.js');
             const { power_user, renderStoryString } = await import('./scripts/power-user.js');
 
-            power_user.experimental_macro_engine = true;
 
             const context = {
                 description: 'character description',

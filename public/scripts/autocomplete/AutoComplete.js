@@ -77,7 +77,7 @@ export class AutoComplete {
     }
 
     get autoHide() {
-        return power_user.stscript.autocomplete.autoHide ?? false;
+        return false;
     }
 
 
@@ -524,11 +524,11 @@ export class AutoComplete {
             this.domWrap.style.bottom = `${window.innerHeight - rect[AUTOCOMPLETE_WIDTH.INPUT].top}px`;
             if (this.isShowingDetails) {
                 this.domWrap.style.setProperty('--leftOffset', '1vw');
-                this.domWrap.style.setProperty('--leftOffset', `max(1vw, ${rect[power_user.stscript.autocomplete.width.left].left}px)`);
-                this.domWrap.style.setProperty('--rightOffset', `calc(100vw - min(${rect[power_user.stscript.autocomplete.width.right].right}px, ${this.isShowingDetails ? 74 : 0}vw)`);
+                this.domWrap.style.setProperty('--leftOffset', `max(1vw, ${rect[AUTOCOMPLETE_WIDTH.CHAT].left}px)`);
+                this.domWrap.style.setProperty('--rightOffset', `calc(100vw - min(${rect[AUTOCOMPLETE_WIDTH.CHAT].right}px, ${this.isShowingDetails ? 74 : 0}vw)`);
             } else {
-                this.domWrap.style.setProperty('--leftOffset', `max(1vw, ${rect[power_user.stscript.autocomplete.width.left].left}px)`);
-                this.domWrap.style.setProperty('--rightOffset', `calc(100vw - min(99vw, ${rect[power_user.stscript.autocomplete.width.right].right}px)`);
+                this.domWrap.style.setProperty('--leftOffset', `max(1vw, ${rect[AUTOCOMPLETE_WIDTH.CHAT].left}px)`);
+                this.domWrap.style.setProperty('--rightOffset', `calc(100vw - min(99vw, ${rect[AUTOCOMPLETE_WIDTH.CHAT].right}px)`);
             }
         }
         this.updateDetailsPosition();
@@ -557,8 +557,8 @@ export class AutoComplete {
                     this.detailsWrap.classList.add('full');
                     this.detailsWrap.style.setProperty('--targetOffset', `${rect[AUTOCOMPLETE_WIDTH.INPUT].top}`);
                     this.detailsWrap.style.setProperty('--bottomOffset', `calc(100vh - ${rect[AUTOCOMPLETE_WIDTH.INPUT].top}px)`);
-                    this.detailsWrap.style.setProperty('--leftOffset', `${rect[power_user.stscript.autocomplete.width.left].left}px`);
-                    this.detailsWrap.style.setProperty('--rightOffset', `calc(100vw - ${rect[power_user.stscript.autocomplete.width.right].right}px)`);
+                    this.detailsWrap.style.setProperty('--leftOffset', `${rect[AUTOCOMPLETE_WIDTH.CHAT].left}px`);
+                    this.detailsWrap.style.setProperty('--rightOffset', `calc(100vw - ${rect[AUTOCOMPLETE_WIDTH.CHAT].right}px)`);
                 }
             }
         }
@@ -790,7 +790,6 @@ export class AutoComplete {
                 }
                 case 'Enter': {
                     // pick the selected item to autocomplete
-                    if ((power_user.stscript.autocomplete.select & AUTOCOMPLETE_SELECT_KEY.ENTER) != AUTOCOMPLETE_SELECT_KEY.ENTER) break;
                     if (evt.ctrlKey || evt.altKey || evt.shiftKey || this.selectedItem.value == '') break;
                     if (this.selectedItem.name == this.name) break;
                     if (!this.selectedItem.isSelectable) break;
@@ -801,7 +800,6 @@ export class AutoComplete {
                 }
                 case 'Tab': {
                     // pick the selected item to autocomplete
-                    if ((power_user.stscript.autocomplete.select & AUTOCOMPLETE_SELECT_KEY.TAB) != AUTOCOMPLETE_SELECT_KEY.TAB) break;
                     if (evt.ctrlKey || evt.altKey || evt.shiftKey || this.selectedItem.value == '') break;
                     evt.preventDefault();
                     evt.stopImmediatePropagation();

@@ -1,17 +1,14 @@
 import { DOMPurify, Bowser } from '../lib.js';
 
 import {
-    characters,
     online_status,
     main_api,
     is_send_press,
     max_context,
     saveSettingsDebounced,
-    active_character,
     setActiveCharacter,
     getEntitiesList,
     buildAvatarList,
-    selectCharacterById,
     menu_type,
     substituteParams,
     sendTextareaMessage,
@@ -27,7 +24,6 @@ import {
     send_on_enter_options,
 } from './power-user.js';
 
-import { getTagKeyForEntity, applyTagsOnCharacterSelect } from './tags.js';
 import {
     SECRET_KEYS,
     secret_state,
@@ -247,31 +243,6 @@ export async function RA_CountCharTokens() {
     $('#result_info_text').toggleClass('neutral_warning', showWarning);
     $('#chartokenwarning').toggle(showWarning);
 }
-/**
- * Auto load chat with the last active character.
- * Fires when active_character is defined and auto_load_chat is true.
- * The function first tries to find a character with a specific ID from the global settings.
- * If the character list hadn't been loaded yet, it calls itself again after 100ms delay.
- * The character is selected (clicked) if it is found.
- */
-async function RA_autoloadchat() {
-    // active character is the name, we should look it up in the character list and get the id
-    if (active_character !== null && active_character !== undefined) {
-        const active_character_id = characters.findIndex(x => getTagKeyForEntity(x) === active_character);
-        if (active_character_id !== -1) {
-            await selectCharacterById(active_character_id);
-
-            // Do a little tomfoolery to spoof the tag selector
-            const selectedCharElement = $(`#rm_print_characters_block .character_select[chid="${active_character_id}"]`);
-            applyTagsOnCharacterSelect.call(selectedCharElement);
-        } else {
-            setActiveCharacter(null);
-            saveSettingsDebounced();
-            console.warn(`Currently active character with ID ${active_character} not found. Resetting to no active character.`);
-        }
-    }
-}
-
 export async function favsToHotswap() {
     const entities = getEntitiesList({ doFilter: false });
     const container = $('#right-nav-panel .hotswap');
@@ -297,8 +268,6 @@ function RA_checkOnlineStatus() {
         send_textarea.attr('placeholder', send_textarea.attr('no_connection_text')); //Input bar placeholder tells users they are not connected
         $('#send_form').addClass('no-connection');
         $('#send_but').addClass('displayNone'); //send button is hidden when not connected;
-        $('#mes_continue').addClass('displayNone'); //continue button is hidden when not connected;
-        $('#mes_impersonate').addClass('displayNone'); //continue button is hidden when not connected;
         connection_made = false;
     } else {
         if (online_status !== undefined && online_status !== 'no_connection') {
@@ -310,8 +279,6 @@ function RA_checkOnlineStatus() {
 
             if (!is_send_press) {
                 $('#send_but').removeClass('displayNone'); //on connect, send button shows
-                $('#mes_continue').removeClass('displayNone'); //continue button is shown when connected
-                $('#mes_impersonate').removeClass('displayNone'); //continue button is shown when connected
             }
         }
     }
@@ -362,11 +329,6 @@ function OpenNavPanels() {
 const getUserInputKey = () => getCurrentUserHandle() + '_userInput';
 
 function restoreUserInput() {
-    if (!power_user.restore_user_input) {
-        console.debug('restoreUserInput disabled');
-        return;
-    }
-
     const userInput = localStorage.getItem(getUserInputKey());
     if (userInput) {
         setComposerValue(userInput);
@@ -590,10 +552,6 @@ export function initRossMods() {
     RA_checkOnlineStatus();
     eventSource.on(event_types.ONLINE_STATUS_CHANGED, () => RA_checkOnlineStatus());
 
-    if (power_user.auto_load_chat) {
-        RA_autoloadchat();
-    }
-
     if (power_user.auto_connect) {
         RA_autoconnect();
     }
@@ -754,9 +712,6 @@ export function initRossMods() {
 
     // Swipe gestures (see: https://www.npmjs.com/package/swiped-events)
     document.addEventListener('swiped-left', function (e) {
-        if (power_user.gestures === false) {
-            return;
-        }
         if (Popup.util.isPopupOpen()) {
             return;
         }
@@ -778,9 +733,6 @@ export function initRossMods() {
         }
     });
     document.addEventListener('swiped-right', function (e) {
-        if (power_user.gestures === false) {
-            return;
-        }
         if (Popup.util.isPopupOpen()) {
             return;
         }

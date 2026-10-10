@@ -198,7 +198,6 @@ describe('chat message render descriptor', () => {
             displayName: 'Ember',
             timestampText: 'June 8, 2026 8:00 AM',
             timestampTitle: 'openai - gpt-4o-mini',
-            messageIdText: '#8',
             tokenCountText: '17t',
             messageTitle: 'Pinned response',
             timer: {

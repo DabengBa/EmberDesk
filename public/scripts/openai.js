@@ -1130,7 +1130,7 @@ export async function prepareOpenAIMessages({
     if (!promptManager.activeCharacter && dryRun) return [null, false];
 
     const chatCompletion = new ChatCompletion();
-    if (power_user.console_log_prompts) chatCompletion.enableLogging();
+
 
     const userSettings = promptManager.serviceSettings;
     chatCompletion.setTokenBudget(userSettings.openai_max_context, userSettings.openai_max_tokens);

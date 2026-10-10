@@ -116,8 +116,6 @@ describe('chat workspace structure', () => {
             ['options_button', 'Chat options'],
             ['send_but', 'Send message'],
             ['mes_stop', 'Abort request'],
-            ['mes_continue', 'Continue last message'],
-            ['mes_impersonate', 'Ask AI to write your message'],
         ].forEach(([id, label]) => {
             expect(composerSource).toMatch(new RegExp(`<ContractIconButton[\\s\\S]*?id="${id}"`));
             expect(composerSource).toMatch(new RegExp(`id="${id}"[\\s\\S]*?label="${label}"`));

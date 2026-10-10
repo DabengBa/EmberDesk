@@ -138,7 +138,6 @@
     --avatar-base-width: 50px;
     --avatar-base-border-radius: 2px;
     --avatar-base-border-radius-round: 50%;
-    --avatar-base-border-radius-rounded: 10px;
     --inline-avatar-small-factor: 0.6;
 
     --animation-duration: 125ms;
@@ -656,7 +655,6 @@ input[type='checkbox']:focus-visible {
 }
 
 .mes .mes_timer,
-.mes .mesIDDisplay,
 .mes .tokenCounterDisplay {
     cursor: default;
     opacity: 0.7;
@@ -972,14 +970,6 @@ body .panelControlBar {
     color: var(--SmartThemeQuoteColor);
 }
 
-#mes_continue {
-    order: 1;
-}
-
-#mes_impersonate {
-    order: 1;
-}
-
 #send_form .mes_stop {
     display: none;
     order: 2;
@@ -993,8 +983,7 @@ body .panelControlBar {
 
 #form_sheld.isExecutingCommandsFromChatInput {
 
-    #send_but,
-    #mes_continue {
+    #send_but {
         visibility: hidden;
         width: 0;
         height: 0;
@@ -5003,8 +4992,6 @@ input[type="range"]::-webkit-slider-thumb {
 
 body:is([data-generating="true"], [data-swiping="true"]) :is(
     #send_but,
-    #mes_continue,
-    #mes_impersonate,
     #chat .last_mes .mes_buttons,
     #chat .last_mes .mes_reasoning_actions) {
     display: none !important;
@@ -5017,22 +5004,11 @@ body:is([data-generating="true"], [data-swiping="true"]) :is(
 }
 
     #power-user-option-checkboxes label,
-    .checkbox_label,
-    .auto_continue_settings_block {
+    .checkbox_label {
     display: flex;
     flex-direction: row;
     column-gap: 5px;
     align-items: baseline;
-}
-
-.auto_continue_settings_block {
-    margin-top: 10px;
-}
-
-.auto_continue_settings_block label {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
 }
 
 #character_popup {
@@ -5403,11 +5379,6 @@ body .ui-widget-content li {
 body .ui-widget-content li:hover {
     /* background-color: var(--SmartThemeEmColor); */
     opacity: 1;
-}
-
-body.big-avatars .missing-avatar {
-    width: calc(var(--avatar-base-width)* var(--big-avatar-width-factor));
-    height: calc(var(--avatar-base-height)* var(--big-avatar-height-factor));
 }
 
 .missing-avatar {

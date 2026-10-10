@@ -1,5 +1,4 @@
 import { hljs } from '../../lib.js';
-import { power_user } from '../power-user.js';
 import { isFalseBoolean, isTrueBoolean, uuidv4 } from '../utils.js';
 import { SlashCommand } from './SlashCommand.js';
 import { ARGUMENT_TYPE, SlashCommandArgument } from './SlashCommandArgument.js';
@@ -646,69 +645,13 @@ export class SlashCommandParser {
 
     replaceGetvar(value) {
         // Not needed with the new parser.
-        if (power_user.experimental_macro_engine) {
-            return value;
-        }
-        return value.replace(/{{(get(?:global)?var)::([^}]+)}}/gi, (match, cmd, name, idx) => {
-            name = name.trim();
-            cmd = cmd.toLowerCase();
-            const startIdx = this.index - value.length + idx;
-            const endIdx = this.index - value.length + idx + match.length;
-            // store pipe
-            const pipeName = `_PARSER_PIPE_${uuidv4()}`;
-            const storePipe = new SlashCommandExecutor(startIdx); {
-                storePipe.end = endIdx;
-                storePipe.command = this.commands.let;
-                storePipe.name = 'let';
-                const nameAss = new SlashCommandUnnamedArgumentAssignment();
-                nameAss.value = pipeName;
-                const valAss = new SlashCommandUnnamedArgumentAssignment();
-                valAss.value = '{{pipe}}';
-                storePipe.unnamedArgumentList = [nameAss, valAss];
-                this.closure.executorList.push(storePipe);
-            }
-            // getvar / getglobalvar
-            const getvar = new SlashCommandExecutor(startIdx); {
-                getvar.end = endIdx;
-                getvar.command = this.commands[cmd];
-                getvar.name = cmd;
-                const nameAss = new SlashCommandUnnamedArgumentAssignment();
-                nameAss.value = name;
-                getvar.unnamedArgumentList = [nameAss];
-                this.closure.executorList.push(getvar);
-            }
-            // set to temp scoped var
-            const varName = `_PARSER_VAR_${uuidv4()}`;
-            const setvar = new SlashCommandExecutor(startIdx); {
-                setvar.end = endIdx;
-                setvar.command = this.commands.let;
-                setvar.name = 'let';
-                const nameAss = new SlashCommandUnnamedArgumentAssignment();
-                nameAss.value = varName;
-                const valAss = new SlashCommandUnnamedArgumentAssignment();
-                valAss.value = '{{pipe}}';
-                setvar.unnamedArgumentList = [nameAss, valAss];
-                this.closure.executorList.push(setvar);
-            }
-            // return pipe
-            const returnPipe = new SlashCommandExecutor(startIdx); {
-                returnPipe.end = endIdx;
-                returnPipe.command = this.commands.return;
-                returnPipe.name = 'return';
-                const varAss = new SlashCommandUnnamedArgumentAssignment();
-                varAss.value = `{{var::${pipeName}}}`;
-                returnPipe.unnamedArgumentList = [varAss];
-                this.closure.executorList.push(returnPipe);
-            }
-            return `{{var::${varName}}}`;
-        });
+        return value;
     }
-
 
     parse(text, verifyCommandNames = true, flags = null, abortController = null, debugController = null) {
         this.verifyCommandNames = verifyCommandNames;
         for (const key of Object.keys(PARSER_FLAG)) {
-            this.flags[PARSER_FLAG[key]] = flags?.[PARSER_FLAG[key]] ?? power_user.stscript.parser.flags[PARSER_FLAG[key]] ?? false;
+            this.flags[PARSER_FLAG[key]] = flags?.[PARSER_FLAG[key]] ?? false;
         }
         this.abortController = abortController;
         this.debugController = debugController;

@@ -1,4 +1,4 @@
-import { fuzzySearchCharacters, fuzzySearchTags, fuzzySearchWorldInfo, power_user } from './power-user.js';
+import { fuzzySearchWorldInfo } from './power-user.js';
 import { tag_map } from './tags.js';
 import { includesIgnoreCaseAndAccents } from './utils.js';
 
@@ -94,9 +94,7 @@ export class FilterHelper {
         this.onDataChanged = onDataChanged;
         this.scoreCache = new Map();
         this.fuzzySearchCaches = {
-            [fuzzySearchCategories.characters]: { resultMap: new Map() },
             [fuzzySearchCategories.worldInfo]: { resultMap: new Map() },
-            [fuzzySearchCategories.tags]: { resultMap: new Map() },
         };
     }
 
@@ -281,24 +279,8 @@ export class FilterHelper {
 
         const searchValue = this.filterData[FILTER_TYPES.SEARCH];
 
-        // Save fuzzy search results and scores if enabled
-        if (power_user.fuzzy_search) {
-            const fuzzySearchCharactersResults = fuzzySearchCharacters(searchValue, this.fuzzySearchCaches);
-            const fuzzySearchTagsResult = fuzzySearchTags(searchValue, this.fuzzySearchCaches);
-            this.cacheScores(FILTER_TYPES.SEARCH, new Map(fuzzySearchCharactersResults.map(i => [`character.${i.refIndex}`, i.score])));
-            this.cacheScores(FILTER_TYPES.SEARCH, new Map(fuzzySearchTagsResult.map(i => [`tag.${i.item.id}`, i.score])));
-        }
-
-        const _this = this;
         function getIsValidSearch(entity) {
-            if (power_user.fuzzy_search) {
-                // We can filter easily by checking if we have saved a score
-                const score = _this.getScore(FILTER_TYPES.SEARCH, `${entity.type}.${entity.id}`);
-                return score !== undefined;
-            } else {
-                // Compare insensitive and without accents
-                return includesIgnoreCaseAndAccents(entity.item?.name, searchValue);
-            }
+            return includesIgnoreCaseAndAccents(entity.item?.name, searchValue);
         }
 
         return data.filter(entity => getIsValidSearch(entity));

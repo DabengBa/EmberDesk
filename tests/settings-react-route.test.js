@@ -136,7 +136,7 @@ describe('settings React route flag', () => {
         expect(routeSource).toContain('name="providers.customUrl"');
         expect(routeSource).toContain('name="providers.fallbackProviderModel"');
         expect(routeSource).toContain('name="userInterface.customCss"');
-        expect(routeSource).toContain('name="advanced.autoSwipe"');
+        expect(routeSource).toContain('name="advanced.tokenizer"');
         expect(routeSource).not.toContain("{activeTab === 'general' && (");
         expect(routeSource).not.toContain("{activeTab === 'providers' && (");
         expect(routeSource).not.toContain("{activeTab === 'userInterface' && (");
@@ -216,7 +216,7 @@ describe('settings React route flag', () => {
         ]));
         expect(helperModule.settingsCoverage.reactOwned.providers).toHaveLength(3);
         expect(helperModule.settingsCoverage.reactOwned.userInterface).toContain('power_user.custom_css');
-        expect(helperModule.settingsCoverage.reactOwned.advanced).toContain('power_user.auto_swipe');
+        expect(helperModule.settingsCoverage.reactOwned.advanced).toContain('power_user.tokenizer');
         expect(helperModule.settingsCoverage.reactOwned.advanced).toContain('power_user.stscript.autocomplete.state');
         expect(helperModule.settingsCoverage.legacyOwned).toContain('world_info_settings');
         expect(helperModule.settingsCoverage.legacyOwned).toContain('feature_settings');
@@ -363,8 +363,9 @@ describe('settings React route flag', () => {
         expect(defaults.providers.fallbackProviderEnabled).toBeUndefined();
         expect(defaults.providers.fallbackProviderModel).toBe('gpt-4.1-mini');
         expect(defaults.userInterface.customCss).toBe('.chat { color: white; }');
-        expect(defaults.advanced.autoSwipe).toBe(true);
-        expect(defaults.advanced.stscriptAutocompleteFontScale).toBe(0.9);
+        expect(defaults.advanced.autoSwipe).toBeUndefined();
+        expect(defaults.advanced.stscriptAutocompleteFontScale).toBeUndefined();
+        expect(defaults.advanced.stscriptAutocompleteState).not.toBeUndefined();
 
         const merged = helperModule.buildSettingsSavePayload(parsed.settings, {
             providers: {
@@ -379,34 +380,14 @@ describe('settings React route flag', () => {
                 fastUiMode: false,
                 reducedMotion: false,
                 noShadows: false,
-                toastrPosition: 'toast-bottom-right',
-                avatarStyle: 1,
                 chatDisplay: 2,
-                timerEnabled: false,
                 timestampsEnabled: false,
-                timestampModelIcon: false,
-                mesIDDisplayEnabled: false,
-                hideChatAvatarsEnabled: true,
                 compactInputArea: false,
             },
             advanced: {
-                autoSwipe: false,
-                autoSwipeMinimumLength: 12,
-                autoSwipeBlacklist: 'skip, retry',
-                autoSwipeBlacklistThreshold: 3,
                 customStoppingStrings: 'END',
                 tokenizer: 42,
-                customStoppingStringsMacro: true,
-                experimentalMacroEngine: true,
-                autoContinueEnabled: true,
-                autoContinueAllowChatCompletions: false,
-                autoContinueTargetLength: 200,
-                chatTruncation: 80,
-                streamingFps: 20,
                 smoothStreaming: false,
-                smoothStreamingNoThink: false,
-                smoothStreamingSpeed: 30,
-                streamFadeIn: false,
                 systemPromptName: 'Custom',
                 systemPromptContent: 'Updated prompt',
                 syspromptEnabled: true,
@@ -422,15 +403,6 @@ describe('settings React route flag', () => {
                 reasoningMaxAdditions: 1,
                 stscriptMatching: 'exact',
                 stscriptAutocompleteState: 1,
-                stscriptAutocompleteAutoHide: false,
-                stscriptAutocompleteStyle: 'compact',
-                stscriptAutocompleteSelect: 1,
-                stscriptAutocompleteShowInAllMacroFields: false,
-                stscriptAutocompleteFontScale: 1.1,
-                stscriptAutocompleteWidthLeft: 2,
-                stscriptAutocompleteWidthRight: 3,
-                stscriptParserFlagStrictEscaping: true,
-                stscriptParserFlagReplaceGetvar: false,
             },
         });
 
@@ -441,7 +413,8 @@ describe('settings React route flag', () => {
         expect(merged.power_user.font_scale).toBe(1.15);
         expect(merged.power_user.custom_stopping_strings).toBe('END');
         expect(merged.power_user.tokenizer).toBe(42);
-        expect(merged.power_user.auto_continue.enabled).toBe(true);
+        // Retired power_user keys are stripped from the saved payload.
+        expect(merged.power_user.auto_continue).toBeUndefined();
         expect(merged.power_user.sysprompt.name).toBe('Custom');
         expect(merged.power_user.sysprompt.content).toBe('Updated prompt');
         expect(merged.power_user.context.preset).toBe('Default');
@@ -468,9 +441,9 @@ describe('settings React route flag', () => {
         expect(merged.oai_settings.reasoning_effort).toBe('medium');
         expect(merged.oai_settings.continue_prefill).toBe(true);
         expect(merged.power_user.custom_css).toBe('.chat { color: gold; }');
-        expect(merged.power_user.toastr_position).toBe('toast-bottom-right');
-        expect(merged.power_user.auto_swipe).toBe(false);
-        expect(merged.power_user.auto_swipe_blacklist).toEqual(['skip', 'retry']);
+        expect(merged.power_user.toastr_position).toBeUndefined();
+        expect(merged.power_user.auto_swipe).toBeUndefined();
+        expect(merged.power_user.auto_swipe_blacklist).toBeUndefined();
         expect(merged.power_user.instruct.enabled).toBe(true);
         expect(merged.power_user.instruct.skip_examples).toBe(true);
         expect(merged.power_user.instruct.activation_regex).toBe('/llama/i');
@@ -478,10 +451,7 @@ describe('settings React route flag', () => {
         expect(merged.power_user.sysprompt.post_history).toBe('later');
         expect(merged.power_user.reasoning.max_additions).toBe(1);
         expect(merged.power_user.stscript.autocomplete.state).toBe(1);
-        expect(merged.power_user.stscript.parser.flags).toEqual({
-            1: true,
-            2: false,
-        });
+        expect(merged.power_user.stscript.parser).toBeUndefined();
     });
 
 
@@ -540,16 +510,14 @@ describe('settings React route flag', () => {
         const helperModule = await import(`../app/lib/settings-helpers.js?settingsCoerce=${Date.now()}-${Math.random()}`);
         const defaults = helperModule.buildSettingsFormDefaults({
             power_user: {
-                avatar_style: '1',
                 chat_display: '2',
                 send_on_enter: '-1',
-                tag_import_setting: '3',
             },
         });
-        expect(defaults.userInterface.avatarStyle).toBe(1);
+        expect(defaults.userInterface.avatarStyle).toBeUndefined();
         expect(defaults.userInterface.chatDisplay).toBe(2);
         expect(defaults.userInterface.sendOnEnter).toBe(-1);
-        expect(defaults.userInterface.tagImportSetting).toBe(3);
+        expect(defaults.userInterface.tagImportSetting).toBeUndefined();
     });
 
     test('owner inventory covers drawer fields with lossless single-field save round-trip', async () => {
@@ -578,12 +546,8 @@ describe('settings React route flag', () => {
             expect(helperModule.settingsCoverage.legacyOwned).toContain(path);
         }
         for (const path of [
-            'power_user.main_text_color',
-            'power_user.expand_message_actions',
             'power_user.send_on_enter',
-            'power_user.pin_styles',
             'power_user.message_token_count_enabled',
-            'power_user.collapse_newlines',
             'power_user.token_padding',
             'power_user.user_prompt_bias',
         ]) {
@@ -641,14 +605,14 @@ describe('settings React route flag', () => {
 
         const defaults = helperModule.buildSettingsFormDefaults(fixture);
         expect(defaults.general).toBeUndefined();
-        expect(defaults.userInterface.mainTextColor).toBe('rgba(1, 2, 3, 1)');
+        expect(defaults.userInterface.mainTextColor).toBeUndefined();
         expect(defaults.userInterface.sendOnEnter).toBe(-1);
-        expect(defaults.advanced.collapseNewlines).toBe(true);
+        expect(defaults.advanced.collapseNewlines).toBeUndefined();
         expect(defaults.advanced.tokenPadding).toBe(32);
 
         // Mutate a single field only.
         const singleEdit = structuredClone(defaults);
-        singleEdit.userInterface.mainTextColor = 'rgba(9, 8, 7, 1)';
+        singleEdit.userInterface.sendOnEnter = 1;
         const saved = helperModule.buildSettingsSavePayload(fixture, singleEdit);
 
         expect(saved.untouched).toEqual({ keep: true, nested: { a: 1 } });
@@ -662,19 +626,21 @@ describe('settings React route flag', () => {
         expect(saved.oai_settings.names_behavior).toBe(2);
         expect(saved.oai_settings.reasoning_effort).toBe('xhigh');
         expect(saved.oai_settings.assistant_prefill).toBe('legacy-prefill');
-        expect(saved.power_user.main_text_color).toBe('rgba(9, 8, 7, 1)');
-        expect(saved.power_user.expand_message_actions).toBe(true);
-        expect(saved.power_user.send_on_enter).toBe(-1);
-        expect(saved.power_user.stscript.parser.flags).toEqual({ 1: false, 2: true });
+        expect(saved.power_user.main_text_color).toBeUndefined();
+        expect(saved.power_user.expand_message_actions).toBeUndefined();
+        expect(saved.power_user.send_on_enter).toBe(1);
+        expect(saved.power_user.stscript.parser).toBeUndefined();
+        expect(saved.power_user.stscript.autocomplete.state).toBe(2);
+        expect(saved.power_user.stscript.autocomplete.style).toBeUndefined();
         expect(saved.power_user.user_prompt_bias).toBe('start-with');
         expect(saved.power_user.token_padding).toBe(32);
-        expect(saved.power_user.collapse_newlines).toBe(true);
+        expect(saved.power_user.collapse_newlines).toBeUndefined();
 
         // Full identity round-trip with no form edits preserves unknown enums/values.
         const identity = helperModule.buildSettingsSavePayload(fixture, defaults);
         expect(identity.oai_settings.reasoning_effort).toBe('xhigh');
         expect(identity.oai_settings.tool_reasoning_mode).toBe('active_chain');
-        expect(identity.power_user.main_text_color).toBe('rgba(1, 2, 3, 1)');
+        expect(identity.power_user.main_text_color).toBeUndefined();
     });
 
     test('downgrades legacy Vertex AI source to OpenAI and keeps advanced reasoning effort values saveable', async () => {

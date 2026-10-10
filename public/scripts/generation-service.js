@@ -74,7 +74,6 @@ const showGenerationAutoRecoveryStatus = (...args) => shell().showGenerationAuto
 const showGenerationFailureRecovery = (...args) => shell().showGenerationFailureRecovery(...args);
 const showStopButton = (...args) => shell().showStopButton(...args);
 const substituteParams = (...args) => shell().substituteParams(...args);
-const triggerAutoContinue = (...args) => shell().triggerAutoContinue(...args);
 const unblockGeneration = (...args) => shell().unblockGeneration(...args);
 const unshallowCharacter = (...args) => shell().unshallowCharacter(...args);
 const Generate = (...args) => shell().Generate(...args);
@@ -93,17 +92,16 @@ const extractReasoningSignatureFromData = (...args) => shell().extractReasoningS
 const getRegexedString = (...args) => shell().getRegexedString(...args);
 const getTokenCountAsync = (...args) => shell().getTokenCountAsync(...args);
 const hasPendingFileAttachment = (...args) => shell().hasPendingFileAttachment(...args);
+const STREAMING_FPS = 30;
+
 const sendSystemMessage = (...args) => shell().sendSystemMessage(...args);
-const collapseNewlines = (...args) => shell().collapseNewlines(...args);
-const generatedTextFiltered = (...args) => shell().generatedTextFiltered(...args);
-const playMessageSound = (...args) => shell().playMessageSound(...args);
 const prepareOpenAIMessages = (...args) => shell().prepareOpenAIMessages(...args);
 const renderStoryString = (...args) => shell().renderStoryString(...args);
 const setOpenAIMessageExamples = (...args) => shell().setOpenAIMessageExamples(...args);
 const setOpenAIMessages = (...args) => shell().setOpenAIMessages(...args);
 const shiftDownByOne = (...args) => shell().shiftDownByOne(...args);
 const parseReasoningInSwipes = (...args) => shell().parseReasoningInSwipes(...args);
-const applyStreamFadeIn = (...args) => shell().applyStreamFadeIn(...args);
+
 const countOccurrences = (...args) => shell().countOccurrences(...args);
 const isOdd = (...args) => shell().isOdd(...args);
 const delay = (...args) => shell().delay(...args);
@@ -316,11 +314,7 @@ export class GenerationStreamSession {
                     false,
                 );
                 if (this.messageTextDom instanceof HTMLElement) {
-                    if (state.power_user.stream_fade_in) {
-                        applyStreamFadeIn(this.messageTextDom, formattedText);
-                    } else {
-                        this.messageTextDom.innerHTML = formattedText;
-                    }
+                    this.messageTextDom.innerHTML = formattedText;
                 }
 
                 const timePassed = formatGenerationTimer(this.timeStarted, currentTime, currentTokenCount, this.reasoningHandler.getDuration(), this.timeToFirstToken);
@@ -415,13 +409,7 @@ export class GenerationStreamSession {
     async onFinishStreaming(messageId, text) {
         await this.finalizeIntermediaryMessage(messageId, text, { unlockUI: true });
 
-        const isAborted = this.abortController.signal.aborted;
-        if (!isAborted && state.power_user.auto_swipe && generatedTextFiltered(text)) {
-            return await swipe(null, SWIPE_DIRECTION.RIGHT, { source: SWIPE_SOURCE.AUTO_SWIPE, repeated: true, forceMesId: state.chat.length - 1 });
-        }
         await saveChatConditional();
-
-        playMessageSound();
     }
 
     async onErrorStreaming({ suppressRecovery = false } = {}) {
@@ -490,7 +478,7 @@ export class GenerationStreamSession {
         this.stoppingStrings = getStoppingStrings(isImpersonate, isContinue, state.main_api);
 
         try {
-            const sw = new state.Stopwatch(1000 / state.power_user.streaming_fps);
+            const sw = new state.Stopwatch(1000 / STREAMING_FPS);
             const timestamps = [];
             for await (const { text, swipes, toolCalls, state } of this.generator()) {
                 const now = Date.now();
@@ -830,7 +818,7 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
     // Prepare the system prompt for Text Completion APIs
     if (state.main_api !== 'openai') {
         if (state.power_user.sysprompt.enabled) {
-            system = state.power_user.prefer_character_prompt && system
+            system = system
                 ? substituteParams(system, { original: state.power_user.sysprompt.content ?? '' })
                 : baseChatReplace(state.power_user.sysprompt.content);
         } else {
@@ -1212,10 +1200,6 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
                 generatedPromptCache,
             ].join('').replace(/\r/gm, '');
 
-            if (state.power_user.collapse_newlines) {
-                combinedPrompt = collapseNewlines(combinedPrompt);
-            }
-
             return combinedPrompt;
         };
 
@@ -1292,10 +1276,6 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
     let activeRecoveryMessageId = null;
 
     async function finishGenerating() {
-        if (state.power_user.console_log_prompts) {
-            console.log(generate_data.prompt);
-        }
-
         console.debug('rungenerate calling API');
 
         showStopButton();
@@ -1428,7 +1408,6 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
                     scheduleMainChatMessageListPanelRefresh();
                     state.streamingProcessor = null;
                     clearGenerationAutoRecoveryStatus(finishedMessageId);
-                    triggerAutoContinue(messageChunk, isImpersonate);
                     return Object.defineProperties(new String(getMessage), {
                         'messageChunk': { value: messageChunk },
                         'fromStream': { value: true },
@@ -1639,24 +1618,10 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
             }
         }
 
-        if (type !== 'quiet') {
-            playMessageSound();
-        }
-
-        const isAborted = state.abortController && state.abortController.signal.aborted;
-        if (!isAborted && state.power_user.auto_swipe && generatedTextFiltered(getMessage)) {
-            state.is_send_press = false;
-            return await swipe(null, SWIPE_DIRECTION.RIGHT, { source: SWIPE_SOURCE.AUTO_SWIPE, repeated: true, forceMesId: state.chat.length - 1 });
-        }
-
         console.debug('/api/chats/save called by /Generate');
         await saveChatConditional();
         unblockGeneration(type);
         state.streamingProcessor = null;
-
-        if (type !== 'quiet') {
-            triggerAutoContinue(messageChunk, isImpersonate);
-        }
 
         // Don't break the API chain that expects a single string in return
         return Object.defineProperty(new String(getMessage), 'messageChunk', { value: messageChunk });
@@ -1737,7 +1702,6 @@ export async function swipe(event, direction, {
         const bypassSwipeChecks = [
             SWIPE_SOURCE.DELETE,
             SWIPE_SOURCE.BACK,
-            SWIPE_SOURCE.AUTO_SWIPE,
             SWIPE_SOURCE.SLASH_COMMAND,
             SWIPE_SOURCE.SWIPE_PICKER,
         ].includes(source);
@@ -1812,7 +1776,7 @@ export async function swipe(event, direction, {
         void mountReactMainChatMessageListPanel();
     }
 
-    if ([SWIPE_SOURCE.DELETE, SWIPE_SOURCE.BACK, SWIPE_SOURCE.AUTO_SWIPE, SWIPE_SOURCE.SLASH_COMMAND, SWIPE_SOURCE.SWIPE_PICKER].includes(source)) {
+    if ([SWIPE_SOURCE.DELETE, SWIPE_SOURCE.BACK, SWIPE_SOURCE.SLASH_COMMAND, SWIPE_SOURCE.SWIPE_PICKER].includes(source)) {
         console.info(`The ${direction} swipe source on message #${mesId} is ${source}, Most checks have been bypassed. `);
     } else {
         //Only show an error if swipes are not hidden and a message is generating.

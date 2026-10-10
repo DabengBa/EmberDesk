@@ -36,7 +36,7 @@ describe('chat composer React surface', () => {
             'nonQRFormItems', 'leftSendForm', 'options_button',
             'send_textarea', 'send_textarea_hint', 'rightSendForm',
             'stscript_continue', 'stscript_pause', 'stscript_stop',
-            'mes_stop', 'mes_impersonate', 'mes_continue', 'send_but',
+            'mes_stop', 'send_but',
         ];
         for (const id of ids) {
             expect(composer).toContain(`id="${id}"`);
@@ -45,7 +45,7 @@ describe('chat composer React surface', () => {
 
     test('icon action controls migrate to ContractIconButton while stscript stays tag-qualified divs', () => {
         // Astryx-migrated icon buttons keep their legacy ids/classes.
-        for (const id of ['send_but', 'mes_continue', 'mes_impersonate', 'mes_stop', 'options_button', 'file_form_reset']) {
+        for (const id of ['send_but', 'mes_stop', 'options_button', 'file_form_reset']) {
             expect(composer).toMatch(new RegExp(`<ContractIconButton[\\s\\S]*?id="${id}"`));
         }
         // stscript visibility is driven by `#rightSendForm>div.stscript_btn`

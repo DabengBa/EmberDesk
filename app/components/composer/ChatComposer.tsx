@@ -50,7 +50,7 @@ export function ChatComposer() {
                         />
                     </div>
                     <div className="send_textarea_wrap">
-                        <textarea id="send_textarea" name="text" className="mdHotkeys" data-i18n="[aria-label]Chat message;[no_connection_text]Not connected to API!;[connected_text]Type a message, or /? for help" aria-label="Chat message" aria-describedby="send_textarea_hint" placeholder="Not connected to API!" no_connection_text="Not connected to API!" connected_text="Type a message, or /? for help" autoComplete="off"></textarea>
+                        <textarea id="send_textarea" name="text" data-i18n="[aria-label]Chat message;[no_connection_text]Not connected to API!;[connected_text]Type a message, or /? for help" aria-label="Chat message" aria-describedby="send_textarea_hint" placeholder="Not connected to API!" no_connection_text="Not connected to API!" connected_text="Type a message, or /? for help" autoComplete="off"></textarea>
                         <small id="send_textarea_hint" className="send_textarea_hint" data-i18n="Type /? for commands. Send requires an API connection.">Type /? for commands. Send requires an API connection.</small>
                     </div>
                     <div id="rightSendForm" className="alignContentCenter">
@@ -70,24 +70,6 @@ export function ChatComposer() {
                             title="Abort request"
                             icon={<i className="fa-solid fa-circle-stop" aria-hidden="true" />}
                             xstyle={composerStyles.idleHidden}
-                            nativeTitle
-                            tabIndex={0}
-                        />
-                        <ContractIconButton
-                            id="mes_impersonate"
-                            className="interactable displayNone"
-                            label="Ask AI to write your message"
-                            title="Ask AI to write your message for you"
-                            icon={<i className="fa-solid fa-user-secret" aria-hidden="true" />}
-                            nativeTitle
-                            tabIndex={0}
-                        />
-                        <ContractIconButton
-                            id="mes_continue"
-                            className="interactable displayNone"
-                            label="Continue last message"
-                            title="Continue the last message"
-                            icon={<i className="fa-fw fa-solid fa-arrow-right" aria-hidden="true" />}
                             nativeTitle
                             tabIndex={0}
                         />

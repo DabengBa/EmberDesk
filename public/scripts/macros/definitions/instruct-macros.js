@@ -63,7 +63,7 @@ export function registerInstructMacros() {
             const isEnabled = !!power_user.sysprompt.enabled;
             if (!isEnabled) return '';
 
-            if (power_user.prefer_character_prompt && env.character.charPrompt) {
+            if (env.character.charPrompt) {
                 return env.character.charPrompt;
             }
             return power_user.sysprompt.content ?? '';
@@ -164,7 +164,7 @@ export function getInstructMacros(env) {
         // System prompt macros
         {
             key: 'systemPrompt',
-            value: power_user.prefer_character_prompt && env.charPrompt ? env.charPrompt : power_user.sysprompt.content,
+            value: env.charPrompt ? env.charPrompt : power_user.sysprompt.content,
             enabled: power_user.sysprompt.enabled,
         },
         {
