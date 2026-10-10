@@ -212,8 +212,6 @@ describe('third-party extension retirement (E-cut-2)', () => {
         expect(settingsSource).toContain('parsedSettings.feature_settings = parsedSettings.extension_settings');
         expect(settingsSource).toContain('delete parsedSettings.extension_settings');
 
-        const dataMaidSource = readRepoFile('src/endpoints/data-maid.js');
-        expect(dataMaidSource).toContain('settings?.feature_settings ?? settings?.extension_settings');
     });
 
     test('no consumer keeps the retired extension_settings name or disabledExtensions gate', () => {

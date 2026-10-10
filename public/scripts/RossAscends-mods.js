@@ -39,11 +39,9 @@ import { getComposerValue, setComposerValue } from './main-chat-composer-service
 
 // Populated in initRossMods: drawer/panel markup is React-mounted after module eval.
 var RPanelPin = null;
-var LPanelPin = null;
 var WIPanelPin = null;
 
 var RightNavPanel = null;
-var LeftNavPanel = null;
 var WorldInfo = null;
 
 var SelectedCharacterTab = null;
@@ -521,10 +519,8 @@ export const autoFitSendTextAreaDebounced = debounce(autoFitSendTextArea, deboun
 export function initRossMods() {
     sendTextArea = document.querySelector('#send_textarea');
     RPanelPin = document.getElementById('rm_button_panel_pin');
-    LPanelPin = document.getElementById('lm_button_panel_pin');
     WIPanelPin = document.getElementById('WI_panel_pin');
     RightNavPanel = document.getElementById('right-nav-panel');
-    LeftNavPanel = document.getElementById('left-nav-panel');
     WorldInfo = document.getElementById('WorldInfo');
     SelectedCharacterTab = document.getElementById('rm_button_selected_ch');
 
@@ -560,21 +556,6 @@ export function initRossMods() {
             }
         }
     });
-    $(LPanelPin).on('click', function () {
-        accountStorage.setItem('LNavLockOn', $(LPanelPin).prop('checked'));
-        if ($(LPanelPin).prop('checked') == true) {
-            //console.log('adding pin class to Left nav');
-            $(LeftNavPanel).addClass('pinnedOpen');
-        } else {
-            //console.log('removing pin class from Left nav');
-            $(LeftNavPanel).removeClass('pinnedOpen');
-
-            if ($(LeftNavPanel).hasClass('openDrawer') && $('.openDrawer').length > 1) {
-                closeWorkspaceChildSlotHost('left-nav-panel');
-            }
-        }
-    });
-
     $(WIPanelPin).on('click', async function () {
         accountStorage.setItem('WINavLockOn', $(WIPanelPin).prop('checked'));
         if ($(WIPanelPin).prop('checked') == true) {
@@ -602,18 +583,7 @@ export function initRossMods() {
             console.debug('setting pin class via checkbox state');
             $(RightNavPanel).addClass('pinnedOpen');
         }
-        // read the state of left Nav Lock and apply to leftnav classlist
-        $(LPanelPin).prop('checked', accountStorage.getItem('LNavLockOn') === 'true');
-        if (accountStorage.getItem('LNavLockOn') == 'true') {
-            //console.log('setting pin class via local var');
-            $(LeftNavPanel).addClass('pinnedOpen');
-        }
-        if ($(LPanelPin).prop('checked')) {
-            console.debug('setting pin class via checkbox state');
-            $(LeftNavPanel).addClass('pinnedOpen');
-        }
-
-        // read the state of left Nav Lock and apply to leftnav classlist
+        // read the state of the World Info lock and apply to its classlist
         $(WIPanelPin).prop('checked', accountStorage.getItem('WINavLockOn') === 'true');
         if (accountStorage.getItem('WINavLockOn') == 'true') {
             //console.log('setting pin class via local var');
@@ -626,8 +596,8 @@ export function initRossMods() {
         }
     }
 
-    // Drawer open/closed persistence (NavOpened/LNavOpened/WINavOpened) is
-    // written by openWorkspaceChildSlotHost/closeWorkspaceChildSlotHost.
+    // Drawer open/closed persistence (NavOpened/WINavOpened) is written by
+    // openWorkspaceChildSlotHost/closeWorkspaceChildSlotHost.
 
     var chatbarInFocus = false;
     $('#send_textarea').on('focus', function () {
@@ -996,12 +966,10 @@ export function initRossMods() {
 
             if ($('.drawer-content')
                 .not('#WorldInfo')
-                .not('#left-nav-panel')
                 .not('#right-nav-panel')
                 .is(':visible')) {
                 let visibleDrawerContent = $('.drawer-content:visible')
                     .not('#WorldInfo')
-                    .not('#left-nav-panel')
                     .not('#right-nav-panel');
                 visibleDrawerContent.each((_, element) => closeWorkspaceChildSlotHost(element.id));
                 return;
@@ -1018,12 +986,6 @@ export function initRossMods() {
                     $(div).find('.floating_panel_close, .dragClose').trigger('click');
                     return;
                 }
-            }
-
-            if ($('#left-nav-panel').is(':visible') &&
-                $(LPanelPin).prop('checked') === false) {
-                closeWorkspaceChildSlotHost('left-nav-panel');
-                return;
             }
 
             if ($('#right-nav-panel').is(':visible') &&

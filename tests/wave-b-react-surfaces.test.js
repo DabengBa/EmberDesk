@@ -7,49 +7,6 @@ import url from 'node:url';
 const repoRoot = path.resolve(path.dirname(url.fileURLToPath(import.meta.url)), '..');
 
 describe('Wave B React surfaces', () => {
-    test('PromptManager popup markup is React-owned with IDs preserved', () => {
-        const popup = readRepoFile('app/components/panels/PromptManagerPopup.tsx');
-        const indexHtml = readRepoFile('public/index.html');
-        const openai = readRepoFile('public/scripts/openai.js');
-
-        for (const id of [
-            'completion_prompt_manager_popup_inspect',
-            'completion_prompt_manager_popup_close_button',
-            'completion_prompt_manager_popup_entry_form_inspect_list',
-            'completion_prompt_manager_popup_edit',
-            'completion_prompt_manager_popup_entry_form_name',
-            'completion_prompt_manager_popup_entry_form_role',
-            'completion_prompt_manager_popup_entry_form_prompt',
-            'completion_prompt_manager_popup_entry_form_injection_position',
-            'completion_prompt_manager_popup_entry_form_injection_depth',
-            'completion_prompt_manager_popup_entry_form_injection_order',
-            'completion_prompt_manager_popup_entry_form_injection_trigger',
-            'completion_prompt_manager_popup_entry_form_forbid_overrides',
-            'completion_prompt_manager_popup_entry_form_save',
-            'completion_prompt_manager_popup_entry_form_reset',
-            'completion_prompt_manager_popup_entry_form_close',
-        ]) {
-            expect(popup).toContain(`id="${id}"`);
-            expect(indexHtml).not.toContain(`id="${id}"`);
-        }
-        expect(indexHtml).toContain('id="completion_prompt_manager_popup"');
-        // The dynamic prompt list container lives in the AI config drawer
-        // (React-owned since the left-nav-panel migration).
-        const aiConfig = readRepoFile('app/components/ai-config/AiConfigPanel.tsx');
-        expect(aiConfig).toContain('id="completion_prompt_manager"');
-
-        expect(openai).toContain('export async function mountPromptManagerPopup(');
-        expect(openai).toContain('module.mountPromptManagerPopup(host)');
-    });
-
-    test('external_piece_text attribute is preserved for promptmanager.css attr()', () => {
-        const popup = readRepoFile('app/components/panels/PromptManagerPopup.tsx');
-        const css = readRepoFile('public/css/promptmanager.css');
-        expect(css).toContain('attr(external_piece_text)');
-        expect(popup).toContain('external_piece_text=');
-        expect(popup).not.toContain('data-external-piece-text');
-    });
-
     test('regex editor/settings/debugger/import-target markup is React-owned', () => {
         const editor = readRepoFile('app/components/regex/RegexEditor.tsx');
         const settings = readRepoFile('app/components/regex/RegexSettingsPanel.tsx');

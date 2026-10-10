@@ -20,7 +20,7 @@ const longChatName = 'Dev Character 001 Long Rendering Proof';
 const mobileLongChatName = 'Dev Character 001 Mobile Long Rendering Proof';
 const reactMainChatMessageListEnabled = true;
 const seededChatPath = path.join(userRoot, 'chats', chatFolder, `${seededChatName}.jsonl`);
-const longChatLimit = 25;
+const fixedChatTruncation = 100;
 const mobileViewports = [
     { name: 'narrow phone', width: 390, height: 844 },
     { name: 'wide mobile', width: 768, height: 1024 },
@@ -275,12 +275,11 @@ async function readDeleteModeRowState(page, messageId) {
     }, String(messageId));
 }
 
-async function openCharacterChatWithTruncation(page, chatName, truncationLimit) {
-    await page.evaluate(async ({ nextChatName, nextTruncationLimit }) => {
+async function openCharacterChat(page, chatName) {
+    await page.evaluate(async (nextChatName) => {
         const context = window.SillyTavern.getContext();
-        context.powerUserSettings.chat_truncation = nextTruncationLimit;
         await context.openCharacterChat(nextChatName);
-    }, { nextChatName: chatName, nextTruncationLimit: truncationLimit });
+    }, chatName);
 }
 
 async function positionMessageRowNearViewportTop(page, messageId, topOffset = 120) {
@@ -349,7 +348,7 @@ test.describe('chat message rendering', () => {
 
     test('renders seeded stored chat messages through the real app DOM', async ({ page }, testInfo) => {
         expect(fs.existsSync(seededChatPath)).toBe(true);
-        const longChat = buildLongChatFixture(seededChatPath);
+        const longChat = buildLongChatFixture(seededChatPath, 230);
 
         const seededMessages = getChatMessages(seededChatPath);
         const userMessageIndex = seededMessages.findIndex(message => message.is_user);
@@ -363,10 +362,6 @@ test.describe('chat message rendering', () => {
         await testSetup.awaitST({ page });
         await seedLongChatFixture(page, longChatName, longChat);
         await selectCharacterByName(page, characterName);
-        await page.evaluate((truncationLimit) => {
-            const context = window.SillyTavern.getContext();
-            context.powerUserSettings.chat_truncation = truncationLimit;
-        }, seededMessages.length);
 
         const firstMessageVisibleMs = await openChatAndMeasureFirstMessage(page, seededChatName, seededMessages[0].mes);
         testInfo.annotations.push({
@@ -440,21 +435,17 @@ test.describe('chat message rendering', () => {
         await expect(actionRow.getByRole('button', { name: 'Copy' })).toBeVisible();
 
         const longMessages = longChat.slice(1);
-        await page.evaluate(async ({ chatName, truncationLimit }) => {
-            const context = window.SillyTavern.getContext();
-            context.powerUserSettings.chat_truncation = truncationLimit;
-            await context.openCharacterChat(chatName);
-        }, { chatName: longChatName, truncationLimit: longChatLimit });
+        await openCharacterChat(page, longChatName);
 
         const showMoreMessagesButton = page.locator('#show_more_messages');
         await expect(showMoreMessagesButton).toBeVisible();
-        await expect(page.locator('#chat .mes[mesid]')).toHaveCount(longChatLimit);
-        await expectMainChatMessageListHostState(page, longChatLimit);
+        await expect(page.locator('#chat .mes[mesid]')).toHaveCount(fixedChatTruncation);
+        await expectMainChatMessageListHostState(page, fixedChatTruncation);
         await expectReactMessageRowState(page, longMessages.length - 1, true);
         await expectReactRichBodyState(page, longMessages.length - 1);
 
         const firstRenderedLongMessageId = await page.locator('#chat .mes[mesid]').first().getAttribute('mesid');
-        expect(Number(firstRenderedLongMessageId)).toBe(longMessages.length - longChatLimit);
+        expect(Number(firstRenderedLongMessageId)).toBe(longMessages.length - fixedChatTruncation);
 
         const firstRenderedLongMessageIndex = Number(firstRenderedLongMessageId);
         await expectMessageTextMatches(page, firstRenderedLongMessageIndex, longMessages[firstRenderedLongMessageIndex].mes);
@@ -462,14 +453,14 @@ test.describe('chat message rendering', () => {
 
         await showMoreMessagesButton.scrollIntoViewIfNeeded();
         await expect(showMoreMessagesButton).toBeVisible();
-        const expectedFirstLoadedMessageIndex = longMessages.length - (longChatLimit * 2);
+        const expectedFirstLoadedMessageIndex = longMessages.length - (fixedChatTruncation * 2);
 
         await page.evaluate(async () => {
             const script = await import('/script.js');
             await script.showMoreMessages();
         });
-        await expect(page.locator('#chat .mes[mesid]')).toHaveCount(longChatLimit * 2);
-        await expectMainChatMessageListHostState(page, longChatLimit * 2);
+        await expect(page.locator('#chat .mes[mesid]')).toHaveCount(fixedChatTruncation * 2);
+        await expectMainChatMessageListHostState(page, fixedChatTruncation * 2);
         await expectReactMessageRowState(page, expectedFirstLoadedMessageIndex, true);
         await expectReactRichBodyState(page, expectedFirstLoadedMessageIndex);
         await expect(page.locator('#jump_to_latest_message')).toHaveCount(0);
@@ -491,9 +482,9 @@ test.describe('chat message rendering', () => {
         await latestLongMessageRow.scrollIntoViewIfNeeded();
         await expect(latestLongMessageRow).toBeVisible();
         await expectMessageTextMatches(page, longMessages.length - 1, longMessages.at(-1).mes);
-        await expect(page.locator('#chat .mes[mesid]')).toHaveCount(longChatLimit * 2);
+        await expect(page.locator('#chat .mes[mesid]')).toHaveCount(fixedChatTruncation * 2);
 
-        await openCharacterChatWithTruncation(page, seededChatName, seededMessages.length);
+        await openCharacterChat(page, seededChatName);
         await expect(page.locator('#chat .mes[mesid]')).toHaveCount(seededMessages.length);
         expect(getUnexpectedConsoleErrors(consoleErrors)).toEqual([]);
     });
@@ -511,11 +502,10 @@ test.describe('chat message rendering', () => {
         await testSetup.awaitST({ page });
         await grantClipboardPermissions(page);
         await selectCharacterByName(page, characterName);
-        await page.evaluate(({ truncationLimit }) => {
+        await page.evaluate(() => {
             const context = window.SillyTavern.getContext();
-            context.powerUserSettings.chat_truncation = truncationLimit;
             context.powerUserSettings.confirm_message_delete = true;
-        }, { truncationLimit: seededMessages.length });
+        });
 
         await openChatAndMeasureFirstMessage(page, seededChatName, seededMessages[0].mes);
 
@@ -587,11 +577,10 @@ test.describe('chat message rendering', () => {
 
         await testSetup.awaitST({ page });
         await selectCharacterByName(page, characterName);
-        await page.evaluate(({ truncationLimit }) => {
+        await page.evaluate(() => {
             const context = window.SillyTavern.getContext();
-            context.powerUserSettings.chat_truncation = truncationLimit;
             context.powerUserSettings.confirm_message_delete = true;
-        }, { truncationLimit: seededMessages.length });
+        });
 
         await openChatAndMeasureFirstMessage(page, seededChatName, seededMessages[0].mes);
 
@@ -641,31 +630,31 @@ test.describe('chat message rendering', () => {
         test.skip(!reactMainChatMessageListEnabled, 'scroll restore is only required behind the React main-chat flag');
 
         expect(fs.existsSync(seededChatPath)).toBe(true);
-        const longChat = buildLongChatFixture(seededChatPath);
+        const longChat = buildLongChatFixture(seededChatPath, 230);
 
         const seededMessages = getChatMessages(seededChatPath);
         const longMessages = longChat.slice(1);
         const consoleErrors = createConsoleErrorCollector(page);
-        const seededVisibleMessageCount = Math.min(seededMessages.length, longChatLimit);
+        const seededVisibleMessageCount = Math.min(seededMessages.length, fixedChatTruncation);
 
         await testSetup.awaitST({ page });
         await seedLongChatFixture(page, longChatName, longChat);
         await selectCharacterByName(page, characterName);
-        await openCharacterChatWithTruncation(page, seededChatName, longChatLimit);
+        await openCharacterChat(page, seededChatName);
         await expect(page.locator('#chat .mes[mesid]')).toHaveCount(seededVisibleMessageCount);
-        await openCharacterChatWithTruncation(page, longChatName, longChatLimit);
+        await openCharacterChat(page, longChatName);
 
-        await expect(page.locator('#chat .mes[mesid]')).toHaveCount(longChatLimit);
-        await expectMainChatMessageListHostState(page, longChatLimit);
+        await expect(page.locator('#chat .mes[mesid]')).toHaveCount(fixedChatTruncation);
+        await expectMainChatMessageListHostState(page, fixedChatTruncation);
 
-        const anchorMessageId = longMessages.length - Math.ceil(longChatLimit / 2);
+        const anchorMessageId = longMessages.length - Math.ceil(fixedChatTruncation / 2);
         const anchorRow = page.locator(`#chat .mes[mesid="${anchorMessageId}"]`);
         const anchorTopBeforeSwitch = await positionMessageRowNearViewportTop(page, anchorMessageId);
 
-        await openCharacterChatWithTruncation(page, seededChatName, longChatLimit);
+        await openCharacterChat(page, seededChatName);
         await expect(page.locator('#chat .mes[mesid]')).toHaveCount(seededVisibleMessageCount);
 
-        await openCharacterChatWithTruncation(page, longChatName, longChatLimit);
+        await openCharacterChat(page, longChatName);
         await expect(page.locator(`#chat .mes[mesid="${anchorMessageId}"]`)).toBeVisible();
 
         await expect.poll(async () => {
@@ -682,7 +671,7 @@ test.describe('chat message rendering', () => {
 
     test('keeps long-chat load-more reachable on mobile viewports', async ({ page }) => {
         expect(fs.existsSync(seededChatPath)).toBe(true);
-        const longChat = buildLongChatFixture(seededChatPath);
+        const longChat = buildLongChatFixture(seededChatPath, 330);
         const longMessages = longChat.slice(1);
 
         const consoleErrors = createConsoleErrorCollector(page);
@@ -692,11 +681,10 @@ test.describe('chat message rendering', () => {
 
         for (const viewport of mobileViewports) {
             await page.setViewportSize({ width: viewport.width, height: viewport.height });
-            await page.evaluate(async ({ chatName, truncationLimit }) => {
+            await page.evaluate(async (chatName) => {
                 const context = window.SillyTavern.getContext();
-                context.powerUserSettings.chat_truncation = truncationLimit;
                 await context.openCharacterChat(chatName);
-            }, { chatName: mobileLongChatName, truncationLimit: longChatLimit });
+            }, mobileLongChatName);
 
             const composer = page.getByRole('textbox', { name: 'Chat message' });
             await expect(composer, `${viewport.name} composer`).toBeVisible();
@@ -704,9 +692,11 @@ test.describe('chat message rendering', () => {
             await expect(composer, `${viewport.name} composer focus`).toBeFocused();
             await expect(page.locator('#show_more_messages'), `${viewport.name} load more`).toBeVisible();
 
+            const renderedBeforeLoadMore = await page.locator('#chat .mes[mesid]').count();
             await page.locator('#show_more_messages').evaluate(element => element.click());
-            await expect(page.locator('#chat .mes[mesid]'), `${viewport.name} rendered messages`).toHaveCount(longChatLimit * 2);
-            await expectMainChatMessageListHostState(page, longChatLimit * 2);
+            const expectedRenderedCount = Math.min(renderedBeforeLoadMore + fixedChatTruncation, longMessages.length);
+            await expect(page.locator('#chat .mes[mesid]'), `${viewport.name} rendered messages`).toHaveCount(expectedRenderedCount);
+            await expectMainChatMessageListHostState(page, expectedRenderedCount);
             await expect(page.locator('#jump_to_latest_message'), `${viewport.name} jump to latest removed`).toHaveCount(0);
             await expect(page.locator('#show_more_messages'), `${viewport.name} load more remains`).toBeVisible();
 

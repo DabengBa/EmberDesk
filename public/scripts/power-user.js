@@ -7,14 +7,12 @@ import {
     reloadMarkdownProcessor,
     reloadCurrentChat,
     substituteParams,
-    getCurrentChatId,
     printCharactersDebounced,
     setCharacterId,
     setEditedMessageId,
     chat,
     getFirstDisplayedMessageId,
     showMoreMessages,
-    saveSettings,
     saveChatConditional,
     setAnimationDuration,
     ANIMATION_DURATION_DEFAULT,
@@ -23,13 +21,11 @@ import {
     doNewChat,
     messageFormatting,
     extension_prompt_types,
-    extension_prompt_roles,
     deleteMessage,
 } from '../script.js';
 import { favsToHotswap } from './RossAscends-mods.js';
 
 import { tag_map, tag_sort_mode, tags } from './tags.js';
-import { renderTemplateAsync } from './templates.js';
 
 import { debounce, delay, getStringHash, isTrueBoolean, shuffle, sortMoments, stringToRange, timestampToMoment } from './utils.js';
 import { FILTER_TYPES, fuzzySearchCategories } from './filters.js';
@@ -38,8 +34,8 @@ import { SlashCommand } from './slash-commands/SlashCommand.js';
 import { ARGUMENT_TYPE, SlashCommandArgument, SlashCommandNamedArgument } from './slash-commands/SlashCommandArgument.js';
 import { SlashCommandEnumValue, enumTypes } from './slash-commands/SlashCommandEnumValue.js';
 import { commonEnumProviders, enumIcons } from './slash-commands/SlashCommandCommonEnumsProvider.js';
-import { POPUP_TYPE, callGenericPopup, fixToastrForDialogs } from './popup.js';
 import { accountStorage } from './util/AccountStorage.js';
+import { fixToastrForDialogs } from './popup.js';
 import { loadWorkspacePanelsModule } from './workspace-panels-react-bridge.js';
 import { DEFAULT_FRONTEND_FRAME_SETTINGS, normalizeFrontendFramesSettings } from './frontend-frame.js';
 
@@ -55,16 +51,22 @@ export const toastPositionClasses = [
 export const MAX_CONTEXT_DEFAULT = 8192;
 export const MAX_RESPONSE_DEFAULT = 2048;
 
-const defaultStoryString = '{{#if system}}{{system}}\n{{/if}}{{#if description}}{{description}}\n{{/if}}{{#if scenario}}Scenario: {{scenario}}\n{{/if}}';
-const defaultExampleSeparator = '***';
-const defaultChatStart = '***';
+// power_user.context / power_user.instruct are retired data fields. The prompt
+// assembly and macro surfaces use these frozen shipped defaults instead. The
+// story string keeps the seeded template so world-info before/after injections
+// and the description/scenario fields keep resolving.
+export const DEFAULT_CONTEXT = Object.freeze({
+    story_string: '{{#if system}}{{system}}\n{{/if}}{{#if wiBefore}}{{wiBefore}}\n{{/if}}{{#if description}}{{description}}\n{{/if}}{{#if scenario}}Scenario: {{scenario}}\n{{/if}}{{#if wiAfter}}{{wiAfter}}\n{{/if}}',
+    chat_start: '***',
+    example_separator: '***',
+    story_string_position: extension_prompt_types.IN_PROMPT,
+});
+export const INERT_INSTRUCT = Object.freeze({ enabled: false });
 const defaultToastPosition = 'toast-top-center';
 
 
 export const power_user = {
     charListGrid: false,
-    pin_examples: false,
-    strip_examples: false,
 
     frontend_frames: { ...DEFAULT_FRONTEND_FRAME_SETTINGS },
 
@@ -72,54 +74,9 @@ export const power_user = {
     sort_order: 'asc',
     sort_rule: null,
 
-    // Retired from the settings surface; stored legacy CSS is still applied
-    // once at load for compatibility, then stripped on the next save.
-    custom_css: '',
-
     tag_sort_mode: tag_sort_mode.MANUAL,
 
-    instruct: {
-        enabled: false,
-        preset: 'Alpaca',
-        input_sequence: '### Instruction:',
-        input_suffix: '',
-        output_sequence: '### Response:',
-        output_suffix: '',
-        system_sequence: '',
-        system_suffix: '',
-        last_system_sequence: '',
-        first_input_sequence: '',
-        first_output_sequence: '',
-        last_input_sequence: '',
-        last_output_sequence: '',
-        story_string_prefix: '',
-        story_string_suffix: '',
-        stop_sequence: '',
-        wrap: true,
-        macro: true,
-        names_behavior: 'force',
-        activation_regex: '',
-        bind_to_context: false,
-        user_alignment_message: '',
-        system_same_as_user: false,
-        /** @deprecated Use output_suffix instead */
-        separator_sequence: '',
-        sequences_as_stop_strings: true,
-    },
 
-    context: {
-        preset: 'Default',
-        story_string: defaultStoryString,
-        chat_start: defaultChatStart,
-        example_separator: defaultExampleSeparator,
-        use_stop_strings: true,
-        names_as_stop_strings: true,
-        story_string_position: extension_prompt_types.IN_PROMPT,
-        story_string_role: extension_prompt_roles.SYSTEM,
-        story_string_depth: 1,
-    },
-
-    chat_truncation: 100,
     servers: [],
     show_tag_filters: false,
     auto_connect: true,
@@ -127,13 +84,10 @@ export const power_user = {
     external_media_forbidden_overrides: [],
 };
 
-/** @type {ContextSettings[]} */
 const storage_keys = {
     storyStringValidationCache: 'StoryStringValidationCache',
 };
 
-
-const debug_functions = [];
 
 const setHotswapsDebounced = debounce(favsToHotswap);
 
@@ -182,42 +136,17 @@ function applyChatWidth() {
     document.documentElement.style.setProperty('--sheldWidth', '50vw');
 }
 
-function applyCustomCSS() {
-    var styleId = 'custom-style';
-    var style = document.getElementById(styleId);
-    if (!style) {
-        style = document.createElement('style');
-        style.setAttribute('type', 'text/css');
-        style.setAttribute('id', styleId);
-        document.head.appendChild(style);
-    }
-    style.innerHTML = power_user.custom_css;
-}
-
 function applyFontScale() {
     document.documentElement.style.setProperty('--fontScale', '1');
 }
 
-/**
- * Register a function to be executed when the debug menu is opened.
- * @param {string} functionId Unique ID for the function.
- * @param {string} name Name of the function.
- * @param {string} description Description of the function.
- * @param {function} func Function to be executed.
- */
-export function registerDebugFunction(functionId, name, description, func) {
-    debug_functions.push({ functionId, name, description, func });
-}
-
-async function showDebugMenu() {
-    const template = await renderTemplateAsync('debug', { functions: debug_functions });
-    callGenericPopup(template, POPUP_TYPE.TEXT, '', { wide: true, large: true, allowVerticalScrolling: true });
-}
+// The Debug Menu surface is retired; keep the registration hook as a no-op
+// so call sites and the st-context compat bridge keep resolving.
+export function registerDebugFunction() { }
 
 export function applyPowerUserSettings() {
     applyFontScale();
     applyChatWidth();
-    applyCustomCSS();
     applyChatDisplay();
     switchReducedMotion();
     switchFixedInterfaceClasses();
@@ -261,18 +190,6 @@ export function applyStylePins() {
     } catch (error) {
         console.error('Error applying style pins:', error);
     }
-}
-
-function getExampleMessagesBehavior() {
-    if (power_user.strip_examples) {
-        return 'strip';
-    }
-
-    if (power_user.pin_examples) {
-        return 'keep';
-    }
-
-    return 'normal';
 }
 
 //MARK: loadPowerUser
@@ -329,9 +246,6 @@ export async function loadPowerUserSettings(settings) {
         delete power_user.import_card_tags;
     }
 
-    if (power_user?.instruct?.derived !== undefined) {
-        delete power_user.instruct.derived;
-    }
 
     // Persona system was retired; drop legacy per-persona settings.
     for (const key of ['personas', 'default_persona', 'persona_descriptions', 'persona_description',
@@ -346,16 +260,19 @@ export async function loadPowerUserSettings(settings) {
     delete power_user.sysprompt;
     delete power_user.reasoning;
 
-    // Retired advanced-tab controls are fixed at runtime: tokenizer always
-    // best-match, padding 64, name2/trim always on, no bias/stop-string fields.
+    // Retired controls/data fields are fixed at runtime: tokenizer always
+    // best-match, padding 64, name2/trim always on, no bias/stop-string fields,
+    // story string/context/instruct templates frozen at shipped defaults, and
+    // custom CSS / truncation window are fixed constants.
     for (const key of ['tokenizer', 'token_padding', 'always_force_name2',
         'user_prompt_bias', 'smooth_streaming', 'trim_spaces',
-        'custom_stopping_strings', 'stscript']) {
+        'custom_stopping_strings', 'stscript', 'instruct', 'context',
+        'chat_truncation', 'custom_css', 'pin_examples', 'strip_examples',
+        'movingUI', 'movingUIState', 'movingUIPreset', 'max_context_unlocked',
+        'ui_mode']) {
         delete power_user[key];
     }
 
-    $('#example_messages_behavior').val(getExampleMessagesBehavior());
-    $(`#example_messages_behavior option[value="${getExampleMessagesBehavior()}"]`).prop('selected', true);
 
     $('#frontend_frames_enabled').prop('checked', power_user.frontend_frames.enabled);
     $('#frontend_frames_depth').val(power_user.frontend_frames.depth);
@@ -444,12 +361,12 @@ export function fuzzySearchWorldInfo(data, searchValue, fuzzySearchCaches = null
  * @param {object} params Template parameters.
  * @param {object} [options] Additional options.
  * @param {string} [options.customStoryString] Custom story string template.
- * @param {ContextSettings} [options.customContextSettings] Custom context settings.
+ * @param {Object<string, *>} [options.customContextSettings] Custom context settings.
  * @returns {string} The rendered story string.
  */
 export function renderStoryString(params, { customStoryString = null, customContextSettings = null } = {}) {
     try {
-        const contextSettings = structuredClone(customContextSettings ?? power_user.context);
+        const contextSettings = structuredClone({ ...DEFAULT_CONTEXT, ...(customContextSettings ?? {}) });
         const storyString = customStoryString ?? contextSettings.story_string;
         const storyStringPosition = contextSettings.story_string_position ?? extension_prompt_types.IN_PROMPT;
 
@@ -830,31 +747,6 @@ jQuery(() => {
     });
 
     // Settings that go to settings.json
-    $('#example_messages_behavior').on('change', function () {
-        const selectedOption = String($(this).find(':selected').val());
-        console.log('Setting example messages behavior to', selectedOption);
-
-        switch (selectedOption) {
-            case 'normal':
-                power_user.pin_examples = false;
-                power_user.strip_examples = false;
-                break;
-            case 'keep':
-                power_user.pin_examples = true;
-                power_user.strip_examples = false;
-                break;
-            case 'strip':
-                power_user.pin_examples = false;
-                power_user.strip_examples = true;
-                break;
-        }
-
-        console.debug('power_user.pin_examples', power_user.pin_examples);
-        console.debug('power_user.strip_examples', power_user.strip_examples);
-
-        saveSettingsDebounced();
-    });
-
     $('#character_sort_order').on('change', function () {
         const field = String($(this).find(':selected').data('field'));
         // Save sort order, but do not save search sorting, as this is a temporary sorting option
@@ -865,15 +757,6 @@ jQuery(() => {
         }
         printCharactersDebounced();
         saveSettingsDebounced();
-    });
-
-    $('#reload_chat').on('click', async function () {
-        const currentChatId = getCurrentChatId();
-        if (currentChatId !== undefined && currentChatId !== null) {
-            await saveSettings();
-            await saveChatConditional();
-            await reloadCurrentChat();
-        }
     });
 
     $('#frontend_frames_enabled').on('input', function () {
@@ -911,21 +794,6 @@ jQuery(() => {
     $('#frontend_frames_allow_streaming').on('input', function () {
         power_user.frontend_frames.allow_streaming = !!$(this).prop('checked');
         saveSettingsDebounced();
-    });
-
-    $('#debug_menu').on('click', function () {
-        showDebugMenu();
-    });
-
-    $(document).on('click', '#debug_table [data-debug-function]', function () {
-        const functionId = $(this).data('debug-function');
-        const functionRecord = debug_functions.find(f => f.functionId === functionId);
-
-        if (functionRecord) {
-            functionRecord.func();
-        } else {
-            console.warn(`Debug function ${functionId} not found`);
-        }
     });
 
     SlashCommandParser.addCommandObject(SlashCommand.fromProps({

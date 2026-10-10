@@ -21,7 +21,10 @@ const longChatName = 'Dev Character 001 Long Walkthrough Proof';
 const reasoningChatName = 'Dev Character 001 Reasoning Walkthrough';
 const reactMainChatMessageListEnabled = true;
 const seededChatPath = path.join(userRoot, 'chats', chatFolder, `${seededChatName}.jsonl`);
-const longChatLimit = 25;
+const fixedChatTruncation = 100;
+// Must exceed truncation + 3 load-more steps so the mobile loop's repeated
+// load-more clicks keep the button reachable instead of exhausting history.
+const longChatMessageCount = 450;
 const mobileViewports = [
     { name: 'narrow phone', width: 390, height: 844 },
     { name: 'wide mobile', width: 768, height: 1024 },
@@ -147,12 +150,6 @@ function getUnexpectedConsoleErrors(errors) {
 
         return !isSeedPersonaThumbnail404 && !isTransparentBackgroundSeed404 && !isSettingsSaveConflict && !isExternalResourceFailure;
     });
-}
-
-async function setChatTruncation(page, truncationLimit) {
-    await page.evaluate((nextTruncationLimit) => {
-        window.SillyTavern.getContext().powerUserSettings.chat_truncation = nextTruncationLimit;
-    }, truncationLimit);
 }
 
 async function openCharacterManagement(page) {
@@ -295,7 +292,7 @@ async function wheelRowNearViewportTop(page, messageId, targetTop = 140) {
 
     await page.mouse.move(chatBox.x + Math.min(chatBox.width / 2, 80), chatBox.y + Math.min(chatBox.height / 2, 120));
 
-    for (let attempt = 0; attempt < 20; attempt++) {
+    for (let attempt = 0; attempt < 60; attempt++) {
         const relativeTop = await getRelativeRowTop(page, messageId);
         if (relativeTop === null) {
             throw new Error(`Unable to measure row ${messageId} during wheel positioning.`);
@@ -336,7 +333,7 @@ test.describe('main chat message list walkthrough', () => {
             characterName,
             avatarUrl: `${chatFolder}.png`,
             fileName: longChatName,
-            chat: buildLongChatFixture(seededChatPath),
+            chat: buildLongChatFixture(seededChatPath, longChatMessageCount),
         });
         await testSetup.saveCharacterChat({
             page,
@@ -350,7 +347,7 @@ test.describe('main chat message list walkthrough', () => {
     test('sprint 1 walkthrough reaches stored messages, message actions, and long-chat load more through visible UI', async ({ page }) => {
         const consoleErrors = createConsoleErrorCollector(page);
         const seededMessages = getChatMessages(seededChatPath);
-        const longMessages = buildLongChatFixture(seededChatPath).slice(1);
+        const longMessages = buildLongChatFixture(seededChatPath, longChatMessageCount).slice(1);
         const assistantMessageIndex = seededMessages.findIndex(message => !message.is_user && !message.is_system);
 
         expect(assistantMessageIndex).toBeGreaterThanOrEqual(0);
@@ -360,7 +357,6 @@ test.describe('main chat message list walkthrough', () => {
         await selectCharacterFromVisibleList(page, characterName);
 
         await openPastChatSearchThenClose(page, 'Session');
-        await setChatTruncation(page, seededMessages.length);
         await openPastChat(page, seededChatName);
 
         await expect(page.locator('#chat .mes[mesid]')).toHaveCount(seededMessages.length);
@@ -376,13 +372,12 @@ test.describe('main chat message list walkthrough', () => {
         await page.locator('#send_textarea').click();
         await expect(actionRow.getByRole('button', { name: 'Copy' })).toBeHidden();
 
-        await setChatTruncation(page, longChatLimit);
         await openPastChat(page, longChatName);
         await expect(page.locator('#show_more_messages')).toBeVisible();
-        await expect(page.locator('#chat .mes[mesid]')).toHaveCount(longChatLimit);
+        await expect(page.locator('#chat .mes[mesid]')).toHaveCount(fixedChatTruncation);
         await page.locator('#show_more_messages').evaluate(element => element.click());
-        await expect(page.locator('#chat .mes[mesid]')).toHaveCount(longChatLimit * 2);
-        await expectMainChatHostPresent(page, longChatLimit * 2);
+        await expect(page.locator('#chat .mes[mesid]')).toHaveCount(fixedChatTruncation * 2);
+        await expectMainChatHostPresent(page, fixedChatTruncation * 2);
         await expect(page.locator('#jump_to_latest_message')).toHaveCount(0);
         await expect(page.locator(`#chat .mes[mesid="${longMessages.length - 1}"] .mes_text`)).toContainText(normalizeMessageText(longMessages.at(-1).mes));
 
@@ -417,7 +412,6 @@ test.describe('main chat message list walkthrough', () => {
 
         await testSetup.awaitST({ page });
         await grantClipboardPermissions(page);
-        await setChatTruncation(page, 50);
         await selectCharacterFromVisibleList(page, characterName);
         await openPastChat(page, reasoningChatName);
 
@@ -488,25 +482,24 @@ test.describe('main chat message list walkthrough', () => {
         test.skip(!reactMainChatMessageListEnabled, 'scroll restore is only required behind the React main-chat flag');
 
         const consoleErrors = createConsoleErrorCollector(page);
-        const longMessages = buildLongChatFixture(seededChatPath).slice(1);
-        const anchorMessageId = longMessages.length - longChatLimit - Math.ceil(longChatLimit / 2);
+        const longMessages = buildLongChatFixture(seededChatPath, longChatMessageCount).slice(1);
+        const anchorMessageId = longMessages.length - fixedChatTruncation - Math.ceil(fixedChatTruncation / 2);
 
         await testSetup.awaitST({ page });
-        await setChatTruncation(page, longChatLimit);
         await selectCharacterFromVisibleList(page, characterName);
 
         await openPastChat(page, longChatName);
         await expect(page.locator('#show_more_messages')).toBeVisible();
         await expect(page.locator('#show_more_messages')).toHaveAttribute('data-main-chat-load-more-owner', 'react');
         await page.locator('#show_more_messages').evaluate(element => element.click());
-        await expect(page.locator('#chat .mes[mesid]')).toHaveCount(longChatLimit * 2);
+        await expect(page.locator('#chat .mes[mesid]')).toHaveCount(fixedChatTruncation * 2);
 
         const anchorTopBeforeSwitch = await wheelRowNearViewportTop(page, anchorMessageId);
         await openPastChat(page, alternateChatName);
         await expect(page.locator('#chat .mes[mesid] .mes_text').first()).toBeVisible();
 
         await openPastChat(page, longChatName);
-        await expect(page.locator('#chat .mes[mesid]')).toHaveCount(longChatLimit * 2);
+        await expect(page.locator('#chat .mes[mesid]')).toHaveCount(fixedChatTruncation * 2);
         await expect.poll(async () => {
             const anchorTopAfterSwitch = await getRelativeRowTop(page, anchorMessageId);
             if (anchorTopAfterSwitch === null) {
@@ -528,13 +521,13 @@ test.describe('main chat message list walkthrough', () => {
                 return page.locator('#chat .mes[mesid]').count();
             }, {
                 message: `${viewport.name} restored expanded history window`,
-            }).toBeGreaterThanOrEqual(longChatLimit * 2);
+            }).toBeGreaterThanOrEqual(fixedChatTruncation * 2);
             const renderedMessageCountBeforeLoadMore = await page.locator('#chat .mes[mesid]').count();
             await expect(page.locator('#show_more_messages'), `${viewport.name} load more`).toBeVisible();
             await expect(page.locator('#show_more_messages'), `${viewport.name} react load-more owner`).toHaveAttribute('data-main-chat-load-more-owner', 'react');
             // Element-owned click avoids mobile drawer/composer intercept on the hit-target.
             await page.locator('#show_more_messages').evaluate(element => element.click());
-            const expectedRenderedMessageCount = Math.min(renderedMessageCountBeforeLoadMore + longChatLimit, longMessages.length);
+            const expectedRenderedMessageCount = Math.min(renderedMessageCountBeforeLoadMore + fixedChatTruncation, longMessages.length);
             await expect(page.locator('#chat .mes[mesid]'), `${viewport.name} rendered messages`).toHaveCount(expectedRenderedMessageCount);
             await expectMainChatHostPresent(page, expectedRenderedMessageCount);
             await expect(page.locator('#jump_to_latest_message'), `${viewport.name} jump to latest removed`).toHaveCount(0);

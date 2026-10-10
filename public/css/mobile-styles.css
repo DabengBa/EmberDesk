@@ -2,13 +2,11 @@
 @media screen and (max-width: 1000px) {
 
     #UI-Theme-Block,
-    #UI-Customization,
     #power-user-options-block {
         flex-basis: 100%;
     }
 
-    #rm_button_panel_pin_div,
-    #lm_button_panel_pin_div {
+    #rm_button_panel_pin_div {
         display: none;
     }
 
@@ -214,8 +212,7 @@
         display: none;
     }
 
-    #right-nav-panel,
-    #left-nav-panel {
+    #right-nav-panel {
         /* 100vh are fallback units for browsers that don't support dvh */
         height: calc(100vh - 45px);
         height: calc(100dvh - 45px);
@@ -236,7 +233,6 @@
         }
     }
 
-    #left-nav-panel:not(.openDrawer),
     #right-nav-panel:not(.openDrawer) {
         height: 0;
     }
@@ -392,7 +388,6 @@
 
     #character_popup,
     #world_popup,
-    #left-nav-panel,
     #right-nav-panel,
     .drawer-content {
         width: unset;

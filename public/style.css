@@ -2,7 +2,6 @@
 
 @import url(css/animations.css);
 @import url(css/popup.css);
-@import url(css/promptmanager.css);
 @import url(css/loader.css);
 @import url(css/character-group-overlay.css);
 @import url(css/file-form.css);
@@ -776,11 +775,6 @@ hr {
     min-height: 1px;
     border: 0;
     opacity: 0.2;
-}
-
-#version_display {
-    padding: 5px;
-    opacity: 0.8;
 }
 
 #sheld {
@@ -2779,62 +2773,48 @@ input[type="file"] {
 }
 
     #rm_button_characters,
-    #rm_button_panel_pin_div,
-    #lm_button_panel_pin_div {
+    #rm_button_panel_pin_div {
     font-size: 24px;
     display: inline;
     padding: 1px;
 }
 
-    #rm_button_panel_pin_div,
-    #lm_button_panel_pin_div {
+    #rm_button_panel_pin_div {
     opacity: 0.5;
     transition: var(--animation-duration-2x);
 }
 
     #rm_button_panel_pin_div:hover,
-    #rm_button_panel_pin_div:has(:focus-visible),
-    #lm_button_panel_pin_div:hover,
-    #lm_button_panel_pin_div:has(:focus-visible) {
+    #rm_button_panel_pin_div:has(:focus-visible) {
     opacity: 1;
 }
 
-#lm_button_panel_pin_div {
-    text-align: start;
-}
-
 #rm_button_panel_pin,
-#lm_button_panel_pin,
 #WI_panel_pin {
     display: none;
 }
 
 #rm_button_panel_pin:checked+label,
-#lm_button_panel_pin:checked+label,
 #WI_panel_pin:checked+label {
     display: inline;
 }
 
 #rm_button_panel_pin:checked+label .checked,
-#lm_button_panel_pin:checked+label .checked,
 #WI_panel_pin:checked+label .checked {
     display: inline;
 }
 
 #rm_button_panel_pin:checked+label .unchecked,
-#lm_button_panel_pin:checked+label .unchecked,
 #WI_panel_pin:checked+label .unchecked {
     display: none;
 }
 
 #rm_button_panel_pin:not(:checked)+label .checked,
-#lm_button_panel_pin:not(:checked)+label .checked,
 #WI_panel_pin:not(:checked)+label .checked {
     display: none;
 }
 
 #rm_button_panel_pin:not(:checked)+label .unchecked,
-#lm_button_panel_pin:not(:checked)+label .unchecked,
 #WI_panel_pin:not(:checked)+label .unchecked {
     display: inline;
 }
@@ -3140,10 +3120,6 @@ input[type="file"] {
 
 #rm_buttons_container {
     display: contents;
-}
-
-#left-nav-panel {
-    z-index: 3000;
 }
 
 .radio_group {
@@ -5768,14 +5744,6 @@ body:not(.caption) .mes_img_caption {
     background-color: color-mix(in srgb, var(--SmartThemeBlurTintColor) 72%, var(--black70a) 28%);
 }
 
-#user-settings-block [name="MiscellaneousToggles"] {
-    display: contents;
-}
-
-#ui_language_select {
-    width: 8em;
-}
-
 .standoutHeader.inline-drawer-header:hover {
     filter: brightness(150%);
 }
@@ -5983,14 +5951,12 @@ body:has(#character_popup.open) #top-settings-holder:has(.drawer-content.openDra
 
 /*to prevent draggables from being made too small to see*/
 .fillRight,
-.fillLeft,
 #WorldInfo {
     min-width: 100px !important;
     min-height: 100px !important;
     position: fixed;
 }
 
-.fillLeft,
 .fillRight {
     width: calc((100vw - var(--sheldWidth) - 2px) /2);
     width: calc((100dvw - var(--sheldWidth) - 2px) /2);
@@ -6006,18 +5972,12 @@ body:has(#character_popup.open) #top-settings-holder:has(.drawer-content.openDra
     min-width: 100px;
 }
 
-.fillLeft {
-    left: 0;
-    right: auto;
-}
-
 .fillRight {
     right: 0;
     left: calc(100% - var(--sheldWidth) /2 + var(--sheldWidth) +1px);
     z-index: 3000;
 }
 
-.fillLeft.openDrawer,
 .fillRight.openDrawer {
     display: flex;
     height: 100%;
@@ -6047,10 +6007,6 @@ body:has(#character_popup.open) #top-settings-holder:has(.drawer-content.openDra
     height: 100%;
     overflow-Y: auto;
     overflow-X: hidden;
-}
-
-.fillLeft .scrollableInner {
-    padding: 0.5em 0.75em 0.5em 0.5em
 }
 
 .drawer-content select {
@@ -6688,13 +6644,6 @@ body:has(#character_popup.open) #top-settings-holder:has(.drawer-content.openDra
 /* Features grid: more breathing room between checkboxes */
 .features-grid {
     gap: 6px 12px;
-}
-
-/* Prompt Manager: visual separation from Features */
-#completion_prompt_manager {
-    border-top: 1px solid var(--white20a);
-    padding-top: 8px;
-    margin-top: 4px;
 }
 
 /* Segmented control */

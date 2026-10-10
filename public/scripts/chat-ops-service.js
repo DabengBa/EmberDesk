@@ -1,5 +1,5 @@
 import { eventSource, event_types } from './events.js';
-import { debounce_timeout } from './constants.js';
+import { CHAT_TRUNCATION, debounce_timeout } from './constants.js';
 import { getRequestHeaders } from './request-context.js';
 import { createOrEditCharacter } from './character-lifecycle-service.js';
 import { ensureMessageMediaIsArray, scrollChatToBottom, updateMessageElement } from './message-service.js';
@@ -127,12 +127,9 @@ export async function deleteCharacterChatByName(characterId, fileName) {
 export async function loadEarlierChatMessages(messagesToLoad = null) {
     if (isReactMainChatOwner()) {
         const visibleWindow = getMainChatReactVisibleWindow(state.reactMainChatProjectionCleared ? [] : state.chat);
-        const configuredCount = Number(state.power_user?.chat_truncation);
         const count = Number.isInteger(messagesToLoad) && messagesToLoad > 0
             ? messagesToLoad
-            : configuredCount > 0
-                ? configuredCount
-                : state.chat.length;
+            : CHAT_TRUNCATION;
         state.mainChatVisibleStartIndices.set(getCurrentChatId(), Math.max(
             0,
             (visibleWindow.visibleMessageIds.length > 0
@@ -147,7 +144,7 @@ export async function loadEarlierChatMessages(messagesToLoad = null) {
     const firstDisplayedMesId = state.chatElement.children('.mes').first().attr('mesid');
     const firstDisplayedMessage = state.chatElement.children('.mes').first();
     let messageId = Number(firstDisplayedMesId);
-    let count = messagesToLoad || state.power_user.chat_truncation || Number.MAX_SAFE_INTEGER;
+    let count = messagesToLoad || CHAT_TRUNCATION;
 
     // If there are no messages displayed, or the message somehow has no mesid, we default to one higher than last message id,
     // so the first "new" message being shown will be the last available message
@@ -208,7 +205,7 @@ export async function printMessages() {
     }
 
     let startIndex = 0;
-    let count = state.power_user.chat_truncation || Number.MAX_SAFE_INTEGER;
+    let count = CHAT_TRUNCATION;
 
     if (state.chat.length > count) {
         startIndex = state.chat.length - count;

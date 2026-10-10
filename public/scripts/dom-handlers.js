@@ -68,7 +68,6 @@ const messageEdit = (...args) => shell().messageEdit(...args);
 const messageEditCancel = (...args) => shell().messageEditCancel(...args);
 const messageEditDone = (...args) => shell().messageEditDone(...args);
 const messageEditMove = (...args) => shell().messageEditMove(...args);
-const mountAiConfigPanel = (...args) => shell().mountAiConfigPanel(...args);
 const mountCharacterContextMenu = (...args) => shell().mountCharacterContextMenu(...args);
 const mountCharacterPopup = (...args) => shell().mountCharacterPopup(...args);
 const mountChatComposer = (...args) => shell().mountChatComposer(...args);
@@ -135,7 +134,6 @@ export async function bindLegacyShellHandlers() {
     // bindings below; bootstrapWorkspace re-invokes these mounts later, and
     // each mount is idempotent via its dataset.react*Mounted guard.
     await Promise.all([
-        mountAiConfigPanel(),
         mountCharacterPopup(),
         mountRightNavPanel(),
         mountSelectChatPopup(),
@@ -166,19 +164,6 @@ export async function bindLegacyShellHandlers() {
         } else {
             S_TAPreviouslyFocused = true;
         }
-    });
-
-    /////////////////
-
-    $('#swipes-checkbox').on('change', function () {
-        state.swipes = !!$('#swipes-checkbox').prop('checked');
-        if (state.swipes) {
-            //console.log('toggle change calling showswipebtns');
-            showSwipeButtons();
-        } else {
-            hideSwipeButtons();
-        }
-        saveSettingsDebounced();
     });
 
     ///// SWIPE BUTTON CLICKS ///////

@@ -311,9 +311,6 @@ describe('group chat retirement', () => {
 
         const zhTw = JSON.parse(fs.readFileSync(path.join(localeDirectory, 'zh-tw.json'), 'utf8'));
         expect(zhTw).toHaveProperty('Prome (Visual Novel Extension)');
-        const dataMaidSource = fs.readFileSync(path.join(repoRoot, 'app', 'components', 'data-maid', 'DataMaidDialog.tsx'), 'utf8');
-        expect(dataMaidSource).toContain('Group Chats');
-        expect(dataMaidSource).toContain('Chat files associated with deleted groups.');
         const domHandlersSource = fs.readFileSync(path.join(repoRoot, 'public', 'scripts', 'dom-handlers.js'), 'utf8');
         expect(domHandlersSource).toContain('All chats, assets and group memberships will be preserved');
     });

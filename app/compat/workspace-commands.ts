@@ -4,27 +4,20 @@ export type WorkspaceShellSlotKey =
     | 'characterLibrary'
     | 'worldInfo'
     | 'characterAuthoring'
-    | 'aiConfigDrawer'
     | 'regex';
 
 export type WorkspaceDockPanelKind =
-    | 'aiConfig'
-    | 'advancedFormatting'
     | 'characterLibrary'
     | 'worldInfo'
     | 'settings'
     | 'characterAuthoring'
-    | 'aiConfigDrawer'
     | 'regex';
 
 export interface WorkspaceShellCommands {
-    openAIConfig(): CommandResult;
-    openFormatting(): CommandResult;
     openCharacterLibrary(): CommandResult;
     openWorldInfo(): CommandResult;
     openSettings(): CommandResult;
     openCharacterAuthoring(): CommandResult;
-    openAIConfigDrawer(): CommandResult;
     openRegex(): CommandResult;
     activateWorkspaceShellSlot(slotKey: WorkspaceShellSlotKey): CommandResult;
     deactivateWorkspaceShellSlot(slotKey: WorkspaceShellSlotKey): CommandResult;

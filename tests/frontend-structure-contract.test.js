@@ -13,10 +13,10 @@ import {
 
 describe('frontend structure contract helpers', () => {
     test('reads repository files and locates tags by id or class', () => {
-        const aiConfigPanel = readRepoFile('app/components/ai-config/AiConfigPanel.tsx');
+        const powerUserPanel = readRepoFile('app/components/power-user/PowerUserPanel.tsx');
 
-        expect(getTagById(aiConfigPanel, 'ai_response_configuration')).toContain('className="flex-container flexNoGap"');
-        expect(getTagByClass(aiConfigPanel, 'preset-header')).toContain('className="margin0 title_restorable preset-header"');
+        expect(getTagById(powerUserPanel, 'user-settings-block-content')).toContain('className="flex-container spaceEvenly"');
+        expect(getTagByClass(powerUserPanel, 'checkbox_label')).toContain('htmlFor="frontend_frames_enabled"');
     });
 
     test('checks button affordance and readable marker failures', () => {

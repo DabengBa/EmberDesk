@@ -1,74 +1,9 @@
-import { ContractButton } from '../contract/ContractButton';
 export function PowerUserPanel() {
     return (
         <>
-                <div className="flex-container flexFlowColumn">
-                    <div name="userSettingsRowOne" className="flex-container flexFlowRow alignitemscenter spaceBetween">
-                        <div className="flex-container">
-                            <div className="flex-container flexnowrap alignItemsBaseline">
-                                <h3 className="margin0">
-                                    <span data-i18n="User Settings">User Settings</span>
-
-                                    <a href="usage/user-settings/" className="notes-link" target="_blank" rel="noreferrer" aria-label="User settings documentation">
-                                        <span className="fa-solid fa-circle-question note-link-span" aria-hidden="true"></span>
-                                    </a>
-                                </h3>
-                            </div>
-                        </div>
-                        <div id="UI-language-block" className="flex-container alignItemsBaseline">
-                            <span data-i18n="UI Language">Language:</span>
-                            <select id="ui_language_select" className="flex1 margin0 text_pole">
-                                <option value="" data-i18n="Default">Default</option>
-                                <option value="en">English</option>
-                            </select>
-                        </div>
-                        <small id="version_display"></small>
-                    </div>
-                    <div name="UserSettingsRowTwo" className="flex-container flexFlowRow">
-                        <div id="account_controls" className="flex-container">
-                            <ContractButton id="account_button" className="margin0 menu_button_icon menu_button" label="Account" icon={<i className="fa-fw fa-solid fa-user-shield" aria-hidden="true" />} />
-                            <ContractButton id="admin_button" className="margin0 menu_button_icon menu_button" label="Admin Panel" icon={<i className="fa-fw fa-solid fa-user-tie" aria-hidden="true" />} />
-                            <ContractButton id="logout_button" className="margin0 menu_button_icon menu_button" label="Logout" icon={<i className="fa-fw fa-solid fa-right-from-bracket" aria-hidden="true" />} />
-                        </div>
-                        <textarea id="settingsSearch" className="textarea_compact flex1" rows={1} placeholder="Search Settings" data-i18n="[placeholder]Search Settings"></textarea>
-                    </div>
-                </div>
                 <div id="user-settings-block-content" className="flex-container spaceEvenly">
-
-                    <div name="UserSettingsSecondColumn" id="UI-Customization" className="flex-container flexFlowColumn wide100p flexNoGap flex1">
-                        <div name="MiscellaneousToggles">
-                            <h4><span data-i18n="Miscellaneous">Miscellaneous</span></h4>
-                            <div className="flex-container flexGap2">
-                                <ContractButton id="reload_chat" className="menu_button whitespacenowrap" label="Reload Chat" title="Reload and redraw the currently open chat." nativeTitle />
-                                <ContractButton id="debug_menu" className="menu_button whitespacenowrap" label="Debug Menu" />
-                                <ContractButton id="data_maid_button" className="menu_button whitespacenowrap" label="Clean-Up" title="Find and delete backups, unused chats, files, images, etc." nativeTitle />
-                            </div>
-                        </div>
-                    </div>
                     <div name="UserSettingsThirdColumn" id="power-user-options-block" className="flex-container wide100p flex1">
                         <div id="power-user-option-checkboxes">
-
-                            <div name="ChatMessageHandlingToggles">
-                                <h4 data-i18n="Chat/Message Handling">Chat/Message Handling</h4>
-                                <div id="examples-behavior-block">
-                                    <label htmlFor="example_messages_behavior">
-                                        <small data-i18n="Example Messages Behavior">
-                                            Example Messages Behavior:
-                                        </small>
-                                    </label>
-                                    <select id="example_messages_behavior">
-                                        <option value="normal" data-i18n="Gradual push-out">Gradual push-out</option>
-                                        <option value="keep" data-i18n="Always include examples">Always include examples</option>
-                                        <option value="strip" data-i18n="Never include examples">Never include examples</option>
-                                    </select>
-                                </div>
-                                <div className="checkbox-container flex-container">
-                                    <label className="checkbox_label" htmlFor="swipes-checkbox" title="Show arrow buttons on the last in-chat message to generate alternative AI responses. Both PC and mobile." data-i18n="[title]Show arrow buttons on the last in-chat message to generate alternative AI responses. Both PC and mobile">
-                                        <input id="swipes-checkbox" type="checkbox" />
-                                        <small data-i18n="Swipes">Swipes</small><i className="fa-solid fa-desktop"  /><i className="fa-solid fa-mobile-screen-button"  />
-                                    </label>
-                                </div>
-                            </div>
                             <div name="FrontendFramesToggle" className="inline-drawer wide100p flexFlowColumn">
                                 <div className="inline-drawer-toggle inline-drawer-header userSettingsInnerExpandable" title="Render complete HTML documents inside message code blocks as live frames.">
                                     <b><span data-i18n="Frontend Frames">Frontend Frames</span></b>

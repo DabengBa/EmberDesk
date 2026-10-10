@@ -391,9 +391,9 @@ describe('settings React route flag', () => {
         expect(merged.power_user.custom_stopping_strings).toBeUndefined();
         expect(merged.power_user.tokenizer).toBeUndefined();
         expect(merged.power_user.smooth_streaming).toBeUndefined();
-        // chat_truncation stays a live data field (no UI): the fixed default
-        // drives the long-chat initial window and the JSON value still loads.
-        expect(merged.power_user.chat_truncation).toBe(120);
+        // chat_truncation is retired; the initial long-chat window is a fixed
+        // constant and the stored key is stripped from the saved payload.
+        expect(merged.power_user.chat_truncation).toBeUndefined();
         // Retired power_user keys are stripped from the saved payload.
         expect(merged.power_user.auto_continue).toBeUndefined();
         // Global system prompt and configurable reasoning template are
@@ -806,25 +806,24 @@ describe('settings React route flag', () => {
         const providerSource = fs.readFileSync(path.join(repoRoot, 'public', 'scripts', 'react-runtime-provider.js'), 'utf8');
         const scriptSource = fs.readFileSync(path.join(repoRoot, 'public', 'script.js'), 'utf8');
 
-        // Legacy-owned surfaces (preset CRUD, Prompt Manager,
-        // user-settings extras) still render
-        // inside workspace drawers that the shell no longer opens. Overlay links
-        // reach them through the openWorkspaceDrawer runtime command, which
+        // The remaining legacy-owned drawer (Frontend Frames extras) still
+        // renders inside a workspace drawer the shell no longer opens. Overlay
+        // links reach it through the openWorkspaceDrawer runtime command, which
         // resolves to openWorkspaceChildSlotHostImmediate on the drawer host id.
         for (const target of [
-            'left-nav-panel',
             'user-settings-block',
         ]) {
             expect(routeSource).toContain(`'${target}'`);
             expect(indexHtml).toContain(`id="${target}" class="drawer-content`);
         }
-        // The retired API Connections and Advanced Formatting drawers are gone
-        // from both surfaces; formatting preset CRUD moved into the advanced
-        // settings tab itself.
+        // The retired API Connections, AI Response Configuration, and Advanced
+        // Formatting drawers are gone from both surfaces.
         expect(routeSource).not.toContain("'rm_api_block'");
         expect(routeSource).not.toContain("'AdvancedFormatting'");
+        expect(routeSource).not.toContain("'left-nav-panel'");
         expect(indexHtml).not.toContain('id="rm_api_block"');
         expect(indexHtml).not.toContain('id="AdvancedFormatting"');
+        expect(indexHtml).not.toContain('id="left-nav-panel"');
 
         expect(routeSource).toContain('runtime?.commands.openWorkspaceDrawer(link.target)');
         expect(routeSource).toContain('onRequestClose?.()');
@@ -839,13 +838,13 @@ describe('settings React route flag', () => {
         expect(scriptSource).toContain('WORKSPACE_DRAWER_COMMAND_HOST_IDS');
         expect(scriptSource).toContain('rejected unknown drawer host id');
         for (const target of [
-            'left-nav-panel',
             'user-settings-block',
         ]) {
             expect(scriptSource).toContain(`'${target}'`);
         }
         expect(scriptSource).not.toContain("'rm_api_block'");
         expect(scriptSource).not.toContain("'AdvancedFormatting'");
+        expect(scriptSource).not.toContain("'left-nav-panel'");
     });
 
     test('redirects unauthenticated /settings requests to /login', async () => {

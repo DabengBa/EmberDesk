@@ -97,7 +97,7 @@ describe('React runtime provider', () => {
         await runtime.commands.retryMessage('4');
         await runtime.commands.loadEarlier('2');
         await runtime.commands.saveSettings({ oai_settings: { temperature: 0.7 } });
-        runtime.commands.openWorkspaceDrawer('left-nav-panel');
+        runtime.commands.openWorkspaceDrawer('user-settings-block');
         await runtime.commands.connectProvider();
         await runtime.commands.testProviderConnection();
 
@@ -106,7 +106,7 @@ describe('React runtime provider', () => {
         expect(commands.retryMessage).toHaveBeenCalledWith('4');
         expect(commands.loadEarlier).toHaveBeenCalledWith('2');
         expect(commands.saveSettings).toHaveBeenCalledWith({ oai_settings: { temperature: 0.7 } });
-        expect(commands.openWorkspaceDrawer).toHaveBeenCalledWith('left-nav-panel');
+        expect(commands.openWorkspaceDrawer).toHaveBeenCalledWith('user-settings-block');
         expect(commands.connectProvider).toHaveBeenCalledTimes(1);
         expect(commands.testProviderConnection).toHaveBeenCalledTimes(1);
     });

@@ -192,3 +192,7 @@ export const REASONING_SEPARATOR = '\n';
 // Fixed padding compensating for API-side message format overhead that local
 // token counting cannot observe (retired power_user.token_padding setting).
 export const TOKEN_PADDING = 64;
+
+// Initial render window for long chats (retired power_user.chat_truncation
+// setting); load-more paginates the remainder in the same step.
+export const CHAT_TRUNCATION = 100;

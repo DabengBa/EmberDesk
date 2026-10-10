@@ -50,9 +50,7 @@ import {
 } from './world-info-workbench';
 import { SettingsSurface } from './components/settings/SettingsSurface';
 import { ChatBackupsBrowser, type ChatBackupsCommands } from './components/chat-backups/ChatBackupsBrowser';
-import { DataMaidDialog } from './components/data-maid/DataMaidDialog';
 import { PowerUserPanel } from './components/power-user/PowerUserPanel';
-import { PromptManagerPopup } from './components/panels/PromptManagerPopup';
 import { TagManagement } from './components/tags/TagManagement';
 import { TagChipInput } from './components/fields/TagChipInput';
 import { useAutosizeTextareaRef } from './lib/autosize-textarea';
@@ -63,7 +61,6 @@ import { RegexImportTarget } from './components/regex/RegexImportTarget';
 import { MacroBrowserPanel, type MacroBrowserProps } from './components/macros/MacroBrowser';
 import { WorldInfoPanel } from './components/panels/WorldInfoPanel';
 import { ChatComposer } from './components/composer/ChatComposer';
-import { AiConfigPanel } from './components/ai-config/AiConfigPanel';
 import { CharacterPopup } from './components/character-popup/CharacterPopup';
 import { RightNavPanel } from './components/right-nav/RightNavPanel';
 import { SelectChatPopup } from './components/select-chat/SelectChatPopup';
@@ -1436,7 +1433,6 @@ function WorkspacePanelRoot({
 }
 
 const workspaceShellNavigationEntries: WorkspaceShellNavigationEntry[] = [
-    { command: 'openAIConfigDrawer', icon: 'fa-bookmark', label: 'AI 响应配置', panelKind: 'aiConfigDrawer', slotKey: 'aiConfigDrawer' },
     { command: 'openCharacterLibrary', icon: 'fa-address-book', label: '角色库', panelKind: 'characterLibrary', slotKey: 'characterLibrary' },
     { command: 'openWorldInfo', icon: 'fa-book-atlas', label: '世界书', panelKind: 'worldInfo', slotKey: 'worldInfo' },
     { command: 'openRegex', icon: 'fa-code', label: '正则', panelKind: 'regex', slotKey: 'regex' },
@@ -1521,10 +1517,6 @@ function executeWorkspaceShellNavigationCommand(
     }
 
     switch (command) {
-        case 'openAIConfig':
-            return commands.openAIConfig();
-        case 'openFormatting':
-            return commands.openFormatting();
         case 'openCharacterLibrary':
             return commands.openCharacterLibrary();
         case 'openWorldInfo':
@@ -1533,8 +1525,6 @@ function executeWorkspaceShellNavigationCommand(
             return commands.openSettings();
         case 'openCharacterAuthoring':
             return commands.openCharacterAuthoring();
-        case 'openAIConfigDrawer':
-            return commands.openAIConfigDrawer();
         case 'openRegex':
             return commands.openRegex();
         case 'activateWorkspaceShellSlot':
@@ -1872,10 +1862,7 @@ export function mountSettingsOverlay(options: {
 }) {
     attachGlobalCompatibilityBridge();
     const initialTab = typeof options.initialTab === 'string' ? options.initialTab : null;
-    const panelKind: WorkspaceDockPanelKind =
-        options.panelKind === 'aiConfig' || options.panelKind === 'advancedFormatting'
-            ? options.panelKind
-            : 'settings';
+    const panelKind: WorkspaceDockPanelKind = 'settings';
     if (mountedSettingsOverlay) {
         mountedSettingsOverlay.initialTab = initialTab;
         mountedSettingsOverlay.panelKind = panelKind;
@@ -2082,49 +2069,6 @@ export function unmountChatBackupsBrowser() {
     }
 }
 
-let mountedDataMaid: { root: Root; host: HTMLElement } | null = null;
-
-function renderDataMaid(mount: NonNullable<typeof mountedDataMaid>) {
-    mount.root.render(
-        <StrictMode>
-            <Theme theme={emberDeskTheme} mode="dark">
-                <DataMaidDialog onRequestClose={() => unmountDataMaidDialog()} />
-            </Theme>
-        </StrictMode>,
-    );
-}
-
-export function mountDataMaidDialog() {
-    attachGlobalCompatibilityBridge();
-    if (mountedDataMaid) {
-        return;
-    }
-
-    const host = document.createElement('div');
-    host.id = 'emberdesk-react-data-maid-host';
-    host.setAttribute('data-react-data-maid-host', 'true');
-    document.body.appendChild(host);
-
-    mountedDataMaid = {
-        root: createRoot(host),
-        host,
-    };
-    renderDataMaid(mountedDataMaid);
-}
-
-export function unmountDataMaidDialog() {
-    if (!mountedDataMaid) {
-        return;
-    }
-
-    mountedDataMaid.root.unmount();
-    mountedDataMaid.host.remove();
-    mountedDataMaid = null;
-    if (mountedPanels.size === 0 && !mountedShellChrome && !mountedSettingsOverlay && !mountedChatBackups) {
-        detachGlobalCompatibilityBridge();
-    }
-}
-
 let mountedPowerUser: { root: Root; container: HTMLElement } | null = null;
 
 /**
@@ -2162,7 +2106,7 @@ export function unmountPowerUserPanel() {
 
     mountedPowerUser.root.unmount();
     mountedPowerUser = null;
-    if (mountedPanels.size === 0 && !mountedShellChrome && !mountedSettingsOverlay && !mountedChatBackups && !mountedDataMaid) {
+    if (mountedPanels.size === 0 && !mountedShellChrome && !mountedSettingsOverlay && !mountedChatBackups) {
         detachGlobalCompatibilityBridge();
     }
 }
@@ -2188,13 +2132,6 @@ function mountSmallPanel(container: HTMLElement, element: ReactElement) {
     ));
 }
 
-/**
- * Mounts the Prompt Manager popup markup. Presentation-only: PromptManager.js
- * attaches listeners to the preserved completion_prompt_manager_* IDs.
- */
-export function mountPromptManagerPopup(container: HTMLElement) {
-    mountSmallPanel(container, <PromptManagerPopup />);
-}
 
 /**
  * Mounts the Tag Management popup content inside the legacy popup shell.
@@ -2260,14 +2197,6 @@ export function mountWorldInfoPanel(container: HTMLElement) {
  */
 export function mountChatComposer(container: HTMLElement) {
     mountSmallPanel(container, <ChatComposer />);
-}
-
-/**
- * Mounts the AI Response Configuration drawer markup into #left-nav-panel.
- * Synchronous commit: initOpenAI/getSettings bind the preserved IDs right after.
- */
-export function mountAiConfigPanel(container: HTMLElement) {
-    mountSmallPanel(container, <AiConfigPanel />);
 }
 
 /**

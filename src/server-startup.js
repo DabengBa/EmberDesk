@@ -28,7 +28,6 @@ import { router as settingsRouter } from './endpoints/settings.js';
 import { router as vectorRetirementRouter } from './endpoints/vector-retirement.js';
 import { router as utilityFeatureRetirementRouter } from './endpoints/feature-retirement.js';
 import { router as chatCompletionsRouter } from './endpoints/backends/chat-completions.js';
-import { router as dataMaidRouter } from './endpoints/data-maid.js';
 import { router as backupsRouter } from './endpoints/backups.js';
 import { setupHealthEndpoint } from './endpoints/health.js';
 
@@ -150,7 +149,6 @@ export function setupPrivateEndpoints(app) {
     app.use('/api/openrouter', providerRetirementRouter);
     app.use('/api/nanogpt', providerRetirementRouter);
     app.use('/api/backends/chat-completions', chatCompletionsRouter);
-    app.use('/api/data-maid', dataMaidRouter);
     app.use('/api/backups', backupsRouter);
 }
 

@@ -7,10 +7,8 @@ import { DOMPurify } from '../lib.js';
 
 import {
     abortStatusCheck,
-    characters,
     extension_prompt_roles,
     extension_prompt_types,
-    Generate,
     getExtensionPrompt,
     getExtensionPromptMaxDepth,
     getMediaDisplay,
@@ -25,7 +23,6 @@ import {
     substituteParams,
     substituteParamsExtended,
     system_message_types,
-    this_chid,
 } from '../script.js';
 import { eventSource, event_types } from './events.js';
 import { getRequestHeaders } from './request-context.js';
@@ -38,7 +35,7 @@ import {
     promptManagerDefaultPromptOrders,
 } from './PromptManager.js';
 
-import { forceCharacterEditorTokenize, getCustomStoppingStrings, power_user } from './power-user.js';
+import { forceCharacterEditorTokenize, getCustomStoppingStrings } from './power-user.js';
 import { SECRET_KEYS, secret_state, writeSecret, deleteSecret, resolveSecretKey } from './secrets.js';
 
 import { getEventSourceStream } from './sse-stream.js';
@@ -50,7 +47,6 @@ import {
     getBase64Async,
     getFileText,
     getImageSizeFromDataURL,
-    getSortableDelay,
     getVideoDurationFromDataURL,
     isDataURL,
     isValidUrl,
@@ -58,7 +54,6 @@ import {
     stringFormat,
 } from './utils.js';
 import { countTokensOpenAIAsync } from './tokenizers.js';
-import { isMobile } from './RossAscends-mods.js';
 import { SlashCommandParser } from './slash-commands/SlashCommandParser.js';
 import { SlashCommand } from './slash-commands/SlashCommand.js';
 import { ARGUMENT_TYPE, SlashCommandArgument } from './slash-commands/SlashCommandArgument.js';
@@ -68,7 +63,6 @@ import { t } from './i18n.js';
 import { ToolManager } from './tool-calling.js';
 import { IGNORE_SYMBOL, MEDIA_DISPLAY, MEDIA_TYPE } from './constants.js';
 import { getFallbackOpenAIModel } from './chat-generation-auto-recovery.js';
-import { loadWorkspacePanelsModule } from './workspace-panels-react-bridge.js';
 
 import {
     getChatCompletionModelFromSettings,
@@ -391,19 +385,12 @@ function setOpenAIMessageExamples(mesExamplesArray) {
 function setupChatCompletionPromptManager(openAiSettings) {
     // Do not set up prompt manager more than once
     if (promptManager) {
-        promptManager.render(false);
         return promptManager;
     }
 
     promptManager = new PromptManager();
 
     const configuration = {
-        prefix: 'completion_',
-        containerIdentifier: 'completion_prompt_manager',
-        listIdentifier: 'completion_prompt_manager_list',
-        toggleDisabled: [],
-        sortableDelay: getSortableDelay(),
-        defaultPrompts: {},
         promptOrder: {
             strategy: 'global',
             dummyId: 100001,
@@ -415,18 +402,9 @@ function setupChatCompletionPromptManager(openAiSettings) {
         return new Promise((resolve) => eventSource.once(event_types.SETTINGS_UPDATED, resolve));
     };
 
-    promptManager.tryGenerate = () => {
-        if (characters[this_chid]) {
-            return Generate('normal', {}, true);
-        } else {
-            return Promise.resolve();
-        }
-    };
-
     promptManager.tokenHandler = tokenHandler;
 
     promptManager.init(configuration, openAiSettings);
-    promptManager.render(false);
 
     return promptManager;
 }
@@ -1004,14 +982,10 @@ async function populateChatCompletion(prompts, chatCompletion, { bias, quietProm
     // Add in-chat injections
     messages = await populationInjectionPrompts(absolutePrompts, messages);
 
-    // Decide whether dialogue examples should always be added
-    if (power_user.pin_examples) {
-        await populateDialogueExamples(prompts, chatCompletion, messageExamples);
-        await populateChatHistory(messages, prompts, chatCompletion, type, cyclePrompt);
-    } else {
-        await populateChatHistory(messages, prompts, chatCompletion, type, cyclePrompt);
-        await populateDialogueExamples(prompts, chatCompletion, messageExamples);
-    }
+    // Dialogue examples slot in after the chat history (example_messages_behavior
+    // is fixed to the shipped 'normal' ordering).
+    await populateChatHistory(messages, prompts, chatCompletion, type, cyclePrompt);
+    await populateDialogueExamples(prompts, chatCompletion, messageExamples);
 
     chatCompletion.freeBudget(controlPrompts);
     if (controlPrompts.collection.length) chatCompletion.add(controlPrompts);
@@ -1153,11 +1127,9 @@ export async function prepareOpenAIMessages({
         if (error instanceof TokenBudgetExceededError) {
             toastr.error(t`Mandatory prompts exceed the context size.`);
             chatCompletion.log('Mandatory prompts exceed the context size.');
-            promptManager.error = t`Not enough free tokens for mandatory prompts. Raise your token limit or disable custom prompts.`;
         } else if (error instanceof InvalidCharacterNameError) {
             toastr.warning(t`An error occurred while counting tokens: Invalid character name`);
             chatCompletion.log('Invalid character name');
-            promptManager.error = t`The name of at least one character contained whitespaces or special characters. Please check your user and character name.`;
         } else {
             toastr.error(t`An unknown error occurred while counting tokens. Further information may be available in console.`);
             chatCompletion.log('----- Unexpected error while preparing prompts -----');
@@ -1166,15 +1138,12 @@ export async function prepareOpenAIMessages({
             chatCompletion.log('----------------------------------------------------');
         }
     } finally {
-        // Pass chat completion to prompt manager for inspection
+        // Pass chat completion to prompt manager for token bookkeeping
         promptManager.setChatCompletion(chatCompletion);
 
         if (oai_settings.squash_system_messages && dryRun == false) {
             await chatCompletion.squashSystemMessages();
         }
-
-        // All information is up-to-date, render.
-        if (false === dryRun) promptManager.render(false);
     }
 
     const chat = chatCompletion.getChat();
@@ -3334,14 +3303,6 @@ export function initOpenAI() {
         });
     }
 
-    if (!isMobile()) {
-        $('#completion_prompt_manager_popup_entry_form_injection_trigger').select2({
-            placeholder: t`All types (default)`,
-            width: '100%',
-            closeOnSelect: false,
-        });
-    }
-
     $('#settings_preset_openai').on('change', onSettingsPresetChange);
     $('#new_oai_preset').on('click', onNewPresetClick);
     $('#delete_oai_preset').on('click', onDeletePresetClick);
@@ -3359,30 +3320,3 @@ export function initOpenAI() {
     }
 }
 
-/**
- * Mounts the React-owned Prompt Manager popup markup.
- * Must run before setupChatCompletionPromptManager(): PromptManager.init
- * attaches listeners to the preserved element IDs.
- */
-export async function mountPromptManagerPopup() {
-    const popup = document.getElementById('completion_prompt_manager_popup');
-    if (!popup) {
-        console.warn('Prompt Manager popup not found');
-        return;
-    }
-    if (popup.dataset.reactPromptManagerMounted === 'true') {
-        return;
-    }
-
-    const host = document.createElement('div');
-    host.id = 'emberdesk-react-prompt-manager-host';
-    popup.replaceChildren(host);
-
-    try {
-        const module = await loadWorkspacePanelsModule();
-        module.mountPromptManagerPopup(host);
-        popup.dataset.reactPromptManagerMounted = 'true';
-    } catch (error) {
-        console.error('Failed to mount prompt manager popup:', error);
-    }
-}

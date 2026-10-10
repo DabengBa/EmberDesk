@@ -50,7 +50,6 @@ fs.writeFileSync(configPath, [
 setConfigFilePath(configPath);
 
 const { getChatInfo } = await import('../src/endpoints/chats.js');
-const { DataMaidService } = await import('../src/endpoints/data-maid.js');
 
 const tempRoots = [];
 const managers = [];
@@ -118,42 +117,6 @@ afterEach(() => {
         fs.rmSync(root, { recursive: true, force: true });
     }
     jest.restoreAllMocks();
-});
-
-describe('data maid historical group chats', () => {
-    test('discovers historical group JSONL files and reports only unreferenced ones as loose', async () => {
-        const directories = makeDirectories();
-        writeFile(path.join(directories.groups, 'party.json'), JSON.stringify({
-            id: 'party',
-            chats: ['party'],
-        }));
-        writeFile(path.join(directories.groupChats, 'party.jsonl'), GROUP_CHAT_CONTENTS);
-        writeFile(path.join(directories.groupChats, 'orphan.jsonl'), GROUP_CHAT_CONTENTS);
-        writeFile(path.join(directories.chats, 'Ada', 'solo.jsonl'), [
-            '{"chat_metadata":{"title":"Solo"}}',
-            '{"name":"Ada","mes":"hello"}',
-        ].join('\n'));
-
-        const service = new DataMaidService('alice', directories);
-        const report = await service.generateReport();
-
-        expect(report.groupChats).toEqual([path.join(directories.groupChats, 'orphan.jsonl')]);
-        expect(report.groupChats).not.toEqual(expect.arrayContaining([
-            path.join(directories.groupChats, 'party.jsonl'),
-        ]));
-        expect(report.chats).not.toEqual(expect.arrayContaining([
-            expect.stringContaining('group chats'),
-        ]));
-
-        const sanitized = await service.sanitizeReport(report);
-        expect(sanitized.groupChats).toEqual([
-            expect.objectContaining({
-                name: 'orphan.jsonl',
-                hash: expect.any(String),
-                size: expect.any(Number),
-            }),
-        ]);
-    });
 });
 
 describe('canonical backup restore preserves group sessions', () => {

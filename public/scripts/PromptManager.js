@@ -1,18 +1,10 @@
 'use strict';
 
-import { DOMPurify } from '../lib.js';
-
 import { eventSource, event_types } from './events.js';
-import { is_send_press, main_api, substituteParams } from '../script.js';
-import { Message, MessageCollection, TokenHandler } from './openai.js';
-import { debounce, waitUntilCondition, escapeHtml, uuidv4 } from './utils.js';
-import { debounce_timeout } from './constants.js';
-import { renderTemplateAsync } from './templates.js';
-import { Popup } from './popup.js';
-import { t } from './i18n.js';
-import { isMobile } from './RossAscends-mods.js';
+import { substituteParams } from '../script.js';
+import { TokenHandler } from './openai.js';
+import { uuidv4 } from './utils.js';
 
-const DEFAULT_DEPTH = 4;
 const DEFAULT_ORDER = 100;
 
 /**
@@ -272,116 +264,33 @@ export class PromptCollection {
 }
 
 class PromptManager {
-    get promptSources() {
-        return {
-            charDescription: t`Character Description`,
-            worldInfo: t`World Info`,
-        };
-    }
-
     constructor() {
-        this.systemPrompts = [];
-
-        this.overridablePrompts = [];
-
-        this.overriddenPrompts = [];
-
         this.configuration = {
-            version: 1,
-            prefix: '',
-            containerIdentifier: '',
-            listIdentifier: '',
-            listItemTemplateIdentifier: '',
-            toggleDisabled: [],
             promptOrder: {
                 strategy: 'global',
                 dummyId: 100000,
             },
-            sortableDelay: 30,
-            warningTokenThreshold: 1500,
-            dangerTokenThreshold: 500,
-            defaultPrompts: {},
         };
 
         // Chatcompletion configuration object
         this.serviceSettings = null;
 
-        // DOM element containing the prompt manager
-        this.containerElement = null;
-
-        // DOM element containing the prompt list
-        this.listElement = null;
-
         // Currently selected character
         this.activeCharacter = null;
-
-        // Message collection of the most recent chatcompletion
-        this.messages = null;
 
         // The current token handler instance
         this.tokenHandler = null;
 
-        // Token usage of last dry run
-        this.tokenUsage = 0;
-
-        // Error state, contains error message.
-        this.error = null;
-
-        /** Dry-run for generate, must return a promise  */
-        this.tryGenerate = async () => { };
-
         /** Called to persist the configuration, must return a promise */
         this.saveServiceSettings = () => { return Promise.resolve(); };
-
-        /** Toggle prompt button click */
-        this.handleToggle = () => { };
-
-        /** Prompt name click */
-        this.handleInspect = () => { };
-
-        /** Edit prompt button click */
-        this.handleEdit = () => { };
-
-        /** Detach prompt button click */
-        this.handleDetach = () => { };
-
-        /** Save prompt button click */
-        this.handleSavePrompt = () => { };
-
-        /** Reset prompt button click */
-        this.handleResetPrompt = () => { };
-
-        /** New prompt button click */
-        this.handleNewPrompt = () => { };
-
-        /** Delete prompt button click */
-        this.handleDeletePrompt = () => { };
-
-        /** Append prompt button click */
-        this.handleAppendPrompt = () => { };
-
-        /** Import button click */
-        this.handleImport = () => { };
-
-        /** Full export click */
-        this.handleFullExport = () => { };
-
-        /** Character export click */
-        this.handleCharacterExport = () => { };
-
-        /** Character reset button click*/
-        this.handleCharacterReset = () => { };
-
-        /** Debounced version of render */
-        this.renderDebounced = debounce(this.render.bind(this), debounce_timeout.relaxed);
     }
 
 
     /**
      * Initializes the PromptManager with provided configuration and service settings.
      *
-     * Sets up various handlers for user interactions, event listeners and initial rendering of prompts.
-     * It is also responsible for preparing prompt edit form buttons, managing popup form close and clear actions.
+     * Prompts and prompt orders are runtime state for generation; the legacy
+     * editing drawer is retired, so init only wires the service lifecycle.
      *
      * @param {Object} moduleConfiguration - Configuration object for the PromptManager.
      * @param {Object} serviceSettings - Service settings object for the PromptManager.
@@ -390,515 +299,35 @@ class PromptManager {
         this.configuration = Object.assign(this.configuration, moduleConfiguration);
         this.tokenHandler = this.tokenHandler || new TokenHandler(() => { throw new Error('Token handler not set'); });
         this.serviceSettings = serviceSettings;
-        this.containerElement = document.getElementById(this.configuration.containerIdentifier);
 
         if ('global' === this.configuration.promptOrder.strategy) this.activeCharacter = { id: this.configuration.promptOrder.dummyId };
 
         this.sanitizeServiceSettings();
 
-        // Enable and disable prompts
-        this.handleToggle = (event) => {
-            const promptID = event.target.closest('.' + this.configuration.prefix + 'prompt_manager_prompt').dataset.pmIdentifier;
-            const promptOrderEntry = this.getPromptOrderEntry(this.activeCharacter, promptID);
-            const counts = this.tokenHandler.getCounts();
-
-            counts[promptID] = null;
-            promptOrderEntry.enabled = !promptOrderEntry.enabled;
-            this.render();
-            this.saveServiceSettings();
-        };
-
-        // Open edit form and load selected prompt
-        this.handleEdit = (event) => {
-            this.clearEditForm();
-            this.clearInspectForm();
-
-            const promptID = event.target.closest('.' + this.configuration.prefix + 'prompt_manager_prompt').dataset.pmIdentifier;
-            const prompt = this.getPromptById(promptID);
-
-            this.loadPromptIntoEditForm(prompt);
-
-            this.showPopup();
-        };
-
-        // Open edit form and load selected prompt
-        this.handleInspect = (event) => {
-            this.clearEditForm();
-            this.clearInspectForm();
-
-            const promptID = event.target.closest('.' + this.configuration.prefix + 'prompt_manager_prompt').dataset.pmIdentifier;
-            if (true === this.messages.hasItemWithIdentifier(promptID)) {
-                const messages = this.messages.getItemByIdentifier(promptID);
-
-                this.loadMessagesIntoInspectForm(messages);
-
-                this.showPopup('inspect');
-            }
-        };
-
-        // Detach selected prompt from list form and close edit form
-        this.handleDetach = (event) => {
-            if (null === this.activeCharacter) return;
-            const promptID = event.target.closest('.' + this.configuration.prefix + 'prompt_manager_prompt').dataset.pmIdentifier;
-            const prompt = this.getPromptById(promptID);
-
-            this.detachPrompt(prompt, this.activeCharacter);
-            this.hidePopup();
-            this.clearEditForm();
-            this.render();
-            this.saveServiceSettings();
-        };
-
-        // Save prompt edit form to settings and close form.
-        this.handleSavePrompt = (event) => {
-            const promptId = event.target.dataset.pmPrompt;
-            const prompt = this.getPromptById(promptId);
-
-            if (null === prompt) {
-                const newPrompt = {};
-                this.updatePromptWithPromptEditForm(newPrompt);
-                this.addPrompt(newPrompt, promptId);
-            } else {
-                this.updatePromptWithPromptEditForm(prompt);
-            }
-
-            this.log('Saved prompt: ' + promptId);
-
-            this.hidePopup();
-            this.clearEditForm();
-            this.render();
-            this.saveServiceSettings();
-        };
-
-        // Reset prompt should it be a system prompt
-        this.handleResetPrompt = (event) => {
-            const promptId = event.target.dataset.pmPrompt;
-            const prompt = this.getPromptById(promptId);
-            const isPulledPrompt = Object.keys(this.promptSources).includes(promptId);
-
-            const nameField = /** @type {HTMLInputElement} */(document.getElementById(this.configuration.prefix + 'prompt_manager_popup_entry_form_name'));
-            const roleField = /** @type {HTMLSelectElement} */(document.getElementById(this.configuration.prefix + 'prompt_manager_popup_entry_form_role'));
-            const promptField = /** @type {HTMLTextAreaElement} */(document.getElementById(this.configuration.prefix + 'prompt_manager_popup_entry_form_prompt'));
-            const injectionPositionField = /** @type {HTMLSelectElement} */(document.getElementById(this.configuration.prefix + 'prompt_manager_popup_entry_form_injection_position'));
-            const injectionDepthField = /** @type {HTMLInputElement} */(document.getElementById(this.configuration.prefix + 'prompt_manager_popup_entry_form_injection_depth'));
-            const injectionOrderField = /** @type {HTMLInputElement} */(document.getElementById(this.configuration.prefix + 'prompt_manager_popup_entry_form_injection_order'));
-            const injectionTriggerField = /** @type {HTMLSelectElement} */(document.getElementById(this.configuration.prefix + 'prompt_manager_popup_entry_form_injection_trigger'));
-            const depthBlock = /** @type {HTMLDivElement} */(document.getElementById(this.configuration.prefix + 'prompt_manager_depth_block'));
-            const orderBlock = /** @type {HTMLDivElement} */(document.getElementById(this.configuration.prefix + 'prompt_manager_order_block'));
-            const forbidOverridesField = /** @type {HTMLInputElement} */(document.getElementById(this.configuration.prefix + 'prompt_manager_popup_entry_form_forbid_overrides'));
-            const forbidOverridesBlock = /** @type {HTMLDivElement} */(document.getElementById(this.configuration.prefix + 'prompt_manager_forbid_overrides_block'));
-            const entrySourceBlock = /** @type {HTMLDivElement} */(document.getElementById(this.configuration.prefix + 'prompt_manager_popup_entry_source_block'));
-            const entrySource = /** @type {HTMLSpanElement} */(document.getElementById(this.configuration.prefix + 'prompt_manager_popup_entry_source'));
-
-            nameField.value = prompt.name;
-            roleField.value = 'system';
-            promptField.value = prompt.content ?? '';
-            injectionPositionField.value = (prompt.injection_position ?? 0).toString();
-            injectionDepthField.value = (prompt.injection_depth ?? DEFAULT_DEPTH).toString();
-            injectionOrderField.value = (prompt.injection_order ?? DEFAULT_ORDER).toString();
-            Array.from(injectionTriggerField.options).forEach(option => {
-                option.selected = false;
-            });
-            injectionTriggerField.dispatchEvent(new Event('change', { bubbles: true }));
-            depthBlock.style.visibility = prompt.injection_position === INJECTION_POSITION.ABSOLUTE ? 'visible' : 'hidden';
-            orderBlock.style.visibility = prompt.injection_position === INJECTION_POSITION.ABSOLUTE ? 'visible' : 'hidden';
-            forbidOverridesField.checked = prompt.forbid_overrides ?? false;
-            forbidOverridesBlock.style.visibility = this.overridablePrompts.includes(prompt.identifier) ? 'visible' : 'hidden';
-            promptField.disabled = prompt.marker ?? false;
-            entrySourceBlock.style.display = isPulledPrompt ? '' : 'none';
-
-            if (isPulledPrompt) {
-                const sourceName = this.promptSources[promptId];
-                entrySource.textContent = sourceName;
-            }
-
-            this.#clearDirtyFormMarks();
-        };
-
-        // Append prompt to selected character
-        this.handleAppendPrompt = (_event) => {
-            const appendPromptFooter = /** @type {HTMLSelectElement} */(document.getElementById(this.configuration.prefix + 'prompt_manager_footer_append_prompt'));
-            const promptID = appendPromptFooter.value;
-            const prompt = this.getPromptById(promptID);
-
-            if (prompt) {
-                this.appendPrompt(prompt, this.activeCharacter);
-                this.render();
-                this.saveServiceSettings();
-            }
-        };
-
-        // Delete selected prompt from list form and close edit form
-        this.handleDeletePrompt = async (_event) => {
-            Popup.show.confirm(t`Are you sure you want to delete this prompt?`, null).then((userChoice) => {
-                if (!userChoice) return;
-                const appendPromptFooter = /** @type {HTMLSelectElement} */(document.getElementById(this.configuration.prefix + 'prompt_manager_footer_append_prompt'));
-                const promptID = appendPromptFooter.value;
-                const prompt = this.getPromptById(promptID);
-
-                if (prompt && true === this.isPromptDeletionAllowed(prompt)) {
-                    const promptIndex = this.getPromptIndexById(promptID);
-                    this.serviceSettings.prompts.splice(Number(promptIndex), 1);
-
-                    this.log('Deleted prompt: ' + prompt.identifier);
-
-                    this.hidePopup();
-                    this.clearEditForm();
-                    this.render();
-                    this.saveServiceSettings();
-                }
-            });
-        };
-
-        // Create new prompt, then save it to settings and close form.
-        this.handleNewPrompt = (_event) => {
-            const prompt = {
-                identifier: this.getUuidv4(),
-                name: '',
-                role: 'system',
-                content: '',
-            };
-
-            this.loadPromptIntoEditForm(prompt);
-            this.showPopup();
-        };
-
-        // Export all user prompts
-        this.handleFullExport = () => {
-            const prompts = this.serviceSettings.prompts.reduce((userPrompts, prompt) => {
-                if (false === prompt.system_prompt && false === prompt.marker) userPrompts.push(prompt);
-                return userPrompts;
-            }, []);
-
-            let promptOrder = [];
-            if ('global' === this.configuration.promptOrder.strategy) {
-                promptOrder = this.getPromptOrderForCharacter({ id: this.configuration.promptOrder.dummyId });
-            } else if ('character' === this.configuration.promptOrder.strategy) {
-                promptOrder = [];
-            } else {
-                throw new Error('Prompt order strategy not supported.');
-            }
-
-            const exportPrompts = {
-                prompts: prompts,
-                prompt_order: promptOrder,
-            };
-
-            this.export(exportPrompts, 'full', 'st-prompts');
-        };
-
-        // Export user prompts and order for this character
-        this.handleCharacterExport = () => {
-            const characterPrompts = this.getPromptsForCharacter(this.activeCharacter).reduce((userPrompts, prompt) => {
-                if (false === prompt.system_prompt && !prompt.marker) userPrompts.push(prompt);
-                return userPrompts;
-            }, []);
-
-            const characterList = this.getPromptOrderForCharacter(this.activeCharacter);
-
-            const exportPrompts = {
-                prompts: characterPrompts,
-                prompt_order: characterList,
-            };
-
-            const name = this.activeCharacter.name + '-prompts';
-            this.export(exportPrompts, 'character', name);
-        };
-
-        // Import prompts for the selected character
-        this.handleImport = () => {
-            Popup.show.confirm(t`Existing prompts with the same ID will be overridden. Do you want to proceed?`, null)
-                .then(userChoice => {
-                    if (!userChoice) return;
-
-                    const fileOpener = document.createElement('input');
-                    fileOpener.type = 'file';
-                    fileOpener.accept = '.json';
-
-                    fileOpener.addEventListener('change', (event) => {
-                        if (!(event.target instanceof HTMLInputElement)) return;
-                        const file = event.target.files[0];
-                        if (!file) return;
-
-                        const reader = new FileReader();
-
-                        reader.onload = (event) => {
-                            const fileContent = event.target.result;
-
-                            try {
-                                const data = JSON.parse(fileContent.toString());
-                                this.import(data);
-                            } catch (err) {
-                                toastr.error(t`An error occurred while importing prompts. More info available in console.`);
-                                console.log('An error occurred while importing prompts');
-                                console.log(err.toString());
-                            }
-                        };
-
-                        reader.readAsText(file);
-                    });
-
-                    fileOpener.click();
-                });
-        };
-
-        // Restore default state of a characters prompt order
-        this.handleCharacterReset = () => {
-            Popup.show.confirm(t`This will reset the prompt order for this character. You will not lose any prompts.`, null)
-                .then(userChoice => {
-                    if (!userChoice) return;
-
-                    this.removePromptOrderForCharacter(this.activeCharacter);
-                    this.addPromptOrderForCharacter(this.activeCharacter, promptManagerDefaultPromptOrder);
-
-                    this.render();
-                    this.saveServiceSettings();
-                });
-        };
-
-        // Re-render when chat history changes.
-        eventSource.on(event_types.MESSAGE_DELETED, () => this.renderDebounced());
-        eventSource.on(event_types.MESSAGE_EDITED, () => this.renderDebounced());
-        eventSource.on(event_types.MESSAGE_RECEIVED, () => this.renderDebounced());
-
-        // Re-render when chatcompletion settings change
-        eventSource.on(event_types.CHATCOMPLETION_SOURCE_CHANGED, () => this.renderDebounced());
-
-        eventSource.on(event_types.CHATCOMPLETION_MODEL_CHANGED, () => this.renderDebounced());
-
-        // Re-render when the character changes.
+        // Service lifecycle: keep prompt orders in sync with the active
+        // character and persist changes; the retired drawer no longer renders.
         eventSource.on(event_types.CHAT_LOADED, (event) => {
             this.handleCharacterSelected(event);
-            this.saveServiceSettings().then(() => this.renderDebounced());
+            this.saveServiceSettings();
         });
 
-        // Re-render when the character gets edited.
         eventSource.on(event_types.CHARACTER_EDITED, (event) => {
             this.handleCharacterUpdated(event);
-            this.saveServiceSettings().then(() => this.renderDebounced());
+            this.saveServiceSettings();
         });
 
         // Sanitize settings after character has been deleted.
         eventSource.on(event_types.CHARACTER_DELETED, (event) => {
             this.handleCharacterDeleted(event);
-            this.saveServiceSettings().then(() => this.renderDebounced());
+            this.saveServiceSettings();
         });
 
-        // Trigger re-render when token settings are changed
-        document.getElementById('openai_max_context').addEventListener('change', (event) => {
-            if (!(event.target instanceof HTMLInputElement)) return;
-            this.serviceSettings.openai_max_context = event.target.value;
-            if (this.activeCharacter) this.renderDebounced();
-        });
-
-        document.getElementById('openai_max_tokens').addEventListener('change', (_event) => {
-            if (this.activeCharacter) this.renderDebounced();
-        });
-
-        // Prepare prompt edit form buttons
-        document.getElementById(this.configuration.prefix + 'prompt_manager_popup_entry_form_save').addEventListener('click', this.handleSavePrompt);
-        document.getElementById(this.configuration.prefix + 'prompt_manager_popup_entry_form_reset').addEventListener('click', this.handleResetPrompt);
-
-        const closeAndClearPopup = () => {
-            this.hidePopup();
-            this.clearEditForm();
-            this.clearInspectForm();
-        };
-
-        // Clear forms on closing the popup
-        document.getElementById(this.configuration.prefix + 'prompt_manager_popup_entry_form_close').addEventListener('click', closeAndClearPopup);
-        document.getElementById(this.configuration.prefix + 'prompt_manager_popup_close_button').addEventListener('click', closeAndClearPopup);
-        closeAndClearPopup();
-
-        const closeFooterMenu = () => {
-            document.querySelectorAll('.pm-overflow-menu.show').forEach(el => el.classList.remove('show'));
-            document.getElementById('prompt-manager-more')?.setAttribute('aria-expanded', 'false');
-        };
-
-        // Footer overflow ⋮ menu (document-delegated: the footer is re-rendered).
-        $(document).on('click', '#prompt-manager-more', (event) => {
-            event.stopPropagation();
-            const trigger = document.getElementById('prompt-manager-more');
-            const menu = trigger?.closest('.pm-footer-menu')?.querySelector('.pm-overflow-menu');
-            if (!menu) return;
-            const willOpen = !menu.classList.contains('show');
-            closeFooterMenu();
-            menu.classList.toggle('show', willOpen);
-            trigger.setAttribute('aria-expanded', String(willOpen));
-        });
-        $(document).on('click', '.pm-overflow-item', () => closeFooterMenu());
-        $(document).on('mousedown', (event) => {
-            if (!(event.target instanceof Element) || event.target.closest('.pm-footer-menu')) return;
-            closeFooterMenu();
-        });
-
-        // Popup keyboard: Esc closes menu then popup; Ctrl/Cmd+S saves.
-        $(document).on('keydown', (event) => {
-            const menuOpen = document.querySelector('.pm-overflow-menu.show');
-            if (event.key === 'Escape' && menuOpen) {
-                closeFooterMenu();
-                return;
-            }
-
-            const popup = document.getElementById(this.configuration.prefix + 'prompt_manager_popup');
-            if (!popup?.classList.contains('openDrawer')) return;
-
-            if (event.key === 'Escape') {
-                closeAndClearPopup();
-            } else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
-                event.preventDefault();
-                document.getElementById(this.configuration.prefix + 'prompt_manager_popup_entry_form_save')?.click();
-            }
-        });
-
-        // Field-as-editor: dirty marking + live char count on the prompt field.
-        const popupSelector = `#${this.configuration.prefix}prompt_manager_popup`;
-        $(document).on('input change', `${popupSelector} .completion_prompt_manager_popup_entry_form :input`, function () {
-            this.closest('.completion_prompt_manager_popup_entry_form_control')?.classList.add('pm-field-dirty');
-        });
-        $(document).on('input', `${popupSelector} #${this.configuration.prefix}prompt_manager_popup_entry_form_prompt`, (event) => {
-            const meta = document.getElementById(this.configuration.prefix + 'prompt_manager_popup_entry_form_prompt_meta');
-            if (meta && event.target instanceof HTMLTextAreaElement) {
-                meta.textContent = `${event.target.value.length} chars`;
-            }
-        });
-
-        // Re-render prompt manager on openai preset change
+        // Re-normalize prompts after an openai preset change.
         eventSource.on(event_types.OAI_PRESET_CHANGED_AFTER, () => {
             this.sanitizeServiceSettings();
-
-            this.hidePopup();
-            this.clearEditForm();
-            this.renderDebounced();
         });
-
-        // Re-render prompt manager on world settings update
-        eventSource.on(event_types.WORLDINFO_SETTINGS_UPDATED, () => this.renderDebounced());
 
         this.log('Initialized');
-    }
-
-    /**
-     * Get the scroll position of the prompt manager
-     * @returns {number} - Scroll position of the prompt manager
-     */
-    #getScrollPosition() {
-        return document.getElementById(this.configuration.prefix + 'prompt_manager')?.closest('.scrollableInner')?.scrollTop;
-    }
-
-    /**
-     * Set the scroll position of the prompt manager
-     * @param {number} scrollPosition - The scroll position to set
-     */
-    #setScrollPosition(scrollPosition) {
-        if (scrollPosition === undefined || scrollPosition === null) return;
-        document.getElementById(this.configuration.prefix + 'prompt_manager')?.closest('.scrollableInner')?.scrollTo(0, scrollPosition);
-    }
-
-    /**
-     * Clears dirty-field marks in the prompt edit form and refreshes the
-     * prompt field's char-count meta to match the loaded value.
-     */
-    #clearDirtyFormMarks() {
-        const popup = document.getElementById(this.configuration.prefix + 'prompt_manager_popup');
-        popup?.querySelectorAll('.pm-field-dirty').forEach(el => el.classList.remove('pm-field-dirty'));
-        const meta = document.getElementById(this.configuration.prefix + 'prompt_manager_popup_entry_form_prompt_meta');
-        const promptField = document.getElementById(this.configuration.prefix + 'prompt_manager_popup_entry_form_prompt');
-        if (meta && promptField instanceof HTMLTextAreaElement) {
-            meta.textContent = `${promptField.value.length} chars`;
-        }
-    }
-
-    /**
-     * Main rendering function
-     *
-     * @param afterTryGenerate - Whether a dry run should be attempted before rendering
-     */
-    render(afterTryGenerate = true) {
-        if (main_api !== 'openai') return;
-
-        if ('character' === this.configuration.promptOrder.strategy && null === this.activeCharacter) return;
-        this.error = null;
-
-        waitUntilCondition(() => !is_send_press, 1024 * 1024, 100).then(async () => {
-            if (true === afterTryGenerate) {
-                // Executed during dry-run for determining context composition
-                this.profileStart('filling context');
-                this.tryGenerate().finally(async () => {
-                    this.profileEnd('filling context');
-                    this.profileStart('render');
-                    const scrollPosition = this.#getScrollPosition();
-                    await this.renderPromptManager();
-                    await this.renderPromptManagerListItems();
-                    this.makeDraggable();
-                    this.#setScrollPosition(scrollPosition);
-                    this.profileEnd('render');
-                });
-            } else {
-                // Executed during live communication
-                this.profileStart('render');
-                const scrollPosition = this.#getScrollPosition();
-                await this.renderPromptManager();
-                await this.renderPromptManagerListItems();
-                this.makeDraggable();
-                this.#setScrollPosition(scrollPosition);
-                this.profileEnd('render');
-            }
-        }).catch(() => {
-            console.log('Timeout while waiting for send press to be false');
-        });
-    }
-
-    /**
-     * Update a prompt with the values from the HTML form.
-     * @param {Partial<Prompt>} prompt - The prompt to be updated.
-     * @returns {void}
-     */
-    updatePromptWithPromptEditForm(prompt) {
-        const nameField = /** @type {HTMLInputElement} */(document.getElementById(this.configuration.prefix + 'prompt_manager_popup_entry_form_name'));
-        const roleField = /** @type {HTMLSelectElement} */(document.getElementById(this.configuration.prefix + 'prompt_manager_popup_entry_form_role'));
-        const promptField = /** @type {HTMLTextAreaElement} */(document.getElementById(this.configuration.prefix + 'prompt_manager_popup_entry_form_prompt'));
-        const injectionPositionField = /** @type {HTMLSelectElement} */(document.getElementById(this.configuration.prefix + 'prompt_manager_popup_entry_form_injection_position'));
-        const injectionDepthField = /** @type {HTMLInputElement} */(document.getElementById(this.configuration.prefix + 'prompt_manager_popup_entry_form_injection_depth'));
-        const injectionOrderField = /** @type {HTMLInputElement} */(document.getElementById(this.configuration.prefix + 'prompt_manager_popup_entry_form_injection_order'));
-        const injectionTriggerField = /** @type {HTMLSelectElement} */(document.getElementById(this.configuration.prefix + 'prompt_manager_popup_entry_form_injection_trigger'));
-        const forbidOverridesField = /** @type {HTMLInputElement} */(document.getElementById(this.configuration.prefix + 'prompt_manager_popup_entry_form_forbid_overrides'));
-
-        prompt.name = nameField.value;
-        prompt.role = roleField.value;
-        prompt.content = promptField.value;
-        prompt.injection_position = Number(injectionPositionField.value);
-        prompt.injection_depth = Number(injectionDepthField.value);
-        prompt.injection_order = Number(injectionOrderField.value);
-        prompt.injection_trigger = Array.from(injectionTriggerField.selectedOptions).map(option => option.value);
-        prompt.forbid_overrides = forbidOverridesField.checked;
-    }
-
-    /**
-     * Find a prompt by its identifier and update it with the provided object.
-     * @param {string} identifier - The identifier of the prompt.
-     * @param {Prompt} updatePrompt - An object with properties to be updated in the prompt.
-     * @returns {void}
-     */
-    updatePromptByIdentifier(identifier, updatePrompt) {
-        let prompt = this.serviceSettings.prompts.find((item) => identifier === item.identifier);
-        if (prompt) prompt = Object.assign(prompt, updatePrompt);
-    }
-
-    /**
-     * Iterate over an array of prompts, find each one by its identifier, and update them with the provided data.
-     * @param {Prompt[]} prompts - An array of prompt updates.
-     * @returns {void}
-     */
-    updatePrompts(prompts) {
-        prompts.forEach((update) => {
-            let prompt = this.getPromptById(update.identifier);
-            if (prompt) Object.assign(prompt, update);
-        });
-    }
-
-    getTokenHandler() {
-        return this.tokenHandler;
     }
 
     isPromptDisabledForActiveCharacter(identifier) {
@@ -907,52 +336,6 @@ class PromptManager {
         return false;
     }
 
-    /**
-     * Add a prompt to the current character's prompt list.
-     * @param {Prompt} prompt - The prompt to be added.
-     * @param {object} character - The character whose prompt list will be updated.
-     * @returns {void}
-     */
-    appendPrompt(prompt, character) {
-        const promptOrder = this.getPromptOrderForCharacter(character);
-        const index = promptOrder.findIndex(entry => entry.identifier === prompt.identifier);
-
-        if (-1 === index) promptOrder.unshift({ identifier: prompt.identifier, enabled: false });
-    }
-
-    /**
-     * Remove a prompt from the current character's prompt list.
-     * @param {Prompt} prompt - The prompt to be removed.
-     * @param {object} character - The character whose prompt list will be updated.
-     * @returns {void}
-     */
-    // Remove a prompt from the current characters prompt list
-    detachPrompt(prompt, character) {
-        const promptOrder = this.getPromptOrderForCharacter(character);
-        const index = promptOrder.findIndex(entry => entry.identifier === prompt.identifier);
-        if (-1 === index) return;
-        promptOrder.splice(index, 1);
-    }
-
-    /**
-     * Create a new prompt and add it to the list of prompts.
-     * @param {Partial<Prompt>} prompt - The prompt to be added.
-     * @param {string} identifier - The identifier for the new prompt.
-     * @returns {void}
-     */
-    addPrompt(prompt, identifier) {
-        if (typeof prompt !== 'object' || prompt === null) throw new Error('Object is not a prompt');
-
-        const newPrompt = {
-            identifier: identifier,
-            system_prompt: false,
-            enabled: false,
-            marker: false,
-            ...prompt,
-        };
-
-        this.serviceSettings.prompts.push(newPrompt);
-    }
 
     /**
      * Sanitize the service settings, ensuring each prompt has a unique identifier.
@@ -1074,51 +457,6 @@ class PromptManager {
         });
     }
 
-    /**
-     * Check whether a prompt can be inspected.
-     * @param {Prompt} prompt - The prompt to check.
-     * @returns {boolean} True if the prompt is a marker, false otherwise.
-     */
-    isPromptInspectionAllowed(_prompt) {
-        return true;
-    }
-
-    /**
-     * Check whether a prompt can be deleted. System prompts cannot be deleted.
-     * @param {Prompt} prompt - The prompt to check.
-     * @returns {boolean} True if the prompt can be deleted, false otherwise.
-     */
-    isPromptDeletionAllowed(prompt) {
-        return false === prompt.system_prompt;
-    }
-
-    /**
-     * Check whether a prompt can be edited.
-     * @param {Prompt} prompt - The prompt to check.
-     * @returns {boolean} True if the prompt can be edited, false otherwise.
-     */
-    isPromptEditAllowed(prompt) {
-        const forceEditPrompts = [
-            'charDescription',
-            'worldInfo',
-        ];
-        return forceEditPrompts.includes(prompt.identifier) || !prompt.marker;
-    }
-
-    /**
-     * Check whether a prompt can be toggled on or off.
-     * @param {Prompt} prompt - The prompt to check.
-     * @returns {boolean} True if the prompt can be deleted, false otherwise.
-     */
-    isPromptToggleAllowed(prompt) {
-        const forceTogglePrompts = [
-            'charDescription',
-            'worldInfo',
-            'chatHistory',
-            'dialogueExamples',
-        ];
-        return prompt.marker && !forceTogglePrompts.includes(prompt.identifier) ? false : !this.configuration.toggleDisabled.includes(prompt.identifier);
-    }
 
     /**
      * Handle the deletion of a character by removing their prompt list and nullifying the active character if it was the one deleted.
@@ -1140,7 +478,6 @@ class PromptManager {
         if ('global' === this.configuration.promptOrder.strategy) {
             this.activeCharacter = { id: this.configuration.promptOrder.dummyId };
         } else if ('character' === this.configuration.promptOrder.strategy) {
-            console.log('FOO');
             this.activeCharacter = { id: event.detail.id, ...event.detail.character };
             const promptOrder = this.getPromptOrderForCharacter(this.activeCharacter);
 
@@ -1167,17 +504,6 @@ class PromptManager {
         }
     }
 
-    /**
-     * Get the prompts for a specific character. Can be filtered to only include enabled prompts.
-     * @returns {Prompt[]} The prompts for the character.
-     * @param character
-     * @param onlyEnabled
-     */
-    getPromptsForCharacter(character, onlyEnabled = false) {
-        return this.getPromptOrderForCharacter(character)
-            .map(item => true === onlyEnabled ? (true === item.enabled ? this.getPromptById(item.identifier) : null) : this.getPromptById(item.identifier))
-            .filter(prompt => null !== prompt);
-    }
 
     /**
      * Get the order of prompts for a specific character. If no character is specified or the character doesn't have a prompt list, an empty array is returned.
@@ -1238,14 +564,6 @@ class PromptManager {
         return this.serviceSettings.prompts.find(item => item && item.identifier === identifier) ?? null;
     }
 
-    /**
-     * Finds and returns the index of a prompt by its identifier.
-     * @param {string} identifier - Identifier of the prompt
-     * @returns {number|null} Index of the prompt, or null if not found
-     */
-    getPromptIndexById(identifier) {
-        return this.serviceSettings.prompts.findIndex(item => item.identifier === identifier) ?? null;
-    }
 
     /**
      * Enriches a generic object, creating a new prompt object in the process
@@ -1283,167 +601,6 @@ class PromptManager {
         return name.replace(/[^a-zA-Z0-9_]/g, '_').substring(0, 64);
     }
 
-    /**
-     * Loads a given prompt into the edit form fields.
-     * @param {Partial<Prompt>} prompt - Prompt object with properties 'name', 'role', 'content', and 'system_prompt'
-     */
-    loadPromptIntoEditForm(prompt) {
-        const nameField = /** @type {HTMLInputElement} */(document.getElementById(this.configuration.prefix + 'prompt_manager_popup_entry_form_name'));
-        const roleField = /** @type {HTMLSelectElement} */(document.getElementById(this.configuration.prefix + 'prompt_manager_popup_entry_form_role'));
-        const promptField = /** @type {HTMLTextAreaElement} */(document.getElementById(this.configuration.prefix + 'prompt_manager_popup_entry_form_prompt'));
-        const injectionPositionField = /** @type {HTMLSelectElement} */(document.getElementById(this.configuration.prefix + 'prompt_manager_popup_entry_form_injection_position'));
-        const injectionDepthField = /** @type {HTMLInputElement} */(document.getElementById(this.configuration.prefix + 'prompt_manager_popup_entry_form_injection_depth'));
-        const injectionOrderField = /** @type {HTMLInputElement} */(document.getElementById(this.configuration.prefix + 'prompt_manager_popup_entry_form_injection_order'));
-        const injectionTriggerField = /** @type {HTMLSelectElement} */(document.getElementById(this.configuration.prefix + 'prompt_manager_popup_entry_form_injection_trigger'));
-        const injectionDepthBlock = /** @type {HTMLDivElement} */(document.getElementById(this.configuration.prefix + 'prompt_manager_depth_block'));
-        const injectionOrderBlock = /** @type {HTMLDivElement} */(document.getElementById(this.configuration.prefix + 'prompt_manager_order_block'));
-        const forbidOverridesField = /** @type {HTMLInputElement} */(document.getElementById(this.configuration.prefix + 'prompt_manager_popup_entry_form_forbid_overrides'));
-        const forbidOverridesBlock = /** @type {HTMLDivElement} */(document.getElementById(this.configuration.prefix + 'prompt_manager_forbid_overrides_block'));
-        const entrySourceBlock = /** @type {HTMLDivElement} */(document.getElementById(this.configuration.prefix + 'prompt_manager_popup_entry_source_block'));
-        const entrySource = /** @type {HTMLSpanElement} */(document.getElementById(this.configuration.prefix + 'prompt_manager_popup_entry_source'));
-        const isPulledPrompt = Object.keys(this.promptSources).includes(prompt.identifier);
-
-        nameField.value = prompt.name ?? '';
-        roleField.value = prompt.role || 'system';
-        promptField.value = prompt.content ?? '';
-        promptField.disabled = prompt.marker ?? false;
-        injectionPositionField.value = (prompt.injection_position ?? INJECTION_POSITION.RELATIVE).toString();
-        injectionDepthField.value = (prompt.injection_depth ?? DEFAULT_DEPTH).toString();
-        injectionOrderField.value = (prompt.injection_order ?? DEFAULT_ORDER).toString();
-        Array.from(injectionTriggerField.options).forEach(option => {
-            option.selected = Array.isArray(prompt.injection_trigger) && prompt.injection_trigger.includes(option.value);
-        });
-        injectionTriggerField.dispatchEvent(new Event('change', { bubbles: true }));
-        injectionDepthBlock.style.visibility = prompt.injection_position === INJECTION_POSITION.ABSOLUTE ? 'visible' : 'hidden';
-        injectionOrderBlock.style.visibility = prompt.injection_position === INJECTION_POSITION.ABSOLUTE ? 'visible' : 'hidden';
-        injectionPositionField.removeAttribute('disabled');
-        forbidOverridesField.checked = prompt.forbid_overrides ?? false;
-        forbidOverridesBlock.style.visibility = this.overridablePrompts.includes(prompt.identifier) ? 'visible' : 'hidden';
-        entrySourceBlock.style.display = isPulledPrompt ? '' : 'none';
-
-        if (isPulledPrompt) {
-            const sourceName = this.promptSources[prompt.identifier];
-            entrySource.textContent = sourceName;
-        }
-
-        const resetPromptButton = document.getElementById(this.configuration.prefix + 'prompt_manager_popup_entry_form_reset');
-        if (true === prompt.system_prompt) {
-            resetPromptButton.style.display = 'block';
-            resetPromptButton.dataset.pmPrompt = prompt.identifier;
-        } else {
-            resetPromptButton.style.display = 'none';
-        }
-
-        injectionPositionField.removeEventListener('change', this.handleInjectionPositionChange);
-        injectionPositionField.addEventListener('change', this.handleInjectionPositionChange);
-
-        const savePromptButton = document.getElementById(this.configuration.prefix + 'prompt_manager_popup_entry_form_save');
-        savePromptButton.dataset.pmPrompt = prompt.identifier;
-
-        this.#clearDirtyFormMarks();
-    }
-
-    handleInjectionPositionChange = (event) => {
-        const injectionDepthBlock = document.getElementById(this.configuration.prefix + 'prompt_manager_depth_block');
-        const injectionOrderBlock = document.getElementById(this.configuration.prefix + 'prompt_manager_order_block');
-        const injectionPosition = Number(event.target.value);
-        if (injectionPosition === INJECTION_POSITION.ABSOLUTE) {
-            injectionDepthBlock.style.visibility = 'visible';
-            injectionOrderBlock.style.visibility = 'visible';
-        } else {
-            injectionDepthBlock.style.visibility = 'hidden';
-            injectionOrderBlock.style.visibility = 'hidden';
-        }
-    };
-
-    /**
-     * Loads a given prompt into the inspect form
-     * @param {MessageCollection} messages - Prompt object with properties 'name', 'role', 'content', and 'system_prompt'
-     */
-    loadMessagesIntoInspectForm(messages) {
-        if (!messages) return;
-
-        const createInlineDrawer = (message) => {
-            const truncatedTitle = message.content.length > 32 ? message.content.slice(0, 32) + '...' : message.content;
-            const title = message.identifier || truncatedTitle;
-            const role = message.role;
-            const content = message.content || 'No Content';
-            const tokens = message.getTokens();
-
-            let drawerHTML = `
-        <div class="inline-drawer ${this.configuration.prefix}prompt_manager_prompt">
-            <div class="inline-drawer-toggle inline-drawer-header">
-                <span>Name: ${escapeHtml(title)}, Role: ${role}, Tokens: ${tokens}</span>
-                <div class="fa-solid fa-circle-chevron-down inline-drawer-icon down"></div>
-            </div>
-            <div class="inline-drawer-content" style="white-space: pre-wrap;">${escapeHtml(content)}</div>
-        </div>
-        `;
-
-            let template = document.createElement('template');
-            template.innerHTML = drawerHTML.trim();
-            return template.content.firstChild;
-        };
-
-        const messageList = document.getElementById(this.configuration.prefix + 'prompt_manager_popup_entry_form_inspect_list');
-
-        const messagesCollection = messages instanceof Message ? [messages] : messages.getCollection();
-
-        if (0 === messagesCollection.length) messageList.innerHTML = '<span>This marker does not contain any prompts.</span>';
-
-        messagesCollection.forEach(message => {
-            messageList.append(createInlineDrawer(message));
-        });
-    }
-
-    /**
-     * Clears all input fields in the edit form.
-     */
-    clearEditForm() {
-        const editArea = document.getElementById(this.configuration.prefix + 'prompt_manager_popup_edit');
-        editArea.style.display = 'none';
-
-        const nameField = /** @type {HTMLInputElement} */(document.getElementById(this.configuration.prefix + 'prompt_manager_popup_entry_form_name'));
-        const roleField = /** @type {HTMLSelectElement} */(document.getElementById(this.configuration.prefix + 'prompt_manager_popup_entry_form_role'));
-        const promptField = /** @type {HTMLTextAreaElement} */(document.getElementById(this.configuration.prefix + 'prompt_manager_popup_entry_form_prompt'));
-        const injectionPositionField = /** @type {HTMLSelectElement} */(document.getElementById(this.configuration.prefix + 'prompt_manager_popup_entry_form_injection_position'));
-        const injectionDepthField = /** @type {HTMLInputElement} */(document.getElementById(this.configuration.prefix + 'prompt_manager_popup_entry_form_injection_depth'));
-        const injectionDepthBlock = /** @type {HTMLDivElement} */(document.getElementById(this.configuration.prefix + 'prompt_manager_depth_block'));
-        const injectionOrderBlock = /** @type {HTMLDivElement} */(document.getElementById(this.configuration.prefix + 'prompt_manager_order_block'));
-        const injectionOrderField = /** @type {HTMLInputElement} */(document.getElementById(this.configuration.prefix + 'prompt_manager_popup_entry_form_injection_order'));
-        const injectionTriggerField = /** @type {HTMLSelectElement} */(document.getElementById(this.configuration.prefix + 'prompt_manager_popup_entry_form_injection_trigger'));
-        const forbidOverridesField = /** @type {HTMLInputElement} */(document.getElementById(this.configuration.prefix + 'prompt_manager_popup_entry_form_forbid_overrides'));
-        const forbidOverridesBlock = /** @type {HTMLDivElement} */(document.getElementById(this.configuration.prefix + 'prompt_manager_forbid_overrides_block'));
-        const entrySourceBlock = /** @type {HTMLDivElement} */(document.getElementById(this.configuration.prefix + 'prompt_manager_popup_entry_source_block'));
-        const entrySource = /** @type {HTMLSpanElement} */(document.getElementById(this.configuration.prefix + 'prompt_manager_popup_entry_source'));
-
-        nameField.value = '';
-        roleField.selectedIndex = 0;
-        promptField.value = '';
-        promptField.disabled = false;
-        injectionPositionField.selectedIndex = 0;
-        injectionPositionField.removeAttribute('disabled');
-        injectionDepthField.value = DEFAULT_DEPTH.toString();
-        injectionOrderField.value = DEFAULT_ORDER.toString();
-        injectionTriggerField.value = '';
-        injectionDepthBlock.style.visibility = 'unset';
-        injectionOrderBlock.style.visibility = 'unset';
-        forbidOverridesBlock.style.visibility = 'unset';
-        forbidOverridesField.checked = false;
-        entrySourceBlock.style.display = 'none';
-        entrySource.textContent = '';
-
-        roleField.disabled = false;
-
-        this.#clearDirtyFormMarks();
-    }
-
-    clearInspectForm() {
-        const inspectArea = document.getElementById(this.configuration.prefix + 'prompt_manager_popup_inspect');
-        inspectArea.style.display = 'none';
-        const messageList = document.getElementById(this.configuration.prefix + 'prompt_manager_popup_entry_form_inspect_list');
-        messageList.innerHTML = '';
-    }
 
     /**
      * Returns a full list of prompts whose content markers have been substituted.
@@ -1484,25 +641,12 @@ class PromptManager {
     }
 
     /**
-     * Setter for messages property
-     *
-     * @param {import('./openai.js').MessageCollection} messages
-     */
-    setMessages(messages) {
-        this.messages = messages;
-    }
-
-    /**
      * Set and process a finished chat completion object
      *
      * @param {import('./openai.js').ChatCompletion} chatCompletion
      */
     setChatCompletion(chatCompletion) {
-        const messages = chatCompletion.getMessages();
-
-        this.setMessages(messages);
-        this.populateTokenCounts(messages);
-        this.overriddenPrompts = chatCompletion.getOverriddenPrompts();
+        this.populateTokenCounts(chatCompletion.getMessages());
     }
 
     /**
@@ -1517,384 +661,7 @@ class PromptManager {
             counts[message.identifier] = message.getTokens();
         });
 
-        this.tokenUsage = this.tokenHandler.getTotal();
-
-        this.log('Updated token usage with ' + this.tokenUsage);
-    }
-
-    /**
-     * Empties, then re-assembles the container containing the prompt list.
-     */
-    async renderPromptManager() {
-        let selectedPromptIndex = 0;
-        const existingAppendSelect = document.getElementById(`${this.configuration.prefix}prompt_manager_footer_append_prompt`);
-        if (existingAppendSelect instanceof HTMLSelectElement) {
-            selectedPromptIndex = existingAppendSelect.selectedIndex;
-        }
-        const promptManagerDiv = this.containerElement;
-        promptManagerDiv.innerHTML = '';
-
-        const errorDiv = this.error ? `
-                <div class="${this.configuration.prefix}prompt_manager_error">
-                    <span class="fa-solid tooltip fa-triangle-exclamation text_danger"></span> ${DOMPurify.sanitize(this.error)}
-                </div>
-        ` : '';
-
-        const totalActiveTokens = this.tokenUsage;
-
-        const orderEntries = this.activeCharacter ? this.getPromptOrderForCharacter(this.activeCharacter) : [];
-        const enabledCount = orderEntries.filter(entry => entry.enabled).length;
-        const promptCounts = orderEntries.length ? `${enabledCount}/${orderEntries.length}` : '';
-
-        const headerHtml = await renderTemplateAsync('promptManagerHeader', { error: this.error, errorDiv, prefix: this.configuration.prefix, totalActiveTokens, promptCounts });
-        promptManagerDiv.insertAdjacentHTML('beforeend', headerHtml);
-
-        this.listElement = promptManagerDiv.querySelector(`#${this.configuration.prefix}prompt_manager_list`);
-
-        if (null !== this.activeCharacter) {
-            const prompts = [...this.serviceSettings.prompts]
-                .filter(prompt => prompt && !prompt?.system_prompt)
-                .sort((promptA, promptB) => promptA.name.localeCompare(promptB.name));
-            const promptsHtml = prompts.reduce((acc, prompt) => acc + `<option value="${prompt.identifier}">${escapeHtml(prompt.name)}</option>`, '');
-
-            if (selectedPromptIndex > 0) {
-                selectedPromptIndex = Math.min(selectedPromptIndex, prompts.length - 1);
-            }
-
-            if (selectedPromptIndex === -1 && prompts.length) {
-                selectedPromptIndex = 0;
-            }
-
-            const rangeBlockDiv = promptManagerDiv.querySelector('.range-block');
-            const headerDiv = promptManagerDiv.querySelector('.completion_prompt_manager_header');
-            const footerHtml = await renderTemplateAsync('promptManagerFooter', { promptsHtml, prefix: this.configuration.prefix });
-            headerDiv.insertAdjacentHTML('afterend', footerHtml);
-            rangeBlockDiv.querySelector('#prompt-manager-reset-character').addEventListener('click', this.handleCharacterReset);
-
-            const footerDiv = rangeBlockDiv.querySelector(`.${this.configuration.prefix}prompt_manager_footer`);
-            footerDiv.querySelector('#prompt-manager-append-prompt').addEventListener('click', this.handleAppendPrompt);
-            footerDiv.querySelector('#prompt-manager-delete-prompt').addEventListener('click', this.handleDeletePrompt);
-            footerDiv.querySelector('#prompt-manager-new-prompt').addEventListener('click', this.handleNewPrompt);
-            footerDiv.querySelector('select').selectedIndex = selectedPromptIndex;
-
-            // Add prompt export dialogue and options
-            footerDiv.querySelector('#prompt-manager-import').addEventListener('click', this.handleImport);
-            footerDiv.querySelector('#prompt-manager-export').addEventListener('click', this.handleFullExport);
-        }
-    }
-
-    /**
-     * Empties, then re-assembles the prompt list
-     */
-    async renderPromptManagerListItems() {
-        if (!this.serviceSettings.prompts) return;
-
-        const promptManagerList = this.listElement;
-        promptManagerList.innerHTML = '';
-
-        const { prefix } = this.configuration;
-
-        let listItemHtml = await renderTemplateAsync('promptManagerListHeader', { prefix });
-
-        this.getPromptsForCharacter(this.activeCharacter).forEach(prompt => {
-            if (!prompt) return;
-
-            const listEntry = this.getPromptOrderEntry(this.activeCharacter, prompt.identifier);
-            const enabledClass = listEntry.enabled ? '' : `${prefix}prompt_manager_prompt_disabled`;
-            const draggableClass = `${prefix}prompt_manager_prompt_draggable`;
-            const markerClass = prompt.marker ? `${prefix}prompt_manager_marker` : '';
-            const tokens = this.tokenHandler?.getCounts()[prompt.identifier] ?? 0;
-
-            // Warn the user if the chat history goes below certain token thresholds.
-            let warningClass = '';
-            let warningTitle = '';
-
-            const tokenBudget = this.serviceSettings.openai_max_context - this.serviceSettings.openai_max_tokens;
-            if (this.tokenUsage > tokenBudget * 0.8 &&
-                'chatHistory' === prompt.identifier) {
-                const warningThreshold = this.configuration.warningTokenThreshold;
-                const dangerThreshold = this.configuration.dangerTokenThreshold;
-
-                if (tokens <= dangerThreshold) {
-                    warningClass = 'fa-solid tooltip fa-triangle-exclamation text_danger';
-                    warningTitle = 'Very little of your chat history is being sent, consider deactivating some other prompts.';
-                } else if (tokens <= warningThreshold) {
-                    warningClass = 'fa-solid tooltip fa-triangle-exclamation text_warning';
-                    warningTitle = 'Only a few messages worth chat history are being sent.';
-                }
-            }
-
-            const calculatedTokens = tokens ? tokens : '-';
-
-            let detachSpanHtml = '';
-            if (this.isPromptDeletionAllowed(prompt)) {
-                detachSpanHtml = `
-                    <span title="Remove" class="prompt-manager-detach-action caution fa-solid fa-chain-broken fa-xs"></span>
-                `;
-            } else {
-                detachSpanHtml = '<span class="fa-solid"></span>';
-            }
-
-            let editSpanHtml = '';
-            if (this.isPromptEditAllowed(prompt)) {
-                editSpanHtml = `
-                    <span title="edit" class="prompt-manager-edit-action fa-solid fa-pencil fa-xs"></span>
-                `;
-            } else {
-                editSpanHtml = '<span class="fa-solid"></span>';
-            }
-
-            let toggleSpanHtml = '';
-            if (this.isPromptToggleAllowed(prompt)) {
-                toggleSpanHtml = `
-                    <span class="prompt-manager-toggle-action ${listEntry.enabled ? 'fa-solid fa-toggle-on' : 'fa-solid fa-toggle-off'}"></span>
-                `;
-            } else {
-                toggleSpanHtml = '<span class="fa-solid"></span>';
-            }
-
-            const encodedName = escapeHtml(prompt.name);
-            const isMarkerPrompt = prompt.marker && prompt.injection_position !== INJECTION_POSITION.ABSOLUTE;
-            const isSystemPrompt = !prompt.marker && prompt.system_prompt && prompt.injection_position !== INJECTION_POSITION.ABSOLUTE && !prompt.forbid_overrides;
-            const isImportantPrompt = !prompt.marker && prompt.system_prompt && prompt.injection_position !== INJECTION_POSITION.ABSOLUTE && prompt.forbid_overrides;
-            const isUserPrompt = !prompt.marker && !prompt.system_prompt && prompt.injection_position !== INJECTION_POSITION.ABSOLUTE;
-            const isInjectionPrompt = prompt.injection_position === INJECTION_POSITION.ABSOLUTE;
-            const isOverriddenPrompt = Array.isArray(this.overriddenPrompts) && this.overriddenPrompts.includes(prompt.identifier);
-            const importantClass = isImportantPrompt ? `${prefix}prompt_manager_important` : '';
-            const iconLookup = prompt.role === 'system' && (prompt.marker || prompt.system_prompt) ? '' : prompt.role;
-
-            //add role icons to the right of prompt name
-            const promptRoles = {
-                assistant: { roleIcon: 'fa-robot', roleTitle: 'Prompt will be sent as Assistant' },
-                user: { roleIcon: 'fa-user', roleTitle: 'Prompt will be sent as User' },
-            };
-            const roleIcon = promptRoles[iconLookup]?.roleIcon || '';
-            const roleTitle = promptRoles[iconLookup]?.roleTitle || '';
-
-            listItemHtml += `
-                <li class="${prefix}prompt_manager_prompt ${draggableClass} ${enabledClass} ${markerClass} ${importantClass}" data-pm-identifier="${escapeHtml(prompt.identifier)}">
-                    <span class="drag-handle">☰</span>
-                    <span class="${prefix}prompt_manager_prompt_name" data-pm-name="${encodedName}">
-                        ${isMarkerPrompt ? '<span class="fa-fw fa-solid fa-thumb-tack" title="Marker"></span>' : ''}
-                        ${isSystemPrompt ? '<span class="fa-fw fa-solid fa-square-poll-horizontal" title="Global Prompt"></span>' : ''}
-                        ${isImportantPrompt ? '<span class="fa-fw fa-solid fa-star" title="Important Prompt"></span>' : ''}
-                        ${isUserPrompt ? '<span class="fa-fw fa-solid fa-asterisk" title="Preset Prompt"></span>' : ''}
-                        ${isInjectionPrompt ? '<span class="fa-fw fa-solid fa-syringe" title="In-Chat Injection"></span>' : ''}
-                        ${this.isPromptInspectionAllowed(prompt) ? `<a title="${encodedName}" class="prompt-manager-inspect-action">${encodedName}</a>` : `<span title="${encodedName}">${encodedName}</span>`}
-                        ${roleIcon ? `<span data-role="${escapeHtml(prompt.role)}" class="fa-xs fa-solid ${roleIcon}" title="${roleTitle}"></span>` : ''}
-                        ${isInjectionPrompt ? `<small class="prompt-manager-injection-depth">@ ${escapeHtml(prompt.injection_depth.toString())}</small>` : ''}
-                        ${isOverriddenPrompt ? '<small class="fa-solid fa-address-card prompt-manager-overridden" title="Pulled from a character card"></small>' : ''}
-                    </span>
-                    <span>
-                            <span class="prompt_manager_prompt_controls">
-                                ${detachSpanHtml}
-                                ${editSpanHtml}
-                                ${toggleSpanHtml}
-                            </span>
-                    </span>
-
-                    <span class="prompt_manager_prompt_tokens" data-pm-tokens="${calculatedTokens}"><span class="${warningClass}" title="${warningTitle}"> </span>${calculatedTokens}</span>
-                </li>
-            `;
-        });
-
-        promptManagerList.insertAdjacentHTML('beforeend', listItemHtml);
-
-        // Now that the new elements are in the DOM, you can add the event listeners.
-        Array.from(promptManagerList.getElementsByClassName('prompt-manager-detach-action')).forEach(el => {
-            el.addEventListener('click', this.handleDetach);
-        });
-
-        Array.from(promptManagerList.getElementsByClassName('prompt-manager-inspect-action')).forEach(el => {
-            el.addEventListener('click', this.handleInspect);
-        });
-
-        Array.from(promptManagerList.getElementsByClassName('prompt-manager-edit-action')).forEach(el => {
-            el.addEventListener('click', this.handleEdit);
-        });
-
-        Array.from(promptManagerList.querySelectorAll('.prompt-manager-toggle-action')).forEach(el => {
-            el.addEventListener('click', this.handleToggle);
-        });
-    }
-
-    /**
-     * Writes the passed data to a json file
-     *
-     * @param data
-     * @param type
-     * @param name
-     */
-    export(data, type, name = 'export') {
-        const promptExport = {
-            version: this.configuration.version,
-            type: type,
-            data: data,
-        };
-
-        const serializedObject = JSON.stringify(promptExport, null, 4);
-        const blob = new Blob([serializedObject], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const downloadLink = document.createElement('a');
-        downloadLink.href = url;
-
-        const dateString = this.getFormattedDate();
-        downloadLink.download = `${name}-${dateString}.json`;
-
-        downloadLink.click();
-
-        URL.revokeObjectURL(url);
-    }
-
-    /**
-     * Imports a json file with prompts and an optional prompt list for the active character
-     *
-     * @param importData
-     */
-    import(importData) {
-        const mergeKeepNewer = (prompts, newPrompts) => {
-            let merged = [...prompts, ...newPrompts];
-
-            let map = new Map();
-            for (let obj of merged) {
-                map.set(obj.identifier, obj);
-            }
-
-            merged = Array.from(map.values());
-
-            return merged;
-        };
-
-        const controlObj = {
-            version: 1,
-            type: '',
-            data: {
-                prompts: [],
-                prompt_order: null,
-            },
-        };
-
-        if (false === this.validateObject(controlObj, importData)) {
-            toastr.warning(t`Could not import prompts. Export failed validation.`);
-            return;
-        }
-
-        const prompts = mergeKeepNewer(this.serviceSettings.prompts, importData.data.prompts);
-
-        this.setPrompts(prompts);
-        this.log('Prompt import succeeded');
-
-        if ('global' === this.configuration.promptOrder.strategy) {
-            const promptOrder = this.getPromptOrderForCharacter({ id: this.configuration.promptOrder.dummyId });
-            Object.assign(promptOrder, importData.data.prompt_order);
-            this.log('Prompt order import succeeded');
-        } else if ('character' === this.configuration.promptOrder.strategy) {
-            if ('character' === importData.type) {
-                const promptOrder = this.getPromptOrderForCharacter(this.activeCharacter);
-                Object.assign(promptOrder, importData.data.prompt_order);
-                this.log(`Prompt order import for character ${this.activeCharacter.name} succeeded`);
-            }
-        } else {
-            throw new Error('Prompt order strategy not supported.');
-        }
-
-        // Imported files may carry retired identifiers; normalize before saving.
-        this.sanitizeServiceSettings();
-
-        toastr.success(t`Prompt import complete.`);
-        this.saveServiceSettings().then(() => this.render());
-    }
-
-    /**
-     * Helper function to check whether the structure of object matches controlObj
-     *
-     * @param controlObj
-     * @param object
-     * @returns {boolean}
-     */
-    validateObject(controlObj, object) {
-        for (let key in controlObj) {
-            if (!Object.hasOwn(object, key)) {
-                if (controlObj[key] === null) continue;
-                else return false;
-            }
-
-            if (typeof controlObj[key] === 'object' && controlObj[key] !== null) {
-                if (typeof object[key] !== 'object') return false;
-                if (!this.validateObject(controlObj[key], object[key])) return false;
-            } else {
-                if (typeof object[key] !== typeof controlObj[key]) return false;
-            }
-        }
-
-        return true;
-    }
-
-    /**
-     * Get current date as mm/dd/YYYY
-     *
-     * @returns {`${string}_${string}_${string}`}
-     */
-    getFormattedDate() {
-        const date = new Date();
-        let month = String(date.getMonth() + 1);
-        let day = String(date.getDate());
-        const year = String(date.getFullYear());
-
-        if (month.length < 2) month = '0' + month;
-        if (day.length < 2) day = '0' + day;
-
-        return `${month}_${day}_${year}`;
-    }
-
-    /**
-     * Makes the prompt list draggable and handles swapping of two entries in the list.
-     * @typedef {Object} Entry
-     * @property {string} identifier
-     * @returns {void}
-     */
-    makeDraggable() {
-        $(`#${this.configuration.prefix}prompt_manager_list`).sortable({
-            delay: this.configuration.sortableDelay,
-            handle: isMobile() ? '.drag-handle' : null,
-            items: `.${this.configuration.prefix}prompt_manager_prompt_draggable`,
-            update: (_event, _ui) => {
-                const promptOrder = this.getPromptOrderForCharacter(this.activeCharacter);
-                const promptListElement = $(`#${this.configuration.prefix}prompt_manager_list`).sortable('toArray', { attribute: 'data-pm-identifier' });
-                const idToObjectMap = new Map(promptOrder.map(prompt => [prompt.identifier, prompt]));
-                const updatedPromptOrder = promptListElement.map(identifier => idToObjectMap.get(identifier));
-
-                this.removePromptOrderForCharacter(this.activeCharacter);
-                this.addPromptOrderForCharacter(this.activeCharacter, updatedPromptOrder);
-
-                this.log(`Prompt order updated for ${this.activeCharacter.name}.`);
-
-                this.saveServiceSettings();
-            },
-        });
-    }
-
-    /**
-     * Slides down the edit form and adds the class 'openDrawer' to the first element of '#openai_prompt_manager_popup'.
-     * @returns {void}
-     */
-    showPopup(area = 'edit') {
-        const areaElement = document.getElementById(this.configuration.prefix + 'prompt_manager_popup_' + area);
-        areaElement.style.display = 'flex';
-
-        $('#' + this.configuration.prefix + 'prompt_manager_popup').first()
-            .slideDown(200, 'swing')
-            .addClass('openDrawer');
-    }
-
-    /**
-     * Slides up the edit form and removes the class 'openDrawer' from the first element of '#openai_prompt_manager_popup'.
-     * @returns {void}
-     */
-    hidePopup() {
-        $('#' + this.configuration.prefix + 'prompt_manager_popup').first()
-            .slideUp(200, 'swing')
-            .removeClass('openDrawer');
+        this.log('Updated token usage with ' + this.tokenHandler.getTotal());
     }
 
     /**
@@ -1912,24 +679,6 @@ class PromptManager {
      */
     log(output) {
         console.debug('[PromptManager] ' + output);
-    }
-
-    /**
-     * Start a profiling task
-     *
-     * @param identifier
-     */
-    profileStart(identifier) {
-        console.debug('[PromptManager] profileStart', identifier);
-    }
-
-    /**
-     * End a profiling task
-     *
-     * @param identifier
-     */
-    profileEnd(identifier) {
-        this.log('Profiling of "' + identifier + '" finished. Result below.');
     }
 }
 

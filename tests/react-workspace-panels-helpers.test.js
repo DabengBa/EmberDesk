@@ -133,7 +133,6 @@ describe('React workspace panels bridge helpers', () => {
         expect(bridgeSource).toContain('panelModule.mountWorkspaceShellChrome');
         expect(workspacePanelSource).toContain('export function mountWorkspaceShellChrome');
         expect(workspacePanelSource).toContain('ReactWorkspaceShellChrome');
-        expect(workspacePanelSource).toContain('AI 响应配置');
         expect(workspacePanelSource).toContain('角色库');
         expect(workspacePanelSource).not.toContain("{ action: 'openCharacterAuthoring'");
         expect(workspacePanelSource).not.toContain('Workspace ready');
@@ -147,11 +146,7 @@ describe('React workspace panels bridge helpers', () => {
         expect(workspacePanelSource).not.toContain('Backgrounds');
         expect(workspacePanelSource).not.toContain('openExtensions');
         expect(workspacePanelSource).toContain('设置');
-        expect(scriptSource).toContain("openAIConfig: () => openWorkspaceSettingsOverlay({ tab: 'providers', panelKind: 'aiConfig' })");
         expect(scriptSource).toContain("openWorkspaceSettingsOverlay");
-        expect(scriptSource).toContain("tab: 'providers'");
-        expect(scriptSource).toContain("openFormatting: () => openWorkspaceSettingsOverlay({ tab: 'providers', panelKind: 'advancedFormatting' })");
-        expect(scriptSource).toContain("tab: 'providers'");
         expect(scriptSource).toContain("openSettings: () => openWorkspaceSettingsOverlay({ tab: null, panelKind: 'settings' })");
         expect(scriptSource).not.toContain("window.location.assign('/settings");
         expect(scriptSource).not.toContain("await openWorkspaceShellDrawer('user-settings-block');");
@@ -164,21 +159,14 @@ describe('React workspace panels bridge helpers', () => {
         const workspacePanelStoreSource = read('app/stores/workspace-panel-store.js');
         const workspacePanelSource = read('app/workspace-panels.tsx');
 
-        // AI Config / Formatting / Settings were merged into a single 设置 nav
-        // entry; openAIConfig/openFormatting remain dispatchable commands that
-        // land on the matching overlay tabs.
-        [
-            ['aiConfig'],
-            ['advancedFormatting'],
-            ['settings'],
-        ].forEach(([panelKind]) => {
-            expect(workspacePanelStoreSource).toContain(`'${panelKind}',`);
-        });
+        // AI Config / Formatting were retired; the single 设置 nav entry is
+        // the only settings surface.
+        expect(workspacePanelStoreSource).toContain("'settings',");
+        expect(workspacePanelStoreSource).not.toContain("'aiConfig'");
+        expect(workspacePanelStoreSource).not.toContain("'advancedFormatting'");
         expect(workspacePanelSource).toContain("{ command: 'openSettings'");
         expect(workspacePanelSource).toContain("label: '设置'");
         expect(workspacePanelSource).toContain("panelKind: 'settings'");
-        expect(workspacePanelSource).not.toContain("{ command: 'openAIConfig',");
-        expect(workspacePanelSource).not.toContain("{ command: 'openFormatting',");
 
         expect(workspacePanelSource).toContain('recordWorkspacePanelDockIntent,');
         expect(workspacePanelSource).toContain('recordWorkspacePanelDockClose,');
@@ -248,20 +236,18 @@ describe('React workspace panels bridge helpers', () => {
         expect(scriptSource).toContain('openCharacterLibrary: openWorkspaceShellCharacterLibrary,');
         expect(scriptSource).toContain('openCharacterLibrary: async () => {');
         expect(workspacePanelSource).toContain("panelKind: 'worldInfo'");
-        expect(scriptSource).toContain('async function openWorkspaceShellAiConfigDrawer()');
-        expect(scriptSource).toContain("await openWorkspaceChildSlotHost('left-nav-panel');");
-        expect(scriptSource).toContain('openAIConfigDrawer: openWorkspaceShellAiConfigDrawer,');
-        expect(workspacePanelSource).toContain("panelKind: 'aiConfigDrawer'");
-        expect(workspacePanelSource).toContain("slotKey: 'aiConfigDrawer'");
+        // The AI Response Configuration drawer is retired with its slot.
+        expect(scriptSource).not.toContain('openWorkspaceShellAiConfigDrawer');
+        expect(scriptSource).not.toContain('openAIConfigDrawer');
+        expect(workspacePanelSource).not.toContain("panelKind: 'aiConfigDrawer'");
+        expect(workspacePanelSource).not.toContain("slotKey: 'aiConfigDrawer'");
         expect(scriptSource).toContain('return createWorkspaceShellPanelResult(');
         expect(scriptSource).not.toContain('getWorkspaceShellPanelDockState');
         expect(scriptSource).not.toContain('locked: dockState.locked,');
         expect(scriptSource).not.toContain('pinned: dockState.pinned,');
         expect(scriptSource).toContain("return createWorkspaceShellPanelResult('characterLibrary',");
         expect(scriptSource).toContain("return createWorkspaceShellPanelResult('worldInfo', worldInfoMount);");
-        expect(scriptSource).toContain("openAIConfig: () => openWorkspaceSettingsOverlay({ tab: 'providers', panelKind: 'aiConfig' })");
         expect(scriptSource).toContain("openWorkspaceSettingsOverlay");
-        expect(scriptSource).toContain("openFormatting: () => openWorkspaceSettingsOverlay({ tab: 'providers', panelKind: 'advancedFormatting' })");
         expect(scriptSource).toContain("openSettings: () => openWorkspaceSettingsOverlay({ tab: null, panelKind: 'settings' })");
         expect(scriptSource).not.toContain("window.location.assign('/settings');");
         expect(scriptSource).not.toContain("openWorkspaceShellDrawer('user-settings-block')");

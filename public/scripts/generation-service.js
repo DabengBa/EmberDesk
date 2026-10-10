@@ -826,10 +826,6 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
 
     setExtensionPrompt(inject_ids.STORY_STRING, '', state.extension_prompt_types.IN_CHAT, 0);
 
-    // Story string rendered, safe to remove
-    if (state.power_user.strip_examples) {
-        mesExamplesArray = [];
-    }
 
     // Inject all Depth prompts. Chat Completion does it separately
     let injectedIndices = [];
@@ -894,11 +890,7 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
         return getTokenCountAsync(encodeString, TOKEN_PADDING);
     }
 
-    // Force pinned examples into the context
     let pinExmString;
-    if (state.power_user.pin_examples) {
-        pinExmString = examplesString = mesExamplesArray.join('');
-    }
 
     // Only add the chat in context if past the greeting message
     if (isContinue && (chat2.length > 1 || state.main_api === 'openai')) {
@@ -986,15 +978,13 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
     // Estimate how many unpinned example messages fit in the context
     tokenCount = await getMessagesTokenCount();
     let count_exm_add = 0;
-    if (!state.power_user.pin_examples) {
-        for (let example of mesExamplesArray) {
-            tokenCount += await getTokenCountAsync(example.replace(/\r/gm, ''));
-            examplesString += example;
-            if (tokenCount < this_max_context) {
-                count_exm_add++;
-            } else {
-                break;
-            }
+    for (let example of mesExamplesArray) {
+        tokenCount += await getTokenCountAsync(example.replace(/\r/gm, ''));
+        examplesString += example;
+        if (tokenCount < this_max_context) {
+            count_exm_add++;
+        } else {
+            break;
         }
     }
 

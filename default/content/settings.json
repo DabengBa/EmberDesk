@@ -19,7 +19,6 @@
         "world_info_character_strategy": 1,
         "world_info_budget_cap": 0
     },
-    "swipes": true,
     "horde_settings": {
         "models": [],
         "auto_adjust_response_length": true,
@@ -27,43 +26,9 @@
         "trusted_workers_only": false
     },
     "power_user": {
-        "pin_examples": false,
-        "strip_examples": false,
         "sort_field": "name",
         "sort_order": "asc",
-        "sort_rule": null,
-        "movingUI": false,
-        "movingUIState": {},
-        "movingUIPreset": "Default",
-        "max_context_unlocked": false,
-        "instruct": {
-            "enabled": false,
-            "preset": "Alpaca",
-            "input_sequence": "### Instruction:",
-            "output_sequence": "### Response:",
-            "last_output_sequence": "",
-            "system_sequence": "### Input:",
-            "stop_sequence": "",
-            "wrap": true,
-            "macro": true,
-            "names_behavior": "force",
-            "activation_regex": "",
-            "first_output_sequence": "",
-            "skip_examples": false,
-            "output_suffix": "\n\n",
-            "input_suffix": "\n\n",
-            "system_suffix": "\n\n",
-            "user_alignment_message": "",
-            "system_same_as_user": false
-        },
-        "context": {
-            "preset": "Default",
-            "story_string": "{{#if system}}{{system}}\n{{/if}}{{#if wiBefore}}{{wiBefore}}\n{{/if}}{{#if description}}{{description}}\n{{/if}}{{#if scenario}}Scenario: {{scenario}}\n{{/if}}{{#if wiAfter}}{{wiAfter}}\n{{/if}}",
-            "chat_start": "***",
-            "example_separator": "***",
-            "use_stop_strings": true
-        },
-        "ui_mode": 1
+        "sort_rule": null
     },
     "feature_settings": {
         "connectionManager": {

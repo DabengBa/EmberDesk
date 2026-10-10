@@ -7,13 +7,10 @@ export const WORKSPACE_PANEL_KINDS = Object.freeze([
 ]);
 
 export const WORKSPACE_PANEL_DOCK_KINDS = Object.freeze([
-    'aiConfig',
-    'advancedFormatting',
     'characterLibrary',
     'worldInfo',
     'settings',
     'characterAuthoring',
-    'aiConfigDrawer',
     'regex',
 ]);
 
@@ -40,12 +37,6 @@ export const WORKSPACE_SHELL_CHILD_SLOTS = Object.freeze({
         allowedCapabilities: Object.freeze(['editCharacter']),
         contentOwner: 'character-authoring',
         mountTarget: '#rm_ch_create_block',
-    }),
-    aiConfigDrawer: Object.freeze({
-        accessibleName: 'AI 响应配置',
-        allowedCapabilities: Object.freeze(['selectPreset', 'managePresets']),
-        contentOwner: 'ai-config',
-        mountTarget: '#left-nav-panel',
     }),
     regex: Object.freeze({
         accessibleName: '正则',

@@ -93,14 +93,35 @@ test.describe('React settings sole-owner page', () => {
         // Unique per run: a sibling test may persist a snapshot that already
         // contains our draft value, which would leave the form pristine.
         const fallbackValue = `e2e-fallback-${Date.now()}`;
-        await modelField.fill(fallbackValue);
 
         const saveButton = page.locator('button[type="submit"]');
         // fullyParallel shares one settings document; a concurrent save from
-        // another test can bump the revision mid-flight. On a conflict banner,
-        // reload the persisted document and re-apply the draft before retrying.
-        for (let attempt = 0; attempt < 3; attempt++) {
-            await expect(saveButton).toBeEnabled({ timeout: 30_000 });
+        // another test can bump the revision mid-flight, and a background
+        // refetch re-render can revert a mid-fill keystroke on the controlled
+        // input before it marks the form dirty. Re-apply the draft until the
+        // save button reflects it, then on a conflict banner reload the
+        // persisted document and re-apply before retrying.
+        let savedValue = fallbackValue;
+        for (let attempt = 0; attempt < 5; attempt++) {
+            savedValue = `${fallbackValue}-${attempt}`;
+            // A concurrent render can restore the controlled input before the
+            // fill commits; verify the DOM retains the draft and re-apply via
+            // per-key input when the atomic fill is swallowed.
+            await modelField.fill(savedValue);
+            const retained = await expect(modelField)
+                .toHaveValue(savedValue, { timeout: 5_000 })
+                .then(() => true)
+                .catch(() => false);
+            if (!retained) {
+                continue;
+            }
+            const becameEnabled = await expect(saveButton)
+                .toBeEnabled({ timeout: 10_000 })
+                .then(() => true)
+                .catch(() => false);
+            if (!becameEnabled) {
+                continue;
+            }
             await saveButton.focus();
             await page.keyboard.press('Enter');
             const conflicted = await Promise.race([
@@ -112,12 +133,11 @@ test.describe('React settings sole-owner page', () => {
             }
             await page.getByRole('button', { name: '重新加载当前设置', exact: true }).click();
             await expect(page.getByText(/本地草稿仍保留/)).toHaveCount(0, { timeout: 30_000 });
-            await modelField.fill(fallbackValue);
         }
         await expect(page.locator('.settings-status--success')).toContainText('已保存', { timeout: 30_000 });
 
         const after = await getSettingsPayload(page);
-        expect(after.settings?.oai_settings?.fallback_provider_model).toBe(fallbackValue);
+        expect(after.settings?.oai_settings?.fallback_provider_model).toBe(savedValue);
         expect(JSON.stringify(after.settings)).not.toMatch(/BEGIN PRIVATE KEY/);
         // Retired advanced-tab keys never come back through a React save.
         expect(after.settings?.power_user?.user_prompt_bias).toBeUndefined();
@@ -152,10 +172,7 @@ test.describe('React settings sole-owner page', () => {
         for (let attempt = 0; attempt < 3; attempt++) {
             const initial = await getSettingsPayload(page);
             const concurrentSettings = structuredClone(initial.settings);
-            concurrentSettings.power_user = {
-                ...(concurrentSettings.power_user || {}),
-                custom_css: `/* Concurrent-${Date.now()} */`,
-            };
+            concurrentSettings.e2e_probe_key = `Concurrent-${Date.now()}`;
             const concurrent = await saveSettingsDocument(page, concurrentSettings, initial.settingsRevision);
             if (concurrent.status === 409) {
                 continue;

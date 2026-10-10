@@ -51,8 +51,6 @@ describe('chat workspace structure', () => {
             'ensureWorkspaceShellChromeHost',
             'data-react-workspace-shell-chrome-status',
             'function getWorkspaceShellCommands()',
-            "openAIConfig: () => openWorkspaceSettingsOverlay({ tab: 'providers', panelKind: 'aiConfig' })",
-            "openFormatting: () => openWorkspaceSettingsOverlay({ tab: 'providers', panelKind: 'advancedFormatting' })",
             "openSettings: () => openWorkspaceSettingsOverlay({ tab: null, panelKind: 'settings' })",
         ], { contractName: 'same-entry React workspace chrome host' });
         expect(scriptSource).not.toContain('openWorkspaceShellDrawer');

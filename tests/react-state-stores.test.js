@@ -34,13 +34,10 @@ describe('React state stores', () => {
         ]);
 
         expect(WORKSPACE_PANEL_DOCK_KINDS).toEqual([
-            'aiConfig',
-            'advancedFormatting',
             'characterLibrary',
             'worldInfo',
             'settings',
             'characterAuthoring',
-            'aiConfigDrawer',
             'regex',
         ]);
     });
@@ -65,11 +62,8 @@ describe('React state stores', () => {
         }));
 
         expect(() => getWorkspaceShellChildSlot('extensionsHost')).toThrow('Unsupported workspace shell child slot');
-        expect(getWorkspaceShellChildSlot('aiConfigDrawer')).toEqual(expect.objectContaining({
-            accessibleName: 'AI 响应配置',
-            contentOwner: 'ai-config',
-            mountTarget: '#left-nav-panel',
-        }));
+        // The AI Response Configuration drawer is retired; the slot is gone.
+        expect(() => getWorkspaceShellChildSlot('aiConfigDrawer')).toThrow('Unsupported workspace shell child slot');
         expect(getWorkspaceShellChildSlot('regex')).toEqual(expect.objectContaining({
             accessibleName: '正则',
             contentOwner: 'regex',

@@ -82,7 +82,6 @@ import {
     chat_completion_sources,
     getChatCompletionModel,
     initOpenAI,
-    mountPromptManagerPopup,
     connectProviderConnection,
     testProviderConnection,
 } from './scripts/openai.js';
@@ -130,7 +129,7 @@ import {
     createTimeout,
     cancelDebounce,
 } from './scripts/utils.js';
-import { debounce_timeout, IGNORE_SYMBOL, inject_ids, MEDIA_SOURCE, MEDIA_TYPE, SCROLL_BEHAVIOR, SWIPE_DIRECTION, SWIPE_STATE } from './scripts/constants.js';
+import { CHAT_TRUNCATION, debounce_timeout, IGNORE_SYMBOL, inject_ids, MEDIA_SOURCE, MEDIA_TYPE, SCROLL_BEHAVIOR, SWIPE_DIRECTION, SWIPE_STATE } from './scripts/constants.js';
 
 import {
     cancelDebouncedMetadataSave,
@@ -220,12 +219,10 @@ import { createChatMessageActionsController } from './scripts/chat-message-actio
 import { ToolManager } from './scripts/tool-calling.js';
 import { addShowdownPatch } from './scripts/util/showdown-patch.js';
 import { applyBrowserFixes } from './scripts/browser-fixes.js';
-import { initSettingsSearch } from './scripts/setting-search.js';
 import { initBulkEdit } from './scripts/bulk-edit.js';
 import { getContext } from './scripts/st-context.js';
 import { extractReasoningFromData, extractReasoningSignatureFromData, initReasoning, parseReasoningInSwipes, PromptReasoning, ReasoningHandler, removeReasoningFromString, updateReasoningUI } from './scripts/reasoning.js';
 import { accountStorage } from './scripts/util/AccountStorage.js';
-import { initDataMaid } from './scripts/data-maid.js';
 
 import { getSystemMessageByType, initSystemMessages, SAFETY_CHAT, sendSystemMessage, system_message_types, system_messages } from './scripts/system-messages.js';
 import { event_types, eventSource } from './scripts/events.js';
@@ -451,7 +448,7 @@ const reactRuntimePort = createReactRuntimeProvider({
         },
         connectProvider: () => connectProviderConnection(),
         testProviderConnection: () => testProviderConnection(),
-        // Drawer-content host id (e.g. 'left-nav-panel', 'user-settings-block').
+        // Drawer-content host id (e.g. 'user-settings-block').
         // Settings overlay links use this to reach legacy-owned surfaces that
         // still live inside workspace drawers. The allowlist keeps the command
         // from turning into generic "open any element by id" DOM access.
@@ -1023,7 +1020,6 @@ registerDomHandlersShellContext({
     messageEditCancel: (...args) => messageEditCancel(...args),
     messageEditDone: (...args) => messageEditDone(...args),
     messageEditMove: (...args) => messageEditMove(...args),
-    mountAiConfigPanel: (...args) => mountAiConfigPanel(...args),
     mountCharacterContextMenu: (...args) => mountCharacterContextMenu(...args),
     mountCharacterPopup: (...args) => mountCharacterPopup(...args),
     mountChatComposer: (...args) => mountChatComposer(...args),
@@ -1168,14 +1164,12 @@ function getWorkspaceShellChromeState() {
 
 const WORKSPACE_DRAWER_OPENED_STORAGE_KEYS = {
     'right-nav-panel': 'NavOpened',
-    'left-nav-panel': 'LNavOpened',
     WorldInfo: 'WINavOpened',
 };
 
 // Drawer-content host ids reachable through the openWorkspaceDrawer runtime
 // command. These are the legacy-owned surfaces the Settings overlay links to.
 const WORKSPACE_DRAWER_COMMAND_HOST_IDS = new Set([
-    'left-nav-panel',
     'user-settings-block',
     'RegexPanel',
 ]);
@@ -1270,7 +1264,6 @@ function getWorkspaceChildSlotHostId(slotKey) {
         characterLibrary: 'right-nav-panel',
         worldInfo: 'WorldInfo',
         characterAuthoring: 'right-nav-panel',
-        aiConfigDrawer: 'left-nav-panel',
         regex: 'RegexPanel',
     }[slotKey];
 }
@@ -1328,8 +1321,6 @@ async function activateWorkspaceShellSlot(slotKey) {
             return openWorkspaceShellWorldInfo();
         case 'characterAuthoring':
             return openWorkspaceShellCharacterAuthoring();
-        case 'aiConfigDrawer':
-            return openWorkspaceShellAiConfigDrawer();
         case 'regex':
             return openWorkspaceShellRegex();
         default:
@@ -1342,7 +1333,6 @@ function deactivateWorkspaceShellSlot(slotKey) {
         characterLibrary: 'characterLibrary',
         worldInfo: 'worldInfo',
         characterAuthoring: 'characterAuthoring',
-        aiConfigDrawer: 'aiConfigDrawer',
         regex: 'regex',
     }[slotKey];
 
@@ -1436,22 +1426,8 @@ async function openWorkspaceShellRegex() {
     });
 }
 
-async function openWorkspaceShellAiConfigDrawer() {
-    await waitForWorkspaceShellPanelOpenTask();
-    // Legacy-owned drawer: AI Response Configuration (chat completion preset
-    // row, sampling controls, Prompt Manager). React markup inside was mounted
-    // by the mountAiConfigPanel startup stage; nothing else needs mounting here.
-    await openWorkspaceChildSlotHost('left-nav-panel');
-    await waitForWorkspaceShellPanelOpenTask();
-    return createWorkspaceShellPanelResult('aiConfigDrawer', {
-        kind: 'aiConfigDrawer',
-        mounted: true,
-        status: 'success',
-    });
-}
-
 async function closeWorkspacePanel(kind) {
-    if (kind === 'settings' || kind === 'aiConfig' || kind === 'advancedFormatting') {
+    if (kind === 'settings') {
         // Reserve the close generation before awaiting; a superseding reopen
         // must always observe a higher generation or the deferred unmount
         // would unmount the freshly mounted overlay.
@@ -1469,16 +1445,11 @@ function getWorkspaceShellCommands() {
         activateWorkspaceShellSlot,
         deactivateWorkspaceShellSlot,
         setWorkspaceShellSlotPinned,
-        openAIConfig: () => openWorkspaceSettingsOverlay({ tab: 'providers', panelKind: 'aiConfig' }),
-        // The advanced tab is retired; the compatibility command now opens the
-        // single providers/settings tab.
-        openFormatting: () => openWorkspaceSettingsOverlay({ tab: 'providers', panelKind: 'advancedFormatting' }),
         openCharacterLibrary: openWorkspaceShellCharacterLibrary,
         openWorldInfo: openWorkspaceShellWorldInfo,
         openSettings: () => openWorkspaceSettingsOverlay({ tab: null, panelKind: 'settings' }),
         closeWorkspacePanel,
         openCharacterAuthoring: openWorkspaceShellCharacterAuthoring,
-        openAIConfigDrawer: openWorkspaceShellAiConfigDrawer,
         openRegex: openWorkspaceShellRegex,
     };
 }
@@ -3066,10 +3037,7 @@ function getMainChatReactVisibleWindow(projectedChat) {
         };
     }
 
-    const configuredLimit = Number(power_user?.chat_truncation);
-    const defaultStartIndex = Number.isInteger(configuredLimit) && configuredLimit > 0
-        ? Math.max(totalMessageCount - configuredLimit, 0)
-        : 0;
+    const defaultStartIndex = Math.max(totalMessageCount - CHAT_TRUNCATION, 0);
     const savedStartIndex = mainChatVisibleStartIndices.get(getCurrentChatId());
     const requestedStartIndex = Number.isInteger(savedStartIndex)
         ? savedStartIndex
@@ -4028,7 +3996,6 @@ export let isChatSaving = false;
 let firstRun = false;
 export let settingsReady = false;
 let currentVersion = '0.0.0';
-export let displayVersion = 'EmberDesk';
 let deferredCoreFeatureTask = null;
 const deferredVersionTask = createSingleFlightTask(() => measureStartupStage('deferred.getClientVersion', () => getClientVersion()));
 
@@ -4207,14 +4174,7 @@ async function getClientVersion() {
         const response = await fetch('/version');
         const data = await response.json();
         CLIENT_VERSION = data.agent;
-        displayVersion = `EmberDesk ${data.pkgVersion}`;
         currentVersion = data.pkgVersion;
-
-        if (data.gitRevision && data.gitBranch) {
-            displayVersion += ` '${data.gitBranch}' (${data.gitRevision})`;
-        }
-
-        $('#version_display').text(displayVersion);
     } catch (err) {
         console.error('Couldn\'t get client version', err);
     }
@@ -4503,7 +4463,6 @@ async function bootstrapWorkspace() {
         applyBrowserFixes();
     }));
 
-    await measureStartupStage('mountAiConfigPanel', () => mountAiConfigPanel());
     await measureStartupStage('mountCharacterPopup', () => mountCharacterPopup());
     await measureStartupStage('mountRightNavPanel', () => mountRightNavPanel());
     await measureStartupStage('mountSelectChatPopup', () => mountSelectChatPopup());
@@ -4528,7 +4487,6 @@ async function bootstrapWorkspace() {
     await measureStartupStage('initSystemMessages', () => initSystemMessages());
     await measureStartupStage('mountPowerUserPanel', () => mountPowerUserPanel());
     await measureStartupStage('mountConfigDrawers', () => Promise.all([
-        mountPromptManagerPopup(),
         mountWorldInfoPanel(),
     ]));
     await getSettings(initLoaderHandle);
@@ -4548,13 +4506,11 @@ async function bootstrapWorkspace() {
         registerPanelHook('world-info-body', _replayWorldInfoSettings);
         initWorldInfo();
         initRossMods();
-        initSettingsSearch();
         initBulkEdit();
         initReasoning();
     });
     await measureStartupStage('lateFeatureInit', () => Promise.resolve().then(() => {
         initCustomSelectedSamplers();
-        initDataMaid();
         initAccessibility();
         initSwipePicker();
         initFrontendFrameController();
@@ -6863,11 +6819,8 @@ export function getMaxPromptTokens(overrideResponseLength = null) {
 
 
 function addChatsSeparator(mesSendString) {
-    if (power_user.context.chat_start) {
-        return substituteParams(power_user.context.chat_start + '\n') + mesSendString;
-    } else {
-        return mesSendString;
-    }
+    // chat_start is retired as a data field; the shipped default ('***') is fixed.
+    return substituteParams('***\n') + mesSendString;
 }
 
 /**
@@ -7618,8 +7571,6 @@ async function applyStartupSettingsCore(data, initLoaderHandle = null) {
         if (settings.max_context !== undefined)
             max_context = parseInt(settings.max_context);
 
-        swipes = settings.swipes !== undefined ? !!settings.swipes : true;  // enable swipes by default
-        $('#swipes-checkbox').prop('checked', swipes); /// swipecode
         refreshSwipeButtons();
 
         // OpenAI
@@ -7737,7 +7688,6 @@ export async function saveSettings(loopCounter = 0) {
         max_context: max_context,
         main_api: main_api,
         world_info_settings: getWorldInfoSettings(),
-        swipes: swipes,
         power_user: power_user,
         feature_settings: feature_settings,
         tags: tags,
@@ -9781,34 +9731,6 @@ async function mountChatComposer() {
         sendForm.dataset.reactComposerMounted = 'true';
     } catch (error) {
         console.error('Failed to mount chat composer:', error);
-    }
-}
-
-/**
- * Mounts the React-owned AI Response Configuration markup into #left-nav-panel.
- * Must complete before initOpenAI (registerCoreModules stage) and getSettings:
- * preset controls, sampling fields, and prompt textareas are bound by ID.
- */
-async function mountAiConfigPanel() {
-    const drawerContent = document.getElementById('left-nav-panel');
-    if (!drawerContent) {
-        console.warn('AI config drawer not found');
-        return;
-    }
-    if (drawerContent.dataset.reactAiConfigMounted === 'true') {
-        return;
-    }
-
-    const host = document.createElement('div');
-    host.id = 'emberdesk-react-ai-config-host';
-    drawerContent.replaceChildren(host);
-
-    try {
-        const module = await loadWorkspacePanelsModule();
-        module.mountAiConfigPanel(host);
-        drawerContent.dataset.reactAiConfigMounted = 'true';
-    } catch (error) {
-        console.error('Failed to mount ai config panel:', error);
     }
 }
 

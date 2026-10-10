@@ -103,16 +103,14 @@ function resolveInitialSettingsTab(initialTab?: string | null) {
     return readStoredSettingsTab() ?? settingsTabDefinitions[0].id;
 }
 
-// Overlay-only navigation into workspace drawers. Preset CRUD, the Prompt
-// Manager, connection-profile capture/apply, and the
+// Overlay-only navigation into workspace drawers. The remaining
 // user-settings extras still live in drawer surfaces the shell no longer opens.
 // Each target is the drawer's .drawer-content host id opened through the
 // openWorkspaceDrawer runtime command; the link also runs onRequestClose so the
 // overlay does not cover the drawer it just opened.
 const WORKSPACE_DRAWER_LINKS: Record<string, Array<{ target: string; label: string; hint: string }>> = {
     providers: [
-        { target: 'left-nav-panel', label: '打开 AI 响应配置', hint: '预设下拉与操作、采样滑条、Prompt Manager。' },
-        { target: 'user-settings-block', label: '打开用户设置', hint: '账户、语言、调试菜单、清理与前端渲染帧等工具。' },
+        { target: 'user-settings-block', label: '打开用户设置', hint: '前端渲染帧(Frontend Frames)设置。' },
     ],
 };
 

@@ -309,10 +309,14 @@ export function buildSettingsSavePayload(baseSettings, formValues, { settingsRev
             'compact_input_area', 'media_display', 'send_on_enter',
             'auto_fix_generated_markdown', 'forbid_external_media',
             'message_token_count_enabled',
-            // Retired advanced-tab controls; runtime uses fixed constants.
+            // Retired controls/data fields; runtime uses fixed constants or
+            // frozen shipped defaults.
             'custom_stopping_strings', 'tokenizer', 'token_padding',
             'smooth_streaming', 'always_force_name2', 'trim_spaces',
-            'user_prompt_bias', 'stscript',
+            'user_prompt_bias', 'stscript', 'instruct', 'context',
+            'chat_truncation', 'custom_css', 'pin_examples', 'strip_examples',
+            'movingUI', 'movingUIState', 'movingUIPreset', 'max_context_unlocked',
+            'ui_mode',
         ]) {
             delete powerUser[key];
         }
@@ -321,6 +325,9 @@ export function buildSettingsSavePayload(baseSettings, formValues, { settingsRev
         delete powerUser.sysprompt;
         delete powerUser.reasoning;
     }
+
+    // The swipes toggle is retired; swipe buttons are always on.
+    delete nextSettings.swipes;
 
     if (settingsRevision != null && Number.isFinite(Number(settingsRevision))) {
         nextSettings.settings_revision = Number(settingsRevision);

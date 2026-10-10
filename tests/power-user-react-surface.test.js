@@ -2,27 +2,38 @@ import { describe, expect, test } from '@jest/globals';
 import { readRepoFile } from './helpers/frontend-compatibility-contract.js';
 
 describe('power-user settings drawer React surface (Wave A)', () => {
-    test('React owns the drawer markup with every legacy element ID preserved', () => {
+    test('React owns the drawer markup; only Frontend Frames remains', () => {
         const panel = readRepoFile('app/components/power-user/PowerUserPanel.tsx');
         const indexHtml = readRepoFile('public/index.html');
 
-        // A representative slice of the IDs power-user.js binds in
-        // loadPowerUserSettings / registerPowerUserEvents.
+        // The surviving controls are the Frontend Frames settings bound by ID
+        // in loadPowerUserSettings / registerPowerUserEvents.
         for (const id of [
             'user-settings-block-content',
-            'ui_language_select',
-            'settingsSearch',
-            'swipes-checkbox',
-            'example_messages_behavior',
-            'reload_chat',
-            'debug_menu',
-            'data_maid_button',
+            'frontend_frames_enabled',
+            'frontend_frames_depth',
+            'frontend_frames_depth_ignore_hidden',
+            'frontend_frames_collapse_code_block',
+            'frontend_frames_skip_highlight',
+            'frontend_frames_use_blob_url',
+            'frontend_frames_allow_streaming',
         ]) {
             expect(panel).toContain(`id="${id}"`);
         }
 
         // Retired controls are gone from the drawer markup.
         for (const id of [
+            'ui_language_select',
+            'version_display',
+            'settingsSearch',
+            'account_button',
+            'admin_button',
+            'logout_button',
+            'swipes-checkbox',
+            'example_messages_behavior',
+            'reload_chat',
+            'debug_menu',
+            'data_maid_button',
             'smooth_streaming',
             'stscript_autocomplete_state',
             'stscript_matching',
@@ -35,22 +46,6 @@ describe('power-user settings drawer React surface (Wave A)', () => {
         // The inner markup moved out of index.html.
         expect(indexHtml).not.toContain('user-settings-block-content');
         expect(indexHtml).not.toContain('id="ui_language_select"');
-    });
-
-    test('name= layout attributes are preserved for [name=...] CSS selectors', () => {
-        const panel = readRepoFile('app/components/power-user/PowerUserPanel.tsx');
-        const styleCss = readRepoFile('public/style.css');
-
-        // style.css targets these layout divs via attribute selectors.
-        expect(styleCss).toContain('#user-settings-block [name="MiscellaneousToggles"]');
-        for (const name of [
-            'userSettingsRowOne',
-            'UserSettingsRowTwo',
-            'MiscellaneousToggles',
-            'UserSettingsThirdColumn',
-        ]) {
-            expect(panel).toContain(`name="${name}"`);
-        }
     });
 
     test('mount runs before getSettings bindings attach', () => {

@@ -292,16 +292,21 @@ test.describe('workspace shell panel navigation', () => {
 
         await expect(page.locator('[data-settings-overlay="true"] .settings-tab')).toHaveCount(0);
 
+        // The AI Response Configuration / API Connections drawers are retired;
+        // no such workspace links may exist.
         const aiConfigLink = page.locator('[data-settings-overlay="true"] button').filter({ hasText: '打开 AI 响应配置' });
-        // The API Connections drawer is retired; no such workspace link may exist.
         const apiConnectionsLink = page.locator('[data-settings-overlay="true"] button').filter({ hasText: 'Open API Connections' });
-        await expect(aiConfigLink).toBeVisible();
+        await expect(aiConfigLink).toHaveCount(0);
         await expect(apiConnectionsLink).toHaveCount(0);
 
-        await aiConfigLink.click();
+        const userSettingsLink = page.locator('[data-settings-overlay="true"] button').filter({ hasText: '打开用户设置' });
+        await expect(userSettingsLink).toBeVisible();
+        await userSettingsLink.click();
         await expect(page.locator('[data-settings-overlay="true"]')).toHaveCount(0, { timeout: 10_000 });
-        await expect(page.locator('#left-nav-panel.openDrawer')).toBeVisible({ timeout: 10_000 });
-        await expect(page.locator('#left-nav-panel #completion_prompt_manager_list')).toBeVisible({ timeout: 10_000 });
+        await expect(page.locator('#user-settings-block.openDrawer')).toBeVisible({ timeout: 10_000 });
+        // The Frontend Frames controls live inside a collapsed inline drawer;
+        // assert its always-visible toggle header as proof the panel mounted.
+        await expect(page.locator('#user-settings-block .inline-drawer-toggle').filter({ hasText: 'Frontend Frames' })).toBeVisible({ timeout: 10_000 });
 
         await settingsButton.click({ timeout: 10_000 });
         await expect(page.locator('[data-settings-overlay="true"]')).toBeVisible({ timeout: 15_000 });
@@ -313,20 +318,12 @@ test.describe('workspace shell panel navigation', () => {
         await expect(page.locator('[data-settings-overlay="true"] button').filter({ hasText: '打开用户设置' })).toBeVisible();
     });
 
-    test('opens the AI Response Configuration drawer from the AI 响应配置 shell entry', async ({ page }) => {
+    test('exposes no retired AI Response Configuration shell entry', async ({ page }) => {
         await testSetup.awaitST({ page });
 
         const presetsButton = page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: 'AI 响应配置' });
-        await expect(presetsButton).toBeVisible({ timeout: 15_000 });
-        await presetsButton.click({ timeout: 10_000 });
-
-        await expect(page.locator('#left-nav-panel.openDrawer')).toBeVisible({ timeout: 10_000 });
-        await expect(page.locator('#left-nav-panel #settings_preset_openai')).toBeVisible({ timeout: 10_000 });
-        await expect(page.locator('#left-nav-panel #completion_prompt_manager_list')).toBeVisible({ timeout: 10_000 });
-
-        // Second click toggles the drawer closed, matching the other slot entries.
-        await presetsButton.click({ timeout: 10_000 });
-        await expect(page.locator('#left-nav-panel.openDrawer')).toHaveCount(0, { timeout: 10_000 });
+        await expect(presetsButton).toHaveCount(0);
+        await expect(page.locator('#left-nav-panel')).toHaveCount(0);
     });
 
     test('keeps a reopened Settings overlay mounted when a deferred close is superseded', async ({ page }) => {

@@ -14,7 +14,7 @@ related: [page.settings, page.chat_workspace, feature.custom_base_url, feature.c
 
 ## Page Purpose
 
-Document the retirement of the API Connections drawer. All remaining provider work — base URL, API key, model, fallback model, Connect/Test actions, and connection status — is owned by the Providers tab of [Settings](page.settings), opened from the workspace shell AI Config entry as an overlay or deep-linked at `/settings?tab=providers`. Generation defaults (presets, sampling, reasoning, continue, prompt formats) live in the separate AI Response Configuration drawer (`#left-nav-panel`, shell Presets entry).
+Document the retirement of the API Connections drawer. All remaining provider work — base URL, API key, model, fallback model, Connect/Test actions, and connection status — is owned by the Providers tab of [Settings](page.settings), opened from the workspace shell AI Config entry as an overlay or deep-linked at `/settings?tab=providers`. Generation defaults (presets, sampling, reasoning, continue, prompt formats) persist in `oai_settings` without an editing surface; the separate AI Response Configuration drawer (`#left-nav-panel`, shell Presets entry) is retired as well.
 
 ## Retired Structure
 

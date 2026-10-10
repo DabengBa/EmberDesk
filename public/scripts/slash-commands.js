@@ -2653,21 +2653,8 @@ export function initDefaultSlashCommands() {
     }));
     SlashCommandParser.addCommandObject(SlashCommand.fromProps({
         name: 'pm-render',
-        callback: (args, _) => {
-            const dryRun = !isFalseBoolean(args?.refresh?.toString());
-            promptManager.render(dryRun);
-            return '';
-        },
-        namedArgumentList: [
-            SlashCommandNamedArgument.fromProps({
-                name: 'refresh',
-                description: 'Perform a dry run of the generation to refresh token counters before rendering the prompt manager',
-                typeList: [ARGUMENT_TYPE.BOOLEAN],
-                defaultValue: 'true',
-                enumList: commonEnumProviders.boolean('trueFalse')(),
-            }),
-        ],
-        helpString: t`Rerenders the prompt manager content. Use this if you have made changes to the prompt entries through slash commands and want to see the changes reflected in the prompt manager UI.`,
+        callback: (_args, _) => '',
+        helpString: t`No-op. The prompt manager drawer has been retired.`,
     }));
     SlashCommandParser.addCommandObject(SlashCommand.fromProps({
         name: 'pick-icon',
@@ -5644,8 +5631,7 @@ function setPromptEntryCallback(args, targetState) {
         promptOrderEntry.enabled = getPromptOrderEntryState(promptOrderEntry);
     });
 
-    // no need to render for each identifier
-    promptManager.render();
+    // no need to re-render for each identifier
     promptManager.saveServiceSettings();
     return '';
 }
