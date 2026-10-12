@@ -348,11 +348,9 @@ describe('world info card rendering', () => {
     test('react world info host becomes sole visible owner and hides legacy workbench children', () => {
         const script = read('public/script.js');
         const css = read('public/css/world-info.css');
-        const flags = read('src/react-feature-flags.js');
         const bridge = read('public/scripts/workspace-panels-react-bridge.js');
 
-        expect(flags).toContain("panelName === 'characterAuthoring' || panelName === 'worldInfo'");
-        expect(flags).not.toContain('groupAuthoring');
+        expect(bridge).not.toContain('groupAuthoring');
         expect(bridge).toContain('worldInfo: true');
         expect(script).toContain('function hideLegacyWorldInfoWorkbench(hidden');
         expect(script).toContain("workbench.dataset.worldInfoVisibleOwner = hidden ? 'react' : 'legacy'");

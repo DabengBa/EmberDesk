@@ -151,10 +151,6 @@ features:
         # demand, and export-all materializes the file tree.
         characters:
           projection: off
-  react:
-    pages:
-    panels:
-      # mainChatMessageList product flag retired (React sole-owner; always enabled in workspace bootstrap)
 
 # -- SSO LOGIN CONFIGURATION --
 sso:
@@ -327,17 +323,6 @@ whitelistImportDomains:
   - cdn.discordapp.com
   - files.catbox.moe
   - raw.githubusercontent.com
-# API request overrides (for KoboldAI and Text Completion APIs)
-## Note: host includes the port number if it's not the default (80 or 443)
-## Format is an array of objects:
-## - hosts:
-##   - example.com
-##   headers:
-##     Content-Type: application/json
-##   - 127.0.0.1:5001
-##   headers:
-##     User-Agent: "Googlebot/2.1 (+http://www.google.com/bot.html)"
-requestOverrides: []
 
 # Additional model tokenizers can be downloaded on demand.
 # Disabling will fallback to another locally available tokenizer.
@@ -348,30 +333,11 @@ promptPlaceholder: "[Start a new chat]"
 openai:
   # Will send a random user ID to OpenAI completion API
   randomizeUserId: false
-  # If not empty, will add this as a system message to the start of every caption completion prompt
-  # Example: "Perform the instructions to the best of your ability.\n" (for LLaVA)
-  # Not used in image inlining mode
-  captionSystemPrompt: ""
-# -- DEEPL TRANSLATION CONFIGURATION --
-deepl:
-  # Available options: default, more, less, prefer_more, prefer_less
-  formality: default
 # -- MISTRAL API CONFIGURATION --
 mistral:
   # Enables prefilling of the reply with the last assistant message in the prompt
   # CAUTION: The prefix is echoed into the completion. You may want to use regex to trim it out.
   enablePrefix: false
-# -- OLLAMA API CONFIGURATION --
-ollama:
-  # Controls how long the model will stay loaded into memory following the request
-  # * -1: Keep the model loaded indefinitely
-  # * 0: Unload the model immediately after the request
-  # * N (any positive number): Keep the model loaded for N seconds after the request.
-  keepAlive: -1
-  # Controls the "num_batch" (batch size) parameter of the generation request
-  # * -1: Use the default value of the model
-  # * N (positive number): Use the specified value. Must be a power of 2, e.g. 128, 256, 512, etc.
-  batchSize: -1
 # -- SERVER PLUGIN CONFIGURATION --
 enableServerPlugins: false
 # Attempt to automatically update server plugins on startup

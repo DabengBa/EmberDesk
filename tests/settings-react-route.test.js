@@ -76,7 +76,6 @@ async function createSettingsRouteApp({ isLoggedIn = true, reactLoginDistRoot } 
     const usersModule = await import(`../src/users.js?settingsRoute=${Date.now()}-${Math.random()}`);
     const middlewareModule = await import(`../src/middleware/react-login-serve.js?settingsRoute=${Date.now()}-${Math.random()}`);
     const basePathModule = await import(`../src/react-login-feature.js?settingsRoute=${Date.now()}-${Math.random()}`);
-    const featureModule = await import(`../src/react-settings-feature.js?settingsRoute=${Date.now()}-${Math.random()}`);
 
     const app = express();
     app.use((request, _response, next) => {
@@ -87,7 +86,7 @@ async function createSettingsRouteApp({ isLoggedIn = true, reactLoginDistRoot } 
     app.use(basePathModule.REACT_LOGIN_BASE_PATH, middlewareModule.getReactLoginServeMiddleware(reactLoginDistRoot));
     app.use(express.static(path.join(repoRoot, 'public'), {}));
 
-    return { app, featureModule };
+    return { app };
 }
 
 describe('settings React route flag', () => {
@@ -860,11 +859,9 @@ describe('settings React route flag', () => {
     test('returns a clear error when the React settings build is missing instead of falling back to the workspace', async () => {
         const missingRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-settings-missing-dist-'));
         tmpRoots.push(missingRoot);
-        const { app, featureModule } = await createSettingsRouteApp({
+        const { app } = await createSettingsRouteApp({
             reactLoginDistRoot: missingRoot,
         });
-
-        expect(featureModule.isReactSettingsEnabled()).toBe(true);
 
         await usingApp(app, async (url) => {
             const response = await fetch(`${url}/settings`, { redirect: 'manual' });
@@ -893,9 +890,7 @@ describe('settings React route flag', () => {
         ].join('\n'), 'utf8');
         fs.writeFileSync(path.join(assetsRoot, 'settings.js'), 'console.log("react settings");', 'utf8');
 
-        const { app, featureModule } = await createSettingsRouteApp({ reactLoginDistRoot: distRoot });
-
-        expect(featureModule.isReactSettingsEnabled()).toBe(true);
+        const { app } = await createSettingsRouteApp({ reactLoginDistRoot: distRoot });
 
         await usingApp(app, async (url) => {
             const settingsResponse = await fetch(`${url}/settings`, { redirect: 'manual' });
