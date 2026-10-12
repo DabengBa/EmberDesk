@@ -54,7 +54,8 @@ describe('seed-dev-environment', () => {
         expect(fs.existsSync(path.join(dataRoot, '_css', 'user.css'))).toBe(true);
         expect(fs.existsSync(path.join(dataRoot, 'default-user', 'backgrounds', '__transparent.png'))).toBe(false);
         expect(fs.existsSync(path.join(dataRoot, 'default-user', 'backgrounds'))).toBe(true);
-        expect(fs.existsSync(path.join(dataRoot, 'default-user', 'QuickReplies', 'Default.json'))).toBe(true);
+        // Quick Replies are retired; dev seeds no longer ship a default preset.
+        expect(fs.existsSync(path.join(dataRoot, 'default-user', 'QuickReplies', 'Default.json'))).toBe(false);
     });
 
     test('seeds embedded lorebooks and group-chat messages in app-compatible formats', async () => {

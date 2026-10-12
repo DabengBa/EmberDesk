@@ -153,10 +153,6 @@ async function seedBootstrapContent() {
         path.join(repoRoot, 'default', 'content', 'user.css'),
         path.join(dataRoot, '_css', 'user.css'),
     );
-    await copyFile(
-        path.join(repoRoot, 'default', 'content', 'presets', 'quick-replies', 'Default.json'),
-        path.join(directories.quickreplies, 'Default.json'),
-    );
 }
 
 async function seedUserAccount() {

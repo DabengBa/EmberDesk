@@ -61,12 +61,7 @@ export const CONTENT_TYPES = {
     WORLD: 'world',
     AVATAR: 'avatar',
     THEME: 'theme',
-    WORKFLOW: 'workflow',
-    KOBOLD_PRESET: 'kobold_preset',
     OPENAI_PRESET: 'openai_preset',
-    NOVEL_PRESET: 'novel_preset',
-    MOVING_UI: 'moving_ui',
-    QUICK_REPLIES: 'quick_replies',
     ERROR_PAGE: 'error_page',
     STYLESHEET: 'stylesheet',
 };
@@ -356,18 +351,8 @@ export function getUserTargetByType(type, directories) {
             return directories.avatars;
         case CONTENT_TYPES.THEME:
             return directories.themes;
-        case CONTENT_TYPES.WORKFLOW:
-            return directories.comfyWorkflows;
-        case CONTENT_TYPES.KOBOLD_PRESET:
-            return directories.koboldAI_Settings;
         case CONTENT_TYPES.OPENAI_PRESET:
             return directories.openAI_Settings;
-        case CONTENT_TYPES.NOVEL_PRESET:
-            return directories.novelAI_Settings;
-        case CONTENT_TYPES.MOVING_UI:
-            return directories.movingUI;
-        case CONTENT_TYPES.QUICK_REPLIES:
-            return directories.quickreplies;
         default:
             return null;
     }
