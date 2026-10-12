@@ -92,7 +92,7 @@ function buildFrameContext(messageId: string) {
         // The row being written by the live streaming transport. Row `state`
         // stays 'finalized' while tokens arrive — this is the authoritative
         // per-row streaming signal.
-        isStreamingRow: streaming.activeMessageId === String(messageId)
+        isStreamingRow: streaming.activeMessageId === messageId
             && (streaming.phase === 'connecting' || streaming.phase === 'streaming'),
         messageId,
         userAvatarUrl: shell?.getUserAvatarUrl?.() ?? '',

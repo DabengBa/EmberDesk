@@ -120,13 +120,13 @@ export function CharacterPopup() {
                             @ Depth
                         </span>
                     </h4>
-                    <input id="depth_prompt_depth" name="depth_prompt_depth" className="text_pole textarea_compact m-t-0" type="number" min="0" max="9999" defaultValue="4" form="form_create" />
+                    <input id="depth_prompt_depth" name="depth_prompt_depth" className="text_pole textarea_compact m-t-0" type="number" min="0" max="9999" defaultValue="4" form="form_create" data-i18n="[aria-label]@ Depth" aria-label="@ Depth" />
                     <h4>
                         <span data-i18n="Role">
                             Role
                         </span>
                     </h4>
-                    <select id="depth_prompt_role" name="depth_prompt_role" form="form_create" className="text_pole textarea_compact m-t-0">
+                    <select id="depth_prompt_role" name="depth_prompt_role" form="form_create" className="text_pole textarea_compact m-t-0" data-i18n="[aria-label]Role" aria-label="Role">
                         <option value="system" data-i18n="System">System</option>
                         <option value="user" data-i18n="User">User</option>
                         <option value="assistant" data-i18n="Assistant">Assistant</option>

@@ -10,7 +10,6 @@
 @import url(css/scrollable-button.css);
 
 @import url(css/backgrounds.css);
-@import url(css/streaming-display.css);
 @import url(css/delete-dialog.css);
 
 :root {
@@ -468,11 +467,6 @@ input[type='checkbox']:focus-visible {
 
 .mes:has(.mes_reasoning:empty) .mes_reasoning_header {
     cursor: default;
-}
-
-/* TWIMC: Remove with custom CSS to show the icon */
-.mes_reasoning_header>.icon-svg {
-    display: none;
 }
 
 @supports not selector(:has(*)) {
@@ -3077,6 +3071,7 @@ input[type="file"] {
 
 #rm_print_characters_block .character_select:hover,
 #rm_print_characters_block .character_select:focus-visible,
+#rm_print_characters_block .character_select:has(:focus-visible),
 #rm_print_characters_block .bogus_folder_select:hover,
 #rm_print_characters_block .bogus_folder_select:focus-visible {
     background-color: color-mix(in srgb, var(--SmartThemeBodyColor) 7%, transparent);
@@ -3084,6 +3079,7 @@ input[type="file"] {
 }
 
 #rm_print_characters_block .character_select:focus-visible,
+#rm_print_characters_block .character_select:has(:focus-visible),
 #rm_print_characters_block .bogus_folder_select:focus-visible {
     outline: 2px solid var(--SmartThemeQuoteColor);
     outline-offset: -2px;
@@ -6244,16 +6240,6 @@ body:has(#character_popup.open) #top-settings-holder:has(.drawer-content.openDra
 
 .lastInContext {
     border-top: 3px dotted var(--SmartThemeQuoteColor) !important;
-}
-
-.icon-svg {
-    /* Takes on the color of the surrounding text */
-    fill: currentColor;
-    width: auto;
-    height: 14px;
-    aspect-ratio: 1;
-    /* To align with adjacent text */
-    place-self: center;
 }
 
 .paginationjs {

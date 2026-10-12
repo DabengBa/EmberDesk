@@ -1027,16 +1027,20 @@ export function WorldInfoWorkbenchPanel({
         worldInfoForm.reset(formDefaults);
     }, [formDefaults, worldInfoForm]);
 
-    useEffect(() => {
+    const [previousEntryUid, setPreviousEntryUid] = useState(bridgeState.selectedEntryUid);
+    if (previousEntryUid !== bridgeState.selectedEntryUid) {
+        setPreviousEntryUid(bridgeState.selectedEntryUid);
         if (!bridgeState.selectedEntryUid) {
             setMobileView('list');
         }
-    }, [bridgeState.selectedEntryUid]);
+    }
 
-    useEffect(() => {
+    const [previousWorldName, setPreviousWorldName] = useState(bridgeState.selectedWorldName);
+    if (previousWorldName !== bridgeState.selectedWorldName) {
+        setPreviousWorldName(bridgeState.selectedWorldName);
         setMultiSelectMode(false);
         setSelectedUids(new Set());
-    }, [bridgeState.selectedWorldName]);
+    }
 
     const worldNames = bridgeState.worldNames ?? [];
     const sortOptions = bridgeState.sortOptions ?? [];
@@ -1346,12 +1350,10 @@ export function WorldInfoWorkbenchPanel({
                                     data-world-info-react-action="toggle-multi-select"
                                     aria-pressed={multiSelectMode}
                                     onClick={() => {
-                                        setMultiSelectMode(current => {
-                                            if (current) {
-                                                setSelectedUids(new Set());
-                                            }
-                                            return !current;
-                                        });
+                                        if (multiSelectMode) {
+                                            setSelectedUids(new Set());
+                                        }
+                                        setMultiSelectMode(!multiSelectMode);
                                     }}
                                 >
                                     <i className={iconClass('fa-list-check', s.buttonIconSlot)} aria-hidden="true" />

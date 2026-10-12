@@ -286,10 +286,10 @@ class PresetManager {
 
     /**
      * Gets the preset settings for the given name.
-     * @param {string} name Name of the preset
+     * @param {string} _name Name of the preset
      * @returns {object} Preset settings object for the given name
      */
-    getPresetSettings(name) {
+    getPresetSettings(_name) {
         function getSettingsByApiId(apiId) {
             console.warn(`Unknown API ID ${apiId}`);
             return {};

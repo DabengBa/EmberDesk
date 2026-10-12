@@ -223,7 +223,7 @@ describe('main chat store projection', () => {
         }));
     });
 
-    test('projects legacy DOM affordances (timer, model icon, prompt, swipe picker, media display) as data', () => {
+    test('projects legacy DOM affordances (timer, prompt, swipe picker, media display) as data', () => {
         const record = buildMainChatMessageRecord({
             name: 'Assistant',
             mes: 'Answer',
@@ -232,8 +232,6 @@ describe('main chat store projection', () => {
             swipe_id: 0,
             swipes: ['a', 'b'],
             extra: {
-                api: 'openai',
-                model: 'gpt-test',
                 token_count: 42,
                 reasoning_duration: 1200,
                 media: [{ type: 'image', url: '/files/x.png' }],
@@ -247,14 +245,11 @@ describe('main chat store projection', () => {
             mediaDisplayForMessage: () => 'gallery',
             hasItemizedPromptForMessage: () => true,
             swipePickerForMessage: () => ({ canOpen: true, canJump: false }),
-            modelIconEnabled: true,
         });
 
         expect(record).toEqual(expect.objectContaining({
             timer: '4.2s',
             timerTitle: 'Generation took 4.2s',
-            modelIconApi: 'openai',
-            modelIconTitle: 'openai - gpt-test',
             promptButtonVisible: true,
             swipePickerEnabled: true,
             swipePickerCanJump: false,

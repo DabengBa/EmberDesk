@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { default as git, CheckRepoActions } from 'simple-git';
+import { simpleGit as git, CheckRepoActions } from 'simple-git';
 import { sync as commandExistsSync } from 'command-exists';
 import { getConfigValue, color } from './util.js';
 

@@ -54,29 +54,43 @@ export function ChatBackupsBrowser({ buttonContainer, listContainer, commands, r
     const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null);
     const abortRef = useRef<AbortController | null>(null);
 
-    const loadBackups = useCallback(async () => {
-        abortRef.current?.abort();
-        const controller = new AbortController();
-        abortRef.current = controller;
-
-        const response = await apiFetch('/api/backups/chat/get', { signal: controller.signal });
-        if (!response.ok) {
-            console.error('Failed to load chat backups list:', response.statusText);
-            return;
-        }
-
-        const data: ChatBackupInfo[] = await response.json();
-        setBackups(sortBackups(data));
-    }, []);
-
     useEffect(() => {
         if (!isOpen) {
             abortRef.current?.abort();
             return;
         }
-        void loadBackups();
-        return () => abortRef.current?.abort();
-    }, [isOpen, loadBackups, refreshToken]);
+
+        abortRef.current?.abort();
+        const controller = new AbortController();
+        abortRef.current = controller;
+        let cancelled = false;
+        void (async () => {
+            const response = await apiFetch('/api/backups/chat/get', { signal: controller.signal });
+            if (cancelled) {
+                return;
+            }
+            if (controller.signal.aborted) {
+                return;
+            }
+            if (!response.ok) {
+                console.error('Failed to load chat backups list:', response.statusText);
+                return;
+            }
+
+            const data: ChatBackupInfo[] = await response.json();
+            if (cancelled) {
+                return;
+            }
+            if (controller.signal.aborted) {
+                return;
+            }
+            setBackups(sortBackups(data));
+        })();
+        return () => {
+            cancelled = true;
+            controller.abort();
+        };
+    }, [isOpen, refreshToken]);
 
     const viewBackup = useCallback(async (name: string) => {
         const response = await apiFetch('/api/backups/chat/download', { body: { name } });

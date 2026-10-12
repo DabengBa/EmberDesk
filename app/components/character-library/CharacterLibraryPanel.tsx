@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import * as stylex from '@stylexjs/stylex';
 import { useVirtualizer } from '@tanstack/react-virtual';
@@ -267,57 +267,29 @@ function EntityRow({
     return null;
 }
 
-export function CharacterLibraryPanel({ bridge, state }: { bridge: CharacterLibraryPanelBridge; state: CharacterLibraryPanelState; }) {
-    const scrollElementRef = useRef<HTMLElement | null>(state.scrollElement);
-    const isGrid = Boolean(state.isGrid);
-    const [gridColumnCount, setGridColumnCount] = useState(() => (
-        getCharacterLibraryGridColumnCount(state.scrollElement?.clientWidth)
-    ));
-
-    useEffect(() => {
-        scrollElementRef.current = state.scrollElement;
-    }, [state.scrollElement]);
-
-    useEffect(() => {
-        const scrollElement = state.scrollElement;
-        if (!isGrid || !scrollElement) {
-            setGridColumnCount(1);
-            return;
-        }
-
-        const updateGridColumnCount = () => {
-            const nextColumnCount = getCharacterLibraryGridColumnCount(scrollElement.clientWidth);
-            setGridColumnCount(currentColumnCount => (
-                currentColumnCount === nextColumnCount ? currentColumnCount : nextColumnCount
-            ));
-        };
-        updateGridColumnCount();
-
-        if (typeof ResizeObserver === 'undefined') {
-            return;
-        }
-
-        const observer = new ResizeObserver(updateGridColumnCount);
-        observer.observe(scrollElement);
-        return () => observer.disconnect();
-    }, [isGrid, state.scrollElement]);
-
-    const lastRenderedPageRef = useRef(state.pagination?.currentPage ?? state.currentPage);
-    useEffect(() => {
-        const nextPage = state.pagination?.currentPage ?? state.currentPage;
-        if (lastRenderedPageRef.current === nextPage) {
-            return;
-        }
-        lastRenderedPageRef.current = nextPage;
-        const scrollElement = scrollElementRef.current;
-        if (scrollElement) {
-            scrollElement.scrollTop = 0;
-        }
-    }, [state.pagination?.currentPage, state.currentPage]);
-
+// useVirtualizer returns functions that React Compiler cannot memoize, so the
+// hook and everything derived from it stay isolated in this child component —
+// keeping the rest of the panel free of incompatible API values.
+function CharacterLibraryVirtualRows({
+    bridge,
+    state,
+    scrollElementRef,
+    isGrid,
+    gridColumnCount,
+    bulkMode,
+    selectedCharacterIds,
+    activeCharacterId,
+}: {
+    bridge: CharacterLibraryPanelBridge;
+    state: CharacterLibraryPanelState;
+    scrollElementRef: RefObject<HTMLElement | null>;
+    isGrid: boolean;
+    gridColumnCount: number;
+    bulkMode: boolean;
+    selectedCharacterIds: Array<string | number>;
+    activeCharacterId?: string | number | null;
+}) {
     const estimatedRowHeight = state.estimatedRowHeight ?? 112;
-    const bulkMode = Boolean(state.bulkMode);
-    const selectedCharacterIds = state.selectedCharacterIds ?? [];
     const virtualizer = useVirtualizer({
         count: isGrid
             ? getCharacterLibraryGridRowCount(state.pageEntities.length, gridColumnCount)
@@ -329,7 +301,6 @@ export function CharacterLibraryPanel({ bridge, state }: { bridge: CharacterLibr
 
     const virtualItems = virtualizer.getVirtualItems();
     const totalSize = virtualizer.getTotalSize();
-    const showVirtualRows = !state.renderPlan.showEmptyBlock;
 
     // The scroll container collapses while the character editor is open, so the
     // browser clamps scrollTop to 0 without firing a scroll event the
@@ -370,7 +341,114 @@ export function CharacterLibraryPanel({ bridge, state }: { bridge: CharacterLibr
         observer.observe(scrollElement);
         restoreScrollOffset();
         return () => observer.disconnect();
-    }, [virtualizer, state.scrollElement]);
+    }, [virtualizer, scrollElementRef, state.scrollElement]);
+
+    return (
+        <div
+            className={`character-library-react-panel${isGrid ? ' character-library-react-panel--grid' : ''}`}
+            style={{ height: `${totalSize}px`, position: 'relative', width: '100%' }}
+        >
+            {virtualItems.map(item => {
+                const entity = state.pageEntities[item.index];
+                const rowRange = isGrid
+                    ? getCharacterLibraryGridRowRange(item.index, gridColumnCount)
+                    : { start: item.index, end: item.index + 1 };
+                const rowEntities = isGrid
+                    ? state.pageEntities.slice(rowRange.start, rowRange.end)
+                    : (entity ? [entity] : []);
+                if (rowEntities.length === 0) {
+                    return null;
+                }
+
+                return (
+                    <div
+                        key={rowEntities[0]?.renderKey ?? `${rowEntities[0]?.type}:${rowEntities[0]?.id}`}
+                        className={`character-library-react-panel__row ${stylex.props(characterLibraryStyles.panelRow, isGrid ? characterLibraryStyles.panelRowGrid : null).className ?? ''}`}
+                        data-index={item.index}
+                        ref={virtualizer.measureElement}
+                        style={{
+                            position: 'absolute',
+                            top: 0,
+                            left: 0,
+                            width: '100%',
+                            transform: `translateY(${item.start}px)`,
+                            gridTemplateColumns: isGrid ? `repeat(${gridColumnCount}, minmax(0, 1fr))` : undefined,
+                        }}
+                    >
+                        {rowEntities.map(rowEntity => (
+                            <div
+                                className={`character-library-react-panel__cell ${stylex.props(characterLibraryStyles.panelCell).className ?? ''}`}
+                                key={rowEntity.renderKey ?? `${rowEntity.type}:${rowEntity.id}`}
+                            >
+                                <EntityRow
+                                    bridge={bridge}
+                                    entity={rowEntity}
+                                    bulkMode={bulkMode}
+                                    selectedCharacterIds={selectedCharacterIds}
+                                    activeCharacterId={activeCharacterId}
+                                />
+                            </div>
+                        ))}
+                    </div>
+                );
+            })}
+        </div>
+    );
+}
+
+export function CharacterLibraryPanel({ bridge, state }: { bridge: CharacterLibraryPanelBridge; state: CharacterLibraryPanelState; }) {
+    const scrollElementRef = useRef<HTMLElement | null>(state.scrollElement);
+    const isGrid = Boolean(state.isGrid);
+    const [gridColumnCount, setGridColumnCount] = useState(() => (
+        getCharacterLibraryGridColumnCount(state.scrollElement?.clientWidth)
+    ));
+
+    useEffect(() => {
+        scrollElementRef.current = state.scrollElement;
+    }, [state.scrollElement]);
+
+    // Recompute the column count during render when the grid context switches
+    // (grid toggle or scroll element swap); resize handling stays in the
+    // ResizeObserver effect below.
+    const gridColumnElement = isGrid ? state.scrollElement : null;
+    const [prevGridColumnElement, setPrevGridColumnElement] = useState(gridColumnElement);
+    if (prevGridColumnElement !== gridColumnElement) {
+        setPrevGridColumnElement(gridColumnElement);
+        setGridColumnCount(getCharacterLibraryGridColumnCount(gridColumnElement?.clientWidth));
+    }
+
+    useEffect(() => {
+        const scrollElement = gridColumnElement;
+        if (!scrollElement || typeof ResizeObserver === 'undefined') {
+            return;
+        }
+
+        const observer = new ResizeObserver(() => {
+            const nextColumnCount = getCharacterLibraryGridColumnCount(scrollElement.clientWidth);
+            setGridColumnCount(currentColumnCount => (
+                currentColumnCount === nextColumnCount ? currentColumnCount : nextColumnCount
+            ));
+        });
+        observer.observe(scrollElement);
+        return () => observer.disconnect();
+    }, [gridColumnElement]);
+
+    const lastRenderedPageRef = useRef(state.pagination?.currentPage ?? state.currentPage);
+    useEffect(() => {
+        const nextPage = state.pagination?.currentPage ?? state.currentPage;
+        if (lastRenderedPageRef.current === nextPage) {
+            return;
+        }
+        lastRenderedPageRef.current = nextPage;
+        const scrollElement = scrollElementRef.current;
+        if (scrollElement) {
+            scrollElement.scrollTop = 0;
+        }
+    }, [state.pagination?.currentPage, state.currentPage]);
+
+    const bulkMode = Boolean(state.bulkMode);
+    const selectedCharacterIds = state.selectedCharacterIds ?? [];
+    const showVirtualRows = !state.renderPlan.showEmptyBlock;
 
     return (
         <>
@@ -402,55 +480,16 @@ button.bogus_folder_select {
                 )
                 : null}
             {showVirtualRows ? (
-                <div
-                    className={`character-library-react-panel${isGrid ? ' character-library-react-panel--grid' : ''}`}
-                    style={{ height: `${totalSize}px`, position: 'relative', width: '100%' }}
-                >
-                    {virtualItems.map(item => {
-                        const entity = state.pageEntities[item.index];
-                        const rowRange = isGrid
-                            ? getCharacterLibraryGridRowRange(item.index, gridColumnCount)
-                            : { start: item.index, end: item.index + 1 };
-                        const rowEntities = isGrid
-                            ? state.pageEntities.slice(rowRange.start, rowRange.end)
-                            : (entity ? [entity] : []);
-                        if (rowEntities.length === 0) {
-                            return null;
-                        }
-
-                        return (
-                            <div
-                                key={rowEntities[0]?.renderKey ?? `${rowEntities[0]?.type}:${rowEntities[0]?.id}`}
-                                className={`character-library-react-panel__row ${stylex.props(characterLibraryStyles.panelRow, isGrid ? characterLibraryStyles.panelRowGrid : null).className ?? ''}`}
-                                data-index={item.index}
-                                ref={virtualizer.measureElement}
-                                style={{
-                                    position: 'absolute',
-                                    top: 0,
-                                    left: 0,
-                                    width: '100%',
-                                    transform: `translateY(${item.start}px)`,
-                                    gridTemplateColumns: isGrid ? `repeat(${gridColumnCount}, minmax(0, 1fr))` : undefined,
-                                }}
-                            >
-                                {rowEntities.map(rowEntity => (
-                                    <div
-                                        className={`character-library-react-panel__cell ${stylex.props(characterLibraryStyles.panelCell).className ?? ''}`}
-                                        key={rowEntity.renderKey ?? `${rowEntity.type}:${rowEntity.id}`}
-                                    >
-                                        <EntityRow
-                                            bridge={bridge}
-                                            entity={rowEntity}
-                                            bulkMode={bulkMode}
-                                            selectedCharacterIds={selectedCharacterIds}
-                                            activeCharacterId={state.activeCharacterId}
-                                        />
-                                    </div>
-                                ))}
-                            </div>
-                        );
-                    })}
-                </div>
+                <CharacterLibraryVirtualRows
+                    bridge={bridge}
+                    state={state}
+                    scrollElementRef={scrollElementRef}
+                    isGrid={isGrid}
+                    gridColumnCount={gridColumnCount}
+                    bulkMode={bulkMode}
+                    selectedCharacterIds={selectedCharacterIds}
+                    activeCharacterId={state.activeCharacterId}
+                />
             ) : null}
             {state.renderPlan.showHiddenBlock
                 ? <CharacterLibraryHiddenBlock hiddenCount={state.renderPlan.hiddenCount} />

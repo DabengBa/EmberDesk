@@ -19,7 +19,7 @@ export function TagManagement({ bogusFolders }: TagManagementProps) {
             <div className="justifyLeft m-b-1">
                 <div className="flex-container alignItemsBaseline">
                     <span data-i18n="Sort mode">Sort mode:</span>
-                    <select id="tag_sort_mode_select" className="flex1 text_pole">
+                    <select id="tag_sort_mode_select" className="flex1 text_pole" data-i18n="[aria-label]Sort mode" aria-label="Sort mode">
                         <option value="manual" data-i18n="Manual (Drag & Drop)">Manual (Drag & Drop)</option>
                         <option value="alphabetical" data-i18n="Alphabetical (A-Z)">Alphabetical (A-Z)</option>
                         <option value="by_entries" data-i18n="Most Used (By Count)">Most Used (By Count)</option>

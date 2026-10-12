@@ -1,4 +1,4 @@
-export function resolveStartupSettingsPlan({ data, currentVersion = null }) {
+export function resolveStartupSettingsPlan({ data, currentVersion: _currentVersion = null }) {
     const hasSettings = data?.result != 'file not find' && !!data?.settings;
     const settings = hasSettings ? normalizeSettingsPayload(data.settings) : null;
 

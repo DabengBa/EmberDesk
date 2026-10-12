@@ -36,16 +36,6 @@ export default {
                 ],
             },
             {
-                // This is the first-party debug menu template loaded by the
-                // application, not a generated browser debug dump.
-                files: [
-                    'public/scripts/templates/debug.html',
-                ],
-                rules: [
-                    'react-doctor/public-debug-artifact',
-                ],
-            },
-            {
                 // These endpoints already constrain paths through per-user
                 // directory roots, sanitize-filename, strict filename
                 // validators, readdir-derived names, or isPathUnderParent.

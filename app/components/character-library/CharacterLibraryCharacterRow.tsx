@@ -30,13 +30,13 @@ export function CharacterLibraryCharacterRow({
     ].filter(Boolean).join(' ');
 
     return (
-        <button
-            type="button"
+        <div
             className={className}
             data-chid={String(model.id)}
             {...{ chid: String(model.id) }}
             id={buildCharacterRowDomId(model.id)}
-            aria-pressed={selected}
+            role="presentation"
+            tabIndex={-1}
             onClick={(event) => {
                 event.preventDefault();
                 event.stopPropagation();
@@ -72,39 +72,68 @@ export function CharacterLibraryCharacterRow({
                     onClick={(event) => event.stopPropagation()}
                 />
             ) : null}
-            <div className="avatar" title={`[Character] ${model.name}\nFile: ${model.avatar}`}>
-                <img src={model.avatarUrl} alt={model.name} loading="lazy" decoding="async" />
-                <i className="ch_fav_icon fa-solid fa-star" aria-hidden="true" />
-            </div>
-            <div className="flex-container wide100pLess70px character_select_container">
-                <div className="wide100p character_name_block">
-                    <small className="entity_type_badge character_type_badge" data-i18n="Character">Character</small>
-                    <span className="ch_name" title={`[Character] ${model.name}`}>{model.name}</span>
-                    <small className="ch_additional_info ch_add_placeholder">+++</small>
-                    {model.auxFieldValue
-                        ? <small className="ch_additional_info character_version">{model.auxFieldValue}</small>
-                        : <small className="ch_additional_info character_version" style={{ display: 'none' }} />}
-                    {model.showAvatarUrl
-                        ? <small className="ch_additional_info ch_avatar_url">{model.avatar}</small>
-                        : null}
+            {/* The bulk-mode checkbox must stay a sibling of this button: a
+                focusable control inside a <button> is invalid HTML and gets
+                flagged as nested-interactive. The button keeps the row's
+                pressable semantics (aria-pressed) and its content; the
+                wrapper div keeps the legacy .character_select event surface
+                so clicks and key activations anywhere on the row behave the
+                same as before. */}
+            <button
+                type="button"
+                className="interactable"
+                aria-pressed={selected}
+                style={{
+                    display: 'flex',
+                    flexDirection: 'row',
+                    alignItems: 'inherit',
+                    justifyContent: 'inherit',
+                    gap: 'inherit',
+                    flex: '1 1 auto',
+                    minWidth: 0,
+                    padding: 0,
+                    border: 0,
+                    background: 'none',
+                    font: 'inherit',
+                    color: 'inherit',
+                    textAlign: 'inherit',
+                    cursor: 'inherit',
+                }}
+            >
+                <div className="avatar" title={`[Character] ${model.name}\nFile: ${model.avatar}`}>
+                    <img src={model.avatarUrl} alt={model.name} loading="lazy" decoding="async" />
+                    <i className="ch_fav_icon fa-solid fa-star" aria-hidden="true" />
                 </div>
-                <input className="ch_fav" value={String(model.isFav)} hidden readOnly />
-                <div className="ch_description" style={model.description ? undefined : { display: 'none' }}>
-                    {model.description || ''}
+                <div className="flex-container wide100pLess70px character_select_container">
+                    <div className="wide100p character_name_block">
+                        <small className="entity_type_badge character_type_badge" data-i18n="Character">Character</small>
+                        <span className="ch_name" title={`[Character] ${model.name}`}>{model.name}</span>
+                        <small className="ch_additional_info ch_add_placeholder">+++</small>
+                        {model.auxFieldValue
+                            ? <small className="ch_additional_info character_version">{model.auxFieldValue}</small>
+                            : <small className="ch_additional_info character_version" style={{ display: 'none' }} />}
+                        {model.showAvatarUrl
+                            ? <small className="ch_additional_info ch_avatar_url">{model.avatar}</small>
+                            : null}
+                    </div>
+                    <input className="ch_fav" value={String(model.isFav)} hidden readOnly />
+                    <div className="ch_description" style={model.description ? undefined : { display: 'none' }}>
+                        {model.description || ''}
+                    </div>
+                    <div className="tags tags_inline">
+                        {visible.map(tag => (
+                            <span className="tag" id={tag.id} key={tag.id}>
+                                <span className="tag_name">{tag.name}</span>
+                            </span>
+                        ))}
+                        {skipped > 0 ? (
+                            <span className="tag tag_placeholder">
+                                <span className="tag_name">+{skipped}</span>
+                            </span>
+                        ) : null}
+                    </div>
                 </div>
-                <div className="tags tags_inline">
-                    {visible.map(tag => (
-                        <span className="tag" id={tag.id} key={tag.id}>
-                            <span className="tag_name">{tag.name}</span>
-                        </span>
-                    ))}
-                    {skipped > 0 ? (
-                        <span className="tag tag_placeholder">
-                            <span className="tag_name">+{skipped}</span>
-                        </span>
-                    ) : null}
-                </div>
-            </div>
-        </button>
+            </button>
+        </div>
     );
 }

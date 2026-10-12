@@ -14,10 +14,6 @@ function parseRequiredJson(value, fieldName) {
     }
 }
 
-function cloneJson(payload) {
-    return structuredClone(payload);
-}
-
 export function stableSettingsPayloadJson(payload) {
     // Preserve object key order as provided by JSON.parse/JSON.stringify of the
     // source document. Do not re-sort keys; settings.json identity is full text
@@ -91,7 +87,7 @@ export function upsertCanonicalSettingsDocument(db, {
     }
 
     const resolvedPayload = payload != null
-        ? cloneJson(payload)
+        ? structuredClone(payload)
         : parseRequiredJson(payloadJson, 'payloadJson');
     const resolvedPayloadJson = payloadJson != null
         ? String(payloadJson)

@@ -2,6 +2,8 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { performance } from 'node:perf_hooks';
+import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import {
     buildInventoryReport,

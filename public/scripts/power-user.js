@@ -48,9 +48,6 @@ export const toastPositionClasses = [
     'toast-bottom-right',
 ];
 
-export const MAX_CONTEXT_DEFAULT = 8192;
-export const MAX_RESPONSE_DEFAULT = 2048;
-
 // power_user.context / power_user.instruct are retired data fields. The prompt
 // assembly and macro surfaces use these frozen shipped defaults instead. The
 // story string keeps the seeded template so world-info before/after injections
@@ -366,7 +363,7 @@ export function fuzzySearchWorldInfo(data, searchValue, fuzzySearchCaches = null
  */
 export function renderStoryString(params, { customStoryString = null, customContextSettings = null } = {}) {
     try {
-        const contextSettings = structuredClone({ ...DEFAULT_CONTEXT, ...(customContextSettings ?? {}) });
+        const contextSettings = structuredClone({ ...DEFAULT_CONTEXT, ...customContextSettings });
         const storyString = customStoryString ?? contextSettings.story_string;
         const storyStringPosition = contextSettings.story_string_position ?? extension_prompt_types.IN_PROMPT;
 

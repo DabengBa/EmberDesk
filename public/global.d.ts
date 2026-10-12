@@ -1,6 +1,6 @@
 import libs from './lib';
 import getContext from './scripts/st-context';
-import { power_user, getThemeObject } from './scripts/power-user';
+import { getThemeObject } from './scripts/power-user';
 import { oai_settings } from './scripts/openai';
 import { FileAttachment } from './scripts/chats';
 import { ReasoningMessageExtra } from './scripts/reasoning';

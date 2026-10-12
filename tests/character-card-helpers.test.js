@@ -197,7 +197,7 @@ describe('character-card helpers', () => {
 
         unsetPrivateFields(character);
 
-        const persistedCard = JSON.parse(JSON.stringify(character));
+        const persistedCard = structuredClone(character);
         expect(persistedCard.data.extensions).toEqual({
             fav: false,
             risuai: {

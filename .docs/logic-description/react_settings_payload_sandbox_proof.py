@@ -125,7 +125,10 @@ def build_settings_save_payload(base_settings, form_values):
 def main():
     invalid = parse_settings_payload({"settings": "not json"})
     assert invalid["settings"] == {}
-    assert build_settings_form_defaults(invalid["settings"])["providers"]["customUrl"] == ""
+    assert (
+        build_settings_form_defaults(invalid["settings"])["providers"]["customUrl"]
+        == ""
+    )
 
     parsed = parse_settings_payload(
         {

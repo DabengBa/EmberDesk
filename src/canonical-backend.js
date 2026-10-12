@@ -4,6 +4,7 @@ import { canonicalSqliteManager } from './canonical-sqlite.js';
 import { runCanonicalMigrations } from './canonical-sqlite-migrations.js';
 import {
     auditCanonicalShadowImport,
+    getPersistedCanonicalAuditStatus,
     runCanonicalShadowImport,
 } from './canonical-sqlite-shadow-import.js';
 import {
@@ -27,7 +28,6 @@ import {
     runCanonicalChatShadowImport,
 } from './canonical-chat-shadow-import.js';
 import { getCanonicalStorageSlice } from './canonical-storage-slice-registry.js';
-import { getPersistedCanonicalAuditStatus } from './canonical-sqlite-shadow-import.js';
 import { buildCharacterFileSnapshotRow } from './endpoints/character-file-snapshot.js';
 import { parse as parseCharacterCard } from './character-card-parser.js';
 import { getCharaCardV2 } from './endpoints/character-card-v2.js';

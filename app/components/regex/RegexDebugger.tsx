@@ -95,6 +95,8 @@ export function RegexDebugger() {
                     </div>
                     <select
                         id="regex_debugger_render_mode"
+                        aria-label="Render mode"
+                        data-i18n="[aria-label]Render mode"
                     >
                         <option
                             value="text"

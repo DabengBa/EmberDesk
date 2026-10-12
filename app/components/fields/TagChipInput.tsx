@@ -47,10 +47,11 @@ export function TagChipInput({
     return (
         <div
             {...stylex.props(s.box)}
+            role="presentation"
             onClick={() => inputRef.current?.focus()}
         >
             {values.map((value, index) => (
-                <span key={`${index}-${value}`} {...stylex.props(s.chip)}>
+                <span key={value} {...stylex.props(s.chip)}>
                     {value}
                     <button
                         type="button"

@@ -45,7 +45,7 @@ export function RegexEditor() {
                     <small data-i18n="Script Name">Script Name</small>
                 </label>
                 <div>
-                    <input className="regex_script_name text_pole textarea_compact" type="text" />
+                    <input className="regex_script_name text_pole textarea_compact" type="text" aria-label="Script Name" data-i18n="[aria-label]Script Name" />
                 </div>
             </div>
             <div className="flex1">
@@ -53,7 +53,7 @@ export function RegexEditor() {
                     <small data-i18n="Find Regex">Find Regex</small>
                 </label>
                 <div>
-                    <input className="find_regex text_pole textarea_compact" type="text" />
+                    <input className="find_regex text_pole textarea_compact" type="text" aria-label="Find Regex" data-i18n="[aria-label]Find Regex" />
                 </div>
             </div>
             <div className="flex1">

@@ -55,8 +55,6 @@ export interface MainChatMessageRecord {
     readonly extraType: string;
     readonly timer: string;
     readonly timerTitle: string;
-    readonly modelIconApi: string | null;
-    readonly modelIconTitle: string;
     readonly promptButtonVisible: boolean;
     readonly swipePickerEnabled: boolean;
     readonly swipePickerCanJump: boolean;
@@ -338,8 +336,6 @@ function normalizeMessages(value: unknown) {
             extraType: normalizeString(message.extraType),
             timer: normalizeString(message.timer),
             timerTitle: normalizeString(message.timerTitle),
-            modelIconApi: normalizeNullableString(message.modelIconApi),
-            modelIconTitle: normalizeString(message.modelIconTitle),
             promptButtonVisible: message.promptButtonVisible === true,
             swipePickerEnabled: message.swipePickerEnabled === true,
             swipePickerCanJump: message.swipePickerCanJump === true,

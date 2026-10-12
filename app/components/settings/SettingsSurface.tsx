@@ -122,7 +122,7 @@ export function SettingsSurface({
 }: SettingsSurfaceProps) {
     const isOverlay = variant === 'overlay';
     const [activeTab, setActiveTab] = useState(() => resolveInitialSettingsTab(initialTab));
-    const [isSettingsFormReady, setIsSettingsFormReady] = useState(false);
+    const [isSettingsFormLoaded, setIsSettingsFormLoaded] = useState(false);
     const [pageError, setPageError] = useState('');
     const [saveStatus, setSaveStatus] = useState<{ kind: 'success' | 'info'; message: string } | null>(null);
     const [hasRevisionConflict, setHasRevisionConflict] = useState(false);
@@ -433,23 +433,22 @@ export function SettingsSurface({
 
     useEffect(() => {
         if (!parsedPayload || hasRevisionConflict) {
-            if (!parsedPayload) {
-                setIsSettingsFormReady(false);
-            }
             return;
         }
 
         if (!settingsForm.state.isPristine) {
-            // A background refetch must not clobber an in-progress draft.
-            setIsSettingsFormReady(true);
+            // A background refetch must not clobber an in-progress draft. A
+            // dirty form is by definition already loaded, so no state update.
             return;
         }
 
         const nextDefaults = buildSettingsFormDefaults(parsedPayload.settings);
         settingsForm.reset(nextDefaults, { keepDefaultValues: true });
         setPageError('');
-        setIsSettingsFormReady(true);
+        setIsSettingsFormLoaded(true);
     }, [hasRevisionConflict, parsedPayload, settingsForm]);
+
+    const isSettingsFormReady = isSettingsFormLoaded && parsedPayload !== null;
 
     useEffect(() => {
         if (!saveStatus) {

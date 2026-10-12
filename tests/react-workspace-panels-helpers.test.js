@@ -410,7 +410,8 @@ describe('React workspace panels bridge helpers', () => {
         expect(workspacePanelSource).toContain('createCharacterAuthoringSession(');
         expect(workspacePanelSource).toContain('saveGenerationRef');
         expect(workspacePanelSource).toContain("status={authoringCommandMutation.isError ? 'error' : 'success'}");
-        expect(workspacePanelSource).toContain("const isCreateMode = (bridgeState.mode ?? 'create') === 'create';");
+        expect(workspacePanelSource).toContain("const authoringMode = bridgeState.mode ?? 'create';");
+        expect(workspacePanelSource).toContain("const isCreateMode = authoringMode === 'create';");
         expect(workspacePanelSource).toContain('const isActionPending = authoringCommandMutation.isPending;');
         expect(workspacePanelSource).toContain('submitDraftRef.current()');
         expect(workspacePanelSource).toContain("bridgeState.mode !== 'edit'");

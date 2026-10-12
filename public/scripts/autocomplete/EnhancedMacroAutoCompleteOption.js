@@ -13,6 +13,7 @@ import {
 import { enumIcons } from '../slash-commands/SlashCommandCommonEnumsProvider.js';
 import { ValidFlagSymbols } from '../macros/engine/MacroFlags.js';
 import { MACRO_VARIABLE_SHORTHAND_PATTERN } from '../macros/engine/MacroLexer.js';
+import { escapeHtml } from '../utils.js';
 
 /** @typedef {import('../macros/engine/MacroRegistry.js').MacroDefinition} MacroDefinition */
 
@@ -342,10 +343,11 @@ export class EnhancedMacroAutoCompleteOption extends AutoCompleteOption {
         info.append(icon);
 
         const text = document.createElement('span');
+        const escapedScopedMacroName = escapeHtml(this.#context.scopedMacroName);
         const closingHint = this.#context.isScopedContentOptional
-            ? `Can optionally close with <code>{{/${this.#context.scopedMacroName}}}</code>`
-            : `Close with <code>{{/${this.#context.scopedMacroName}}}</code>`;
-        text.innerHTML = `Typing <strong>scoped content</strong> for <code>{{${this.#context.scopedMacroName}}}</code>. ${closingHint}`;
+            ? `Can optionally close with <code>{{/${escapedScopedMacroName}}}</code>`
+            : `Close with <code>{{/${escapedScopedMacroName}}}</code>`;
+        text.innerHTML = `Typing <strong>scoped content</strong> for <code>{{${escapedScopedMacroName}}}</code>. ${closingHint}`;
         info.append(text);
 
         return info;
@@ -814,7 +816,7 @@ export class VariableNameAutoCompleteOption extends AutoCompleteOption {
 
             const warningText = document.createElement('p');
             warningText.style.cssText = 'margin: 0 0 8px 0;';
-            warningText.innerHTML = `The name <code>${this.#varName}</code> cannot be used with variable shorthand syntax.`;
+            warningText.innerHTML = `The name <code>${escapeHtml(this.#varName)}</code> cannot be used with variable shorthand syntax.`;
             warningBox.append(warningText);
 
             const rulesText = document.createElement('p');
@@ -830,8 +832,8 @@ export class VariableNameAutoCompleteOption extends AutoCompleteOption {
         // Header
         const header = document.createElement('h3');
         header.innerHTML = this.#isNewVariable
-            ? `<code>${prefix}${this.#varName}</code> (New ${scopeLabel} Variable)`
-            : `<code>${prefix}${this.#varName}</code> ${scopeLabel} Variable`;
+            ? `<code>${prefix}${escapeHtml(this.#varName)}</code> (New ${scopeLabel} Variable)`
+            : `<code>${prefix}${escapeHtml(this.#varName)}</code> ${scopeLabel} Variable`;
         details.append(header);
 
         // Description
@@ -1132,7 +1134,7 @@ export class VariableValueContextAutoCompleteOption extends AutoCompleteOption {
         // Current value being typed
         if (this.#currentValue) {
             const currentNote = document.createElement('p');
-            currentNote.innerHTML = `<em>Currently typing:</em> <code>${this.#currentValue}</code>`;
+            currentNote.innerHTML = `<em>Currently typing:</em> <code>${escapeHtml(this.#currentValue)}</code>`;
             details.append(currentNote);
         }
 
@@ -1298,7 +1300,7 @@ export class MacroClosingTagAutoCompleteOption extends AutoCompleteOption {
 
         // Header
         const header = document.createElement('h3');
-        header.innerHTML = `Close <code>{{${this.#macroName}}}</code>`;
+        header.innerHTML = `Close <code>{{${escapeHtml(this.#macroName)}}}</code>`;
         details.append(header);
 
         // Description

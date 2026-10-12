@@ -6,6 +6,16 @@ overrides:
   lodash-es: 4.18.1
   nanoid: 3.3.18
   qs: 6.16.0
+  'get-uri>basic-ftp': ^6.2.1
+  'brace-expansion@2': ^2.1.7
+  'brace-expansion@5': ^5.0.12
+  http-cache-semantics: ^4.3.0
+  ip-address: ^10.7.1
+  proxy-addr: ^2.0.8
+  seroval: ^1.6.8
+  seroval-plugins: ^1.6.8
+  shell-quote: ^1.11.0
+  source-map-js: ^1.2.2
 minimumReleaseAge: 10080
 minimumReleaseAgeExclude:
   - '@stylexjs/babel-plugin@0.19.1'
@@ -14,6 +24,8 @@ minimumReleaseAgeExclude:
   - '@stylexjs/stylex@0.19.1'
   - '@stylexjs/unplugin@0.19.1'
   - '@astryxdesign/core@0.6.2'
+  - handlebars@4.7.10
+  - http-cache-semantics@4.3.0
 trustPolicy: no-downgrade
 trustPolicyExclude:
   - protobufjs@6.11.6

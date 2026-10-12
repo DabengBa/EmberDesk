@@ -271,14 +271,15 @@ function LoginPage() {
         },
     });
 
-    useEffect(() => {
+    const [previousLockoutSeconds, setPreviousLockoutSeconds] = useState(lockoutSeconds);
+    if (previousLockoutSeconds !== lockoutSeconds) {
+        setPreviousLockoutSeconds(lockoutSeconds);
         if (lockoutSeconds === null || lockoutSeconds <= 1) {
             setLoginError('');
-            return;
+        } else {
+            setLoginError(formatLockoutMessage(lockoutSeconds));
         }
-
-        setLoginError(formatLockoutMessage(lockoutSeconds));
-    }, [lockoutSeconds]);
+    }
 
     const isLockedOut = lockoutSeconds !== null;
 

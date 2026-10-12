@@ -105,7 +105,6 @@ function getProjectedSwipeState(message, {
  * @param {Function} [options.mediaDisplayForMessage] Resolves the media display attribute for the row
  * @param {Function} [options.hasItemizedPromptForMessage] Whether an itemized prompt exists for the message
  * @param {Function} [options.swipePickerForMessage] Resolves { canOpen, canJump } swipe-picker affordances
- * @param {boolean} [options.modelIconEnabled] Whether the timestamp/thinking model icon is enabled
  * @returns {object} Typed message record containing HTML strings only
  */
 export function buildMainChatMessageRecord(message, {
@@ -123,7 +122,6 @@ export function buildMainChatMessageRecord(message, {
     mediaDisplayForMessage = null,
     hasItemizedPromptForMessage = () => false,
     swipePickerForMessage = () => null,
-    modelIconEnabled = false,
     includeRender = true,
 } = {}) {
     const numericMessageId = normalizeMessageId(messageId);
@@ -189,12 +187,6 @@ export function buildMainChatMessageRecord(message, {
         state: messageState,
         timer: normalizeString(timer.timerValue),
         timerTitle: normalizeString(timer.timerTitle),
-        modelIconApi: modelIconEnabled && normalizeString(message?.extra?.api)
-            ? normalizeString(message.extra.api)
-            : null,
-        modelIconTitle: normalizeString(message?.extra?.api)
-            ? `${normalizeString(message.extra.api)}${normalizeString(message?.extra?.model) ? ` - ${normalizeString(message.extra.model)}` : ''}`
-            : '',
         promptButtonVisible: message?.is_user !== true
             && hasItemizedPromptForMessage(message, numericMessageId) === true,
         swipePickerEnabled: swipePicker.canOpen === true,
@@ -269,7 +261,6 @@ function normalizeMessageIds(value) {
  * @param {Function} [options.mediaDisplayForMessage]
  * @param {Function} [options.hasItemizedPromptForMessage]
  * @param {Function} [options.swipePickerForMessage]
- * @param {boolean} [options.modelIconEnabled]
  * @param {string[]} [options.visibleMessageIds]
  * @param {object} [options.composer]
  * @param {object} [options.generation]
@@ -292,7 +283,6 @@ export function buildMainChatSnapshotFromLegacyChat({
     mediaDisplayForMessage,
     hasItemizedPromptForMessage,
     swipePickerForMessage,
-    modelIconEnabled = false,
     visibleMessageIds,
     composer = {},
     generation = {},
@@ -339,7 +329,6 @@ export function buildMainChatSnapshotFromLegacyChat({
             mediaDisplayForMessage,
             hasItemizedPromptForMessage,
             swipePickerForMessage,
-            modelIconEnabled,
         });
     }
 

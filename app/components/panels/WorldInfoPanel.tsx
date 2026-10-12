@@ -46,16 +46,16 @@ export function WorldInfoPanel() {
                                             <small>
                                                 <span data-i18n="Scan Depth">Scan Depth</span>
                                             </small>
-                                            <input className="neo-range-slider" type="range" id="world_info_depth" name="world_info_depth" min="0" max="1000" step="1" />
-                                            <input className="neo-range-input" type="number" min="0" max="1000" step="1" data-for="world_info_depth" id="world_info_depth_counter" />
+                                            <input className="neo-range-slider" type="range" id="world_info_depth" name="world_info_depth" min="0" max="1000" step="1" aria-label="Scan Depth" data-i18n="[aria-label]Scan Depth" />
+                                            <input className="neo-range-input" type="number" min="0" max="1000" step="1" data-for="world_info_depth" id="world_info_depth_counter" aria-label="Scan Depth" data-i18n="[aria-label]Scan Depth" />
                                         </div>
 
                                             <div className="alignitemscenter flex-container flexFlowColumn flexGrow flexShrink gap0 flexBasis48p">
                                                 <small>
                                                     <span data-i18n="Context %">Context %</span>
                                                 </small>
-                                                <input className="neo-range-slider" type="range" id="world_info_budget" name="world_info_budget" min="1" max="100" step="1" />
-                                                <input className="neo-range-input" type="number" min="1" max="100" step="1" data-for="world_info_budget" id="world_info_budget_counter" />
+                                                <input className="neo-range-slider" type="range" id="world_info_budget" name="world_info_budget" min="1" max="100" step="1" aria-label="Context %" data-i18n="[aria-label]Context %" />
+                                                <input className="neo-range-input" type="number" min="1" max="100" step="1" data-for="world_info_budget" id="world_info_budget_counter" aria-label="Context %" data-i18n="[aria-label]Context %" />
                                             </div>
 
                                             <div className="alignitemscenter flex-container flexFlowColumn flexGrow flexShrink gap0 flexBasis48p">
@@ -63,8 +63,8 @@ export function WorldInfoPanel() {
                                                     <span data-i18n="Budget Cap">Budget Cap</span>
                                                     <div className="fa-solid fa-circle-info opacity50p" data-i18n="[title](0 = disabled)" title="(0 = disabled)"></div>
                                                 </small>
-                                                <input className="neo-range-slider" type="range" id="world_info_budget_cap" name="world_info_budget_cap" min="0" max="65536" step="1" />
-                                                <input className="neo-range-input" type="number" min="0" max="65536" step="1" data-for="world_info_budget_cap" id="world_info_budget_cap_counter" />
+                                                <input className="neo-range-slider" type="range" id="world_info_budget_cap" name="world_info_budget_cap" min="0" max="65536" step="1" aria-label="Budget Cap" data-i18n="[aria-label]Budget Cap" />
+                                                <input className="neo-range-input" type="number" min="0" max="65536" step="1" data-for="world_info_budget_cap" id="world_info_budget_cap_counter" aria-label="Budget Cap" data-i18n="[aria-label]Budget Cap" />
                                             </div>
 
                                             <div className="alignitemscenter flex-container flexFlowColumn flexGrow flexShrink gap0 flexBasis48p" title="Scan chronologically until reached min entries or token budget." data-i18n="[title]Scan chronologically until reached min entries or token budget.">
@@ -72,8 +72,8 @@ export function WorldInfoPanel() {
                                                     <span data-i18n="Min Activations">Min Activations</span>
                                                     <div className="fa-solid fa-triangle-exclamation opacity50p" data-i18n="[title](disabled when max recursion steps are used)" title="(disabled when max recursion steps are used)"></div>
                                                 </small>
-                                                <input className="neo-range-slider" type="range" id="world_info_min_activations" name="world_info_min_activations" min="0" max="100" step="1" />
-                                                <input className="neo-range-input" type="number" min="0" max="100" step="1" data-for="world_info_min_activations" id="world_info_min_activations_counter" />
+                                                <input className="neo-range-slider" type="range" id="world_info_min_activations" name="world_info_min_activations" min="0" max="100" step="1" aria-label="Min Activations" data-i18n="[aria-label]Min Activations" />
+                                                <input className="neo-range-input" type="number" min="0" max="100" step="1" data-for="world_info_min_activations" id="world_info_min_activations_counter" aria-label="Min Activations" data-i18n="[aria-label]Min Activations" />
                                             </div>
 
                                             <div className="alignitemscenter flex-container flexFlowColumn flexGrow flexShrink gap0 flexBasis48p" title="Scan chronologically until reached min entries or token budget." data-i18n="[title]Scan chronologically until reached min entries or token budget.">
@@ -81,23 +81,23 @@ export function WorldInfoPanel() {
                                                     <span data-i18n="Max Depth">Max Depth</span>
                                                     <div className="fa-solid fa-circle-info opacity50p" data-i18n="[title](0 = unlimited, use budget)" title="(0 = unlimited, use budget)"></div>
                                                 </small>
-                                                <input className="neo-range-slider" type="range" id="world_info_min_activations_depth_max" name="volume" min="0" max="100" step="1" />
-                                                <input className="neo-range-input" type="number" min="0" max="100" step="1" data-for="world_info_min_activations_depth_max" id="world_info_min_activations_depth_max_counter" />
+                                                <input className="neo-range-slider" type="range" id="world_info_min_activations_depth_max" name="volume" min="0" max="100" step="1" aria-label="Max Depth" data-i18n="[aria-label]Max Depth" />
+                                                <input className="neo-range-input" type="number" min="0" max="100" step="1" data-for="world_info_min_activations_depth_max" id="world_info_min_activations_depth_max_counter" aria-label="Max Depth" data-i18n="[aria-label]Max Depth" />
                                             </div>
                                             <div className="alignitemscenter flex-container flexFlowColumn flexGrow flexShrink gap0 flexBasis48p" title="Cap the number of entry activation recursions" data-i18n="[title]Cap the number of entry activation recursions">
                                                 <small>
                                                     <span data-i18n="Max Recursion Steps">Max Recursion Steps</span>
                                                     <div className="fa-solid fa-triangle-exclamation opacity50p" data-i18n="[title]0 = unlimited, 1 = scans once and doesn't recurse, 2 = scans once and recurses once, etc" title={"0 = unlimited, 1 = scans once and doesn't recurse, 2 = scans once and recurses once, etc\n(disabled when min activations are used)"}></div>
                                                 </small>
-                                                <input className="neo-range-slider" type="range" id="world_info_max_recursion_steps" name="world_info_max_recursion_steps" min="0" max="10" step="1" />
-                                                <input className="neo-range-input" type="number" min="0" max="10" step="1" data-for="world_info_max_recursion_steps" id="world_info_max_recursion_steps_counter" />
+                                                <input className="neo-range-slider" type="range" id="world_info_max_recursion_steps" name="world_info_max_recursion_steps" min="0" max="10" step="1" aria-label="Max Recursion Steps" data-i18n="[aria-label]Max Recursion Steps" />
+                                                <input className="neo-range-input" type="number" min="0" max="10" step="1" data-for="world_info_max_recursion_steps" id="world_info_max_recursion_steps_counter" aria-label="Max Recursion Steps" data-i18n="[aria-label]Max Recursion Steps" />
                                             </div>
 
                                             <div className="alignitemscenter flex-container flexFlowColumn flexGrow flexShrink flexBasis48p">
                                                 <small data-i18n="Insertion Strategy">
                                                     Insertion Strategy
                                                 </small>
-                                                <select id="world_info_character_strategy" className="flexGrow margin0">
+                                                <select id="world_info_character_strategy" className="flexGrow margin0" aria-label="Insertion Strategy" data-i18n="[aria-label]Insertion Strategy">
                                                     <option value="0" data-i18n="Sorted Evenly">Sorted Evenly</option>
                                                     <option value="1" data-i18n="Character Lore First">Character Lore First</option>
                                                     <option value="2" data-i18n="Global Lore First">Global Lore First</option>

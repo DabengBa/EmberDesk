@@ -448,6 +448,7 @@ export class GenerationStreamSession {
      * @returns {AsyncGenerator<{ text: string, swipes: string[], toolCalls: any[], state: any }, void, void>}
      */
     async* nullStreamingGeneration() {
+        yield* [];
         throw new Error('Generation function for streaming is not hooked up');
     }
 
@@ -890,8 +891,6 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
         return getTokenCountAsync(encodeString, TOKEN_PADDING);
     }
 
-    let pinExmString;
-
     // Only add the chat in context if past the greeting message
     if (isContinue && (chat2.length > 1 || state.main_api === 'openai')) {
         cyclePrompt = chat2.shift();
@@ -1037,7 +1036,7 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
         }
 
         console.debug('--setting Prompt string');
-        mesExmString = pinExmString ?? mesExamplesArray.slice(0, count_exm_add).join('');
+        mesExmString = mesExamplesArray.slice(0, count_exm_add).join('');
 
         if (mesSend.length) {
             mesSend[mesSend.length - 1].message = modifyLastPromptLine(mesSend[mesSend.length - 1].message);

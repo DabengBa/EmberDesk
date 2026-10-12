@@ -507,12 +507,13 @@ function AuthoringActionsMenu({
                 aria-haspopup="menu"
                 aria-expanded={open}
                 data-i18n="[title]More...;[aria-label]More..."
-                onClick={() => setOpen(current => {
-                    if (!current) {
+                onClick={() => {
+                    const next = !open;
+                    if (next) {
                         onOpen?.();
                     }
-                    return !current;
-                })}
+                    setOpen(next);
+                }}
             />
             {open ? (
                 <div ref={menuRef} role="menu" {...stylex.props(authoringStyles.actionMenu)}>
@@ -598,23 +599,45 @@ function AuthoringWorkspacePanel({
     const bridgeState = asAuthoringState(state);
     const title = bridgeState.title ?? 'Character Authoring';
     const unsupportedFields = Array.isArray(bridgeState.unsupportedFields) ? bridgeState.unsupportedFields : [];
-    const initialSession = useMemo(() => createCharacterAuthoringSession(bridgeState.draft ?? {}, { mode: bridgeState.mode ?? 'create' }), [bridgeState.draft, bridgeState.mode]);
+    const authoringDraft = bridgeState.draft;
+    const authoringMode = bridgeState.mode ?? 'create';
+    const managementActionDefs = bridgeState.managementActions;
+    const initialSession = useMemo(() => createCharacterAuthoringSession(authoringDraft ?? {}, { mode: authoringMode }), [authoringDraft, authoringMode]);
     const [authoringSession, setAuthoringSession] = useState(initialSession);
     const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+    const [advancedOpen, setAdvancedOpen] = useState(false);
+    const [expandedField, setExpandedField] = useState<{ key: string; label: string } | null>(null);
+    const [avatarPreviewOverride, setAvatarPreviewOverride] = useState<string | null>(null);
+    const [liveManagementActions, setLiveManagementActions] = useState<AuthoringManagementAction[] | null>(null);
     const saveGenerationRef = useRef(0);
     const authoringCommandMutation = useMutation({
         mutationFn: async (payload: Record<string, unknown>) => await commands?.saveCharacterAuthoring?.(payload),
         retry: false,
     });
 
-    useEffect(() => {
-        saveGenerationRef.current += 1;
+    // Reset the session state when the incoming draft is replaced — the
+    // adjust-state-during-render pattern replaces the old reset effect; the
+    // save-generation guard stays in an effect because refs are not written
+    // during render.
+    const [previousInitialSession, setPreviousInitialSession] = useState(initialSession);
+    if (previousInitialSession !== initialSession) {
+        setPreviousInitialSession(initialSession);
         setAuthoringSession(initialSession);
         setFieldErrors({});
         setAdvancedOpen(false);
         setExpandedField(null);
         setAvatarPreviewOverride(null);
+    }
+
+    useEffect(() => {
+        saveGenerationRef.current += 1;
     }, [initialSession]);
+
+    const [previousManagementActionDefs, setPreviousManagementActionDefs] = useState(managementActionDefs);
+    if (previousManagementActionDefs !== managementActionDefs) {
+        setPreviousManagementActionDefs(managementActionDefs);
+        setLiveManagementActions(null);
+    }
 
     const updateDraft = useCallback((patch: Record<string, unknown>) => {
         setAuthoringSession((currentSession: typeof initialSession) => currentSession.update(patch));
@@ -647,20 +670,20 @@ function AuthoringWorkspacePanel({
                 }
                 setAuthoringSession((currentSession: typeof initialSession) => {
                     if (currentSession.draft === submittedDraft) {
-                        return createCharacterAuthoringSession(submittedDraft, { mode: bridgeState.mode ?? 'create' });
+                        return createCharacterAuthoringSession(submittedDraft, { mode: authoringMode });
                     }
                     // The user kept typing while the save was in flight — keep the
                     // live draft and only advance the clean baseline so the
                     // remaining diff stays dirty for the next autosave pass.
                     return typeof currentSession.rebase === 'function'
                         ? currentSession.rebase(submittedDraft)
-                        : createCharacterAuthoringSession(currentSession.draft, { mode: bridgeState.mode ?? 'create' });
+                        : createCharacterAuthoringSession(currentSession.draft, { mode: authoringMode });
                 });
             })
             .catch(() => {
                 // Mutation state carries the failed status; keep the dirty draft intact for retry.
             });
-    }, [authoringCommandMutation, authoringSession, bridgeState.mode]);
+    }, [authoringCommandMutation, authoringSession, authoringMode]);
 
     const submitDraftRef = useRef(submitDraft);
     useEffect(() => {
@@ -691,7 +714,7 @@ function AuthoringWorkspacePanel({
     const characterToolPayload = authoringSession.submit();
     const characterActionPayload = characterToolPayload.ok ? characterToolPayload.payload : undefined;
     const characterToolActionPayload = characterActionPayload ? { ...characterActionPayload, draft } : undefined;
-    const isCreateMode = (bridgeState.mode ?? 'create') === 'create';
+    const isCreateMode = authoringMode === 'create';
     const isActionPending = authoringCommandMutation.isPending;
     const dirtyFieldSet = new Set(authoringSession.dirtyFields);
     const isFieldDirty = (key: string) => dirtyFieldSet.has(key);
@@ -716,7 +739,6 @@ function AuthoringWorkspacePanel({
             (target?.querySelector('textarea, input, select') as HTMLElement | null)?.focus({ preventScroll: true });
         });
     };
-    const [avatarPreviewOverride, setAvatarPreviewOverride] = useState<string | null>(null);
     useEffect(() => {
         return () => {
             if (avatarPreviewOverride) {
@@ -728,12 +750,10 @@ function AuthoringWorkspacePanel({
     const tokenTotal = String(bridgeState.tokenSummary?.total ?? '').trim();
     const tokenPermanent = String(bridgeState.tokenSummary?.permanent ?? '').trim();
     const managementActions = useMemo(
-        () => (Array.isArray(bridgeState.managementActions) ? bridgeState.managementActions.filter(action => action && action.id) : [])
+        () => (Array.isArray(managementActionDefs) ? managementActionDefs.filter(action => action && action.id) : [])
             .filter(action => !(isCreateMode && action.editAction)),
-        [bridgeState.managementActions, isCreateMode],
+        [managementActionDefs, isCreateMode],
     );
-    const [advancedOpen, setAdvancedOpen] = useState(false);
-    const [expandedField, setExpandedField] = useState<{ key: string; label: string } | null>(null);
     const getExpandedFieldValue = (key: string) =>
         key === 'depthPrompt.prompt' ? (depthPrompt.prompt ?? '') : stringDraft(key);
     const setExpandedFieldValue = (key: string, value: string) => {
@@ -743,7 +763,6 @@ function AuthoringWorkspacePanel({
         }
         updateDraft({ [key]: value });
     };
-    const [liveManagementActions, setLiveManagementActions] = useState<AuthoringManagementAction[] | null>(null);
     const refreshManagementActions = useCallback(() => {
         // The hidden select is the compatibility host; read live options so
         // extension-injected actions appear even if they were added post-mount.
@@ -763,10 +782,6 @@ function AuthoringWorkspacePanel({
                 .filter(action => !(isCreateMode && action.editAction)),
         );
     }, [isCreateMode]);
-
-    useEffect(() => {
-        setLiveManagementActions(null);
-    }, [bridgeState.managementActions]);
 
     return (
         <WorkspacePanelShell
@@ -1316,6 +1331,31 @@ function MainChatMessageListWorkspacePanel({
 
     return (
         <>
+            {/* Message-row controls render as native <button> elements carrying
+                the legacy icon classes; reset the UA button chrome those classes
+                never specified (.menu_button/.empty_reply_regenerate provide
+                their own background/border, so only appearance is reset). */}
+            <style>{`
+button.mes_button,
+button.swipe_left,
+button.swipe_right {
+    -webkit-appearance: none;
+    appearance: none;
+    background: none;
+    border: none;
+}
+
+button.swipe_left,
+button.swipe_right {
+    padding: 0;
+}
+
+button.menu_button,
+button.empty_reply_regenerate {
+    -webkit-appearance: none;
+    appearance: none;
+}
+`}</style>
             {snapshot.window.showMoreVisible ? (
                 <button
                     type="button"

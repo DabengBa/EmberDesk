@@ -234,7 +234,6 @@ body.documentstyle #chat .last_mes .swipe_left {
 body.documentstyle #chat .mes .mesAvatarWrapper,
 body.documentstyle #chat .mes .mes_block .ch_name .name_text,
 body.documentstyle #chat .mes .mes_block .ch_name .timestamp,
-body.documentstyle #chat .mes .mes_block .ch_name .timestamp-icon,
 body.documentstyle .mes:not(.last_mes) .ch_name .mes_buttons {
     display: none !important;
 }

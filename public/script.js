@@ -271,7 +271,6 @@ import {
     addOneMessage,
     appendMediaToMessage,
     cleanUpMessage,
-    createModelIcon,
     ensureMessageMediaIsArray,
     formatCharacterAvatar,
     formatGenerationTimer,
@@ -330,7 +329,6 @@ export {
     addOneMessage,
     appendMediaToMessage,
     cleanUpMessage,
-    createModelIcon,
     ensureMessageMediaIsArray,
     formatCharacterAvatar,
     getCharacterAvatar,
@@ -3145,7 +3143,6 @@ function getMainChatMessageListReactBridgeState() {
             canOpen: canOpenSwipePickerForMessage(messageId),
             canJump: canJumpToSwipeForMessage(messageId),
         }),
-        modelIconEnabled: false,
         visibleMessageIds,
         composer: {
             value: getComposerValue(),
@@ -4486,9 +4483,7 @@ async function bootstrapWorkspace() {
     await measureStartupStage('initPresetManager', () => initPresetManager());
     await measureStartupStage('initSystemMessages', () => initSystemMessages());
     await measureStartupStage('mountPowerUserPanel', () => mountPowerUserPanel());
-    await measureStartupStage('mountConfigDrawers', () => Promise.all([
-        mountWorldInfoPanel(),
-    ]));
+    await measureStartupStage('mountConfigDrawers', () => mountWorldInfoPanel());
     await getSettings(initLoaderHandle);
     await measureStartupStage('bindPostSettingsUi', () => Promise.resolve().then(() => {
         initKeyboard();

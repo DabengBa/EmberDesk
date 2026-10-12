@@ -1,9 +1,12 @@
+/* global PerformanceObserver, document, fetch */
+
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import process from 'node:process';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, URL } from 'node:url';
 import { performance } from 'node:perf_hooks';
+import { setTimeout } from 'node:timers';
 import { spawn } from 'node:child_process';
 
 import { chromium } from '../tests/node_modules/playwright/index.mjs';

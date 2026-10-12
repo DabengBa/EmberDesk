@@ -1,6 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { getCanonicalSliceProjectionMode } from './storage-feature-flags.js';
+import {
+    getCanonicalSliceProjectionMode,
+    getCanonicalSqliteFeatureFlags,
+    getCanonicalStorageSliceFeatureFlagSnapshot,
+} from './storage-feature-flags.js';
 import { getCanonicalMigrationStatus } from './canonical-sqlite-migrations.js';
 import { getPersistedCanonicalAuditStatus } from './canonical-sqlite-shadow-import.js';
 import { WORLD_INFO_AUDIT_SCOPE } from './canonical-world-info-shadow-import.js';
@@ -19,10 +23,6 @@ import { listOpenSettingsProjectionRepairs } from './endpoints/settings-store.js
 import { listOpenSecretProjectionRepairs } from './endpoints/canonical-secrets-store.js';
 import { listOpenCanonicalManagedMediaRepairs } from './endpoints/canonical-managed-media-store.js';
 import { listOpenCanonicalChatProjectionRepairs } from './endpoints/canonical-chat-write-service.js';
-import {
-    getCanonicalSqliteFeatureFlags,
-    getCanonicalStorageSliceFeatureFlagSnapshot,
-} from './storage-feature-flags.js';
 import { SETTINGS_FILE } from './constants.js';
 
 const REQUIRED_SLICE_FIELDS = Object.freeze([

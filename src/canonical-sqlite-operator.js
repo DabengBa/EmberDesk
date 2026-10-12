@@ -278,8 +278,6 @@ export function explainCanonicalRolloutBlockers({
         });
     }
 
-    // Compatibility aggregate used by the existing CLI/tests: character blockers
-    // plus open world_info repairs for write-related phases.
     const result = buildCanonicalRollbackBlockers({
         db,
         featureFlags,

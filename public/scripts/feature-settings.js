@@ -286,10 +286,8 @@ function initCoreFeatureOnce(key, loader) {
  * @returns {Promise<void>}
  */
 export async function initCoreFeatures() {
-    await Promise.all([
-        initCoreFeatureOnce('regex', async () => {
-            const { init } = await import('./extensions/regex/index.js');
-            await init();
-        }),
-    ]);
+    await initCoreFeatureOnce('regex', async () => {
+        const { init } = await import('./extensions/regex/index.js');
+        await init();
+    });
 }
