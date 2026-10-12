@@ -122,7 +122,8 @@ describe('settings React route flag', () => {
         expect(routeSource).toContain('selector={state => state.isPristine}');
         expect(routeSource).toContain('disabled={isBusy || settingsQuery.isPending || isPristine || hasRevisionConflict}');
         expect(routeSource).toContain("import { startTransition, useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';");
-        expect(routeSource).toContain('const [isSettingsFormReady, setIsSettingsFormReady] = useState(false);');
+        expect(routeSource).toContain('const [isSettingsFormLoaded, setIsSettingsFormLoaded] = useState(false);');
+        expect(routeSource).toContain('const isSettingsFormReady = isSettingsFormLoaded && parsedPayload !== null;');
         expect(routeSource).toContain('const openSettingsTab = useCallback((tabId: string)');
         expect(routeSource).toContain('startTransition(() => {');
         expect(routeSource).toContain('{isSettingsFormReady ? (');
@@ -384,8 +385,8 @@ describe('settings React route flag', () => {
         expect(merged.power_user.theme).toBe('Dark Lite');
         expect(merged.power_user.chat_width).toBeUndefined();
         expect(merged.power_user.font_scale).toBeUndefined();
-        // Stored legacy custom CSS keeps round-tripping invisibly; no UI remains.
-        expect(merged.power_user.custom_css).toBe('.chat { color: white; }');
+        // Legacy custom CSS UI is retired; the stored key is stripped on save.
+        expect(merged.power_user.custom_css).toBeUndefined();
         // Retired advanced-tab keys are stripped from the saved payload.
         expect(merged.power_user.custom_stopping_strings).toBeUndefined();
         expect(merged.power_user.tokenizer).toBeUndefined();
@@ -399,7 +400,7 @@ describe('settings React route flag', () => {
         // retired; stored objects are stripped from the saved payload.
         expect(merged.power_user.sysprompt).toBeUndefined();
         expect(merged.power_user.reasoning).toBeUndefined();
-        expect(merged.power_user.context.preset).toBe('Default');
+        expect(merged.power_user.context).toBeUndefined();
         expect(merged.oai_settings.preset_settings_openai).toBe('RecoveredRuins');
         expect(merged.oai_settings.chat_completion_source).toBe('openai');
         expect(merged.oai_settings.openai_model).toBe('gpt-5.2');
@@ -414,38 +415,39 @@ describe('settings React route flag', () => {
         expect(merged.oai_settings.fallback_provider_enabled).toBeUndefined();
         expect(merged.oai_settings.fallback_provider_base_url).toBeUndefined();
         expect(merged.oai_settings.bind_preset_to_connection).toBeUndefined();
-        // Generation defaults are legacy-drawer-owned: a React Settings save
-        // preserves them untouched instead of writing or deleting them.
+        // Generation defaults are provider-owned oai_settings keys: a React
+        // Settings save preserves them untouched instead of writing or
+        // deleting them.
         expect(merged.oai_settings.stream_openai).toBe(true);
         expect(merged.oai_settings.openai_max_context).toBe(4095);
         expect(merged.oai_settings.openai_max_tokens).toBe(300);
         expect(merged.oai_settings.temp_openai).toBe(0.7);
         expect(merged.oai_settings.reasoning_effort).toBe('medium');
         expect(merged.oai_settings.continue_prefill).toBe(true);
-        expect(merged.power_user.custom_css).toBe('.chat { color: white; }');
+        // Retired power_user keys (custom CSS, instruct, context template,
+        // stscript) are stripped from the saved payload.
+        expect(merged.power_user.custom_css).toBeUndefined();
         expect(merged.power_user.toastr_position).toBeUndefined();
         expect(merged.power_user.auto_swipe).toBeUndefined();
         expect(merged.power_user.auto_swipe_blacklist).toBeUndefined();
-        expect(merged.power_user.instruct.enabled).toBe(true);
-        expect(merged.power_user.instruct.skip_examples).toBe(true);
-        expect(merged.power_user.instruct.activation_regex).toBe('/llama/i');
-        expect(merged.power_user.context.story_string).toBe('Story');
+        expect(merged.power_user.instruct).toBeUndefined();
+        expect(merged.power_user.context).toBeUndefined();
         expect(merged.power_user.stscript).toBeUndefined();
     });
 
 
 
-    test('keeps generation-default fields out of the React surface while legacy drawer bindings stay intact', async () => {
+    test('keeps generation-default fields out of the React surface while provider field bindings stay intact', async () => {
         const routeSource = fs.readFileSync(path.join(repoRoot, 'app', 'components', 'settings', 'SettingsSurface.tsx'), 'utf8');
         const helperModule = await import(`../app/lib/settings-helpers.js?settingsGeneralRetired=${Date.now()}-${Math.random()}`);
-        const aiConfigSource = fs.readFileSync(path.join(repoRoot, 'app', 'components', 'ai-config', 'AiConfigPanel.tsx'), 'utf8');
         const openaiSource = fs.readFileSync(path.join(repoRoot, 'public', 'scripts', 'openai.js'), 'utf8');
 
         expect(routeSource).not.toContain('name="general.');
         expect(routeSource).not.toContain("'Generation Defaults'");
         expect(helperModule.settingsFormFieldPaths.some(path => path.startsWith('general.'))).toBe(false);
         expect(helperModule.defaultSettingsFormValues.general).toBeUndefined();
-        // The AI Response Configuration drawer still owns every removed field.
+        // The AI Response Configuration drawer is retired; the provider runtime
+        // still owns every removed field as openai.js settings keys.
         for (const legacyId of [
             'settings_preset_openai',
             'openai_max_context',
@@ -455,7 +457,6 @@ describe('settings React route flag', () => {
             'continue_nudge_prompt_textarea',
             'names_behavior',
         ]) {
-            expect(aiConfigSource).toContain(`id="${legacyId}"`);
             expect(openaiSource).toContain(legacyId);
         }
     });
@@ -701,7 +702,7 @@ describe('settings React route flag', () => {
 
 
 
-    test('stored instruct and context template keys survive a settings save untouched', async () => {
+    test('retired instruct and context template keys are stripped on settings save', async () => {
         const helperModule = await import(`../app/lib/settings-helpers.js?settingsAf=${Date.now()}-${Math.random()}`);
         const routeSource = fs.readFileSync(path.join(repoRoot, 'app', 'components', 'settings', 'SettingsSurface.tsx'), 'utf8');
         const pageRouteSource = fs.readFileSync(path.join(repoRoot, 'app', 'routes', 'settings.tsx'), 'utf8');
@@ -735,11 +736,8 @@ describe('settings React route flag', () => {
         const defaults = helperModule.buildSettingsFormDefaults(fixture);
         const saved = helperModule.buildSettingsSavePayload(fixture, defaults);
         expect(saved.keep).toBe(true);
-        expect(saved.power_user.instruct.input_sequence).toBe('### Input:');
-        expect(saved.power_user.instruct.output_sequence).toBe('### Response:');
-        expect(saved.power_user.instruct.stop_sequence).toBe('</s>');
-        expect(saved.power_user.context.story_string_depth).toBe(4);
-        expect(saved.power_user.instruct.system_same_as_user).toBe(true);
+        expect(saved.power_user.instruct).toBeUndefined();
+        expect(saved.power_user.context).toBeUndefined();
     });
 
     test('keeps secrets out of settings JSON and retires the connection-profile picker', async () => {

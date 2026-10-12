@@ -68,7 +68,8 @@ describe('World Info drawer React surface', () => {
 
     test('mount runs before initWorldInfo bindings in startup order', () => {
         expect(script).toContain('mountWorldInfoPanel');
-        const mountIdx = script.indexOf('mountWorldInfoPanel(),');
+        // The mount call is wrapped in a measureStartupStage arrow function.
+        const mountIdx = script.indexOf('=> mountWorldInfoPanel()');
         // Startup path: the initWorldInfo() call inside hydrateFeatureModules
         // (the earlier occurrence is a deferred panel hook, not startup order).
         const initIdx = script.lastIndexOf('initWorldInfo();');
