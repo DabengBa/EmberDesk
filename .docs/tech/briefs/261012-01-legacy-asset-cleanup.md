@@ -184,9 +184,9 @@ status: delivered
 - **`scripts/seed-dev-environment.mjs` 是漏网消费方**：`seedBootstrapContent` 硬编码复制已删的 `presets/quick-replies/Default.json`，被 `seed-dev-environment.test.js` 在 integration lane 暴露。已删除该复制步骤；测试中 `QuickReplies/Default.json` 断言翻转为钉"不播种"。
 - **`character-library-react-panel-flag.test.js` 需补充改线**：其 `:47` 断言 `default/config.yaml` 含 `panels:`，删 `features.react` 块后翻转为钉缺席。
 
-### HEAD 预存 integration lane 失败（与本清理无因果，移交 owner）
+### HEAD 预存 integration lane 失败（与本清理无因果；已在 `fb62fe65b` 修复）
 
-以下 5 个失败断言在 `HEAD fc062359e` 的未修改版本中逐字存在，属退役 commit 未同步的 stale 断言（integration lane 此前未在 unit 全量中执行，故长期未暴露）：
+以下 5 个失败断言在 `HEAD fc062359e` 的未修改版本中逐字存在，属退役 commit 未同步的 stale 断言（integration lane 此前未在 unit 全量中执行，故长期未暴露）。修复时又暴露 3 处被前置 throw 掩盖的同类断言（`custom_css`/`instruct`/`context` 两处 merged 块 + 第二处 `custom_css`），一并按 strip 契约翻转：
 
 | 测试 | 失败点 | 归属 commit |
 |---|---|---|
@@ -194,7 +194,7 @@ status: delivered
 | `world-info-card-rendering.test.js` ×1 | `:256` 期望 `ai-config-button` 在顶部抽屉列表（已退役移除） | `8a126bee3` |
 | `world-info-react-surface.test.js` ×1 | `:75` 查找 `mountWorldInfoPanel(),` 逗号语法（现为 `measureStartupStage` 包装） | `fc062359e` |
 
-建议另起小批修复这 5 处断言，不混入资产清理批次。
+修复结果（`fb62fe65b`）：integration lane 880/880、unit lane 605/605，工作树首次零失败基线。
 
 ## 9. 评审修订记录（v2）
 
