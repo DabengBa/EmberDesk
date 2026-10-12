@@ -1,5 +1,6 @@
 import { ContractButton } from '../contract/ContractButton';
 import { ContractIconButton } from '../contract/ContractIconButton';
+import { useTranslated } from '../../compat/i18n.js';
 
 /**
  * Past-chats popup inner markup (React-owned inside #select_chat_popup).
@@ -9,6 +10,7 @@ import { ContractIconButton } from '../contract/ContractIconButton';
  * plain input because legacy code drives it via jQuery .val()/input events.
  */
 export function SelectChatPopup() {
+    const searchLabel = useTranslated('Search chats');
     return (
         <>
             <div name="selectChatPopupHeader" className="flex-container alignitemscenter justifySpaceBetween flexGap10">
@@ -26,8 +28,8 @@ export function SelectChatPopup() {
                 </div>
                 <ContractButton id="newChatFromManageScreenButton" className="menu_button menu_button_icon" variant="ghost" label="New Chat" icon={<i className="fa-solid fa-plus" aria-hidden="true" />} />
                 <ContractButton id="chat_import_button" className="menu_button menu_button_icon" variant="ghost" label="Import Chat" icon={<i className="fa-solid fa-file-import" aria-hidden="true" />} />
-                <input type="search" id="select_chat_search" className="text_pole flex1" data-i18n="[placeholder]Search..." placeholder="Search..." autoComplete="off" />
-                <ContractIconButton id="select_chat_cross" className="opacity50p hoverglow fontsize120p" label="Close" labelKey="Close" icon={<i className="fa-solid fa-circle-xmark" aria-hidden="true" />} />
+                <input type="search" id="select_chat_search" className="text_pole flex1" aria-label={searchLabel} data-i18n="[aria-label]Search chats;[placeholder]Search..." placeholder="Search..." autoComplete="off" autoFocus />
+                <ContractIconButton id="select_chat_cross" className="chat-history-close fontsize120p" label="Close" labelKey="Close" icon={<i className="fa-solid fa-circle-xmark" aria-hidden="true" />} />
             </div>
             <div id="select_chat_div"></div>
         </>

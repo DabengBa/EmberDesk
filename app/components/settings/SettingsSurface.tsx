@@ -73,6 +73,7 @@ export type SettingsSurfaceProps = {
     variant?: SettingsSurfaceVariant;
     initialTab?: string | null;
     onRequestClose?: () => void;
+    onDirtyStateChange?: (dirty: boolean) => void;
     runtime?: RuntimePort;
 };
 
@@ -110,7 +111,7 @@ function resolveInitialSettingsTab(initialTab?: string | null) {
 // overlay does not cover the drawer it just opened.
 const WORKSPACE_DRAWER_LINKS: Record<string, Array<{ target: string; label: string; hint: string }>> = {
     providers: [
-        { target: 'user-settings-block', label: '打开用户设置', hint: '前端渲染帧(Frontend Frames)设置。' },
+        { target: 'user-settings-block', label: '消息渲染设置', hint: '调整 Frontend Frames 渲染行为。' },
     ],
 };
 
@@ -118,6 +119,7 @@ export function SettingsSurface({
     variant = 'page',
     initialTab = null,
     onRequestClose,
+    onDirtyStateChange,
     runtime,
 }: SettingsSurfaceProps) {
     const isOverlay = variant === 'overlay';
@@ -134,29 +136,108 @@ export function SettingsSurface({
         (listener: () => void) => (runtime ? runtime.subscribe(listener) : () => {}),
         [runtime],
     );
-    const providerStatus = useSyncExternalStore(
+    const runtimeProviderStatus = useSyncExternalStore(
         subscribeRuntime,
         () => runtime?.getSnapshot().provider?.status ?? 'no_connection',
         () => 'no_connection',
     );
+    const [pageProviderStatus, setPageProviderStatus] = useState('no_connection');
+    const providerStatus = runtime ? runtimeProviderStatus : pageProviderStatus;
     const providerStatusLabel = providerStatus === 'no_connection' ? '未连接' : providerStatus;
-    const canRunProviderActions = Boolean(
-        runtime?.commands
-        && typeof runtime.commands.connectProvider === 'function'
-        && typeof runtime.commands.testProviderConnection === 'function',
-    );
+    const canRunProviderActions = Boolean(runtime)
+        ? Boolean(
+            runtime?.commands
+            && typeof runtime.commands.connectProvider === 'function'
+            && typeof runtime.commands.testProviderConnection === 'function',
+        )
+        : true;
+
+    async function runPageProviderAction(kind: 'connect' | 'test') {
+        const values = settingsForm.state.values;
+        const customUrl = values.providers.customUrl.trim();
+        const model = values.providers.openaiModel.trim();
+        const hasSavedSecret = Boolean(currentSecretKey && secretsData?.[currentSecretKey]);
+        if (!hasSavedSecret && !customUrl) {
+            throw new MessageError('请先保存 API key，或配置自定义接口地址。');
+        }
+
+        const csrfToken = await ensureCsrfToken();
+
+        if (kind === 'connect') {
+            const response = await fetch('/api/backends/chat-completions/status', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': csrfToken,
+                },
+                body: JSON.stringify({
+                    chat_completion_source: 'openai',
+                    ...(customUrl ? { custom_url: customUrl } : {}),
+                }),
+            });
+            const data = await readJsonObject(response);
+            if (!response.ok || data.error) {
+                setPageProviderStatus('no_connection');
+                throw new MessageError('连接失败：无法从接口拉取模型列表，请检查接口地址与 API key。');
+            }
+
+            setPageProviderStatus('online');
+            const modelCount = Array.isArray(data.data) ? data.data.length : null;
+            setSaveStatus({
+                kind: 'info',
+                message: modelCount === null ? '连接成功。' : `连接成功，接口返回 ${modelCount} 个模型。`,
+            });
+            return;
+        }
+
+        if (!model) {
+            throw new MessageError('请先填写主模型后再测试。');
+        }
+
+        const response = await fetch('/api/backends/chat-completions/generate', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-Token': csrfToken,
+            },
+            body: JSON.stringify({
+                chat_completion_source: 'openai',
+                ...(customUrl ? { custom_url: customUrl } : {}),
+                model,
+                messages: [{ role: 'user', content: 'Hi' }],
+                max_tokens: 1,
+                stream: false,
+            }),
+        });
+        const data = await readJsonObject(response);
+        if (!response.ok || data.error) {
+            setPageProviderStatus('no_connection');
+            throw new MessageError('测试请求失败：接口未返回有效回复，请检查连接设置与 API key。');
+        }
+
+        setPageProviderStatus('online');
+        setSaveStatus({ kind: 'info', message: '已收到 API 回复。' });
+    }
 
     async function handleProviderAction(kind: 'connect' | 'test') {
         const command = kind === 'connect'
             ? runtime?.commands.connectProvider
             : runtime?.commands.testProviderConnection;
-        if (typeof command !== 'function' || providerActionBusy) {
+        if (providerActionBusy) {
+            return;
+        }
+        if (runtime && typeof command !== 'function') {
             return;
         }
         setProviderActionBusy(kind);
         setPageError('');
+        setSaveStatus(null);
         try {
-            await command();
+            if (runtime) {
+                await command?.();
+            } else {
+                await runPageProviderAction(kind);
+            }
         } catch (error) {
             setPageError(error instanceof Error ? error.message : 'Provider 操作失败。');
         } finally {
@@ -245,6 +326,7 @@ export function SettingsSurface({
     });
     const {
         data: settingsData,
+        error: settingsQueryError,
         refetch: refetchSettings,
     } = settingsQuery;
 
@@ -269,6 +351,7 @@ export function SettingsSurface({
     });
     const {
         data: secretsData,
+        error: secretsQueryError,
         refetch: refetchSecrets,
     } = secretsQuery;
 
@@ -449,6 +532,9 @@ export function SettingsSurface({
     }, [hasRevisionConflict, parsedPayload, settingsForm]);
 
     const isSettingsFormReady = isSettingsFormLoaded && parsedPayload !== null;
+    const closeRequest = useCallback(() => {
+        onRequestClose?.();
+    }, [onRequestClose]);
 
     useEffect(() => {
         if (!saveStatus) {
@@ -473,6 +559,13 @@ export function SettingsSurface({
     }, [settingsData]);
 
     const isBusy = saveMutation.isPending || secretsQuery.isPending || providerSecretMutation.isPending;
+    const hasPendingSecretInput = providerSecretInput.trim().length > 0;
+    const hasUnsavedChanges = !settingsForm.state.isPristine || hasPendingSecretInput;
+
+    useEffect(() => {
+        onDirtyStateChange?.(hasUnsavedChanges);
+        return () => onDirtyStateChange?.(false);
+    }, [hasUnsavedChanges, onDirtyStateChange]);
 
     function clearTransientState() {
         saveMutation.reset();
@@ -547,12 +640,22 @@ export function SettingsSurface({
                                     </>
                                 )}
                             </div>
-                            {isOverlay ? (
+                            <div {...stylex.props(settingsStyles.headerActions)}>
+                                <button
+                                    type="button"
+                                    {...stylex.props(settingsStyles.button, settingsStyles.buttonSecondary)}
+                                    aria-expanded={showDiagnostics}
+                                    aria-controls="settings-diagnostics"
+                                    onClick={() => setShowDiagnostics(value => !value)}
+                                >
+                                    诊断
+                                </button>
+                                {isOverlay ? (
                                 <button
                                     type="button"
                                     {...stylex.props(settingsStyles.button, settingsStyles.buttonSecondary, settingsStyles.overlayClose)}
                                     aria-label="关闭设置"
-                                    onClick={() => onRequestClose?.()}
+                                    onClick={closeRequest}
                                 >
                                     <i className="fa-solid fa-xmark" aria-hidden="true" />
                                 </button>
@@ -565,7 +668,8 @@ export function SettingsSurface({
                                 >
                                     返回工作区
                                 </a>
-                            )}
+                                )}
+                            </div>
                         </div>
                     </header>
 
@@ -578,19 +682,49 @@ export function SettingsSurface({
 
                     <div {...stylex.props(settingsStyles.stack, isOverlay && settingsStyles.stackOverlay)}>
                         {settingsQuery.isPending && (
-                            <div {...stylex.props(settingsStyles.status, settingsStyles.statusInfo)}>
+                            <div {...stylex.props(settingsStyles.status, settingsStyles.statusInfo)} role="status">
                                 正在加载当前设置...
                             </div>
                         )}
 
+                        {settingsQuery.isError && !settingsQuery.isPending ? (
+                            <div {...stylex.props(settingsStyles.status, settingsStyles.statusError)} role="alert">
+                                <p>设置加载失败。</p>
+                                <p>{settingsQueryError instanceof Error ? settingsQueryError.message : '请检查服务后重试。'}</p>
+                                <button
+                                    type="button"
+                                    {...stylex.props(settingsStyles.button, settingsStyles.buttonSecondary)}
+                                    onClick={() => void refetchSettings()}
+                                    disabled={settingsQuery.isFetching}
+                                >
+                                    重新加载设置
+                                </button>
+                            </div>
+                        ) : null}
+
+                        {secretsQuery.isError && !secretsQuery.isPending ? (
+                            <div {...stylex.props(settingsStyles.status, settingsStyles.statusError)} role="alert">
+                                <p>无法读取密钥状态，普通设置字段仍可编辑。</p>
+                                <p>{secretsQueryError instanceof Error ? secretsQueryError.message : '请稍后重试。'}</p>
+                                <button
+                                    type="button"
+                                    {...stylex.props(settingsStyles.button, settingsStyles.buttonSecondary)}
+                                    onClick={() => void refetchSecrets()}
+                                    disabled={secretsQuery.isFetching}
+                                >
+                                    重试密钥状态
+                                </button>
+                            </div>
+                        ) : null}
+
                         {pageError && (
-                            <div {...stylex.props(settingsStyles.status, settingsStyles.statusError)}>
+                            <div {...stylex.props(settingsStyles.status, settingsStyles.statusError)} role="alert">
                                 {pageError}
                             </div>
                         )}
 
                         {hasRevisionConflict && (
-                            <div {...stylex.props(settingsStyles.status, settingsStyles.statusError)}>
+                            <div {...stylex.props(settingsStyles.status, settingsStyles.statusError)} role="alert">
                                 <p>当前草稿基于过期版本，尚未丢失。重新加载会放弃本地草稿，并显示当前保存的设置。</p>
                                 <button
                                     type="button"
@@ -771,7 +905,7 @@ export function SettingsSurface({
                                             title={link.hint}
                                             onClick={() => {
                                                 runtime?.commands.openWorkspaceDrawer(link.target);
-                                                onRequestClose?.();
+                                                closeRequest();
                                             }}
                                         >
                                             {link.label}
@@ -790,7 +924,7 @@ export function SettingsSurface({
                                         <button
                                             type="submit"
                                             {...stylex.props(settingsStyles.button, settingsStyles.buttonPrimary)}
-                                            disabled={isBusy || settingsQuery.isPending || isPristine || hasRevisionConflict}
+                                            disabled={isBusy || settingsQuery.isPending || settingsQuery.isFetching || isPristine || hasRevisionConflict}
                                         >
                                             {saveMutation.isPending ? '保存中...' : isPristine ? '修改后可保存' : '保存设置'}
                                         </button>
@@ -802,7 +936,8 @@ export function SettingsSurface({
                     </div>
                 </section>
 
-                <aside {...stylex.props(settingsStyles.side)}>
+                {showDiagnostics && (
+                <aside {...stylex.props(settingsStyles.side)} id="settings-diagnostics">
                     <section {...stylex.props(settingsStyles.sidePanel)}>
                         <h2 {...stylex.props(settingsStyles.sectionTitle)}>负载摘要</h2>
                         <div {...stylex.props(settingsStyles.metrics)}>
@@ -816,50 +951,36 @@ export function SettingsSurface({
                     </section>
 
                     <section {...stylex.props(settingsStyles.sidePanel)}>
-                        <div {...stylex.props(settingsStyles.inlineHeader)}>
+                        <h2 {...stylex.props(settingsStyles.sectionTitle)}>字段归属</h2>
+                        <p {...stylex.props(settingsStyles.mutedText, settingsStyles.sectionDescription)}>
+                            开发调试信息：React 管理的设置字段与仍在 legacy 侧的字段清单。
+                        </p>
+                        <div {...stylex.props(settingsStyles.diagnosticsBody)}>
                             <div>
-                                <h2 {...stylex.props(settingsStyles.sectionTitle)}>诊断</h2>
-                                <p {...stylex.props(settingsStyles.mutedText, settingsStyles.sectionDescription)}>
-                                    字段归属调试信息。
-                                </p>
+                                {Object.entries(settingsCoverage.reactOwned as Record<string, string[]>).map(([tabId, paths]) => (
+                                    <div key={tabId} {...stylex.props(settingsStyles.diagnosticsGroup)}>
+                                        <h3 {...stylex.props(settingsStyles.diagnosticsTitle)}>{settingsTabDefinitions.find(tab => tab.id === tabId)?.label}</h3>
+                                        <ul {...stylex.props(settingsStyles.diagnosticsList)}>
+                                            {paths.map((coveragePath: string) => (
+                                                <li key={coveragePath}>{coveragePath}</li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                ))}
                             </div>
-                            <button
-                                type="button"
-                                {...stylex.props(settingsStyles.button, settingsStyles.buttonSecondary)}
-                                onClick={() => setShowDiagnostics(value => !value)}
-                                aria-expanded={showDiagnostics}
-                            >
-                                {showDiagnostics ? '收起' : '展开'}
-                            </button>
-                        </div>
 
-                        {showDiagnostics && (
-                            <div {...stylex.props(settingsStyles.diagnosticsBody)}>
-                                <div>
-                                    {Object.entries(settingsCoverage.reactOwned as Record<string, string[]>).map(([tabId, paths]) => (
-                                        <div key={tabId} {...stylex.props(settingsStyles.diagnosticsGroup)}>
-                                            <h3 {...stylex.props(settingsStyles.diagnosticsTitle)}>{settingsTabDefinitions.find(tab => tab.id === tabId)?.label}</h3>
-                                            <ul {...stylex.props(settingsStyles.diagnosticsList)}>
-                                                {paths.map((coveragePath: string) => (
-                                                    <li key={coveragePath}>{coveragePath}</li>
-                                                ))}
-                                            </ul>
-                                        </div>
+                            <div {...stylex.props(settingsStyles.diagnosticsGroup)}>
+                                <h3 {...stylex.props(settingsStyles.diagnosticsTitle)}>遗留字段</h3>
+                                <ul {...stylex.props(settingsStyles.diagnosticsList)}>
+                                        {settingsCoverage.legacyOwned.map(path => (
+                                        <li key={path}>{path}</li>
                                     ))}
-                                </div>
-
-                                <div {...stylex.props(settingsStyles.diagnosticsGroup)}>
-                                    <h3 {...stylex.props(settingsStyles.diagnosticsTitle)}>遗留字段</h3>
-                                    <ul {...stylex.props(settingsStyles.diagnosticsList)}>
-                                            {settingsCoverage.legacyOwned.map(path => (
-                                            <li key={path}>{path}</li>
-                                        ))}
-                                    </ul>
-                                </div>
+                                </ul>
                             </div>
-                        )}
+                        </div>
                     </section>
                 </aside>
+                )}
             </div>
         </main>
     );

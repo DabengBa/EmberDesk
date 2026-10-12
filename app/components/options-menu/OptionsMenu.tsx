@@ -1,4 +1,7 @@
 import { ContractButton } from '../contract/ContractButton';
+import * as stylex from '@stylexjs/stylex';
+
+const optionStyles = stylex.create({ item: { justifyContent: 'flex-start', textAlign: 'start' } });
 
 /**
  * Options popup markup (React-owned inside #options). The shell keeps
@@ -20,18 +23,18 @@ export function OptionsMenu({ showBackToMain = false }: { showBackToMain?: boole
     return (
         <>
         <div className="options-content">
-            <ContractButton id="option_close_chat" className="displayNone" variant="ghost" label="Close chat" icon={<i className="fa-lg fa-solid fa-times" aria-hidden="true" />} />
+            <ContractButton className="displayNone" variant="ghost" xstyle={optionStyles.item} label="Close chat" icon={<i className="fa-lg fa-solid fa-times" aria-hidden="true" />} />
 
-            <ContractButton id="option_back_to_main" variant="ghost" label="Back to parent chat" icon={<i className="fa-lg fa-solid fa-left-long" aria-hidden="true" />} style={showBackToMain ? undefined : { display: 'none' }} />
+            <ContractButton id="option_back_to_main" variant="ghost" xstyle={optionStyles.item} label="Back to parent chat" icon={<i className="fa-lg fa-solid fa-left-long" aria-hidden="true" />} style={showBackToMain ? undefined : { display: 'none' }} />
             <hr />
-            <ContractButton id="option_start_new_chat" variant="ghost" label="Start new chat" icon={<i className="fa-lg fa-solid fa-comments" aria-hidden="true" />} tabIndex={0} />
-            <ContractButton id="option_close_chat" variant="ghost" label="Close chat" icon={<i className="fa-lg fa-solid fa-times" aria-hidden="true" />} />
-            <ContractButton id="option_select_chat" variant="ghost" label="Manage chat files" icon={<i className="fa-lg fa-solid fa-address-book" aria-hidden="true" />} tabIndex={0} />
+            <ContractButton id="option_start_new_chat" variant="ghost" xstyle={optionStyles.item} label="Start new chat" icon={<i className="fa-lg fa-solid fa-comments" aria-hidden="true" />} tabIndex={0} />
+            <ContractButton id="option_close_chat" variant="ghost" xstyle={optionStyles.item} label="Close chat" icon={<i className="fa-lg fa-solid fa-times" aria-hidden="true" />} />
+            <ContractButton id="option_select_chat" variant="ghost" xstyle={optionStyles.item} label="Manage chat files" icon={<i className="fa-lg fa-solid fa-address-book" aria-hidden="true" />} tabIndex={0} />
             <hr />
-            <ContractButton id="option_delete_mes" variant="ghost" label="Delete messages" icon={<i className="fa-lg fa-solid fa-trash-can" aria-hidden="true" />} tabIndex={0} className="options-menu-danger" />
-            <ContractButton id="option_regenerate" variant="ghost" label="Regenerate" icon={<i className="fa-lg fa-solid fa-repeat" aria-hidden="true" />} tabIndex={0} />
-            <ContractButton id="option_impersonate" variant="ghost" label="Impersonate" title="Ask AI to write your message for you" nativeTitle icon={<i className="fa-lg fa-solid fa-user-secret" aria-hidden="true" />} tabIndex={0} />
-            <ContractButton id="option_continue" variant="ghost" label="Continue" title="Continue the last message" nativeTitle icon={<i className="fa-lg fa-solid fa-arrow-right" aria-hidden="true" />} tabIndex={0} />
+            <ContractButton id="option_delete_mes" variant="ghost" xstyle={optionStyles.item} label="Delete messages" icon={<i className="fa-lg fa-solid fa-trash-can" aria-hidden="true" />} tabIndex={0} className="options-menu-danger" />
+            <ContractButton id="option_regenerate" variant="ghost" xstyle={optionStyles.item} label="Regenerate" icon={<i className="fa-lg fa-solid fa-repeat" aria-hidden="true" />} tabIndex={0} />
+            <ContractButton id="option_impersonate" variant="ghost" xstyle={optionStyles.item} label="Impersonate" title="Ask AI to write your message for you" nativeTitle icon={<i className="fa-lg fa-solid fa-user-secret" aria-hidden="true" />} tabIndex={0} />
+            <ContractButton id="option_continue" variant="ghost" xstyle={optionStyles.item} label="Continue" title="Continue the last message" nativeTitle icon={<i className="fa-lg fa-solid fa-arrow-right" aria-hidden="true" />} tabIndex={0} />
         </div>
         </>
     );

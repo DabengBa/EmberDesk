@@ -125,12 +125,13 @@ describe('login React sole owner route', () => {
         expect(loginRouteSource).toContain('const recoveryForm = useForm(');
     });
 
-    test('shows a visible recovery-code hint once the reset flow reaches code entry', () => {
+    test('explains the recovery-code source before the reset flow is submitted', () => {
         const recoveryFormSource = fs.readFileSync(path.join(repoRoot, 'app', 'components', 'login', 'RecoveryForm.tsx'), 'utf8');
 
-        expect(recoveryFormSource).toContain('{currentStep === 2 && (');
         expect(recoveryFormSource).toContain('loginStyles.recoveryNote');
-        expect(recoveryFormSource).toContain('恢复码会输出到服务端控制台，请联系管理员获取。');
+        expect(recoveryFormSource).toContain('id="recoveryCodeHint"');
+        expect(recoveryFormSource).toContain('aria-describedby="recoveryCodeHint"');
+        expect(recoveryFormSource).toContain('恢复码会输出到服务端控制台，不会通过邮件或短信发送，请联系管理员获取。');
     });
 
     test('serves React from /login and redirects /login.html while preserving supported query context', async () => {

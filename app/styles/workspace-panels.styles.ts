@@ -1,7 +1,7 @@
 import * as stylex from '@stylexjs/stylex';
 
 const narrowScreen = '@media screen and (max-width: 800px)';
-const shellChromeNarrow = '@container (max-width: 1180px)';
+const shellChromeNarrow = '@container (max-width: 560px)';
 
 export const workspacePanelStyles = stylex.create({
     statusBadge: {
@@ -78,7 +78,8 @@ export const workspaceShellStyles = stylex.create({
         borderStyle: 'solid',
         borderColor: 'color-mix(in srgb, var(--SmartThemeBorderColor) 78%, transparent)',
         borderRadius: '0 0 9px 9px',
-        background: 'linear-gradient(90deg, color-mix(in srgb, var(--SmartThemeQuoteColor) 13%, transparent), transparent 32%), color-mix(in srgb, var(--SmartThemeBlurTintColor) 90%, var(--black70a) 10%)',
+        backgroundImage: 'linear-gradient(90deg, color-mix(in srgb, var(--SmartThemeQuoteColor) 13%, transparent), transparent 32%)',
+        backgroundColor: 'color-mix(in srgb, var(--SmartThemeBlurTintColor) 90%, var(--black70a) 10%)',
         boxShadow: '0 4px 24px color-mix(in srgb, var(--black70a) 72%, transparent)',
         backdropFilter: 'blur(var(--SmartThemeBlurStrength))',
         WebkitBackdropFilter: 'blur(var(--SmartThemeBlurStrength))',
@@ -119,7 +120,10 @@ export const workspaceShellStyles = stylex.create({
         justifyContent: 'center',
         minWidth: 0,
         flex: '0 0 auto',
-        minHeight: '28px',
+        minHeight: {
+            default: '28px',
+            [narrowScreen]: '36px',
+        },
         gap: '5px',
         borderWidth: '1px',
         borderStyle: 'solid',
@@ -136,7 +140,7 @@ export const workspaceShellStyles = stylex.create({
             ':focus-visible': 'color-mix(in srgb, var(--SmartThemeQuoteColor) 13%, var(--SmartThemeBlurTintColor) 87%)',
         },
         color: 'var(--SmartThemeBodyColor)',
-        font: 'inherit',
+        fontFamily: 'inherit',
         fontSize: 'calc(var(--mainFontSize) * 0.83)',
         lineHeight: 1.2,
         cursor: 'pointer',
@@ -176,7 +180,8 @@ export const authoringStyles = stylex.create({
         borderStyle: 'solid',
         borderColor: 'color-mix(in srgb, var(--SmartThemeBorderColor) 72%, transparent)',
         borderRadius: '10px',
-        background: 'linear-gradient(color-mix(in srgb, var(--SmartThemeBlurTintColor) 86%, transparent), color-mix(in srgb, var(--SmartThemeBlurTintColor) 86%, transparent)), color-mix(in srgb, black 88%, var(--SmartThemeBodyColor) 12%)',
+        backgroundImage: 'linear-gradient(color-mix(in srgb, var(--SmartThemeBlurTintColor) 86%, transparent), color-mix(in srgb, var(--SmartThemeBlurTintColor) 86%, transparent))',
+        backgroundColor: 'color-mix(in srgb, black 88%, var(--SmartThemeBodyColor) 12%)',
     },
     panelHeader: {
         display: 'flex',
@@ -196,7 +201,7 @@ export const authoringStyles = stylex.create({
         borderWidth: '1px',
         borderStyle: 'solid',
         borderColor: 'color-mix(in srgb, var(--SmartThemeBorderColor) 62%, transparent)',
-        background: 'color-mix(in srgb, var(--SmartThemeBlurTintColor) 68%, transparent)',
+        backgroundColor: 'color-mix(in srgb, var(--SmartThemeBlurTintColor) 68%, transparent)',
         color: 'color-mix(in srgb, var(--SmartThemeBodyColor) 92%, transparent)',
     },
     fields: {
@@ -241,7 +246,8 @@ export const authoringStyles = stylex.create({
         borderTopColor: 'color-mix(in srgb, var(--SmartThemeBorderColor) 48%, transparent)',
         padding: '8px 6px 6px',
         marginTop: '10px',
-        background: 'linear-gradient(color-mix(in srgb, var(--SmartThemeBlurTintColor) 86%, transparent), color-mix(in srgb, var(--SmartThemeBlurTintColor) 86%, transparent)), color-mix(in srgb, black 88%, var(--SmartThemeBodyColor) 12%)',
+        backgroundImage: 'linear-gradient(color-mix(in srgb, var(--SmartThemeBlurTintColor) 86%, transparent), color-mix(in srgb, var(--SmartThemeBlurTintColor) 86%, transparent))',
+        backgroundColor: 'color-mix(in srgb, black 88%, var(--SmartThemeBodyColor) 12%)',
         boxShadow: '0 -8px 18px color-mix(in srgb, black 22%, transparent)',
     },
     iconAction: {
@@ -286,7 +292,7 @@ export const authoringStyles = stylex.create({
     },
 
     saveButton: {
-        background: 'color-mix(in srgb, var(--SmartThemeQuoteColor) 26%, var(--SmartThemeBlurTintColor))',
+        backgroundColor: 'color-mix(in srgb, var(--SmartThemeQuoteColor) 26%, var(--SmartThemeBlurTintColor))',
         borderColor: 'color-mix(in srgb, var(--SmartThemeQuoteColor) 65%, transparent)',
         color: 'var(--SmartThemeBodyColor)',
         fontWeight: 700,
@@ -294,7 +300,7 @@ export const authoringStyles = stylex.create({
     toolAction: {
         opacity: 0.82,
         filter: 'grayscale(0.35)',
-        background: 'color-mix(in srgb, var(--SmartThemeBlurTintColor) 72%, transparent)',
+        backgroundColor: 'color-mix(in srgb, var(--SmartThemeBlurTintColor) 72%, transparent)',
         borderColor: 'color-mix(in srgb, var(--SmartThemeBorderColor) 58%, transparent)',
     },
     dangerButton: {
@@ -468,7 +474,8 @@ export const authoringStyles = stylex.create({
         borderStyle: 'solid',
         borderColor: 'var(--SmartThemeBorderColor)',
         borderRadius: '12px',
-        background: 'linear-gradient(color-mix(in srgb, var(--SmartThemeBlurTintColor) 92%, transparent), color-mix(in srgb, var(--SmartThemeBlurTintColor) 92%, transparent)), color-mix(in srgb, black 90%, var(--SmartThemeBodyColor) 10%)',
+        backgroundImage: 'linear-gradient(color-mix(in srgb, var(--SmartThemeBlurTintColor) 92%, transparent), color-mix(in srgb, var(--SmartThemeBlurTintColor) 92%, transparent))',
+        backgroundColor: 'color-mix(in srgb, black 90%, var(--SmartThemeBodyColor) 10%)',
         boxShadow: '0 18px 48px var(--SmartThemeShadowColor)',
     },
     modalHead: {
@@ -503,6 +510,22 @@ export const authoringStyles = stylex.create({
         display: 'flex',
         alignItems: 'flex-start',
         gap: '10px',
+    },
+    avatarUploadTrigger: {
+        position: 'absolute',
+        inset: 0,
+        width: '100%',
+        height: '100%',
+        borderWidth: 0,
+        padding: 0,
+        cursor: 'pointer',
+        backgroundColor: 'transparent',
+        outline: {
+            ':focus-visible': '2px solid var(--interactable-outline-color)',
+        },
+        outlineOffset: {
+            ':focus-visible': '2px',
+        },
     },
     heroAvatar: {
         position: 'relative',
@@ -744,6 +767,7 @@ export const characterLibraryStyles = stylex.create({
     toolbarAction: {
         margin: 0,
         minHeight: 'calc(var(--mainFontSize) * 1.85)',
+        touchAction: 'manipulation',
         borderColor: 'color-mix(in srgb, var(--SmartThemeBorderColor) 72%, transparent)',
         backgroundColor: 'color-mix(in srgb, var(--SmartThemeBlurTintColor) 72%, transparent)',
     },
@@ -755,6 +779,11 @@ export const characterLibraryStyles = stylex.create({
         minWidth: 'calc(var(--mainFontSize) * 1.9)',
         minHeight: 'calc(var(--mainFontSize) * 1.9)',
         padding: '3px',
+        touchAction: 'manipulation',
+        '@media (pointer: coarse)': {
+            minWidth: 'max(44px, calc(var(--mainFontSize) * 1.9))',
+            minHeight: 'max(44px, calc(var(--mainFontSize) * 1.9))',
+        },
     },
     toolbarActionFull: {
         gap: '5px',
@@ -762,7 +791,10 @@ export const characterLibraryStyles = stylex.create({
     },
     toolbarActions: {
         display: 'flex',
-        flexWrap: 'nowrap',
+        flexWrap: {
+            default: 'nowrap',
+            '@media screen and (max-width: 600px)': 'wrap',
+        },
         gap: '8px',
         alignItems: 'center',
         minWidth: 0,
@@ -790,9 +822,15 @@ export const characterLibraryStyles = stylex.create({
     },
     toolbarSearchField: {
         display: 'flex',
-        flex: '1 1 auto',
+        flex: {
+            default: '1 1 auto',
+            '@media screen and (max-width: 600px)': '1 1 100%',
+        },
         alignItems: 'center',
-        minWidth: 'calc(var(--mainFontSize) * 8)',
+        minWidth: {
+            default: 'calc(var(--mainFontSize) * 8)',
+            '@media screen and (max-width: 600px)': '100%',
+        },
     },
     toolbarFields: {
         display: 'grid',

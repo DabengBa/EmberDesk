@@ -285,6 +285,9 @@ export async function bindLegacyShellHandlers() {
         row.addClass('selected'); //sets the bg of the mes selected for deletion
         var i = Number($(this).attr('mesid')); //checks the message ID in the chat
         state.this_del_mes = i;
+        const count = state.chat.length - i;
+        $('#dialogue_del_mes_summary').text(t`Delete ${count} messages, from message ${i + 1} through the end of this chat.`);
+        $('#dialogue_del_mes_ok').prop('disabled', false).attr('aria-label', t`Delete ${count} messages`);
         //as long as the current message ID is less than the total chat length
         while (i < state.chat.length) {
             //sets the bg of the all msgs BELOW the selected .mes
@@ -337,7 +340,14 @@ export async function bindLegacyShellHandlers() {
             return;
         }
 
-        const result = await callGenericPopup('<h3>' + t`Delete the Chat File?` + '</h3>', state.POPUP_TYPE.CONFIRM);
+        const content = document.createElement('div');
+        const title = document.createElement('h3');
+        title.textContent = t`Delete the Chat File?`;
+        const file = document.createElement('p');
+        file.className = 'chat-file-name';
+        file.textContent = deleteFileName;
+        content.append(title, file);
+        const result = await callGenericPopup(content, state.POPUP_TYPE.CONFIRM, '', { okButton: t`Delete chat`, cancelButton: t`Cancel`, defaultResult: state.POPUP_RESULT.NEGATIVE });
         if (result === state.POPUP_RESULT.AFFIRMATIVE) {
             await handleDeleteChat(deleteFileName, null, false);
         }
@@ -577,26 +587,52 @@ export async function bindLegacyShellHandlers() {
             await loaderHandle.hide();
         }
 
-        $('#shadow_select_chat_popup').css('display', 'none');
+        document.getElementById('shadow_select_chat_popup').close();
     });
 
     $(document).on('click', '.renameChatButton', async function (e) {
         e.stopPropagation();
         const oldFileName = $(this).closest('.select_chat_block_wrapper').find('.select_chat_block_filename').text();
 
-        const popupText = await renderTemplateAsync('chatRename');
-        const newName = await callGenericPopup(popupText, state.POPUP_TYPE.INPUT, oldFileName);
-
-        if (!newName || typeof newName !== 'string' || newName == oldFileName) {
-            console.log('no new name found, aborting');
-            return;
-        }
-
-        await renameChat(oldFileName, newName);
-
-        await delay(250);
-        $('#option_select_chat').trigger('click');
-        $('#options').hide();
+        const popupText = $('<div></div>').html(await renderTemplateAsync('chatRename'));
+        const errorText = $('<p role="alert" class="chat-rename-error" hidden></p>');
+        popupText.append(errorText);
+        let renaming = false;
+        const result = await callGenericPopup(popupText, state.POPUP_TYPE.INPUT, oldFileName, {
+            okButton: t`Rename chat`,
+            cancelButton: t`Cancel`,
+            onClosing: async popup => {
+                if (renaming) return false;
+                if (popup.result !== state.POPUP_RESULT.AFFIRMATIVE) return true;
+                const name = popup.mainInput.value.trim();
+                if (!name) {
+                    errorText.text(t`Enter a chat name.`).prop('hidden', false);
+                    popup.mainInput.setAttribute('aria-invalid', 'true');
+                    popup.mainInput.focus();
+                    return false;
+                }
+                if (name === oldFileName) return true;
+                renaming = true;
+                popup.dlg.setAttribute('aria-busy', 'true');
+                popup.mainInput.disabled = true;
+                popup.buttonControls.querySelectorAll('button').forEach(button => { button.disabled = true; });
+                try {
+                    const renamed = await renameChat(oldFileName, name);
+                    if (!renamed) {
+                        errorText.text(t`Chat was not renamed. Check the name and connection, then try again.`).prop('hidden', false);
+                        return false;
+                    }
+                    return true;
+                } finally {
+                    renaming = false;
+                    popup.dlg.removeAttribute('aria-busy');
+                    popup.mainInput.disabled = false;
+                    popup.buttonControls.querySelectorAll('button').forEach(button => { button.disabled = false; });
+                    popup.mainInput.focus();
+                }
+            },
+        });
+        if (result !== state.POPUP_RESULT.CANCELLED && result !== state.POPUP_RESULT.NEGATIVE) await displayPastChats();
     });
 
     $(document).on('click', '.exportChatButton, .exportRawChatButton', async function (e) {
@@ -649,6 +685,7 @@ export async function bindLegacyShellHandlers() {
     let isOptionsMenuVisible = false;
 
     function showMenu() {
+        button.attr('aria-expanded', 'true');
         showBranchChatButtons();
         menu.fadeIn(state.animation_duration);
         getOptionsPopper()?.update();
@@ -656,6 +693,7 @@ export async function bindLegacyShellHandlers() {
     }
 
     function hideMenu() {
+        button.attr('aria-expanded', 'false');
         menu.fadeOut(state.animation_duration);
         getOptionsPopper()?.update();
         isOptionsMenuVisible = false;
@@ -705,19 +743,17 @@ export async function bindLegacyShellHandlers() {
                 //however, the dialog popup still gets one..
                 if (!fromSlashCommand) {
                     console.log('displaying shadow');
-                    $('#shadow_select_chat_popup').css('display', 'block');
-                    $('#shadow_select_chat_popup').css('opacity', 0.0);
-                    $('#shadow_select_chat_popup').transition({
-                        opacity: 1.0,
-                        duration: state.animation_duration,
-                        easing: state.animation_easing,
-                    });
+                    const historyDialog = document.getElementById('shadow_select_chat_popup');
+                    if (!historyDialog.open) historyDialog.showModal();
+                    document.getElementById('select_chat_search').focus();
                 }
             }
         } else if (id == 'option_start_new_chat') {
             if (state.this_chid !== undefined && !state.is_send_press) {
                 let deleteCurrentChat = false;
                 const result = await state.Popup.show.confirm(t`Start new chat?`, await renderTemplateAsync('newChatConfirm'), {
+                    okButton: t`Start new chat`,
+                    cancelButton: t`Cancel`,
                     onClose: () => { deleteCurrentChat = !!$('#del_chat_checkbox').prop('checked'); },
                 });
                 if (!result) {
@@ -788,12 +824,16 @@ export async function bindLegacyShellHandlers() {
         showSwipeButtons();
         state.this_del_mes = -1;
         state.is_delete_mode = false;
+        $('#send_textarea').trigger('focus');
     });
 
     //confirms message deletion with the "ok" button
     $('#dialogue_del_mes_ok').on('click', async function () {
-        $('#dialogue_del_mes').css('display', 'none');
-        $('#send_form').css('display', state.css_send_form_display);
+        if (this.disabled || state.this_del_mes < 0) return;
+        this.disabled = true;
+        $('#dialogue_del_mes_cancel').prop('disabled', true);
+        $('#dialogue_del_mes_summary').text(t`Deleting messages…`);
+        $('#dialogue_del_mes').attr('aria-busy', 'true');
         $('.del_checkbox').each(function () {
             const checkbox = $(this);
             const row = checkbox.closest('.mes');
@@ -803,23 +843,29 @@ export async function bindLegacyShellHandlers() {
             checkbox.prop('checked', false);
         });
 
-        if (state.this_del_mes >= 0) {
-            state.chatElement.find(`.mes[mesid="${state.this_del_mes}"]`).nextAll('div').remove();
-            state.chatElement.find(`.mes[mesid="${state.this_del_mes}"]`).remove();
-            state.chat.length = state.this_del_mes;
-            state.chat_metadata.tainted = true;
-            await saveChatConditional();
-            state.chatElement.scrollTop(state.chatElement[0].scrollHeight);
-            await eventSource.emit(event_types.MESSAGE_DELETED, state.chat.length);
-            state.chatElement.find('.mes').removeClass('last_mes');
-            state.chatElement.find('.mes').last().addClass('last_mes');
-        } else {
-            console.log('this_del_mes is not >= 0, not deleting');
+        try {
+            if (state.this_del_mes >= 0) {
+                state.chatElement.find(`.mes[mesid="${state.this_del_mes}"]`).nextAll('div').remove();
+                state.chatElement.find(`.mes[mesid="${state.this_del_mes}"]`).remove();
+                state.chat.length = state.this_del_mes;
+                state.chat_metadata.tainted = true;
+                await saveChatConditional();
+                state.chatElement.scrollTop(state.chatElement[0].scrollHeight);
+                await eventSource.emit(event_types.MESSAGE_DELETED, state.chat.length);
+                state.chatElement.find('.mes').removeClass('last_mes');
+                state.chatElement.find('.mes').last().addClass('last_mes');
+            } else {
+                console.log('this_del_mes is not >= 0, not deleting');
+            }
+        } finally {
+            $('#dialogue_del_mes').css('display', 'none').removeAttr('aria-busy');
+            $('#send_form').css('display', state.css_send_form_display);
+            $('#dialogue_del_mes_cancel').prop('disabled', false);
+            $('#send_textarea').trigger('focus');
+            showSwipeButtons();
+            state.this_del_mes = -1;
+            state.is_delete_mode = false;
         }
-
-        showSwipeButtons();
-        state.this_del_mes = -1;
-        state.is_delete_mode = false;
     });
 
     ////////////////// OPTIMIZED RANGE SLIDER LISTENERS////////////////
@@ -875,12 +921,13 @@ export async function bindLegacyShellHandlers() {
     //////////////////////////////////////////////////////////////
 
     $('#select_chat_cross').on('click', function () {
-        $('#shadow_select_chat_popup').transition({
-            opacity: 0,
-            duration: state.animation_duration,
-            easing: state.animation_easing,
-        });
-        setTimeout(function () { $('#shadow_select_chat_popup').css('display', 'none'); }, state.animation_duration);
+        document.getElementById('shadow_select_chat_popup').close();
+    });
+    document.getElementById('shadow_select_chat_popup').addEventListener('keydown', event => {
+        if (event.key === 'Escape') event.stopPropagation();
+    });
+    document.getElementById('shadow_select_chat_popup').addEventListener('close', () => {
+        document.getElementById('options_button').focus();
     });
 
     $(document).on('pointerup', '.mes_copy', async function () {
@@ -1217,6 +1264,7 @@ export async function bindLegacyShellHandlers() {
         icon.toggleClass('fa-circle-chevron-down fa-circle-chevron-up');
         drawer.trigger('inline-drawer-toggle');
         drawerContent.stop(true, true).css({ display: '', height: '' }).toggleClass('openInlineDrawer');
+        $(this).attr('aria-expanded', String(drawerContent.hasClass('openInlineDrawer')));
 
         // Set the height of "autoSetHeight" textareas within the inline-drawer to their scroll height
         if (!CSS.supports('field-sizing', 'content')) {

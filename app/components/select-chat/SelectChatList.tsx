@@ -32,26 +32,31 @@ function SelectChatRow({ item, avatarImg, isCurrent }: { item: SelectChatListIte
     return (
         <div className="select_chat_block_wrapper flex-container">
             <div
-                className="select_chat_block wide100p flex-container"
+                className="select_chat_block wide100p"
+                role="group"
+                aria-label={item.fileName}
+                tabIndex={-1}
                 {...{ file_name: item.fileName }}
                 {...(isCurrent ? { highlight: 'true' } : {})}
             >
                 <div className="avatar"><img src={avatarImg} alt="" loading="lazy" decoding="async" /></div>
-                <div id="select_chat_name_wrapper" className="flex-container alignitemscenter justifySpaceBetween wide100p">
-                    <div className="flex-container alignItemsCenter">
-                        <small className="select_chat_block_filename select_chat_block_filename_item">{item.fileName}</small>
-                        <div title="Rename chat file" className="renameChatButton hoverglow opacity50p fa-solid fa-pencil fa-sm" data-i18n="[title]Rename chat file" />
+                <div className="select_chat_name_wrapper">
+                    <div className="select_chat_title">
+                        <button type="button" className="select_chat_open" aria-label={`${translate('Open chat')}: ${item.fileName}`}>
+                            <span className="select_chat_block_filename select_chat_block_filename_item" title={item.fileName}>{item.fileName}</span>
+                        </button>
+                        <button type="button" title={translate('Rename chat file')} aria-label={translate('Rename chat file')} className="renameChatButton chat-file-action fa-solid fa-pencil fa-sm" data-i18n="[title][aria-label]Rename chat file" />
                     </div>
-                    <div className="flex-container gap10px alignItemsCenter">
+                    <div className="select_chat_details">
                         <div className="select_chat_info flex-container">
                             <small className="chat_messages_date select_chat_block_filename_item">{item.dateLabel}</small>
                             <small className="chat_file_size select_chat_block_filename_item">({item.fileSize},</small>
                             <small className="chat_messages_num select_chat_block_filename_item">{item.messageCount} 💬)</small>
                         </div>
                         <div className="select_chat_actions flex-container gap10px">
-                            <div title="Export JSONL chat file" data-format="jsonl" className="exportRawChatButton opacity50p hoverglow fa-solid fa-file-export" data-i18n="[title]Export JSONL chat file" />
-                            <div title="Download chat as plain text document" data-format="txt" className="exportChatButton opacity50p hoverglow fa-solid fa-file-lines" data-i18n="[title]Download chat as plain text document" />
-                            <div title="Delete chat file" {...{ file_name: item.fileName }} className="PastChat_cross opacity50p hoverglow fa-solid fa-skull" data-i18n="[title]Delete chat file" />
+                            <button type="button" title={translate('Export JSONL chat file')} aria-label={translate('Export JSONL chat file')} data-format="jsonl" className="exportRawChatButton chat-file-action fa-solid fa-file-export" data-i18n="[title][aria-label]Export JSONL chat file" />
+                            <button type="button" title={translate('Download chat as plain text document')} aria-label={translate('Download chat as plain text document')} data-format="txt" className="exportChatButton chat-file-action fa-solid fa-file-lines" data-i18n="[title][aria-label]Download chat as plain text document" />
+                            <button type="button" title={translate('Delete chat file')} aria-label={translate('Delete chat file')} {...{ file_name: item.fileName }} className="PastChat_cross chat-file-action fa-solid fa-trash-can" data-i18n="[title][aria-label]Delete chat file" />
                         </div>
                     </div>
                 </div>

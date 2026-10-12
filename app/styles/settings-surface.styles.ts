@@ -24,7 +24,8 @@ export const settingsStyles = stylex.create({
         '--settings-danger': 'var(--clay-warning, rgb(215, 136, 114))',
         '--settings-success': 'var(--success-green, rgb(88, 182, 0))',
         minHeight: '100dvh',
-        background: 'radial-gradient(circle at top left, color-mix(in srgb, var(--settings-accent) 8%, transparent) 0 18rem, transparent 28rem), color-mix(in srgb, var(--settings-surface) 92%, var(--black70a, rgba(0, 0, 0, 0.7)) 8%)',
+        backgroundImage: 'radial-gradient(circle at top left, color-mix(in srgb, var(--settings-accent) 8%, transparent) 0 18rem, transparent 28rem)',
+        backgroundColor: 'color-mix(in srgb, var(--settings-surface) 92%, var(--black70a, rgba(0, 0, 0, 0.7)) 8%)',
         color: 'var(--settings-body)',
         fontFamily: 'var(--mainFontFamily, \'Noto Sans\', system-ui, sans-serif)',
         fontSize: 'var(--mainFontSize, 15px)',
@@ -33,7 +34,8 @@ export const settingsStyles = stylex.create({
     pageOverlay: {
         minHeight: 0,
         height: '100%',
-        background: 'radial-gradient(circle at top left, color-mix(in srgb, var(--settings-accent) 8%, transparent) 0 12rem, transparent 22rem), color-mix(in srgb, var(--settings-surface) 92%, var(--black70a, rgba(0, 0, 0, 0.7)) 8%)',
+        backgroundImage: 'radial-gradient(circle at top left, color-mix(in srgb, var(--settings-accent) 8%, transparent) 0 12rem, transparent 22rem)',
+        backgroundColor: 'color-mix(in srgb, var(--settings-surface) 92%, var(--black70a, rgba(0, 0, 0, 0.7)) 8%)',
     },
     layout: {
         display: 'flex',
@@ -70,7 +72,7 @@ export const settingsStyles = stylex.create({
         borderStyle: 'solid',
         borderColor: 'var(--settings-border)',
         borderRadius: '10px',
-        background: 'var(--settings-surface-raised)',
+        backgroundColor: 'var(--settings-surface-raised)',
         backdropFilter: 'blur(calc(var(--SmartThemeBlurStrength, 10) * 1px))',
         padding: {
             default: null,
@@ -102,6 +104,12 @@ export const settingsStyles = stylex.create({
     workspaceLink: {
         textDecoration: 'none',
         whiteSpace: 'nowrap',
+    },
+    headerActions: {
+        display: 'flex',
+        alignItems: 'center',
+        gap: '10px',
+        flexShrink: 0,
     },
     pageHeader: {
         marginBottom: '15px',
@@ -138,12 +146,15 @@ export const settingsStyles = stylex.create({
         display: 'inline-flex',
         alignItems: 'center',
         justifyContent: 'center',
-        minHeight: '32px',
+        minHeight: {
+            default: '32px',
+            [narrow]: '42px',
+        },
         borderWidth: '1px',
         borderStyle: 'solid',
         borderColor: 'var(--settings-border)',
         borderRadius: '5px',
-        background: {
+        backgroundColor: {
             default: 'var(--settings-surface)',
             ':hover': 'color-mix(in srgb, var(--settings-body) 10%, var(--settings-surface) 90%)',
         },
@@ -175,10 +186,10 @@ export const settingsStyles = stylex.create({
     },
     buttonPrimary: {
         borderColor: 'color-mix(in srgb, var(--settings-accent) 58%, var(--settings-border) 42%)',
-        background: 'color-mix(in srgb, var(--settings-accent) 28%, var(--settings-surface) 72%)',
+        backgroundColor: 'color-mix(in srgb, var(--settings-accent) 28%, var(--settings-surface) 72%)',
     },
     buttonSecondary: {
-        background: 'transparent',
+        backgroundColor: 'transparent',
     },
     overlayClose: {
         width: 'auto',
@@ -188,12 +199,15 @@ export const settingsStyles = stylex.create({
         display: 'inline-flex',
         alignItems: 'center',
         justifyContent: 'center',
-        minHeight: '32px',
+        minHeight: {
+            default: '32px',
+            [narrow]: '42px',
+        },
         borderWidth: '1px',
         borderStyle: 'solid',
         borderColor: 'var(--settings-border)',
         borderRadius: '5px',
-        background: {
+        backgroundColor: {
             default: 'var(--settings-surface)',
             ':hover': 'color-mix(in srgb, var(--settings-body) 10%, var(--settings-surface) 90%)',
         },
@@ -215,7 +229,7 @@ export const settingsStyles = stylex.create({
     },
     tabActive: {
         borderColor: 'color-mix(in srgb, var(--settings-accent) 62%, var(--settings-border) 38%)',
-        background: 'color-mix(in srgb, var(--settings-accent) 18%, var(--settings-surface) 82%)',
+        backgroundColor: 'color-mix(in srgb, var(--settings-accent) 18%, var(--settings-surface) 82%)',
     },
     tabsDescription: {
         margin: 0,
@@ -255,7 +269,7 @@ export const settingsStyles = stylex.create({
         borderStyle: 'solid',
         borderColor: 'var(--settings-border)',
         borderRadius: '10px',
-        background: 'var(--settings-surface-raised)',
+        backgroundColor: 'var(--settings-surface-raised)',
         backdropFilter: 'blur(calc(var(--SmartThemeBlurStrength, 10) * 1px))',
         padding: {
             default: '15px',
@@ -307,50 +321,14 @@ export const settingsStyles = stylex.create({
         color: 'var(--settings-muted)',
         fontSize: '0.9rem',
         lineHeight: 1.45,
-        position: {
-            default: 'absolute',
-            [stylex.when.ancestor(':hover')]: 'static',
-            [stylex.when.ancestor(':focus-within')]: 'static',
-        },
-        width: {
-            default: '1px',
-            [stylex.when.ancestor(':hover')]: 'auto',
-            [stylex.when.ancestor(':focus-within')]: 'auto',
-        },
-        height: {
-            default: '1px',
-            [stylex.when.ancestor(':hover')]: 'auto',
-            [stylex.when.ancestor(':focus-within')]: 'auto',
-        },
-        margin: {
-            default: '-1px',
-            [stylex.when.ancestor(':hover')]: '2px 0 0',
-            [stylex.when.ancestor(':focus-within')]: '2px 0 0',
-        },
-        overflow: {
-            default: 'hidden',
-            [stylex.when.ancestor(':hover')]: 'visible',
-            [stylex.when.ancestor(':focus-within')]: 'visible',
-        },
-        clip: {
-            default: 'rect(0 0 0 0)',
-            [stylex.when.ancestor(':hover')]: 'auto',
-            [stylex.when.ancestor(':focus-within')]: 'auto',
-        },
-        clipPath: {
-            default: 'inset(50%)',
-            [stylex.when.ancestor(':hover')]: 'none',
-            [stylex.when.ancestor(':focus-within')]: 'none',
-        },
-        whiteSpace: {
-            default: 'nowrap',
-            [stylex.when.ancestor(':hover')]: 'normal',
-            [stylex.when.ancestor(':focus-within')]: 'normal',
-        },
+        margin: '2px 0 0',
     },
     input: {
         width: '100%',
-        minHeight: '34px',
+        minHeight: {
+            default: '34px',
+            [narrow]: '44px',
+        },
         borderWidth: '1px',
         borderStyle: 'solid',
         borderColor: {
@@ -358,7 +336,7 @@ export const settingsStyles = stylex.create({
             ':focus': 'var(--form-control-border-color-focus, var(--settings-focus))',
         },
         borderRadius: '5px',
-        background: {
+        backgroundColor: {
             default: 'var(--form-control-bg, var(--settings-surface-sunken))',
             ':focus': 'var(--form-control-bg-focus, var(--settings-surface-sunken))',
         },
@@ -402,7 +380,7 @@ export const settingsStyles = stylex.create({
         borderStyle: 'solid',
         borderColor: 'var(--settings-border)',
         borderRadius: '5px',
-        background: 'var(--settings-surface-sunken)',
+        backgroundColor: 'var(--settings-surface-sunken)',
         padding: '10px',
     },
     toggleBody: {
@@ -438,15 +416,15 @@ export const settingsStyles = stylex.create({
         lineHeight: 1.4,
     },
     statusInfo: {
-        background: 'var(--settings-surface-sunken)',
+        backgroundColor: 'var(--settings-surface-sunken)',
     },
     statusSuccess: {
         borderColor: 'color-mix(in srgb, var(--settings-success) 55%, var(--settings-border) 45%)',
-        background: 'color-mix(in srgb, var(--settings-success) 15%, var(--settings-surface) 85%)',
+        backgroundColor: 'color-mix(in srgb, var(--settings-success) 15%, var(--settings-surface) 85%)',
     },
     statusError: {
         borderColor: 'color-mix(in srgb, var(--settings-danger) 55%, var(--settings-border) 45%)',
-        background: 'color-mix(in srgb, var(--settings-danger) 14%, var(--settings-surface) 86%)',
+        backgroundColor: 'color-mix(in srgb, var(--settings-danger) 14%, var(--settings-surface) 86%)',
         color: 'var(--settings-danger)',
     },
     inlinePanel: {
@@ -455,7 +433,7 @@ export const settingsStyles = stylex.create({
         borderStyle: 'solid',
         borderColor: 'var(--settings-border)',
         borderRadius: '10px',
-        background: 'var(--settings-surface-sunken)',
+        backgroundColor: 'var(--settings-surface-sunken)',
         padding: '12px',
     },
     inlineHeader: {
@@ -518,7 +496,7 @@ export const settingsStyles = stylex.create({
         borderStyle: 'solid',
         borderColor: 'var(--settings-border)',
         borderRadius: '10px',
-        background: 'var(--settings-surface-raised)',
+        backgroundColor: 'var(--settings-surface-raised)',
         padding: '10px',
     },
     saveBarOverlay: {
@@ -539,7 +517,7 @@ export const settingsStyles = stylex.create({
         borderStyle: 'solid',
         borderColor: 'var(--settings-border)',
         borderRadius: '10px',
-        background: 'var(--settings-surface-raised)',
+        backgroundColor: 'var(--settings-surface-raised)',
         backdropFilter: 'blur(calc(var(--SmartThemeBlurStrength, 10) * 1px))',
         padding: {
             default: '15px',
@@ -561,7 +539,7 @@ export const settingsStyles = stylex.create({
         borderStyle: 'solid',
         borderColor: 'var(--settings-border)',
         borderRadius: '5px',
-        background: 'var(--settings-surface-sunken)',
+        backgroundColor: 'var(--settings-surface-sunken)',
         padding: '10px',
     },
     metricLabel: {
@@ -631,7 +609,7 @@ export const settingsStyles = stylex.create({
             [phone]: 0,
         },
         overflow: 'hidden',
-        background: 'color-mix(in srgb, var(--SmartThemeBlurTintColor, rgb(23, 23, 23)) 78%, rgba(0, 0, 0, 0.7) 22%)',
+        backgroundColor: 'color-mix(in srgb, var(--SmartThemeBlurTintColor, rgb(23, 23, 23)) 78%, rgba(0, 0, 0, 0.7) 22%)',
         boxShadow: '0 8px 32px color-mix(in srgb, rgba(0, 0, 0, 0.7) 55%, transparent)',
         animation: {
             default: `${overlayFadeIn} 120ms ease-out both`,
@@ -668,7 +646,7 @@ export const settingsStyles = stylex.create({
         top: 'var(--topBarBlockSize, 40px)',
         zIndex: 0,
         pointerEvents: 'auto',
-        background: 'color-mix(in srgb, var(--SmartThemeBlurTintColor, rgb(23, 23, 23)) 72%, transparent)',
+        backgroundColor: 'color-mix(in srgb, var(--SmartThemeBlurTintColor, rgb(23, 23, 23)) 72%, transparent)',
         backdropFilter: 'blur(calc(var(--SmartThemeBlurStrength, 10) * 2px))',
         WebkitBackdropFilter: 'blur(calc(var(--SmartThemeBlurStrength, 10) * 2px))',
         animation: {

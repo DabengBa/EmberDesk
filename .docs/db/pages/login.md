@@ -49,8 +49,8 @@ The two cards are mutually exclusive; only one is visible at a time.
 ## Page States And Constraints
 
 - **Default state**: the login card is visible, the recovery card is hidden.
-- **Recovery state**: the recovery card is visible, the login card is hidden.
-- **Error state**: an error message appears on the active card without navigating away.
+- **Recovery state**: the recovery card is visible, the login card is hidden. A persistent hint above the step-1 action states that recovery codes are printed to the server console and must be relayed by an admin; focus moves to the card's first field on entry and back to the forgot-password link on cancel.
+- **Error state**: an error message appears on the active card without navigating away; the first invalid field is marked `aria-invalid`, linked to the error block via `aria-describedby`, and receives focus.
 - **Lockout state**: the login button is disabled and a countdown timer is displayed after too many failed attempts.
 - **Loading state**: the submit button is disabled while a request is in flight.
 

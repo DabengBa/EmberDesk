@@ -52,6 +52,31 @@ function getSchemaErrorMessage(schema: z.ZodTypeAny, values: unknown) {
     return flattenedErrors[0] ?? parsed.error.issues[0]?.message ?? setupMessages.genericError;
 }
 
+const SETUP_FIELD_IDS: Record<string, string> = {
+    handle: 'handle',
+    displayName: 'name',
+    password: 'password',
+    confirmPassword: 'confirmPassword',
+};
+
+function focusFirstInvalidField(schema: z.ZodTypeAny, values: unknown) {
+    const parsed = schema.safeParse(values);
+    if (parsed.success) {
+        return null;
+    }
+
+    for (const issue of parsed.error.issues) {
+        const fieldName = typeof issue.path[0] === 'string' ? issue.path[0] : undefined;
+        const targetId = fieldName ? SETUP_FIELD_IDS[fieldName] : undefined;
+        if (targetId) {
+            document.getElementById(targetId)?.focus();
+            return fieldName ?? null;
+        }
+    }
+
+    return null;
+}
+
 function getDisplayErrorMessage(error: unknown) {
     if (error instanceof MessageError) {
         return error.message;
@@ -69,25 +94,24 @@ function SetupPage() {
     const [passwordVisible, setPasswordVisible] = useState(false);
     const [confirmPasswordVisible, setConfirmPasswordVisible] = useState(false);
     const [setupError, setSetupError] = useState('');
+    const [setupInvalidField, setSetupInvalidField] = useState<string | null>(null);
     const [setupComplete, setSetupComplete] = useState(false);
 
     const setupModeQuery = useQuery({
         queryKey: ['setup', 'mode'],
         queryFn: async () => {
-            try {
-                const response = await fetch('/api/users/setup-mode');
-                if (response.ok) {
-                    const data = await readJsonObject(response);
-                    if (data.mode === 'complete') {
-                        return 'complete' as const;
-                    }
-                    return data.mode === 'set-password' ? 'set-password' as const : 'fresh' as const;
-                }
-            } catch {
-                // Fall back to fresh mode when setup-mode cannot be read.
+            const response = await fetch('/api/users/setup-mode').catch(() => {
+                throw new MessageError('无法读取安装状态。');
+            });
+            if (!response.ok) {
+                throw new MessageError('无法读取安装状态。');
             }
 
-            return 'fresh' as const;
+            const data = await readJsonObject(response);
+            if (data.mode === 'complete') {
+                return 'complete' as const;
+            }
+            return data.mode === 'set-password' ? 'set-password' as const : 'fresh' as const;
         },
         retry: false,
     });
@@ -184,9 +208,11 @@ function SetupPage() {
         },
         onSubmitInvalid: ({ value }) => {
             setSetupError(getSchemaErrorMessage(activeSchema, value));
+            setSetupInvalidField(focusFirstInvalidField(activeSchema, value));
         },
         onSubmit: async ({ value }) => {
             setSetupError('');
+            setSetupInvalidField(null);
 
             try {
                 const data = await setupMutation.mutateAsync(value);
@@ -209,29 +235,55 @@ function SetupPage() {
 
     return (
         <main {...stylex.props(loginStyles.page)}>
+            {setupModeQuery.isPending ? (
+                <section {...stylex.props(loginStyles.card)} aria-busy="true">
+                    <p {...stylex.props(loginStyles.fieldLabel)}>正在读取安装状态...</p>
+                </section>
+            ) : setupModeQuery.isError ? (
+                <section {...stylex.props(loginStyles.card)}>
+                    <div {...stylex.props(loginStyles.error, loginStyles.errorVisible)} role="alert">
+                        {setupModeQuery.error instanceof Error ? setupModeQuery.error.message : '无法读取安装状态。'}
+                    </div>
+                    <div {...stylex.props(loginStyles.actions)}>
+                        <button
+                            type="button"
+                            {...stylex.props(loginStyles.btn)}
+                            disabled={setupModeQuery.isFetching}
+                            onClick={() => void setupModeQuery.refetch()}
+                        >
+                            重试
+                        </button>
+                    </div>
+                </section>
+            ) : (
             <SetupForm
                 form={setupForm}
                 mode={setupMode}
                 isSubmitting={setupMutation.isPending}
                 isComplete={setupComplete}
                 errorMessage={setupError}
+                invalidField={setupInvalidField}
                 passwordVisible={passwordVisible}
                 confirmPasswordVisible={confirmPasswordVisible}
                 onHandleChange={() => {
                     setupMutation.reset();
                     setSetupError('');
+                    setSetupInvalidField(null);
                 }}
                 onDisplayNameChange={() => {
                     setupMutation.reset();
                     setSetupError('');
+                    setSetupInvalidField(null);
                 }}
                 onPasswordChange={() => {
                     setupMutation.reset();
                     setSetupError('');
+                    setSetupInvalidField(null);
                 }}
                 onConfirmPasswordChange={() => {
                     setupMutation.reset();
                     setSetupError('');
+                    setSetupInvalidField(null);
                 }}
                 onTogglePassword={() => setPasswordVisible(current => !current)}
                 onToggleConfirmPassword={() => setConfirmPasswordVisible(current => !current)}
@@ -241,6 +293,7 @@ function SetupPage() {
                     void setupForm.handleSubmit();
                 }}
             />
+            )}
         </main>
     );
 }

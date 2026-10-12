@@ -591,6 +591,8 @@ test.describe('chat message rendering', () => {
         await page.getByRole('button', { name: 'Chat options' }).click();
         await page.getByRole('button', { name: 'Delete messages' }).click();
         await expect(page.locator('#dialogue_del_mes')).toBeVisible();
+        await expect(page.locator('#dialogue_del_mes_ok')).toBeDisabled();
+        await expect(page.locator('#dialogue_del_mes_summary')).toContainText('Select a message');
 
         const enteredDeleteModeState = await readDeleteModeRowState(page, assistantMessageIndex);
         expect(enteredDeleteModeState).toMatchObject({
@@ -602,6 +604,8 @@ test.describe('chat message rendering', () => {
         });
 
         await assistantRow.click();
+        await expect(page.locator('#dialogue_del_mes_ok')).toBeEnabled();
+        await expect(page.locator('#dialogue_del_mes_summary')).toContainText(`Delete ${seededMessages.length - assistantMessageIndex} messages`);
 
         const selectedDeleteModeState = await readDeleteModeRowState(page, assistantMessageIndex);
         expect(selectedDeleteModeState).toMatchObject({

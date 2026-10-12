@@ -7830,6 +7830,9 @@ function openMessageDelete(fromSlashCommand) {
     hideSwipeButtons();
     if (fromSlashCommand || !is_send_press) {
         $('#dialogue_del_mes').css('display', 'block');
+        $('#dialogue_del_mes_summary').text(t`Select a message to delete it and every message after it.`);
+        $('#dialogue_del_mes_ok').prop('disabled', true);
+        $('#dialogue_del_mes_cancel').prop('disabled', false);
         $('#send_form').css('display', 'none');
         $('.del_checkbox').each(function () {
             const checkbox = $(this);

@@ -5,7 +5,7 @@
     <title>EmberDesk</title>
     <base href="/">
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, viewport-fit=cover, initial-scale=1, maximum-scale=1.0, user-scalable=no, interactive-widget=resizes-content">
+    <meta name="viewport" content="width=device-width, viewport-fit=cover, initial-scale=1, interactive-widget=resizes-content">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="darkreader-lock">
@@ -113,11 +113,11 @@
                     <textarea class="popup-input text_pole result-control auto-select" rows="1" data-result="1" data-result-event="submit"></textarea>
                     <div class="popup-inputs"></div>
                     <div class="popup-controls">
-                        <div class="popup-button-ok menu_button result-control" data-result="1" data-i18n="Delete">Delete</div>
-                        <div class="popup-button-cancel menu_button result-control" data-result="0" data-i18n="Cancel">Cancel</div>
+                        <button type="button" class="popup-button-ok menu_button result-control" data-result="1" data-i18n="Delete">Delete</button>
+                        <button type="button" class="popup-button-cancel menu_button result-control" data-result="0" data-i18n="Cancel">Cancel</button>
                     </div>
                 </div>
-                <div class="popup-button-close right_menu_button fa-solid fa-circle-xmark" data-result="0" title="Close popup" data-i18n="[title]Close popup"></div>
+                <button type="button" class="popup-button-close right_menu_button fa-solid fa-circle-xmark" data-result="0" title="Close popup" aria-label="Close popup" data-i18n="[title][aria-label]Close popup"></button>
             </dialog>
         </template>
         <div id="shadow_popup">
@@ -135,10 +135,10 @@
         <div id="character_popup" class="flex-container flexFlowColumn flexNoGap">
         </div>
 
-        <div id="shadow_select_chat_popup">
+        <dialog id="shadow_select_chat_popup" aria-labelledby="selectChatPopupHeaderText">
             <div id="select_chat_popup">
             </div>
-        </div>
+        </dialog>
         <!-- templates for JS to reuse when needed -->
         <div id="character_world_template" class="template_element">
             <div class="character_world range-block flexFlowColumn flex-container">
@@ -179,7 +179,7 @@
             <div class="select_chat_block_wrapper flex-container">
                 <div class="select_chat_block  wide100p flex-container" file_name="">
                     <div class="avatar"><img src="img/No-Image-Placeholder.svg" loading="lazy" decoding="async"></div>
-                    <div id="select_chat_name_wrapper" class="flex-container alignitemscenter justifySpaceBetween wide100p">
+                    <div class="select_chat_name_wrapper">
                         <div class="flex-container alignItemsCenter">
                             <small class="select_chat_block_filename select_chat_block_filename_item"></small>
                             <div title="Rename chat file" class="renameChatButton hoverglow opacity50p fa-solid fa-pencil fa-sm" data-i18n="[title]Rename chat file"></div>
@@ -191,9 +191,9 @@
                                 <small class="chat_messages_num select_chat_block_filename_item"></small>
                             </div>
                             <div class="select_chat_actions flex-container gap10px">
-                                <div title="Export JSONL chat file" data-format="jsonl" class="exportRawChatButton opacity50p hoverglow fa-solid fa-file-export" data-i18n="[title]Export JSONL chat file"></div>
-                                <div title="Download chat as plain text document" data-format="txt" class="exportChatButton opacity50p hoverglow fa-solid fa-file-lines" data-i18n="[title]Download chat as plain text document"></div>
-                                <div title="Delete chat file" file_name="" class="PastChat_cross opacity50p hoverglow fa-solid fa-skull" data-i18n="[title]Delete chat file"></div>
+                                <button type="button" title="Export JSONL chat file" aria-label="Export JSONL chat file" data-format="jsonl" class="exportRawChatButton chat-file-action fa-solid fa-file-export" data-i18n="[title][aria-label]Export JSONL chat file"></button>
+                                <button type="button" title="Download chat as plain text document" aria-label="Download chat as plain text document" data-format="txt" class="exportChatButton chat-file-action fa-solid fa-file-lines" data-i18n="[title][aria-label]Download chat as plain text document"></button>
+                                <button type="button" title="Delete chat file" aria-label="Delete chat file" file_name="" class="PastChat_cross chat-file-action fa-solid fa-skull" data-i18n="[title][aria-label]Delete chat file"></button>
                             </div>
                         </div>
                     </div>

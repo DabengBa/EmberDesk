@@ -46,8 +46,10 @@ The page has no alternative cards or navigation links.
 
 - **Default state**: the setup form is visible and enabled in `fresh` mode.
 - **Set-password state**: when `GET /api/users/setup-mode` reports `set-password`, only the password and confirm-password fields remain visible.
+- **Mode-loading state**: while the setup-mode request is in flight the card shows a loading message instead of a guessed form.
+- **Mode-error state**: a failed setup-mode request shows an alert with an explicit retry action; the page never falls back to `fresh` silently.
 - **Loading state**: the submit button is disabled and shows "创建中..." while the request is in flight.
-- **Error state**: a validation or server error appears on the card with a shake animation.
+- **Error state**: a validation or server error appears on the card with a shake animation; the first invalid field is marked `aria-invalid`, linked to the error block via `aria-describedby`, and receives focus.
 - **Success state**: the browser redirects to `/` after the admin account is created and session established.
 - **Bypass state**: if `needsSetup()` returns false, visiting `/setup` redirects to `/login`.
 

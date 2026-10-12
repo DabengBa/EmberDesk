@@ -27,6 +27,16 @@ const interactableSelectors = [
 export const INTERACTABLE_CONTROL_CLASS = 'interactable';
 export const CUSTOM_INTERACTABLE_CONTROL_CLASS = 'custom_interactable';
 
+/** Controls whose own native key activation already produces a click event. */
+const nativeKeyboardInteractiveSelector = [
+    'button',
+    'input:not([type="hidden"])',
+    'select',
+    'textarea',
+    'a[href]',
+    'summary',
+].join(',');
+
 export const NOT_FOCUSABLE_CONTROL_CLASS = 'not_focusable';
 export const DISABLED_CONTROL_CLASS = 'disabled';
 
@@ -210,7 +220,12 @@ function handleGlobalKeyDown(event) {
         if (event.altKey || event.ctrlKey || event.shiftKey)
             return;
 
-        // Traverse up the DOM tree to find the actual interactable element
+        // Traverse up the DOM tree to find the actual interactable element.
+        // Native controls dispatch key activation themselves; synthesizing a
+        // second click would double-toggle React-mounted buttons.
+        if (event.target.closest(nativeKeyboardInteractiveSelector)) {
+            return;
+        }
         let target = event.target;
         while (target && !isKeyboardInteractable(target)) {
             target = target.parentElement;

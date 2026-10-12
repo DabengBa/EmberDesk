@@ -49,7 +49,8 @@ export const worldInfoWorkbenchStyles = stylex.create({
         borderStyle: 'solid',
         borderColor: 'color-mix(in srgb, var(--SmartThemeQuoteColor) 26%, var(--SmartThemeBorderColor) 74%)',
         borderRadius: 'var(--rounded-lg, 10px)',
-        background: 'linear-gradient(90deg, color-mix(in srgb, var(--SmartThemeQuoteColor) 10%, transparent), transparent 55%), color-mix(in srgb, var(--SmartThemeBlurTintColor) 88%, var(--black70a) 12%)',
+        backgroundImage: 'linear-gradient(90deg, color-mix(in srgb, var(--SmartThemeQuoteColor) 10%, transparent), transparent 55%)',
+        backgroundColor: 'color-mix(in srgb, var(--SmartThemeBlurTintColor) 88%, var(--black70a) 12%)',
         boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--SmartThemeQuoteColor) 8%, transparent)',
     },
     globalIcon: {
@@ -181,7 +182,7 @@ export const worldInfoWorkbenchStyles = stylex.create({
         borderColor: 'color-mix(in srgb, var(--SmartThemeBorderColor) 68%, transparent)',
         borderRadius: 'var(--rounded-lg, 10px)',
         padding: '8px 10px',
-        background: 'color-mix(in srgb, var(--SmartThemeBlurTintColor) 88%, var(--black70a) 12%)',
+        backgroundColor: 'color-mix(in srgb, var(--SmartThemeBlurTintColor) 88%, var(--black70a) 12%)',
     },
     bookRow: {
         display: 'flex',
@@ -429,7 +430,7 @@ export const worldInfoWorkbenchStyles = stylex.create({
         borderStyle: 'solid',
         borderColor: 'color-mix(in srgb, var(--SmartThemeBorderColor) 62%, transparent)',
         borderRadius: 'var(--rounded-lg, 10px)',
-        background: 'color-mix(in srgb, var(--SmartThemeBlurTintColor) 82%, var(--black70a) 18%)',
+        backgroundColor: 'color-mix(in srgb, var(--SmartThemeBlurTintColor) 82%, var(--black70a) 18%)',
         overflow: 'clip',
     },
     paneHidden: {
@@ -747,7 +748,7 @@ export const worldInfoWorkbenchStyles = stylex.create({
     sectionRule: {
         flex: '1 1 auto',
         height: '1px',
-        background: 'linear-gradient(90deg, color-mix(in srgb, var(--SmartThemeBorderColor) 70%, transparent), transparent)',
+        backgroundImage: 'linear-gradient(90deg, color-mix(in srgb, var(--SmartThemeBorderColor) 70%, transparent), transparent)',
     },
     field: {
         display: 'flex',

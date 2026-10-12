@@ -18,7 +18,7 @@ describe('legacy dialogue popup structure', () => {
 
         expect(source).toMatch(/<ContractButton[^>]*id="dialogue_popup_ok"[^>]*className="menu_button"[^>]*label="Delete"[^>]*labelClassName="dialogue-popup-btn-label"[^>]*data-result="1"[^>]*\/>/);
         expect(source).toMatch(/<ContractButton[^>]*id="dialogue_popup_cancel"[^>]*className="menu_button"[^>]*label="Cancel"[^>]*data-result="0"[^>]*\/>/);
-        expect(source).toMatch(/<ContractButton[^>]*id="dialogue_del_mes_ok"[^>]*className="menu_button"[^>]*label="Delete"[^>]*\/>/);
+        expect(source).toMatch(/<ContractButton[^>]*id="dialogue_del_mes_ok"[^>]*className="menu_button"[^>]*label="Delete"[^>]*disabled[^>]*\/>/);
         expect(source).toMatch(/<ContractButton[^>]*id="dialogue_del_mes_cancel"[^>]*className="menu_button"[^>]*label="Cancel"[^>]*\/>/);
     });
 

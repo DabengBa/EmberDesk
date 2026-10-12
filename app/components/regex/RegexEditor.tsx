@@ -45,7 +45,7 @@ export function RegexEditor() {
                     <small data-i18n="Script Name">Script Name</small>
                 </label>
                 <div>
-                    <input className="regex_script_name text_pole textarea_compact" type="text" aria-label="Script Name" data-i18n="[aria-label]Script Name" />
+                    <input id="regex_script_name" className="regex_script_name text_pole textarea_compact" type="text" aria-label="Script Name" data-i18n="[aria-label]Script Name" />
                 </div>
             </div>
             <div className="flex1">
@@ -53,7 +53,7 @@ export function RegexEditor() {
                     <small data-i18n="Find Regex">Find Regex</small>
                 </label>
                 <div>
-                    <input className="find_regex text_pole textarea_compact" type="text" aria-label="Find Regex" data-i18n="[aria-label]Find Regex" />
+                    <input id="find_regex" className="find_regex text_pole textarea_compact" type="text" aria-label="Find Regex" data-i18n="[aria-label]Find Regex" />
                 </div>
             </div>
             <div className="flex1">
@@ -61,7 +61,7 @@ export function RegexEditor() {
                     <small data-i18n="Replace With">Replace With</small>
                 </label>
                 <div>
-                    <textarea className="regex_replace_string text_pole wide100p textarea_compact" data-i18n="[placeholder]ext_regex_replace_string_placeholder" placeholder="Use {{match}} to include the matched text from the Find Regex, $1, $2, etc. for numbered capture groups, or $<name> for named capture groups." rows={3}></textarea>
+                    <textarea id="regex_replace_string" className="regex_replace_string text_pole wide100p textarea_compact" aria-label="Replace With" data-i18n="[aria-label]Replace With;[placeholder]ext_regex_replace_string_placeholder" placeholder="Use {{match}} to include the matched text from the Find Regex, $1, $2, etc. for numbered capture groups, or $<name> for named capture groups." rows={3}></textarea>
                 </div>
             </div>
             <div className="flex1">
@@ -69,7 +69,7 @@ export function RegexEditor() {
                     <small data-i18n="Trim Out">Trim Out</small>
                 </label>
                 <div>
-                    <textarea className="regex_trim_strings text_pole wide100p textarea_compact" data-i18n="[placeholder]ext_regex_trim_placeholder" placeholder="Globally trims any unwanted parts from a regex match before replacement. Separate each element by an enter." rows={3}></textarea>
+                    <textarea id="regex_trim_strings" className="regex_trim_strings text_pole wide100p textarea_compact" aria-label="Trim Out" data-i18n="[aria-label]Trim Out;[placeholder]ext_regex_trim_placeholder" placeholder="Globally trims any unwanted parts from a regex match before replacement. Separate each element by an enter." rows={3}></textarea>
                 </div>
             </div>
         </div>
@@ -113,14 +113,14 @@ export function RegexEditor() {
                             <span data-i18n="Min Depth">Min Depth</span>
                             <span className="fa-solid fa-circle-question note-link-span"></span>
                         </small>
-                        <input name="min_depth" className="text_pole textarea_compact" type="number" min="-1" max="9999" data-i18n="[placeholder]ext_regex_min_depth_placeholder" placeholder="Unlimited" />
+                        <input name="min_depth" className="text_pole textarea_compact" type="number" min="-1" max="9999" aria-label="Min Depth" data-i18n="[aria-label]Min Depth;[placeholder]ext_regex_min_depth_placeholder" placeholder="Unlimited" />
                     </div>
                     <div className="flex1 flex-container flexNoGap">
                         <small data-i18n="[title]ext_regex_max_depth_desc" title="When applied to prompts or display, only affect messages no more than N levels deep. 0 = last message, 1 = penultimate message, etc. System prompt and utility prompts are not affected. Max must be greater than Min for regex to apply.">
                             <span data-i18n="Max Depth">Max Depth</span>
                             <span className="fa-solid fa-circle-question note-link-span"></span>
                         </small>
-                        <input name="max_depth" className="text_pole textarea_compact" type="number" min="0" max="9999" data-i18n="[placeholder]ext_regex_min_depth_placeholder" placeholder="Unlimited" />
+                        <input name="max_depth" className="text_pole textarea_compact" type="number" min="0" max="9999" aria-label="Max Depth" data-i18n="[aria-label]Max Depth;[placeholder]ext_regex_min_depth_placeholder" placeholder="Unlimited" />
                     </div>
                 </div>
             </div>

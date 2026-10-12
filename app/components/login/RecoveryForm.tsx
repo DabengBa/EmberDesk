@@ -7,6 +7,7 @@ type RecoveryFormProps = {
     currentStep: 1 | 2;
     isSubmitting: boolean;
     errorMessage: string;
+    invalidField?: string | null;
     onHandleChange: () => void;
     onCodeChange: () => void;
     onNewPasswordChange: () => void;
@@ -20,6 +21,7 @@ export function RecoveryForm({
     currentStep,
     isSubmitting,
     errorMessage,
+    invalidField,
     onHandleChange,
     onCodeChange,
     onNewPasswordChange,
@@ -47,6 +49,9 @@ export function RecoveryForm({
                                     autoComplete="username"
                                     placeholder="请输入用户名"
                                     required
+                                    aria-required="true"
+                                    aria-invalid={invalidField === 'handle' || undefined}
+                                    aria-describedby={invalidField === 'handle' ? 'recoveryError' : undefined}
                                     value={field.state.value}
                                     onBlur={field.handleBlur}
                                     disabled={isSubmitting || currentStep === 2}
@@ -60,16 +65,15 @@ export function RecoveryForm({
                     </form.Field>
                 </div>
 
+                <p {...stylex.props(loginStyles.recoveryNote)} id="recoveryCodeHint">
+                    恢复码会输出到服务端控制台，不会通过邮件或短信发送，请联系管理员获取。
+                </p>
+
                 <div id="recoveryStep1" {...stylex.props(loginStyles.actions)} style={{ display: currentStep === 1 ? 'flex' : 'none' }}>
-                    <button type="submit" {...stylex.props(loginStyles.btn)} id="sendCodeBtn" disabled={isSubmitting}>发送恢复码</button>
+                    <button type="submit" {...stylex.props(loginStyles.btn)} id="sendCodeBtn" disabled={isSubmitting} aria-describedby="recoveryCodeHint">生成恢复码</button>
                 </div>
 
                 <div id="recoveryStep2" style={{ display: currentStep === 2 ? 'block' : 'none' }}>
-                    {currentStep === 2 && (
-                        <p {...stylex.props(loginStyles.recoveryNote)}>
-                            恢复码会输出到服务端控制台，请联系管理员获取。
-                        </p>
-                    )}
                     <div {...stylex.props(loginStyles.fieldStack)}>
                         <form.Field name="code">
                             {(field: any) => (
@@ -84,6 +88,8 @@ export function RecoveryForm({
                                         inputMode="numeric"
                                         placeholder="000000"
                                         maxLength={6}
+                                        aria-invalid={invalidField === 'code' || undefined}
+                                        aria-describedby={invalidField === 'code' ? 'recoveryError recoveryCodeHint' : 'recoveryCodeHint'}
                                         value={field.state.value}
                                         onBlur={field.handleBlur}
                                         disabled={isSubmitting}
@@ -106,6 +112,8 @@ export function RecoveryForm({
                                         type="password"
                                         autoComplete="new-password"
                                         placeholder="请输入新密码"
+                                        aria-invalid={invalidField === 'newPassword' || undefined}
+                                        aria-describedby={invalidField === 'newPassword' ? 'recoveryError' : undefined}
                                         value={field.state.value}
                                         onBlur={field.handleBlur}
                                         disabled={isSubmitting}

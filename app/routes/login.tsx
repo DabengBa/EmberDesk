@@ -2,7 +2,7 @@ import { createFileRoute } from '@tanstack/react-router';
 import * as stylex from '@stylexjs/stylex';
 import { useForm } from '@tanstack/react-form';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { z } from 'zod';
 import {
     buildHomeRedirectUrl,
@@ -65,6 +65,35 @@ function getSchemaErrorMessage(schema: z.ZodTypeAny, values: unknown) {
     return flattenedErrors[0] ?? parsed.error.issues[0]?.message ?? loginMessages.genericError;
 }
 
+const LOGIN_FIELD_IDS: Record<string, string> = {
+    handle: 'handle',
+    password: 'password',
+};
+
+const RECOVERY_FIELD_IDS: Record<string, string> = {
+    handle: 'recoverHandle',
+    code: 'recoveryCode',
+    newPassword: 'newPassword',
+};
+
+function focusFirstInvalidField(schema: z.ZodTypeAny, values: unknown, fieldIds: Record<string, string>) {
+    const parsed = schema.safeParse(values);
+    if (parsed.success) {
+        return null;
+    }
+
+    for (const issue of parsed.error.issues) {
+        const fieldName = typeof issue.path[0] === 'string' ? issue.path[0] : undefined;
+        const targetId = fieldName ? fieldIds[fieldName] : undefined;
+        if (targetId) {
+            document.getElementById(targetId)?.focus();
+            return fieldName ?? null;
+        }
+    }
+
+    return null;
+}
+
 function getDisplayErrorMessage(error: unknown) {
     if (error instanceof MessageError) {
         return error.message;
@@ -83,6 +112,8 @@ function LoginPage() {
     const [recoveryStep, setRecoveryStep] = useState<1 | 2>(1);
     const [loginError, setLoginError] = useState('');
     const [recoveryError, setRecoveryError] = useState('');
+    const [loginInvalidField, setLoginInvalidField] = useState<string | null>(null);
+    const [recoveryInvalidField, setRecoveryInvalidField] = useState<string | null>(null);
     const [loginVisible, setLoginVisible] = useState(true);
     const [lockoutSeconds, setLockoutSeconds] = useState<number | null>(null);
 
@@ -216,9 +247,11 @@ function LoginPage() {
         },
         onSubmitInvalid: ({ value }) => {
             setLoginError(getSchemaErrorMessage(loginSchema, value));
+            setLoginInvalidField(focusFirstInvalidField(loginSchema, value, LOGIN_FIELD_IDS));
         },
         onSubmit: async ({ value }) => {
             setLoginError('');
+            setLoginInvalidField(null);
 
             try {
                 const data = await loginMutation.mutateAsync(value);
@@ -252,9 +285,11 @@ function LoginPage() {
         },
         onSubmitInvalid: ({ value }) => {
             setRecoveryError(getSchemaErrorMessage(activeRecoverySchema, value));
+            setRecoveryInvalidField(focusFirstInvalidField(activeRecoverySchema, value, RECOVERY_FIELD_IDS));
         },
         onSubmit: async ({ value }) => {
             setRecoveryError('');
+            setRecoveryInvalidField(null);
 
             try {
                 if (recoveryStep === 1) {
@@ -301,6 +336,22 @@ function LoginPage() {
         return () => window.clearInterval(timerId);
     }, [isLockedOut]);
 
+    const wasLoginVisibleRef = useRef(true);
+    useEffect(() => {
+        const wasLoginVisible = wasLoginVisibleRef.current;
+        wasLoginVisibleRef.current = loginVisible;
+
+        if (!loginVisible) {
+            const targetId = recoveryStep === 1 ? 'recoverHandle' : 'recoveryCode';
+            window.requestAnimationFrame(() => document.getElementById(targetId)?.focus());
+            return;
+        }
+
+        if (!wasLoginVisible) {
+            document.getElementById('forgotLink')?.focus();
+        }
+    }, [loginVisible, recoveryStep]);
+
     function showRecovery() {
         setLoginVisible(false);
         setRecoveryStep(1);
@@ -331,14 +382,17 @@ function LoginPage() {
                 isSubmitting={loginMutation.isPending}
                 isLockedOut={isLockedOut}
                 errorMessage={loginError}
+                invalidField={loginInvalidField}
                 onHandleChange={() => {
                     loginMutation.reset();
+                    setLoginInvalidField(null);
                     if (lockoutSeconds === null) {
                         setLoginError('');
                     }
                 }}
                 onPasswordChange={() => {
                     loginMutation.reset();
+                    setLoginInvalidField(null);
                     if (lockoutSeconds === null) {
                         setLoginError('');
                     }
@@ -358,18 +412,22 @@ function LoginPage() {
                 currentStep={recoveryStep}
                 isSubmitting={recoveryStep1Mutation.isPending || recoveryStep2Mutation.isPending}
                 errorMessage={recoveryError}
+                invalidField={recoveryInvalidField}
                 onHandleChange={() => {
                     recoveryStep1Mutation.reset();
                     recoveryStep2Mutation.reset();
                     setRecoveryError('');
+                    setRecoveryInvalidField(null);
                 }}
                 onCodeChange={() => {
                     recoveryStep2Mutation.reset();
                     setRecoveryError('');
+                    setRecoveryInvalidField(null);
                 }}
                 onNewPasswordChange={() => {
                     recoveryStep2Mutation.reset();
                     setRecoveryError('');
+                    setRecoveryInvalidField(null);
                 }}
                 onSubmit={(event) => {
                     event.preventDefault();

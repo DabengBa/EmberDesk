@@ -842,6 +842,15 @@ function AuthoringWorkspacePanel({
                     <div {...stylex.props(authoringStyles.section, authoringStyles.sectionFirst)} data-react-authoring-section="basics">
                         <div {...stylex.props(authoringStyles.heroRow)}>
                             <label {...stylex.props(authoringStyles.heroAvatar)} title="Change avatar" data-react-authoring-field="avatar">
+                                <input
+                                    type="button"
+                                    className="avatar-upload-trigger"
+                                    aria-label="Change character avatar"
+                                    onClick={event => {
+                                        event.preventDefault();
+                                        document.getElementById('authoring-avatar-file')?.click();
+                                    }}
+                                />
                                 <img
                                     {...stylex.props(authoringStyles.heroAvatarImg)}
                                     src={avatarPreviewSrc}
@@ -858,6 +867,7 @@ function AuthoringWorkspacePanel({
                                     <i className="fa-solid fa-camera" />
                                 </span>
                                 <input
+                                    id="authoring-avatar-file"
                                     hidden
                                     type="file"
                                     accept="image/*"
@@ -1785,7 +1795,15 @@ function SettingsOverlayHost({
     onRequestClose?: () => void;
     runtime: RuntimePort;
 }) {
+    const settingsDirtyRef = useRef(false);
+    const handleSettingsDirtyChange = useCallback((dirty: boolean) => {
+        settingsDirtyRef.current = dirty;
+    }, []);
     const handleClose = useCallback(() => {
+        if (settingsDirtyRef.current && !window.confirm('当前设置有未保存的修改。离开将丢弃这些修改，确定关闭吗？')) {
+            return;
+        }
+        settingsDirtyRef.current = false;
         recordWorkspacePanelDockClose(panelKind);
         onRequestClose?.();
     }, [onRequestClose, panelKind]);
@@ -1798,7 +1816,7 @@ function SettingsOverlayHost({
         const dialog = dialogRef.current;
         const backdrop = backdropRef.current;
         if (dialog && !dialog.open) {
-            dialog.show();
+            dialog.showModal();
             dialog.focus();
         }
         const onKeyDown = (event: KeyboardEvent) => {
@@ -1870,6 +1888,7 @@ function SettingsOverlayHost({
                     variant="overlay"
                     initialTab={initialTab}
                     onRequestClose={handleClose}
+                    onDirtyStateChange={handleSettingsDirtyChange}
                     runtime={runtime}
                 />
             </dialog>

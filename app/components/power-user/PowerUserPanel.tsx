@@ -5,11 +5,11 @@ export function PowerUserPanel() {
                     <div name="UserSettingsThirdColumn" id="power-user-options-block" className="flex-container wide100p flex1">
                         <div id="power-user-option-checkboxes">
                             <div name="FrontendFramesToggle" className="inline-drawer wide100p flexFlowColumn">
-                                <div className="inline-drawer-toggle inline-drawer-header userSettingsInnerExpandable" title="Render complete HTML documents inside message code blocks as live frames.">
+                                <div className="inline-drawer-toggle inline-drawer-header userSettingsInnerExpandable" title="Render complete HTML documents inside message code blocks as live frames." role="button" aria-expanded="false" aria-controls="frontend-frames-settings" tabIndex={0}>
                                     <b><span data-i18n="Frontend Frames">Frontend Frames</span></b>
-                                    <div className="fa-solid fa-circle-chevron-down inline-drawer-icon down"></div>
+                                    <div className="fa-solid fa-circle-chevron-down inline-drawer-icon down" aria-hidden="true"></div>
                                 </div>
-                                <div className="inline-drawer-content">
+                                <div id="frontend-frames-settings" className="inline-drawer-content">
                                     <label className="checkbox_label" htmlFor="frontend_frames_enabled" title="Render complete HTML documents in message code blocks as live iframes. The frame runs same-origin scripts from the card, so only enable this for content you trust." data-i18n="[title]Render complete HTML documents in message code blocks as live iframes. The frame runs same-origin scripts from the card, so only enable this for content you trust.">
                                         <input id="frontend_frames_enabled" type="checkbox" />
                                         <small data-i18n="Enable frontend frames">Enable frontend frames</small>

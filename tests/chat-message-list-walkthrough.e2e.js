@@ -210,7 +210,7 @@ async function selectPastChatByVisibleName(page, chatName) {
     await search.fill(chatName);
     const chatRow = page.locator('#select_chat_div .select_chat_block').filter({ hasText: chatName }).first();
     await expect(chatRow).toBeVisible();
-    await chatRow.click();
+    await chatRow.getByRole('button', { name: `Open chat: ${chatName}`, exact: true }).click();
     await expect(page.locator('#shadow_select_chat_popup')).toBeHidden();
 }
 
@@ -405,6 +405,25 @@ test.describe('main chat message list walkthrough', () => {
         await expect(page.locator('#select_chat_div .select_chat_block').first()).toBeVisible();
 
         expect(getUnexpectedConsoleErrors(consoleErrors)).toEqual([]);
+    });
+
+    test('chat history keeps a rename draft after the server rejects it', async ({ page }) => {
+        await testSetup.awaitST({ page });
+        await selectCharacterFromVisibleList(page, characterName);
+        await openPastChatsPopup(page);
+        await expect(page.getByRole('button', { name: 'Chat options' })).toHaveAttribute('aria-expanded', 'false');
+        const row = page.locator(`.select_chat_block[file_name="${seededChatName}"]`);
+        await row.getByRole('button', { name: 'Rename chat file' }).click();
+        const dialog = page.getByRole('dialog', { name: 'Enter the new name for the chat:' });
+        const name = dialog.getByRole('textbox');
+        await name.fill('Rename draft retained after failure');
+        await page.route('**/api/chats/rename', route => route.fulfill({ status: 500, json: { error: 'rejected' } }));
+        await dialog.getByRole('button', { name: 'Rename chat', exact: true }).click();
+        await expect(dialog.getByRole('alert')).toContainText('Chat was not renamed');
+        await expect(name).toHaveValue('Rename draft retained after failure');
+        await expect(name).toBeEnabled();
+        await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+        await expect(page.locator('#shadow_select_chat_popup')).toBeVisible();
     });
 
     test('sprint 2 walkthrough persists React reasoning edits and deletions through visible UI', async ({ page }) => {

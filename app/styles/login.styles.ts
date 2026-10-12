@@ -22,7 +22,7 @@ export const loginStyles = stylex.create({
         alignItems: 'center',
         justifyContent: 'center',
         minHeight: '100dvh',
-        background: 'color-mix(in srgb, var(--SmartThemeBlurTintColor) 92%, var(--black70a) 8%)',
+        backgroundColor: 'color-mix(in srgb, var(--SmartThemeBlurTintColor) 92%, var(--black70a) 8%)',
         padding: '18px',
     },
     card: {
@@ -35,7 +35,7 @@ export const loginStyles = stylex.create({
             default: '18px 20px 20px',
             [smallPhone]: '18px 15px',
         },
-        background: 'color-mix(in srgb, var(--SmartThemeBlurTintColor) 72%, var(--black70a) 28%)',
+        backgroundColor: 'color-mix(in srgb, var(--SmartThemeBlurTintColor) 72%, var(--black70a) 28%)',
         borderWidth: '1px',
         borderStyle: 'solid',
         borderColor: 'color-mix(in srgb, var(--SmartThemeBorderColor) 74%, var(--SmartThemeBodyColor) 10%)',
@@ -116,7 +116,7 @@ export const loginStyles = stylex.create({
             [smallPhone]: '44px',
         },
         padding: '4px 8px',
-        background: {
+        backgroundColor: {
             default: 'var(--form-control-bg)',
             ':focus': 'var(--form-control-bg-focus)',
         },
@@ -146,7 +146,7 @@ export const loginStyles = stylex.create({
     recoveryNote: {
         margin: '0 0 12px',
         padding: '7px 10px',
-        background: 'color-mix(in srgb, var(--SmartThemeBlurTintColor) 76%, var(--black70a) 24%)',
+        backgroundColor: 'color-mix(in srgb, var(--SmartThemeBlurTintColor) 76%, var(--black70a) 24%)',
         borderWidth: '1px',
         borderStyle: 'solid',
         borderColor: 'color-mix(in srgb, var(--SmartThemeBorderColor) 66%, transparent)',
@@ -161,21 +161,30 @@ export const loginStyles = stylex.create({
         position: 'relative',
     },
     inputInWrap: {
-        paddingRight: '36px',
+        paddingRight: {
+            default: '36px',
+            [smallPhone]: '50px',
+        },
     },
     passwordToggle: {
         position: 'absolute',
         right: '8px',
         top: '50%',
         transform: 'translateY(-50%)',
-        background: 'none',
-        border: 'none',
+        backgroundColor: 'transparent',
+        borderWidth: 0,
         color: {
-            default: 'var(--SmartThemeEmColor)',
+            default: 'var(--SmartThemeBodyColor)',
             ':hover': 'var(--SmartThemeBodyColor)',
         },
         cursor: 'pointer',
-        padding: '4px',
+        padding: {
+            default: '4px',
+            [smallPhone]: '15px',
+        },
+        marginRight: {
+            [smallPhone]: '-4px',
+        },
         fontSize: '14px',
         lineHeight: 1,
         textShadow: 'none',
@@ -202,7 +211,10 @@ export const loginStyles = stylex.create({
             default: '7px 10px',
             [smallPhone]: '8px 10px',
         },
-        background: {
+        minHeight: {
+            [smallPhone]: '44px',
+        },
+        backgroundColor: {
             default: 'var(--SmartThemeBlurTintColor)',
             ':hover': 'color-mix(in srgb, var(--SmartThemeBodyColor) 15%, var(--SmartThemeBlurTintColor) 85%)',
         },
@@ -218,7 +230,7 @@ export const loginStyles = stylex.create({
             default: 'pointer',
             ':disabled': 'not-allowed',
         },
-        transition: 'background 250ms ease-out',
+        transition: 'background-color 250ms ease-out',
         lineHeight: 1.3,
         textShadow: 'none',
         opacity: {
@@ -235,14 +247,17 @@ export const loginStyles = stylex.create({
         display: 'block',
         width: '100%',
         marginTop: '10px',
-        padding: 0,
-        border: 0,
-        background: 'transparent',
+        padding: {
+            default: '6px 0',
+            [smallPhone]: '11px 0',
+        },
+        borderWidth: 0,
+        backgroundColor: 'transparent',
         textAlign: 'center',
         fontFamily: 'var(--mainFontFamily)',
         fontSize: '0.8rem',
         color: {
-            default: 'var(--SmartThemeEmColor)',
+            default: 'var(--SmartThemeBodyColor)',
             ':hover': 'var(--SmartThemeBodyColor)',
         },
         textDecoration: {
@@ -262,7 +277,7 @@ export const loginStyles = stylex.create({
         marginTop: '12px',
         marginBottom: '10px',
         padding: '7px 10px',
-        background: 'color-mix(in srgb, var(--ember-deep, rgb(100, 0, 0)) 72%, var(--black70a) 28%)',
+        backgroundColor: 'color-mix(in srgb, var(--ember-deep, rgb(100, 0, 0)) 72%, var(--black70a) 28%)',
         color: 'var(--clay-warning)',
         borderRadius: '5px',
         fontFamily: 'var(--mainFontFamily)',

@@ -120,7 +120,7 @@ describe('settings React route flag', () => {
         expect(routeSource).not.toContain('settingsForm.reset(nextDefaults);');
         expect(routeSource).toContain('<settingsForm.Subscribe');
         expect(routeSource).toContain('selector={state => state.isPristine}');
-        expect(routeSource).toContain('disabled={isBusy || settingsQuery.isPending || isPristine || hasRevisionConflict}');
+        expect(routeSource).toContain('disabled={isBusy || settingsQuery.isPending || settingsQuery.isFetching || isPristine || hasRevisionConflict}');
         expect(routeSource).toContain("import { startTransition, useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';");
         expect(routeSource).toContain('const [isSettingsFormLoaded, setIsSettingsFormLoaded] = useState(false);');
         expect(routeSource).toContain('const isSettingsFormReady = isSettingsFormLoaded && parsedPayload !== null;');
@@ -789,7 +789,7 @@ describe('settings React route flag', () => {
 
         expect(routeSource).toContain('setHasRevisionConflict(true)');
         expect(routeSource).toContain('重新加载当前设置');
-        expect(routeSource).toContain('disabled={isBusy || settingsQuery.isPending || isPristine || hasRevisionConflict}');
+        expect(routeSource).toContain('disabled={isBusy || settingsQuery.isPending || settingsQuery.isFetching || isPristine || hasRevisionConflict}');
         // Legacy settings drawer toggles are deleted; no route-redirect listener remains.
         expect(scriptSource).not.toContain('LEGACY_SETTINGS_DRAWER_ROUTE_TARGETS');
         expect(scriptSource).toContain('openWorkspaceSettingsOverlay');

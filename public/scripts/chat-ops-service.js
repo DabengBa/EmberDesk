@@ -25,7 +25,6 @@ const state = new Proxy({}, {
 
 const applyStylePins = (...args) => shell().applyStylePins(...args);
 const compressRequest = (...args) => shell().compressRequest(...args);
-const callGenericPopup = (...args) => shell().callGenericPopup(...args);
 const cancelDebouncedChatSave = (...args) => shell().cancelDebouncedChatSave(...args);
 const cancelDebouncedMetadataSave = (...args) => shell().cancelDebouncedMetadataSave(...args);
 const clamp = (...args) => shell().clamp(...args);
@@ -69,7 +68,6 @@ const Popup = new Proxy(function () {}, {
     get: (_, key) => shell().Popup[key],
     construct: (_, args) => new (shell().Popup)(...args),
 });
-const POPUP_TYPE = new Proxy({}, { get: (_, key) => shell().POPUP_TYPE[key] });
 
 /**
  * Deletes a character chat by its name.
@@ -683,9 +681,10 @@ export async function renameCharacterChat({ characterId, oldFileName, newFileNam
 
         const eventData = { avatarId: body.avatar_url, oldFileName: body.original_file, newFileName: body.renamed_file };
         await eventSource.emit(event_types.CHAT_RENAMED, eventData);
+        return true;
     } catch {
-        await delay(500);
-        await callGenericPopup('An error has occurred. Chat was not renamed.', POPUP_TYPE.TEXT);
+        toastr.error(t`Chat was not renamed. Check the name and connection, then try again.`);
+        return false;
     } finally {
         await loaderHandle?.hide();
     }

@@ -12,6 +12,7 @@ type SetupFormProps = {
     isSubmitting: boolean;
     isComplete: boolean;
     errorMessage: string;
+    invalidField?: string | null;
     passwordVisible: boolean;
     confirmPasswordVisible: boolean;
     onHandleChange: () => void;
@@ -29,6 +30,7 @@ export function SetupForm({
     isSubmitting,
     isComplete,
     errorMessage,
+    invalidField,
     passwordVisible,
     confirmPasswordVisible,
     onHandleChange,
@@ -72,6 +74,8 @@ export function SetupForm({
                                     placeholder="请输入用户名"
                                     required
                                     aria-required="true"
+                                    aria-invalid={invalidField === 'handle' || undefined}
+                                    aria-describedby={invalidField === 'handle' ? 'errorMessage' : undefined}
                                     value={field.state.value}
                                     onBlur={field.handleBlur}
                                     disabled={isSubmitting}
@@ -95,6 +99,8 @@ export function SetupForm({
                                     type="text"
                                     autoComplete="name"
                                     placeholder="留空则使用用户名"
+                                    aria-invalid={invalidField === 'displayName' || undefined}
+                                    aria-describedby={invalidField === 'displayName' ? 'errorMessage' : undefined}
                                     value={field.state.value}
                                     onBlur={field.handleBlur}
                                     disabled={isSubmitting}
@@ -119,6 +125,8 @@ export function SetupForm({
                                 value={field.state.value}
                                 visible={passwordVisible}
                                 disabled={isSubmitting}
+                                invalid={invalidField === 'password'}
+                                describedBy="errorMessage"
                                 onChange={event => {
                                     field.handleChange(event.target.value);
                                     onPasswordChange();
@@ -138,6 +146,8 @@ export function SetupForm({
                                 value={field.state.value}
                                 visible={confirmPasswordVisible}
                                 disabled={isSubmitting}
+                                invalid={invalidField === 'confirmPassword'}
+                                describedBy="errorMessage"
                                 onChange={event => {
                                     field.handleChange(event.target.value);
                                     onConfirmPasswordChange();

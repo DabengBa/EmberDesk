@@ -1,3 +1,4 @@
+import type { KeyboardEvent } from 'react';
 import { composerStyles } from '../../styles/composer.styles';
 import { ContractIconButton } from '../contract/ContractIconButton';
 
@@ -14,8 +15,18 @@ import { ContractIconButton } from '../contract/ContractIconButton';
  * stscript_* controls stay plain divs: their visibility chain is driven by
  * tag-qualified legacy CSS (`#rightSendForm>div.stscript_btn` under
  * .isExecutingCommandsFromChatInput/.script_paused) which a <button> tag
- * would break.
+ * would break. Keyboard activation dispatches a real click so the delegated
+ * legacy handlers in public/scripts/dom-handlers.js stay the single command path.
  */
+function activateOnEnterOrSpace(event: KeyboardEvent<HTMLElement>) {
+    if (event.key !== 'Enter' && event.key !== ' ') {
+        return;
+    }
+
+    event.preventDefault();
+    event.currentTarget.click();
+}
+
 export function ChatComposer() {
     return (
         <>
@@ -41,6 +52,8 @@ export function ChatComposer() {
                     <div id="leftSendForm" className="alignContentCenter">
                         <ContractIconButton
                             id="options_button"
+                            aria-expanded="false"
+                            aria-controls="options"
                             className="interactable"
                             label="Chat options"
                             title="Chat options"
@@ -54,13 +67,13 @@ export function ChatComposer() {
                         <small id="send_textarea_hint" className="send_textarea_hint" data-i18n="Type /? for commands. Send requires an API connection.">Type /? for commands. Send requires an API connection.</small>
                     </div>
                     <div id="rightSendForm" className="alignContentCenter">
-                        <div id="stscript_continue" title="Continue script execution" className="stscript_btn stscript_continue" data-i18n="[title]Continue script execution">
+                        <div id="stscript_continue" title="Continue script execution" className="stscript_btn stscript_continue" role="button" aria-label="Continue script execution" tabIndex={0} onKeyDown={activateOnEnterOrSpace} data-i18n="[title]Continue script execution;[aria-label]Continue script execution">
                             <i className="fa-solid fa-play" />
                         </div>
-                        <div id="stscript_pause" title="Pause script execution" className="stscript_btn stscript_pause" data-i18n="[title]Pause script execution">
+                        <div id="stscript_pause" title="Pause script execution" className="stscript_btn stscript_pause" role="button" aria-label="Pause script execution" tabIndex={0} onKeyDown={activateOnEnterOrSpace} data-i18n="[title]Pause script execution;[aria-label]Pause script execution">
                             <i className="fa-solid fa-pause" />
                         </div>
-                        <div id="stscript_stop" title="Abort script execution" className="stscript_btn stscript_stop" data-i18n="[title]Abort script execution">
+                        <div id="stscript_stop" title="Abort script execution" className="stscript_btn stscript_stop" role="button" aria-label="Abort script execution" tabIndex={0} onKeyDown={activateOnEnterOrSpace} data-i18n="[title]Abort script execution;[aria-label]Abort script execution">
                             <i className="fa-solid fa-stop" />
                         </div>
                         <ContractIconButton

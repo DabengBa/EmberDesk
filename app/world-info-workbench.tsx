@@ -1195,7 +1195,7 @@ export function WorldInfoWorkbenchPanel({
                 </div>
                 {activationOpen ? (
                     <p {...stylex.props(s.rulesHint)} data-world-info-react-global="rules-hint">
-                        全局扫描规则已在下方展开（沿用既有控件，不复制第二套状态机）。
+                        全局扫描规则已展开。
                     </p>
                 ) : null}
 

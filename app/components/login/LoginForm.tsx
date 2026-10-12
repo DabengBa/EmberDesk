@@ -10,6 +10,7 @@ type LoginFormProps = {
     isSubmitting: boolean;
     isLockedOut: boolean;
     errorMessage: string;
+    invalidField?: string | null;
     onHandleChange: () => void;
     onPasswordChange: () => void;
     onTogglePassword: () => void;
@@ -24,6 +25,7 @@ export function LoginForm({
     isSubmitting,
     isLockedOut,
     errorMessage,
+    invalidField,
     onHandleChange,
     onPasswordChange,
     onTogglePassword,
@@ -55,6 +57,8 @@ export function LoginForm({
                                     placeholder="请输入用户名"
                                     required
                                     aria-required="true"
+                                    aria-invalid={invalidField === 'handle' || undefined}
+                                    aria-describedby={invalidField === 'handle' ? 'errorMessage' : undefined}
                                     value={field.state.value}
                                     onBlur={field.handleBlur}
                                     onChange={event => {
@@ -79,6 +83,8 @@ export function LoginForm({
                                 value={field.state.value}
                                 visible={passwordVisible}
                                 disabled={controlsDisabled}
+                                invalid={invalidField === 'password'}
+                                describedBy="errorMessage"
                                 onChange={event => {
                                     field.handleChange(event.target.value);
                                     onPasswordChange();

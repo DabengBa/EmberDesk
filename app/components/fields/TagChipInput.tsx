@@ -76,6 +76,11 @@ export function TagChipInput({
                 placeholder={values.length === 0 ? placeholder : ''}
                 onChange={event => {
                     const raw = event.target.value;
+                    const nativeEvent = event.nativeEvent;
+                    if ('isComposing' in nativeEvent && nativeEvent.isComposing) {
+                        setPending(raw);
+                        return;
+                    }
                     if (!raw.includes(',')) {
                         setPending(raw);
                         return;
@@ -85,6 +90,9 @@ export function TagChipInput({
                     setPending((pieces[pieces.length - 1] ?? '').trimStart());
                 }}
                 onKeyDown={event => {
+                    if (event.nativeEvent.isComposing) {
+                        return;
+                    }
                     if (event.key === 'Enter') {
                         event.preventDefault();
                         flushPending();

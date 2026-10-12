@@ -288,7 +288,8 @@ export class Popup {
             /** @type {CustomPopupButton} */
             const button = typeof x === 'string' ? { text: x, result: index + 2 } : x;
 
-            const buttonElement = document.createElement('div');
+            const buttonElement = document.createElement('button');
+            buttonElement.type = 'button';
             buttonElement.classList.add('menu_button', 'popup-button-custom', 'result-control');
             buttonElement.classList.add(...(button.classes ?? []));
             buttonElement.dataset.result = String(button.result); // This is expected to also write 'null' or 'staging', to indicate cancel and no action respectively
@@ -531,6 +532,19 @@ export class Popup {
             console.warn('Unknown popup text type. Should be jQuery, HTMLElement or string.', content);
         }
 
+        const heading = this.content.querySelector('h1, h2, h3, h4');
+        if (heading) {
+            heading.id ||= `popup-title-${this.id}`;
+            this.dlg.setAttribute('aria-labelledby', heading.id);
+            this.mainInput.setAttribute('aria-labelledby', heading.id);
+        } else {
+            const label = type === POPUP_TYPE.INPUT ? t`Input` : type === POPUP_TYPE.CONFIRM ? t`Confirm action` : t`Message`;
+            this.dlg.setAttribute('aria-label', label);
+            this.mainInput.setAttribute('aria-label', label);
+        }
+        this.content.id = `popup-content-${this.id}`;
+        this.mainInput.setAttribute('aria-describedby', this.content.id);
+
         // Already prepare the auto-focus control by adding the "autofocus" attribute, this should be respected by showModal()
         this.setAutoFocus({ applyAutoFocus: true });
 
@@ -623,6 +637,7 @@ export class Popup {
         const keyListener = async (evt) => {
             switch (evt.key) {
                 case 'Enter': {
+                    if (evt.isComposing) return;
                     // CTRL+Enter counts as a closing action, but all other modifiers (ALT, SHIFT) should not trigger this
                     if (evt.altKey || evt.shiftKey)
                         return;

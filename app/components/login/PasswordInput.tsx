@@ -13,6 +13,8 @@ type PasswordInputProps = {
     placeholder?: string;
     visible: boolean;
     disabled?: boolean;
+    invalid?: boolean;
+    describedBy?: string;
     onChange: ChangeEventHandler<HTMLInputElement>;
     onToggle: () => void;
 };
@@ -27,6 +29,8 @@ export function PasswordInput({
     placeholder,
     visible,
     disabled = false,
+    invalid = false,
+    describedBy,
     onChange,
     onToggle,
 }: PasswordInputProps) {
@@ -43,6 +47,8 @@ export function PasswordInput({
                     type={state.type}
                     autoComplete={autoComplete}
                     placeholder={placeholder}
+                    aria-invalid={invalid || undefined}
+                    aria-describedby={invalid && describedBy ? describedBy : undefined}
                     value={value}
                     onChange={onChange}
                     disabled={disabled}

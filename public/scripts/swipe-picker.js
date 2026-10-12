@@ -161,7 +161,8 @@ async function openSwipePicker(messageId) {
                 .removeAttr('data-format')
                 .attr({
                     title: t`Create Branch`,
-                    'data-i18n': '[title]Create Branch',
+                    'aria-label': t`Create Branch`,
+                    'data-i18n': '[title][aria-label]Create Branch',
                 })
                 .removeClass('exportRawChatButton fa-solid fa-file-export')
                 .addClass('swipe_picker_branch mes_button fa-fw fa-regular fa-code-branch')
@@ -175,6 +176,8 @@ async function openSwipePicker(messageId) {
             deleteButton
                 .removeAttr('file_name')
                 .attr('aria-disabled', String(!canDeleteSwipe))
+                .attr('aria-label', t`Delete Swipe`)
+                .prop('disabled', !canDeleteSwipe)
                 .removeClass('fa-skull')
                 .addClass('swipe_picker_delete fa-fw fa-trash-can')
                 .toggleClass('hoverglow', canDeleteSwipe)
@@ -184,7 +187,7 @@ async function openSwipePicker(messageId) {
                         $(this)
                             .attr({
                                 title: t`Delete Swipe`,
-                                'data-i18n': '[title]Delete Swipe',
+                                'data-i18n': '[title][aria-label]Delete Swipe',
                             });
                     } else {
                         $(this)
@@ -240,18 +243,29 @@ async function openSwipePicker(messageId) {
             expandCheckbox.classList.add('swipe_picker_expand_toggle');
             block[0].prepend(expandCheckbox);
 
-            const expandLabel = document.createElement('label');
-            expandLabel.htmlFor = expandCheckboxId;
-            expandLabel.classList.add('swipe_picker_expand_label', 'fa-solid', 'fa-fw', 'fa-chevron-down');
+            const expandLabel = document.createElement('button');
+            expandLabel.type = 'button';
+            expandLabel.classList.add('swipe_picker_expand_label', 'chat-file-action', 'fa-solid', 'fa-fw', 'fa-chevron-down');
             expandLabel.title = t`Expand/Collapse`;
-            expandLabel.setAttribute('data-i18n', '[title]Expand/Collapse');
-            expandLabel.addEventListener('click', (event) => event.stopPropagation());
+            expandLabel.setAttribute('aria-label', t`Expand/Collapse`);
+            expandLabel.setAttribute('aria-expanded', 'false');
+            const contentId = `swipe_picker_content_${messageId}_${index}`;
+            block.find('.select_chat_block_mes').attr('id', contentId);
+            expandLabel.setAttribute('aria-controls', contentId);
+            expandLabel.setAttribute('data-i18n', '[title][aria-label]Expand/Collapse');
+            expandLabel.addEventListener('click', (event) => {
+                event.stopPropagation();
+                expandCheckbox.checked = !expandCheckbox.checked;
+                expandLabel.setAttribute('aria-expanded', String(expandCheckbox.checked));
+            });
 
             // Add copy button
-            const copyButton = document.createElement('div');
-            copyButton.classList.add('swipe_picker_copy', 'fa-solid', 'fa-fw', 'fa-copy');
+            const copyButton = document.createElement('button');
+            copyButton.type = 'button';
+            copyButton.classList.add('swipe_picker_copy', 'chat-file-action', 'fa-solid', 'fa-fw', 'fa-copy');
             copyButton.title = t`Copy`;
-            copyButton.setAttribute('data-i18n', '[title]Copy');
+            copyButton.setAttribute('aria-label', t`Copy`);
+            copyButton.setAttribute('data-i18n', '[title][aria-label]Copy');
             copyButton.addEventListener('click', async (event) => {
                 event.preventDefault();
                 event.stopPropagation();

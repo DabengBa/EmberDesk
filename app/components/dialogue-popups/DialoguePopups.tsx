@@ -31,7 +31,8 @@ export function DialoguePopupControls() {
 export function DialogueDelMesControls() {
     return (
         <>
-            <ContractButton id="dialogue_del_mes_ok" className="menu_button" label="Delete" />
+            <p id="dialogue_del_mes_summary" role="status" aria-live="polite" />
+            <ContractButton id="dialogue_del_mes_ok" className="menu_button" label="Delete" disabled />
             <ContractButton id="dialogue_del_mes_cancel" className="menu_button" label="Cancel" />
         </>
     );
