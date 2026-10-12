@@ -9,13 +9,11 @@ import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
 import { simpleGit as git, CheckRepoActions } from 'simple-git';
-import { createGitClient } from './src/git/client.js';
 import { color } from './src/util.js';
 
 const __dirname = import.meta.dirname ?? path.dirname(fileURLToPath(import.meta.url));
 process.chdir(__dirname);
 const pluginsPath = './plugins';
-const gitBackend = process.env.EMBERDESK_GIT_BACKEND || 'auto';
 
 const command = process.argv[2];
 
@@ -89,7 +87,7 @@ async function installPlugin(pluginName) {
             return console.log(color.yellow(`Directory already exists at ${pluginPath}`));
         }
 
-        await createGitClient({ backend: gitBackend }).clone(pluginName, pluginPath, { depth: 1 });
+        await git().clone(pluginName, pluginPath, ['--depth', '1']);
         console.log(`Plugin ${color.green(pluginName)} installed to ${color.cyan(pluginPath)}`);
     } catch (error) {
         console.error(color.red(`Failed to install plugin ${pluginName}`), error);
