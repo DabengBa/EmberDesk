@@ -162,8 +162,6 @@ declare global {
         ai: any;
     }
 
-    var quickReplyApi: typeof import('./scripts/extensions/quick-reply/index.js').quickReplyApi;
-
     var SillyTavern: {
         getContext(): ReturnType<typeof getContext>;
         llm: any;
