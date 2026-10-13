@@ -17,13 +17,13 @@ export async function showWorldInfoCascadeDialog(worldInfos) {
     let capturedCascade = { deleteWorlds: [], clearWorldReferences: false };
 
     const popup = new Popup(html, POPUP_TYPE.CONFIRM, '', {
-        okButton: t`Delete`,
+        okButton: t`Delete selected world books`,
         cancelButton: t`Cancel`,
         wider: true,
         leftAlign: true,
         defaultResult: POPUP_RESULT.NEGATIVE,
         customButtons: [{
-            text: t`Delete All`,
+            text: t`Delete ${worldInfos.length} linked world book(s)`,
             result: POPUP_RESULT.CUSTOM1,
             classes: ['popup-button-danger'],
         }],
@@ -66,13 +66,13 @@ export async function showDeleteConfirmWithCascade(title, content) {
     const fullContent = title ? `<h3>${title}</h3>${content}` : content;
 
     const popup = new Popup(fullContent, POPUP_TYPE.CONFIRM, '', {
-        okButton: t`Delete`,
+        okButton: t`Delete with selected options`,
         cancelButton: t`Cancel`,
         wider: true,
         leftAlign: true,
         defaultResult: POPUP_RESULT.NEGATIVE,
         customButtons: [{
-            text: t`Delete All`,
+            text: t`Delete characters, chats and linked world books`,
             result: POPUP_RESULT.CUSTOM1,
             classes: ['popup-button-danger'],
         }],

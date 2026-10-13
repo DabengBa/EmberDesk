@@ -124,7 +124,7 @@ The current code has these explicit owner boundaries. They are the baseline for 
 - `.mes_text`, `.mes[mesid]`, `.mes_reasoning_details`, `.mes_media_wrapper`, `.mes_file_wrapper`, swipe controls, and visible action shell reachability keep compatibility proof
 - long-chat windows preserve direct-child `.mes[mesid]` order, `#show_more_messages` reachability, reading-position restore, and mobile load-more access
 - the hidden controller records `data-main-chat-windowing-*` and `data-main-chat-row-lifecycle-*` markers so the final fallback split is auditable instead of implicit
-- [ADR-0012](../adr/0012-react-migrated-surface-legacy-retirement.md) permits removal only when React covers every listed row family and long-chat algorithm while these proof gates remain green; same-version legacy fallback is not the release rollback mechanism
+- React owns every listed row family and the long-chat algorithm while these proof gates remain green; previous-version deploy is the release rollback mechanism
 
 ### User Message Append
 
@@ -139,7 +139,7 @@ Current path:
 Current proof:
 
 - Main-chat send-form structure is covered by `tests/chat-workspace-structure.test.js`.
-- User-message timing evidence is covered by `main_chat_send_local_echo` in `scripts/interaction-performance-runner.mjs` and documented in `.docs/tech/main-chat-performance-evidence.md`.
+- User-message timing is covered by the `main_chat_send_local_echo` scenario in `scripts/interaction-performance-runner.mjs`.
 
 Failure modes:
 
@@ -241,5 +241,4 @@ Candidate 4: interaction performance evidence.
 - `tests/chat-message-layout.e2e.js`
 - `tests/chat-message-rendering.e2e.js`
 - `tests/chat-message-render-descriptor.test.js`
-- `.docs/tech/main-chat-successor-scope.md`
 - `.docs/tech/third-party-extension-compatibility.md`

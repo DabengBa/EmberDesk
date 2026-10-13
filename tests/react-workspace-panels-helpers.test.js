@@ -302,8 +302,6 @@ describe('React workspace panels bridge helpers', () => {
         const bridgeSource = read('public/scripts/workspace-panels-react-bridge.js');
         const workspacePanelSource = read('app/workspace-panels.tsx');
         const scriptSource = read('public/script.js');
-        const groupChatsSource = read('public/scripts/group-chats.js');
-        expect(groupChatsSource).toContain('retired multi-character chat product');
 
         expect(configSource).not.toContain('mainChatMessageList:');
         expect(configSource).not.toContain('characterAuthoring:');
@@ -325,7 +323,6 @@ describe('React workspace panels bridge helpers', () => {
     test('retires the legacy group drawer, shell entry, bookmark conversion, and group-only settings fields', () => {
         const indexHtmlSource = read('public/index.html');
         const scriptSource = read('public/script.js');
-        const groupChatsSource = read('public/scripts/group-chats.js');
         const tagsSource = read('public/scripts/tags.js');
         const bookmarksSource = read('public/scripts/chat-branch.js');
         const settingsSurfaceSource = read('app/components/settings/SettingsSurface.tsx');
@@ -336,9 +333,6 @@ describe('React workspace panels bridge helpers', () => {
 
         expect(scriptSource).not.toContain('rm_group_chats_block');
         expect(scriptSource).not.toContain('rm_button_group_chats');
-        expect(groupChatsSource).not.toContain("$('#rm_group_submit').on('click', createGroup)");
-        expect(groupChatsSource).not.toContain("$('#rm_group_filter').on('input', filterGroupMembers)");
-        expect(groupChatsSource).not.toContain('function onSendTextareaInput');
         expect(tagsSource).not.toContain('rm_button_group_chats');
         expect(tagsSource).not.toContain('onGroupCreateClick');
         expect(bookmarksSource).not.toContain('convertSoloToGroupChat');
@@ -353,14 +347,12 @@ describe('React workspace panels bridge helpers', () => {
     test('ships React authoring form fields and legacy write-through action bridge', () => {
         const workspacePanelSource = read('app/workspace-panels.tsx');
         const scriptSource = read('public/script.js');
-        const groupChatsSource = read('public/scripts/group-chats.js');
         const workspaceCommandsSource = read('app/compat/workspace-commands.ts');
 
         expect(workspacePanelSource).not.toContain('groupAuthoring');
         expect(workspacePanelSource).not.toContain('createGroupAuthoring');
         expect(scriptSource).not.toContain('mountReactGroupAuthoringPanel');
         expect(scriptSource).not.toContain('GROUP_AUTHORING_REACT_HOST_ID');
-        expect(groupChatsSource).not.toContain('setGroupAuthoringMembersDraft');
         expect(workspaceCommandsSource).not.toContain('groupAuthoring');
         expect(workspaceCommandsSource).not.toContain('openGroupChats');
         expect(fs.existsSync(path.join(repoRoot, 'public/scripts/group-authoring.js'))).toBe(false);

@@ -45,7 +45,8 @@ export function RegexEditor() {
                     <small data-i18n="Script Name">Script Name</small>
                 </label>
                 <div>
-                    <input id="regex_script_name" className="regex_script_name text_pole textarea_compact" type="text" aria-label="Script Name" data-i18n="[aria-label]Script Name" />
+                    <input id="regex_script_name" className="regex_script_name text_pole textarea_compact" type="text" required aria-describedby="regex_name_error" aria-label="Script Name" data-i18n="[aria-label]Script Name" />
+                    <small id="regex_name_error" className="regex-validation-error" role="alert" hidden></small>
                 </div>
             </div>
             <div className="flex1">
@@ -53,7 +54,8 @@ export function RegexEditor() {
                     <small data-i18n="Find Regex">Find Regex</small>
                 </label>
                 <div>
-                    <input id="find_regex" className="find_regex text_pole textarea_compact" type="text" aria-label="Find Regex" data-i18n="[aria-label]Find Regex" />
+                    <input id="find_regex" className="find_regex text_pole textarea_compact" type="text" required aria-describedby="regex_find_error" aria-label="Find Regex" data-i18n="[aria-label]Find Regex" />
+                    <small id="regex_find_error" className="regex-validation-error" role="alert" hidden></small>
                 </div>
             </div>
             <div className="flex1">
@@ -74,9 +76,10 @@ export function RegexEditor() {
             </div>
         </div>
 
-        <div className="flex-container">
-            <div className="flex1 wi-enter-footer-text flex-container flexFlowColumn flexNoGap alignitemsstart">
-                <small data-i18n="ext_regex_affects">Affects</small>
+        <div className="flex-container regex-editor-options">
+            <div className="flex1 regex-editor-option-group" role="group" aria-label="Affects" aria-describedby="regex_placement_error" data-i18n="[aria-label]ext_regex_affects">
+                <h4 data-i18n="ext_regex_affects">Affects</h4>
+                <small id="regex_placement_error" className="regex-validation-error" role="alert" hidden></small>
                 <div data-i18n="[title]ext_regex_user_input_desc" title="Messages sent by the user.">
                     <label className="checkbox flex-container">
                         <input type="checkbox" name="replace_position" defaultValue="1" />
@@ -124,8 +127,8 @@ export function RegexEditor() {
                     </div>
                 </div>
             </div>
-            <div className="flex1 wi-enter-footer-text flex-container flexFlowColumn flexNoGap alignitemsstart">
-                <small data-i18n="ext_regex_other_options">Other Options</small>
+            <div className="flex1 regex-editor-option-group">
+                <h4 data-i18n="ext_regex_other_options">Other Options</h4>
                 <label className="checkbox flex-container">
                     <input type="checkbox" name="disabled" />
                     <span data-i18n="Disabled">Disabled</span>

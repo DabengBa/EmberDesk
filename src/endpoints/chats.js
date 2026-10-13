@@ -9,7 +9,6 @@ import { sync as writeFileAtomicSync } from 'write-file-atomic';
 import _ from 'lodash';
 
 import validateAvatarUrlMiddleware from '../middleware/validateFileName.js';
-import { groupChatRetirementHandler, sendGroupChatRetired } from './group-chat-retirement.js';
 import {
     getConfigValue,
     humanizedDateTime,
@@ -64,7 +63,7 @@ export const CHAT_BACKUPS_PREFIX = 'chat_';
 
 function rejectGroupChatRequest(request, response, next) {
     if (request.body?.is_group) {
-        return sendGroupChatRetired(response);
+        return response.status(400).send({ error: 'group chats are not supported' });
     }
     return next();
 }
@@ -1059,8 +1058,6 @@ router.post('/import', validateAvatarUrlMiddleware, async function (request, res
         return response.send({ error: true });
     }
 });
-
-router.use('/group', groupChatRetirementHandler);
 
 router.post('/search', validateAvatarUrlMiddleware, async function (request, response) {
     try {

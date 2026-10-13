@@ -25,27 +25,18 @@ const profiles = {
         worlds: 4,
         chatsPerCharacter: 2,
         messagesPerChat: 18,
-        groups: 2,
-        groupChatsPerGroup: 2,
-        groupMessagesPerChat: 24,
     },
     medium: {
         characters: 48,
         worlds: 12,
         chatsPerCharacter: 4,
         messagesPerChat: 36,
-        groups: 8,
-        groupChatsPerGroup: 3,
-        groupMessagesPerChat: 48,
     },
     large: {
         characters: 120,
         worlds: 24,
         chatsPerCharacter: 6,
         messagesPerChat: 60,
-        groups: 18,
-        groupChatsPerGroup: 4,
-        groupMessagesPerChat: 72,
     },
 };
 
@@ -111,7 +102,6 @@ await seedUserAccount();
 const worldNames = await seedWorlds();
 const characterRecords = await seedCharacters(worldNames);
 await seedSettings(characterRecords[0]?.avatar ?? '');
-await seedGroups(characterRecords);
 await writeDevConfig();
 
 const summary = {
@@ -122,8 +112,6 @@ const summary = {
         characters: profile.characters,
         worlds: profile.worlds,
         chatsPerCharacter: profile.chatsPerCharacter,
-        groups: profile.groups,
-        groupChatsPerGroup: profile.groupChatsPerGroup,
     },
     user: options.userHandle ? { handle: options.userHandle } : null,
 };
@@ -134,7 +122,6 @@ async function seedSettings(activeCharacterAvatar) {
     const settings = structuredClone(defaultSettings);
     settings.firstRun = false;
     settings.active_character = activeCharacterAvatar;
-    settings.active_group = null;
     settings.power_user = settings.power_user || {};
     // Auto-open the seeded active character so first paint exercises real chat
     // history rather than an empty chat with only the greeting.
@@ -341,85 +328,6 @@ async function seedCharacters(worldNames) {
     return records;
 }
 
-async function seedGroups(characterRecords) {
-    for (let index = 0; index < profile.groups; index++) {
-        const id = `dev-group-${String(index + 1).padStart(3, '0')}`;
-        const name = `Dev Group ${String(index + 1).padStart(2, '0')}`;
-        const start = (index * 3) % characterRecords.length;
-        const members = [];
-
-        for (let offset = 0; offset < 4; offset++) {
-            members.push(characterRecords[(start + offset) % characterRecords.length].avatar);
-        }
-
-        const chats = [];
-        for (let chatIndex = 0; chatIndex < profile.groupChatsPerGroup; chatIndex++) {
-            const chatId = `${id}-chat-${chatIndex + 1}`;
-            chats.push(chatId);
-            const header = {
-                chat_metadata: {
-                    integrity: `${chatId}-integrity`,
-                    scenario: randomSentence(12),
-                },
-                user_name: 'unused',
-                character_name: 'unused',
-            };
-            const lines = [JSON.stringify(header)];
-            const startedAt = Date.UTC(2026, 1, 1, 10, 0, 0) + ((index * 10) + chatIndex) * 7200000;
-
-            for (let messageIndex = 0; messageIndex < profile.groupMessagesPerChat; messageIndex++) {
-                const speakerRecord = messageIndex % 3 === 0
-                    ? null
-                    : characterRecords[(start + messageIndex) % characterRecords.length];
-                const sender = speakerRecord ? speakerRecord.name : 'User';
-                const message = {
-                    name: sender,
-                    is_user: sender === 'User',
-                    is_system: false,
-                    mes: randomChatMessage(index + messageIndex),
-                    send_date: new Date(startedAt + messageIndex * 60000).toISOString(),
-                };
-
-                if (speakerRecord) {
-                    message.original_avatar = speakerRecord.avatar;
-                    message.force_avatar = buildAvatarThumbnailUrl(speakerRecord.avatar);
-                }
-
-                lines.push(JSON.stringify(message));
-            }
-
-            await fs.promises.writeFile(
-                path.join(directories.groupChats, `${chatId}.jsonl`),
-                `${lines.join('\n')}\n`,
-                'utf8',
-            );
-        }
-
-        const group = {
-            id,
-            name,
-            members,
-            avatar_url: '',
-            allow_self_responses: false,
-            activation_strategy: 0,
-            generation_mode: 0,
-            disabled_members: [],
-            fav: index % 5 === 0,
-            chat_id: chats[0],
-            chats,
-            auto_mode_delay: 5,
-            generation_mode_join_prefix: '',
-            generation_mode_join_suffix: '',
-        };
-
-        await fs.promises.writeFile(
-            path.join(directories.groups, `${id}.json`),
-            `${JSON.stringify(group, null, 4)}\n`,
-            'utf8',
-        );
-    }
-}
-
 async function writeDevConfig() {
     const config = [
         `dataRoot: ${normalizePathForYaml(dataRoot)}`,
@@ -429,9 +337,6 @@ async function writeDevConfig() {
         '  enabled: false',
         'enableUserAccounts: true',
         'whitelistMode: false',
-        'extensions:',
-        '  enabled: true',
-        '  autoUpdate: false',
         'skipContentCheck: true',
         'logging:',
         '  minLogLevel: 1',
@@ -479,10 +384,6 @@ function createCharacterBook(name, worldName) {
             },
         ],
     };
-}
-
-function buildAvatarThumbnailUrl(avatar) {
-    return `/thumbnail?type=avatar&file=${encodeURIComponent(avatar)}`;
 }
 
 function randomParagraphs(count) {

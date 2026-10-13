@@ -12,7 +12,7 @@
   - `tests/helpers/script-js-reverse-import-contract.js`
   - `tests/script-js-composition-root.test.js`
 - Related tech doc: [Workspace Composition Root](../tech/workspace-composition-root.md)
-- Related ADR: [ADR-0014](../adr/0014-workspace-composition-root.md)
+- Related tech doc: [.docs/tech/workspace-composition-root.md](../tech/workspace-composition-root.md)
 - Related semantic docs:
   - [Chat Workspace](../db/pages/chat-workspace.md)
   - [Workspace Startup Bootstrap](../db/features/startup-bootstrap.md)

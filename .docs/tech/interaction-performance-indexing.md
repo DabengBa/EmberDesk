@@ -171,7 +171,7 @@ The retired SQLite sidecar historically cached per-character derived payloads fo
 
 Shared SQLite lifecycle details live in [Derived Cache SQLite Helper](derived-cache-sqlite.md). The helper owns feature detection, PRAGMA setup, cached handle lifecycle, schema-version reset plumbing, status reporting, and reset-count circuit breaking. `character-index.js` remains the owner of the retired helper schema, payloads, freshness checks, and fallback rules used by historical proof.
 
-Per [ADR-0009](../adr/0009-derived-cache-sqlite-drizzle-decision.md), this sidecar used the handwritten `node:sqlite` path. Drizzle was reviewed and rejected for that derived-cache scope; the decision remains historical context rather than a reason to keep the sidecar in normal runtime.
+This sidecar uses the handwritten `node:sqlite` path rather than Drizzle.
 
 It is not just a tiny row index with avatar and title fields.
 

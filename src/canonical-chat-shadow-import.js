@@ -350,7 +350,7 @@ export function reconcileCanonicalChatSources({
                 sourcePath: toSourcePath(directories, filePath),
             }))
             : ownerType === 'group'
-                ? listJsonlFiles(directories.groupChats)
+                ? listJsonlFiles(path.join(directories.root, 'group chats'))
                     .filter(filePath => path.parse(filePath).name === String(ownerId))
                     .map(filePath => ({
                         ownerType,

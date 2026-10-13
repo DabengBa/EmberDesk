@@ -105,26 +105,14 @@ import { updateReasoningUI, parseReasoningFromString } from './reasoning.js';
 import { IGNORE_SYMBOL } from './constants.js';
 import { macros } from './macros/macro-system.js';
 
-const GROUP_CHAT_RETIRED_MESSAGE = 'Group chat functionality has been removed from EmberDesk.';
-
-function rejectRetiredGroupChatOperation() {
-    const error = new Error(GROUP_CHAT_RETIRED_MESSAGE);
-    error.code = 'group_chat_feature_removed';
-    error.error = 'group_chat_feature_removed';
-    error.status = 410;
-    return Promise.reject(error);
-}
-
 export function getContext() {
     return {
         accountStorage,
         chat,
         characters,
-        groups: [],
         name1,
         name2,
         characterId: this_chid,
-        groupId: null,
         chatId: characters[this_chid]?.chat,
         getCurrentChatId,
         getRequestHeaders,
@@ -155,7 +143,6 @@ export function getContext() {
         updateChatMetadata,
         saveChat: saveChatConditional,
         openCharacterChat,
-        openGroupChat: rejectRetiredGroupChatOperation,
         saveMetadata,
         sendSystemMessage,
         activateSendButtons,
@@ -291,7 +278,6 @@ export function getContext() {
         updateReasoningUI,
         parseReasoningFromString,
         unshallowCharacter,
-        unshallowGroupMembers: rejectRetiredGroupChatOperation,
         symbols: {
             ignore: IGNORE_SYMBOL,
         },

@@ -147,3 +147,158 @@ test.describe('world info workbench', () => {
         await expect(page.locator('[data-world-info-react-entry]').first()).toBeVisible({ timeout: 10_000 });
     });
 });
+
+test.describe('UI hardening', () => {
+    test.beforeEach(async ({ page }) => {
+        await page.route('**/api/settings/save', route => route.fulfill({ json: {} }));
+        await page.route('**/api/worldinfo/edit', route => route.fulfill({ json: {} }));
+    });
+
+    async function openEntry(page) {
+        await testSetup.awaitST({ page });
+        await openWorldInfo(page);
+        await page.locator('[data-world-info-react-control="world-select"]').selectOption({ index: 1 });
+        await page.locator('[data-world-info-react-entry]').first().click();
+        await expect(page.locator('[data-world-info-react-editor="active"]')).toBeVisible();
+    }
+
+    async function openRegex(page) {
+        await testSetup.awaitST({ page });
+        await page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: '正则' }).click();
+        await expect(page.locator('#RegexPanel')).toBeVisible();
+        if (!await page.locator('#open_regex_editor').isVisible()) {
+            await page.locator('.regex_settings > .inline-drawer > .inline-drawer-toggle').click();
+        }
+    }
+
+    test('world entry reports rejected saves and retries the retained draft', async ({ page }) => {
+        let rejectSave = true;
+        const writes = [];
+        await page.route('**/api/worldinfo/edit', route => {
+            writes.push(route.request().postDataJSON());
+            return route.fulfill({ status: rejectSave ? 500 : 200, json: {} });
+        });
+        await openEntry(page);
+        const content = page.locator('[data-world-info-react-field="content"]');
+        const draft = `${await content.inputValue()}\nRetained audit draft`;
+        await content.fill(draft);
+        await page.locator('[data-world-info-react-field="comment"]').focus();
+        const status = page.locator('[data-world-info-react-section="ops"]');
+        await expect(status).toContainText('保存失败');
+        await expect(content).toHaveValue(draft);
+        rejectSave = false;
+        await page.locator('[data-world-info-react-action="retry-save"]').click();
+        await expect(status).toContainText('已保存');
+        expect(Object.values(writes.at(-1).data.entries).some(entry => entry.content === draft)).toBe(true);
+    });
+
+    test('expanded world editor is modal and restores focus on desktop and mobile', async ({ page }) => {
+        await openEntry(page);
+        for (const width of [1440, 390]) {
+            await page.setViewportSize({ width, height: 844 });
+            if (width < 768) {
+                await page.locator('[data-world-info-react-entry]').first().click();
+            }
+            const trigger = page.locator('[data-world-info-react-action="expand-content"]');
+            await trigger.click();
+            const dialog = page.locator('[data-world-info-react-modal="content"]');
+            await expect(dialog).toBeVisible();
+            expect(await dialog.evaluate(element => element.matches(':modal'))).toBe(true);
+            await dialog.locator('textarea').focus();
+            for (let index = 0; index < 7; index++) {
+                await page.keyboard.press('Tab');
+                expect(await dialog.evaluate(element => element.contains(document.activeElement))).toBe(true);
+            }
+            await page.keyboard.press('Escape');
+            await expect(dialog).toHaveCount(0);
+            await expect(trigger).toBeFocused();
+        }
+    });
+
+    test('regex import cancellation never imports and clears the file input', async ({ page }) => {
+        await openRegex(page);
+        const list = page.locator('#saved_regex_scripts .regex-script-label');
+        const count = await list.count();
+        const file = {
+            name: 'ui-hardening-regex.json',
+            mimeType: 'application/json',
+            buffer: Buffer.from(JSON.stringify({ scriptName: 'Transient test', findRegex: '/test/g', replaceString: '', placement: [1], trimStrings: [], disabled: true })),
+        };
+        for (const action of ['escape', 'cancel', 'close']) {
+            await page.locator('#import_regex_file').setInputFiles(file);
+            await expect(page.locator('#regex_import_target_global')).toBeVisible();
+            if (action === 'escape') {
+                await page.keyboard.press('Escape');
+            } else {
+                await page.locator(`dialog[open] .popup-button-${action === 'cancel' ? 'cancel' : 'close'}`).click();
+            }
+            await expect(page.locator('#regex_import_target_global')).toHaveCount(0);
+            await expect(page.locator('#import_regex_file')).toHaveValue('');
+            await expect(list).toHaveCount(count);
+        }
+    });
+
+    test('regex editor keeps invalid drafts open and associates field errors', async ({ page }) => {
+        await page.setViewportSize({ width: 390, height: 844 });
+        await openRegex(page);
+        await page.locator('#open_regex_editor').click();
+        const directions = await page.locator('.regex-editor-option-group').evaluateAll(elements => elements.map(element => getComputedStyle(element).flexDirection));
+        expect(directions).toEqual(['column', 'column']);
+        const dialog = page.locator('dialog[open]').filter({ has: page.locator('#regex_editor_template') });
+        await dialog.locator('.popup-button-ok').click();
+        await expect(dialog).toBeVisible();
+        await expect(dialog.locator('#regex_script_name')).toHaveAttribute('aria-invalid', 'true');
+        await dialog.locator('#regex_script_name').fill('Draft rule');
+        await dialog.locator('#find_regex').fill('/[/');
+        await dialog.locator('.popup-button-ok').click();
+        await expect(dialog.locator('#find_regex')).toHaveAttribute('aria-invalid', 'true');
+        await expect(dialog.locator('#regex_script_name')).toHaveValue('Draft rule');
+        await dialog.locator('#find_regex').fill('/test/g');
+        await dialog.locator('input[name="replace_position"][value="1"]').uncheck();
+        await dialog.locator('.popup-button-ok').click();
+        await expect(dialog.locator('#regex_placement_error')).toBeVisible();
+        await expect(dialog).toBeVisible();
+        await page.keyboard.press('Escape');
+    });
+
+    test('world editor expand controls have touch-sized targets on mobile', async ({ page }) => {
+        await page.setViewportSize({ width: 390, height: 844 });
+        await openEntry(page);
+        const bounds = await page.locator('[data-world-info-react-action="expand-content"]').boundingBox();
+        expect(bounds.width).toBeGreaterThanOrEqual(44);
+        expect(bounds.height).toBeGreaterThanOrEqual(44);
+    });
+
+    test('confirmed regex import remains usable in the debugger', async ({ page }) => {
+        await openRegex(page);
+        await page.locator('#import_regex_file').setInputFiles({
+            name: 'ui-hardening-confirmed.json',
+            mimeType: 'application/json',
+            buffer: Buffer.from(JSON.stringify({ scriptName: 'Confirmed rule', findRegex: '/test/g', replaceString: 'passed', placement: [1], trimStrings: [], disabled: false })),
+        });
+        await expect(page.locator('#regex_import_target_global')).toBeVisible();
+        await expect(page.locator('#regex_import_target_scoped')).toBeDisabled();
+        await page.locator('dialog[open] .popup-button-ok').click();
+        await expect(page.locator('#saved_regex_scripts')).toContainText('Confirmed rule');
+        await page.locator('#open_regex_debugger').click();
+        const dialog = page.locator('dialog[open]').filter({ has: page.locator('.regex-debugger-container') });
+        await expect(dialog.locator('.regex-debugger-results')).toBeHidden();
+        await dialog.locator('#regex_debugger_raw_input').fill('test');
+        await dialog.locator('#regex_debugger_run_test').click();
+        await expect(dialog.locator('.regex-debugger-results')).toBeVisible();
+        await expect(dialog.locator('#regex_debugger_final_output')).toHaveText('passed');
+        await expect(dialog.locator('#regex_debugger_steps_output')).toContainText('Confirmed rule');
+    });
+
+    test('empty regex debugger offers creation instead of dead actions', async ({ page }) => {
+        await openRegex(page);
+        await expect(page.locator('#saved_regex_scripts .regex-script-label')).toHaveCount(0);
+        await page.locator('#open_regex_debugger').click();
+        const dialog = page.locator('dialog[open]').filter({ has: page.locator('.regex-debugger-container') });
+        await expect(dialog.locator('#regex_debugger_run_test')).toBeDisabled();
+        await expect(dialog.locator('#regex_debugger_save_order')).toBeDisabled();
+        await expect(dialog.locator('.regex-debugger-results')).toBeHidden();
+        await dialog.locator('#regex_debugger_create_rule').click();
+        await expect(page.locator('#regex_editor_template')).toBeVisible();
+    });
+});

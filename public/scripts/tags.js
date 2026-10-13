@@ -167,10 +167,10 @@ export const tag_sort_mode = {
  * Tags without `filter_state` (VIEW, HINT, UNFILTER) are action buttons only.
  */
 const ACTIONABLE_TAGS = {
-    FAV: { id: '1', sort_order: 1, name: 'Show only favorites', color: 'rgba(255, 255, 0, 0.5)', filter_state: undefined, action: filterByFav, icon: 'fa-solid fa-star', class: 'filterByFavorites' },
-    FOLDER: { id: '4', sort_order: 3, name: 'Show only folders', color: 'rgba(120, 120, 120, 0.5)', filter_state: undefined, action: filterByFolder, icon: 'fa-solid fa-folder-plus', class: 'filterByFolder' },
-    VIEW: { id: '2', sort_order: 4, name: 'Manage tags', color: 'rgba(150, 100, 100, 0.5)', action: onViewTagsListClick, icon: 'fa-solid fa-gear', class: 'manageTags' },
-    HINT: { id: '3', sort_order: 5, name: 'Show Tag List', color: 'rgba(150, 100, 100, 0.5)', action: onTagListHintClick, icon: 'fa-solid fa-tags', class: 'showTagList' },
+    FAV: { id: '1', sort_order: 1, name: 'Show only favorites', color: 'color-mix(in srgb, var(--golden) 50%, transparent)', filter_state: undefined, action: filterByFav, icon: 'fa-solid fa-star', class: 'filterByFavorites' },
+    FOLDER: { id: '4', sort_order: 3, name: 'Show only folders', color: 'color-mix(in srgb, var(--SmartThemeBodyColor) 40%, transparent)', filter_state: undefined, action: filterByFolder, icon: 'fa-solid fa-folder-plus', class: 'filterByFolder' },
+    VIEW: { id: '2', sort_order: 4, name: 'Manage tags', color: 'color-mix(in srgb, var(--SmartThemeEmColor) 45%, transparent)', action: onViewTagsListClick, icon: 'fa-solid fa-gear', class: 'manageTags' },
+    HINT: { id: '3', sort_order: 5, name: 'Show Tag List', color: 'color-mix(in srgb, var(--SmartThemeEmColor) 45%, transparent)', action: onTagListHintClick, icon: 'fa-solid fa-tags', class: 'showTagList' },
     UNFILTER: { id: '5', sort_order: 6, name: 'Clear all filters', action: onClearAllFiltersClick, icon: 'fa-solid fa-filter-circle-xmark', class: 'clearAllFilters' },
 };
 
@@ -1921,7 +1921,7 @@ async function onTagsPruneClick() {
         return;
     }
 
-    const confirm = await Popup.show.confirm(t`Prune ${tagsToPrune.length} tags and ${tagMapsToPrune.length} references`, t`Are you sure you want to remove all unused tags and references to missing or deleted characters?`);
+    const confirm = await Popup.show.confirm(t`Prune ${tagsToPrune.length} tags and ${tagMapsToPrune.length} references`, t`Are you sure you want to remove all unused tags and references to missing or deleted characters?`, { defaultResult: POPUP_RESULT.NEGATIVE });
 
     if (!confirm) {
         return;
@@ -2095,12 +2095,21 @@ async function onTagDeleteClick() {
         }).val(null).trigger('change');
     }
 
-    const result = await callGenericPopup(popupContent, POPUP_TYPE.CONFIRM);
+    let mergeTagId = null;
+    const result = await callGenericPopup(popupContent, POPUP_TYPE.CONFIRM, '', {
+        // Read the merge target while the dialog is still attached — the
+        // content is detached before the show() promise resolves.
+        onClosing: popup => {
+            if (popup.result === POPUP_RESULT.AFFIRMATIVE) {
+                const value = popupContent.find('#merge_tag_select').val();
+                mergeTagId = value ? String(value) : null;
+            }
+            return true;
+        },
+    });
     if (result !== POPUP_RESULT.AFFIRMATIVE) {
         return;
     }
-
-    const mergeTagId = $('#merge_tag_select').val() ? String($('#merge_tag_select').val()) : null;
 
     // Remove the tag from all entities that use it
     // If we have a replacement tag, add that one instead
@@ -2126,8 +2135,21 @@ async function onTagDeleteClick() {
 
 function onTagRenameInput() {
     const id = $(this).closest('.tag_view_item').attr('id');
-    const newName = $(this).text();
+    const newName = $(this).text().trim();
     const tag = tags.find(x => x.id === id);
+
+    if (!newName) {
+        $(this).text(tag.name);
+        toastr.warning('Tag name cannot be empty.', 'Rename Tag');
+        return;
+    }
+
+    if (tags.some(x => x.id !== id && x.name.toLowerCase() === newName.toLowerCase())) {
+        $(this).text(tag.name);
+        toastr.warning(`A tag named '${newName}' already exists.`, 'Rename Tag');
+        return;
+    }
+
     tag.name = newName;
     $(this).attr('dirty', '');
     $(`.tag[id="${id}"] .tag_name`).text(newName);

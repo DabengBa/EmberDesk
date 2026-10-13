@@ -1,6 +1,6 @@
 import dialogPolyfill from '../lib/dialog-polyfill.esm.js';
 import { shouldSendOnEnter } from './RossAscends-mods.js';
-import { t } from './i18n.js';
+import { t, translate } from './i18n.js';
 import { toastPositionClasses } from './power-user.js';
 import { clamp, removeFromArray, runAfterAnimation, uuidv4 } from './utils.js';
 
@@ -485,7 +485,52 @@ export class Popup {
             case POPUP_TYPE.CROP: {
                 this.cropWrap.style.display = 'block';
                 this.cropImage.src = cropImage;
+                this.cropImage.alt = t`Crop avatar`;
+                const controls = document.createElement('div');
+                controls.className = 'popup-crop-controls';
+                controls.setAttribute('role', 'group');
+                controls.setAttribute('aria-label', t`Adjust crop selection`);
+                const actions = [
+                    ['Move crop left', 'fa-arrow-left', -1, 0],
+                    ['Move crop right', 'fa-arrow-right', 1, 0],
+                    ['Move crop up', 'fa-arrow-up', 0, -1],
+                    ['Move crop down', 'fa-arrow-down', 0, 1],
+                    ['Shrink crop', 'fa-minus', 0, 0, 0.9],
+                    ['Enlarge crop', 'fa-plus', 0, 0, 1.1],
+                    ['Reset crop', 'fa-rotate-left'],
+                ];
+                for (const [label, icon, x, y, scale] of actions) {
+                    const button = document.createElement('button');
+                    button.type = 'button';
+                    button.className = 'menu_button';
+                    const glyph = document.createElement('i');
+                    glyph.className = `fa-solid ${icon}`;
+                    glyph.setAttribute('aria-hidden', 'true');
+                    button.appendChild(glyph);
+                    button.setAttribute('aria-label', translate(String(label)));
+                    button.title = translate(String(label));
+                    button.disabled = true;
+                    button.addEventListener('click', () => {
+                        const cropper = $(this.cropImage);
+                        if (x === undefined) {
+                            cropper.cropper('reset');
+                            return;
+                        }
+                        const data = cropper.cropper('getData');
+                        const step = Math.max(1, Math.min(data.width, data.height) * 0.05);
+                        const factor = Number(scale ?? 1);
+                        cropper.cropper('setData', {
+                            x: data.x + Number(x) * step + data.width * (1 - factor) / 2,
+                            y: data.y + Number(y) * step + data.height * (1 - factor) / 2,
+                            width: data.width * factor,
+                            height: data.height * factor,
+                        });
+                    });
+                    controls.appendChild(button);
+                }
+                this.cropWrap.insertAdjacentElement('afterend', controls);
                 $(this.cropImage).cropper({
+                    ready: () => controls.querySelectorAll('button').forEach(button => { button.disabled = false; }),
                     aspectRatio: cropAspect ?? 2 / 3,
                     autoCropArea: 1,
                     viewMode: 2,
@@ -510,6 +555,15 @@ export class Popup {
 
         this.mainInput.value = inputValue;
         this.mainInput.rows = rows ?? 1;
+
+        // Multiline inputs submit with Ctrl+Enter — make the shortcut visible.
+        this.mainInput.parentElement?.querySelector('.popup-input-hint')?.remove();
+        if (type === POPUP_TYPE.INPUT && this.mainInput.rows > 1) {
+            const hint = document.createElement('small');
+            hint.className = 'popup-input-hint opacity50p';
+            hint.textContent = t`Press Ctrl+Enter to submit.`;
+            this.mainInput.insertAdjacentElement('afterend', hint);
+        }
 
         // Apply placeholder and tooltip based on popup type
         if (type === POPUP_TYPE.INPUT) {
@@ -840,6 +894,8 @@ export class Popup {
             if (this.onClose) {
                 await this.onClose(this);
             }
+
+            if (this.type === POPUP_TYPE.CROP) $(this.cropImage).cropper('destroy');
 
             // Remove it from the dom
             this.dlg.remove();

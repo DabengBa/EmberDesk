@@ -13,6 +13,7 @@ import {
 import { worldInfoWorkbenchStyles as s } from '@/styles/world-info-workbench.styles';
 import { TagChipInput } from '@/components/fields/TagChipInput';
 import type { WorldInfoCommands } from './compat/workspace-commands';
+import { translate } from './compat/i18n.js';
 
 function parseFiniteNumber(value: string): number | undefined {
     if (value.trim() === '') {
@@ -495,6 +496,8 @@ function EntryEditor({
     const titleInputRef = useRef<HTMLInputElement>(null);
     const contentInputRef = useRef<HTMLTextAreaElement>(null);
     const modalContentRef = useRef<HTMLTextAreaElement>(null);
+    const modalDialogRef = useRef<HTMLDialogElement>(null);
+    const pendingFieldsRef = useRef<Record<string, unknown>>({});
     const advanced = isAdvancedDefault(entry);
     const entryUid = entry?.uid;
     const focusTitleOnOpen = Boolean(onBack);
@@ -509,8 +512,13 @@ function EntryEditor({
     // same commit that delivers the entry — a downstream focus effect must not
     // find an unmounted input on its animation frame.
     if (draftEntry !== entry) {
+        if (draftEntry?.uid !== entry?.uid) {
+            pendingFieldsRef.current = {};
+            saveSeqRef.current++;
+            setSaveState('idle');
+        }
         setDraftEntry(entry);
-        setDraft(entry);
+        setDraft(entry ? { ...entry, ...pendingFieldsRef.current } as WorldInfoWorkbenchEntryDetail : null);
     }
 
     useEffect(() => {
@@ -527,8 +535,16 @@ function EntryEditor({
             return undefined;
         }
 
-        const frame = requestAnimationFrame(() => modalContentRef.current?.focus());
-        return () => cancelAnimationFrame(frame);
+        const dialog = modalDialogRef.current;
+        const previousFocus = document.activeElement;
+        dialog?.showModal();
+        modalContentRef.current?.focus({ preventScroll: true });
+        return () => {
+            dialog?.close();
+            if (previousFocus instanceof HTMLElement && previousFocus.isConnected) {
+                previousFocus.focus({ preventScroll: true });
+            }
+        };
     }, [contentModalOpen]);
 
     if (!entry || !draft) {
@@ -542,11 +558,15 @@ function EntryEditor({
 
     const saveFields = (fields: Record<string, unknown>) => {
         setDraft(current => current ? { ...current, ...fields } as WorldInfoWorkbenchEntryDetail : current);
+        pendingFieldsRef.current = { ...pendingFieldsRef.current, ...fields };
         const seq = ++saveSeqRef.current;
         setSaveState('saving');
-        Promise.resolve(commands.updateEntryFields(entry.uid, fields))
+        Promise.resolve(commands.updateEntryFields(entry.uid, { ...pendingFieldsRef.current }))
             .then(result => {
                 if (seq === saveSeqRef.current) {
+                    if (result !== false) {
+                        pendingFieldsRef.current = {};
+                    }
                     setSaveState(result === false ? 'error' : 'saved');
                 }
             })
@@ -575,10 +595,18 @@ function EntryEditor({
     const closeContentModal = () => {
         saveFields({ content: draft.content ?? '' });
         setContentModalOpen(false);
-        requestAnimationFrame(() => contentInputRef.current?.focus());
     };
 
     const onModalKeyDown = (event: KeyboardEvent) => {
+        if (event.key === 'Tab') {
+            const controls = modalDialogRef.current?.querySelectorAll<HTMLElement>('button:not([disabled]), textarea');
+            const first = controls?.[0];
+            const last = controls?.[controls.length - 1];
+            if (event.shiftKey ? document.activeElement === first : document.activeElement === last) {
+                event.preventDefault();
+                (event.shiftKey ? last : first)?.focus();
+            }
+        }
         if (event.key === 'Escape' || ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's')) {
             event.preventDefault();
             event.stopPropagation();
@@ -907,6 +935,16 @@ function EntryEditor({
                     </span>
                 ) : null}
             </span>
+            {saveState === 'error' ? (
+                <button
+                    type="button"
+                    className={buttonClass(s.button, s.buttonGhost)}
+                    data-world-info-react-action="retry-save"
+                    onClick={() => saveFields(pendingFieldsRef.current)}
+                >
+                    重试保存
+                </button>
+            ) : null}
             <button
                 type="button"
                 {...stylex.props(s.sectionAction)}
@@ -920,7 +958,6 @@ function EntryEditor({
         {contentModalOpen ? createPortal(
             <div
                 {...stylex.props(s.modalOverlay)}
-                data-world-info-react-modal="content"
                 role="presentation"
                 onMouseDown={event => {
                     event.stopPropagation();
@@ -932,7 +969,21 @@ function EntryEditor({
                 onClick={event => event.stopPropagation()}
                 onKeyDown={onModalKeyDown}
             >
-                <dialog open {...stylex.props(s.modalPanel)} aria-modal="true" aria-label="放大编辑注入内容">
+                <dialog
+                    ref={modalDialogRef}
+                    {...stylex.props(s.modalPanel)}
+                    data-world-info-react-modal="content"
+                    aria-modal="true"
+                    aria-label="放大编辑注入内容"
+                    onCancel={event => { event.preventDefault(); closeContentModal(); }}
+                    onClick={event => {
+                        if (event.target !== event.currentTarget) return;
+                        const bounds = event.currentTarget.getBoundingClientRect();
+                        if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) {
+                            closeContentModal();
+                        }
+                    }}
+                >
                     <header {...stylex.props(s.modalHead)}>
                         <span {...stylex.props(s.modalTitle)}>注入内容</span>
                         <div {...stylex.props(s.macroBar)}>
@@ -1328,7 +1379,7 @@ export function WorldInfoWorkbenchPanel({
                                             }}
                                         >
                                             {sortOptions.filter(option => !option.hidden).map(option => (
-                                                <option key={option.value} value={option.value}>{option.label}</option>
+                                                <option key={option.value} value={option.value}>{translate(option.label)}</option>
                                             ))}
                                         </select>
                                     )}

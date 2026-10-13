@@ -175,12 +175,6 @@ test.describe('MacroEnvBuilder', () => {
         const result = await page.evaluate(async () => {
             /** @type {import('../../public/scripts/macros/engine/MacroEnvBuilder.js')} */
             const { MacroEnvBuilder } = await import('./scripts/macros/engine/MacroEnvBuilder.js');
-            const groupChats = await import('./scripts/group-chats.js');
-
-            // Ensure we are in a solo-chat like state for this test
-            if (typeof groupChats.resetSelectedGroup === 'function') {
-                groupChats.resetSelectedGroup();
-            }
 
             /** @type {import('../../public/scripts/macros/engine/MacroEnvBuilder.js').MacroEnvRawContext} */
             const ctx = {

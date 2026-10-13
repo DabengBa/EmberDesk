@@ -21,8 +21,16 @@ describe('getUserDirectories', () => {
         expect(dirs).toHaveProperty('chats');
         expect(dirs).toHaveProperty('avatars');
         expect(dirs).toHaveProperty('backups');
-        expect(dirs).toHaveProperty('sysprompt');
+        expect(dirs).toHaveProperty('worlds');
+        expect(dirs).toHaveProperty('openAI_Settings');
         expect(dirs).toHaveProperty('storage');
+    });
+
+    test('does not create retired directory keys', () => {
+        const dirs = getUserDirectories('alice');
+        for (const key of ['sysprompt', 'instruct', 'context', 'movingUI', 'quickreplies', 'vectors', 'reasoning', 'groups', 'groupChats', 'themes', 'comfyWorkflows', 'personas', 'extensions', 'novelAI_Settings', 'koboldAI_Settings', 'textGen_Settings']) {
+            expect(dirs).not.toHaveProperty(key);
+        }
     });
 
     test('all paths are under DATA_ROOT/<handle>/', () => {

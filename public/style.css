@@ -4203,6 +4203,10 @@ textarea:focus-visible {
     text-align: center;
 }
 
+button.menu_button {
+    font: inherit;
+}
+
 .menu_button.fa-fw {
     /* Font Awesome icons that are a menu button and should be fixed width need a slight fix. 1.25em is their default, but we need to account for button spacing. */
     min-width: calc(1.25em + 12px);
@@ -5868,8 +5872,41 @@ body:not(.caption) .mes_img_caption {
     display: none;
 }
 
-.popup:has(.img_enlarged.zoomed).large_dialogue_popup .popup-button-close {
-    display: none !important;
+.popup:has(.img_enlarged_container) .popup-button-close {
+    top: 10px;
+    right: 10px;
+    min-width: 44px;
+    min-height: 44px;
+    background: var(--SmartThemeBlurTintColor);
+    color: var(--SmartThemeBodyColor);
+    z-index: 2;
+}
+
+.media-preview-toolbar {
+    position: absolute;
+    inset-block-start: 10px;
+    inset-inline-start: 10px;
+    z-index: 2;
+}
+
+.media-preview-toolbar button,
+.zoomed_avatar .dragClose {
+    min-width: 44px;
+    min-height: 44px;
+    background: var(--SmartThemeBlurTintColor);
+    color: var(--SmartThemeBodyColor);
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 5px;
+}
+
+.zoomed_avatar:focus-within .panelControlBar {
+    opacity: 1;
+}
+
+.zoomed_avatar .dragClose:focus-visible,
+.media-preview-toolbar button:focus-visible {
+    outline: 2px solid var(--interactable-outline-color);
+    outline-offset: 2px;
 }
 
 .cropper-container {
@@ -6490,6 +6527,19 @@ body:has(#character_popup.open) #top-settings-holder:has(.drawer-content.openDra
 
 .onboarding span.menu_button {
     display: inline-flex;
+}
+
+@media (max-width: 600px), (pointer: coarse) {
+    .onboarding .menu_button,
+    .popup .checkbox_label {
+        min-height: 44px;
+    }
+
+    .popup input[type="text"],
+    .popup textarea,
+    .onboarding select {
+        font-size: max(16px, var(--mainFontSize));
+    }
 }
 
 .onboarding>h3 {

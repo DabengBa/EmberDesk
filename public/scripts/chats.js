@@ -699,22 +699,17 @@ async function openGlobalStylesPreferenceDialog() {
     const allowedRadio = template.find('#global_styles_allowed');
     const forbiddenRadio = template.find('#global_styles_forbidden');
 
-    allowedRadio.on('change', () => {
-        preference.set(true);
-        allowedRadio.prop('checked', true);
-        forbiddenRadio.prop('checked', false);
-    });
-
-    forbiddenRadio.on('change', () => {
-        preference.set(false);
-        allowedRadio.prop('checked', false);
-        forbiddenRadio.prop('checked', true);
+    template.find('input[name="global_styles_preference"]').on('change', function () {
+        const allowed = this.id === 'global_styles_allowed';
+        preference.set(allowed);
+        $('#rm_button_selected_ch').trigger('click');
+        setGlobalStylesButtonClass(allowed);
     });
 
     const currentPreferenceRadio = currentValue ? allowedRadio : forbiddenRadio;
     template.find(currentPreferenceRadio).prop('checked', true);
 
-    await callGenericPopup(template, POPUP_TYPE.TEXT, '', { wide: false, large: false });
+    await callGenericPopup(template, POPUP_TYPE.TEXT, '', { wide: false, large: false, okButton: t`Done` });
 
     // Re-render the notes if the preference changed
     const newValue = preference.get();
@@ -744,18 +739,22 @@ async function checkForCreatorNotesStyles() {
     if (!hasPreference) {
         const template = $(await renderTemplateAsync('globalStylesPopup'));
         template.find('textarea').val(styleContents);
-        const confirmResult = await callGenericPopup(template, POPUP_TYPE.CONFIRM, '', {
+        const confirmResult = await callGenericPopup(template, POPUP_TYPE.TEXT, '', {
             wide: false,
             large: false,
-            okButton: t`Just to Creator's Notes`,
-            cancelButton: t`Apply to the entire app`,
+            okButton: false,
+            cancelButton: false,
+            customButtons: [
+                { text: t`Just to Creator's Notes`, result: POPUP_RESULT.AFFIRMATIVE },
+                { text: t`Apply to the entire app`, result: POPUP_RESULT.CUSTOM1 },
+            ],
         });
 
         switch (confirmResult) {
             case POPUP_RESULT.AFFIRMATIVE:
                 preference.set(false);
                 break;
-            case POPUP_RESULT.NEGATIVE:
+            case POPUP_RESULT.CUSTOM1:
                 preference.set(true);
                 break;
             case POPUP_RESULT.CANCELLED:
@@ -809,9 +808,6 @@ async function openExternalMediaOverridesDialog() {
     }
 
     const template = $(await renderTemplateAsync('forbidMedia'));
-    template.find('.forbid_media_global_state_forbidden').toggle(true);
-    template.find('.forbid_media_global_state_allowed').toggle(false);
-
     if (power_user.external_media_allowed_overrides.includes(entityId)) {
         template.find('#forbid_media_override_allowed').prop('checked', true);
     } else if (power_user.external_media_forbidden_overrides.includes(entityId)) {
@@ -820,7 +816,7 @@ async function openExternalMediaOverridesDialog() {
         template.find('#forbid_media_override_global').prop('checked', true);
     }
 
-    callGenericPopup(template, POPUP_TYPE.TEXT, '', { wide: false, large: false });
+    callGenericPopup(template, POPUP_TYPE.TEXT, '', { wide: false, large: false, okButton: t`Done` });
 }
 
 export function getCurrentEntityId() {
@@ -885,6 +881,7 @@ function expandMessageMedia(messageId, mediaIndex) {
         function getImageElement() {
             const img = document.createElement('img');
             img.src = mediaAttachment.url;
+            img.alt = title || t`Media preview`;
             img.classList.add('img_enlarged');
             return img;
         }
@@ -917,11 +914,27 @@ function expandMessageMedia(messageId, mediaIndex) {
     mediaContainer.classList.add('img_enlarged_container');
     mediaContainer.append(mediaHolder);
 
-    mediaElement.addEventListener('click', event => {
-        const shouldZoom = !mediaElement.classList.contains('zoomed') && mediaElement.nodeName === 'IMG';
-        mediaElement.classList.toggle('zoomed', shouldZoom);
-        event.stopPropagation();
-    });
+    if (mediaElement instanceof HTMLImageElement) {
+        const toolbar = document.createElement('div');
+        toolbar.className = 'media-preview-toolbar';
+        const zoomButton = document.createElement('button');
+        zoomButton.type = 'button';
+        zoomButton.className = 'menu_button';
+        zoomButton.textContent = t`Zoom in`;
+        zoomButton.setAttribute('aria-pressed', 'false');
+        const toggleZoom = event => {
+            event.stopPropagation();
+            const zoomed = mediaElement.classList.toggle('zoomed');
+            zoomButton.textContent = zoomed ? t`Zoom out` : t`Zoom in`;
+            zoomButton.setAttribute('aria-pressed', String(zoomed));
+        };
+        zoomButton.addEventListener('click', toggleZoom);
+        mediaElement.addEventListener('click', toggleZoom);
+        toolbar.appendChild(zoomButton);
+        mediaContainer.prepend(toolbar);
+    } else {
+        mediaElement.addEventListener('click', event => event.stopPropagation());
+    }
 
     if (title.trim().length > 0) {
         const mediaTitlePre = document.createElement('pre');
@@ -937,11 +950,12 @@ function expandMessageMedia(messageId, mediaIndex) {
     }
 
     const popup = new Popup(mediaContainer, POPUP_TYPE.DISPLAY, '', { large: true, transparent: true });
+    popup.dlg.setAttribute('aria-label', t`Media preview`);
 
     popup.dlg.style.width = 'unset';
     popup.dlg.style.height = 'unset';
-    popup.dlg.addEventListener('click', () => {
-        popup.completeCancelled();
+    popup.dlg.addEventListener('click', event => {
+        if ([popup.dlg, popup.content, mediaContainer, mediaHolder].includes(event.target)) popup.completeCancelled();
     });
 
     popup.show();
@@ -1521,8 +1535,23 @@ export function initChatUtilities() {
         const wrapper = document.createElement('div');
         wrapper.classList.add('height100p', 'wide100p', 'flex-container');
         wrapper.classList.add('flexFlowColumn', 'justifyCenter', 'alignitemscenter');
+        const fieldName = bro.attr('aria-label')
+            || document.getElementById(bro.attr('aria-labelledby'))?.textContent?.trim()
+            || bro[0].labels?.[0]?.textContent?.trim()
+            || bro.prevAll('h4, .title_restorable').first().find('span').first().text().trim()
+            || t`Expanded editor`;
+        const heading = document.createElement('h3');
+        heading.textContent = fieldName;
+        heading.className = 'margin0';
+        const hint = document.createElement('p');
+        hint.id = `expanded-editor-hint-${broId}`;
+        hint.textContent = t`Changes apply as you type.`;
+        wrapper.append(heading, hint);
         const textarea = document.createElement('textarea');
         textarea.dataset.for = broId;
+        textarea.setAttribute('aria-label', fieldName);
+        textarea.setAttribute('aria-describedby', hint.id);
+        textarea.autofocus = true;
         if (bro[0].dataset.macros !== undefined) {
             textarea.dataset.macros = bro[0].dataset.macros;
             textarea.dataset.macrosAutocomplete = 'always'; // Always show autocomplete in expanded editor
@@ -1571,7 +1600,13 @@ export function initChatUtilities() {
             });
         }
 
-        await callGenericPopup(wrapper, POPUP_TYPE.TEXT, '', { wide: true, large: true });
+        await callGenericPopup(wrapper, POPUP_TYPE.TEXT, '', {
+            wide: true, large: true, okButton: t`Done`,
+            onOpen: () => {
+                textarea.focus();
+                if (!contentEditable) textarea.setSelectionRange(bro[0].selectionStart, bro[0].selectionEnd);
+            },
+        });
     });
 
     $(document).on('click', '.open_media_overrides', openExternalMediaOverridesDialog);

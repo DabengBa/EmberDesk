@@ -58,7 +58,10 @@ describe('Wave B React surfaces', () => {
         expect(indexJs).toContain('workspacePanels.mountRegexEditor(regexEditorHost)');
         expect(indexJs).toContain('workspacePanels.mountRegexSettings(regexSettingsHost.get(0))');
         expect(indexJs).toContain('workspacePanels.mountRegexDebugger(debuggerHost)');
-        expect(indexJs).toContain('workspacePanels.mountRegexImportTarget(template.get(0))');
+        expect(indexJs).toContain('workspacePanels.mountRegexImportTarget(template.get(0), {');
+        expect(indexJs).toContain('characterName: characters[this_chid]?.name');
+        expect(importTarget).toContain('disabled={!characterName}');
+        expect(importTarget).toContain('disabled={!presetName}');
         expect(indexJs).not.toContain("renderFeatureTemplateAsync('regex', 'editor')");
         expect(indexJs).not.toContain("renderFeatureTemplateAsync('regex', 'dropdown')");
         expect(indexJs).not.toContain("renderFeatureTemplateAsync('regex', 'debugger')");

@@ -2868,7 +2868,7 @@ export async function importFromExternalUrl(url, { preserveFileName = null } = {
     }
 
     if (!request.ok) {
-        toastr.info(request.statusText, 'Custom content import failed');
+        toastr.error(request.statusText || `HTTP ${request.status}`, 'Custom content import failed');
         console.error('Custom content import failed', request.status, request.statusText);
         return;
     }

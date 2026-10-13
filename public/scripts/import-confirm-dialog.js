@@ -164,6 +164,7 @@ export async function showUnifiedImportConfirm(results) {
     html += '</div></div>';
 
     let importAllChoices = null;
+    let applyChoices = null;
 
     const result = await callGenericPopup(html, POPUP_TYPE.CONFIRM, '', {
         okButton: t`Apply`,
@@ -184,6 +185,23 @@ export async function showUnifiedImportConfirm(results) {
                 };
             },
         }],
+        // Checkbox state must be captured while the dialog is still attached:
+        // controls are detached before the show() promise resolves.
+        onClosing: popup => {
+            if (popup.result === POPUP_RESULT.AFFIRMATIVE) {
+                const isChecked = id => !!popup.dlg.querySelector(`#${id}`)?.checked;
+                applyChoices = {
+                    importTags: showTags && isChecked('import_opt_tags'),
+                    importWorldBook: showWorldBook && isChecked('import_opt_world'),
+                    enableRegex: showRegex && isChecked('import_opt_regex'),
+                    applyCSS: showCSS && isChecked('import_opt_css'),
+                    tagImportSetting: showTags && isChecked('import_opt_tags')
+                        ? tag_import_setting.ALL
+                        : tag_import_setting.NONE,
+                };
+            }
+            return true;
+        },
     });
 
     if (!result) {
@@ -194,14 +212,12 @@ export async function showUnifiedImportConfirm(results) {
         return importAllChoices;
     }
 
-    return {
-        importTags: showTags ? !!document.getElementById('import_opt_tags')?.checked : false,
-        importWorldBook: showWorldBook ? !!document.getElementById('import_opt_world')?.checked : false,
-        enableRegex: showRegex ? !!document.getElementById('import_opt_regex')?.checked : false,
-        applyCSS: showCSS ? !!document.getElementById('import_opt_css')?.checked : false,
-        tagImportSetting: showTags && document.getElementById('import_opt_tags')?.checked
-            ? tag_import_setting.ALL
-            : tag_import_setting.NONE,
+    return applyChoices ?? {
+        importTags: false,
+        importWorldBook: false,
+        enableRegex: false,
+        applyCSS: false,
+        tagImportSetting: tag_import_setting.NONE,
     };
 }
 

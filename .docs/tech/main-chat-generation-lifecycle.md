@@ -81,7 +81,6 @@ Stable binding points:
 
 Related docs:
 
-- [Main Chat Successor Scope](main-chat-successor-scope.md)
 - [Main Chat Rendering Call Chain](main-chat-rendering-call-chain.md)
 - [Third-Party Extension Compatibility](third-party-extension-compatibility.md)
 - [Chat Generation Auto Recovery](../db/features/chat-generation-auto-recovery.md)

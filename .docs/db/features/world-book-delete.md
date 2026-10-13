@@ -17,7 +17,7 @@ Let a user delete a world info/lorebook file from the World Info editor while ma
 
 ## User-Visible Contract
 
-- Deleting a world book always requires explicit confirmation from the World Info editor surface.
+- Deleting a world book always requires explicit confirmation from the World Info editor surface. Cascade actions name their scope and linked-book count instead of an ambiguous “Delete All”; cancellation remains the default.
 - When EmberDesk can see that other characters reference the world book, it shows a cascade warning with the world name, entry count, bound-character warning, and an unchecked option to clear those references.
 - The clear-references option is opt-in; deleting the world book without selecting it removes the world file but leaves other characters' references untouched.
 - If no bound characters are found, or if the preflight cannot provide bound-character details, EmberDesk falls back to a simple irreversible-delete confirmation rather than blocking deletion.
@@ -58,4 +58,4 @@ Let a user delete a world info/lorebook file from the World Info editor while ma
 - Opening and editing World Info belongs to [World Info Panel](feature.world_info_panel).
 - Character deletion and character-owned cascade choices belong to [Delete Character](feature.character_delete).
 - Character-card identity belongs to [Character Card](term.character_card).
-- The no-cross-character-cleanup rule for deleting characters is recorded in [ADR-0005](../adr/0005-delete-no-cross-character-world-ref-cleanup.md).
+- Deleting a character must not silently remove world references owned by other characters.

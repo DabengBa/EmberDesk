@@ -2,7 +2,7 @@
 
 ## Module Responsibility
 
-`src/canonical-sqlite.js` owns the first durable runtime foundation for canonical per-user SQLite storage under [ADR-0011](../adr/0011-canonical-per-user-sqlite-storage.md). It does not make SQLite authoritative by itself. Instead, it establishes the per-user DB path, lifecycle, fail-closed behavior, and transaction contract that later migration, import, read, and write slices will build on.
+`src/canonical-sqlite.js` owns the first durable runtime foundation for canonical per-user SQLite storage under the [canonical per-user SQLite storage contract](canonical-sqlite-storage-roadmap.md). It does not make SQLite authoritative by itself. Instead, it establishes the per-user DB path, lifecycle, fail-closed behavior, and transaction contract that later migration, import, read, and write slices will build on.
 
 Primary files:
 

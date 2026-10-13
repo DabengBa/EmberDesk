@@ -8,6 +8,7 @@
 import { MacroRegistry, MacroCategory } from './MacroRegistry.js';
 import { escapeRegex } from '/scripts/utils.js';
 import { loadWorkspacePanelsModule } from '../../workspace-panels-react-bridge.js';
+import { t, translate } from '../../i18n.js';
 
 /** @typedef {import('./MacroRegistry.js').MacroDefinition} MacroDefinition */
 /** @typedef {import('./MacroRegistry.js').MacroValueType} MacroValueType */
@@ -143,8 +144,8 @@ export function createSourceIndicator(macro) {
     }
 
     const titleParts = [
-        macro.source.isExtension ? 'Extension' : 'Core',
-        macro.source.isThirdParty ? 'Third Party' : (macro.source.isExtension ? 'Built-in' : null),
+        translate(macro.source.isExtension ? 'Extension' : 'Core'),
+        macro.source.isThirdParty ? translate('Third Party') : (macro.source.isExtension ? translate('Built-in') : null),
         macro.source.name,
     ].filter(Boolean);
     src.title = titleParts.join('\n');
@@ -162,7 +163,7 @@ export function createAliasIndicator(macro) {
 
     const icon = document.createElement('span');
     icon.classList.add('macro-alias-indicator', 'fa-solid', 'fa-arrow-turn-up');
-    icon.title = `Alias of {{${macro.aliasOf}}}`;
+    icon.title = t`Alias of ${`{{${macro.aliasOf}}}`}`;
     return icon;
 }
 
@@ -215,7 +216,7 @@ export function renderMacroDetails(macro, options = {}) {
     if (showCategory) {
         const categoryBadge = document.createElement('span');
         categoryBadge.classList.add('macro-category-badge');
-        categoryBadge.textContent = getCategoryConfig(macro.category).label;
+        categoryBadge.textContent = translate(getCategoryConfig(macro.category).label);
         details.appendChild(categoryBadge);
     }
 
@@ -232,11 +233,11 @@ export function renderMacroDetails(macro, options = {}) {
     descSection.classList.add('macro-details-section');
     const descLabel = document.createElement('div');
     descLabel.classList.add('macro-details-label');
-    descLabel.textContent = 'Description';
+    descLabel.textContent = translate('Description');
     descSection.appendChild(descLabel);
     const descText = document.createElement('div');
     descText.classList.add('macro-details-text');
-    descText.textContent = macro.description || '<no description>';
+    descText.textContent = macro.description || translate('No description');
     descSection.appendChild(descText);
     details.appendChild(descSection);
 
@@ -246,7 +247,7 @@ export function renderMacroDetails(macro, options = {}) {
         argsSection.classList.add('macro-details-section');
         const argsLabel = document.createElement('div');
         argsLabel.classList.add('macro-details-label');
-        argsLabel.textContent = 'Arguments';
+        argsLabel.textContent = translate('Arguments');
         argsSection.appendChild(argsLabel);
 
         const argsList = document.createElement('ul');
@@ -331,7 +332,7 @@ export function renderMacroDetails(macro, options = {}) {
         returnsSection.classList.add('macro-details-section');
         const returnsLabel = document.createElement('div');
         returnsLabel.classList.add('macro-details-label');
-        returnsLabel.textContent = 'Returns';
+        returnsLabel.textContent = translate('Returns');
         returnsSection.appendChild(returnsLabel);
 
         const returnsContent = document.createElement('div');
@@ -359,7 +360,7 @@ export function renderMacroDetails(macro, options = {}) {
         exampleSection.classList.add('macro-details-section');
         const exampleLabel = document.createElement('div');
         exampleLabel.classList.add('macro-details-label');
-        exampleLabel.textContent = 'Example Usage';
+        exampleLabel.textContent = translate('Example Usage');
         exampleSection.appendChild(exampleLabel);
 
         const exampleList = document.createElement('ul');
@@ -381,7 +382,7 @@ export function renderMacroDetails(macro, options = {}) {
         aliasSection.classList.add('macro-details-section');
         const aliasLabel = document.createElement('div');
         aliasLabel.classList.add('macro-details-label');
-        aliasLabel.textContent = 'Aliases';
+        aliasLabel.textContent = translate('Aliases');
         aliasSection.appendChild(aliasLabel);
 
         const aliasList = document.createElement('ul');

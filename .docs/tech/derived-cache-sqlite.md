@@ -18,7 +18,7 @@ The helper is infrastructure only. It owns:
 
 The helper does not own business rules. Entity modules continue to own their schema, payloads, freshness keys, invalidation rules, and filesystem fallback behavior.
 
-As of [ADR-0009](../adr/0009-derived-cache-sqlite-drizzle-decision.md), EmberDesk explicitly did not adopt Drizzle for the character-index derived-cache slice. That decision remains useful historical context for helper-level maintenance, but the character-index sidecar is no longer part of normal runtime operation.
+EmberDesk does not use Drizzle for the character-index derived-cache slice; the helper uses handwritten `node:sqlite`. The character-index sidecar is no longer part of normal runtime operation.
 
 ## Derived Cache Contract
 

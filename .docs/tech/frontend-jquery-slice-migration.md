@@ -22,7 +22,7 @@ The shipped slices are:
 
 This is not a framework migration. EmberDesk still uses the existing HTML/CSS/jQuery frontend, and this pattern only removes page-local jQuery dependencies when the slice can stay small and independently validated.
 
-React page and panel islands are a separate modernization route recorded in [ADR-0007](../adr/0007-react-page-islands-with-legacy-fallbacks.md) and [React Modernization Roadmap](react-modernization-roadmap.md). The jQuery slice pattern remains valid for small legacy controller extractions, but it is not the owner for `/login`, `/setup`, `/settings`, or the guarded character-library React island.
+React page and panel islands are the separate modernization route used by `/login`, `/setup`, `/settings`, and the guarded workspace panels. The jQuery slice pattern remains valid for small legacy controller extractions, but it is not the owner for those React surfaces.
 
 ## Architecture And Constraints
 
@@ -202,5 +202,3 @@ Related docs:
 - [API Configuration](../db/pages/api-configuration.md)
 - [Fallback Provider](../db/features/fallback-provider.md)
 - [Frontend Structure Contracts](frontend-structure-contracts.md)
-- [ADR-0007: React page and panel islands with legacy fallbacks](../adr/0007-react-page-islands-with-legacy-fallbacks.md)
-- [React Modernization Roadmap](react-modernization-roadmap.md)

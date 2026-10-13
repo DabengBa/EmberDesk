@@ -12,7 +12,6 @@
   - `tests/interaction-performance-index.test.js`
 - Related tech docs:
   - [.docs/tech/canonical-sqlite-storage-roadmap.md](../tech/canonical-sqlite-storage-roadmap.md)
-  - [.docs/adr/0011-canonical-per-user-sqlite-storage.md](../adr/0011-canonical-per-user-sqlite-storage.md)
 - Related semantic docs:
   - [.docs/db/pages/chat-workspace.md](../db/pages/chat-workspace.md)
   - [.docs/db/features/character-library-panel.md](../db/features/character-library-panel.md)

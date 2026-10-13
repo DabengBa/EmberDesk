@@ -430,6 +430,7 @@ const WORLD_INFO_IMPORT_CONFLICT_CHOICE = Object.freeze({
     CONFIRM: 'confirm',
     OVERWRITE: 'overwrite',
     SKIP: 'skip',
+    CANCEL: 'cancel',
 });
 
 const WORLD_INFO_IMPORT_BATCH_FILE_LIMIT = 50;
@@ -597,9 +598,10 @@ function updateWorldInfoBatchProgress(batchState, index, total, file, { status =
 }
 
 function buildWorldInfoBatchConflictHtml(conflicts) {
-    const visibleConflicts = conflicts.slice(0, 10).map(conflict => `<li>${escapeHtml(conflict.file.name)} &rarr; ${escapeHtml(conflict.existingName)}</li>`).join('');
+    const rows = conflicts.map(conflict => `<li>${escapeHtml(conflict.file.name)} &rarr; ${escapeHtml(conflict.existingName)}</li>`);
+    const visibleConflicts = rows.slice(0, 10).join('');
     const overflowCount = conflicts.length - 10;
-    const overflow = overflowCount > 0 ? `<p>${t`${overflowCount} more conflicts are not shown.`}</p>` : '';
+    const overflow = overflowCount > 0 ? `<details class="world-info-conflict-details"><summary>${t`Show ${overflowCount} more conflicts`}</summary><ul>${rows.slice(10).join('')}</ul></details>` : '';
 
     return `<p>${t`Some selected files will overwrite existing World Info.`}</p><ul>${visibleConflicts}</ul>${overflow}<p>${t`Choose how to handle these conflicts before the batch starts.`}</p>`;
 }
@@ -611,9 +613,12 @@ async function showWorldInfoBatchConflictPopup(conflicts) {
 
     const result = await Popup.show.confirm(t`World Info import conflicts`, buildWorldInfoBatchConflictHtml(conflicts), {
         okButton: t`Overwrite all`,
-        cancelButton: t`Ask for each conflict`,
+        cancelButton: t`Cancel batch`,
         defaultResult: POPUP_RESULT.NEGATIVE,
-        customButtons: [{ text: t`Skip all`, result: POPUP_RESULT.CUSTOM1 }],
+        customButtons: [
+            { text: t`Ask for each conflict`, result: POPUP_RESULT.CUSTOM2 },
+            { text: t`Skip all`, result: POPUP_RESULT.CUSTOM1 },
+        ],
     });
 
     if (result === POPUP_RESULT.AFFIRMATIVE) {
@@ -624,7 +629,7 @@ async function showWorldInfoBatchConflictPopup(conflicts) {
         return WORLD_INFO_IMPORT_CONFLICT_CHOICE.SKIP;
     }
 
-    return WORLD_INFO_IMPORT_CONFLICT_CHOICE.CONFIRM;
+    return result === POPUP_RESULT.CUSTOM2 ? WORLD_INFO_IMPORT_CONFLICT_CHOICE.CONFIRM : WORLD_INFO_IMPORT_CONFLICT_CHOICE.CANCEL;
 }
 
 async function prepareWorldInfoImportOverwrite(sanitizedWorldName, metadata, overwriteMode) {
@@ -1105,7 +1110,7 @@ async function deleteWorldInfoWithCascade(worldName) {
             leftAlign: true,
             defaultResult: POPUP_RESULT.NEGATIVE,
             customButtons: [{
-                text: t`Delete All`,
+                text: t`Delete ${worldInfos.length} linked world book(s)`,
                 result: POPUP_RESULT.CUSTOM1,
                 classes: ['popup-button-danger'],
             }],
@@ -1243,7 +1248,7 @@ export async function promptApplyWorldInfoCurrentSorting() {
 
     let content = '<span>' + t`Apply your current sorting to the "Order" field. The Order values will go down from the chosen number.` + '</span>';
     if (moreThan100) {
-        content += '<div class="m-t-1"><i class="fa-solid fa-triangle-exclamation" style="color: #FFD43B;"></i> ' + t`More than 100 entries in this world. If you don't choose a number higher than that, the lower entries will default to 0.<br />(Usual default: 100)<br />Minimum: ${entryCount}` + '</div>';
+        content += '<div class="m-t-1"><i class="fa-solid fa-triangle-exclamation" style="color: var(--clay-warning);"></i> ' + t`More than 100 entries in this world. If you don't choose a number higher than that, the lower entries will default to 0.<br />(Usual default: 100)<br />Minimum: ${entryCount}` + '</div>';
     }
 
     const result = await Popup.show.input(t`Apply Current Sorting`, content, '100', { okButton: t`Apply`, cancelButton: 'Cancel' });
@@ -1336,6 +1341,7 @@ export async function promptMoveOrCopyWorldInfoEntry(uid, sourceWorld = '') {
 
     const select = document.createElement('select');
     select.id = 'move_entry_target_select';
+    select.setAttribute('aria-label', t`Target Lorebook`);
     select.classList.add('text_pole', 'wide100p', 'marginTop10');
     const defaultOption = document.createElement('option');
     defaultOption.value = '';
@@ -1362,10 +1368,17 @@ export async function promptMoveOrCopyWorldInfoEntry(uid, sourceWorld = '') {
     container.appendChild(wrapper);
     container.appendChild(select);
     let selectedWorldIndex = -1;
-    select.addEventListener('change', function () { selectedWorldIndex = this.value === '' ? -1 : Number(this.value); });
     const popup = new Popup(container, POPUP_TYPE.CONFIRM, '', {
         cancelButton: t`Cancel`,
+        defaultResult: POPUP_RESULT.NEGATIVE,
         customButtons: [{ text: t`Move`, result: POPUP_RESULT.CUSTOM1 }, { text: t`Copy`, result: POPUP_RESULT.CUSTOM2 }],
+        onClosing: (instance) => instance.result <= POPUP_RESULT.NEGATIVE || selectedWorldIndex !== -1,
+    });
+    const actions = popup.dlg.querySelectorAll('.popup-button-custom');
+    actions.forEach(action => { action.disabled = true; });
+    select.addEventListener('change', function () {
+        selectedWorldIndex = this.value === '' ? -1 : Number(this.value);
+        actions.forEach(action => { action.disabled = selectedWorldIndex === -1; });
     });
     popup.okButton.style.display = 'none';
     const popupConfirm = await popup.show();
@@ -2960,7 +2973,7 @@ async function displayWorldEntries(name, data, navigation = navigation_option.no
 
         let content = '<span>' + t`Apply your current sorting to the "Order" field. The Order values will go down from the chosen number.` + '</span>';
         if (moreThan100) {
-            content += '<div class="m-t-1"><i class="fa-solid fa-triangle-exclamation" style="color: #FFD43B;"></i> ' + t`More than 100 entries in this world. If you don't choose a number higher than that, the lower entries will default to 0.<br />(Usual default: 100)<br />Minimum: ${entryCount}` + '</div>';
+            content += '<div class="m-t-1"><i class="fa-solid fa-triangle-exclamation" style="color: var(--clay-warning);"></i> ' + t`More than 100 entries in this world. If you don't choose a number higher than that, the lower entries will default to 0.<br />(Usual default: 100)<br />Minimum: ${entryCount}` + '</div>';
         }
 
         const result = await Popup.show.input(t`Apply Current Sorting`, content, '100', { okButton: t`Apply`, cancelButton: 'Cancel' });
@@ -4346,11 +4359,14 @@ async function _save(name, data) {
     // Prevent double saving if both immediate and debounced save are called
     cancelDebounce(saveWorldDebounced);
 
-    await fetch('/api/worldinfo/edit', {
+    const response = await fetch('/api/worldinfo/edit', {
         method: 'POST',
         headers: getRequestHeaders(),
         body: JSON.stringify({ name: name, data: data }),
     });
+    if (!response.ok) {
+        throw new Error(`World Info save failed (HTTP ${response.status}).`);
+    }
     await eventSource.emit(event_types.WORLDINFO_UPDATED, name, data);
 }
 
@@ -4377,7 +4393,12 @@ export async function saveWorldInfo(name, data, immediately = false) {
     worldInfoCache.set(name, data);
 
     if (immediately) {
-        return await _save(name, data);
+        try {
+            return await _save(name, data);
+        } catch (error) {
+            worldInfoCache.delete(name);
+            throw error;
+        }
     }
 
     saveWorldDebounced(name, data);
@@ -4816,6 +4837,7 @@ export async function importWorldInfoFiles(files) {
             toastr.warning(t`Conflict pre-scan failed. EmberDesk will ask about overwrites one file at a time.`, t`World Info Import`);
         }
         const conflictChoice = await showWorldInfoBatchConflictPopup(conflicts);
+        batchState.cancelRequested = conflictChoice === WORLD_INFO_IMPORT_CONFLICT_CHOICE.CANCEL;
         conflictFiles = new Set(conflicts.map(conflict => conflict.file));
         skippedConflictFiles = conflictChoice === WORLD_INFO_IMPORT_CONFLICT_CHOICE.SKIP ? conflictFiles : new Set();
 

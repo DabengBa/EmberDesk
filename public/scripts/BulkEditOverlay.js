@@ -34,6 +34,58 @@ import { t } from './i18n.js';
  */
 class CharacterContextMenu {
     /**
+     * The overlay instance, captured on construction for Escape handling.
+     * @type {BulkEditOverlay?}
+     */
+    static #overlay = null;
+
+    /**
+     * Element focused before the menu opened, for focus restoration.
+     * @type {HTMLElement?}
+     */
+    static #lastFocus = null;
+
+    /**
+     * Keyboard support while the menu is open: Escape closes, arrows move.
+     * @param {KeyboardEvent} event
+     */
+    static #onKeydown = (event) => {
+        const contextMenu = document.getElementById(BulkEditOverlay.contextMenuId);
+        if (!contextMenu || contextMenu.classList.contains('hidden')) {
+            return;
+        }
+
+        // A modal layer above the menu (native popup or bulk tag popup) owns Escape.
+        if (document.querySelector('dialog[open], #bulk_tag_shadow_popup')) {
+            return;
+        }
+
+        if (event.key === 'Escape') {
+            event.preventDefault();
+            event.stopPropagation();
+            CharacterContextMenu.#overlay?.closeContextMenu();
+            return;
+        }
+
+        if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') {
+            return;
+        }
+
+        const buttons = [...contextMenu.querySelectorAll('button')];
+        if (!buttons.length) {
+            return;
+        }
+
+        event.preventDefault();
+        const currentIndex = buttons.indexOf(document.activeElement);
+        const step = event.key === 'ArrowDown' ? 1 : -1;
+        const nextIndex = currentIndex === -1
+            ? (step === 1 ? 0 : buttons.length - 1)
+            : (currentIndex + step + buttons.length) % buttons.length;
+        buttons[nextIndex].focus();
+    };
+
+    /**
      * Tag one or more characters,
      * opens a popup.
      *
@@ -138,12 +190,23 @@ class CharacterContextMenu {
         if (boundingRect.bottom > window.innerHeight) {
             contextMenu.style.top = `${positionY - (boundingRect.bottom - window.innerHeight)}px`;
         }
+
+        CharacterContextMenu.#lastFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+        document.addEventListener('keydown', CharacterContextMenu.#onKeydown, true);
+        contextMenu.querySelector('button')?.focus();
     };
 
     /**
      * Hide the context menu
      */
-    static hide = () => document.getElementById(BulkEditOverlay.contextMenuId).classList.add('hidden');
+    static hide = () => {
+        const contextMenu = document.getElementById(BulkEditOverlay.contextMenuId);
+        contextMenu.classList.add('hidden');
+        document.removeEventListener('keydown', CharacterContextMenu.#onKeydown, true);
+        if (contextMenu.contains(document.activeElement)) {
+            CharacterContextMenu.#lastFocus?.focus();
+        }
+    };
 
     /**
      * Sets up the context menu for the given overlay
@@ -151,6 +214,7 @@ class CharacterContextMenu {
      * @param characterGroupOverlay
      */
     constructor(characterGroupOverlay) {
+        CharacterContextMenu.#overlay = characterGroupOverlay;
         const contextMenuItems = [
             { id: 'character_context_menu_favorite', callback: characterGroupOverlay.handleContextMenuFavorite },
             { id: 'character_context_menu_duplicate', callback: characterGroupOverlay.handleContextMenuDuplicate },
@@ -179,6 +243,18 @@ class BulkTagPopupHandler {
     currentMutualTags;
 
     /**
+     * Element focused before the popup opened, for focus restoration.
+     * @type {HTMLElement?}
+     */
+    #previousFocus = null;
+
+    /**
+     * Document keydown listener for Escape-to-close while the popup is open.
+     * @type {((event: KeyboardEvent) => void)?}
+     */
+    #escapeListener = null;
+
+    /**
      * Sets up the bulk popup menu handler for the given overlay.
      *
      * Characters can be passed in with the show() call.
@@ -193,35 +269,35 @@ class BulkTagPopupHandler {
     #getHtml = () => {
         const characterData = JSON.stringify({ characterIds: this.characterIds });
         return `<div id="bulk_tag_shadow_popup">
-            <div id="bulk_tag_popup" class="wider_dialogue_popup">
+            <div id="bulk_tag_popup" class="wider_dialogue_popup" role="dialog" aria-modal="true" aria-labelledby="bulk_tag_popup_title">
                 <div id="bulk_tag_popup_holder">
-                    <h3 class="marginBot5">Modify tags of ${this.characterIds.length} characters</h3>
+                    <h3 id="bulk_tag_popup_title" class="marginBot5">Modify tags of ${this.characterIds.length} characters</h3>
                     <small class="bulk_tags_desc m-b-1">Add or remove the mutual tags of all selected characters. Import all or existing tags for all selected characters.</small>
                     <div id="bulk_tags_avatars_block" class="avatars_inline avatars_inline_small tags tags_inline"></div>
                     <br>
                     <div id="bulk_tags_div" class="marginBot5" data-characters='${characterData}'>
                         <div class="tag_controls">
                             <input id="bulkTagInput" class="text_pole tag_input wide100p margin0" data-i18n="[placeholder]Search / Create Tags" placeholder="Search / Create tags" maxlength="25" />
-                            <div class="tags_view menu_button fa-solid fa-tags" title="View all tags" data-i18n="[title]View all tags"></div>
+                            <button type="button" class="tags_view menu_button fa-solid fa-tags" title="View all tags" aria-label="View all tags" data-i18n="[title][aria-label]View all tags"></button>
                         </div>
                         <div id="bulkTagList" class="m-t-1 tags"></div>
                     </div>
                     <div id="dialogue_popup_controls" class="m-t-1">
-                        <div id="bulk_tag_popup_reset" class="menu_button" title="Remove all tags from the selected characters" data-i18n="[title]Remove all tags from the selected characters">
+                        <button type="button" id="bulk_tag_popup_reset" class="menu_button" title="Remove all tags from the selected characters" data-i18n="[title]Remove all tags from the selected characters">
                             <i class="fa-solid fa-trash-can margin-right-10px"></i>
-                            All
-                        </div>
-                        <div id="bulk_tag_popup_remove_mutual" class="menu_button" title="Remove all mutual tags from the selected characters" data-i18n="[title]Remove all mutual tags from the selected characters">
+                            <span data-i18n="Remove all">Remove all</span>
+                        </button>
+                        <button type="button" id="bulk_tag_popup_remove_mutual" class="menu_button" title="Remove all mutual tags from the selected characters" data-i18n="[title]Remove all mutual tags from the selected characters">
                             <i class="fa-solid fa-trash-can margin-right-10px"></i>
-                            Mutual
-                        </div>
-                        <div id="bulk_tag_popup_import_all_tags" class="menu_button" title="Import all tags from selected characters" data-i18n="[title]Import all tags from selected characters">
-                            Import All
-                        </div>
-                        <div id="bulk_tag_popup_import_existing_tags" class="menu_button" title="Import existing tags from selected characters" data-i18n="[title]Import existing tags from selected characters">
-                            Import Existing
-                        </div>
-                        <div id="bulk_tag_popup_cancel" class="menu_button" data-i18n="Cancel">Close</div>
+                            <span data-i18n="Remove mutual">Remove mutual</span>
+                        </button>
+                        <button type="button" id="bulk_tag_popup_import_all_tags" class="menu_button" title="Import all tags from selected characters" data-i18n="[title]Import all tags from selected characters">
+                            <span data-i18n="Import All">Import All</span>
+                        </button>
+                        <button type="button" id="bulk_tag_popup_import_existing_tags" class="menu_button" title="Import existing tags from selected characters" data-i18n="[title]Import existing tags from selected characters">
+                            <span data-i18n="Import Existing">Import Existing</span>
+                        </button>
+                        <button type="button" id="bulk_tag_popup_cancel" class="menu_button" data-i18n="Cancel">Close</button>
                     </div>
                 </div>
             </div>
@@ -253,11 +329,28 @@ class BulkTagPopupHandler {
         // Tag input with resolvable list for the mutual tags to get redrawn, so that newly added tags get sorted correctly
         createTagInput('#bulkTagInput', '#bulkTagList', { tags: () => this.getMutualTags(), tagOptions: { removable: true } });
 
+        this.#previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+        this.#escapeListener = (event) => {
+            if (event.key === 'Escape') {
+                event.stopPropagation();
+                this.hide();
+            }
+        };
+        document.addEventListener('keydown', this.#escapeListener);
+        document.querySelector('#bulkTagInput')?.focus();
+
         document.querySelector('#bulk_tag_popup_reset').addEventListener('click', this.resetTags.bind(this));
         document.querySelector('#bulk_tag_popup_remove_mutual').addEventListener('click', this.removeMutual.bind(this));
         document.querySelector('#bulk_tag_popup_cancel').addEventListener('click', this.hide.bind(this));
         document.querySelector('#bulk_tag_popup_import_all_tags').addEventListener('click', this.importAllTags.bind(this));
         document.querySelector('#bulk_tag_popup_import_existing_tags').addEventListener('click', this.importExistingTags.bind(this));
+    }
+
+    /**
+     * Redraws the mutual tag list after a tag-changing action.
+     */
+    #redrawTagList() {
+        printTagList($('#bulkTagList'), { tags: () => this.getMutualTags(), tagOptions: { removable: true } });
     }
 
     /**
@@ -268,7 +361,8 @@ class BulkTagPopupHandler {
             await importTags(characters[characterId], { importSetting: tag_import_setting.ONLY_EXISTING });
         }
 
-        $('#bulkTagList').empty();
+        this.#redrawTagList();
+        toastr.success(t`Existing tags imported for ${this.characterIds.length} character(s).`);
     }
 
     /**
@@ -279,7 +373,8 @@ class BulkTagPopupHandler {
             await importTags(characters[characterId], { importSetting: tag_import_setting.ALL });
         }
 
-        $('#bulkTagList').empty();
+        this.#redrawTagList();
+        toastr.success(t`All tags imported for ${this.characterIds.length} character(s).`);
     }
 
     /**
@@ -311,9 +406,18 @@ class BulkTagPopupHandler {
      * Hide and remove the tag control
      */
     hide() {
+        if (this.#escapeListener) {
+            document.removeEventListener('keydown', this.#escapeListener);
+            this.#escapeListener = null;
+        }
+
         let popupElement = document.querySelector('#bulk_tag_shadow_popup');
         if (popupElement) {
+            const hadFocus = popupElement.contains(document.activeElement);
             document.body.removeChild(popupElement);
+            if (hadFocus) {
+                this.#previousFocus?.focus();
+            }
         }
 
         // No need to redraw here, all tags actions were redrawn when they happened
@@ -322,13 +426,22 @@ class BulkTagPopupHandler {
     /**
      * Empty the tag map for the given characters
      */
-    resetTags() {
+    async resetTags() {
+        const confirmed = await Popup.show.confirm(
+            t`Remove all tags from ${this.characterIds.length} character(s)?`,
+            t`Every tag will be removed from each selected character. This cannot be undone.`,
+            { defaultResult: POPUP_RESULT.NEGATIVE },
+        );
+        if (!confirmed) {
+            return;
+        }
+
         for (const characterId of this.characterIds) {
             const key = getTagKeyForEntity(characterId);
             if (key) tag_map[key] = [];
         }
 
-        $('#bulkTagList').empty();
+        this.#redrawTagList();
 
         printCharactersDebounced();
     }
@@ -336,8 +449,21 @@ class BulkTagPopupHandler {
     /**
      * Remove the mutual tags for all given characters
      */
-    removeMutual() {
+    async removeMutual() {
         const mutualTags = this.getMutualTags();
+        if (!mutualTags.length) {
+            toastr.info(t`No mutual tags to remove.`);
+            return;
+        }
+
+        const confirmed = await Popup.show.confirm(
+            t`Remove ${mutualTags.length} mutual tag(s) from ${this.characterIds.length} character(s)?`,
+            t`Only the tags shared by every selected character will be removed.`,
+            { defaultResult: POPUP_RESULT.NEGATIVE },
+        );
+        if (!confirmed) {
+            return;
+        }
 
         for (const characterId of this.characterIds) {
             for (const tag of mutualTags) {
@@ -345,7 +471,7 @@ class BulkTagPopupHandler {
             }
         }
 
-        $('#bulkTagList').empty();
+        this.#redrawTagList();
 
         printCharactersDebounced();
     }
@@ -789,9 +915,17 @@ class BulkEditOverlay {
     handleContextMenuHide = (event) => {
         let contextMenu = document.getElementById(BulkEditOverlay.contextMenuId);
         if (false === contextMenu.contains(event.target)) {
-            CharacterContextMenu.hide();
-            this.#contextMenuOpen = false;
+            this.closeContextMenu();
         }
+    };
+
+    /**
+     * Closes the context menu and clears the open flag.
+     * Used by click-outside and by the menu's own Escape handling.
+     */
+    closeContextMenu = () => {
+        CharacterContextMenu.hide();
+        this.#contextMenuOpen = false;
     };
 
     /**
@@ -930,6 +1064,7 @@ class BulkEditOverlay {
             okButton: t`Delete`,
             wider: true,
             leftAlign: true,
+            defaultResult: POPUP_RESULT.NEGATIVE,
             customButtons: hasWorldInfos
                 ? [{ text: t`Delete All`, result: POPUP_RESULT.CUSTOM1, classes: ['popup-button-danger'] }]
                 : [],

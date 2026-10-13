@@ -17,7 +17,7 @@ describe('onboarding template action chrome', () => {
         const source = read('app/components/onboarding/OnboardingActions.tsx');
 
         expect(source).toMatch(/<ContractButton[\s\S]*?className="menu_button menu_button_icon external_import_button"[\s\S]*?labelKey="onboarding_import"[\s\S]*?\/>/);
-        expect(source).toMatch(/<ContractButton[\s\S]*?className="menu_button menu_button_icon open_characters_library"[\s\S]*?label="Sample characters"[\s\S]*?\/>/);
+        expect(source).toMatch(/<ContractButton[\s\S]*?className="menu_button menu_button_icon open_characters_library"[\s\S]*?label="Open character library"[\s\S]*?\/>/);
     });
 
     test('template keeps mount hosts and surrounding i18n text', () => {
@@ -25,7 +25,8 @@ describe('onboarding template action chrome', () => {
 
         expect(index).toContain('data-onboarding-host="import"');
         expect(index).toContain('data-onboarding-host="library"');
-        expect(index).toContain('data-i18n="from supported sources or view"');
+        expect(index).toContain('for="onboarding_ui_language_select"');
+        expect(index).not.toContain('data-i18n="from supported sources or view"');
         expect(index).not.toContain('class="menu_button menu_button_icon external_import_button"');
         expect(index).not.toContain('class="open_characters_library menu_button menu_button_icon"');
     });
@@ -36,6 +37,6 @@ describe('onboarding template action chrome', () => {
 
         expect(domHandlersSource).toContain('mountOnboardingActions()');
         expect(scriptSource).toContain('mountOnboardingActions: (...args)');
-        expect(scriptSource).toContain("measureStartupStage('mountOnboardingActions'");
+        expect(scriptSource).toContain('measureStartupStage(\'mountOnboardingActions\'');
     });
 });

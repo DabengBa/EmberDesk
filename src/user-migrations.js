@@ -56,63 +56,8 @@ export async function migrateUserData() {
             file: false,
         },
         {
-            old: path.join(publicDirectory, 'context'),
-            new: userDirectories.context,
-            file: false,
-        },
-        {
-            old: path.join(publicDirectory, 'group chats'),
-            new: userDirectories.groupChats,
-            file: false,
-        },
-        {
-            old: path.join(publicDirectory, 'groups'),
-            new: userDirectories.groups,
-            file: false,
-        },
-        {
-            old: path.join(publicDirectory, 'instruct'),
-            new: userDirectories.instruct,
-            file: false,
-        },
-        {
-            old: path.join(publicDirectory, 'KoboldAI Settings'),
-            new: userDirectories.koboldAI_Settings,
-            file: false,
-        },
-        {
-            old: path.join(publicDirectory, 'movingUI'),
-            new: userDirectories.movingUI,
-            file: false,
-        },
-        {
-            old: path.join(publicDirectory, 'NovelAI Settings'),
-            new: userDirectories.novelAI_Settings,
-            file: false,
-        },
-        {
             old: path.join(publicDirectory, 'OpenAI Settings'),
             new: userDirectories.openAI_Settings,
-            file: false,
-        },
-        {
-            old: path.join(publicDirectory, 'QuickReplies'),
-            new: userDirectories.quickreplies,
-            file: false,
-        },
-        {
-            old: path.join(publicDirectory, 'TextGen Settings'),
-            new: userDirectories.textGen_Settings,
-            file: false,
-        },
-        {
-            old: path.join(publicDirectory, 'themes'),
-            new: userDirectories.themes,
-            file: false,
-        },
-        {
-            old: path.join(publicDirectory, 'user'),
-            new: userDirectories.user,
             file: false,
         },
         {
@@ -131,11 +76,6 @@ export async function migrateUserData() {
             file: false,
         },
         {
-            old: path.join(process.cwd(), 'vectors'),
-            new: userDirectories.vectors,
-            file: false,
-        },
-        {
             old: path.join(process.cwd(), 'secrets.json'),
             new: path.join(userDirectories.root, 'secrets.json'),
             file: true,
@@ -143,11 +83,6 @@ export async function migrateUserData() {
         {
             old: path.join(publicDirectory, 'settings.json'),
             new: path.join(userDirectories.root, 'settings.json'),
-            file: true,
-        },
-        {
-            old: path.join(publicDirectory, 'stats.json'),
-            new: path.join(userDirectories.root, 'stats.json'),
             file: true,
         },
     ];

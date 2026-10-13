@@ -71,18 +71,9 @@ The page does not allow passwordless accounts. In `fresh` mode, both handle and 
 
 ### Optional
 
-| Key | Default | Effect |
-|---|---|---|
-| `features.react.pages.setup` | `false` | Current migration flag. The approved retirement direction removes this switch and the `/setup.html` fallback after fresh and set-password workflow parity is proven. |
-
 ## Behavioral Notes
 
 - The setup page is shown until the user store has a password-protected account. After setup is complete, `/setup` redirects to `/login`.
 - The display name field is optional; if left empty, the handle is used as the display name.
 - The created account is always admin and enabled.
-- Current code keeps `/setup` and `/setup.html` behavior aligned while migration is incomplete.
-- `app/routes/setup.tsx` owns the React setup page when `features.react.pages.setup` is enabled. `public/scripts/setup.js` continues to own the legacy controller via `createSetupController()` and `initSetupPage()`, including the stable `/setup.html` fallback surface. Tests disable legacy auto-init with `globalThis.EMBERDESK_SETUP_TEST_MODE`.
-
-## Approved Retirement Direction
-
-The React setup route is a first-wave legacy-retirement candidate. Its completion preserves fresh-account and password-upgrade outcomes, validation, rate-limit feedback, redirects, and accessible form behavior, then removes the legacy controller, route flag, and `/setup.html` fallback from the released version.
+- `app/routes/setup.tsx` owns the setup page. `/setup.html` is served by `createLegacySetupHtmlRedirectMiddleware()` and only redirects to `/setup`.

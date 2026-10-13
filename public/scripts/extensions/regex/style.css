@@ -1,5 +1,88 @@
 @import "debugger.css";
 
+.regex_editor .regex-validation-error {
+    color: var(--clay-warning);
+    text-align: start;
+    margin-top: 5px;
+}
+
+.regex-validation-error[hidden],
+.regex-debugger-container [hidden] {
+    display: none;
+}
+
+.regex-editor-options {
+    gap: 15px;
+    text-align: start;
+}
+
+.regex-editor-options > .regex-editor-option-group {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+}
+
+.regex-editor-options h4 {
+    margin: 10px 0 5px;
+}
+
+.popup:has(.regex-import-targets) .popup-button-close {
+    background: transparent;
+    color: var(--SmartThemeBodyColor);
+    border: 0;
+    padding: 10px;
+    min-width: 44px;
+    min-height: 44px;
+}
+
+.regex-import-targets label {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 5px 10px;
+    align-items: center;
+    padding: 10px;
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 5px;
+}
+
+.regex-import-targets label small {
+    grid-column: 2;
+    color: var(--SmartThemeFadedColor);
+    overflow-wrap: anywhere;
+}
+
+.regex-import-targets label:has(:disabled) {
+    opacity: 0.65;
+}
+
+.regex-import-targets label:has(:checked) {
+    border-color: var(--SmartThemeQuoteColor);
+}
+
+@media (max-width: 768px) {
+    .regex-editor-options,
+    #regex_test_mode {
+        flex-direction: column;
+    }
+
+    .regex-editor-options > div {
+        width: 100%;
+        min-width: 0;
+    }
+
+    .regex_editor .checkbox,
+    .regex-import-targets label {
+        min-height: 44px;
+    }
+
+    .regex_editor input[type="text"],
+    .regex_editor textarea,
+    #regex_debugger_raw_input {
+        font-size: max(16px, var(--mainFontSize));
+    }
+}
+
 .regex_settings .menu_button {
     width: fit-content;
     display: flex;

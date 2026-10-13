@@ -48,7 +48,6 @@ const duplicateCharacter = (...args) => shell().duplicateCharacter(...args);
 const formatCreatorNotes = (...args) => shell().formatCreatorNotes(...args);
 const getCharacterDeleteDialogTitle = (...args) => shell().getCharacterDeleteDialogTitle(...args);
 const getCharacterSource = (...args) => shell().getCharacterSource(...args);
-const getCharacters = (...args) => shell().getCharacters(...args);
 const getOptionsPopper = (...args) => shell().getOptionsPopper(...args);
 const getRequestHeaders = (...args) => shell().getRequestHeaders(...args);
 const handleUnifiedImport = (...args) => shell().handleUnifiedImport(...args);
@@ -643,7 +642,6 @@ export async function bindLegacyShellHandlers() {
         console.log(`exporting ${filename} in ${format} format`);
 
         const body = {
-            is_group: false,
             avatar_url: state.characters[state.this_chid]?.avatar,
             file: `${filename}.jsonl`,
             exportfilename: `${filename}.${format}`,
@@ -1317,6 +1315,22 @@ export async function bindLegacyShellHandlers() {
             $('body').append(newElement);
             newElement.fadeIn(state.animation_duration);
             const zoomedAvatarImgElement = $(`.zoomed_avatar[forChar="${charname}"] img`);
+            zoomedAvatarImgElement.attr('alt', $(this).children('img').attr('alt') || t`Avatar preview`);
+            const opener = this;
+            const closePreview = () => {
+                newElement.fadeOut(state.animation_duration, () => {
+                    newElement.remove();
+                    opener.focus();
+                });
+            };
+            newElement.find('.dragClose').on('click', closePreview).trigger('focus');
+            newElement.on('keydown', event => {
+                if (event.key === 'Escape') {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    closePreview();
+                }
+            });
             if (messageElement.attr('is_user') == 'true' || (messageElement.attr('is_system') == 'true' && !isValidCharacter)) {
                 //handle user and system avatars
                 zoomedAvatarImgElement.attr('src', thumbURL);
@@ -1326,14 +1340,6 @@ export async function bindLegacyShellHandlers() {
                 zoomedAvatarImgElement.attr('data-izoomify-url', avatarSrc);
             }
             $(`.zoomed_avatar[forChar="${charname}"]`).css('display', 'flex');
-
-            $('.zoomed_avatar, .zoomed_avatar .dragClose').on('click touchend', (e) => {
-                if (e.target.closest('.dragClose')) {
-                    $(`.zoomed_avatar[forChar="${charname}"]`).fadeOut(state.animation_duration, () => {
-                        $(`.zoomed_avatar[forChar="${charname}"]`).remove();
-                    });
-                }
-            });
 
             zoomedAvatarImgElement.on('dragstart', (e) => {
                 console.log('saw drag on avatar!');
@@ -1625,8 +1631,9 @@ export async function bindLegacyShellHandlers() {
     });
 
     $(document).on('click', '.open_characters_library', async function () {
-        await getCharacters();
-        await eventSource.emit(event_types.OPEN_CHARACTER_LIBRARY);
+        const popup = state.Popup.util.popups.find(popup => popup.dlg.contains(this));
+        await popup?.completeAffirmative();
+        await shell().openCharacterLibrary();
     });
 
     // Show regenerate button for empty AI replies

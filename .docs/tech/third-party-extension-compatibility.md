@@ -1,40 +1,17 @@
-# Third-Party Extension Compatibility (Retired)
+# First-Party Internal Compatibility Contracts
 
-> **Status: RETIRED (2026-09-28).** Third-party extension compatibility is no longer a supported boundary. This document is now (1) a retirement record describing what was removed, and (2) the surviving **internal** contract reference for regex, slash commands, message-row DOM, character-list DOM, events, and module surfaces that first-party EmberDesk code still depends on.
+> Internal contract reference for regex, slash commands, message-row DOM, character-list DOM, events, and module surfaces that first-party EmberDesk code still depends on. There is no third-party extension system: no extension loading, discovery, install, update, serving, or `/api/extensions/*` endpoints exist.
 
-## What Was Retired
+## Current Contracts
 
-The third-party extension system was removed in three batches (see `.docs/tech/extension-system-retirement-plan.md` and `.docs/tech/legacy-cutover-ledger.md`):
+- **Regex** is a fixed product feature under `public/scripts/extensions/regex/` (the directory name is retained; it is a directly imported module, not a plugin system). It initializes via `initCoreFeatures()` in `public/scripts/feature-settings.js`.
+- **`feature_settings` data bag**: owns `regex`/`regex_presets`, `note`, `variables.global`, `character_allowed_regex`, `preset_allowed_regex`. New writes use `feature_settings`; legacy `extension_settings` data is preserved through lazy migration and on-disk keys are never purged.
+- **Message cards**: first-party frontend frames (`frontend-frame.js` / `frontend-frame-controller.js` / `EmberDeskFrame`) render fenced complete HTML documents as same-origin iframes.
+- **Character-card metadata**: `data.extensions.*` fields (`regex_scripts`, `world`, etc.) are feature data and must not be deleted.
 
-| Batch | Commit | Removed |
-|---|---|---|
-| E-cut-1 (2026-09-24) | — | `public/scripts/extensions/third-party/` vendored JS-Slash-Runner, static serving, manifest loading, token-counter/quick-reply/wand menu stubs |
-| E-cut-3 (2026-09-28) | `5a3c46484` | `/api/extensions/*` (now a JSON `410` tombstone), extension-host service/domain/compat-slot modules, `ExtensionsHostWorkspacePanel`, `extensionsHost` workspace state/bridge/commands, Extensions drawer DOM (`#rm_extensions_block`, `#extensions_settings`, `#extensions_settings2`, wand menu buttons), `directories.extensions` creation/migration, `extensions.*`/`git.backend` config keys, deferred extension bootstrap, `src/git/client.js` |
-| E-cut-2 (2026-09-28) | `772c1a8d3` | `extension_settings` renamed to `feature_settings` (lazy migration), `extensions.js` renamed to `feature-settings.js`, manifest pipeline, `disabledExtensions`, `runGenerationInterceptors`, generation-interceptor hook in generation-service, Extras/scrapers/st-context third-party exports |
-| E-cut-4 (2026-09-28) | — | `st-context` third-party-only exports, `extension-mutated` message-row contract, compat suite reclassified as internal-contract tests, documentation |
+## Internal Contracts
 
-Concretely, the following are **gone** and must not be reintroduced:
-
-- Loading, discovering, installing, updating, or serving third-party extension code. `/api/extensions/*` answers `410` with `{ error: "extensions_retired" }`.
-- `public/scripts/extensions/third-party/` and the fixture fetch script.
-- Extension manifests (`manifest.json`) as an initialization mechanism — built-in features initialize directly via `initCoreFeatures()`.
-- `@sillytavern/*` browser import aliases as a supported contract.
-- `window.TavernHelper` / JS-Slash-Runner / Tavern Helper as supported integrations.
-- Extension mount points (`#extensions_settings`, `#extensions_settings2`, `#regex_container`, `#extensionsMenuButton`, `#extensionsMenu`) — deleted from `index.html` and templates.
-- `extension_settings` as the active settings key — replaced by `feature_settings` (lazy migration: `/api/settings/get` normalizes the old key on the wire; `data-maid` dual-reads unmigrated files; on-disk `extension_settings` keys in existing `settings.json` are never purged).
-- `runGenerationInterceptors` and the extension generation-interceptor contract.
-- The `extension-mutated` message-row contract (`.TH-streaming` / `.TH-render` markers, `hasExtensionMutatedRows`) — no producer remains.
-
-## What Replaced It
-
-- **Built-in features promoted to first-party**: Regex remains as a fixed product feature under `public/scripts/extensions/regex/` (the directory name is retained; it is a directly imported module, not a plugin system). It initializes via `initCoreFeatures()` in `public/scripts/feature-settings.js`. **Connection Manager is retired**: the single-provider contract (one URL, one key, one model, one fallback model) makes multi-connection profiles unnecessary — its module directory, `/profile*` slash commands, `ConnectionManagerRequestService`, and the `rm_api_block` drawer it lived in are all removed; stored `feature_settings.connectionManager` data remains inert historical data.
-- **`feature_settings` data bag**: owns `regex`/`regex_presets`, `note`, `variables.global`, `character_allowed_regex`, `preset_allowed_regex`. New writes use `feature_settings`; legacy `extension_settings` data is preserved through lazy migration.
-- **Message cards**: first-party frontend frames (`frontend-frame.js` / `frontend-frame-controller.js` / `EmberDeskFrame`) render fenced complete HTML documents as same-origin iframes — **shape-compatible** with the fenced-document card format, **API-incompatible** with Tavern Helper (no TH variables, no `{{get_*_variable}}` macros, no arbitrary extension APIs). See `.docs/specs/260924-01-message-frontend-rendering/spec.md`.
-- **Character-card metadata**: `data.extensions.*` fields (`regex_scripts`, `world`, etc.) are feature data, unrelated to the retired extension system — they remain valid and must not be deleted.
-
-## Surviving Internal Contracts
-
-The following remain as **internal** contracts consumed by EmberDesk's own modules. They are no longer third-party extension commitments — breaking them is an internal refactor concern, not an external compatibility violation.
+The following are internal contracts consumed by EmberDesk's own modules; breaking them is an internal refactor concern.
 
 ### Internal runtime surface
 
@@ -62,7 +39,7 @@ Preserve these selectors and identity attributes (also mandated by `AGENTS.md`):
 - `.character_select[data-chid]`, `.character_select[chid]`, `id="CharID${chid}"`
 - `.character_selected`, `.bulk_select_checkbox`, `.tags_inline`, `.ch_fav`
 
-`data-chid` is the standard row identity; the legacy `chid` attribute remains for existing selectors. `.group_select` is retired with group chat removal.
+`data-chid` is the standard row identity; the legacy `chid` attribute remains for existing selectors.
 
 ### Slash command surface
 
@@ -100,10 +77,9 @@ Internal read-service envelopes (`result.mode`, `latencyHint`, `interactionPath`
 ## Validation
 
 ```bash
-pnpm run test:compat          # internal-contract gate (was: third-party extension gate)
-pnpm --dir tests run test:unit -- extension-retirement.test.js --runInBand
+pnpm run test:compat          # internal-contract gate
 pnpm --dir tests run test:unit -- chat-workspace-structure.test.js --runInBand
 pnpm --dir tests run test:e2e -- chat-message-frontend-frames.e2e.js --workers=1
 ```
 
-`tests/helpers/frontend-compatibility-contract.js` is the internal contract manifest; `tests/extension-retirement.test.js` is the retirement-absence gate.
+`tests/helpers/frontend-compatibility-contract.js` is the internal contract manifest.

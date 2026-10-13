@@ -27,7 +27,7 @@ const RULES = [
         command: 'pnpm --dir tests run test:unit -- react-workspace-panels-helpers.test.js workspace-react-panel-flags.test.js --runInBand',
         reason: 'React workspace panel bridge, host lifecycle, or guarded panel flag surface changed.',
         sources: [
-            '.docs/tech/react-modernization-roadmap.md',
+            '.docs/tech/workspace-shell-panel-dock-coordination.md',
             '.docs/tech/pnpm-workflow.md',
             '.docs/tech/third-party-extension-compatibility.md',
         ],
@@ -71,8 +71,7 @@ const RULES = [
         reason: 'Express route, middleware order, or route compatibility surface changed.',
         sources: [
             'AGENTS.md',
-            '.docs/adr/0010-express-runtime-owner-boundary.md',
-            '.docs/adr/0013-remove-obsolete-web-stack-experiments.md',
+            '.docs/tech/server-startup-orchestration.md',
         ],
         matches(input) {
             return matchesAny(input, [
@@ -92,8 +91,7 @@ const RULES = [
         sources: [
             'AGENTS.md',
             '.docs/tech/config-resolution.md',
-            '.docs/tech/modernization-roadmap.md',
-            '.docs/adr/0002-config-resolution-three-phase-split.md',
+            '.docs/tech/server-startup-orchestration.md',
         ],
         matches(input) {
             return matchesAny(input, [
@@ -114,7 +112,7 @@ const RULES = [
         reason: 'User auth, storage, directory, or migration surface changed.',
         sources: [
             'AGENTS.md',
-            '.docs/adr/0003-user-account-module-split.md',
+            '.docs/tech/user-module-split.md',
         ],
         matches(input) {
             return matchesAny(input, [
@@ -133,9 +131,7 @@ const RULES = [
         command: 'pnpm --dir tests run test:unit -- canonical-storage-slice-registry.test.js canonical-sqlite-cli.test.js canonical-sqlite-operator.test.js canonical-sqlite-rollout-contract.test.js canonical-sqlite-shadow-import.test.js character-read-service.test.js character-write-service.test.js --runInBand',
         reason: 'Canonical SQLite repair tooling, rollout contract, rollback blockers, or DB-first storage authority changed.',
         sources: [
-            '.docs/adr/0011-canonical-per-user-sqlite-storage.md',
             '.docs/tech/canonical-sqlite-storage-roadmap.md',
-            '.docs/specs/260707-07-canonical-sqlite-repair-rollout-contract/spec.md',
         ],
         matches(input) {
             return matchesAny(input, [
@@ -154,7 +150,6 @@ const RULES = [
                 /^tests\/character-read-service\.test\.js$/,
                 /^tests\/character-write-service\.test\.js$/,
                 /^\.docs\/tech\/canonical-sqlite-storage-roadmap\.md$/,
-                /^\.docs\/adr\/0011-canonical-per-user-sqlite-storage\.md$/,
                 /^(canonical sqlite|canonical storage|repair tooling|repair tool|rollout contract|rollback blocker|projection repair|shadow import|db-first reads|db-first writes)$/i,
             ]);
         },
@@ -165,7 +160,6 @@ const RULES = [
         command: 'pnpm --dir tests run test:unit -- derived-cache-sqlite.test.js interaction-performance-index.test.js --runInBand',
         reason: 'Derived SQLite helper, retired character-index helper, or historical interaction performance cache proof changed.',
         sources: [
-            '.docs/adr/0009-derived-cache-sqlite-drizzle-decision.md',
             '.docs/tech/derived-cache-sqlite.md',
             '.docs/tech/interaction-performance-indexing.md',
         ],
@@ -205,7 +199,6 @@ const RULES = [
         sources: [
             'AGENTS.md',
             '.docs/db/scripts/doc-compiler.js',
-            '.docs/tech/modernization-roadmap.md',
         ],
         matches(input) {
             return matchesAny(input, [

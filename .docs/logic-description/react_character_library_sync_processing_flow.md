@@ -7,7 +7,7 @@
   - `public/scripts/character-library-react-sync.js`
   - `public/script.js`
   - `app/components/character-library/CharacterLibraryPanel.tsx`
-- Related tech doc: [.docs/tech/react-modernization-roadmap.md](../tech/react-modernization-roadmap.md)
+- Related tech doc: [.docs/tech/workspace-shell-panel-dock-coordination.md](../tech/workspace-shell-panel-dock-coordination.md)
 - Related semantic docs:
   - [.docs/db/features/character-library-panel.md](../db/features/character-library-panel.md)
   - [.docs/db/pages/chat-workspace.md](../db/pages/chat-workspace.md)

@@ -28,7 +28,7 @@ The same source file is also imported directly by Node/Jest tests. Dependency ex
 - Vite's browser module build (ES module output)
 - Node's direct source import path, where a CommonJS package can appear under `default`, `slidetoggle`, or `module.exports`.
 
-This dual boundary is intentional and recorded in [ADR-0006](../adr/0006-preserve-dual-libjs-source-and-bundled-boundary.md).
+This dual boundary is intentional: `/lib.js` must preserve both source imports and bundled output.
 
 ## Module Export Contract
 

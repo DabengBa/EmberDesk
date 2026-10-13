@@ -94,4 +94,3 @@ Stability-sensitive binding points:
 
 ## Related ADRs
 
-- [ADR-0002](../adr/0002-config-resolution-three-phase-split.md) — why the three-phase split was chosen

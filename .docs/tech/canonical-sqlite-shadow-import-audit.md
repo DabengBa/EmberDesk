@@ -2,7 +2,7 @@
 
 ## Module Responsibility
 
-`src/canonical-sqlite-shadow-import.js` owns the Phase 1 bridge between EmberDesk's file-backed character data and the future canonical per-user SQLite store accepted by [ADR-0011](../adr/0011-canonical-per-user-sqlite-storage.md). It imports character metadata plus chat stats into the canonical DB without changing runtime authority, and it provides a machine-readable audit that compares canonical rows against the current file-backed projection.
+`src/canonical-sqlite-shadow-import.js` owns the Phase 1 bridge between EmberDesk's file-backed character data and the canonical per-user SQLite store defined by the [storage roadmap](canonical-sqlite-storage-roadmap.md). It imports character metadata plus chat stats into the canonical DB without changing runtime authority, and it provides a machine-readable audit that compares canonical rows against the current file-backed projection.
 
 Primary files:
 

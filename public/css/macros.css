@@ -12,6 +12,22 @@
     display: flex;
     flex-direction: column;
     gap: 0.5em;
+    min-width: 0;
+    container: macro-browser / inline-size;
+}
+
+.macroBrowser .macro-container[hidden] {
+    display: none;
+}
+
+.macroBrowser .macro-empty-state {
+    padding: 1em;
+    text-align: start;
+}
+
+.macroBrowser button:focus-visible {
+    outline: 2px solid var(--interactable-outline-color);
+    outline-offset: 2px;
 }
 
 /* -----------------------------------------------------------------------------
@@ -30,8 +46,8 @@
     display: flex;
     gap: 0.5em;
     align-items: center;
-    min-width: 200px;
-    white-space: nowrap;
+    min-width: min(100%, 200px);
+    white-space: normal;
 }
 
 .macroBrowser .macro-search-input {
@@ -45,7 +61,8 @@
 }
 
 .macroBrowser .macro-sort-btn.active {
-    background-color: var(--SmartThemeQuoteColor);
+    background-color: color-mix(in srgb, var(--SmartThemeQuoteColor) 12%, var(--SmartThemeBlurTintColor));
+    border-color: var(--SmartThemeQuoteColor);
 }
 
 /* -----------------------------------------------------------------------------
@@ -69,7 +86,9 @@
 }
 
 .macroBrowser .macro-details-panel {
-    flex: 0 0 40%;
+    flex: 1 1 40%;
+    min-width: 0;
+    overflow-wrap: anywhere;
     position: sticky;
     top: 0;
     max-height: 60vh;
@@ -80,9 +99,59 @@
 }
 
 .macroBrowser .macro-details-placeholder {
-    opacity: 0.6;
-    text-align: center;
-    padding: 2em;
+    color: var(--SmartThemeEmColor);
+    text-align: start;
+    padding: 1em;
+}
+
+@container macro-browser (max-width: 600px) {
+    .macroBrowser .macro-container {
+        flex-direction: column;
+    }
+
+    .macroBrowser .macro-list-panel,
+    .macroBrowser .macro-details-panel {
+        width: 100%;
+        flex-basis: auto;
+        position: static;
+    }
+
+    .macroBrowser .macro-list-panel {
+        max-height: 35dvh;
+    }
+
+    .macroBrowser .macro-details-panel {
+        max-height: none;
+    }
+
+    .macroBrowser .macro-container .macro-item {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        text-align: start;
+    }
+
+    .macroBrowser .macro-signature,
+    .macroBrowser .macro-desc-preview {
+        grid-column: 1;
+        max-width: 100%;
+    }
+
+    .macroBrowser .macro-source {
+        grid-column: 2;
+        grid-row: 1;
+    }
+}
+
+@media (max-width: 600px), (pointer: coarse) {
+    .macroBrowser .macro-item,
+    .macroBrowser .menu_button {
+        min-height: 44px;
+        min-width: 44px;
+    }
+
+    .macroBrowser .macro-search-input {
+        font-size: max(16px, var(--mainFontSize));
+    }
 }
 
 /* -----------------------------------------------------------------------------
@@ -131,7 +200,12 @@
 }
 
 .macroBrowser .macro-item.selected {
-    background: var(--SmartThemeQuoteColor);
+    background: color-mix(in srgb, var(--SmartThemeQuoteColor) 12%, var(--SmartThemeBlurTintColor));
+    box-shadow: inset 0 0 0 1px var(--SmartThemeQuoteColor);
+}
+
+.macroBrowser .macro-item.selected .macro-desc-preview {
+    color: var(--SmartThemeBodyColor);
 }
 
 .macroBrowser .macro-item.isFiltered {
@@ -144,19 +218,18 @@
     font-size: 0.9em;
     color: var(--SmartThemeQuoteColor);
     flex: 0 1 auto; /* Can shrink, but prefers not to */
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    overflow-wrap: anywhere;
+    white-space: normal;
     min-width: 3em; /* Minimum before fully hidden */
 }
 
 .macroBrowser .macro-desc-preview {
     flex: 1 1 0; /* Shrinks first, starts at 0 basis */
-    opacity: 0.7;
+    opacity: 1;
+    color: var(--SmartThemeEmColor);
     font-size: 0.9em;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    overflow-wrap: anywhere;
+    white-space: normal;
     min-width: 0; /* Allow shrinking to nothing */
 }
 
@@ -167,15 +240,15 @@
 }
 
 .macroBrowser .macro-source.isExtension.isThirdParty {
-    color: #f0a030;
+    color: var(--SmartThemeQuoteColor);
 }
 
 .macroBrowser .macro-source.isExtension.isCore {
-    color: #30a0f0;
+    color: var(--frost-blue);
 }
 
 .macroBrowser .macro-source.isCore:not(.isExtension) {
-    color: #50c050;
+    color: var(--success-green);
 }
 
 /* -----------------------------------------------------------------------------

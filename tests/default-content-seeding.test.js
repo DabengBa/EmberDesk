@@ -81,9 +81,9 @@ describe('default content seeding', () => {
         expect(fs.existsSync(path.join(directories.avatars, 'user-default.png'))).toBe(true);
         expect(fs.existsSync(path.join(directories.openAI_Settings, 'Default.json'))).toBe(true);
 
-        // Retired-type target directories receive nothing.
+        // Retired-type target directories are not part of the template and receive nothing.
         for (const key of ['koboldAI_Settings', 'novelAI_Settings', 'movingUI', 'quickreplies', 'comfyWorkflows']) {
-            expect(walkFiles(directories[key])).toEqual([]);
+            expect(directories).not.toHaveProperty(key);
         }
 
         // No retired default filename appears anywhere under the user root.
@@ -105,15 +105,16 @@ describe('default content seeding', () => {
 
     test('pre-existing files in retired-type directories are left untouched', async () => {
         const directories = getUserDirectories('seed-legacy-user');
-        const legacyFile = path.join(directories.koboldAI_Settings, 'Legacy-Custom.json');
-        fs.mkdirSync(directories.koboldAI_Settings, { recursive: true });
+        const legacyDir = path.join(directories.root, 'KoboldAI Settings');
+        const legacyFile = path.join(legacyDir, 'Legacy-Custom.json');
+        fs.mkdirSync(legacyDir, { recursive: true });
         fs.writeFileSync(legacyFile, '{"sentinel":"keep-me"}', 'utf8');
 
         await checkForNewContent([directories]);
 
         expect(fs.readFileSync(legacyFile, 'utf8')).toBe('{"sentinel":"keep-me"}');
         // Only the pre-existing file is present; nothing new was added.
-        expect(walkNames(directories.koboldAI_Settings)).toEqual(['Legacy-Custom.json']);
+        expect(walkNames(legacyDir)).toEqual(['Legacy-Custom.json']);
     });
 
     test('repeated seeding is idempotent', async () => {

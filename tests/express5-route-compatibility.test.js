@@ -27,7 +27,7 @@ const repoRoot = path.resolve(__dirname, '..');
 const packageJson = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8'));
 const configTmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-express5-config-'));
 const configPath = path.join(configTmpDir, 'config.yaml');
-fs.writeFileSync(configPath, 'extensions:\n  enabled: true\n', 'utf8');
+fs.writeFileSync(configPath, 'whitelistMode: false\n', 'utf8');
 setConfigFilePath(configPath);
 
 const { router: userDataRouter, requireLoginMiddleware } = await import('../src/users.js');
@@ -65,7 +65,6 @@ function createUserDirectories(root) {
         assets: path.join(root, 'assets'),
         userImages: path.join(root, 'user', 'images'),
         files: path.join(root, 'user', 'files'),
-        extensions: path.join(root, 'extensions'),
     };
     for (const directory of Object.values(directories)) {
         fs.mkdirSync(directory, { recursive: true });

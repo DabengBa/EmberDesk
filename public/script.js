@@ -1032,6 +1032,7 @@ registerDomHandlersShellContext({
     mountSelectChatPopup: (...args) => mountSelectChatPopup(...args),
     newAssistantChat: (...args) => newAssistantChat(...args),
     openAlternateGreetings: (...args) => openAlternateGreetings(...args),
+    openCharacterLibrary: () => openWorkspaceShellCharacterLibrary(),
     openCharacterChat: (...args) => openCharacterChat(...args),
     openCharacterWorldPopup: (...args) => openCharacterWorldPopup(...args),
     openMessageDelete: (...args) => openMessageDelete(...args),
@@ -2368,6 +2369,7 @@ function getCharacterAuthoringReactBridgeState(stateOverrides = {}) {
         },
         unsupportedFields: Array.isArray(draft.unsupportedFields) ? [...draft.unsupportedFields] : [],
         managementActions: getCharacterManagementDropdownActions(),
+        worldNames: Array.isArray(world_names) ? [...world_names] : [],
     };
 }
 
@@ -4084,8 +4086,9 @@ function toggleCharacterExportPopup(referenceElement = document.getElementById('
 
 function getVisibleCharacterExportTrigger() {
     const authoringPanel = document.querySelector('[data-react-authoring-owner="characterAuthoring"]');
-    const reactExportButton = [...(authoringPanel?.querySelectorAll('button') ?? [])]
-        .find(button => button.textContent?.trim() === 'Export');
+    const reactExportButton = authoringPanel?.querySelector('button[data-character-export-trigger]')
+        ?? [...(authoringPanel?.querySelectorAll('button') ?? [])]
+            .find(button => button.textContent?.trim() === 'Export');
 
     return reactExportButton instanceof HTMLElement
         ? reactExportButton
@@ -8730,12 +8733,19 @@ export async function setCharacterSettingsOverrides() {
         pendingChanges.system_prompt = '';
     });
 
-    // Wait for popup close/confirm.
-    await callGenericPopup($template, POPUP_TYPE.TEXT, '', {
+    // Wait for popup close/confirm. Only an affirmative result commits —
+    // Cancel and Escape discard the pending edits.
+    const result = await callGenericPopup($template, POPUP_TYPE.TEXT, '', {
         wide: true,
         large: true,
         allowVerticalScrolling: true,
+        okButton: t`Save`,
+        cancelButton: t`Cancel`,
     });
+
+    if (result !== POPUP_RESULT.AFFIRMATIVE) {
+        return;
+    }
 
     chat_metadata.scenario = pendingChanges.scenario;
     chat_metadata.mes_example = pendingChanges.examples;
@@ -8926,12 +8936,30 @@ async function openAlternateGreetings() {
     }
 
     const template = $('#alternate_greetings_template .alternate_grettings').clone();
-    const getArray = () => menu_type == 'create' ? create_save.alternate_greetings : characters[chid].data.alternate_greetings;
+    const sourceArray = menu_type == 'create' ? create_save.alternate_greetings : characters[chid].data.alternate_greetings;
+    const draftArray = Array.isArray(sourceArray) ? [...sourceArray] : [];
+    const getArray = () => draftArray;
     const popup = new Popup(template, POPUP_TYPE.TEXT, '', {
         wide: true,
         large: true,
         allowVerticalScrolling: true,
-        onClose: async () => {
+        okButton: t`Save`,
+        cancelButton: t`Cancel`,
+        onClose: async (popup) => {
+            // Only an affirmative result writes the draft back — Cancel and
+            // Escape leave the stored greetings untouched.
+            if (popup.result !== POPUP_RESULT.AFFIRMATIVE) {
+                return;
+            }
+
+            if (Array.isArray(sourceArray)) {
+                sourceArray.splice(0, sourceArray.length, ...draftArray);
+            } else if (menu_type === 'create') {
+                create_save.alternate_greetings = [...draftArray];
+            } else {
+                characters[chid].data.alternate_greetings = [...draftArray];
+            }
+
             if (menu_type !== 'create') {
                 await createOrEditCharacter();
             }

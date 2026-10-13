@@ -50,14 +50,12 @@ export function resolveCanonicalChatProjectionPath({
     }
 
     if (ownerType === 'group') {
-        if (!directories.groupChats) {
-            throw new Error('Canonical group chat projection directory is required.');
-        }
-        if (path.dirname(filePath) !== path.resolve(directories.groupChats)
+        const groupChatsDir = path.resolve(directories.root, 'group chats');
+        if (path.dirname(filePath) !== groupChatsDir
             || path.parse(filePath).name !== String(ownerId)) {
             throw new Error(`Canonical group chat projection path is invalid: ${sourcePath}`);
         }
-        assertNoSymlinkComponents(directories.groupChats, filePath);
+        assertNoSymlinkComponents(groupChatsDir, filePath);
         return filePath;
     }
 

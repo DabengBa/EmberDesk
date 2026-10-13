@@ -24,6 +24,21 @@
     display: none;
 }
 
+.world-info-conflict-details {
+    max-height: 40vh;
+    overflow-y: auto;
+    text-align: start;
+}
+
+.world-info-conflict-details summary {
+    padding: 10px 0;
+    cursor: pointer;
+}
+
+.world-info-conflict-details li {
+    overflow-wrap: anywhere;
+}
+
 #WorldInfo.wi-more-menu-open {
     overflow: visible;
 }

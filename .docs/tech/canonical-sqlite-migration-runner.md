@@ -2,7 +2,7 @@
 
 ## Module Responsibility
 
-`src/canonical-sqlite-migrations.js` owns the schema-history and migration contract for EmberDesk's future canonical per-user SQLite store under [ADR-0011](../adr/0011-canonical-per-user-sqlite-storage.md). It sits above `src/canonical-sqlite.js`: the manager opens the DB and enforces fail-closed lifecycle rules, while the migration runner decides whether that DB is at a supported schema version and, if not blocked, applies ordered schema changes.
+`src/canonical-sqlite-migrations.js` owns the schema-history and migration contract for EmberDesk's future canonical per-user SQLite store under the [canonical per-user SQLite storage contract](canonical-sqlite-storage-roadmap.md). It sits above `src/canonical-sqlite.js`: the manager opens the DB and enforces fail-closed lifecycle rules, while the migration runner decides whether that DB is at a supported schema version and, if not blocked, applies ordered schema changes.
 
 Primary files:
 

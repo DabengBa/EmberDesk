@@ -5,7 +5,7 @@
 - Owner: main-chat slash-command bridge documentation
 - Current code bindings: `public/scripts/main-chat-slash-command-state.js`, `public/script.js`, `app/workspace-panels.tsx`, `public/scripts/slash-commands.js`
 - Related semantic docs: [.docs/db/pages/chat-workspace.md](../db/pages/chat-workspace.md), [.docs/tech/third-party-extension-compatibility.md](../tech/third-party-extension-compatibility.md)
-- Related tech doc: [.docs/tech/react-modernization-roadmap.md](../tech/react-modernization-roadmap.md)
+- Related tech doc: [.docs/tech/main-chat-generation-lifecycle.md](../tech/main-chat-generation-lifecycle.md)
 
 ## Goals And Non-Goals
 

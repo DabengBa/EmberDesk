@@ -18,30 +18,15 @@ const DIRECTORIES_CACHE = new Map();
  * @property {string} thumbnails - The directory where the thumbnails are stored
  * @property {string} thumbnailsAvatar - The directory where the avatar thumbnails are stored
  * @property {string} worlds - The directory where the WI are stored
- * @property {string} user - The directory where the user's public data is stored
  * @property {string} avatars - The directory where the avatars are stored
  * @property {string} userImages - The directory where the images are stored
- * @property {string} groups - The directory where the groups are stored
- * @property {string} groupChats - The directory where the group chats are stored
  * @property {string} chats - The directory where the chats are stored
  * @property {string} characters - The directory where the characters are stored
  * @property {string} backgrounds - The directory where the backgrounds are stored
- * @property {string} novelAI_Settings - The directory where the NovelAI settings are stored
- * @property {string} koboldAI_Settings - The directory where the KoboldAI settings are stored
  * @property {string} openAI_Settings - The directory where the OpenAI settings are stored
- * @property {string} textGen_Settings - The directory where the TextGen settings are stored
- * @property {string} themes - The directory where the themes are stored
- * @property {string} movingUI - The directory where the moving UI data is stored
- * @property {string} instruct - The directory where the instruct templates is stored
- * @property {string} context - The directory where the context templates is stored
- * @property {string} quickreplies - The directory where the quick replies are stored
  * @property {string} assets - The directory where the assets are stored
- * @property {string} comfyWorkflows - The directory where the ComfyUI workflows are stored
  * @property {string} files - The directory where the uploaded files are stored
- * @property {string} vectors - The directory where the vectors are stored
  * @property {string} backups - The directory where the backups are stored
- * @property {string} sysprompt - The directory where the system prompt data is stored
- * @property {string} reasoning - The directory where the reasoning templates are stored
  * @property {string} storage - The directory where the durable canonical storage files are stored
  */
 

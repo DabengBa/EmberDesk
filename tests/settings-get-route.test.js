@@ -40,18 +40,8 @@ function makeDirectories() {
 
     const directories = {
         root,
-        novelAI_Settings: path.join(root, 'NovelAI Settings'),
         openAI_Settings: path.join(root, 'OpenAI Settings'),
-        koboldAI_Settings: path.join(root, 'KoboldAI Settings'),
-        textGen_Settings: path.join(root, 'TextGen Settings'),
         worlds: path.join(root, 'worlds'),
-        themes: path.join(root, 'themes'),
-        movingUI: path.join(root, 'movingUI'),
-        quickreplies: path.join(root, 'QuickReplies'),
-        instruct: path.join(root, 'instruct'),
-        context: path.join(root, 'context'),
-        sysprompt: path.join(root, 'sysprompt'),
-        reasoning: path.join(root, 'reasoning'),
     };
 
     for (const dir of Object.values(directories)) {
@@ -72,14 +62,18 @@ describe('settings get route', () => {
         }
     });
 
-    test('keeps legacy TextGen preset fields in the settings payload', async () => {
+    test('returns OpenAI preset fields and omits retired provider preset payloads', async () => {
         const directories = makeDirectories();
-        fs.writeFileSync(path.join(directories.textGen_Settings, 'textgen.json'), JSON.stringify({ name: 'TextGen' }), 'utf8');
+        fs.writeFileSync(path.join(directories.openAI_Settings, 'openai.json'), JSON.stringify({ name: 'OpenAI' }), 'utf8');
 
         const response = await invokeSettingsGet(directories);
 
         expect(response.statusCode).toBe(200);
-        expect(response.body.textgenerationwebui_presets).toEqual([JSON.stringify({ name: 'TextGen' })]);
-        expect(response.body.textgenerationwebui_preset_names).toEqual(['textgen']);
+        expect(response.body.openai_settings).toEqual([JSON.stringify({ name: 'OpenAI' })]);
+        expect(response.body.openai_setting_names).toEqual(['openai']);
+        expect(response.body).not.toHaveProperty('textgenerationwebui_presets');
+        expect(response.body).not.toHaveProperty('koboldai_settings');
+        expect(response.body).not.toHaveProperty('novelai_settings');
+        expect(response.body).not.toHaveProperty('quickReplyPresets');
     });
 });

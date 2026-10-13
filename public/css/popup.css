@@ -52,6 +52,7 @@ dialog {
     overflow: hidden;
     width: min(100%, 100vw);
     height: 100%;
+    min-height: 0;
     padding: 1px;
 }
 
@@ -62,8 +63,46 @@ dialog {
 .popup .popup-content {
     margin-top: 10px;
     padding: 0 8px;
-    overflow: hidden;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overflow-wrap: anywhere;
+    text-align: start;
+    min-height: 0;
     flex-grow: 1;
+}
+
+.popup:has(.maximized_textarea, .img_enlarged_container) .popup-content {
+    overflow: hidden;
+}
+
+.popup-crop-controls {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 5px;
+    padding-block: 10px;
+}
+
+.popup-crop-controls button {
+    min-width: 44px;
+    min-height: 44px;
+}
+
+.popup .popup-controls,
+.popup .popup-crop-controls,
+.popup .popup-crop-wrap {
+    flex-shrink: 0;
+}
+
+.popup .popup-crop-wrap {
+    width: 100%;
+    height: min(55dvh, 32rem);
+    overflow: hidden;
+}
+
+.popup .maximized_textarea {
+    min-height: 0;
+    flex: 1;
 }
 
 .popup .popup-content h3:first-child {

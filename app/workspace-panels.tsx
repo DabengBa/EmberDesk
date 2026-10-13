@@ -214,6 +214,7 @@ interface AuthoringWorkspacePanelState {
     candidates?: AuthoringCandidateState[];
     tagOptions?: AuthoringCandidateState[];
     managementActions?: AuthoringManagementAction[];
+    worldNames?: string[];
 }
 
 interface AuthoringManagementAction {
@@ -599,6 +600,9 @@ function AuthoringWorkspacePanel({
     const bridgeState = asAuthoringState(state);
     const title = bridgeState.title ?? 'Character Authoring';
     const unsupportedFields = Array.isArray(bridgeState.unsupportedFields) ? bridgeState.unsupportedFields : [];
+    const worldNames = Array.isArray(bridgeState.worldNames)
+        ? bridgeState.worldNames.filter((name): name is string => typeof name === 'string' && name.trim().length > 0)
+        : [];
     const authoringDraft = bridgeState.draft;
     const authoringMode = bridgeState.mode ?? 'create';
     const managementActionDefs = bridgeState.managementActions;
@@ -947,7 +951,17 @@ function AuthoringWorkspacePanel({
                                         value={stringDraft('characterWorld')}
                                         onChange={(event) => updateDraft({ characterWorld: event.target.value })}
                                         placeholder="Linked world file name"
+                                        list="authoring-character-world-names"
+                                        aria-invalid={Boolean(stringDraft('characterWorld').trim()) && worldNames.length > 0 && !worldNames.includes(stringDraft('characterWorld').trim()) ? 'true' : undefined}
                                     />
+                                    <datalist id="authoring-character-world-names">
+                                        {worldNames.map(name => (
+                                            <option key={name} value={name} />
+                                        ))}
+                                    </datalist>
+                                    {stringDraft('characterWorld').trim() && worldNames.length > 0 && !worldNames.includes(stringDraft('characterWorld').trim()) ? (
+                                        <small {...stylex.props(authoringStyles.fieldWarning)}>No world file with this name — the link will be ignored.</small>
+                                    ) : null}
                                 </label>
                             </div>
                         </div>
@@ -1239,6 +1253,7 @@ function AuthoringWorkspacePanel({
                                 type="button"
                                 className={`menu_button ${stylex.props(authoringStyles.toolAction).className ?? ''}`}
                                 disabled={isActionPending}
+                                data-character-export-trigger=""
                                 onClick={() => void commands?.exportAuthoring?.(characterToolActionPayload)}
                             >
                                 Export
@@ -2229,8 +2244,8 @@ export function mountRegexDebugger(container: HTMLElement) {
 /**
  * Mounts the regex import target picker inside the legacy popup shell.
  */
-export function mountRegexImportTarget(container: HTMLElement) {
-    mountSmallPanel(container, <RegexImportTarget />);
+export function mountRegexImportTarget(container: HTMLElement, options: { characterName?: string; presetName?: string }) {
+    mountSmallPanel(container, <RegexImportTarget {...options} />);
 }
 
 /**

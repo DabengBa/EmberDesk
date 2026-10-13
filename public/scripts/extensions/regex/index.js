@@ -2,7 +2,7 @@ import { characters, getCurrentChatId, messageFormatting, reloadCurrentChat, sav
 import { eventSource, event_types } from '../../events.js';
 import { feature_settings, renderFeatureTemplateAsync } from '../../feature-settings.js';
 import { loadWorkspacePanelsModule } from '../../workspace-panels-react-bridge.js';
-import { callGenericPopup, Popup, POPUP_TYPE } from '../../popup.js';
+import { callGenericPopup, Popup, POPUP_TYPE, POPUP_RESULT } from '../../popup.js';
 import { SlashCommand } from '../../slash-commands/SlashCommand.js';
 import { ARGUMENT_TYPE, SlashCommandArgument, SlashCommandNamedArgument } from '../../slash-commands/SlashCommandArgument.js';
 import { commonEnumProviders, enumIcons } from '../../slash-commands/SlashCommandCommonEnumsProvider.js';
@@ -844,11 +844,42 @@ async function onRegexEditorOpenClick(existingId, scriptType) {
     editorHtml.find('input, textarea, select').on('input', updateTestResult);
     updateInfoBlock(editorHtml);
 
-    const popupResult = await callGenericPopup(editorHtml, POPUP_TYPE.CONFIRM, '', { okButton: t`Save`, cancelButton: t`Cancel`, allowVerticalScrolling: true });
+    const validateEditor = () => {
+        const name = editorHtml.find('#regex_script_name');
+        const find = editorHtml.find('#find_regex');
+        const placement = editorHtml.find('input[name="replace_position"]');
+        const errors = [
+            { controls: name, output: '#regex_name_error', message: String(name.val()).trim() ? '' : t`Enter a script name.` },
+            { controls: find, output: '#regex_find_error', message: '' },
+            { controls: placement, output: '#regex_placement_error', message: placement.filter(':checked').length ? '' : t`Select at least one affected area.` },
+        ];
+        const pattern = String(find.val());
+        try {
+            const dynamic = Number(editorHtml.find('select[name="substitute_regex"]').val()) !== substitute_find_regex.NONE && pattern.includes('{{');
+            if (!pattern.trim() || (!dynamic && !regexFromString(pattern))) {
+                errors[1].message = t`Enter a valid regular expression.`;
+            }
+        } catch {
+            errors[1].message = t`Enter a valid regular expression.`;
+        }
+        errors.forEach(({ controls, output, message }) => {
+            controls.attr('aria-invalid', String(Boolean(message)));
+            editorHtml.find(output).text(message).prop('hidden', !message);
+        });
+        const firstError = errors.find(error => error.message);
+        firstError?.controls.first().trigger('focus');
+        return !firstError;
+    };
+    const popupResult = await new Popup(editorHtml, POPUP_TYPE.CONFIRM, '', {
+        okButton: t`Save`,
+        cancelButton: t`Cancel`,
+        allowVerticalScrolling: true,
+        onClosing: (popup) => popup.result !== POPUP_RESULT.AFFIRMATIVE || validateEditor(),
+    }).show();
     if (popupResult) {
         const newRegexScript = {
             id: existingId ? String(existingId) : uuidv4(),
-            scriptName: String(editorHtml.find('.regex_script_name').val()),
+            scriptName: String(editorHtml.find('.regex_script_name').val()).trim(),
             findRegex: String(editorHtml.find('.find_regex').val()),
             replaceString: String(editorHtml.find('.regex_replace_string').val()),
             trimStrings: String(editorHtml.find('.regex_trim_strings').val()).split('\n').filter((e) => e.length !== 0) || [],
@@ -1059,10 +1090,14 @@ function populateDebuggerRuleList(container) {
     rulesContainer.empty();
 
     const allScripts = getRegexScripts();
-    if (!allScripts || allScripts.length === 0) {
-        rulesContainer.append('<div class="regex-debugger-no-rules">' + t`No regex rules found.` + '</div>');
-        return;
-    }
+    const empty = !allScripts?.length;
+    container.data('allScripts', []);
+    container.find('#regex_debugger_empty').prop('hidden', !empty);
+    container.find('#regex_debugger_rules').prop('hidden', empty);
+    container.find('#regex_debugger_save_order, #regex_debugger_run_test').prop('disabled', empty);
+    container.find('.regex-debugger-results').prop('hidden', true);
+    container.find('#regex_debugger_result_hint').prop('hidden', empty);
+    if (empty) return;
 
     const globalScriptIds = new Set(getScriptsByType(SCRIPT_TYPES.GLOBAL).map(s => s.id));
     const scopedScriptIds = new Set(getScriptsByType(SCRIPT_TYPES.SCOPED).map(s => s.id));
@@ -1203,7 +1238,9 @@ async function onRegexDebuggerOpenClick() {
         finalOutput.empty();
         $('#regex_debugger_final_summary').remove();
 
-        if (!allScripts) return;
+        if (!allScripts?.length) return;
+        $(debuggerHost).find('.regex-debugger-results').prop('hidden', false);
+        $(debuggerHost).find('#regex_debugger_result_hint').prop('hidden', true);
         let textForNextStep = rawInput;
         let totalCharsCaptured = 0;
         let totalCharsAdded = 0;
@@ -1336,7 +1373,13 @@ async function onRegexDebuggerOpenClick() {
         callGenericPopup(popupContent, POPUP_TYPE.TEXT, t`Final Output`, { wide: true, large: true, allowVerticalScrolling: true });
     });
 
-    await callGenericPopup(debuggerHtml.children(), POPUP_TYPE.TEXT, '', { wide: true, allowVerticalScrolling: true });
+    const createButton = debuggerHtml.find('#regex_debugger_create_rule');
+    const popup = new Popup(debuggerHtml.children(), POPUP_TYPE.TEXT, '', { wide: true, allowVerticalScrolling: true });
+    createButton.on('click', async () => {
+        await popup.completeCancelled();
+        await onRegexEditorOpenClick(false, SCRIPT_TYPES.GLOBAL);
+    });
+    await popup.show();
 }
 
 /**
@@ -1752,18 +1795,29 @@ export async function init() {
     $('#import_regex_file').on('change', async function () {
         let target = SCRIPT_TYPES.GLOBAL;
         const template = $(document.createElement('div'));
-        workspacePanels.mountRegexImportTarget(template.get(0));
+        workspacePanels.mountRegexImportTarget(template.get(0), {
+            characterName: characters[this_chid]?.name,
+            presetName: getCurrentPresetName() || undefined,
+        });
         template.find('#regex_import_target_global').on('input', () => (target = SCRIPT_TYPES.GLOBAL));
         template.find('#regex_import_target_scoped').on('input', () => (target = SCRIPT_TYPES.SCOPED));
         template.find('#regex_import_target_preset').on('input', () => (target = SCRIPT_TYPES.PRESET));
 
-        await callGenericPopup(template, POPUP_TYPE.TEXT);
-
         const inputElement = this instanceof HTMLInputElement && this;
-        for (const file of inputElement.files) {
-            await onRegexImportFileChange(file, target);
+        try {
+            const result = await callGenericPopup(template, POPUP_TYPE.CONFIRM, '', {
+                okButton: t`Import`,
+                cancelButton: t`Cancel`,
+                defaultResult: POPUP_RESULT.NEGATIVE,
+                onOpen: (popup) => { popup.closeButton.style.display = 'block'; },
+            });
+            if (result !== POPUP_RESULT.AFFIRMATIVE) return;
+            for (const file of inputElement.files) {
+                await onRegexImportFileChange(file, target);
+            }
+        } finally {
+            inputElement.value = '';
         }
-        inputElement.value = '';
     });
     $('#import_regex').on('click', function () {
         $('#import_regex_file').trigger('click');

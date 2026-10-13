@@ -2,7 +2,7 @@
 id: feature.startup_bootstrap
 type: feature
 name: Workspace Startup Bootstrap
-related: [page.chat_workspace, feature.extension_panel_open]
+related: [page.chat_workspace]
 ---
 
 # Feature: Workspace Startup Bootstrap
@@ -24,6 +24,7 @@ Bring the user from the root EmberDesk URL to a usable main workspace while slow
 - The root workspace remains the long-term runtime facade for `/`; feature-flagged React routes or guarded panel islands may enhance surfaces, but disabled flags or missing bundles must not invalidate the same root shell.
 - Same-entry React shell takeover diagnostics may be published during startup after the main shell has a host to attach diagnostic state. Development and CI should treat an enabled but unmountable takeover foundation as a failure, while production safety paths may leave the existing shell visible with a recorded failure reason instead of showing an empty migration host.
 - Refreshing the root URL repeats the same visible readiness contract and must not strand the user between shell and panel states.
+- First-use onboarding labels its language selector and explains connecting a model through Settings before choosing a character. The character-library action closes onboarding and opens the existing workspace library; it does not advertise a separate sample catalog or an empty documentation link.
 - The root entry invokes the explicit `bootstrapWorkspace()` composition-root bootstrap. This names the startup contract without implying that all remaining legacy domain and DOM owners have already moved out of `script.js`.
 
 ## Semantic Interaction IDs
@@ -57,7 +58,7 @@ Bring the user from the root EmberDesk URL to a usable main workspace while slow
 
 ## Boundaries
 
-- Active chat background application and its metadata belong to [Chat Workspace](page.chat_workspace); the retired global Background Library has no startup-loading owner.
-- The retired extensions surface boundary is documented in [Extensions Panel Open](feature.extension_panel_open).
+- Active chat background application and its metadata belong to [Chat Workspace](page.chat_workspace).
+
 - The workspace layout and navigation surface belong to [Chat Workspace](page.chat_workspace).
 - Server startup phases, profiler metrics, and transport internals belong to tech docs, not this semantic feature.

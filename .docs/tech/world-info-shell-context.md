@@ -48,7 +48,7 @@ Code binding points:
 
 Related docs:
 
-- [React Modernization Roadmap](react-modernization-roadmap.md)
+- [Workspace Shell Panel Dock Coordination](workspace-shell-panel-dock-coordination.md)
 - [Third-Party Extension Compatibility](third-party-extension-compatibility.md)
 - [Workspace Composition Root](workspace-composition-root.md)
 - [Workspace Composition Root Processing Flow](../logic-description/workspace_composition_root_processing_flow.md)

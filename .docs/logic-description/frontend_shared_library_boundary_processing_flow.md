@@ -5,7 +5,7 @@
 - Owner: frontend shared-library boundary documentation
 - Current code binding: `public/lib.js`
 - Related tech doc: [.docs/tech/frontend-shared-library-boundary.md](../tech/frontend-shared-library-boundary.md)
-- Related ADR: [.docs/adr/0006-preserve-dual-libjs-source-and-bundled-boundary.md](../adr/0006-preserve-dual-libjs-source-and-bundled-boundary.md)
+- Related tech doc: [.docs/tech/frontend-shared-library-boundary.md](../tech/frontend-shared-library-boundary.md)
 
 ## Goals And Non-Goals
 

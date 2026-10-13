@@ -58,7 +58,7 @@ describe('seed-dev-environment', () => {
         expect(fs.existsSync(path.join(dataRoot, 'default-user', 'QuickReplies', 'Default.json'))).toBe(false);
     });
 
-    test('seeds embedded lorebooks and group-chat messages in app-compatible formats', async () => {
+    test('seeds embedded lorebooks in app-compatible formats', async () => {
         const sandboxRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-seed-dev-'));
         tempRoots.push(sandboxRoot);
 
@@ -99,16 +99,7 @@ describe('seed-dev-environment', () => {
         }));
         expect(book.entries[0].keys.length).toBeGreaterThan(0);
 
-        const groupChatPath = path.join(dataRoot, 'default-user', 'group chats', 'dev-group-001-chat-1.jsonl');
-        const lines = fs.readFileSync(groupChatPath, 'utf8').trim().split('\n').map(line => JSON.parse(line));
-        const botMessage = lines.find(line => line && line.is_user === false && line.is_system === false);
-
-        expect(botMessage).toEqual(expect.objectContaining({
-            name: expect.any(String),
-            original_avatar: expect.any(String),
-            force_avatar: expect.any(String),
-        }));
-        expect(botMessage.original_avatar.endsWith('.png')).toBe(true);
-        expect(botMessage.force_avatar).toContain(encodeURIComponent(botMessage.original_avatar));
+        // Dev seeds no longer write group chats.
+        expect(fs.existsSync(path.join(dataRoot, 'default-user', 'group chats'))).toBe(false);
     });
 });

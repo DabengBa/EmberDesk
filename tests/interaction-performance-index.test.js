@@ -20,7 +20,6 @@ import {
 } from '../src/endpoints/character-index.js';
 import { createCanonicalSqliteManager } from '../src/canonical-sqlite.js';
 import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
-import { groupChatRetirementHandler } from '../src/endpoints/group-chat-retirement.js';
 import {
     getPersistedCanonicalAuditStatus,
     persistCanonicalAuditStatus,
@@ -837,20 +836,6 @@ async function invokeChatImport(directories, avatar, file, format = 'jsonl') {
     };
     const response = createMockResponse();
     await handler(request, response);
-    return response;
-}
-
-async function invokeGroupChatSave(directories, id, chat) {
-    const request = {
-        body: {
-            id,
-            chat,
-            force: true,
-        },
-        user: { directories, profile: { handle: `chat-test-${path.basename(directories.root)}` } },
-    };
-    const response = createMockResponse();
-    await groupChatRetirementHandler(request, response);
     return response;
 }
 
@@ -1889,45 +1874,6 @@ describe('character index', () => {
             expect(stats.chat_size_bytes).toBeGreaterThan(0);
             expect(stats.date_last_chat_ms).toBeGreaterThan(0);
             expect(stats.stats_updated_at_ms).toBeGreaterThan(0);
-        } finally {
-            manager.dispose();
-        }
-    });
-
-    test('rejects retired group chat saves without updating character chat stats', async () => {
-        const directories = makeDirectories('emberdesk-chat-stats-route-');
-        tempRoots.push(directories.root);
-        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_ENABLED = 'true';
-        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SHADOWIMPORT = 'true';
-        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_READS = 'true';
-        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_WRITES = 'true';
-        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_CHATSTATS = 'true';
-
-        const { manager, db } = openCanonicalDbForTests(directories);
-        try {
-            seedCanonicalCharacterForTests(db, 'alpha.png');
-            await prepareCanonicalChatWriteAudit({
-                db,
-                directories,
-                handle: `chat-test-${path.basename(directories.root)}`,
-            });
-
-            const response = await invokeGroupChatSave(directories, 'group-1', [
-                { name: 'Alpha', mes: 'hello group' },
-            ]);
-
-            expect(response.statusCode).toBe(410);
-            expect(response.body).toEqual({
-                error: 'group_chat_feature_removed',
-                message: 'Group chat functionality has been removed from EmberDesk.',
-            });
-            const stats = db.prepare('SELECT chat_count, chat_size_bytes, date_last_chat_ms, stats_updated_at_ms FROM character_chat_stats WHERE character_id = ?').get('char-alpha');
-            expect(stats).toEqual({
-                chat_count: 0,
-                chat_size_bytes: 0,
-                date_last_chat_ms: 0,
-                stats_updated_at_ms: 0,
-            });
         } finally {
             manager.dispose();
         }

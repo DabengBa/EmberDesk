@@ -23,6 +23,39 @@ function extractBlock(source, startNeedle, endNeedle) {
 }
 
 describe('world info import feedback', () => {
+    test('save rejects HTTP errors without announcing an update', async () => {
+        const source = read('public/scripts/world-info.js');
+        const body = extractBlock(source, 'async function _save(name, data)', 'export async function saveWorldInfo');
+        let emitted = false;
+        const save = new Function('fetch', 'cancelDebounce', 'saveWorldDebounced', 'getRequestHeaders', 'eventSource', 'event_types', `${body}; return _save;`)(
+            async () => ({ ok: false, status: 500 }),
+            () => {},
+            () => {},
+            () => ({}),
+            { emit: async () => { emitted = true; } },
+            { WORLDINFO_UPDATED: 'updated' },
+        );
+        await expect(save('Book', { entries: {} })).rejects.toThrow();
+        expect(emitted).toBe(false);
+    });
+
+    test('batch conflicts expose the full list and an explicit cancellation result', async () => {
+        const source = read('public/scripts/world-info.js');
+        const body = extractBlock(source, 'function buildWorldInfoBatchConflictHtml', 'async function prepareWorldInfoImportOverwrite');
+        const choice = { CONFIRM: 'confirm', OVERWRITE: 'overwrite', SKIP: 'skip', CANCEL: 'cancel' };
+        const result = { AFFIRMATIVE: 1, NEGATIVE: 0, CUSTOM1: 2, CUSTOM2: 3 };
+        const conflicts = Array.from({ length: 15 }, (_, index) => ({ file: { name: `file-${index}.json` }, existingName: `Book-${index}` }));
+        const helpers = new Function('escapeHtml', 't', 'Popup', 'POPUP_RESULT', 'WORLD_INFO_IMPORT_CONFLICT_CHOICE', `${body}; return { buildWorldInfoBatchConflictHtml, showWorldInfoBatchConflictPopup };`)(
+            value => String(value),
+            (strings, ...values) => strings.reduce((text, part, index) => text + part + (values[index] ?? ''), ''),
+            { show: { confirm: async () => result.NEGATIVE } },
+            result,
+            choice,
+        );
+        expect(helpers.buildWorldInfoBatchConflictHtml(conflicts)).toContain('file-14.json');
+        await expect(helpers.showWorldInfoBatchConflictPopup(conflicts)).resolves.toBe('cancel');
+    });
+
     test('file import change flow batches selected files and restores input state', () => {
         const source = read('public/scripts/world-info.js');
         const changeHandler = extractBlock(

@@ -20,16 +20,16 @@ The first selector slice covers these high-risk surfaces:
 
 | Surface | Command | Requirement | Rule sources |
 |---|---|---|---|
-| Canonical SQLite repair tooling, rollout contract, rollback blockers, DB-first authority seams | `pnpm --dir tests run test:unit -- canonical-sqlite-cli.test.js canonical-sqlite-operator.test.js canonical-sqlite-rollout-contract.test.js canonical-sqlite-shadow-import.test.js character-read-service.test.js character-write-service.test.js --runInBand` | required | `ADR-0011`, `canonical-sqlite-storage-roadmap.md`, `260707-07 canonical-sqlite repair/rollout spec` |
+| Canonical SQLite repair tooling, rollout contract, rollback blockers, DB-first authority seams | `pnpm --dir tests run test:unit -- canonical-sqlite-cli.test.js canonical-sqlite-operator.test.js canonical-sqlite-rollout-contract.test.js canonical-sqlite-shadow-import.test.js character-read-service.test.js character-write-service.test.js --runInBand` | required | `canonical-sqlite-storage-roadmap.md` |
 | Frontend compatibility, regex, slash commands, extension surfaces | `pnpm run test:compat` | required | `AGENTS.md`, `third-party-extension-compatibility.md`, `pnpm-workflow.md` |
-| React workspace panels | `pnpm --dir tests run test:unit -- react-workspace-panels-helpers.test.js workspace-react-panel-flags.test.js --runInBand` | required | `react-modernization-roadmap.md`, `pnpm-workflow.md`, `third-party-extension-compatibility.md` |
+| React workspace panels | `pnpm --dir tests run test:unit -- react-workspace-panels-helpers.test.js workspace-react-panel-flags.test.js --runInBand` | required | `workspace-shell-panel-dock-coordination.md`, `pnpm-workflow.md`, `third-party-extension-compatibility.md` |
 | React workspace panel bundle | `pnpm run build:react:workspace-panels` | optional | `pnpm-workflow.md`, `package.json`, `tests/playwright.config.js` |
-| Express route/order | `pnpm --dir tests run test:unit -- express5-route-compatibility.test.js --runInBand` | required | `AGENTS.md`, `ADR-0010`, `ADR-0008` |
-| Startup/config | `pnpm --dir tests run test:unit -- command-line.test.js startup-critical-path.test.js startup-loader.test.js --runInBand` | required | `AGENTS.md`, `config-resolution.md`, `modernization-roadmap.md`, `ADR-0002` |
-| User auth/storage/directories/migrations | `pnpm --dir tests run test:unit -- user-auth.test.js user-storage.test.js user-directories.test.js user-migrations.test.js --runInBand` | required | `AGENTS.md`, `ADR-0003` |
-| Derived cache / retired character index helper | `pnpm --dir tests run test:unit -- derived-cache-sqlite.test.js interaction-performance-index.test.js --runInBand` | required | `ADR-0009`, `derived-cache-sqlite.md`, `interaction-performance-indexing.md` |
+| Express route/order | `pnpm --dir tests run test:unit -- express5-route-compatibility.test.js --runInBand` | required | `AGENTS.md`, `server-startup-orchestration.md` |
+| Startup/config | `pnpm --dir tests run test:unit -- command-line.test.js startup-critical-path.test.js startup-loader.test.js --runInBand` | required | `AGENTS.md`, `config-resolution.md`, `server-startup-orchestration.md` |
+| User auth/storage/directories/migrations | `pnpm --dir tests run test:unit -- user-auth.test.js user-storage.test.js user-directories.test.js user-migrations.test.js --runInBand` | required | `AGENTS.md`, `user-module-split.md` |
+| Derived cache / retired character index helper | `pnpm --dir tests run test:unit -- derived-cache-sqlite.test.js interaction-performance-index.test.js --runInBand` | required | `derived-cache-sqlite.md`, `interaction-performance-indexing.md` |
 | Shared `/lib.js` | `pnpm --dir tests run test:unit -- frontend-shared-library-boundary.test.js --runInBand` | required | `frontend-shared-library-boundary.md`, `pnpm-workflow.md` |
-| Semantic docs database | `pnpm run docs:check` | required | `AGENTS.md`, `.docs/db/scripts/doc-compiler.js`, `modernization-roadmap.md` |
+| Semantic docs database | `pnpm run docs:check` | required | `AGENTS.md`, `.docs/db/scripts/doc-compiler.js` |
 
 Example:
 

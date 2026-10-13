@@ -58,5 +58,3 @@ Current code binding points:
 
 Related deeper docs:
 
-- [ADR-0007: React page and panel islands with legacy fallbacks](../adr/0007-react-page-islands-with-legacy-fallbacks.md)
-- [ADR-0012: Retire Legacy Runtime Owners From Migrated React Surfaces](../adr/0012-react-migrated-surface-legacy-retirement.md)

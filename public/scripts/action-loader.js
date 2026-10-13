@@ -156,7 +156,7 @@ export class ActionLoaderHandle {
 
         // Show the blocking loader overlay if this is the first blocking handle
         if (blocking && !hasBlockingLoaders() && !isOverlayDisplayed()) {
-            showOverlay(overlayContent);
+            showOverlay(overlayContent, message);
         }
 
         // Register this handle
@@ -192,9 +192,11 @@ export class ActionLoaderHandle {
 
         // Add stop button if mode is STOPPABLE
         if (toastMode === ActionLoaderToastMode.STOPPABLE) {
-            const stopButton = document.createElement('i');
+            const stopButton = document.createElement('button');
+            stopButton.type = 'button';
             stopButton.className = 'fa-solid fa-stop-circle action-loader-stop interactable';
             stopButton.title = stopTooltip;
+            stopButton.setAttribute('aria-label', stopTooltip);
             stopButton.addEventListener('click', (e) => {
                 e.preventDefault();
                 e.stopPropagation();
@@ -537,11 +539,18 @@ function isOverlayDisplayed() {
  * Internal function - use showActionLoader() instead.
  * @param {HTMLElement|string|null} [customContent] - Custom content for the overlay
  */
-function showOverlay(customContent = null) {
+function showOverlay(customContent = null, message = t`Generating...`) {
     // Two loaders don't make sense. Don't await, we can overlay the old loader while it closes
     if (loaderPopup) loaderPopup.complete(POPUP_RESULT.CANCELLED);
 
     const content = getOverlayContent(customContent);
+    if (!customContent) {
+        const status = document.createElement('p');
+        status.className = 'action-loader-overlay-message';
+        status.textContent = message;
+        status.setAttribute('role', 'status');
+        content.appendChild(status);
+    }
 
     loaderPopup = new Popup(content, POPUP_TYPE.DISPLAY, null, {
         allowEscapeClose: false,
@@ -550,6 +559,10 @@ function showOverlay(customContent = null) {
         wide: true,
         large: true,
     });
+
+    loaderPopup.dlg.setAttribute('aria-busy', 'true');
+    loaderPopup.dlg.setAttribute('aria-label', message);
+    loaderPopup.dlg.removeAttribute('aria-labelledby');
 
     // No close button, loaders are not closable
     loaderPopup.closeButton.style.display = 'none';

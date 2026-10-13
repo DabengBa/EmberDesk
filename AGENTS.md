@@ -21,21 +21,21 @@ EmberDesk is a self-hosted browser LLM workspace forked from SillyTavern. The pr
 
 ## First Reads
 
-- Read `.docs/project-overview.md` and `.docs/PROJECT_HISTORY.md` for durable project direction.
-- Read the relevant `.docs/tech/*.md` and `.docs/adr/*.md` before changing accepted architecture.
+- Read `.docs/project-overview.md` for durable project direction.
+- Read the relevant `.docs/tech/*.md` before changing accepted architecture.
 - Read `.docs/db/pages`, `.docs/db/features`, and `.docs/db/terms` before changing user-visible pages, features, or terms.
 - Read `.docs/tech/pnpm-workflow.md` for Node/pnpm/CI boundaries.
-- Read `.docs/tech/third-party-extension-compatibility.md` before touching regex, extensions, slash commands, world info regex editing, message rendering, or character-list DOM.
+- Read `.docs/tech/third-party-extension-compatibility.md` before touching regex, slash commands, world info regex editing, message rendering, or character-list DOM.
 
 ## Key Directories
 
 - `server.js` - process entry point; parses config, sets globals, then imports `src/server-main.js`.
-- `src/` - Express server, startup pipeline, middleware, endpoints, user storage/auth, plugins, vectors, utilities.
+- `src/` - Express server, startup pipeline, middleware, endpoints, user storage/auth, plugins, utilities.
 - `src/endpoints/` - API routers mounted by `setupPrivateEndpoints(app)`.
-- `public/` - browser shell, HTML/CSS/jQuery UI, shared library boundary, extensions, macros, slash commands.
+- `public/` - browser shell, HTML/CSS/jQuery UI, shared library boundary, first-party features, macros, slash commands.
 - `tests/` - separate pnpm package for Jest and Playwright tests.
 - `default/` - default config and scaffold content.
-- `.docs/` - durable project history, ADRs, tech notes, and semantic doc database.
+- `.docs/` - project overview, tech notes, processing-flow references, and the semantic doc database.
 - `docs/` - shared workflow/environment docs and active design specs.
 
 ## Commands
@@ -63,6 +63,8 @@ pnpm run lint
 
 Use Node.js 24.16.0 for server release proof by default. pnpm is the package manager and script runner.
 
+For focused E2E runs, pass arguments directly: `pnpm --dir tests run test:e2e world-info-workbench.e2e.js --grep "UI hardening"`. An extra `--` reaches Playwright and stops option parsing, potentially running the whole suite. Keep the default isolated data root/server; do not reuse a user's running server for mutating tests.
+
 ## Architecture Rules
 
 - `server.js` is the only normal entry point. It calls `CommandLineParser.parse(process.argv)`, sets `globalThis.DATA_ROOT` and `globalThis.COMMAND_LINE_ARGS`, changes cwd to `serverDirectory`, then imports `src/server-main.js`.
@@ -71,16 +73,19 @@ Use Node.js 24.16.0 for server release proof by default. pnpm is the package man
 - `src/command-line.js` owns config resolution. Keep argv parsing, filesystem prep, and config merge separable and testable.
 - `src/users.js` is a compatibility barrel plus middleware/routes. Storage, directories, migrations, and auth live in `src/user-storage.js`, `src/user-directories.js`, `src/user-migrations.js`, and `src/user-auth.js`.
 - Canonical user data lives in per-user `storage/emberdesk.sqlite` under `dataRoot`; PNG/JSON/JSONL compatibility files are projections and import/export surfaces, not runtime authority. `DiskCache` and `_cache/character-index.sqlite` are derived caches only.
-- `public/script.js` is the legacy browser shell and compatibility surface for not-yet-migrated surfaces. Treat `eventSource`, `event_types`, `globalThis.SillyTavern`, and startup ordering as shared contracts there. Migrated surfaces are owned by the TypeScript React app under `app/` (see ADR-0012).
+- `public/script.js` is the legacy browser shell and compatibility surface for not-yet-migrated surfaces. Treat `eventSource`, `event_types`, `globalThis.SillyTavern`, and startup ordering as shared contracts there. Migrated surfaces are owned by the TypeScript React app under `app/`.
 - `public/lib.js` is both source-import and bundled `/lib.js` compatibility boundary. Normalize package interop inside that file.
 
 ## Frontend Guardrails
 
-- Per ADR-0012 (Accepted 2026-07-16), React is the **sole runtime owner** of already-migrated surfaces: `/login`, `/setup`, `/settings`, Character Library + Character Authoring, World Info, Background Library, and the same-entry workspace shell with its guarded main-chat island. Group chat, group authoring, and third-party extensions are retired product paths; do not reintroduce their UI or controllers. Do not reintroduce legacy `public/login.html` / `public/setup.html` controllers or otherwise keep a parallel legacy implementation alive; roll back by deploying a prior version. Shared helpers remain in `public/scripts/login-shared.js` and `public/scripts/setup-shared.js`.
-- Frontend `app/` is TypeScript + React 19 using the standard stack: TanStack Router, TanStack Query, TanStack Form, Zustand, and Zod. Do not broaden Vue, SPA-framework rewrites, or a separate `/workspace-next` route beyond the ADR-0012 scope without explicit approval. ADR-0012 does **not** authorize a broad SPA rewrite of the entire `public/` shell.
-- The legacy `public/` HTML/CSS/jQuery shell is retained only for surfaces not yet migrated under ADR-0012. Treat `eventSource`, `event_types`, `globalThis.SillyTavern`, and startup ordering as shared contracts there.
+- React is the **sole runtime owner** of migrated surfaces: `/login`, `/setup`, `/settings`, Character Library + Character Authoring, World Info, and the same-entry workspace shell with its main-chat island. There are no group chat, group authoring, or third-party extension surfaces; do not reintroduce their UI or controllers. Do not reintroduce legacy `public/login.html` / `public/setup.html` controllers or otherwise keep a parallel legacy implementation alive; roll back by deploying a prior version. Shared helpers remain in `public/scripts/login-shared.js` and `public/scripts/setup-shared.js`.
+- Frontend `app/` is TypeScript + React 19 using the standard stack: TanStack Router, TanStack Query, TanStack Form, Zustand, and Zod. Do not broaden Vue, SPA-framework rewrites, or a separate `/workspace-next` route without explicit approval. Do not use the React stack to rewrite the entire `public/` shell in one move.
+- The legacy `public/` HTML/CSS/jQuery shell is retained only for surfaces not yet migrated. Treat `eventSource`, `event_types`, `globalThis.SillyTavern`, and startup ordering as shared contracts there.
 - Preserve character-list identity selectors: `.character_select`, `.bogus_folder_select`, `data-chid`, legacy `chid`, `id="CharID${chid}"`, `.character_selected`, `.bulk_select_checkbox`, `.tags_inline`, `.ch_fav`.
-- Third-party extension compatibility is retired (2026-09): `/api/extensions/*` is a `410` tombstone, the Extensions Host/drawer is deleted, and `@sillytavern/*` aliases are gone. Do not reintroduce them; built-in Regex/Connection Manager survive as first-party features, and message cards run through first-party frontend frames.
+- There is no third-party extension API: `/api/extensions/*` does not exist and returns ordinary 404. Built-in Regex survives as a first-party feature, and message cards run through first-party frontend frames.
+- Retired API surfaces (`/api/groups`, `/api/extensions`, `/api/vector`, `/api/stats`, `/api/moving-ui`, `/api/presets` non-`openai` IDs, etc.) are absent rather than tombstoned: they fall through to ordinary 404. Do not re-add 410 handlers.
+- Old user data still loads: settings/preset/provider normalization on read stays intact (`extension_settings` → `feature_settings`, legacy provider IDs → `openai`, retired `power_user` keys stripped on load/save). Do not delete normalization just because the identifiers are retired.
+- New installations must not create retired user directories (`groups`, `group chats`, `personas`, `movingUI`, `instruct`, `context`, `quickreplies`, `vectors`, `sysprompt`, `reasoning`, `comfyWorkflows`, `themes`, retired provider preset dirs). Existing files on disk are never auto-purged.
 - Run `pnpm run test:compat` around regex, slash-command, world-info regex, message-rendering, and character-list DOM work.
 
 ## Backend And Security Guardrails

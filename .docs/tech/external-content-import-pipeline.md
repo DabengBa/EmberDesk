@@ -74,7 +74,6 @@ Stable binding points:
 
 Related docs:
 
-- [Modernization Roadmap](modernization-roadmap.md)
 - [Server Startup Orchestration](server-startup-orchestration.md)
 - [Character Library Panel](../db/features/character-library-panel.md)
 - [World Info Panel](../db/features/world-info-panel.md)

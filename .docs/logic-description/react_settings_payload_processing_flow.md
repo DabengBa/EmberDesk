@@ -6,7 +6,7 @@
 - Current code binding:
   - `app/lib/settings-helpers.js`
   - `app/routes/settings.tsx`
-- Related tech doc: [.docs/tech/react-modernization-roadmap.md](../tech/react-modernization-roadmap.md)
+- Related tech doc: [.docs/tech/workspace-shell-panel-dock-coordination.md](../tech/workspace-shell-panel-dock-coordination.md)
 - Related semantic docs:
   - [.docs/db/pages/settings.md](../db/pages/settings.md)
   - [.docs/db/pages/api-configuration.md](../db/pages/api-configuration.md)

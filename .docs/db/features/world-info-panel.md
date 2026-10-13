@@ -15,9 +15,9 @@ related: [page.chat_workspace, feature.world_book_delete, feature.character_dele
 
 Keep World Info/lorebook activation and editing available inside the chat workspace through visible selectors, entry cards, editor controls, and import/export actions.
 
-## Approved Retirement Direction
+## Ownership Direction
 
-World Info is a completed third-wave React sole-owner surface. The React workbench owns the visible editor workflow; framework-neutral domain and workbench services own projection, selection, and entry field updates. `public/scripts/world-info.js` remains a compatibility barrel for prompt/scan, import/export, delete cascade, slash commands, and internal module exports. Product flag-off and legacy visible editor fallbacks are retired; missing-build failures stay fail-closed and prior-version deploy is the rollback path.
+World Info is a React sole-owner surface. The React workbench owns the visible editor workflow; framework-neutral domain and workbench services own projection, selection, and entry field updates. `public/scripts/world-info.js` remains a compatibility barrel for prompt/scan, import/export, delete cascade, slash commands, and internal module exports. Missing-build failures stay fail-closed and prior-version deploy is the rollback path.
 
 ## User-Visible Contract
 
@@ -31,6 +31,9 @@ World Info is a completed third-wave React sole-owner surface. The React workben
 - The React World Info workbench is the sole visible owner inside `#wi-holder`: one global-activation summary, one editor-book header, one entry list, and one entry editor. Hidden legacy workbench children stay inert compatibility hosts only (for example activation-rules DOM), not a second visible control set or product fallback.
 - Desktop workbench layout places entry list and current entry editor side by side; mobile uses list/editor two-state navigation with a single active scroll root and restore of list position/focus on return.
 - Entry editing uses progressive disclosure: basic identity and enablement, trigger keywords, primary content, injection placement, then collapsed advanced groups (timing/recursion, inclusion group, automation/outlet) that surface non-default summaries.
+- Entry save feedback reflects the server response: HTTP/network failures retain the local draft, display a save-failed state, and offer retry instead of reporting success. Expanded content editing uses a native modal dialog with keyboard focus contained inside it, Esc/close saving behavior, and focus restored to its opener.
+- Batch import conflicts show file-to-book mappings, with an expandable complete list beyond the first ten. Overwrite, ask individually, skip conflicts, and cancel the entire batch are distinct choices; Esc/close cancels the batch before imports start.
+- Entry move/copy actions require a labeled target world selector and remain disabled until a valid destination is selected. Sorting labels follow the active locale and warnings use theme colors.
 - Global activation remains a compact summary with a secondary activation-rules entry; choosing an editor book never auto-changes global activation, and changing global activation never silently switches the editor book.
 - The React host routes mutations through the World Info workbench service and compatibility barrel (`public/scripts/world-info.js`). Prompt activation, regex placement, converter/import outcomes, delete cascade, and persistence remain available through the public module path; there is no product flag that restores the legacy editor as sole visible owner.
 - When the same-entry React shell is enabled, its World Info entry owns only the transient active-panel/dock state and mount status; prompt activation, regex placement, converter/import outcomes, and world-book deletion semantics remain owned by the World Info service/barrel.

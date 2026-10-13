@@ -5,7 +5,7 @@
 - Owner: main-chat generation-control bridge documentation
 - Current code bindings: `public/scripts/chat-streaming-control-state.js`, `public/script.js`, `app/workspace-panels.tsx`
 - Related semantic docs: [.docs/db/pages/chat-workspace.md](../db/pages/chat-workspace.md), [.docs/db/features/chat-generation-auto-recovery.md](../db/features/chat-generation-auto-recovery.md), [.docs/db/features/chat-message-actions.md](../db/features/chat-message-actions.md), [.docs/db/features/chat-message-rendering.md](../db/features/chat-message-rendering.md)
-- Related tech doc: [.docs/tech/react-modernization-roadmap.md](../tech/react-modernization-roadmap.md)
+- Related tech doc: [.docs/tech/main-chat-generation-lifecycle.md](../tech/main-chat-generation-lifecycle.md)
 
 ## Goals And Non-Goals
 

@@ -60,7 +60,6 @@ export const CONTENT_TYPES = {
     CHARACTER: 'character',
     WORLD: 'world',
     AVATAR: 'avatar',
-    THEME: 'theme',
     OPENAI_PRESET: 'openai_preset',
     ERROR_PAGE: 'error_page',
     STYLESHEET: 'stylesheet',
@@ -349,8 +348,6 @@ export function getUserTargetByType(type, directories) {
             return directories.worlds;
         case CONTENT_TYPES.AVATAR:
             return directories.avatars;
-        case CONTENT_TYPES.THEME:
-            return directories.themes;
         case CONTENT_TYPES.OPENAI_PRESET:
             return directories.openAI_Settings;
         default:

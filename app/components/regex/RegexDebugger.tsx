@@ -1,4 +1,12 @@
+import { useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { ContractIconButton } from '../contract/ContractIconButton';
+import { ContractButton } from '../contract/ContractButton';
+
+function DebuggerTemplate({ id, children }: { id: string; children: ReactNode }) {
+    const [template, setTemplate] = useState<HTMLTemplateElement | null>(null);
+    return <><template id={id} ref={setTemplate} />{template ? createPortal(children, template.content) : null}</>;
+}
 
 export function RegexDebugger() {
     return (
@@ -25,6 +33,10 @@ export function RegexDebugger() {
                     >Save Order</span
                 >
             </button>
+        </div>
+        <div id="regex_debugger_empty" className="regex-debugger-no-rules" role="status" hidden>
+            <p data-i18n="Create a regex rule before testing transformations.">Create a regex rule before testing transformations.</p>
+            <ContractButton id="regex_debugger_create_rule" label="New global regex script" labelKey="ext_regex_new_global_script" icon={<i className="fa-solid fa-plus" aria-hidden="true" />} />
         </div>
         <ul id="regex_debugger_rules" className="sortable-list">
             {/* Rules will be populated here by JavaScript */}
@@ -113,7 +125,8 @@ export function RegexDebugger() {
                     </select>
                 </div>
             </div>
-            <div className="regex-debugger-results">
+            <p id="regex_debugger_result_hint" data-i18n="Run a test to see each transformation and the final output." role="status">Run a test to see each transformation and the final output.</p>
+            <div className="regex-debugger-results" hidden>
                 <div className="results-header">
                     <h4>
                         <i className="fa-solid fa-shoe-prints" />
@@ -121,14 +134,7 @@ export function RegexDebugger() {
                             >Step-by-step Transformation</span
                         >
                     </h4>
-                    <div
-                        id="regex_debugger_expand_steps"
-                        className="menu_button menu_button_icon"
-                        data-i18n="[title]Expand view"
-                        title="Expand view"
-                    >
-                        <i className="fa-solid fa-expand" />
-                    </div>
+                    <ContractIconButton id="regex_debugger_expand_steps" className="menu_button menu_button_icon" label="Expand transformation steps" title="Expand view" nativeTitle icon={<i className="fa-solid fa-expand" aria-hidden="true" />} />
                 </div>
                 <div id="regex_debugger_steps_output" className="results-box"></div>
 
@@ -139,14 +145,7 @@ export function RegexDebugger() {
                             >Final Output</span
                         >
                     </h4>
-                    <div
-                        id="regex_debugger_expand_final"
-                        className="menu_button menu_button_icon"
-                        data-i18n="[title]Expand view"
-                        title="Expand view"
-                    >
-                        <i className="fa-solid fa-expand" />
-                    </div>
+                    <ContractIconButton id="regex_debugger_expand_final" className="menu_button menu_button_icon" label="Expand final output" title="Expand view" nativeTitle icon={<i className="fa-solid fa-expand" aria-hidden="true" />} />
                 </div>
                 <div
                     id="regex_debugger_final_output"
@@ -158,7 +157,7 @@ export function RegexDebugger() {
 </div>
 
 {/* Template for a single rule item */}
-<template id="regex_debugger_rule_template">
+<DebuggerTemplate id="regex_debugger_rule_template">
     <li className="regex-debugger-rule" draggable={true}>
         <i className="fa-solid fa-grip-vertical handle" />
         <label className="checkbox">
@@ -172,17 +171,17 @@ export function RegexDebugger() {
         </div>
         <ContractIconButton className="menu_button menu_button_icon edit_rule" label="Edit Rule" title="Edit Rule" nativeTitle icon={<i className="fa-solid fa-pencil" aria-hidden="true" />} />
     </li>
-</template>
+</DebuggerTemplate>
 
 {/* Template for a single transformation step */}
-<template id="regex_debugger_step_template">
+<DebuggerTemplate id="regex_debugger_step_template">
     <div className="step-result">
         <div className="step-header">
             <strong></strong>
         </div>
         <pre className="step-output"></pre>
     </div>
-</template>
+</DebuggerTemplate>
         </>
     );
 }

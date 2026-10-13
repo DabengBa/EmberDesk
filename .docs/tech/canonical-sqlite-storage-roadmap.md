@@ -2,7 +2,7 @@
 
 ## Module Responsibility
 
-This document owns the executable roadmap for ADR-0011's canonical per-user SQLite storage direction. It defines the first storage slice, phase acceptance gates, task order, feature flags, rollback rules, and validation expectations.
+This document owns the canonical per-user SQLite storage contract and rollout direction. It defines the first storage slice, phase acceptance gates, task order, feature flags, rollback rules, and validation expectations.
 
 Primary current files:
 
@@ -31,7 +31,7 @@ Delivered Phase 1 tech docs:
 
 ## Architecture And Constraints
 
-ADR-0011 originally accepted canonical per-user SQLite storage for selected slices, beginning
+Canonical per-user SQLite storage was accepted for selected slices, beginning
 with character metadata plus character chat stats. The 2026-07-13 successor decision confirms
 comprehensive database authority as the long-term direction while retaining per-slice rollout
 and rollback gates.
@@ -84,15 +84,15 @@ Goal: make the direction official before implementation.
 
 Deliverables:
 
-- Accepted `ADR-0011`.
+- Accepted canonical per-user SQLite storage for selected slices.
 - This roadmap.
 - Project overview and history updated.
 - Canonical DB location, first-slice scope, non-goals, and compatibility projection policy documented.
 
 Acceptance:
 
-- ADR names the first approved slice: character metadata plus chat stats.
-- ADR explicitly forbids promoting `_cache/character-index.sqlite` or `DiskCache` to canonical storage.
+- The first approved slice: character metadata plus chat stats.
+- `_cache/character-index.sqlite` and `DiskCache` must not be promoted to canonical storage.
 - Roadmap includes feature flags and rollback behavior.
 - Docs check passes.
 
@@ -249,7 +249,7 @@ Current delivered foundation:
 - `src/canonical-sqlite-migrations.js` now includes the `world_info_authority` migration with `world_books`, `world_book_entries`, and `world_info_projection_repairs`.
 - `src/endpoints/world-info-store.js` owns canonical World Info row normalization to projection-safe file ids, route-compatible list/get payload reconstruction, DB-first write helpers, and open projection-repair listing.
 - `src/canonical-world-info-shadow-import.js` imports existing `worlds/*.json` files idempotently, audits DB/file projection drift, and persists `canonical_audit_state` scope `world_info` as the fail-closed read/write gate.
-- `src/endpoints/worldinfo.js` serves `/api/worldinfo/list` and `/get` from canonical SQLite; init-frozen or blocked slices return structured 503 `canonical_storage_unavailable` responses (ADR-0017), and explicit operator file actions invalidate `world_info` audit state.
+- `src/endpoints/worldinfo.js` serves `/api/worldinfo/list` and `/get` from canonical SQLite; init-frozen or blocked slices return structured 503 `canonical_storage_unavailable` responses, and explicit operator file actions invalidate `world_info` audit state.
 - `/api/worldinfo/import`, `/edit`, and `/delete` can commit canonical SQLite first behind canonical write flags, then project compatibility JSON files; projection failure records `world_info_projection_repairs` rather than restoring JSON files as truth.
 - `src/canonical-sqlite-operator.js` can replay World Info projection repairs, resolve delete repairs without requiring a live canonical row, include `world_info_projection_repairs` in write rollback blockers, and resolve the repair row after the JSON projection state is restored.
 - `scripts/canonical-sqlite-audit.mjs --scope world_info` and `scripts/canonical-sqlite-repair.mjs audit-world-info|list-world-info-repairs|repair-world-info-projection` expose the World Info audit and repair paths to operators.
@@ -313,7 +313,7 @@ product/performance contract rather than a hidden requirement of storage migrati
 Vectra, chunks, and generation manifests remain deletable derived state. They reference stable
 canonical source IDs but do not become a second text authority.
 
-## Projection Retirement Sequence (ADR-0015)
+## Projection Retirement Sequence
 
 The compatibility-file projection is a transitional double-write surface, not a permanent
 contract. Retirement is sequenced so each irreversible step has a working escape hatch first:
@@ -322,9 +322,9 @@ contract. Retirement is sequenced so each irreversible step has a working escape
 |---|---|---|---|
 | P0 | Import ledger + `export-all` escape hatch + audit semantics | Delivered: `import_ledger` (migration v10) records `(slice, path, hash, origin)` for `import`/`projection`/`export`; audits classify file drift as `candidate` (import-heals via `audit_stale_file_changes`) vs `known` (stays `audit_drift_blocked`); `repair.mjs export-all --slice --out-dir` materializes DB back to the file tree plus `export-manifest.json`; managed-media invalidation vocabulary unified (`audit_stale_*` reasons, operation details on `source`) | — |
 | P1 | Avatar blob storage | Delivered: `character-avatars/<avatar>` virtual-path references store pure image bytes (all tEXt/zTXt/iTXt stripped so card edits keep blob-hash stability); `writeCanonicalManagedMedia` gained `projection: 'off'`; managed-media audit exempts virtual avatar references; characters audit reports `avatarBlobMissing`; idempotent backfill runs as a `postInit` hook on every characters-slice init; rename/delete migrate or retire the reference inside the canonical transaction. `readManagedMediaContent` serves blob bytes by path or reference; `/thumbnail?type=avatar` and `/characters/<name>.png` (root level only — subdirectories stay file-backed) resolve blob bytes first with file fallback, thumbnail cache gated by a `content_hash` sidecar | P0 |
-| P2 | Per-slice `projection: 'sync'/'off'` | Partially delivered (secrets, settings): `slices.<flagKey>.projection` resolves `sync`/`off` per slice (ADR-0016). `secrets` defaults `off` — writes skip `secrets.json`, audits suppress file-side drift (`details.suppressed`), repairs still block, `repair-secret-projection` materializes explicitly. `settings` defaults `off` — `projectSettingsJson` no-ops, audit suppresses `payload_mismatch`/`missing_*` file drift, autosave backups materialize from the canonical document instead of copying the stale file; SecretManager legacy key migrations (flat format, CUSTOM→OPENAI) run DB-side under canonical authority. `world_info` defaults `off` — `writeWorldInfoProjectionFile` no-ops, audit suppresses stale `worlds/*.json` drift, `/delete-preflight` + `/api/characters/delete-preflight` resolve bound characters from `characters.world_name`, and `/delete-cascade` clears canonical `card_json`/`shallow_json` bindings transactionally before tombstoning `world_books` (file-rewrite remains the fallback when the characters slice is unavailable). `chats` defaults `off` — `writeCanonicalChatPayload`/`renameCanonicalChat`/`deleteCanonicalChat` skip JSONL file writes (delete still removes stale files best-effort, `/delete` no longer gates on file existence), chat backups keep materializing the canonical payload via `onAuthorityCommitted`, and character chat stats derive from `chat_sessions` instead of directory scans. `managed_media` defaults `off` — writes/deletes/renames skip compatibility-file materialization (blob bytes stay the content authority under `storage/managed-media/`), the `/assets`, `/user/images`, `/user/files` serve mounts answer from blob bytes when the file is absent, `/api/images/list` + `/api/images/folders` + `/api/files/verify` read canonical references, and CharX misc assets write through the canonical service. `unsafe_path` stays blocking (malformed canonical rows, not file drift). `characters` defaults `off` — serving reads (`/all`, `/get`, `/export`, `/chats`) prefer canonical rows, write-base reads (edit/merge/duplicate/rename) prefer canonical only while writes can land (writes disabled keeps the PNG as edit base), `/export png` synthesizes a card PNG from `card_json` + avatar blob, rename/delete retarget or remove canonical `chat_sessions` owner rows, and name dedup/bulk scans union canonical rows; `chat_stats_mismatch` + open projection repairs stay blocking while file-side drift is suppressed. All six slices now default `off`; export routes generate artifacts on demand | P0, P1 |
+| P2 | Per-slice `projection: 'sync'/'off'` | Partially delivered (secrets, settings): `slices.<flagKey>.projection` resolves `sync`/`off` per slice . `secrets` defaults `off` — writes skip `secrets.json`, audits suppress file-side drift (`details.suppressed`), repairs still block, `repair-secret-projection` materializes explicitly. `settings` defaults `off` — `projectSettingsJson` no-ops, audit suppresses `payload_mismatch`/`missing_*` file drift, autosave backups materialize from the canonical document instead of copying the stale file; SecretManager legacy key migrations (flat format, CUSTOM→OPENAI) run DB-side under canonical authority. `world_info` defaults `off` — `writeWorldInfoProjectionFile` no-ops, audit suppresses stale `worlds/*.json` drift, `/delete-preflight` + `/api/characters/delete-preflight` resolve bound characters from `characters.world_name`, and `/delete-cascade` clears canonical `card_json`/`shallow_json` bindings transactionally before tombstoning `world_books` (file-rewrite remains the fallback when the characters slice is unavailable). `chats` defaults `off` — `writeCanonicalChatPayload`/`renameCanonicalChat`/`deleteCanonicalChat` skip JSONL file writes (delete still removes stale files best-effort, `/delete` no longer gates on file existence), chat backups keep materializing the canonical payload via `onAuthorityCommitted`, and character chat stats derive from `chat_sessions` instead of directory scans. `managed_media` defaults `off` — writes/deletes/renames skip compatibility-file materialization (blob bytes stay the content authority under `storage/managed-media/`), the `/assets`, `/user/images`, `/user/files` serve mounts answer from blob bytes when the file is absent, `/api/images/list` + `/api/images/folders` + `/api/files/verify` read canonical references, and CharX misc assets write through the canonical service. `unsafe_path` stays blocking (malformed canonical rows, not file drift). `characters` defaults `off` — serving reads (`/all`, `/get`, `/export`, `/chats`) prefer canonical rows, write-base reads (edit/merge/duplicate/rename) prefer canonical only while writes can land (writes disabled keeps the PNG as edit base), `/export png` synthesizes a card PNG from `card_json` + avatar blob, rename/delete retarget or remove canonical `chat_sessions` owner rows, and name dedup/bulk scans union canonical rows; `chat_stats_mismatch` + open projection repairs stay blocking while file-side drift is suppressed. All six slices now default `off`; export routes generate artifacts on demand | P0, P1 |
 | P3 | Upload imports write DB+blob directly | Delivered: every `/import` surface commits canonical rows/blobs — characters via `createCharacterCard`, world books via `writeCanonicalWorldInfoBook`, chats via `writeCanonicalChat`, BYAF bundles write member chats through canonical chat storage and backgrounds through canonical managed media, and file/image/asset uploads stage through `writeCanonicalManagedMedia`. Compatibility directories only receive output when `projection: 'sync'` materializes it; no import path writes a compatibility file as authority | P2 for the touched slice |
-| P4 | Runtime file-fallback removal | Delivered (ADR-0017): `reads`/`writes`/`chatStats`/`strict` retire — resolvers force them to `enabled`, explicit config warns and is ignored; `enabled: false` is init-freeze (DB never opens; canonical touches return structured unavailable/blocked). Serving reads return canonical rows or empty/unavailable results (`canonical_unavailable` interaction paths, `not_found` for missing rows) with no file stat/reparse; mutation routes fail closed with 503/`CanonicalWriteBlockedError` instead of `!committed → file` tails. `worldinfo` `/get`/list/edit/delete and chats save/rename/delete/import/export/search/recent all return structured `canonical_storage_unavailable`/`canonical_chat_*_blocked` bodies; settings `/get`/`/save` keep a file path only for `canonical_flags_unavailable` (config unresolvable). `/delete-preflight` resolves bound characters from canonical `world_name` only; BYAF skips non-canonicalizable member assets rather than writing orphans | P0–P3 with a stable multi-release window |
+| P4 | Runtime file-fallback removal | Delivered: `reads`/`writes`/`chatStats`/`strict` retire — resolvers force them to `enabled`, explicit config warns and is ignored; `enabled: false` is init-freeze (DB never opens; canonical touches return structured unavailable/blocked). Serving reads return canonical rows or empty/unavailable results (`canonical_unavailable` interaction paths, `not_found` for missing rows) with no file stat/reparse; mutation routes fail closed with 503/`CanonicalWriteBlockedError` instead of `!committed → file` tails. `worldinfo` `/get`/list/edit/delete and chats save/rename/delete/import/export/search/recent all return structured `canonical_storage_unavailable`/`canonical_chat_*_blocked` bodies; settings `/get`/`/save` keep a file path only for `canonical_flags_unavailable` (config unresolvable). `/delete-preflight` resolves bound characters from canonical `world_name` only; BYAF skips non-canonicalizable member assets rather than writing orphans | P0–P3 with a stable multi-release window |
 
 `characters/` and `World Info/` are not pure inboxes: `characters/<name>/<category>/`
 asset subdirectories (sprites, live2d) stay file-backed media, and only root-level
@@ -332,9 +332,9 @@ asset subdirectories (sprites, live2d) stay file-backed media, and only root-lev
 
 ## Task Breakdown And Dependencies
 
-1. `ADR + roadmap docs`
+1. Roadmap and contract docs
    - Depends on the accepted user direction.
-   - Produces ADR-0011, this roadmap, project overview/history sync.
+   - Produces this roadmap and project-overview sync.
 
 2. `canonical SQLite manager`
    - Depends on Phase 0.
@@ -498,10 +498,10 @@ managed-media paths, chat JSONL) are projections/export formats, not runtime aut
     unavailable/blocked result instead of file fallback.
 - `features.storage.canonicalSqlite.shadowImport`
   - allows lazy migration/import/audit during init; default `true`.
-- `features.storage.canonicalSqlite.reads` — **retired (ADR-0017)**
-- `features.storage.canonicalSqlite.writes` — **retired (ADR-0017)**
-- `features.storage.canonicalSqlite.chatStats` — **retired (ADR-0017)**
-- `features.storage.canonicalSqlite.strict` — **retired (ADR-0017)**
+- `features.storage.canonicalSqlite.reads` — **retired**
+- `features.storage.canonicalSqlite.writes` — **retired**
+- `features.storage.canonicalSqlite.chatStats` — **retired**
+- `features.storage.canonicalSqlite.strict` — **retired**
   - The four staged gates parse for compatibility, warn
     (`Canonical storage flag '...' is retired and ignored`), and resolve to
     `enabled`. Runtime reads/writes are always canonical while a slice is
@@ -561,7 +561,7 @@ rollback. The importer retains stable session/message identities across repeat i
 rename, while external JSONL edits remain explicit import/resolve work rather than automatic
 authority replacement.
 
-Rollback rules for every slice (post-ADR-0017, staged flags retired):
+Rollback rules for every slice (staged flags retired):
 
 - `enabled: false` init-freezes a slice: its DB stays closed, imported rows sit
   unused, and canonical touches fail closed. This is the only in-place park.

@@ -1,4 +1,44 @@
 /* Styles for the debugger UI */
+.regex-debugger-container {
+    text-align: start;
+}
+
+.regex-debugger-rules-list > h3,
+.regex-debugger-tester > h3 {
+    margin: 15px 0 10px;
+}
+
+.regex-debugger-no-rules .menu_button {
+    margin-inline: auto;
+}
+
+#regex_debugger_result_hint {
+    color: var(--SmartThemeFadedColor);
+}
+
+@media (max-width: 768px) {
+    #regex_debugger_run_test_header {
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+
+    .regex-debugger-rule .rule-details {
+        min-width: 0;
+        flex-wrap: wrap;
+        overflow-wrap: anywhere;
+    }
+
+    .expanded-regex-container {
+        flex-direction: column;
+    }
+
+    .expanded-regex-container .expanded-regex-nav {
+        flex: 0 0 auto;
+        max-height: 25vh;
+        border-right: 0;
+        border-bottom: 1px solid var(--SmartThemeBorderColor);
+    }
+}
 #regex_debugger_rules {
     margin: 10px 0;
 }

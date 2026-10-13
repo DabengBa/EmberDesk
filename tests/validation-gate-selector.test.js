@@ -36,7 +36,7 @@ describe('validation gate selector', () => {
             expect.objectContaining({
                 command: 'pnpm --dir tests run test:unit -- canonical-storage-slice-registry.test.js canonical-sqlite-cli.test.js canonical-sqlite-operator.test.js canonical-sqlite-rollout-contract.test.js canonical-sqlite-shadow-import.test.js character-read-service.test.js character-write-service.test.js --runInBand',
                 required: true,
-                sources: expect.arrayContaining(['.docs/adr/0011-canonical-per-user-sqlite-storage.md']),
+                sources: expect.arrayContaining(['.docs/tech/canonical-sqlite-storage-roadmap.md']),
             }),
             expect.objectContaining({
                 command: 'pnpm run test:compat',
@@ -51,17 +51,17 @@ describe('validation gate selector', () => {
             expect.objectContaining({
                 command: 'pnpm --dir tests run test:unit -- command-line.test.js startup-critical-path.test.js startup-loader.test.js --runInBand',
                 required: true,
-                sources: expect.arrayContaining(['.docs/tech/modernization-roadmap.md']),
+                sources: expect.arrayContaining(['.docs/tech/server-startup-orchestration.md']),
             }),
             expect.objectContaining({
                 command: 'pnpm --dir tests run test:unit -- user-auth.test.js user-storage.test.js user-directories.test.js user-migrations.test.js --runInBand',
                 required: true,
-                sources: expect.arrayContaining(['.docs/adr/0003-user-account-module-split.md']),
+                sources: expect.arrayContaining(['.docs/tech/user-module-split.md']),
             }),
             expect.objectContaining({
                 command: 'pnpm --dir tests run test:unit -- derived-cache-sqlite.test.js interaction-performance-index.test.js --runInBand',
                 required: true,
-                sources: expect.arrayContaining(['.docs/adr/0009-derived-cache-sqlite-drizzle-decision.md']),
+                sources: expect.arrayContaining(['.docs/tech/derived-cache-sqlite.md']),
             }),
             expect.objectContaining({
                 command: 'pnpm --dir tests run test:unit -- frontend-shared-library-boundary.test.js --runInBand',
@@ -76,7 +76,7 @@ describe('validation gate selector', () => {
             expect.objectContaining({
                 command: 'pnpm --dir tests run test:unit -- react-workspace-panels-helpers.test.js workspace-react-panel-flags.test.js --runInBand',
                 required: true,
-                sources: expect.arrayContaining(['.docs/tech/react-modernization-roadmap.md']),
+                sources: expect.arrayContaining(['.docs/tech/workspace-shell-panel-dock-coordination.md']),
             }),
             expect.objectContaining({
                 command: 'pnpm run build:react:workspace-panels',

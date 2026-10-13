@@ -15,7 +15,7 @@
   - [.docs/db/pages/chat-workspace.md](../db/pages/chat-workspace.md)
   - [.docs/db/features/chat-message-rendering.md](../db/features/chat-message-rendering.md)
 - Related tech docs:
-  - [.docs/tech/react-modernization-roadmap.md](../tech/react-modernization-roadmap.md)
+  - [.docs/tech/workspace-composition-root.md](../tech/workspace-composition-root.md)
   - [.docs/tech/third-party-extension-compatibility.md](../tech/third-party-extension-compatibility.md)
 
 ## Goals And Non-Goals

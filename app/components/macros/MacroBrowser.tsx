@@ -1,5 +1,6 @@
-import { useMemo, useRef, useState, useEffect, useCallback } from 'react';
+import { useMemo, useRef, useState, useEffect, useCallback, useId } from 'react';
 import Fuse from 'fuse.js';
+import { t, translate, useTranslated } from '../../compat/i18n.js';
 
 type MacroArgDef = {
     name?: string;
@@ -53,30 +54,31 @@ function SourceIndicator({ macro }: { macro: MacroBrowserMacro }) {
         classes.push('isCore', 'fa-star-of-life');
     }
     const title = [
-        isExtension ? 'Extension' : 'Core',
-        isThirdParty ? 'Third Party' : (isExtension ? 'Built-in' : null),
+        translate(isExtension ? 'Extension' : 'Core'),
+        isThirdParty ? translate('Third Party') : (isExtension ? translate('Built-in') : null),
         name,
     ].filter(Boolean).join('\n');
     return <span className={classes.join(' ')} title={title} />;
 }
 
-function MacroItem({ macro, selected, filtered, onSelect, formatSignature }: {
+function MacroItem({ macro, selected, filtered, onSelect, formatSignature, detailsId }: {
     macro: MacroBrowserMacro;
     selected: boolean;
     filtered: boolean;
     onSelect: () => void;
     formatSignature: (macro: MacroBrowserMacro) => string;
+    detailsId: string;
 }) {
     const classes = ['macro-item'];
     if (macro.aliasOf) classes.push('isAlias');
     if (selected) classes.push('selected');
     if (filtered) classes.push('isFiltered');
     return (
-        <button type="button" className={classes.join(' ')} data-macro-name={macro.name} onClick={onSelect}>
+        <button type="button" className={classes.join(' ')} data-macro-name={macro.name} aria-pressed={selected} aria-controls={detailsId} onClick={onSelect}>
             <code className="macro-signature">{formatSignature(macro)}</code>
-            <span className="macro-desc-preview">{macro.description || '<no description>'}</span>
+            <span className="macro-desc-preview">{macro.description || translate('No description')}</span>
             {macro.aliasOf && (
-                <span className="macro-alias-indicator fa-solid fa-arrow-turn-up" title={`Alias of {{${macro.aliasOf}}}`} />
+                <span className="macro-alias-indicator fa-solid fa-arrow-turn-up" title={t`Alias of ${`{{${macro.aliasOf}}}`}`} aria-hidden="true" />
             )}
             <SourceIndicator macro={macro} />
         </button>
@@ -98,6 +100,9 @@ export function MacroBrowserPanel({ macros, searchCorpus, helpers, categoryConfi
     const [query, setQuery] = useState('');
     const [sorted, setSorted] = useState(false);
     const [selectedName, setSelectedName] = useState<string | null>(null);
+    const searchRef = useRef<HTMLInputElement>(null);
+    const detailsId = useId();
+    const searchLabel = useTranslated('Search macros');
 
     // Group list macros by category, honoring sort toggle.
     const grouped = useMemo(() => {
@@ -117,18 +122,17 @@ export function MacroBrowserPanel({ macros, searchCorpus, helpers, categoryConfi
     }, [macros, sorted, categoryConfig]);
 
     // Fuzzy search over the full corpus, matching legacy weighting.
-    const matchedNames = useMemo(() => {
-        const trimmed = query.trim().replace(/[{}]/g, '');
-        if (!trimmed) return null;
+    const searchIndex = useMemo(() => {
         const searchData = searchCorpus.map(macro => ({
             name: macro.name,
+            aliasOf: macro.aliasOf,
             aliases: macro.aliases?.map(a => a.alias).join(' '),
             description: macro.description || '',
             category: categoryConfigOf(categoryConfig, macro.category).label,
             argNames: (macro.unnamedArgDefs ?? []).map(d => d.name).join(' '),
             argDescriptions: (macro.unnamedArgDefs ?? []).map(d => d.description || '').join(' '),
         }));
-        const fuse = new Fuse(searchData, {
+        return new Fuse(searchData, {
             keys: [
                 { name: 'name', weight: 10 },
                 { name: 'aliases', weight: 1 },
@@ -142,8 +146,12 @@ export function MacroBrowserPanel({ macros, searchCorpus, helpers, categoryConfi
             useExtendedSearch: true,
             threshold: 0.2,
         });
-        return new Set(fuse.search(trimmed).map(r => r.item.name));
-    }, [query, searchCorpus, categoryConfig]);
+    }, [searchCorpus, categoryConfig]);
+    const matchedNames = useMemo(() => {
+        const trimmed = query.trim().replace(/[{}]/g, '');
+        return trimmed ? new Set(searchIndex.search(trimmed).map(r => r.item.aliasOf || r.item.name)) : null;
+    }, [query, searchIndex]);
+    const noResults = !macros.some(macro => !matchedNames || matchedNames.has(macro.name));
 
     const handleSearch = useCallback((value: string) => {
         setQuery(value);
@@ -160,7 +168,7 @@ export function MacroBrowserPanel({ macros, searchCorpus, helpers, categoryConfi
     );
 
     return (
-        <div className="macroBrowser">
+        <div className="macroBrowser" data-empty={noResults || undefined}>
             {/* macro-item rows are native <button> elements; the .macro-item
                 class supplies layout/hover styles but not a background, so
                 reset the UA button background/border at class specificity to
@@ -175,24 +183,33 @@ button.macro-item {
 `}</style>
             <div className="macro-toolbar">
                 <label className="macro-search-label">
-                    {'Search: '}
+                    {searchLabel}
                     <input
+                        ref={searchRef}
                         type="search"
                         className="macro-search-input text_pole"
-                        placeholder="Search macros by name or description..."
+                        placeholder={translate('Search macros by name or description...')}
                         value={query}
                         onChange={e => handleSearch(e.target.value)}
                     />
                 </label>
                 <button
+                    type="button"
                     className={`macro-sort-btn menu_button${sorted ? ' active' : ''}`}
-                    title="Sort macros alphabetically within each category"
+                    title={translate('Sort macros alphabetically within each category')}
+                    aria-pressed={sorted}
                     onClick={() => setSorted(s => !s)}
                 >
-                    <i className="fa-solid fa-arrow-down-a-z" /> Sort A-Z
+                    <i className="fa-solid fa-arrow-down-a-z" aria-hidden="true" /> {translate('Sort A-Z')}
                 </button>
             </div>
-            <div className="macro-container">
+            {noResults && (
+                <div className="macro-empty-state">
+                    <p role="status">{translate(query.trim() ? 'No macros match your search.' : 'No macros available.')}</p>
+                    {query.trim() && <button type="button" className="menu_button" onClick={() => { handleSearch(''); searchRef.current?.focus(); }}>{translate('Clear search')}</button>}
+                </div>
+            )}
+            <div className="macro-container" hidden={noResults}>
                 <div className="macro-list-panel">
                     {grouped.map(([category, list]) => {
                         const visible = matchedNames
@@ -204,7 +221,7 @@ button.macro-item {
                                     className={`macro-category-header${visible ? '' : ' isFiltered'}`}
                                     data-category={category}
                                 >
-                                    {categoryConfigOf(categoryConfig, category).label}
+                                    {translate(categoryConfigOf(categoryConfig, category).label)}
                                 </div>
                                 {list.map(macro => (
                                     <MacroItem
@@ -214,16 +231,17 @@ button.macro-item {
                                         filtered={matchedNames ? !matchedNames.has(macro.name) : false}
                                         onSelect={() => setSelectedName(macro.name)}
                                         formatSignature={helpers.formatMacroSignature}
+                                        detailsId={detailsId}
                                     />
                                 ))}
                             </div>
                         );
                     })}
                 </div>
-                <div className="macro-details-panel">
+                <div className="macro-details-panel" id={detailsId} role="region" aria-label={translate('Macro details')} aria-live="polite">
                     {detailsNode
                         ? <LegacyNodeSlot node={detailsNode} />
-                        : <div className="macro-details-placeholder">Select a macro to view details</div>}
+                        : <div className="macro-details-placeholder">{translate('Select a macro to view details')}</div>}
                 </div>
             </div>
         </div>

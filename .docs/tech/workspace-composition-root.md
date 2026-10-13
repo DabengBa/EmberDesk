@@ -91,7 +91,6 @@ Primary code binding points:
 
 Related documents:
 
-- [ADR-0014](../adr/0014-workspace-composition-root.md)
 - [Third-Party Extension Compatibility](third-party-extension-compatibility.md)
 - [World Info Shell Context](world-info-shell-context.md)
 - [Startup APP_READY Optimization](startup-app-ready-optimization.md)

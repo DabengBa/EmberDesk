@@ -16,11 +16,6 @@ import { invalidateDirectory } from './settings-cache.js';
  */
 function getPresetSettingsByAPI(apiId, directories) {
     switch (apiId) {
-        case 'kobold':
-        case 'koboldhorde':
-            return { folder: directories.koboldAI_Settings, extension: '.json' };
-        case 'novel':
-            return { folder: directories.novelAI_Settings, extension: '.json' };
         case 'openai':
             return { folder: directories.openAI_Settings, extension: '.json' };
         default:

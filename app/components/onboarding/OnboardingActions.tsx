@@ -22,7 +22,7 @@ export function OnboardingActions({ which }: { which: 'import' | 'library' }) {
         <ContractButton
             className="menu_button menu_button_icon open_characters_library"
             icon={<i className="fa-solid fa-image-portrait" aria-hidden="true" />}
-            label="Sample characters"
+            label="Open character library"
         />
     );
 }

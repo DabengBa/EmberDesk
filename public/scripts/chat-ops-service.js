@@ -626,7 +626,6 @@ export async function saveChatConditional() {
 export async function renameCharacterChat({ characterId, oldFileName, newFileName, loader: showLoader }) {
     const currentChatId = getCurrentChatId();
     const body = {
-        is_group: false,
         avatar_url: state.characters[characterId]?.avatar,
         original_file: `${oldFileName}.jsonl`,
         renamed_file: `${newFileName.trim()}.jsonl`,
