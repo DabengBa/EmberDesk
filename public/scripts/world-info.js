@@ -19,6 +19,7 @@ import { renderTemplateAsync } from './templates.js';
 import { t, translate } from './i18n.js';
 import { accountStorage } from './util/AccountStorage.js';
 import { buildWorldInfoReplayState } from './deferred-panel-replays.js';
+import { ensurePanel } from './deferred-panels.js';
 import { buildCascadeSectionHtml, captureCascadeChoices } from './world-cascade-dialog.js';
 import { convertAgnaiMemoryBook, convertCharacterBook, convertNovelLorebook, convertRisuLorebook } from './world-info-converters.js';
 import { DragAndDropHandler } from './dragdrop.js';
@@ -749,6 +750,8 @@ function syncWorldInfoSettingsUi({ preserveEditorSelection = true, syncGlobalSel
         for (const option of replayState.editorOptions) {
             editorSelect.append(new Option(option.text, option.value, false, option.selected));
         }
+        // Repaint the select2 widget after the option rebuild.
+        syncWorldInfoEditorSelectorUi(getWorldInfoWorkbenchSession().getSelectedWorldName());
     }
 
     $('#world_info_sort_order').val(accountStorage.getItem(SORT_ORDER_KEY) || '0');
@@ -796,10 +799,10 @@ export function rehydrateWorldInfoPanel({ resetEmptyEditor = true } = {}) {
  * @param {string} file - The file to load in the editor
  * @param {boolean} [loadIfNotSelected=false] - Indicates whether to load the file even if it's not currently selected
  */
-export function reloadEditor(file, loadIfNotSelected = false) {
+export async function reloadEditor(file, loadIfNotSelected = false) {
     const currentName = getSelectedWorldInfoEditorName();
     if (world_names.includes(file) && (loadIfNotSelected || currentName === file)) {
-        $('#world_editor_select').val(file).trigger('change');
+        await selectWorldInfoEditorName(file);
     }
 }
 
@@ -808,7 +811,9 @@ function getSelectedWorldInfoEditorName() {
     return getWorldInfoWorkbenchSession().getSelectedWorldName();
 }
 
-/** While true, change events on #world_editor_select are mirror repaints, not user selection. */
+// While true, change events on #world_editor_select are mirror repaints, not
+// user selection. jQuery's namespaced 'change.select2' already skips plain
+// handlers; the flag stays as a guard for any future non-namespaced repaint.
 let suppressEditorSelectMirrorEvent = false;
 
 function syncWorldInfoEditorSelectorUi(selectedName) {
@@ -836,28 +841,34 @@ export async function selectWorldInfoEditorName(worldName) {
     session.applySearchQuery('');
     worldInfoWorkbenchSelectedEntryUid = '';
 
-    syncWorldInfoEditorSelectorUi(name);
+    // Mirror the resolved name only when it is a real book; an invalid name
+    // maps to the empty option instead of writing a nonexistent value.
+    const resolvedName = name && world_names?.includes(name) ? name : '';
+    syncWorldInfoEditorSelectorUi(resolvedName);
 
     $('#world_info_search').val('');
     getWorldInfoFilter().setFilterData(FILTER_TYPES.WORLD_INFO_SEARCH, '', true);
 
-    if (!name || !world_names?.includes(name)) {
+    if (!resolvedName) {
         await hideWorldEditor();
         return;
     }
 
-    await showWorldEditor(name);
+    await showWorldEditor(resolvedName);
 }
 
 /**
  * Legacy entry point: accepts the old positional index or a world file name.
+ * Names win over indexes so integer-named books ('1', '2') keep working.
  * @param {string|number} worldIndex index into world_names, or a world name
  */
 export async function selectWorldInfoEditorIndex(worldIndex) {
     const selectedValue = String(worldIndex ?? '');
     const asIndex = Number(selectedValue);
     const indexedName = Number.isInteger(asIndex) && asIndex >= 0 ? world_names?.[asIndex] : undefined;
-    const name = selectedValue === '' ? '' : indexedName ?? selectedValue;
+    const name = selectedValue === ''
+        ? ''
+        : (world_names?.includes(selectedValue) ? selectedValue : indexedName ?? selectedValue);
     await selectWorldInfoEditorName(name);
 }
 
@@ -957,7 +968,14 @@ export function requestWorldInfoImportSelection() {
         return false;
     }
 
-    document.getElementById('world_import_file')?.click();
+    const input = document.getElementById('world_import_file');
+    if (input) {
+        input.click();
+        return true;
+    }
+
+    // The toolbar body is deferred; retry the click once it has loaded.
+    void ensurePanel('world-info-body').then(() => document.getElementById('world_import_file')?.click());
     return true;
 }
 
@@ -1796,7 +1814,7 @@ function registerWorldInfoSlashCommands() {
         }
 
         await saveWorldInfo(file, data);
-        reloadEditor(file);
+        await reloadEditor(file);
 
         return String(entry.uid);
     }
@@ -1913,7 +1931,7 @@ function registerWorldInfoSlashCommands() {
         }
 
         await saveWorldInfo(file, data);
-        reloadEditor(file);
+        await reloadEditor(file);
         return '';
     }
 
@@ -2279,6 +2297,14 @@ export async function updateWorldInfoList() {
             $('#world_editor_select').append(editorListOption);
         });
         refreshGlobalWorldInfoSelectorLabels();
+        // Repaint the select2 widget so the hidden mirror doesn't render a
+        // stale book name after the option rebuild.
+        syncWorldInfoEditorSelectorUi(session.getSelectedWorldName());
+        if (editorSelected && !world_names.includes(editorSelected)) {
+            // The selected book vanished without a flush (e.g. external
+            // deletion); don't leave its stale entries rendered.
+            await hideWorldEditor();
+        }
     }
 }
 
@@ -2326,6 +2352,7 @@ export async function flushDeletedWorldsFromUI(worldNames) {
 }
 
 async function hideWorldEditor() {
+    worldInfoWorkbenchSelectedEntryUid = '';
     await displayWorldEntries(null, null);
 }
 
@@ -3891,7 +3918,7 @@ async function renameWorldInfo(name, data) {
     }
 
     if (world_names.includes(newName)) {
-        $('#world_editor_select').val(newName).trigger('change');
+        await selectWorldInfoEditorName(newName);
     }
 }
 
@@ -4075,7 +4102,7 @@ export async function createNewWorldInfo(worldName, { interactive = false } = {}
     await updateWorldInfoList();
 
     if (world_names.includes(worldName)) {
-        $('#world_editor_select').val(worldName).trigger('change');
+        await selectWorldInfoEditorName(worldName);
     } else {
         await hideWorldEditor();
     }
@@ -4167,7 +4194,7 @@ export async function importEmbeddedWorldInfo(skipPopup = false) {
         //show&draw the WI panel before..
         await getWorldInfoShell().openWorldInfoPanel();
         //..auto-opening the new imported WI
-        $('#world_editor_select').val(bookName).trigger('change');
+        await selectWorldInfoEditorName(bookName);
     }
 
     setWorldInfoButtonClass(chid, true);
@@ -4432,7 +4459,7 @@ export async function importWorldInfo(file, { overwriteMode = WORLD_INFO_IMPORT_
             await updateWorldInfoList();
 
             if (world_names.includes(data.name)) {
-                $('#world_editor_select').val(data.name).trigger('change');
+                await selectWorldInfoEditorName(data.name);
             }
 
             toastr.success(buildWorldInfoImportSuccessMessage(data.name, metadata));
@@ -4453,10 +4480,14 @@ export async function importWorldInfo(file, { overwriteMode = WORLD_INFO_IMPORT_
  */
 export async function openWorldInfoEditor(worldName) {
     console.log(`Opening lorebook for ${worldName}`);
+    if (!world_names?.includes(worldName)) {
+        console.warn(`Lorebook '${worldName}' is not available in the world list.`);
+        return;
+    }
     if (!$('#WorldInfo').hasClass('openDrawer')) {
         await getWorldInfoShell().openWorldInfoPanel();
     }
-    $('#world_editor_select').val(worldName).trigger('change');
+    await selectWorldInfoEditorName(worldName);
 }
 
 /**
@@ -4586,7 +4617,7 @@ export async function moveWorldInfoEntry(sourceName, targetName, uid, { deleteOr
         // Check if the currently viewed book in the editor is the source or target and reload it
         const currentEditorBookName = getSelectedWorldInfoEditorName();
         if (currentEditorBookName === sourceName || currentEditorBookName === targetName) {
-            reloadEditor(currentEditorBookName);
+            await reloadEditor(currentEditorBookName);
         }
 
         toastr.success(deleteOriginal
@@ -4851,20 +4882,10 @@ export function initWorldInfo() {
             if (suppressEditorSelectMirrorEvent) {
                 return;
             }
+            // Funnel: any direct .val(...).trigger('change') write lands here and
+            // is resolved through the session-owned selection path.
             const rawName = String($('#world_editor_select').val() ?? '');
-            const worldName = rawName && world_names.includes(rawName) ? rawName : '';
-            $('#world_info_search').val('');
-            getWorldInfoFilter().setFilterData(FILTER_TYPES.WORLD_INFO_SEARCH, '', true);
-
-            const session = getWorldInfoWorkbenchSession();
-            await session.selectWorldName(worldName);
-            session.applySearchQuery('');
-
-            if (!worldName) {
-                await hideWorldEditor();
-            } else {
-                await showWorldEditor(worldName);
-            }
+            await selectWorldInfoEditorName(rawName);
         });
 
         const debouncedWorldInfoSearch = debounce((searchQuery) => {

@@ -910,7 +910,6 @@ registerDomHandlersShellContext({
     displayPastChats: (...args) => displayPastChats(...args),
     doCharListDisplaySwitch: (...args) => doCharListDisplaySwitch(...args),
     doDrawerOpenClick: (...args) => doDrawerOpenClick(...args),
-    doNavbarIconClick: (...args) => doNavbarIconClick(...args),
     doNewChat: (...args) => doNewChat(...args),
     download: (...args) => download(...args),
     dragElement: (...args) => dragElement(...args),
@@ -1089,6 +1088,11 @@ const WORKSPACE_DRAWER_OPENED_STORAGE_KEYS = {
     SettingsPanel: 'SettingsNavOpened',
 };
 
+const WORKSPACE_DRAWER_LOCKED_STORAGE_KEYS = {
+    'left-nav-panel': 'LNavLockOn',
+    'right-nav-panel': 'NavLockOn',
+};
+
 /**
  * Optional per-host close guards. Return false to refuse a close — used by
  * the settings drawer to intercept with a dirty-changes confirm.
@@ -1232,6 +1236,7 @@ let workspaceShellPanelOpenTaskChain = Promise.resolve();
  * their class/storage writes. Returns the queued task's promise.
  */
 function queueWorkspaceShellPanelOpenTask(task) {
+    // Tasks must stay synchronous; a task awaiting this chain would deadlock.
     const next = workspaceShellPanelOpenTaskChain.then(() => task());
     workspaceShellPanelOpenTaskChain = next.catch(() => {});
     return next;
@@ -1343,6 +1348,12 @@ function setWorkspaceShellSlotPinned(slotKey, pinned) {
     }
 
     drawer.classList.toggle('pinnedOpen', Boolean(pinned));
+    // Keep the class and the persisted lock key atomic so a reload can't
+    // resurrect a divergent pin state.
+    const lockStorageKey = WORKSPACE_DRAWER_LOCKED_STORAGE_KEYS[drawerId];
+    if (lockStorageKey) {
+        accountStorage.setItem(lockStorageKey, pinned ? 'true' : 'false');
+    }
     return { kind, mounted: true, status: 'mounted' };
 }
 
@@ -1386,6 +1397,7 @@ async function openWorkspaceShellRegex() {
 export async function openWorkspaceShellPromptManager({ preserveOpenDrawers = false } = {}) {
     await waitForWorkspaceShellPanelOpenTask();
     await openWorkspaceChildSlotHost('left-nav-panel', { preserveOpenDrawers });
+    await waitForWorkspaceShellPanelOpenTask();
     await mountPromptPanel();
     return createWorkspaceShellPanelResult('promptManager', {
         kind: 'promptManager',
@@ -2589,7 +2601,8 @@ function getWorldInfoReactBridgeState(facadeSnapshot = null) {
         importBusy: importMenuItem?.getAttribute('aria-disabled') === 'true' || importFileInput?.disabled === true,
         dropTargetPresent: Boolean(worldPopup),
         worldNames: getWorldInfoReactWorldNames(editorSelector),
-        selectedWorldName: getWorldInfoReactSelectedWorldName(editorSelector) || facadeSnapshot?.editorWorldName || '',
+        // The session snapshot is canonical; the hidden select is only a mirror.
+        selectedWorldName: facadeSnapshot?.editorWorldName || getWorldInfoReactSelectedWorldName(editorSelector) || '',
         selectedWorldIndex: editorSelector?.value ?? '',
         entryCount: facadeSnapshot?.entryCount ?? entrySummaries.length,
         entrySummaries,
@@ -9010,7 +9023,9 @@ function doDrawerOpenClick() {
         || drawer?.classList.contains('resizing')) {
         return;
     }
-    void openWorkspaceChildSlotHost(drawerContent.id);
+    openWorkspaceChildSlotHost(drawerContent.id).catch(error => {
+        console.warn('Drawer open click failed.', error);
+    });
 }
 
 /**

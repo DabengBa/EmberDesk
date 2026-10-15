@@ -771,7 +771,7 @@ describe('React workspace panels bridge helpers', () => {
 
         expect(scriptSource).toContain('function getWorldInfoReactCommands()');
         expect(scriptSource).toContain('worldNames: getWorldInfoReactWorldNames(editorSelector)');
-        expect(scriptSource).toContain('selectedWorldName: getWorldInfoReactSelectedWorldName(editorSelector)');
+        expect(scriptSource).toContain('selectedWorldName: facadeSnapshot?.editorWorldName || getWorldInfoReactSelectedWorldName(editorSelector)');
         expect(scriptSource).toContain('getWorldInfoWorkbenchFacadeSnapshot');
         expect(scriptSource).toContain('searchQuery: worldInfoSearch?.value ?? \'\'');
         expect(scriptSource).toContain('sortOptions: getWorldInfoReactSortOptions(worldInfoSortOrder)');

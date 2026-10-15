@@ -278,25 +278,26 @@ function OpenNavPanels() {
         // restore must not close sibling drawers: these opens land
         // asynchronously and would otherwise clobber whatever the user just
         // opened (including each other).
+        const restoreFailed = label => error => console.warn(`Drawer restore failed (${label}).`, error);
         if (accountStorage.getItem('LNavOpened') == 'true') {
-            void openWorkspaceShellPromptManager({ preserveOpenDrawers: true });
+            void openWorkspaceShellPromptManager({ preserveOpenDrawers: true }).catch(restoreFailed('left-nav-panel'));
         }
 
         if (accountStorage.getItem('NavOpened') == 'true') {
-            void openWorkspaceChildSlotHost('right-nav-panel', { preserveOpenDrawers: true });
+            void openWorkspaceChildSlotHost('right-nav-panel', { preserveOpenDrawers: true }).catch(restoreFailed('right-nav-panel'));
         }
 
         if (accountStorage.getItem('WINavOpened') == 'true') {
             console.debug('RA -- opening WI panel');
-            void openWorkspaceShellWorldInfo({ preserveOpenDrawers: true });
+            void openWorkspaceShellWorldInfo({ preserveOpenDrawers: true }).catch(restoreFailed('WorldInfo'));
         }
 
         if (accountStorage.getItem('RegexNavOpened') == 'true') {
-            void openWorkspaceChildSlotHost('RegexPanel', { preserveOpenDrawers: true });
+            void openWorkspaceChildSlotHost('RegexPanel', { preserveOpenDrawers: true }).catch(restoreFailed('RegexPanel'));
         }
 
         if (accountStorage.getItem('SettingsNavOpened') == 'true') {
-            void injectedOpenWorkspaceShellSettings?.({ preserveOpenDrawers: true });
+            void injectedOpenWorkspaceShellSettings?.({ preserveOpenDrawers: true })?.catch(restoreFailed('SettingsPanel'));
         }
     }
 }

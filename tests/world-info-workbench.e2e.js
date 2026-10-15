@@ -2,11 +2,11 @@ import { expect, test } from '@playwright/test';
 import { testSetup } from './frontend/frontent-test-utils.js';
 
 async function openWorldInfo(page) {
-    // Startup restores the drawer asynchronously (~300ms after settings load)
-    // when accountStorage WINavOpened was persisted by an earlier test on this
-    // shard. Clicking the nav button on an already-open drawer re-mounts the
-    // React workbench (replaceChildren) and drops the session-bound selection,
-    // so when a restore is pending we wait for it instead of double-opening.
+    // Startup restores the drawer during initRossMods when accountStorage
+    // WINavOpened was persisted by an earlier test on this shard. Clicking the
+    // nav button on an already-open drawer re-mounts the React workbench
+    // (replaceChildren) and drops the session-bound selection, so when a
+    // restore may still be in flight we wait for it instead of double-opening.
     const wiRestoring = await page.evaluate(() => (
         window.innerWidth > 1000
         && window.SillyTavern?.getContext?.()?.accountStorage?.getItem('WINavOpened') === 'true'

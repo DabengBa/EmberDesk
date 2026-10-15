@@ -181,15 +181,20 @@ export function createWorldInfoWorkbenchSession(deps) {
             return;
         }
 
-        const selectedIndex = Number(selectedValue);
-        const worldName = Number.isInteger(selectedIndex) && selectedIndex >= 0
-            ? worldNames[selectedIndex]
-            : null;
+        // Names win over indexes so integer-named books keep resolving to
+        // themselves; fall back to positional index for legacy callers.
+        const asIndex = Number(selectedValue);
+        const indexedName = Number.isInteger(asIndex) && asIndex >= 0 ? worldNames[asIndex] : null;
+        const worldName = worldNames.includes(selectedValue) ? selectedValue : indexedName;
 
         if (!worldName) {
             selectedWorldName = '';
             selectedEntryUid = '';
             searchQuery = '';
+            return;
+        }
+
+        if (worldName === selectedWorldName) {
             return;
         }
 
@@ -212,6 +217,11 @@ export function createWorldInfoWorkbenchSession(deps) {
             selectedWorldName = '';
             selectedEntryUid = '';
             return false;
+        }
+        // Reselecting the same book is a no-op: keep entry selection and
+        // skip the redundant cache warm.
+        if (name === selectedWorldName) {
+            return true;
         }
         selectedWorldName = name;
         selectedEntryUid = '';

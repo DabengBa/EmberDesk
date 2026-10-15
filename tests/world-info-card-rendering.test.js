@@ -193,7 +193,7 @@ describe('world info card rendering', () => {
     test('world info panel rehydrates selected editor after drawer remount', () => {
         const source = read('public/scripts/world-info.js');
         const rehydrateStart = source.indexOf('export function rehydrateWorldInfoPanel');
-        const rehydrateEnd = source.indexOf('export function reloadEditor', rehydrateStart);
+        const rehydrateEnd = source.indexOf('export async function reloadEditor', rehydrateStart);
         const rehydrateSource = source.slice(rehydrateStart, rehydrateEnd);
 
         expect(rehydrateStart).toBeGreaterThanOrEqual(0);

@@ -38,12 +38,12 @@ async function expectShellPanelVisible(page, entry) {
 // still stale. Poll the persisted settings until the write lands before
 // asserting across a reload.
 async function waitForPersistedAccountStorage(page, key, expected) {
+    const csrfToken = await page.evaluate(async () => {
+        const response = await fetch('/csrf-token');
+        const data = await response.json().catch(() => ({}));
+        return data?.token ?? data?.data?.token ?? null;
+    });
     await expect.poll(async () => {
-        const csrfToken = await page.evaluate(async () => {
-            const response = await fetch('/csrf-token');
-            const data = await response.json().catch(() => ({}));
-            return data?.token ?? data?.data?.token ?? null;
-        });
         return page.evaluate(async ({ token, storageKey }) => {
             const response = await fetch('/api/settings/get', {
                 method: 'POST',
