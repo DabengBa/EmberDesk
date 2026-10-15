@@ -378,16 +378,7 @@ export const settingsStyles = stylex.create({
         flexDirection: 'column',
         gap: '4px',
     },
-    checkbox: {
-        width: '16px',
-        height: '16px',
-        marginTop: '2px',
-        accentColor: 'var(--settings-accent)',
-        outline: {
-            ':focus-visible': '1px solid var(--settings-focus)',
-        },
-        outlineOffset: { ':focus-visible': '2px' },
-    },
+
     fieldError: {
         color: 'var(--settings-danger)',
         fontSize: '0.9rem',

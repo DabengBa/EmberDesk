@@ -1051,8 +1051,8 @@ describe('React workspace panels bridge helpers', () => {
         expect(worldInfoSource).toContain('sortWorldInfoEntries(entriesArray)');
         // The entry-row switch remounts on disable-only payloads; other field
         // edits keep draft focus, and the scan depth input commits on blur.
-        expect(scriptSource).toContain("keys.every(key => key === 'disable')");
-        expect(scriptSource).toContain("return commandName !== 'setScanDepth';");
+        expect(scriptSource).toContain('keys.every(key => key === \'disable\')');
+        expect(scriptSource).toContain('return commandName !== \'setScanDepth\';');
 
         expect(worldInfoSource).toContain('export async function updateWorldInfoWorkbenchEntryFields');
         expect(worldInfoSource).toContain('export async function selectWorldInfoWorkbenchEntry');

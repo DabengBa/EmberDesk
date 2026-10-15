@@ -11,6 +11,10 @@ import {
 } from './lib/world-info-workbench-helpers';
 import { worldInfoWorkbenchStyles as s } from '@/styles/world-info-workbench.styles';
 import { TagChipInput } from '@/components/fields/TagChipInput';
+import { FieldSwitch } from '@/components/fields/FieldSwitch';
+import { FieldCheck } from '@/components/fields/FieldCheck';
+import { SegmentedControl } from '@/components/fields/SegmentedControl';
+import { FieldSelect, FieldTextArea, FieldTextInput } from '@/components/fields/FieldInputs';
 import type { WorldInfoCommands } from './compat/workspace-commands';
 import { translate } from './compat/i18n.js';
 
@@ -327,21 +331,17 @@ function EntryRowContent({
     return (
         <span {...stylex.props(s.entryRowContent)}>
             <span {...stylex.props(s.entryTitleRow)}>
-                <button
-                    type="button"
-                    {...stylex.props(s.entryToggle, enabled ? s.entryToggleOn : null)}
-                    role="switch"
-                    aria-checked={enabled}
+                <FieldSwitch
+                    checked={enabled}
+                    variant="success"
                     title={enabled ? '点击停用此条目' : '点击启用此条目'}
-                    aria-label={enabled ? `停用条目 ${entry.title}` : `启用条目 ${entry.title}`}
-                    data-world-info-react-entry-toggle={entry.uid}
-                    onClick={event => {
+                    ariaLabel={enabled ? `停用条目 ${entry.title}` : `启用条目 ${entry.title}`}
+                    attrs={{ 'data-world-info-react-entry-toggle': entry.uid }}
+                    onToggle={(next, event) => {
                         event.stopPropagation();
-                        onToggleEnabled(entry.uid, !enabled);
+                        onToggleEnabled(entry.uid, next);
                     }}
-                >
-                    <span {...stylex.props(s.entryToggleKnob, enabled ? s.entryToggleKnobOn : null)} aria-hidden="true" />
-                </button>
+                />
                 <span {...stylex.props(s.entryTitle)}>{entry.title}</span>
                 {entry.constant ? (
                     <span {...stylex.props(s.constantBadge)}>常驻</span>
@@ -467,8 +467,7 @@ function EntryEditor({
                 <SectionHeader icon="fa-id-card" title="基本信息" />
                 <label {...stylex.props(s.field)}>
                     <span {...stylex.props(s.fieldLabel)}>标题</span>
-                    <input
-                        className="text_pole"
+                    <FieldTextInput
                         ref={titleInputRef}
                         value={draft.comment}
                         data-world-info-react-field="comment"
@@ -477,32 +476,16 @@ function EntryEditor({
                     />
                 </label>
                 <div {...stylex.props(s.switchRow)}>
-                    <div {...stylex.props(s.segmented)} role="group" aria-label="触发方式" data-world-info-react-field="constant">
-                        <button
-                            type="button"
-                            {...stylex.props(s.segOption, !draft.constant ? s.segOptionOn : null)}
-                            aria-pressed={!draft.constant}
-                            onClick={() => {
-                                if (draft.constant) {
-                                    saveFields({ constant: false });
-                                }
-                            }}
-                        >
-                            关键词触发
-                        </button>
-                        <button
-                            type="button"
-                            {...stylex.props(s.segOption, draft.constant ? s.segOptionOn : null)}
-                            aria-pressed={draft.constant}
-                            onClick={() => {
-                                if (!draft.constant) {
-                                    saveFields({ constant: true });
-                                }
-                            }}
-                        >
-                            始终注入（常驻）
-                        </button>
-                    </div>
+                    <SegmentedControl<boolean>
+                        ariaLabel="触发方式"
+                        attrs={{ 'data-world-info-react-field': 'constant' }}
+                        value={Boolean(draft.constant)}
+                        options={[
+                            { value: false, label: '关键词触发' },
+                            { value: true, label: '始终注入（常驻）' },
+                        ]}
+                        onSelect={value => saveFields({ constant: value })}
+                    />
                 </div>
             </section>
 
@@ -534,8 +517,8 @@ function EntryEditor({
 
             <section {...stylex.props(s.editorSection)} data-world-info-react-section="content">
                 <SectionHeader icon="fa-align-left" title="注入内容" />
-                <textarea
-                    className={`text_pole ${stylex.props(s.content).className ?? ''}`}
+                <FieldTextArea
+                    sx={s.content}
                     aria-label="注入内容"
                     value={draft.content}
                     data-world-info-react-field="content"
@@ -550,38 +533,18 @@ function EntryEditor({
                 <div {...stylex.props(s.placementGrid)}>
                     <div {...stylex.props(s.field)}>
                         <span {...stylex.props(s.fieldLabel)}>位置</span>
-                        <div {...stylex.props(s.segmented)} role="group" aria-label="注入位置" data-world-info-react-field="position">
-                            {POSITION_OPTIONS.map(option => (
-                                <button
-                                    key={option.value}
-                                    type="button"
-                                    {...stylex.props(s.segOption, draft.position === option.value ? s.segOptionOn : null)}
-                                    aria-pressed={draft.position === option.value}
-                                    onClick={() => {
-                                        if (draft.position !== option.value) {
-                                            saveFields({ position: option.value });
-                                        }
-                                    }}
-                                >
-                                    {option.label}
-                                </button>
-                            ))}
-                            {POSITION_OPTIONS.some(option => option.value === draft.position) ? null : (
-                                <button
-                                    type="button"
-                                    {...stylex.props(s.segOption, s.segOptionDisabled)}
-                                    disabled
-                                    aria-pressed="true"
-                                >
-                                    {entry.positionLabel ? `${entry.positionLabel}（已退役）` : `已退役位置 ${draft.position}`}
-                                </button>
-                            )}
-                        </div>
+                        <SegmentedControl<number>
+                            ariaLabel="注入位置"
+                            attrs={{ 'data-world-info-react-field': 'position' }}
+                            value={draft.position}
+                            options={POSITION_OPTIONS}
+                            fallbackLabel={entry.positionLabel ? `${entry.positionLabel}（已退役）` : `已退役位置 ${draft.position}`}
+                            onSelect={value => saveFields({ position: value })}
+                        />
                     </div>
                     <label {...stylex.props(s.field)}>
                         <span {...stylex.props(s.fieldLabel)}>深度</span>
-                        <input
-                            className="text_pole"
+                        <FieldTextInput
                             type="number"
                             value={draft.position === 4 ? draft.depth : ''}
                             placeholder={draft.position === 4 ? undefined : '—'}
@@ -603,8 +566,7 @@ function EntryEditor({
                     </label>
                     <label {...stylex.props(s.field)}>
                         <span {...stylex.props(s.fieldLabel)}>顺序</span>
-                        <input
-                            className="text_pole"
+                        <FieldTextInput
                             type="number"
                             value={draft.order}
                             data-world-info-react-field="order"
@@ -625,8 +587,8 @@ function EntryEditor({
                     <label {...stylex.props(s.field)}>
                         <span {...stylex.props(s.fieldLabel)}>触发概率</span>
                         <span {...stylex.props(s.probWrap)}>
-                            <input
-                                className={`text_pole ${stylex.props(s.probInput).className ?? ''}`}
+                            <FieldTextInput
+                                sx={s.probInput}
                                 type="number"
                                 min={0}
                                 max={100}
@@ -970,8 +932,8 @@ export function WorldInfoWorkbenchPanel({
                     <div {...stylex.props(s.globalMeta)}>
                         <label {...stylex.props(s.scanDepthField)}>
                             <span {...stylex.props(s.scanDepthLabel)}>扫描深度</span>
-                            <input
-                                className={`text_pole ${stylex.props(s.scanDepthInput).className ?? ''}`}
+                            <FieldTextInput
+                                sx={s.scanDepthInput}
                                 type="number"
                                 min={0}
                                 max={1000}
@@ -996,8 +958,8 @@ export function WorldInfoWorkbenchPanel({
                         <i className={iconClass('fa-book-open', s.bookIcon)} aria-hidden="true" />
                         <worldInfoForm.Field name="selectedWorldIndex">
                             {field => (
-                                <select
-                                    className={`text_pole ${stylex.props(s.flexInput, s.bookSelect).className ?? ''}`}
+                                <FieldSelect
+                                    sx={[s.flexInput, s.bookSelect]}
                                     data-world-info-react-control="world-select"
                                     aria-label="选择要编辑的世界书"
                                     value={field.state.value}
@@ -1012,7 +974,7 @@ export function WorldInfoWorkbenchPanel({
                                     {worldNames.map(world => (
                                         <option key={world.value} value={world.value}>{world.label}</option>
                                     ))}
-                                </select>
+                                </FieldSelect>
                             )}
                         </worldInfoForm.Field>
                         <output {...stylex.props(s.countBadge)} data-world-info-react-meta="entry-count">
@@ -1119,8 +1081,8 @@ export function WorldInfoWorkbenchPanel({
                                         <i className={iconClass('fa-magnifying-glass', s.searchIcon)} aria-hidden="true" />
                                         <worldInfoForm.Field name="searchQuery">
                                             {field => (
-                                                <input
-                                                    className={`text_pole ${stylex.props(s.searchInput).className ?? ''}`}
+                                                <FieldTextInput
+                                                    sx={s.searchInput}
                                                     type="search"
                                                     data-world-info-react-control="search"
                                                     aria-label="搜索条目"
@@ -1149,8 +1111,8 @@ export function WorldInfoWorkbenchPanel({
                                     </div>
                                     <worldInfoForm.Field name="sortValue">
                                         {field => (
-                                            <select
-                                                className={`text_pole ${stylex.props(s.sortSelect).className ?? ''}`}
+                                            <FieldSelect
+                                                sx={s.sortSelect}
                                                 data-world-info-react-control="sort"
                                                 aria-label="排序"
                                                 value={field.state.value}
@@ -1163,7 +1125,7 @@ export function WorldInfoWorkbenchPanel({
                                                 {sortOptions.filter(option => !option.hidden).map(option => (
                                                     <option key={option.value} value={option.value}>{translate(option.label)}</option>
                                                 ))}
-                                            </select>
+                                            </FieldSelect>
                                         )}
                                     </worldInfoForm.Field>
                                     <button
@@ -1286,9 +1248,7 @@ export function WorldInfoWorkbenchPanel({
                                     />
                                     {multiSelectMode ? (
                                         <span {...stylex.props(s.entryRowInner)}>
-                                            <span {...stylex.props(s.entryCheck, selectedUids.has(entry.uid) ? s.entryCheckOn : null)} aria-hidden="true">
-                                                <i className="fa-solid fa-check" aria-hidden="true" />
-                                            </span>
+                                            <FieldCheck checked={selectedUids.has(entry.uid)} />
                                             <EntryRowContent entry={entry} enabledOverride={enabledOverrides.get(entry.uid)} onToggleEnabled={toggleEntryEnabled} />
                                         </span>
                                     ) : (

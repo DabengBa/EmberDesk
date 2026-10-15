@@ -595,27 +595,6 @@ export const worldInfoWorkbenchStyles = stylex.create({
         width: '100%',
         minWidth: 0,
     },
-    entryCheck: {
-        flex: '0 0 auto',
-        width: '16px',
-        height: '16px',
-        marginTop: '2px',
-        borderWidth: '1px',
-        borderStyle: 'solid',
-        borderColor: 'color-mix(in srgb, var(--SmartThemeBorderColor) 90%, var(--SmartThemeBodyColor) 10%)',
-        borderRadius: '4px',
-        display: 'inline-flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        fontSize: '0.68em',
-        lineHeight: 1,
-        color: 'transparent',
-    },
-    entryCheckOn: {
-        backgroundColor: 'var(--SmartThemeQuoteColor)',
-        color: 'var(--SmartThemeBlurTintColor)',
-        borderColor: 'var(--SmartThemeQuoteColor)',
-    },
     entryRowContent: {
         display: 'flex',
         flexDirection: 'column',
@@ -652,51 +631,6 @@ export const worldInfoWorkbenchStyles = stylex.create({
     statusDotOff: {
         backgroundColor: 'color-mix(in srgb, var(--SmartThemeBodyColor) 32%, transparent)',
         boxShadow: 'none',
-    },
-    /* Inline enable/disable switch on entry rows — click toggles without
-       opening the editor. */
-    entryToggle: {
-        position: 'relative',
-        flex: '0 0 auto',
-        width: '34px',
-        height: '18px',
-        borderRadius: '999px',
-        alignSelf: 'center',
-        padding: 0,
-        borderWidth: '1px',
-        borderStyle: 'solid',
-        borderColor: 'color-mix(in srgb, var(--SmartThemeBodyColor) 30%, transparent)',
-        backgroundColor: 'color-mix(in srgb, var(--SmartThemeBodyColor) 18%, transparent)',
-        cursor: 'pointer',
-        transition: {
-            [motionOk]: 'background-color 0.14s ease, border-color 0.14s ease',
-        },
-        outline: {
-            ':focus-visible': '1px solid var(--interactable-outline-color)',
-        },
-        outlineOffset: {
-            ':focus-visible': '1px',
-        },
-    },
-    entryToggleOn: {
-        borderColor: 'color-mix(in srgb, var(--success-green) 70%, transparent)',
-        backgroundColor: 'color-mix(in srgb, var(--success-green) 65%, transparent)',
-    },
-    entryToggleKnob: {
-        position: 'absolute',
-        top: '2px',
-        left: '2px',
-        width: '12px',
-        height: '12px',
-        borderRadius: '999px',
-        backgroundColor: 'color-mix(in srgb, var(--SmartThemeBodyColor) 80%, transparent)',
-        transition: {
-            [motionOk]: 'transform 0.14s ease, background-color 0.14s ease',
-        },
-    },
-    entryToggleKnobOn: {
-        transform: 'translateX(16px)',
-        backgroundColor: '#fff',
     },
     entryTitle: {
         fontWeight: 650,
@@ -847,51 +781,12 @@ export const worldInfoWorkbenchStyles = stylex.create({
         letterSpacing: '0.015em',
         color: 'color-mix(in srgb, var(--SmartThemeBodyColor) 72%, transparent)',
     },
-    /* ---------- Switch & segmented controls ---------- */
+    /* ---------- Control layout row ---------- */
     switchRow: {
         display: 'flex',
         flexWrap: 'wrap',
         gap: '8px 14px',
         alignItems: 'center',
-    },
-    segmented: {
-        display: 'inline-flex',
-        alignItems: 'stretch',
-        borderRadius: '8px',
-        borderWidth: '1px',
-        borderStyle: 'solid',
-        borderColor: 'color-mix(in srgb, var(--SmartThemeBorderColor) 72%, transparent)',
-        backgroundColor: 'color-mix(in srgb, var(--SmartThemeBlurTintColor) 70%, var(--black70a) 30%)',
-        overflow: 'hidden',
-    },
-    segOption: {
-        padding: '4px 10px',
-        borderWidth: 0,
-        borderStyle: 'none',
-        backgroundColor: 'transparent',
-        color: 'color-mix(in srgb, var(--SmartThemeBodyColor) 66%, transparent)',
-        fontSize: 'calc(var(--mainFontSize) * 0.78)',
-        fontWeight: 600,
-        fontFamily: 'inherit',
-        cursor: 'pointer',
-        whiteSpace: 'nowrap',
-        transition: {
-            [motionOk]: 'background-color 0.12s ease, color 0.12s ease',
-        },
-        outline: {
-            ':focus-visible': '1px solid var(--interactable-outline-color)',
-        },
-        outlineOffset: {
-            ':focus-visible': '1px',
-        },
-    },
-    segOptionOn: {
-        backgroundColor: 'color-mix(in srgb, var(--SmartThemeQuoteColor) 22%, transparent)',
-        color: 'var(--SmartThemeQuoteColor)',
-    },
-    segOptionDisabled: {
-        opacity: 0.5,
-        cursor: 'default',
     },
     placementGrid: {
         display: 'grid',

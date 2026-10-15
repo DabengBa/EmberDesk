@@ -2,6 +2,7 @@ import * as stylex from '@stylexjs/stylex';
 import type { TextareaHTMLAttributes } from 'react';
 import { getFieldErrorMessage, getValueAtPath } from '@/lib/settings-helpers.js';
 import { useAutosizeTextareaRef } from '@/lib/autosize-textarea';
+import { FieldSwitch } from '@/components/fields/FieldSwitch';
 import { settingsStyles } from '@/styles/settings-surface.styles';
 
 function SettingTextarea({
@@ -170,17 +171,14 @@ export function SettingField({
                                                 </span>
                                             )}
                                         </span>
-                                        <input
-                                            type="checkbox"
-                                            id={fieldId}
-                                            name={name}
-                                            {...stylex.props(settingsStyles.checkbox)}
+                                        <FieldSwitch
                                             checked={Boolean(currentValue)}
                                             disabled={disabled}
-                                            aria-describedby={describedBy}
-                                            onBlur={field.handleBlur}
-                                            onChange={event => {
-                                                field.handleChange(event.target.checked);
+                                            ariaLabel={label}
+                                            attrs={{ id: fieldId, name, ...(describedBy ? { 'aria-describedby': describedBy } : {}) }}
+                                            onToggle={next => {
+                                                field.handleChange(next);
+                                                field.handleBlur();
                                                 onValueChange?.();
                                             }}
                                         />
