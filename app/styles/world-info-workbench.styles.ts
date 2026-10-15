@@ -973,21 +973,6 @@ export const worldInfoWorkbenchStyles = stylex.create({
         minWidth: 0,
         margin: 0,
     },
-    secondaryChip: {
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: '4px',
-        maxWidth: '130px',
-        padding: '1px 7px',
-        borderRadius: '5px',
-        borderWidth: '1px',
-        borderStyle: 'dashed',
-        borderColor: 'color-mix(in srgb, var(--SmartThemeQuoteColor) 38%, transparent)',
-        color: 'color-mix(in srgb, var(--SmartThemeQuoteColor) 80%, transparent)',
-        fontSize: 'calc(var(--mainFontSize) * 0.68)',
-        whiteSpace: 'nowrap',
-    },
-
     content: {
         minHeight: '200px',
         maxHeight: 'min(46vh, 420px)',

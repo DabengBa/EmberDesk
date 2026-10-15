@@ -1047,8 +1047,7 @@ body.wi-content-editor-open {
 
 /* Keywords Select2 */
 .world_entry .select2-selection--multiple,
-.world_entry textarea.keyprimarytextpole,
-.world_entry textarea.keysecondarytextpole {
+.world_entry textarea.keyprimarytextpole {
     max-height: 160px;
     overflow-y: auto;
     overflow-x: hidden;

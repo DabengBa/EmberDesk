@@ -11,7 +11,6 @@ import {
     DEFAULT_DEPTH,
     MAX_SCAN_DEPTH,
     KNOWN_DECORATORS,
-    world_info_logic,
     scan_state,
     world_info_position,
     sortFn,
@@ -152,8 +151,8 @@ const extension_prompt_roles = new Proxy({}, {
  * @property {number} [uid] The UID of the entry that triggered the scan
  * @property {string} [world] The world info book of origin of the entry
  * @property {string[]} [key] The primary keys to scan for
- * @property {string[]} [keysecondary] The secondary keys to scan for
- * @property {number} [selectiveLogic] The logic to use for selective activation
+ * @property {string[]} [keysecondary] Retired compat field — stored but never scanned
+ * @property {number} [selectiveLogic] Retired compat field — stored but never applied
  * @property {number} [sticky] The sticky value of the entry
  * @property {number} [cooldown] The cooldown of the entry
  * @property {number} [delay] The delay of the entry
@@ -739,69 +738,10 @@ export async function checkWorldInfo(chat, maxContext, isDryRun, globalScanData 
                 continue;
             }
 
-            const hasSecondaryKeywords = (
-                entry.selective && //all entries are selective now
-                Array.isArray(entry.keysecondary) && //always true
-                entry.keysecondary.length //ignore empties
-            );
-
-            if (!hasSecondaryKeywords) {
-                // Handle cases where secondary is empty
-                log('activated by primary key match', primaryKeyMatch);
-                activatedNow.add(entry);
-                continue;
-            }
-
-
-            // SECONDARY KEYWORDS
-            const selectiveLogic = entry.selectiveLogic ?? 0; // If selectiveLogic isn't found, assume it's AND, only do this once per entry
-            log('Entry with primary key match', primaryKeyMatch, 'has secondary keywords. Checking with logic logic', Object.entries(world_info_logic).find(x => x[1] === entry.selectiveLogic));
-
-            /** @type {() => boolean} */
-            function matchSecondaryKeys() {
-                let hasAnyMatch = false;
-                let hasAllMatch = true;
-                for (let keysecondary of entry.keysecondary) {
-                    const secondarySubstituted = substituteParams(keysecondary);
-                    const hasSecondaryMatch = secondarySubstituted && buffer.matchKeys(textToScan, secondarySubstituted.trim(), entry);
-
-                    if (hasSecondaryMatch) hasAnyMatch = true;
-                    if (!hasSecondaryMatch) hasAllMatch = false;
-
-                    // Simplified AND ANY / NOT ALL if statement. (Proper fix for PR#1356 by Bronya)
-                    // If AND ANY logic and the main checks pass OR if NOT ALL logic and the main checks do not pass
-                    if (selectiveLogic === world_info_logic.AND_ANY && hasSecondaryMatch) {
-                        log('activated. (AND ANY) Found match secondary keyword', secondarySubstituted);
-                        return true;
-                    }
-                    if (selectiveLogic === world_info_logic.NOT_ALL && !hasSecondaryMatch) {
-                        log('activated. (NOT ALL) Found not matching secondary keyword', secondarySubstituted);
-                        return true;
-                    }
-                }
-
-                // Handle NOT ANY logic
-                if (selectiveLogic === world_info_logic.NOT_ANY && !hasAnyMatch) {
-                    log('activated. (NOT ANY) No secondary keywords found', entry.keysecondary);
-                    return true;
-                }
-
-                // Handle AND ALL logic
-                if (selectiveLogic === world_info_logic.AND_ALL && hasAllMatch) {
-                    log('activated. (AND ALL) All secondary keywords found', entry.keysecondary);
-                    return true;
-                }
-
-                return false;
-            }
-
-            const matched = matchSecondaryKeys();
-            if (!matched) {
-                log('skipped. Secondary keywords not satisfied', entry.keysecondary);
-                continue;
-            }
-
-            // Success logging was already done inside the function, so just add the entry
+            // Secondary keywords (keysecondary/selective/selectiveLogic) are
+            // retired: a primary-key match activates the entry directly. The
+            // stored fields remain lossless round-trip compatibility data.
+            log('activated by primary key match', primaryKeyMatch);
             activatedNow.add(entry);
             continue;
         }

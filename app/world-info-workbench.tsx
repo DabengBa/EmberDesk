@@ -139,13 +139,6 @@ const POSITION_OPTIONS = [
     { value: 4, label: '按深度' },
 ] as const;
 
-const SELECTIVE_LOGIC_OPTIONS = [
-    { value: 0, label: '满足任一 (AND ANY)' },
-    { value: 3, label: '满足全部 (AND ALL)' },
-    { value: 2, label: '排除任一 (NOT ANY)' },
-    { value: 1, label: '排除全部 (NOT ALL)' },
-] as const;
-
 const MAX_KEYWORD_CHIPS = 4;
 
 /** Split a joined keyword summary back into chip tokens for list display. */
@@ -376,9 +369,6 @@ function EntryRowContent({
                 ) : (
                     <span {...stylex.props(s.chip, s.chipMuted)}>无关键词</span>
                 )}
-                {entry.hasSecondaryKeys ? (
-                    <span {...stylex.props(s.secondaryChip)} title="含次要条件词">+条件</span>
-                ) : null}
             </span>
         </span>
     );
@@ -403,7 +393,7 @@ function EntryEditor({
     const pendingFieldsRef = useRef<Record<string, unknown>>({});
     const entryUid = entry?.uid;
     const focusTitleOnOpen = Boolean(onBack);
-    const regexKeywordCount = countRegexKeywords([...(draft?.key ?? []), ...(draft?.keysecondary ?? [])]);
+    const regexKeywordCount = countRegexKeywords(draft?.key ?? []);
 
     // Sync draft in render (not an effect) so the editor fields mount in the
     // same commit that delivers the entry — a downstream focus effect must not
@@ -537,25 +527,7 @@ function EntryEditor({
                             field="key"
                             onCommit={values => saveFields({ key: values })}
                         />
-                        <KeywordField
-                            label="可选条件"
-                            values={draft.keysecondary ?? []}
-                            field="keysecondary"
-                            onCommit={values => saveFields({ keysecondary: values })}
-                        />
-                        <label {...stylex.props(s.field)}>
-                            <span {...stylex.props(s.fieldLabel)}>逻辑</span>
-                            <select
-                                className="text_pole"
-                                value={String(draft.selectiveLogic)}
-                                data-world-info-react-field="selectiveLogic"
-                                onChange={event => saveFields({ selectiveLogic: Number(event.target.value) })}
-                            >
-                                {SELECTIVE_LOGIC_OPTIONS.map(option => (
-                                    <option key={option.value} value={option.value}>{option.label}</option>
-                                ))}
-                            </select>
-                        </label>
+
                         {regexKeywordCount > 0 ? (
                             <p {...stylex.props(s.callout)} data-world-info-react-regex-hint>
                                 <i className={iconClass('fa-circle-info', s.calloutIcon)} aria-hidden="true" />

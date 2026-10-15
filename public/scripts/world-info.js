@@ -3346,9 +3346,7 @@ function setupEditFormBindings(editTemplate, outlet, name, data, entry) {
 
     // Key inputs
     const keyInput = enableKeysInputHelper({ template: editTemplate, entry, entryPropName: 'key', originalDataValueName: 'keys', name, data });
-    const keySecondaryInput = enableKeysInputHelper({ template: editTemplate, entry, entryPropName: 'keysecondary', originalDataValueName: 'secondary_keys', name, data });
     if (!keyInput.isFancy) initScrollHeight(keyInput.control);
-    if (!keySecondaryInput.isFancy) initScrollHeight(keySecondaryInput.control);
 
     // Key input switch
     editTemplate.find('.switch_input_type_icon').on('click', function () {
@@ -3451,38 +3449,6 @@ function setupEditFormBindings(editTemplate, outlet, name, data, entry) {
     });
     commentToggle.prop('checked', true).trigger('input', { noSave: true });
     commentToggle.parent().hide();
-
-    // Logic AND/NOT
-    const selectiveLogicDropdown = editTemplate.find('select[name="entryLogicType"]');
-    selectiveLogicDropdown.data('uid', entry.uid);
-    selectiveLogicDropdown.on('click', e => e.stopPropagation());
-    selectiveLogicDropdown.on('input', async function (_, { noSave = false } = {}) {
-        const uid = $(this).data('uid');
-        const value = Number($(this).val());
-        data.entries[uid].selectiveLogic = !isNaN(value) ? value : world_info_logic.AND_ANY;
-        setWIOriginalDataValue(data, uid, 'selectiveLogic', data.entries[uid].selectiveLogic);
-        if (!noSave) await saveWorldInfo(name, data);
-    });
-    editTemplate.find(`select[name="entryLogicType"] option[value=${entry.selectiveLogic}]`).prop('selected', true).trigger('input', { noSave: true });
-
-    // Selective
-    const selectiveInput = editTemplate.find('input[name="selective"]');
-    selectiveInput.data('uid', entry.uid);
-    selectiveInput.on('input', async function (_, { noSave = false } = {}) {
-        const uid = $(this).data('uid');
-        const value = $(this).prop('checked');
-        data.entries[uid].selective = value;
-        setWIOriginalDataValue(data, uid, 'selective', data.entries[uid].selective);
-        if (!noSave) await saveWorldInfo(name, data);
-        const keysecondary = $(this).closest('.world_entry').find('.keysecondary');
-        const keysecondarytextpole = $(this).closest('.world_entry').find('.keysecondarytextpole');
-        const keyprimaryselect = $(this).closest('.world_entry').find('.keyprimaryselect');
-        const keyprimaryHeight = keyprimaryselect.outerHeight();
-        keysecondarytextpole.css('height', keyprimaryHeight + 'px');
-        if (value) keysecondary.show(); else keysecondary.hide();
-    });
-    selectiveInput.prop('checked', true).trigger('input', { noSave: true });
-    selectiveInput.parent().hide();
 
     // Character filter
     const characterFilterLabel = editTemplate.find('label[for="characterFilter"] > small');

@@ -73,12 +73,9 @@ export const NEW_WORLD_INFO_ENTRY_TEMPLATE = {
 
 export const WORLD_INFO_WORKBENCH_EDITABLE_FIELDS = new Set([
     'key',
-    'keysecondary',
     'comment',
     'content',
     'constant',
-    'selective',
-    'selectiveLogic',
     'addMemo',
     'order',
     'position',
