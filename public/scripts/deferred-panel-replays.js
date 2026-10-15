@@ -4,14 +4,14 @@ export function buildWorldInfoReplayState({
     editorSelectedName = '',
 } = {}) {
     return {
-        globalOptions: worldNames.map((name, index) => ({
+        globalOptions: worldNames.map((name) => ({
             text: name,
-            value: String(index),
+            value: name,
             selected: selectedWorldInfo.includes(name),
         })),
-        editorOptions: worldNames.map((name, index) => ({
+        editorOptions: worldNames.map((name) => ({
             text: name,
-            value: String(index),
+            value: name,
             selected: editorSelectedName === name,
         })),
     };

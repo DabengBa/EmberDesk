@@ -727,7 +727,7 @@ function refreshGlobalWorldInfoSelectorState() {
 
 function syncWorldInfoSettingsUi({ preserveEditorSelection = true, syncGlobalSelect = true, syncEditorSelect = true } = {}) {
     const editorSelectedName = preserveEditorSelection
-        ? String($('#world_editor_select').find(':selected').text() ?? '')
+        ? getSelectedWorldInfoEditorName()
         : '';
     const replayState = buildWorldInfoReplayState({
         worldNames: world_names,
@@ -783,7 +783,7 @@ function ensureWorldInfoRuntimeInitialized() {
 
 export function rehydrateWorldInfoPanel({ resetEmptyEditor = true } = {}) {
     syncWorldInfoSettingsUi({ syncGlobalSelect: false });
-    const selectedName = String($('#world_editor_select').find(':selected').text() ?? '');
+    const selectedName = getSelectedWorldInfoEditorName();
     if (selectedName && Array.isArray(world_names) && world_names.includes(selectedName)) {
         void showWorldEditor(selectedName);
     } else if (resetEmptyEditor) {
@@ -797,60 +797,68 @@ export function rehydrateWorldInfoPanel({ resetEmptyEditor = true } = {}) {
  * @param {boolean} [loadIfNotSelected=false] - Indicates whether to load the file even if it's not currently selected
  */
 export function reloadEditor(file, loadIfNotSelected = false) {
-    const currentIndex = Number($('#world_editor_select').val());
-    const selectedIndex = world_names.indexOf(file);
-    if (selectedIndex !== -1 && (loadIfNotSelected || currentIndex === selectedIndex)) {
-        $('#world_editor_select').val(selectedIndex).trigger('change');
+    const currentName = getSelectedWorldInfoEditorName();
+    if (world_names.includes(file) && (loadIfNotSelected || currentName === file)) {
+        $('#world_editor_select').val(file).trigger('change');
     }
 }
 
 function getSelectedWorldInfoEditorName() {
-    const selectedValue = String($('#world_editor_select').val() ?? '');
-    if (selectedValue === '') {
-        return '';
-    }
-
-    const selectedIndex = Number(selectedValue);
-    return Number.isInteger(selectedIndex) && selectedIndex >= 0
-        ? world_names?.[selectedIndex] ?? ''
-        : '';
+    // Session state is the source of truth; the hidden legacy select is only a mirror.
+    return getWorldInfoWorkbenchSession().getSelectedWorldName();
 }
 
-function syncWorldInfoEditorSelectorUi(selectedValue) {
+/** While true, change events on #world_editor_select are mirror repaints, not user selection. */
+let suppressEditorSelectMirrorEvent = false;
+
+function syncWorldInfoEditorSelectorUi(selectedName) {
     const editorSelector = $('#world_editor_select');
-    editorSelector.val(selectedValue);
+    editorSelector.val(selectedName);
     if (editorSelector.data('select2')) {
-        editorSelector.trigger('change.select2');
+        suppressEditorSelectMirrorEvent = true;
+        try {
+            editorSelector.trigger('change.select2');
+        } finally {
+            suppressEditorSelectMirrorEvent = false;
+        }
     }
 }
 
-export async function selectWorldInfoEditorIndex(worldIndex) {
-    const selectedValue = String(worldIndex ?? '');
-    syncWorldInfoEditorSelectorUi(selectedValue);
+/**
+ * Selects a world book in the editor by file name. The workbench session holds
+ * the canonical selection; the hidden legacy select is mirrored afterwards.
+ * @param {string} worldName empty string clears the selection
+ */
+export async function selectWorldInfoEditorName(worldName) {
+    const name = String(worldName ?? '');
+    const session = getWorldInfoWorkbenchSession();
+    await session.selectWorldName(name);
+    session.applySearchQuery('');
+    worldInfoWorkbenchSelectedEntryUid = '';
+
+    syncWorldInfoEditorSelectorUi(name);
 
     $('#world_info_search').val('');
     getWorldInfoFilter().setFilterData(FILTER_TYPES.WORLD_INFO_SEARCH, '', true);
 
-    const session = getWorldInfoWorkbenchSession();
-    await session.selectWorldIndex(selectedValue);
-    worldInfoWorkbenchSelectedEntryUid = '';
-
-    if (selectedValue === '') {
+    if (!name || !world_names?.includes(name)) {
         await hideWorldEditor();
         return;
     }
 
-    const selectedIndex = Number(selectedValue);
-    const worldName = Number.isInteger(selectedIndex) && selectedIndex >= 0
-        ? world_names?.[selectedIndex]
-        : null;
+    await showWorldEditor(name);
+}
 
-    if (!worldName) {
-        await hideWorldEditor();
-        return;
-    }
-
-    await showWorldEditor(worldName);
+/**
+ * Legacy entry point: accepts the old positional index or a world file name.
+ * @param {string|number} worldIndex index into world_names, or a world name
+ */
+export async function selectWorldInfoEditorIndex(worldIndex) {
+    const selectedValue = String(worldIndex ?? '');
+    const asIndex = Number(selectedValue);
+    const indexedName = Number.isInteger(asIndex) && asIndex >= 0 ? world_names?.[asIndex] : undefined;
+    const name = selectedValue === '' ? '' : indexedName ?? selectedValue;
+    await selectWorldInfoEditorName(name);
 }
 
 export function applyWorldInfoSearchQuery(searchQuery) {
@@ -1006,9 +1014,8 @@ export async function duplicateCurrentWorldInfo() {
     await saveWorldInfo(finalName, data, true);
     await updateWorldInfoList();
 
-    const selectedIndex = world_names.indexOf(finalName);
-    if (selectedIndex !== -1) {
-        await selectWorldInfoEditorIndex(selectedIndex);
+    if (world_names.includes(finalName)) {
+        await selectWorldInfoEditorName(finalName);
     } else {
         await hideWorldEditor();
     }
@@ -1315,7 +1322,7 @@ export async function promptMoveOrCopyWorldInfoEntry(uid, sourceWorld = '') {
     world_names.forEach(worldName => {
         if (worldName !== resolvedSource) {
             const option = document.createElement('option');
-            option.value = world_names.indexOf(worldName).toString();
+            option.value = worldName;
             option.textContent = worldName;
             select.appendChild(option);
             selectableWorldCount++;
@@ -1331,30 +1338,25 @@ export async function promptMoveOrCopyWorldInfoEntry(uid, sourceWorld = '') {
     const container = document.createElement('div');
     container.appendChild(wrapper);
     container.appendChild(select);
-    let selectedWorldIndex = -1;
+    let selectedTargetName = '';
     const popup = new Popup(container, POPUP_TYPE.CONFIRM, '', {
         cancelButton: t`Cancel`,
         defaultResult: POPUP_RESULT.NEGATIVE,
         customButtons: [{ text: t`Move`, result: POPUP_RESULT.CUSTOM1 }, { text: t`Copy`, result: POPUP_RESULT.CUSTOM2 }],
-        onClosing: (instance) => instance.result <= POPUP_RESULT.NEGATIVE || selectedWorldIndex !== -1,
+        onClosing: (instance) => instance.result <= POPUP_RESULT.NEGATIVE || selectedTargetName !== '',
     });
     const actions = popup.dlg.querySelectorAll('.popup-button-custom');
     actions.forEach(action => { action.disabled = true; });
     select.addEventListener('change', function () {
-        selectedWorldIndex = this.value === '' ? -1 : Number(this.value);
-        actions.forEach(action => { action.disabled = selectedWorldIndex === -1; });
+        selectedTargetName = String(this.value ?? '');
+        actions.forEach(action => { action.disabled = selectedTargetName === ''; });
     });
     popup.okButton.style.display = 'none';
     const popupConfirm = await popup.show();
-    if (!popupConfirm || selectedWorldIndex === -1) {
+    if (!popupConfirm || selectedTargetName === '') {
         return false;
     }
-    const selectedValue = world_names[selectedWorldIndex];
-    if (!selectedValue) {
-        toastr.warning(t`Please select a target lorebook.`);
-        return false;
-    }
-    return await moveWorldInfoEntry(resolvedSource, selectedValue, sourceUid, { deleteOriginal: popupConfirm === POPUP_RESULT.CUSTOM1 });
+    return await moveWorldInfoEntry(resolvedSource, selectedTargetName, sourceUid, { deleteOriginal: popupConfirm === POPUP_RESULT.CUSTOM1 });
 }
 
 /** @type {string} */
@@ -2260,15 +2262,18 @@ export async function updateWorldInfoList() {
 
     if (result.ok) {
         const data = await result.json();
-        const editorSelected = String($('#world_editor_select').find(':selected').text());
+        const editorSelected = getSelectedWorldInfoEditorName();
         setWorldNames(data.world_names?.length ? data.world_names : []);
+        const session = getWorldInfoWorkbenchSession();
+        session.setWorldNames(world_names);
+        session.setSelectedWorldInfo(selected_world_info);
         $('#world_info').find('option[value!=""]').remove();
         $('#world_editor_select').find('option[value!=""]').remove();
 
-        world_names.forEach((item, i) => {
-            const globalListOption = new Option(item, i.toString());
+        world_names.forEach((item) => {
+            const globalListOption = new Option(item, item);
             globalListOption.selected = selected_world_info.includes(item);
-            const editorListOption = new Option(item, i.toString());
+            const editorListOption = new Option(item, item);
             editorListOption.selected = editorSelected === item;
             $('#world_info').append(globalListOption);
             $('#world_editor_select').append(editorListOption);
@@ -2297,7 +2302,7 @@ export async function flushDeletedWorldsFromUI(worldNames) {
     }
 
     const wasEditingDeletedWorld = names.has(
-        String($('#world_editor_select').find(':selected').text()),
+        getSelectedWorldInfoEditorName(),
     );
 
     await updateWorldInfoList();
@@ -3821,7 +3826,8 @@ async function _save(name, data) {
     if (!response.ok) {
         throw new Error(`World Info save failed (HTTP ${response.status}).`);
     }
-    await eventSource.emit(event_types.WORLDINFO_UPDATED, name, data);
+    // Fire-and-forget: save completion must not await event subscribers.
+    void eventSource.emit(event_types.WORLDINFO_UPDATED, name, data);
 }
 
 
@@ -3884,9 +3890,8 @@ async function renameWorldInfo(name, data) {
         $('#world_info').trigger('change');
     }
 
-    const selectedIndex = world_names.indexOf(newName);
-    if (selectedIndex !== -1) {
-        $('#world_editor_select').val(selectedIndex).trigger('change');
+    if (world_names.includes(newName)) {
+        $('#world_editor_select').val(newName).trigger('change');
     }
 }
 
@@ -4069,9 +4074,8 @@ export async function createNewWorldInfo(worldName, { interactive = false } = {}
     await saveWorldInfo(worldName, worldInfoTemplate, true);
     await updateWorldInfoList();
 
-    const selectedIndex = world_names.indexOf(worldName);
-    if (selectedIndex !== -1) {
-        $('#world_editor_select').val(selectedIndex).trigger('change');
+    if (world_names.includes(worldName)) {
+        $('#world_editor_select').val(worldName).trigger('change');
     } else {
         await hideWorldEditor();
     }
@@ -4159,12 +4163,11 @@ export async function importEmbeddedWorldInfo(skipPopup = false) {
 
     toastr.success(t`The world '${bookName}' has been imported and linked to the character successfully.`, t`World/Lorebook imported`);
 
-    const newIndex = world_names.indexOf(bookName);
-    if (newIndex >= 0) {
+    if (world_names.includes(bookName)) {
         //show&draw the WI panel before..
         await getWorldInfoShell().openWorldInfoPanel();
         //..auto-opening the new imported WI
-        $('#world_editor_select').val(newIndex).trigger('change');
+        $('#world_editor_select').val(bookName).trigger('change');
     }
 
     setWorldInfoButtonClass(chid, true);
@@ -4223,11 +4226,10 @@ export function onWorldInfoChange(args, text) {
     } else { //if it's a pointer selection
         const tempWorldInfo = [];
         const val = $('#world_info').val();
-        const selectedWorlds = (Array.isArray(val) ? val : [val]).map((e) => Number(e)).filter((e) => !isNaN(e));
+        const selectedWorlds = (Array.isArray(val) ? val : val ? [val] : []).map((e) => String(e)).filter(Boolean);
         if (selectedWorlds.length > 0) {
-            selectedWorlds.forEach((worldIndex) => {
-                const existingWorldName = world_names[worldIndex];
-                if (existingWorldName) {
+            selectedWorlds.forEach((existingWorldName) => {
+                if (world_names.includes(existingWorldName)) {
                     tempWorldInfo.push(existingWorldName);
                 } else {
                     const wiElement = getWIElement(existingWorldName);
@@ -4429,9 +4431,8 @@ export async function importWorldInfo(file, { overwriteMode = WORLD_INFO_IMPORT_
         if (data.name) {
             await updateWorldInfoList();
 
-            const newIndex = world_names.indexOf(data.name);
-            if (newIndex >= 0) {
-                $('#world_editor_select').val(newIndex).trigger('change');
+            if (world_names.includes(data.name)) {
+                $('#world_editor_select').val(data.name).trigger('change');
             }
 
             toastr.success(buildWorldInfoImportSuccessMessage(data.name, metadata));
@@ -4455,8 +4456,7 @@ export async function openWorldInfoEditor(worldName) {
     if (!$('#WorldInfo').hasClass('openDrawer')) {
         await getWorldInfoShell().openWorldInfoPanel();
     }
-    const index = world_names.indexOf(worldName);
-    $('#world_editor_select').val(index).trigger('change');
+    $('#world_editor_select').val(worldName).trigger('change');
 }
 
 /**
@@ -4584,12 +4584,9 @@ export async function moveWorldInfoEntry(sourceName, targetName, uid, { deleteOr
         console.log(`[WI Move] ${entryToMove.comment} ${deleteOriginal ? 'moved' : 'copied'} successfully to '${targetName}'.`);
 
         // Check if the currently viewed book in the editor is the source or target and reload it
-        const currentEditorBookIndex = Number($('#world_editor_select').val());
-        if (!isNaN(currentEditorBookIndex)) {
-            const currentEditorBookName = world_names[currentEditorBookIndex];
-            if (currentEditorBookName === sourceName || currentEditorBookName === targetName) {
-                reloadEditor(currentEditorBookName);
-            }
+        const currentEditorBookName = getSelectedWorldInfoEditorName();
+        if (currentEditorBookName === sourceName || currentEditorBookName === targetName) {
+            reloadEditor(currentEditorBookName);
         }
 
         toastr.success(deleteOriginal
@@ -4744,10 +4741,9 @@ export function initWorldInfo() {
 
             select2ChoiceClickSubscribe(globalWorldInfoSelector, target => {
                 const name = $(target).text();
-                const selectedIndex = world_names.indexOf(name);
-                const alreadySelectedInEditor = $('#world_editor_select option:selected').text() === name;
-                if (selectedIndex !== -1 && !alreadySelectedInEditor) {
-                    $('#world_editor_select').val(selectedIndex).trigger('change');
+                const alreadySelectedInEditor = getSelectedWorldInfoEditorName() === name;
+                if (world_names.includes(name) && !alreadySelectedInEditor) {
+                    void selectWorldInfoEditorName(name);
                     console.log('Quick selection of world', name);
                 } else {
                     console.warn('lets not reload an already loaded list yes?');
@@ -4852,15 +4848,22 @@ export function initWorldInfo() {
         });
 
         $('#world_editor_select').on('change', async () => {
+            if (suppressEditorSelectMirrorEvent) {
+                return;
+            }
+            const rawName = String($('#world_editor_select').val() ?? '');
+            const worldName = rawName && world_names.includes(rawName) ? rawName : '';
             $('#world_info_search').val('');
             getWorldInfoFilter().setFilterData(FILTER_TYPES.WORLD_INFO_SEARCH, '', true);
-            const selectedIndex = String($('#world_editor_select').find(':selected').val());
 
-            if (selectedIndex === '') {
+            const session = getWorldInfoWorkbenchSession();
+            await session.selectWorldName(worldName);
+            session.applySearchQuery('');
+
+            if (!worldName) {
                 await hideWorldEditor();
             } else {
-                const worldName = world_names[selectedIndex];
-                showWorldEditor(worldName);
+                await showWorldEditor(worldName);
             }
         });
 

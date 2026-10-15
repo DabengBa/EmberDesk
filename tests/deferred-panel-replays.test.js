@@ -13,12 +13,12 @@ describe('deferred panel replay helpers', () => {
             editorSelectedName: 'alpha',
         })).toEqual({
             globalOptions: [
-                { text: 'alpha', value: '0', selected: false },
-                { text: 'beta', value: '1', selected: true },
+                { text: 'alpha', value: 'alpha', selected: false },
+                { text: 'beta', value: 'beta', selected: true },
             ],
             editorOptions: [
-                { text: 'alpha', value: '0', selected: true },
-                { text: 'beta', value: '1', selected: false },
+                { text: 'alpha', value: 'alpha', selected: true },
+                { text: 'beta', value: 'beta', selected: false },
             ],
         });
     });

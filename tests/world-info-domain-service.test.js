@@ -220,11 +220,11 @@ describe('world info domain and workbench services', () => {
         session.applySortOption('8');
         const state = await session.getReactPanelState();
         expect(state.selectedWorldName).toBe('Alpha');
-        expect(state.selectedWorldIndex).toBe('0');
+        expect(state.selectedWorldIndex).toBe('Alpha');
         expect(state.entrySummaries).toHaveLength(1);
         expect(state.sortValue).toBe('8');
         expect(state.canCreateEntry).toBe(true);
-        expect(state.worldNames[0]).toMatchObject({ value: '0', label: 'Alpha', selected: true });
+        expect(state.worldNames[0]).toMatchObject({ value: 'Alpha', label: 'Alpha', selected: true });
         expect(state.sortOptions.some(option => option.value === '0')).toBe(true);
 
         const pure = service.buildWorldInfoReactPanelState({

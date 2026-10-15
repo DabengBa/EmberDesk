@@ -33,6 +33,33 @@ async function expectShellPanelVisible(page, entry) {
 // Wide-desktop first runs seed both side drawers open+locked; tests that
 // exercise the open→close toggle contract must unpin and close them first so
 // the shell starts from a deterministic state.
+// accountStorage changes flush to the server through saveSettingsDebounced's
+// trailing debounce — the local key can read correct while the server copy is
+// still stale. Poll the persisted settings until the write lands before
+// asserting across a reload.
+async function waitForPersistedAccountStorage(page, key, expected) {
+    await expect.poll(async () => {
+        const csrfToken = await page.evaluate(async () => {
+            const response = await fetch('/csrf-token');
+            const data = await response.json().catch(() => ({}));
+            return data?.token ?? data?.data?.token ?? null;
+        });
+        return page.evaluate(async ({ token, storageKey }) => {
+            const response = await fetch('/api/settings/get', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(token ? { 'X-CSRF-Token': token } : {}),
+                },
+                body: '{}',
+            });
+            const data = await response.json();
+            const settings = typeof data.settings === 'string' ? JSON.parse(data.settings) : data.settings;
+            return settings?.accountStorage?.[storageKey] ?? null;
+        }, { token: csrfToken, storageKey: key });
+    }, { timeout: 15_000 }).toBe(expected);
+}
+
 async function resetSeededSideDrawers(page) {
     await page.evaluate(() => {
         for (const id of ['left-nav-panel', 'right-nav-panel']) {
@@ -106,6 +133,11 @@ test.describe('workspace shell panel navigation', () => {
             const { accountStorage } = await import('/scripts/util/AccountStorage.js');
             return accountStorage.getItem('RegexNavOpened');
         })).toBe('false');
+
+        // accountStorage writes flush via a 1s trailing debounce; reloading
+        // before the save lands would resurrect the last persisted state.
+        await waitForPersistedAccountStorage(page, 'RegexNavOpened', 'false');
+        await waitForPersistedAccountStorage(page, 'NavOpened', 'false');
 
         await page.reload();
         await testSetup.awaitST({ page });

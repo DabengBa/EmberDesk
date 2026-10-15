@@ -355,16 +355,6 @@
     margin: var(--spacing-xs, 2px) 0;
 }
 
-/* Multi-select toolbar */
-#world_multi_select_bar {
-    gap: var(--spacing-sm, 5px);
-    margin-bottom: var(--spacing-md, 10px);
-}
-
-.world_popup_expander {
-    flex-grow: 1;
-}
-
 /* --- Card: Collapsed State --- */
 .world_entry {
     transition: opacity var(--animation-duration-3x, 300ms) ease;

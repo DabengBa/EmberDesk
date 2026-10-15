@@ -58,8 +58,8 @@ export function resolveWorldInfoSortOption(sortValue, options = WORLD_INFO_DEFAU
  * @param {string} selectedWorldName
  */
 export function buildWorldInfoWorldOptions(worldNames, selectedWorldName = '') {
-    return (Array.isArray(worldNames) ? worldNames : []).map((name, index) => ({
-        value: String(index),
+    return (Array.isArray(worldNames) ? worldNames : []).map((name) => ({
+        value: name,
         label: name,
         selected: name === selectedWorldName,
     }));
@@ -74,8 +74,8 @@ export function buildWorldInfoReactPanelState(snapshot, meta = {}) {
     const worldNames = Array.isArray(meta.worldNames) ? meta.worldNames : [];
     const selectedWorldName = snapshot?.editorWorldName || '';
     const searchQuery = String(meta.searchQuery ?? '');
-    const resolvedIndex = selectedWorldName && worldNames.includes(selectedWorldName)
-        ? String(worldNames.indexOf(selectedWorldName))
+    const resolvedSelection = selectedWorldName && worldNames.includes(selectedWorldName)
+        ? selectedWorldName
         : '';
 
     return {
@@ -87,7 +87,7 @@ export function buildWorldInfoReactPanelState(snapshot, meta = {}) {
         dropTargetPresent: meta.dropTargetPresent ?? true,
         worldNames: buildWorldInfoWorldOptions(worldNames, selectedWorldName),
         selectedWorldName,
-        selectedWorldIndex: resolvedIndex,
+        selectedWorldIndex: resolvedSelection,
         entryCount: snapshot?.entryCount ?? 0,
         entrySummaries: Array.isArray(snapshot?.entrySummaries) ? snapshot.entrySummaries : [],
         searchQuery,

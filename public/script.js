@@ -1120,7 +1120,9 @@ export async function openWorkspaceChildSlotHost(hostId, { preserveOpenDrawers =
         return;
     }
 
-    openWorkspaceChildSlotHostImmediate(hostId, { preserveOpenDrawers });
+    await queueWorkspaceShellPanelOpenTask(() => {
+        openWorkspaceChildSlotHostImmediate(hostId, { preserveOpenDrawers });
+    });
 }
 
 export function closeWorkspaceChildSlotHost(hostId, { force = false } = {}) {
@@ -1223,8 +1225,20 @@ async function ensureWorkspaceShellDeferredPanel(panelId) {
     }
 }
 
+let workspaceShellPanelOpenTaskChain = Promise.resolve();
+
+/**
+ * Serializes drawer open mutations so concurrent open calls cannot interleave
+ * their class/storage writes. Returns the queued task's promise.
+ */
+function queueWorkspaceShellPanelOpenTask(task) {
+    const next = workspaceShellPanelOpenTaskChain.then(() => task());
+    workspaceShellPanelOpenTaskChain = next.catch(() => {});
+    return next;
+}
+
 function waitForWorkspaceShellPanelOpenTask() {
-    return new Promise(resolve => setTimeout(resolve, 0));
+    return workspaceShellPanelOpenTaskChain;
 }
 
 function getWorkspaceChildSlotHostId(slotKey) {
@@ -1259,7 +1273,7 @@ function createWorkspaceShellPanelResult(kind, resultOrMounted) {
 }
 
 async function openWorkspaceShellCharacterLibrary() {
-    openWorkspaceChildSlotHostImmediate('right-nav-panel');
+    await openWorkspaceChildSlotHost('right-nav-panel');
     if (menu_type !== 'characters') {
         selected_button = 'characters';
         setMenuType('characters');
@@ -1270,7 +1284,7 @@ async function openWorkspaceShellCharacterLibrary() {
 }
 
 async function openWorkspaceShellCharacterAuthoring() {
-    openWorkspaceChildSlotHostImmediate('right-nav-panel');
+    await openWorkspaceChildSlotHost('right-nav-panel');
     const hasSelectedCharacter = this_chid !== undefined && characters[this_chid];
     selected_button = hasSelectedCharacter ? 'character_edit' : 'create';
     setMenuType(hasSelectedCharacter ? 'character_edit' : 'create');
@@ -1371,7 +1385,7 @@ async function openWorkspaceShellRegex() {
 
 export async function openWorkspaceShellPromptManager({ preserveOpenDrawers = false } = {}) {
     await waitForWorkspaceShellPanelOpenTask();
-    openWorkspaceChildSlotHostImmediate('left-nav-panel', { preserveOpenDrawers });
+    await openWorkspaceChildSlotHost('left-nav-panel', { preserveOpenDrawers });
     await mountPromptPanel();
     return createWorkspaceShellPanelResult('promptManager', {
         kind: 'promptManager',
@@ -8996,7 +9010,7 @@ function doDrawerOpenClick() {
         || drawer?.classList.contains('resizing')) {
         return;
     }
-    openWorkspaceChildSlotHostImmediate(drawerContent.id);
+    void openWorkspaceChildSlotHost(drawerContent.id);
 }
 
 /**

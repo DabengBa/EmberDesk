@@ -233,10 +233,14 @@ describe('React workspace panels bridge helpers', () => {
         expect(scriptSource).not.toContain('group-chat-feature-removed');
         expect(scriptSource).toContain('function showWorkspaceChildSlotContent(selectedMenuId)');
         expect(scriptSource).toContain('async function openWorkspaceShellCharacterLibrary()');
-        expect(scriptSource).toContain("openWorkspaceChildSlotHostImmediate('right-nav-panel');");
+        // Drawer opens go through the serialized queue; the Immediate worker is
+        // only invoked from inside queueWorkspaceShellPanelOpenTask (variable
+        // hostId), never called directly with a literal drawer id.
+        expect(scriptSource.match(/openWorkspaceChildSlotHostImmediate\('/g)?.length ?? 0).toBe(0);
+        expect(scriptSource.match(/openWorkspaceShellCharacterLibrary\(\) \{[\s\S]*?\n\}/)?.[0] ?? '').toContain("await openWorkspaceChildSlotHost('right-nav-panel');");
         expect(scriptSource).toContain("if (menu_type !== 'characters') {\n        selected_button = 'characters';\n        setMenuType('characters');\n        showWorkspaceChildSlotContent('rm_characters_block');");
         expect(scriptSource.match(/openWorkspaceShellCharacterLibrary\(\) \{[\s\S]*?\n\}/)?.[0] ?? '').not.toContain("$('#rm_button_characters').trigger('click');");
-        expect(scriptSource.match(/openWorkspaceShellCharacterLibrary\(\) \{[\s\S]*?\n\}/)?.[0] ?? '').not.toContain("openWorkspaceChildSlotHost('right-nav-panel')");
+        expect(scriptSource.match(/openWorkspaceShellCharacterLibrary\(\) \{[\s\S]*?\n\}/)?.[0] ?? '').not.toContain("openWorkspaceChildSlotHostImmediate('right-nav-panel')");
         expect(scriptSource.match(/openWorkspaceShellCharacterLibrary\(\) \{[\s\S]*?\n\}/)?.[0] ?? '').not.toContain('printCharacters(');
         expect(scriptSource).toContain('openCharacterLibrary: openWorkspaceShellCharacterLibrary,');
         expect(scriptSource).toContain('openCharacterLibrary: async () => {');

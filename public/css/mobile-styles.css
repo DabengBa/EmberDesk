@@ -73,10 +73,6 @@
         row-gap: 0.5rem;
     }
 
-    .world_entry_form_control.world_entry_form_horizontal .world_popup_expander {
-        display: none;
-    }
-
     .world_entry .inline-drawer-toggle {
         padding-bottom: 5px;
     }

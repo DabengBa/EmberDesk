@@ -559,9 +559,10 @@ export function initRossMods({ openWorkspaceShellSettings = null } = {}) {
         chatbarInFocus = false;
     });
 
-    setTimeout(() => {
-        OpenNavPanels();
-    }, 300);
+    // Restore persisted drawers synchronously: accountStorage and drawer hosts
+    // are ready by now, and landing before APP_READY removes the old 300ms
+    // race window where a nav click could interleave with the restore.
+    OpenNavPanels();
 
     $(SelectedCharacterTab).on('click', function () { accountStorage.setItem('SelectedNavTab', 'rm_button_selected_ch'); });
     $('#rm_button_characters').on('click', function () { accountStorage.setItem('SelectedNavTab', 'rm_button_characters'); });
