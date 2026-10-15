@@ -29,10 +29,7 @@
     <link href="css/cropper.min.css" rel="stylesheet">
     <link href="css/toastr.min.css" rel="stylesheet">
     <link href="css/select2.min.css" rel="stylesheet">
-    <link rel="apple-touch-icon" sizes="57x57" href="img/apple-icon-57x57.png" />
-    <link rel="apple-touch-icon" sizes="72x72" href="img/apple-icon-72x72.png" />
-    <link rel="apple-touch-icon" sizes="114x114" href="img/apple-icon-114x114.png" />
-    <link rel="apple-touch-icon" sizes="144x144" href="img/apple-icon-144x144.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="img/apple-icon-180x180.png" />
     <link rel="stylesheet" type="text/css" href="style.css">
     <link rel="stylesheet" type="text/css" href="css/st-tailwind.css">
     <link rel="stylesheet" type="text/css" href="css/toggle-dependent.css">
@@ -42,6 +39,9 @@
     <link rel="stylesheet" type="text/css" href="css/mobile-styles.css">
     <link rel="stylesheet" type="text/css" href="css/macros.css">
     <link rel="stylesheet" type="text/css" href="css/user.css">
+    <link rel="icon" type="image/png" sizes="192x192" href="img/apple-icon-192x192.png" />
+    <link rel="icon" type="image/png" sizes="32x32" href="img/favicon-32x32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="img/favicon-16x16.png" />
     <link rel="icon" type="image/x-icon" href="favicon.ico">
     <!-- Scripts are loaded at the end of the body to improve page load speed -->
 </head>
@@ -62,14 +62,19 @@
             <div id="WorldInfo" class="drawer-content closedDrawer">
             </div>
         </div>
-        <div id="user-settings-button" class="drawer">
-            <div id="user-settings-block" class="drawer-content closedDrawer">
+        <div id="settings-panel-button" class="drawer">
+            <div id="SettingsPanel" class="drawer-content closedDrawer">
+                <!-- React-owned surface: mounted on first open via mountSettingsPanel(). -->
             </div>
         </div>
         <div id="regex-panel-button" class="drawer">
             <div id="RegexPanel" class="drawer-content closedDrawer">
                 <!-- React-owned surface: mounted by the regex feature init via mountRegexSettings(). -->
             </div>
+        </div>
+        <div id="leftNavHolder" class="drawer">
+            <nav id="left-nav-panel" class="drawer-content closedDrawer fillLeft">
+            </nav>
         </div>
         <div id="rightNavHolder" class="drawer">
             <nav id="right-nav-panel" class="drawer-content closedDrawer fillRight">
@@ -229,8 +234,6 @@
                                     </div>
                                     <select name="position" class="wi-card-position-control" title="Position" data-i18n="[title]Position">
                                         <option value="0" data-role="">WI</option>
-                                        <option value="5" data-role="">↑EM</option>
-                                        <option value="6" data-role="">↓EM</option>
                                         <option value="4" data-role="0">@D ⚙️</option>
                                         <option value="4" data-role="1">@D 👤</option>
                                         <option value="4" data-role="2">@D 🤖</option>
@@ -308,24 +311,9 @@
                                 <option value="false" data-i18n="No">No</option>
                             </select>
                         </div>
-                        <div class="world_entry_form_control flex1">
-                            <small class="textAlignCenter" data-i18n="Group Scoring">Group Scoring</small>
-                            <select name="useGroupScoring" class="text_pole widthNatural margin0">
-                                <option value="null" data-i18n="Use global">Use global</option>
-                                <option value="true" data-i18n="Yes">Yes</option>
-                                <option value="false" data-i18n="No">No</option>
-                            </select>
-                        </div>
                         <div class="world_entry_form_control flex1" title="Can be used to automatically activate Quick Replies" data-i18n="[title]Can be used to automatically activate Quick Replies">
                             <small class="textAlignCenter" data-i18n="Automation ID">Automation ID</small>
                             <input class="text_pole margin0" name="automationId" type="text" placeholder="( None )" data-i18n="[placeholder]( None )">
-                        </div>
-                        <div class="world_entry_form_control flex1" title="Defines delay levels for recursive scans.&#13;&#13;Initially, only the first level (smallest number) will match.&#13;Once no matches are found, the next level becomes eligible for matching.&#13;This repeats until all levels are checked.&#13;&#13;Tied to the &quot;Delay until recursion&quot; setting." data-i18n="[title]delay_until_recursion_level">
-                            <small class="textAlignCenter">
-                                <span data-i18n="Recursion Level">Recursion Level</span>
-                                <div class="fa-solid fa-circle-info opacity50p"></div>
-                            </small>
-                            <input class="text_pole margin0" name="delayUntilRecursionLevel" type="text" placeholder="1">
                         </div>
                     </div>
                     </div></div>
@@ -340,7 +328,7 @@
                                     <span class="wi-content-counter">
                                         <span data-i18n="extension_token_counter">Tokens:</span>&nbsp;<span class="world_entry_form_token_counter" data-first-run="true">counting...</span>
                                     </span>
-                                    <span class="wi-content-summary-icon fa-solid fa-maximize" aria-hidden="true"></span>
+                                    <span class="wi-content-summary-icon fa-solid fa-expand" aria-hidden="true"></span>
                                 </span>
                             </button>
                             <div class="wi-content-editor-modal" role="dialog" aria-modal="true" aria-labelledby="wi-content-editor-title" aria-hidden="true" hidden>
@@ -360,24 +348,6 @@
                                     </div>
                                     <textarea class="text_pole" name="content" rows="16" data-i18n="[placeholder]What this keyword should mean to the AI, sent verbatim" placeholder="What this keyword should mean to the AI, sent verbatim"></textarea>
                                     <div class="wi-content-editor-footer">
-                                        <div class="wi-content-flags flex-container flexFlowColumn">
-                                            <label class="checkbox flex-container alignitemscenter flexNoGap" data-i18n="[title]This entry will not be recursively activated by other entries." title="This entry will not be recursively activated by other entries.">
-                                                <input type="checkbox" name="excludeRecursion" />
-                                                <span data-i18n="Non-recursable">Non-recursable</span>
-                                            </label>
-                                            <label class="checkbox flex-container alignitemscenter flexNoGap" title="This entry will not activate other entries recursively." data-i18n="[title]This entry will not activate other entries recursively.">
-                                                <input type="checkbox" name="preventRecursion" />
-                                                <span data-i18n="Prevent further recursion">Prevent further recursion</span>
-                                            </label>
-                                            <label class="checkbox flex-container alignitemscenter flexNoGap" title="This entry can only be activated on recursive checking." data-i18n="[title]This entry can only be activated on recursive checking.">
-                                                <input type="checkbox" name="delay_until_recursion" />
-                                                <span data-i18n="Delay until recursion">Delay until recursion</span>
-                                            </label>
-                                            <label class="checkbox flex-container alignitemscenter flexNoGap" title="This entry will be included ignoring budget constraints, assuming all other checks pass." data-i18n="[title]This entry will be included ignoring budget constraints, assuming all other checks pass.">
-                                                <input type="checkbox" name="ignoreBudget" />
-                                                <span data-i18n="Ignore budget">Ignore budget</span>
-                                            </label>
-                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -420,38 +390,6 @@
                 <div class="wi-accordion-header" data-i18n="Advanced">Advanced</div>
                 <div class="wi-accordion-content">
                 <div class="flex-container wide100p flexGap10">
-                    <div class="flex4 flex-container flexFlowColumn flexNoGap">
-                        <div class="flex-container justifySpaceBetween">
-                            <small for="group">
-                                <span data-i18n="Inclusion Group">Inclusion Group</span>
-                                <a href="https://docs.sillytavern.app/usage/core-concepts/worldinfo/#inclusion-group" class="notes-link" target="_blank" title="Inclusion Groups ensure only one entry from a group is activated at a time, if multiple are triggered.&#13;Supports multiple comma-separated groups.&#13;&#13;Documentation: World Info - Inclusion Group" data-i18n="[title]Inclusion Groups ensure only one entry from a group is activated at a time, if multiple are triggered.Documentation: World Info - Inclusion Group">
-                                    <span class="fa-solid fa-circle-question note-link-span"></span>
-                                </a>
-                            </small>
-                            <label class="checkbox_label flexNoGap margin-r5" for="groupOverride">
-                                <input type="checkbox" name="groupOverride" />
-                                <span>
-                                    <small title="Prioritize this entry: When checked, this entry is prioritized out of all selections.&#13;If multiple are prioritized, the one with the highest 'Order' is chosen.&#13;" data-i18n="[title]Prioritize this entry: When checked, this entry is prioritized out of all selections.If multiple are prioritized, the one with the highest 'Order' is chosen.">
-                                        <span data-i18n="Prioritize">Prioritize</span>
-                                        <div class="fa-solid fa-circle-info opacity50p"></div>
-                                    </small>
-                                </span>
-                            </label>
-                        </div>
-                        <div class="range-block-range">
-                            <input type="text" class="text_pole margin0" name="group" rows="1" data-i18n="[placeholder]Only one entry with the same label will be activated" placeholder="Only one entry with the same label will be activated">
-                        </div>
-                    </div>
-                    <div class="flex2 flex-container flexFlowColumn flexNoGap" data-i18n="[title]A relative likelihood of entry activation within the group" title="A relative likelihood of entry activation within the group">
-                        <div class="flex-container justifySpaceBetween marginBot5">
-                            <small for="groupWeight" data-i18n="Group Weight">
-                                Group Weight
-                            </small>
-                        </div>
-                        <div class="range-block-range">
-                            <input type="number" class="text_pole margin0" name="groupWeight" rows="1" placeholder="100" min="1" max="999999">
-                        </div>
-                    </div>
                     <div class="flex2 flex-container flexFlowColumn flexNoGap" data-i18n="[title]Sticky entries will stay active for N messages after being triggered." title="Sticky entries will stay active for N messages after being triggered.">
                         <div class="flex-container justifySpaceBetween marginBot5">
                             <small class="flex-container alignItemsBaseline" for="sticky">
@@ -531,12 +469,8 @@
                         </div>
                         <div class="range-block-range">
                             <select name="triggers" multiple>
+                                <option data-i18n="All" value="all">All</option>
                                 <option data-i18n="Normal" value="normal">Normal</option>
-                                <option data-i18n="Continue" value="continue">Continue</option>
-                                <option data-i18n="Impersonate" value="impersonate">Impersonate</option>
-                                <option data-i18n="Swipe" value="swipe">Swipe</option>
-                                <option data-i18n="Regenerate" value="regenerate">Regenerate</option>
-                                <option data-i18n="Quiet" value="quiet">Quiet</option>
                             </select>
                         </div>
                     </div>
@@ -598,7 +532,6 @@
                     </div>
                     <div class="mes_timer"></div>
                 </div>
-                <div class="swipe_left fa-solid fa-chevron-left" role="button" aria-label="Previous swipe" tabindex="0"></div>
                 <div class="mes_block">
                     <div class="ch_name flex-container justifySpaceBetween">
                         <div class="flex-container flex1 alignitemscenter">
@@ -619,7 +552,6 @@
                                 <div title="Toggle media display style" class="mes_button mes_media_gallery fa-solid fa-photo-film" data-i18n="[title]Toggle media display style;[aria-label]Toggle media display style" role="button" aria-label="Toggle media display style" tabindex="0"></div>
                                 <div title="Toggle media display style" class="mes_button mes_media_list fa-solid fa-table-cells-large" data-i18n="[title]Toggle media display style;[aria-label]Toggle media display style" role="button" aria-label="Toggle media display style" tabindex="0"></div>
                                 <div title="Embed file or image" class="mes_button mes_embed fa-solid fa-paperclip" data-i18n="[title]Embed file or image;[aria-label]Embed file or image" role="button" aria-label="Embed file or image" tabindex="0"></div>
-                                <div title="Jump to swipe history" class="mes_button mes_swipe_picker fa-solid fa-bookmark" data-i18n="[title]Jump to swipe history;[aria-label]Jump to swipe history" role="button" aria-label="Jump to swipe history" tabindex="0" style="display: none;"></div>
                                 <div title="Create branch" class="mes_button mes_create_branch fa-regular fa-code-branch" data-i18n="[title]Create Branch;[aria-label]Create branch" role="button" aria-label="Create branch" tabindex="0"></div>
                                 <div title="Copy" class="mes_button mes_copy fa-solid fa-copy " data-i18n="[title]Copy;[aria-label]Copy" role="button" aria-label="Copy" tabindex="0"></div>
                             </div>
@@ -658,38 +590,6 @@
                     <div class="mes_media_wrapper"></div>
                     <div class="mes_file_wrapper"></div>
                     <div class="mes_bias"></div>
-                </div>
-                <div class="flex-container swipeRightBlock flexFlowColumn flexNoGap">
-                    <div class="swipe_right fa-solid fa-chevron-right" role="button" aria-label="Next swipe" tabindex="0"></div>
-                    <div class="swipes-counter"></div>
-                </div>
-            </div>
-        </div>
-        <div id="onboarding_template" class="template_element">
-            <div class="onboarding">
-                <h3 data-i18n="Welcome to EmberDesk!">Welcome to EmberDesk!</h3>
-                <div id="onboarding-UI-language-block" class="flex-container alignItemsBaseline">
-                    <label for="onboarding_ui_language_select" data-i18n="Language">Language</label>
-                    <select id="onboarding_ui_language_select" class="flex1 margin0">
-                        <option value="en">English</option>
-                    </select>
-                </div>
-                <b data-i18n="EmberDesk is aimed at advanced users.">
-                    EmberDesk is aimed at advanced users.
-                </b>
-                <ul class="justifyLeft marginTopBot5">
-                    <li data-i18n="Open Settings to connect a model, then choose a character to start chatting.">Open Settings to connect a model, then choose a character to start chatting.</li>
-                    <li><span data-i18n="welcome_message_part_4">Type</span> <code>/help</code> <span data-i18n="welcome_message_part_5">in chat for commands and macros.</span></li>
-                </ul>
-                <div class="expander"></div>
-                <div class="textAlignCenter">
-                    <h3 data-i18n="Looking for AI characters?">
-                        Looking for AI characters?
-                    </h3>
-                    <div class="flex-container justifyCenter">
-                        <span class="onboarding-action-host" data-onboarding-host="import"></span>
-                        <span class="onboarding-action-host" data-onboarding-host="library"></span>
-                    </div>
                 </div>
             </div>
         </div>
@@ -738,7 +638,7 @@
                     </div>
                 </div>
                 <small class="justifyLeft" data-i18n="Alternate_Greetings_desc">
-                    These will be displayed as swipes on the first message when starting a new chat.
+                    Alternate first-message texts stored with the character card.
                 </small>
                 <hr>
                 <div class="alternate_greetings_list flexFlowColumn flex-container wide100p">
@@ -755,7 +655,7 @@
                         <div class="title_restorable gap5px">
                             <div class="flex-container alignItemsCenter">
                                 <strong><span data-i18n="Alternate Greeting #">Alternate Greeting #</span><span class="greeting_index"></span></strong>
-                                <i class="editor_maximize fa-solid fa-maximize right_menu_button" title="Expand the editor" data-i18n="[title]Expand the editor"></i>
+                                <i class="editor_maximize fa-solid fa-expand right_menu_button" title="Expand the editor" data-i18n="[title]Expand the editor"></i>
                             </div>
                             <span class="expander"></span>
                             <div class="menu_button menu_button_icon move_up_alternate_greeting" title="Move up" data-i18n="[title]Move up">
@@ -870,7 +770,6 @@
     <script src="lib/toolcool-color-picker.js"></script>
     <script src="lib/jquery.izoomify.js"></script>
     <script type="module" src="lib/structured-clone/monkey-patch.js"></script>
-    <script type="module" src="lib/swiped-events.js"></script>
     <script type="module" src="lib/eventemitter.js"></script>
     <script type="module" src="scripts/i18n.js"></script>
     <script type="module" src="script.js"></script>

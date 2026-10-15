@@ -407,6 +407,13 @@ export const CANONICAL_SQLITE_MIGRATIONS = Object.freeze([
                 ON import_ledger (slice_key, imported_at_ms);
         `,
     }),
+    Object.freeze({
+        version: 11,
+        name: 'retire_chat_message_swipes',
+        sql: `
+            DROP TABLE IF EXISTS chat_message_swipes;
+        `,
+    }),
 ]);
 
 export class CanonicalMigrationBlockedError extends Error {

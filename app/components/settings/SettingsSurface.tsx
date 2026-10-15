@@ -40,6 +40,15 @@ const settingsSchema = z.object({
         customUrl: z.string(),
         fallbackProviderModel: z.string(),
     }),
+    rendering: z.object({
+        frontendFramesEnabled: z.boolean(),
+        frontendFramesDepth: z.number().int().min(0),
+        frontendFramesDepthIgnoreHidden: z.boolean(),
+        frontendFramesCollapseCodeBlock: z.enum(['all', 'frontend_only', 'none']),
+        frontendFramesSkipHighlight: z.boolean(),
+        frontendFramesUseBlobUrl: z.boolean(),
+        frontendFramesAllowStreaming: z.boolean(),
+    }),
 });
 
 class MessageError extends Error {
@@ -67,12 +76,11 @@ async function readJsonObject(response: Response) {
     return typeof data === 'object' && data !== null ? data as Record<string, any> : {};
 }
 
-export type SettingsSurfaceVariant = 'page' | 'overlay';
+export type SettingsSurfaceVariant = 'page' | 'drawer';
 
 export type SettingsSurfaceProps = {
     variant?: SettingsSurfaceVariant;
     initialTab?: string | null;
-    onRequestClose?: () => void;
     onDirtyStateChange?: (dirty: boolean) => void;
     runtime?: RuntimePort;
 };
@@ -104,25 +112,15 @@ function resolveInitialSettingsTab(initialTab?: string | null) {
     return readStoredSettingsTab() ?? settingsTabDefinitions[0].id;
 }
 
-// Overlay-only navigation into workspace drawers. The remaining
-// user-settings extras still live in drawer surfaces the shell no longer opens.
-// Each target is the drawer's .drawer-content host id opened through the
-// openWorkspaceDrawer runtime command; the link also runs onRequestClose so the
-// overlay does not cover the drawer it just opened.
-const WORKSPACE_DRAWER_LINKS: Record<string, Array<{ target: string; label: string; hint: string }>> = {
-    providers: [
-        { target: 'user-settings-block', label: '消息渲染设置', hint: '调整 Frontend Frames 渲染行为。' },
-    ],
-};
-
 export function SettingsSurface({
     variant = 'page',
     initialTab = null,
-    onRequestClose,
     onDirtyStateChange,
     runtime,
 }: SettingsSurfaceProps) {
-    const isOverlay = variant === 'overlay';
+    // Drawer variant uses the compact layout but leaves the title/close
+    // chrome to WorkspacePanelChrome — no internal header row.
+    const isCompact = variant === 'drawer';
     const [activeTab, setActiveTab] = useState(() => resolveInitialSettingsTab(initialTab));
     const [isSettingsFormLoaded, setIsSettingsFormLoaded] = useState(false);
     const [pageError, setPageError] = useState('');
@@ -260,11 +258,11 @@ export function SettingsSurface({
     }, []);
 
     useEffect(() => {
-        if (!isOverlay) {
+        if (!isCompact) {
             return;
         }
         openSettingsTab(resolveInitialSettingsTab(initialTab));
-    }, [initialTab, isOverlay, openSettingsTab]);
+    }, [initialTab, isCompact, openSettingsTab]);
 
     const csrfTokenQuery = useQuery({
         queryKey: ['settings', 'csrf-token'],
@@ -387,6 +385,10 @@ export function SettingsSurface({
 
             try {
                 await saveMutation.mutateAsync(value);
+                // Saved values become the new baseline; without this the form
+                // stays dirty and the close path wrongly prompts for unsaved
+                // changes.
+                settingsForm.reset(value);
             } catch (error) {
                 setSaveStatus(null);
                 setPageError(error instanceof Error ? error.message : String(error));
@@ -532,9 +534,7 @@ export function SettingsSurface({
     }, [hasRevisionConflict, parsedPayload, settingsForm]);
 
     const isSettingsFormReady = isSettingsFormLoaded && parsedPayload !== null;
-    const closeRequest = useCallback(() => {
-        onRequestClose?.();
-    }, [onRequestClose]);
+
 
     useEffect(() => {
         if (!saveStatus) {
@@ -618,27 +618,20 @@ export function SettingsSurface({
 
     return (
         <main
-            className={`settings-page ${stylex.props(settingsStyles.page, isOverlay && settingsStyles.pageOverlay).className ?? ''}`}
+            className={`settings-page ${stylex.props(settingsStyles.page, isCompact && settingsStyles.pageOverlay).className ?? ''}`}
             data-settings-surface={variant}
             data-doc-id="page.settings"
         >
-            <div {...stylex.props(settingsStyles.layout, isOverlay && settingsStyles.layoutOverlay)}>
-                <section {...stylex.props(settingsStyles.mainPanel, isOverlay && settingsStyles.mainPanelOverlay)}>
+            <div {...stylex.props(settingsStyles.layout, isCompact && settingsStyles.layoutOverlay)}>
+                <section {...stylex.props(settingsStyles.mainPanel, isCompact && settingsStyles.mainPanelOverlay)}>
+                    {isCompact ? null : (
                     <header {...stylex.props(settingsStyles.pageHeader)}>
                         <div {...stylex.props(settingsStyles.pageHeaderRow)}>
                             <div>
-                                {isOverlay ? (
-                                    <h1 {...stylex.props(settingsStyles.pageTitle, settingsStyles.pageTitleOverlay)}>
-                                        设置
-                                    </h1>
-                                ) : (
-                                    <>
-                                        <h1 {...stylex.props(settingsStyles.pageTitle)}>设置</h1>
-                                        <p {...stylex.props(settingsStyles.pageSummary)}>
-                                            服务连接与模型配置的集中管理。
-                                        </p>
-                                    </>
-                                )}
+                                <h1 {...stylex.props(settingsStyles.pageTitle)}>设置</h1>
+                                <p {...stylex.props(settingsStyles.pageSummary)}>
+                                    服务连接与模型配置的集中管理。
+                                </p>
                             </div>
                             <div {...stylex.props(settingsStyles.headerActions)}>
                                 <button
@@ -650,16 +643,6 @@ export function SettingsSurface({
                                 >
                                     诊断
                                 </button>
-                                {isOverlay ? (
-                                <button
-                                    type="button"
-                                    {...stylex.props(settingsStyles.button, settingsStyles.buttonSecondary, settingsStyles.overlayClose)}
-                                    aria-label="关闭设置"
-                                    onClick={closeRequest}
-                                >
-                                    <i className="fa-solid fa-xmark" aria-hidden="true" />
-                                </button>
-                            ) : (
                                 <a
                                     {...stylex.props(settingsStyles.button, settingsStyles.buttonSecondary, settingsStyles.workspaceLink)}
                                     className={`settings-workspace-link ${stylex.props(settingsStyles.button, settingsStyles.buttonSecondary, settingsStyles.workspaceLink).className ?? ''}`}
@@ -668,19 +651,19 @@ export function SettingsSurface({
                                 >
                                     返回工作区
                                 </a>
-                                )}
                             </div>
                         </div>
                     </header>
+                    )}
 
                     <SettingsTabs
                         tabs={settingsTabDefinitions}
                         activeTab={activeTab}
                         onChange={openSettingsTab}
-                        showDescription={!isOverlay}
+                        showDescription={!isCompact}
                     />
 
-                    <div {...stylex.props(settingsStyles.stack, isOverlay && settingsStyles.stackOverlay)}>
+                    <div {...stylex.props(settingsStyles.stack, isCompact && settingsStyles.stackOverlay)}>
                         {settingsQuery.isPending && (
                             <div {...stylex.props(settingsStyles.status, settingsStyles.statusInfo)} role="status">
                                 正在加载当前设置...
@@ -748,14 +731,14 @@ export function SettingsSurface({
 
                         {isSettingsFormReady ? (
                         <form
-                            {...stylex.props(settingsStyles.form, isOverlay && settingsStyles.stackOverlay)}
+                            {...stylex.props(settingsStyles.form, isCompact && settingsStyles.stackOverlay)}
                             onSubmit={(event) => {
                                 event.preventDefault();
                                 event.stopPropagation();
                                 void settingsForm.handleSubmit();
                             }}
                         >
-                            <div className={`settings-tab-panel ${stylex.props(isOverlay && settingsStyles.tabPanelOverlay).className ?? ''}`}>
+                            <div className={`settings-tab-panel ${stylex.props(isCompact && settingsStyles.tabPanelOverlay).className ?? ''}`}>
 
                             {activeTab === 'providers' ? (
                             <div>
@@ -892,33 +875,102 @@ export function SettingsSurface({
                             ) : null}
 
 
-                            {isOverlay && (WORKSPACE_DRAWER_LINKS[activeTab]?.length ?? 0) > 0 ? (
+                            {activeTab === 'providers' ? (
                                 <SettingsSection
-                                    title="工作区面板"
-                                    description="本页未覆盖的高级控件仍在对应的工作区抽屉中维护；点击后此面板会关闭。"
+                                    title="消息渲染设置"
+                                    description="Frontend Frames：把消息代码块中的完整 HTML 文档渲染为同源 iframe，仅对可信卡片内容启用。"
                                 >
-                                    {(WORKSPACE_DRAWER_LINKS[activeTab] ?? []).map(link => (
-                                        <button
-                                            key={link.target}
-                                            type="button"
-                                            {...stylex.props(settingsStyles.button, settingsStyles.buttonSecondary)}
-                                            title={link.hint}
-                                            onClick={() => {
-                                                runtime?.commands.openWorkspaceDrawer(link.target);
-                                                closeRequest();
-                                            }}
-                                        >
-                                            {link.label}
-                                        </button>
-                                    ))}
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="rendering.frontendFramesEnabled"
+                                        label="启用 Frontend Frames"
+                                        description="代码块中的完整 HTML 文档以活 iframe 渲染；框架会执行卡片内的同源脚本。"
+                                        variant="toggle"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="rendering.frontendFramesDepth"
+                                        label="渲染深度（0 = 全部）"
+                                        description="从最新楼层往回数，多少层允许渲染框架；0 表示全部楼层。"
+                                        variant="number"
+                                        min={0}
+                                        step={1}
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="rendering.frontendFramesDepthIgnoreHidden"
+                                        label="深度计数忽略隐藏楼层"
+                                        description="统计渲染深度时跳过隐藏/系统楼层。"
+                                        variant="toggle"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="rendering.frontendFramesCollapseCodeBlock"
+                                        label="折叠代码块"
+                                        description="框架渲染后，何时把源码块收进折叠开关。"
+                                        variant="select"
+                                        options={[
+                                            { value: 'frontend_only', label: '仅前端块' },
+                                            { value: 'all', label: '所有代码块' },
+                                            { value: 'none', label: '从不' },
+                                        ]}
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="rendering.frontendFramesSkipHighlight"
+                                        label="跳过框架块的语法高亮"
+                                        description="渲染为框架的代码块不再做语法高亮。"
+                                        variant="toggle"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="rendering.frontendFramesUseBlobUrl"
+                                        label="使用 blob URL（调试）"
+                                        description="调试用：以 blob URL 代替 srcdoc 加载框架。"
+                                        variant="toggle"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="rendering.frontendFramesAllowStreaming"
+                                        label="流式期间渲染"
+                                        description="消息仍在流式输出时即渲染框架；只有已闭合的代码围栏会挂载。"
+                                        variant="toggle"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
                                 </SettingsSection>
                             ) : null}
                             </div>
 
-                            <div {...stylex.props(settingsStyles.saveBar, isOverlay && settingsStyles.saveBarOverlay)}>
-                                <p {...stylex.props(settingsStyles.mutedText, settingsStyles.sectionDescription)}>
-                                    只保存本页字段。
-                                </p>
+                            <div {...stylex.props(settingsStyles.saveBar, isCompact && settingsStyles.saveBarOverlay)}>
+                                <div {...stylex.props(settingsStyles.saveBarNote)}>
+                                    <p {...stylex.props(settingsStyles.mutedText, settingsStyles.sectionDescription)}>
+                                        只保存本页字段。
+                                    </p>
+                                    {isCompact ? (
+                                    <button
+                                        type="button"
+                                        {...stylex.props(settingsStyles.button, settingsStyles.buttonSecondary)}
+                                        aria-expanded={showDiagnostics}
+                                        aria-controls="settings-diagnostics"
+                                        onClick={() => setShowDiagnostics(value => !value)}
+                                    >
+                                        诊断
+                                    </button>
+                                    ) : null}
+                                </div>
                                 <settingsForm.Subscribe selector={state => state.isPristine}>
                                     {isPristine => (
                                         <button

@@ -120,7 +120,6 @@ process.stdout.write(`${JSON.stringify(summary, null, 2)}\n`);
 
 async function seedSettings(activeCharacterAvatar) {
     const settings = structuredClone(defaultSettings);
-    settings.firstRun = false;
     settings.active_character = activeCharacterAvatar;
     settings.power_user = settings.power_user || {};
     // Auto-open the seeded active character so first paint exercises real chat

@@ -21,7 +21,6 @@ import {
     saveSettingsDebounced,
     setOnlineStatus,
     substituteParams,
-    substituteParamsExtended,
     system_message_types,
 } from '../script.js';
 import { eventSource, event_types } from './events.js';
@@ -83,7 +82,6 @@ export {
     oai_settings,
     loadOpenAISettings,
     setOpenAIMessages,
-    setOpenAIMessageExamples,
     setupChatCompletionPromptManager,
     sendOpenAIRequest,
     TokenHandler,
@@ -94,12 +92,10 @@ export {
 
 let openai_messages_count = 0;
 
-const default_impersonation_prompt = '[Write your next reply from the point of view of {{user}}, using the chat history so far as a guideline for the writing style of {{user}}. Don\'t write as {{char}} or system. Don\'t describe actions of {{char}}.]';
 const default_wi_format = '{0}';
 const default_description_format = '{0}';
 const default_new_chat_prompt = '[Start a new Chat]';
 const default_new_example_chat_prompt = '[Example Chat]';
-const default_continue_nudge_prompt = '[Continue your last message without repeating its original content.]';
 const API_TEST_REQUEST_TIMEOUT_MS = 15000;
 
 const max_64k = 65535;
@@ -119,12 +115,6 @@ const character_names_behavior = {
     CONTENT: 2,
 };
 
-const continue_postfix_types = {
-    NONE: '',
-    SPACE: ' ',
-    NEWLINE: '\n',
-    DOUBLE_NEWLINE: '\n\n',
-};
 
 export const reasoning_effort_types = {
     auto: 'auto',
@@ -206,10 +196,8 @@ export const settingsToUpdate = {
     openai_max_tokens: ['#openai_max_tokens', 'openai_max_tokens', false, false],
     names_behavior: ['#names_behavior', 'names_behavior', false, false],
     send_if_empty: ['#send_if_empty_textarea', 'send_if_empty', false, false],
-    impersonation_prompt: ['#impersonation_prompt_textarea', 'impersonation_prompt', false, false],
     new_chat_prompt: ['#newchat_prompt_textarea', 'new_chat_prompt', false, false],
-    new_example_chat_prompt: ['#newexamplechat_prompt_textarea', 'new_example_chat_prompt', false, false],
-    continue_nudge_prompt: ['#continue_nudge_prompt_textarea', 'continue_nudge_prompt', false, false],
+    new_example_chat_prompt: ['#NULL_SELECTOR', 'new_example_chat_prompt', false, false],
     wi_format: ['#wi_format_textarea', 'wi_format', false, false],
     description_format: ['#description_format_textarea', 'description_format', false, false],
     stream_openai: ['#stream_toggle', 'stream_openai', true, false],
@@ -218,12 +206,9 @@ export const settingsToUpdate = {
     squash_system_messages: ['#squash_system_messages', 'squash_system_messages', true, false],
     media_inlining: ['#openai_media_inlining', 'media_inlining', true, false],
     inline_image_quality: ['#openai_inline_image_quality', 'inline_image_quality', false, false],
-    continue_prefill: ['#continue_prefill', 'continue_prefill', true, false],
-    continue_postfix: ['#continue_postfix', 'continue_postfix', false, false],
     show_thoughts: ['#openai_show_thoughts', 'show_thoughts', true, false],
     reasoning_effort: ['#openai_reasoning_effort', 'reasoning_effort', false, false],
     verbosity: ['#openai_verbosity', 'verbosity', false, false],
-    n: ['#n_openai', 'n', false, false],
     fallback_provider_model: ['#NULL_SELECTOR', 'fallback_provider_model', false, false],
     extensions: ['#NULL_SELECTOR', 'extensions', false, false],
 };
@@ -240,10 +225,8 @@ const default_settings = {
     ...chatCompletionDefaultPrompts,
     ...promptManagerDefaultPromptOrders,
     send_if_empty: '',
-    impersonation_prompt: default_impersonation_prompt,
     new_chat_prompt: default_new_chat_prompt,
     new_example_chat_prompt: default_new_example_chat_prompt,
-    continue_nudge_prompt: default_continue_nudge_prompt,
     wi_format: default_wi_format,
     description_format: default_description_format,
     openai_model: 'gpt-4-turbo',
@@ -254,9 +237,7 @@ const default_settings = {
     squash_system_messages: false,
     media_inlining: true,
     inline_image_quality: 'auto',
-    continue_prefill: false,
     names_behavior: character_names_behavior.DEFAULT,
-    continue_postfix: continue_postfix_types.SPACE,
     show_thoughts: true,
     reasoning_effort: reasoning_effort_types.high,
     verbosity: verbosity_levels.auto,
@@ -359,24 +340,6 @@ function setOpenAIMessages(chat) {
 }
 
 /**
- * Formats chat examples into chat completion messages.
- * @param {string[]} mesExamplesArray - Array containing all examples.
- * @returns {object[]} - Array containing all examples formatted for chat completion.
- */
-function setOpenAIMessageExamples(mesExamplesArray) {
-    // get a nice array of all blocks of all example messages = array of arrays (important!)
-    const examples = [];
-    for (let item of mesExamplesArray) {
-        // remove <START> {Example Dialogue:} and replace \r\n with just \n
-        let replaced = item.replace(/<START>/i, '{Example Dialogue:}').replace(/\r/gm, '');
-        let parsed = parseExampleIntoIndividual(replaced);
-        // add to the example message blocks array
-        examples.push(parsed);
-    }
-    return examples;
-}
-
-/**
  * One-time setup for prompt manager module.
  *
  * @param openAiSettings
@@ -407,60 +370,6 @@ function setupChatCompletionPromptManager(openAiSettings) {
     promptManager.init(configuration, openAiSettings);
 
     return promptManager;
-}
-
-/**
- * Parses the example messages into individual messages.
- * @param {string} messageExampleString - The string containing the example messages
- * @returns {Message[]} Array of message objects
- */
-export function parseExampleIntoIndividual(messageExampleString) {
-    let result = []; // array of msgs
-    let tmp = messageExampleString.split('\n');
-    let cur_msg_lines = [];
-    let in_user = false;
-    let in_bot = false;
-
-    // DRY my cock and balls :)
-    function add_msg(name, role, system_name) {
-        // join different newlines (we split them by \n and join by \n)
-        // remove char name
-        // strip to remove extra spaces
-        const parsed_msg = cur_msg_lines.join('\n').replace(name + ':', '').trim();
-
-        result.push({ 'role': role, 'content': parsed_msg, 'name': system_name });
-        cur_msg_lines = [];
-    }
-    // skip first line as it'll always be "This is how {bot name} should talk"
-    for (let i = 1; i < tmp.length; i++) {
-        let cur_str = tmp[i];
-        // if it's the user message, switch into user mode and out of bot mode
-        // yes, repeated code, but I don't care
-        if (cur_str.startsWith(name1 + ':')) {
-            in_user = true;
-            // we were in the bot mode previously, add the message
-            if (in_bot) {
-                add_msg(name2, 'system', 'example_assistant');
-            }
-            in_bot = false;
-        } else if (cur_str.startsWith(name2 + ':')) {
-            in_bot = true;
-            // we were in the user mode previously, add the message
-            if (in_user) {
-                add_msg(name1, 'system', 'example_user');
-            }
-            in_user = false;
-        }
-        // push the current line into the current message array only after checking for presence of user/bot
-        cur_msg_lines.push(cur_str);
-    }
-    // Special case for last message in a block because we don't have a new message to trigger the switch
-    if (in_user) {
-        add_msg(name1, 'system', 'example_user');
-    } else if (in_bot) {
-        add_msg(name2, 'system', 'example_assistant');
-    }
-    return result;
 }
 
 export function formatWorldInfo(value, { wiFormat = null } = {}) {
@@ -557,9 +466,8 @@ async function populationInjectionPrompts(prompts, messages) {
  * @param {import('./PromptManager').PromptCollection} prompts - Map object containing all prompts where the key is the prompt identifier and the value is the prompt object.
  * @param {ChatCompletion} chatCompletion - An instance of ChatCompletion class that will be populated with the prompts.
  * @param type
- * @param cyclePrompt
  */
-async function populateChatHistory(messages, prompts, chatCompletion, type = null, cyclePrompt = null) {
+async function populateChatHistory(messages, prompts, chatCompletion) {
     if (!prompts.has('chatHistory')) {
         return;
     }
@@ -572,30 +480,6 @@ async function populateChatHistory(messages, prompts, chatCompletion, type = nul
 
     const newChatMessage = await Message.createAsync('system', substituteParams(oai_settings.new_chat_prompt), 'newMainChat');
     chatCompletion.reserveBudget(newChatMessage);
-
-    // Reserve budget for continue nudge
-    let continueMessageCollection = null;
-    if (type === 'continue' && cyclePrompt && !oai_settings.continue_prefill) {
-        const promptObject = {
-            identifier: 'continueNudge',
-            role: 'system',
-            content: substituteParamsExtended(oai_settings.continue_nudge_prompt, { lastChatMessage: String(cyclePrompt).trim() }),
-            system_prompt: true,
-        };
-        continueMessageCollection = new MessageCollection('continueNudge');
-        const continueMessageIndex = messages.findLastIndex(x => !x.injected);
-        if (continueMessageIndex >= 0) {
-            const continueMessage = messages.splice(continueMessageIndex, 1)[0];
-            const prompt = new Prompt(continueMessage);
-            const chatMessage = await Message.fromPromptAsync(promptManager.preparePrompt(prompt));
-            continueMessageCollection.add(chatMessage);
-        }
-        const continueNudgePrompt = new Prompt(promptObject);
-        const preparedNudgePrompt = promptManager.preparePrompt(continueNudgePrompt);
-        const continueNudgeMessage = await Message.fromPromptAsync(preparedNudgePrompt);
-        continueMessageCollection.add(continueNudgeMessage);
-        chatCompletion.reserveBudget(continueMessageCollection);
-    }
 
     const lastChatPrompt = messages[messages.length - 1];
     const message = await Message.createAsync('user', oai_settings.send_if_empty, 'emptyUserMessageReplacement');
@@ -748,54 +632,6 @@ async function populateChatHistory(messages, prompts, chatCompletion, type = nul
     // Insert and free new chat
     chatCompletion.freeBudget(newChatMessage);
     chatCompletion.insertAtStart(newChatMessage, 'chatHistory');
-
-    // Insert and free continue nudge
-    if (type === 'continue' && continueMessageCollection) {
-        chatCompletion.freeBudget(continueMessageCollection);
-        chatCompletion.add(continueMessageCollection, -1);
-    }
-}
-
-/**
- * This function populates the dialogue examples in the conversation.
- *
- * @param {import('./PromptManager').PromptCollection} prompts - Map object containing all prompts where the key is the prompt identifier and the value is the prompt object.
- * @param {ChatCompletion} chatCompletion - An instance of ChatCompletion class that will be populated with the prompts.
- * @param {Object[]} messageExamples - Array containing all message examples.
- */
-async function populateDialogueExamples(prompts, chatCompletion, messageExamples) {
-    if (!prompts.has('dialogueExamples')) {
-        return;
-    }
-
-    chatCompletion.add(new MessageCollection('dialogueExamples'), prompts.index('dialogueExamples'));
-    if (Array.isArray(messageExamples) && messageExamples.length) {
-        const newExampleChat = await Message.createAsync('system', substituteParams(oai_settings.new_example_chat_prompt), 'newChat');
-        for (const dialogue of messageExamples) {
-            const dialogueIndex = messageExamples.indexOf(dialogue);
-            const chatMessages = [];
-
-            for (let promptIndex = 0; promptIndex < dialogue.length; promptIndex++) {
-                const prompt = dialogue[promptIndex];
-                const role = 'system';
-                const content = prompt.content || '';
-                const identifier = `dialogueExamples ${dialogueIndex}-${promptIndex}`;
-
-                const chatMessage = await Message.createAsync(role, content, identifier);
-                await chatMessage.setName(prompt.name);
-                chatMessages.push(chatMessage);
-            }
-
-            if (!chatCompletion.canAffordAll([newExampleChat, ...chatMessages])) {
-                break;
-            }
-
-            chatCompletion.insert(newExampleChat, 'dialogueExamples');
-            for (const chatMessage of chatMessages) {
-                chatCompletion.insert(chatMessage, 'dialogueExamples');
-            }
-        }
-    }
 }
 
 /**
@@ -841,13 +677,11 @@ export function getPromptRole(role) {
  * @param {string} options.bias - A bias to be added in the conversation.
  * @param {string} options.quietPrompt - Instruction prompt for extras
  * @param {string} options.quietImage - Image prompt for extras
- * @param {string} options.type - The type of the chat, can be 'impersonate'.
- * @param {string} options.cyclePrompt - The last prompt in the conversation.
+ * @param {string} options.type - The type of the chat.
  * @param {object[]} options.messages - Array containing all messages.
- * @param {object[]} options.messageExamples - Array containing all message examples.
  * @returns {Promise<void>}
  */
-async function populateChatCompletion(prompts, chatCompletion, { bias, quietPrompt: _quietPrompt, quietImage, type, cyclePrompt, messages, messageExamples }) {
+async function populateChatCompletion(prompts, chatCompletion, { bias, quietPrompt: _quietPrompt, quietImage, type, messages }) {
     // Helper function for preparing a prompt, that already exists within the prompt collection, for completion
     const addToChatCompletion = async (source, target = null) => {
         // We need the prompts array to determine a position for the source.
@@ -880,9 +714,6 @@ async function populateChatCompletion(prompts, chatCompletion, { bias, quietProm
     // Collection of control prompts that will always be positioned last
     chatCompletion.setOverriddenPrompts(prompts.overriddenPrompts);
     const controlPrompts = new MessageCollection('controlPrompts');
-
-    const impersonateMessage = await Message.fromPromptAsync(prompts.get('impersonate')) ?? null;
-    if (type === 'impersonate') controlPrompts.add(impersonateMessage);
 
     // Add quiet prompt to control prompts
     // This should always be last, even in control prompts. Add all further control prompts BEFORE this prompt
@@ -968,24 +799,10 @@ async function populateChatCompletion(prompts, chatCompletion, { bias, quietProm
         chatCompletion.reserveBudget(toolTokens);
     }
 
-    // Displace the message to be continued from its original position before performing in-chat injections
-    if (type === 'continue' && oai_settings.continue_prefill && messages.length) {
-        const chatMessage = messages.shift();
-        const namesInCompletion = oai_settings.names_behavior === character_names_behavior.COMPLETION;
-        const messageContent = chatMessage.content;
-        const continueMessage = await Message.createAsync(chatMessage.role, messageContent, 'continuePrefill');
-        if (chatMessage.name && namesInCompletion) await continueMessage.setName(promptManager.sanitizeName(chatMessage.name));
-        controlPrompts.add(continueMessage);
-        chatCompletion.reserveBudget(continueMessage);
-    }
-
     // Add in-chat injections
     messages = await populationInjectionPrompts(absolutePrompts, messages);
 
-    // Dialogue examples slot in after the chat history (example_messages_behavior
-    // is fixed to the shipped 'normal' ordering).
-    await populateChatHistory(messages, prompts, chatCompletion, type, cyclePrompt);
-    await populateDialogueExamples(prompts, chatCompletion, messageExamples);
+    await populateChatHistory(messages, prompts, chatCompletion);
 
     chatCompletion.freeBudget(controlPrompts);
     if (controlPrompts.collection.length) chatCompletion.add(controlPrompts);
@@ -1005,15 +822,12 @@ async function populateChatCompletion(prompts, chatCompletion, { bias, quietProm
  * @returns {Promise<Object>} prompts - The prepared and merged system and user-defined prompts.
  */
 async function preparePromptsForChatCompletion({ name2: _name2, worldInfo, charDescription, quietPrompt, bias, extensionPrompts, type }) {
-    const impersonationPrompt = oai_settings.impersonation_prompt ? substituteParams(oai_settings.impersonation_prompt) : '';
-
     // Create entries for system prompts
     const systemPrompts = [
         // Ordered prompts for which a marker should exist
         { role: 'system', content: formatWorldInfo(worldInfo), identifier: 'worldInfo' },
         { role: 'system', content: formatWorldInfo(charDescription, { wiFormat: oai_settings.description_format }), identifier: 'charDescription' },
         // Unordered prompts without marker
-        { role: 'system', content: impersonationPrompt, identifier: 'impersonate' },
         { role: 'system', content: quietPrompt, identifier: 'quietPrompt' },
         { role: 'assistant', content: bias, identifier: 'bias' },
     ];
@@ -1077,13 +891,11 @@ async function preparePromptsForChatCompletion({ name2: _name2, worldInfo, charD
  * @param {string} content.charDescription - Description of the character.
  * @param {string} content.worldInfo - The merged world info block for the prompt.
  * @param {string} content.bias - The bias to be added in the conversation.
- * @param {string} content.type - The type of the chat, can be 'impersonate'.
+ * @param {string} content.type - The type of the chat.
  * @param {string} content.quietPrompt - The quiet prompt to be used in the conversation.
  * @param {string} content.quietImage - Image prompt for extras
- * @param {string} content.cyclePrompt - The last prompt used for chat message continuation.
  * @param {object} content.extensionPrompts - An array of additional prompts.
  * @param {object[]} content.messages - An array of messages to be used as chat history.
- * @param {string[]} content.messageExamples - An array of messages to be used as dialogue examples.
  * @param dryRun - Whether this is a live call or not.
  * @returns {Promise<(any[]|boolean)[]>} An array where the first element is the prepared chat and the second element is a boolean flag.
  */
@@ -1096,9 +908,7 @@ export async function prepareOpenAIMessages({
     quietPrompt,
     quietImage,
     extensionPrompts,
-    cyclePrompt,
     messages,
-    messageExamples,
 }, dryRun) {
     // Without a character selected, there is no way to accurately calculate tokens
     if (!promptManager.activeCharacter && dryRun) return [null, false];
@@ -1122,7 +932,7 @@ export async function prepareOpenAIMessages({
         });
 
         // Fill the chat completion with as much context as the budget allows
-        await populateChatCompletion(prompts, chatCompletion, { bias, quietPrompt, quietImage, type, cyclePrompt, messages, messageExamples });
+        await populateChatCompletion(prompts, chatCompletion, { bias, quietPrompt, quietImage, type, messages });
     } catch (error) {
         if (error instanceof TokenBudgetExceededError) {
             toastr.error(t`Mandatory prompts exceed the context size.`);
@@ -1305,7 +1115,7 @@ function getReasoningEffort(settings = null, model = null) {
  * Build the generation parameter object for an OAI request.
  * @param {ChatCompletionSettings} settings Initial chat completion settings
  * @param {string} model Model name
- * @param {string} type Request type (impersonate, quiet, continue, etc)
+ * @param {string} type Request type
  * @param {ChatCompletionMessage[]} messages Array of chat completion messages
  * @param {import('../script.js').AdditionalRequestOptions} options Additional request options
  * @returns {Promise<object>} Final generation parameters object appropriate for the chat completion source
@@ -1322,17 +1132,9 @@ export async function createGenerationParameters(settings, model, type, messages
         chat_completion_sources.OPENAI,
     ];
 
-    // Sources that support "n" parameter for multi-swipe
-    const multiswipeSources = [
-        chat_completion_sources.OPENAI,
-    ];
-
     const isO1 = gptSources.includes(settings.chat_completion_source) && ['o1-2024-12-17', 'o1'].includes(model);
     const isWorkersAIJsonMode = false;
     const stream = settings.stream_openai && type !== 'quiet' && !isO1 && !isWorkersAIJsonMode;
-
-    const noMultiSwipeTypes = ['quiet', 'impersonate', 'continue'];
-    const canMultiSwipe = settings.n > 1 && !noMultiSwipeTypes.includes(type) && multiswipeSources.includes(settings.chat_completion_source);
 
     const generate_data = {
         'type': type,
@@ -1346,7 +1148,6 @@ export async function createGenerationParameters(settings, model, type, messages
         'stream': stream,
         'stop': getCustomStoppingStrings(openai_max_stop_strings),
         'chat_completion_source': settings.chat_completion_source,
-        'n': canMultiSwipe ? settings.n : undefined,
         'user_name': name1,
         'char_name': name2,
         'include_reasoning': Boolean(settings.show_thoughts),
@@ -1355,7 +1156,7 @@ export async function createGenerationParameters(settings, model, type, messages
     };
 
 
-    if (!canMultiSwipe && ToolManager.canPerformToolCalls(type, settings, model)) {
+    if (ToolManager.canPerformToolCalls(type, settings, model)) {
         await ToolManager.registerFunctionToolsOpenAI(generate_data);
     }
 
@@ -1433,12 +1234,12 @@ export async function createGenerationParameters(settings, model, type, messages
         generate_data.json_schema = jsonSchema;
     }
 
-    return { generate_data, stream, canMultiSwipe };
+    return { generate_data, stream };
 }
 
 /**
  * Send a chat completion request to backend
- * @param {string} type Request type (impersonate, quiet, continue, etc)
+ * @param {string} type Request type
  * @param {ChatCompletionMessage[]} messages Array of chat completion messages
  * @param {AbortSignal?} signal Abort signal for request cancellation
  * @param {import('../script.js').AdditionalRequestOptions} options Additional request options
@@ -1457,7 +1258,7 @@ async function sendOpenAIRequest(type, messages, signal, { jsonSchema = null, fa
     }
 
     const model = getChatCompletionModel(requestSettings);
-    const { generate_data, stream, canMultiSwipe } = await createGenerationParameters(requestSettings, model, type, messages, { jsonSchema });
+    const { generate_data, stream } = await createGenerationParameters(requestSettings, model, type, messages, { jsonSchema });
     await eventSource.emit(event_types.CHAT_COMPLETION_SETTINGS_READY, generate_data);
 
     const generate_url = '/api/backends/chat-completions/generate';
@@ -1479,7 +1280,6 @@ async function sendOpenAIRequest(type, messages, signal, { jsonSchema = null, fa
         const responseChatCompletionSource = requestSettings.chat_completion_source;
         return async function* streamData() {
             let text = '';
-            const swipes = [];
             const toolCalls = [];
             const state = { reasoning: '', images: [], signature: '', toolSignatures: {} };
             while (true) {
@@ -1490,17 +1290,11 @@ async function sendOpenAIRequest(type, messages, signal, { jsonSchema = null, fa
                 tryParseStreamingError(response, rawData);
                 const parsed = JSON.parse(rawData);
 
-                if (canMultiSwipe && Array.isArray(parsed?.choices) && parsed?.choices?.[0]?.index > 0) {
-                    const swipeIndex = parsed.choices[0].index - 1;
-                    // FIXME: state.reasoning should be an array to support multi-swipe
-                    swipes[swipeIndex] = (swipes[swipeIndex] || '') + getStreamingReply(parsed, state, { chatCompletionSource: responseChatCompletionSource, overrideShowThoughts: false });
-                } else {
-                    text += getStreamingReply(parsed, state, { chatCompletionSource: responseChatCompletionSource });
-                }
+                text += getStreamingReply(parsed, state, { chatCompletionSource: responseChatCompletionSource });
 
                 ToolManager.parseToolCalls(toolCalls, parsed, state.toolSignatures);
 
-                yield { text, swipes: swipes, toolCalls: toolCalls, state: state };
+                yield { text, toolCalls: toolCalls, state: state };
             }
         };
     } else {
@@ -1543,7 +1337,6 @@ class TokenHandler {
             'prompt': 0,
             'bias': 0,
             'nudge': 0,
-            'impersonate': 0,
             'examples': 0,
             'conversation': 0,
         };
@@ -2497,6 +2290,19 @@ function loadOpenAISettings(data, settings) {
 
     $(`#settings_preset_openai option[value="${openai_setting_names[oai_settings.preset_settings_openai]}"]`).prop('selected', true);
 
+    // When the stored preset file no longer exists on disk, the browser shows
+    // the first option while nothing is applied — a silent mismatch that also
+    // makes single-option lists impossible to (re)apply through the select.
+    // Insert a placeholder so the mismatch is visible and picking a real
+    // preset still fires the change handler.
+    const presetSelect = $('#settings_preset_openai');
+    if (presetSelect.find(':selected').text() !== oai_settings.preset_settings_openai) {
+        const placeholderText = oai_settings.preset_settings_openai
+            ? t`Preset "${oai_settings.preset_settings_openai}" is not installed`
+            : t`No preset applied`;
+        presetSelect.prepend(new Option(placeholderText, '', true, true));
+    }
+
     // Protect openai_max_context from being overridden by extensions on initial load
     const loadedMaxContext = oai_settings.openai_max_context;
     _presetChangeGuard = true;
@@ -2510,7 +2316,6 @@ function loadOpenAISettings(data, settings) {
     });
 
     setNamesBehaviorControls();
-    setContinuePostfixControls();
     setToolReasoningControls();
 
     syncSegmentedFromSelect('openai_reasoning_effort');
@@ -2530,25 +2335,6 @@ function setNamesBehaviorControls() {
     $('#names_behavior').val(String(oai_settings.names_behavior));
     const selectedText = $('#names_behavior option:selected').text().trim();
     $('#character_names_display').text(selectedText);
-}
-
-function setContinuePostfixControls() {
-    const reverseMap = {
-        '': '0',
-        ' ': '1',
-        '\n': '2',
-        '\n\n': '3',
-    };
-    const selectVal = reverseMap[oai_settings.continue_postfix];
-    if (selectVal === undefined) {
-        oai_settings.continue_postfix = continue_postfix_types.SPACE;
-        $('#continue_postfix_select').val('1');
-    } else {
-        $('#continue_postfix_select').val(selectVal);
-    }
-    $('#continue_postfix').val(oai_settings.continue_postfix);
-    const selectedText = $('#continue_postfix_select option:selected').text().trim();
-    $('#continue_postfix_display').text(selectedText);
 }
 
 function setToolReasoningControls() {
@@ -2616,6 +2402,39 @@ export function getChatCompletionPreset(settings = oai_settings) {
 }
 
 /**
+ * Stable value signature for preset comparison: object key order is
+ * irrelevant, array order is significant.
+ * @param {*} value
+ * @returns {string}
+ */
+function presetValueSignature(value) {
+    return JSON.stringify(value, (_key, item) => {
+        if (item && typeof item === 'object' && !Array.isArray(item)) {
+            return Object.fromEntries(Object.entries(item).sort(([a], [b]) => a.localeCompare(b)));
+        }
+        return item;
+    });
+}
+
+/**
+ * Whether the live settings differ from the stored body of the currently
+ * selected preset. Keys missing from the stored preset (fields added after
+ * the preset was saved) don't count as dirty — loading can no longer tell
+ * them apart from untouched new defaults.
+ * @returns {boolean}
+ */
+export function isOpenAIPresetDirty() {
+    const index = openai_setting_names?.[oai_settings.preset_settings_openai];
+    const preset = openai_settings?.[index];
+    if (!preset) {
+        return false;
+    }
+    const current = getChatCompletionPreset(oai_settings);
+    return Object.entries(current).some(([key, value]) =>
+        Object.hasOwn(preset, key) && presetValueSignature(value) !== presetValueSignature(preset[key]));
+}
+
+/**
  * Persist a settings preset with the given name
  *
  * @param {string} name - Name of the preset
@@ -2623,7 +2442,7 @@ export function getChatCompletionPreset(settings = oai_settings) {
  * @param {boolean} triggerUi Whether the change event of preset UI element should be emitted
  * @returns {Promise<void>}
  */
-async function saveOpenAIPreset(name, settings, triggerUi = true) {
+export async function saveOpenAIPreset(name, settings, triggerUi = true) {
     const presetBody = getChatCompletionPreset(settings);
     const savePresetSettings = await fetch('/api/presets/save', {
         method: 'POST',
@@ -2651,7 +2470,8 @@ async function saveOpenAIPreset(name, settings, triggerUi = true) {
             option.selected = true;
             option.value = String(openai_settings.length - 1);
             option.innerText = data.name;
-            if (triggerUi) $('#settings_preset_openai').append(option).trigger('change');
+            $('#settings_preset_openai').append(option);
+            if (triggerUi) $('#settings_preset_openai').trigger('change');
         }
     } else {
         toastr.error(t`Failed to save preset`);
@@ -2791,10 +2611,15 @@ async function onExportPresetClick() {
     download(presetJsonString, presetFileName, 'application/json');
 }
 
-async function onDeletePresetClick() {
-    const confirm = await callGenericPopup(t`Delete the preset? This action is irreversible and your current settings will be overwritten.`, POPUP_TYPE.CONFIRM);
-
-    if (!confirm) {
+/**
+ * Deletes the currently active OpenAI preset on the server and selects the
+ * first remaining preset, if any. UI-free entry point shared by the retired
+ * drawer handler and the workspace prompt panel.
+ * @returns {Promise<void>}
+ */
+export async function deleteOpenAIPreset() {
+    if (!oai_settings.preset_settings_openai) {
+        toastr.error(t`No preset selected`);
         return;
     }
 
@@ -2805,10 +2630,9 @@ async function onDeletePresetClick() {
     oai_settings.preset_settings_openai = null;
 
     if (Object.keys(openai_setting_names).length) {
-        oai_settings.preset_settings_openai = Object.keys(openai_setting_names)[0];
-        const newValue = openai_setting_names[oai_settings.preset_settings_openai];
-        $(`#settings_preset_openai option[value="${newValue}"]`).prop('selected', true);
-        $('#settings_preset_openai').trigger('change');
+        const nextPresetName = Object.keys(openai_setting_names)[0];
+        $(`#settings_preset_openai option[value="${openai_setting_names[nextPresetName]}"]`).prop('selected', true);
+        applyOpenAIPreset(nextPresetName);
     }
 
     const response = await fetch('/api/presets/delete', {
@@ -2827,12 +2651,36 @@ async function onDeletePresetClick() {
     saveSettingsDebounced();
 }
 
-// Load OpenAI preset settings
-function onSettingsPresetChange() {
+async function onDeletePresetClick() {
+    const confirm = await callGenericPopup(t`Delete the preset? This action is irreversible and your current settings will be overwritten.`, POPUP_TYPE.CONFIRM);
+
+    if (!confirm) {
+        return;
+    }
+
+    await deleteOpenAIPreset();
+}
+
+/**
+ * Applies a saved OpenAI preset by name. UI-free entry point: the retired
+ * preset drawer read the name from a select element, while the workspace
+ * prompt panel and slash commands pass it explicitly.
+ * @param {string} presetName Preset name to apply
+ * @returns {void}
+ */
+export function applyOpenAIPreset(presetName) {
+    if (!presetName || !Object.hasOwn(openai_setting_names ?? {}, presetName)) {
+        console.warn('Unknown OpenAI preset name:', presetName);
+        return;
+    }
+
     const presetNameBefore = oai_settings.preset_settings_openai;
 
-    const presetName = $('#settings_preset_openai').find(':selected').text();
     oai_settings.preset_settings_openai = presetName;
+
+    // Drop the "not installed" placeholder inserted when the stored preset was
+    // missing — a real preset is now applied.
+    $('#settings_preset_openai option[value=""]').remove();
 
     const preset = structuredClone(openai_settings[openai_setting_names[oai_settings.preset_settings_openai]]);
 
@@ -2883,6 +2731,37 @@ function onSettingsPresetChange() {
 
         saveSettingsDebounced();
     });
+}
+
+// DOM binding for the preset select. User-initiated switches with unsaved
+// changes ask whether to save first; programmatic .trigger('change') calls
+// (save-as, import, delete) apply directly because they just synced state.
+async function onSettingsPresetChange(event) {
+    const presetName = $('#settings_preset_openai').find(':selected').text();
+    if (event?.isTrigger || !isOpenAIPresetDirty()) {
+        applyOpenAIPreset(presetName);
+        return;
+    }
+    const result = await Popup.show.confirm(
+        t`Unsaved preset changes`,
+        t`The current preset has unsaved changes. Save before switching?`,
+        {
+            okButton: t`Save and switch`,
+            cancelButton: t`Switch without saving`,
+            customButtons: [{ text: t`Cancel`, result: POPUP_RESULT.CANCELLED, appendAtEnd: true }],
+        },
+    );
+    if (result === POPUP_RESULT.AFFIRMATIVE) {
+        await saveOpenAIPreset(oai_settings.preset_settings_openai, oai_settings, false);
+        applyOpenAIPreset(presetName);
+    } else if (result === POPUP_RESULT.NEGATIVE) {
+        applyOpenAIPreset(presetName);
+    } else {
+        const index = openai_setting_names[oai_settings.preset_settings_openai];
+        if (index !== undefined) {
+            $('#settings_preset_openai').val(String(index));
+        }
+    }
 }
 
 async function onNewPresetClick() {
@@ -3132,23 +3011,8 @@ export function initOpenAI() {
         saveSettingsDebounced();
     });
 
-    $('#impersonation_prompt_textarea').on('input', function () {
-        oai_settings.impersonation_prompt = String($('#impersonation_prompt_textarea').val());
-        saveSettingsDebounced();
-    });
-
     $('#newchat_prompt_textarea').on('input', function () {
         oai_settings.new_chat_prompt = String($('#newchat_prompt_textarea').val());
-        saveSettingsDebounced();
-    });
-
-    $('#newexamplechat_prompt_textarea').on('input', function () {
-        oai_settings.new_example_chat_prompt = String($('#newexamplechat_prompt_textarea').val());
-        saveSettingsDebounced();
-    });
-
-    $('#continue_nudge_prompt_textarea').on('input', function () {
-        oai_settings.continue_nudge_prompt = String($('#continue_nudge_prompt_textarea').val());
         saveSettingsDebounced();
     });
 
@@ -3165,30 +3029,13 @@ export function initOpenAI() {
     $('#update_oai_preset').on('click', async function () {
         const name = oai_settings.preset_settings_openai;
         await saveOpenAIPreset(name, oai_settings, false);
+        await eventSource.emit(event_types.OAI_PRESET_CHANGED_AFTER);
         toastr.success(t`Preset updated`);
-    });
-
-    $('#impersonation_prompt_restore').on('click', function () {
-        oai_settings.impersonation_prompt = default_impersonation_prompt;
-        $('#impersonation_prompt_textarea').val(oai_settings.impersonation_prompt);
-        saveSettingsDebounced();
     });
 
     $('#newchat_prompt_restore').on('click', function () {
         oai_settings.new_chat_prompt = default_new_chat_prompt;
         $('#newchat_prompt_textarea').val(oai_settings.new_chat_prompt);
-        saveSettingsDebounced();
-    });
-
-    $('#newexamplechat_prompt_restore').on('click', function () {
-        oai_settings.new_example_chat_prompt = default_new_example_chat_prompt;
-        $('#newexamplechat_prompt_textarea').val(oai_settings.new_example_chat_prompt);
-        saveSettingsDebounced();
-    });
-
-    $('#continue_nudge_prompt_restore').on('click', function () {
-        oai_settings.continue_nudge_prompt = default_continue_nudge_prompt;
-        $('#continue_nudge_prompt_textarea').val(oai_settings.continue_nudge_prompt);
         saveSettingsDebounced();
     });
 
@@ -3220,21 +3067,11 @@ export function initOpenAI() {
         saveSettingsDebounced();
     });
 
-    $('#continue_prefill').on('input', function () {
-        oai_settings.continue_prefill = !!$(this).prop('checked');
-        saveSettingsDebounced();
-    });
-
     $('#tool_reasoning_mode').on('input', function () {
         oai_settings.tool_reasoning_mode = getToolReasoningMode({
             ...oai_settings,
             tool_reasoning_mode: String($(this).val()),
         });
-        saveSettingsDebounced();
-    });
-
-    $('#n_openai').on('input', function () {
-        oai_settings.n = Number($(this).val());
         saveSettingsDebounced();
     });
 
@@ -3263,18 +3100,6 @@ export function initOpenAI() {
     $('#names_behavior').on('change', function () {
         oai_settings.names_behavior = Number($(this).val());
         setNamesBehaviorControls();
-        saveSettingsDebounced();
-    });
-
-    const postfixIndexMap = {
-        '0': continue_postfix_types.NONE,
-        '1': continue_postfix_types.SPACE,
-        '2': continue_postfix_types.NEWLINE,
-        '3': continue_postfix_types.DOUBLE_NEWLINE,
-    };
-    $('#continue_postfix_select').on('change', function () {
-        oai_settings.continue_postfix = postfixIndexMap[$(this).val()] ?? continue_postfix_types.SPACE;
-        setContinuePostfixControls();
         saveSettingsDebounced();
     });
 

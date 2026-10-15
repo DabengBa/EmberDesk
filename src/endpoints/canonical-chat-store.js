@@ -187,10 +187,6 @@ export function serializeCanonicalChatSession(db, sessionId) {
     return session?.source_jsonl ?? null;
 }
 
-function extractSwipes(payload) {
-    return Array.isArray(payload?.swipes) ? payload.swipes : [];
-}
-
 function getExistingMessageIds(db, sessionId) {
     return new Map(db.prepare(`
         SELECT id, identity_key
@@ -316,10 +312,6 @@ export function upsertCanonicalChatSession(db, record) {
                 created_at_ms
             ) VALUES (?, ?, ?, ?, ?, ?)
         `);
-        const insertSwipe = txnDb.prepare(`
-            INSERT INTO chat_message_swipes (message_id, swipe_order, payload_json)
-            VALUES (?, ?, ?)
-        `);
         const insertAttachment = txnDb.prepare(`
             INSERT INTO chat_attachment_refs (message_id, blob_id, role, compatibility_json)
             VALUES (?, ?, ?, ?)
@@ -335,9 +327,6 @@ export function upsertCanonicalChatSession(db, record) {
                 message.payloadJson,
                 message.createdAtMs,
             );
-            for (const [swipeOrder, swipe] of extractSwipes(message.payload).entries()) {
-                insertSwipe.run(messageId, swipeOrder, JSON.stringify(swipe));
-            }
             for (const attachment of message.attachments) {
                 insertAttachment.run(
                     messageId,

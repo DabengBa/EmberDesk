@@ -252,12 +252,16 @@ describe('world info card rendering', () => {
 
         // sys-settings-button hosted the retired rm_api_block drawer,
         // advanced-formatting-button hosted the retired AdvancedFormatting
-        // drawer, and ai-config-button hosted the retired AI Response
-        // Configuration drawer; all three are gone.
+        // drawer, ai-config-button hosted the retired AI Response
+        // Configuration drawer, and user-settings-button hosted the
+        // user-settings drawer merged into Settings; all four are gone.
+        // settings-panel-button is the legacy icon entry for the React
+        // SettingsPanel drawer.
         expect(getTopSettingsDrawerIds(indexHtml)).toEqual([
             'WI-SP-button',
-            'user-settings-button',
+            'settings-panel-button',
             'regex-panel-button',
+            'leftNavHolder',
             'rightNavHolder',
         ]);
     });
@@ -285,14 +289,11 @@ describe('world info card rendering', () => {
         expect(indexHtml).toContain('class="wi-content-editor-modal" role="dialog" aria-modal="true" aria-labelledby="wi-content-editor-title"');
         expect(indexHtml).toContain('class="wi-content-editor-title" id="wi-content-editor-title"');
         expect(indexHtml).toContain('class="wi-content-editor-meta"');
-        expect(indexHtml).toContain('class="wi-content-flags flex-container flexFlowColumn"');
         expect(indexHtml).not.toContain('data-i18n="Content" class="mdhotkey_location"');
         expect(css).toContain('.wi-content-grid');
         expect(css).toContain('.wi-content-open');
         expect(css).toContain('.wi-content-editor-modal');
         expect(css).toContain('body.wi-content-editor-open');
-        expect(css).toContain('grid-template-columns: repeat(2, minmax(220px, 1fr));');
-        expect(css).toContain('.wi-content-flags .checkbox:hover');
         expect(css).toContain('flex: 1 1 100% !important;');
         expect(css).toContain('.wi-content-editor-panel textarea[name="content"]');
         expect(css).toContain('.world_entry_form_horizontal[name="WIEntryBottomControls"]');

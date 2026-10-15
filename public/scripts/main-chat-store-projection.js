@@ -33,59 +33,6 @@ function normalizeMessageId(messageId) {
     return numericId;
 }
 
-function getProjectedOverswipeBehavior(messageId, message, { pristineChat = false } = {}) {
-    const explicitBehavior = message?.extra?.overswipe_behavior;
-    if (typeof explicitBehavior === 'string') {
-        return explicitBehavior;
-    }
-    if (message?.extra?.swipeable === false || message?.extra?.isSmallSys) {
-        return 'none';
-    }
-    if (messageId === 0 && pristineChat) {
-        return 'pristine_greeting';
-    }
-    if (!message?.is_user && !message?.is_system) {
-        return 'regenerate';
-    }
-    return 'loop';
-}
-
-function getProjectedSwipeState(message, {
-    messageId,
-    chatLength = 0,
-    pristineChat = false,
-} = {}) {
-    const swipeCount = Array.isArray(message?.swipes) ? message.swipes.length : 0;
-    const swipeIndex = Number.isInteger(message?.swipe_id) && message.swipe_id >= 0
-        ? message.swipe_id
-        : 0;
-    const isMessageSwipeable = messageId === chatLength - 1
-        && !message?.is_user
-        && message?.extra?.isSmallSys !== true
-        && message?.extra?.swipeable !== false;
-    if (!isMessageSwipeable) {
-        return {
-            swipeIndex,
-            swipeCount,
-            swipesVisible: false,
-            lastSwipe: false,
-        };
-    }
-
-    const overswipeBehavior = getProjectedOverswipeBehavior(messageId, message, { pristineChat });
-    const pristineGreeting = overswipeBehavior === 'pristine_greeting';
-    const isLastSwipe = Math.max(swipeCount, 1) - 1 <= swipeIndex;
-    const lastSwipe = isLastSwipe
-        && (overswipeBehavior === 'regenerate' || overswipeBehavior === 'edit_generate');
-
-    return {
-        swipeIndex,
-        swipeCount,
-        swipesVisible: swipeCount > 1 || pristineGreeting,
-        lastSwipe,
-    };
-}
-
 /**
  * Project one stored chat record into the DOM-free browser message model.
  *
@@ -97,14 +44,11 @@ function getProjectedSwipeState(message, {
  * @param {Function} [options.avatarUrlForMessage] Resolves a display avatar without reading DOM
  * @param {Function} [options.timestampTitleForMessage] Resolves the timestamp tooltip
  * @param {object} [options.messageUi] Transient message controls owned by the projection caller
- * @param {number} [options.chatLength] Total chat length used for swipe ownership
- * @param {boolean} [options.pristineChat] Whether this is an untainted chat
  * @param {string} [options.mediaDisplay]
  * @param {number} [options.mediaIndex]
  * @param {Function} [options.timerForMessage] Resolves { timerValue, timerTitle } for .mes_timer
  * @param {Function} [options.mediaDisplayForMessage] Resolves the media display attribute for the row
  * @param {Function} [options.hasItemizedPromptForMessage] Whether an itemized prompt exists for the message
- * @param {Function} [options.swipePickerForMessage] Resolves { canOpen, canJump } swipe-picker affordances
  * @returns {object} Typed message record containing HTML strings only
  */
 export function buildMainChatMessageRecord(message, {
@@ -114,14 +58,11 @@ export function buildMainChatMessageRecord(message, {
     avatarUrlForMessage = () => '',
     timestampTitleForMessage = () => '',
     messageUi = {},
-    chatLength = 0,
-    pristineChat = false,
     mediaDisplay,
     mediaIndex,
     timerForMessage = () => null,
     mediaDisplayForMessage = null,
     hasItemizedPromptForMessage = () => false,
-    swipePickerForMessage = () => null,
     includeRender = true,
 } = {}) {
     const numericMessageId = normalizeMessageId(messageId);
@@ -152,13 +93,7 @@ export function buildMainChatMessageRecord(message, {
         messageUi.reasoningEditText,
         normalizeString(message?.extra?.reasoning),
     );
-    const swipeState = getProjectedSwipeState(message, {
-        messageId: numericMessageId,
-        chatLength,
-        pristineChat,
-    });
     const timer = timerForMessage(message, numericMessageId) ?? {};
-    const swipePicker = swipePickerForMessage(numericMessageId, message) ?? {};
     const messageState = normalizeMessageState(message, descriptor, messageUi);
     const reasoningState = message?.extra?.reasoning
         ? (messageState === 'streaming' ? 'thinking' : 'done')
@@ -189,8 +124,6 @@ export function buildMainChatMessageRecord(message, {
         timerTitle: normalizeString(timer.timerTitle),
         promptButtonVisible: message?.is_user !== true
             && hasItemizedPromptForMessage(message, numericMessageId) === true,
-        swipePickerEnabled: swipePicker.canOpen === true,
-        swipePickerCanJump: swipePicker.canJump === true,
         mediaDisplay: resolvedMediaDisplay,
         inlineMediaText: hasMedia && message?.extra?.inline_image === false,
         reasoningState,
@@ -202,19 +135,12 @@ export function buildMainChatMessageRecord(message, {
                 ? 'primary'
                 : null,
         failureNoticeVisible: messageUi.failureNoticeVisible === true,
-        failureRetryVisible: messageUi.failureRetryVisible === true,
-        emptyReplyRegenerateVisible: messageUi.emptyReplyRegenerateVisible === true,
         actionsExpanded: messageUi.actionsExpanded === true,
         editing: messageUi.editing === true
             || message?.extra?.editing === true
             || message?.editing === true,
         editText: normalizeString(messageUi.editText, content),
         lastInContext: messageUi.lastInContext === true,
-        swipeCounterHidden: messageUi.swipeCounterHidden === true,
-        swipeIndex: swipeState.swipeIndex,
-        swipeCount: swipeState.swipeCount,
-        swipesVisible: swipeState.swipesVisible,
-        lastSwipe: swipeState.lastSwipe,
         extraType: normalizeString(message?.extra?.type),
         ...(render ? {
             render: {
@@ -260,7 +186,6 @@ function normalizeMessageIds(value) {
  * @param {Function} [options.timerForMessage]
  * @param {Function} [options.mediaDisplayForMessage]
  * @param {Function} [options.hasItemizedPromptForMessage]
- * @param {Function} [options.swipePickerForMessage]
  * @param {string[]} [options.visibleMessageIds]
  * @param {object} [options.composer]
  * @param {object} [options.generation]
@@ -269,7 +194,6 @@ function normalizeMessageIds(value) {
  * @param {object} [options.window]
  * @param {object} [options.window.scrollRestore] One-shot anchor restore owned by the React output lifecycle
  * @param {Record<string, object>} [options.messageUiById]
- * @param {boolean} [options.pristineChat]
  * @returns {object} Main-chat store snapshot input
  */
 export function buildMainChatSnapshotFromLegacyChat({
@@ -282,7 +206,6 @@ export function buildMainChatSnapshotFromLegacyChat({
     timerForMessage,
     mediaDisplayForMessage,
     hasItemizedPromptForMessage,
-    swipePickerForMessage,
     visibleMessageIds,
     composer = {},
     generation = {},
@@ -290,7 +213,6 @@ export function buildMainChatSnapshotFromLegacyChat({
     slash = {},
     window = {},
     messageUiById = {},
-    pristineChat = false,
 } = {}) {
     if (!Array.isArray(chat)) {
         throw new TypeError('Main chat snapshot projection requires a chat array');
@@ -323,12 +245,9 @@ export function buildMainChatSnapshotFromLegacyChat({
             avatarUrlForMessage,
             timestampTitleForMessage,
             messageUi: messageUiById[id],
-            chatLength: chat.length,
-            pristineChat,
             timerForMessage,
             mediaDisplayForMessage,
             hasItemizedPromptForMessage,
-            swipePickerForMessage,
         });
     }
 

@@ -188,10 +188,10 @@ describe('settings React route flag', () => {
         expect(routeSource).not.toContain('<h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-zinc-300">Coverage</h2>');
         expect(routeSource).not.toContain('<h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-zinc-300">Still Legacy-Owned</h2>');
         expect(routeSource).not.toContain('<h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-zinc-300">Payload Snapshot</h2>');
-        expect(settingsStyleSource).toContain('overlayHost');
+        // The overlay layout keys are gone with the retired overlay variant;
+        // the drawer styles keep the overlay-suffixed tab panel and save bar.
+        expect(settingsStyleSource).not.toContain('overlayHost');
         expect(settingsStyleSource).toContain("display: 'grid'");
-        expect(settingsStyleSource).toContain("placeItems: 'center'");
-        expect(settingsStyleSource).toContain("default: 'relative'");
         expect(settingsStyleSource).not.toContain('transform: translate(-50%, -50%)');
         expect(settingsStyleSource).toContain('tabPanelOverlay');
         expect(settingsStyleSource).toContain('saveBarOverlay');
@@ -219,8 +219,16 @@ describe('settings React route flag', () => {
             'oai_settings.openai_model',
             'oai_settings.custom_url',
             'oai_settings.fallback_provider_model',
+            // Frontend Frames fields merged in from the retired user-settings drawer.
+            'power_user.frontend_frames.enabled',
+            'power_user.frontend_frames.depth',
+            'power_user.frontend_frames.depth_ignore_hidden',
+            'power_user.frontend_frames.collapse_code_block',
+            'power_user.frontend_frames.skip_highlight',
+            'power_user.frontend_frames.use_blob_url',
+            'power_user.frontend_frames.allow_streaming',
         ]));
-        expect(helperModule.settingsCoverage.reactOwned.providers).toHaveLength(3);
+        expect(helperModule.settingsCoverage.reactOwned.providers).toHaveLength(10);
         // The interface tab is retired; UI keys are stripped from saved payloads.
         expect(helperModule.settingsCoverage.reactOwned.userInterface).toBeUndefined();
         // The advanced tab is retired entirely; no react-owned advanced paths.
@@ -454,7 +462,6 @@ describe('settings React route flag', () => {
             'openai_max_tokens',
             'temp_openai',
             'openai_reasoning_effort',
-            'continue_nudge_prompt_textarea',
             'names_behavior',
         ]) {
             expect(openaiSource).toContain(legacyId);
@@ -501,9 +508,10 @@ describe('settings React route flag', () => {
     test('owner inventory covers drawer fields with lossless single-field save round-trip', async () => {
         const helperModule = await import(`../app/lib/settings-helpers.js?settingsInventory=${Date.now()}-${Math.random()}`);
 
-        expect(helperModule.settingsOwnerInventory.drawers.userSettings).toBe('#user-settings-block');
-        // The retired API Connections and Advanced Formatting drawers are no
-        // longer part of the inventory.
+        // No legacy-owned settings drawers remain: the user-settings-block
+        // Frontend Frames fields merged into the providers tab as bound fields.
+        expect(helperModule.settingsOwnerInventory.drawers).toEqual({});
+        expect(helperModule.settingsOwnerInventory.drawers.userSettings).toBeUndefined();
         expect(helperModule.settingsOwnerInventory.drawers.apiConfiguration).toBeUndefined();
         expect(helperModule.settingsOwnerInventory.drawers.advancedFormatting).toBeUndefined();
         expect(helperModule.settingsOwnerInventory.specializedSurfaces).toEqual(expect.arrayContaining([
@@ -792,56 +800,49 @@ describe('settings React route flag', () => {
         expect(routeSource).toContain('disabled={isBusy || settingsQuery.isPending || settingsQuery.isFetching || isPristine || hasRevisionConflict}');
         // Legacy settings drawer toggles are deleted; no route-redirect listener remains.
         expect(scriptSource).not.toContain('LEGACY_SETTINGS_DRAWER_ROUTE_TARGETS');
-        expect(scriptSource).toContain('openWorkspaceSettingsOverlay');
+        expect(scriptSource).toContain('openWorkspaceShellSettings');
         expect(scriptSource).not.toContain("window.location.assign('/settings");
     });
 
-    test('settings overlay exposes workspace drawer openers for legacy-owned panels', () => {
+    test('settings surface hosts merged Frontend Frames fields with no drawer links left', () => {
         const routeSource = fs.readFileSync(path.join(repoRoot, 'app', 'components', 'settings', 'SettingsSurface.tsx'), 'utf8');
+        const helperSource = fs.readFileSync(path.join(repoRoot, 'app', 'lib', 'settings-helpers.js'), 'utf8');
         const indexHtml = fs.readFileSync(path.join(repoRoot, 'public', 'index.html'), 'utf8');
         const portSource = fs.readFileSync(path.join(repoRoot, 'app', 'compat', 'runtime-port.ts'), 'utf8');
         const providerSource = fs.readFileSync(path.join(repoRoot, 'public', 'scripts', 'react-runtime-provider.js'), 'utf8');
         const scriptSource = fs.readFileSync(path.join(repoRoot, 'public', 'script.js'), 'utf8');
 
-        // The remaining legacy-owned drawer (Frontend Frames extras) still
-        // renders inside a workspace drawer the shell no longer opens. Overlay
-        // links reach it through the openWorkspaceDrawer runtime command, which
-        // resolves to openWorkspaceChildSlotHostImmediate on the drawer host id.
-        for (const target of [
-            'user-settings-block',
+        // The user-settings-block drawer is retired: its Frontend Frames
+        // controls merged into the providers tab as bound form fields.
+        expect(indexHtml).not.toContain('id="user-settings-block"');
+        expect(indexHtml).not.toContain('id="user-settings-button"');
+        for (const binding of [
+            "settingsPath: 'power_user.frontend_frames.enabled'",
+            "settingsPath: 'power_user.frontend_frames.depth'",
+            "settingsPath: 'power_user.frontend_frames.collapse_code_block'",
+            "settingsPath: 'power_user.frontend_frames.allow_streaming'",
         ]) {
-            expect(routeSource).toContain(`'${target}'`);
-            expect(indexHtml).toContain(`id="${target}" class="drawer-content`);
+            expect(helperSource).toContain(binding);
         }
+        expect(routeSource).toContain('rendering.frontendFramesEnabled');
+        expect(routeSource).toContain('rendering.frontendFramesCollapseCodeBlock');
+        expect(routeSource).not.toContain('openWorkspaceDrawer');
+
+        // With no drawer links left, the openWorkspaceDrawer runtime command
+        // and its host allowlist are retired from every surface.
+        expect(portSource).not.toContain('openWorkspaceDrawer');
+        expect(providerSource).not.toContain('openWorkspaceDrawer');
+        expect(scriptSource).not.toContain('openWorkspaceDrawer');
+        expect(scriptSource).not.toContain('WORKSPACE_DRAWER_COMMAND_HOST_IDS');
+
         // The retired API Connections, AI Response Configuration, and Advanced
         // Formatting drawers are gone from both surfaces.
         expect(routeSource).not.toContain("'rm_api_block'");
         expect(routeSource).not.toContain("'AdvancedFormatting'");
-        expect(routeSource).not.toContain("'left-nav-panel'");
         expect(indexHtml).not.toContain('id="rm_api_block"');
         expect(indexHtml).not.toContain('id="AdvancedFormatting"');
-        expect(indexHtml).not.toContain('id="left-nav-panel"');
-
-        expect(routeSource).toContain('runtime?.commands.openWorkspaceDrawer(link.target)');
-        expect(routeSource).toContain('onRequestClose?.()');
-        expect(routeSource).toContain('isOverlay');
-        expect(portSource).toContain('openWorkspaceDrawer(hostId: string): Promise<void>');
-        expect(providerSource).toContain("'openWorkspaceDrawer'");
-        expect(scriptSource).toContain('openWorkspaceDrawer:');
-        expect(scriptSource).toContain('openWorkspaceChildSlotHostImmediate');
-
-        // The command is allowlisted so it cannot become generic "open any
-        // element by id" DOM access for React callers.
-        expect(scriptSource).toContain('WORKSPACE_DRAWER_COMMAND_HOST_IDS');
-        expect(scriptSource).toContain('rejected unknown drawer host id');
-        for (const target of [
-            'user-settings-block',
-        ]) {
-            expect(scriptSource).toContain(`'${target}'`);
-        }
         expect(scriptSource).not.toContain("'rm_api_block'");
         expect(scriptSource).not.toContain("'AdvancedFormatting'");
-        expect(scriptSource).not.toContain("'left-nav-panel'");
     });
 
     test('redirects unauthenticated /settings requests to /login', async () => {

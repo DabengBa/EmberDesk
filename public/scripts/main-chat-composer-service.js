@@ -3,7 +3,7 @@
  *
  * #send_textarea is rendered once by React as an uncontrolled element; this
  * service is the single command/state path for its value. All reads and writes
- * (submit flows, /send-style commands, macros, impersonate injection,
+ * (submit flows, /send-style commands, macros, and injected composer text,
  * autocomplete clearing, React runtime commands) must go through this module
  * instead of touching `#send_textarea` `.val()`/`.value` directly. The DOM node
  * remains an event source for user typing (native 'input' events sync the

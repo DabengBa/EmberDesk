@@ -40,8 +40,6 @@ export const FRONTEND_FRAME_ALLOWED_EVENTS = Object.freeze([
     'message_updated',
     'message_edited',
     'message_deleted',
-    'message_swiped',
-    'message_swipe_deleted',
     'message_reasoning_edited',
     'generation_started',
     'generation_stopped',

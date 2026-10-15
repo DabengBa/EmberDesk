@@ -14,7 +14,6 @@ import {
     deactivateSendButtons,
     default_avatar,
     deleteCharacter,
-    deleteSwipe,
     displayPastChats,
     duplicateCharacter,
     extension_prompt_roles,
@@ -51,10 +50,8 @@ import {
     setCharacterName,
     setExtensionPrompt,
     showMoreMessages,
-    swipe,
     stopGeneration,
     substituteParams,
-    syncMesToSwipe,
     system_avatar,
     system_message_types,
     this_chid,
@@ -91,7 +88,7 @@ import { accountStorage } from './util/AccountStorage.js';
 import { SlashCommandDebugController } from './slash-commands/SlashCommandDebugController.js';
 import { SlashCommandScope } from './slash-commands/SlashCommandScope.js';
 import { t } from './i18n.js';
-import { debounce_timeout, SWIPE_DIRECTION, SWIPE_SOURCE } from './constants.js';
+import { debounce_timeout } from './constants.js';
 export {
     executeSlashCommands, executeSlashCommandsWithOptions, getSlashCommandsHelp, registerSlashCommand,
 };
@@ -323,67 +320,6 @@ export function initDefaultSlashCommands() {
             <div>
                 <strong>${t`Available APIs:`}</strong>
                 <pre><code>${Object.keys(CONNECT_API_MAP).sort((a, b) => a.localeCompare(b)).join(', ')}</code></pre>
-            </div>
-        `,
-    }));
-    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
-        name: 'impersonate',
-        callback: async function (args, prompt) {
-            const options = prompt?.toString()?.trim() ? { quiet_prompt: prompt.toString().trim(), quietToLoud: true } : {};
-            const shouldAwait = isTrueBoolean(args?.await?.toString());
-            const outerPromise = new Promise((outerResolve) => setTimeout(async () => {
-                try {
-                    await waitUntilCondition(() => !is_send_press, 10000, 100);
-                } catch {
-                    console.warn('Timeout waiting for generation unlock');
-                    toastr.warning(t`Cannot run /impersonate command while the reply is being generated.`);
-                    return '';
-                }
-
-                // Prevent generate recursion
-                clearComposerValue();
-
-                outerResolve(new Promise(innerResolve => setTimeout(() => innerResolve(Generate('impersonate', options)), 1)));
-            }, 1));
-
-            if (shouldAwait) {
-                const innerPromise = await outerPromise;
-                await innerPromise;
-            }
-
-            return '';
-        }
-        ,
-        aliases: ['imp'],
-        namedArgumentList: [
-            new SlashCommandNamedArgument(
-                'await',
-                t`Whether to await for the triggered generation before continuing`,
-                [ARGUMENT_TYPE.BOOLEAN],
-                false,
-                false,
-                'false',
-            ),
-        ],
-        unnamedArgumentList: [
-            new SlashCommandArgument(
-                'prompt', [ARGUMENT_TYPE.STRING], false,
-            ),
-        ],
-        helpString: `
-            <div>
-                ${t`Calls an impersonation response, with an optional additional prompt.`}
-            </div>
-            <div>
-                ${t`If <code>await=true</code> named argument is passed, the command will wait for the impersonation to end before continuing.`}
-            </div>
-            <div>
-                <strong>${t`Example:`}</strong>
-                <ul>
-                    <li>
-                        <pre><code class="language-stscript">/impersonate What is the meaning of life?</code></pre>
-                    </li>
-                </ul>
             </div>
         `,
     }));
@@ -1264,107 +1200,6 @@ export function initDefaultSlashCommands() {
     `,
     }));
     SlashCommandParser.addCommandObject(SlashCommand.fromProps({
-        name: 'continue',
-        callback: continueChatCallback,
-        aliases: ['cont'],
-        namedArgumentList: [
-            new SlashCommandNamedArgument(
-                'await',
-                t`Whether to await for the continued generation before proceeding`,
-                [ARGUMENT_TYPE.BOOLEAN],
-                false,
-                false,
-                'false',
-            ),
-        ],
-        unnamedArgumentList: [
-            new SlashCommandArgument(
-                'prompt', [ARGUMENT_TYPE.STRING], false,
-            ),
-        ],
-        helpString: `
-        <div>
-            ${t`Continues the last message in the chat, with an optional additional prompt.`}
-        </div>
-        <div>
-            ${t`If <code>await=true</code> named argument is passed, the command will await for the continued generation before proceeding.`}
-        </div>
-        <div>
-            <strong>${t`Example:`}</strong>
-            <ul>
-                <li>
-                    <pre><code>/continue</code></pre>
-                    ${t`Continues the chat with no additional prompt and immediately proceeds to the next command.`}
-                </li>
-                <li>
-                    <pre><code>/continue await=true Let's explore this further...</code></pre>
-                    ${t`Continues the chat with the provided prompt and waits for the generation to finish.`}
-                </li>
-            </ul>
-        </div>
-    `,
-    }));
-    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
-        name: 'regenerate',
-        callback: regenerateChatCallback,
-        aliases: ['regen'],
-        namedArgumentList: [
-            new SlashCommandNamedArgument(
-                'await',
-                t`Whether to await for the regeneration before proceeding`,
-                [ARGUMENT_TYPE.BOOLEAN],
-                false,
-                false,
-                'false',
-            ),
-        ],
-        helpString: `
-        <div>
-            ${t`Regenerates the latest reply in the chat.`}
-        </div>
-        <div>
-            ${t`If <code>await=true</code> named argument is passed, the command will await for the regeneration before proceeding.`}
-        </div>
-    `,
-    }));
-    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
-        name: 'swipe',
-        callback: swipeChatCallback,
-        namedArgumentList: [
-            new SlashCommandNamedArgument(
-                'direction',
-                t`Swipe direction`,
-                [ARGUMENT_TYPE.STRING],
-                false,
-                false,
-                SWIPE_DIRECTION.RIGHT,
-                [
-                    new SlashCommandEnumValue(SWIPE_DIRECTION.RIGHT, t`Swipe to the next reply`, enumTypes.enum, enumIcons.default),
-                    new SlashCommandEnumValue(SWIPE_DIRECTION.LEFT, t`Swipe to the previous reply`, enumTypes.enum, enumIcons.default),
-                ],
-                [],
-                null,
-                true,
-            ),
-            new SlashCommandNamedArgument(
-                'await',
-                t`Whether to await for the swipe action before proceeding`,
-                [ARGUMENT_TYPE.BOOLEAN],
-                false,
-                false,
-                'false',
-            ),
-        ],
-        helpString: `
-        <div>
-            ${t`Swipes the latest reply. Defaults to <code>direction=right</code>; use <code>direction=left</code> to go to the previous reply. If no next swipe exists, behavior depends on message context.`}
-        </div>
-        <div>
-            ${t`If <code>await=true</code> named argument is passed, the command will await for the swipe action before proceeding.`}
-        </div>
-    `,
-    }));
-    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
         name: 'go',
         callback: goToCharacterCallback,
         returns: t`The character name`,
@@ -1640,40 +1475,6 @@ export function initDefaultSlashCommands() {
         helpString: t`Unhides a message from the prompt.`,
     }));
     SlashCommandParser.addCommandObject(SlashCommand.fromProps({
-        name: 'delswipe',
-        callback: deleteSwipeCallback,
-        returns: t`the new, currently selected swipe id`,
-        aliases: ['swipedel'],
-        unnamedArgumentList: [
-            SlashCommandArgument.fromProps({
-                description: t`1-based swipe id`,
-                typeList: [ARGUMENT_TYPE.NUMBER],
-                isRequired: true,
-                enumProvider: () => Array.isArray(chat[chat.length - 1]?.swipes) ?
-                    chat[chat.length - 1].swipes.map((/** @type {string} */ swipe, /** @type {number} */ i) => new SlashCommandEnumValue(String(i + 1), swipe, enumTypes.enum, enumIcons.message))
-                    : [],
-            }),
-        ],
-        helpString: `
-        <div>
-            ${t`Deletes a swipe from the last chat message. If swipe id is not provided, it deletes the current swipe.`}
-        </div>
-        <div>
-            <strong>${t`Example:`}</strong>
-            <ul>
-                <li>
-                    <pre><code>/delswipe</code></pre>
-                    ${t`Deletes the current swipe.`}
-                </li>
-                <li>
-                    <pre><code>/delswipe 2</code></pre>
-                    ${t`Deletes the second swipe from the last chat message.`}
-                </li>
-            </ul>
-        </div>
-    `,
-    }));
-    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
         name: 'echo',
         rawQuotes: true,
         callback: echoCallback,
@@ -1881,32 +1682,6 @@ export function initDefaultSlashCommands() {
             ${t`If "length" argument is provided as a number in tokens, allows to temporarily override an API response length.`}
         </div>
     `,
-    }));
-    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
-        name: 'addswipe',
-        callback: addSwipeCallback,
-        returns: t`the new swipe id`,
-        aliases: ['swipeadd'],
-        namedArgumentList: [
-            SlashCommandNamedArgument.fromProps({
-                name: 'switch',
-                description: t`switch to the new swipe`,
-                typeList: [ARGUMENT_TYPE.BOOLEAN],
-                enumList: commonEnumProviders.boolean()(),
-            }),
-        ],
-        unnamedArgumentList: [
-            new SlashCommandArgument(
-                'text', [ARGUMENT_TYPE.STRING], true,
-            ),
-        ],
-        helpString: `
-        <div>
-            ${t`Adds a swipe to the last chat message.`}
-        </div>
-        <div>
-            ${t`Use switch=true to switch to directly switch to the new swipe.`}
-        </div>`,
     }));
     SlashCommandParser.addCommandObject(SlashCommand.fromProps({
         name: 'stop',
@@ -4101,80 +3876,6 @@ async function echoCallback(args, value) {
     }
 }
 
-/**
- * @param {{switch?: string}} args - named arguments
- * @param {string} value - The swipe text to add (unnamed argument)
- */
-async function addSwipeCallback(args, value) {
-    const lastMessage = chat[chat.length - 1];
-
-    if (!lastMessage) {
-        toastr.warning(t`No messages to add swipes to.`);
-        return '';
-    }
-
-    if (!value) {
-        console.warn('WARN: No argument provided for /addswipe command');
-        return '';
-    }
-
-    if (lastMessage.is_user) {
-        toastr.warning(t`Can't add swipes to user messages.`);
-        return '';
-    }
-
-    if (lastMessage.is_system) {
-        toastr.warning(t`Can't add swipes to system messages.`);
-        return '';
-    }
-
-    if (!Array.isArray(lastMessage.swipes)) {
-        lastMessage.swipes = [lastMessage.mes];
-        lastMessage.swipe_info = [{}];
-        lastMessage.swipe_id = 0;
-    }
-    if (!Array.isArray(lastMessage.swipe_info)) {
-        lastMessage.swipe_info = lastMessage.swipes.map(() => ({}));
-    }
-
-    lastMessage.swipes.push(value);
-    lastMessage.swipe_info.push({
-        send_date: getMessageTimeStamp(),
-        gen_started: null,
-        gen_finished: null,
-        extra: {
-            bias: extractMessageBias(value),
-            gen_id: Date.now(),
-            api: 'manual',
-            model: 'slash command',
-        },
-    });
-
-    const newSwipeId = lastMessage.swipes.length - 1;
-
-    if (isTrueBoolean(args.switch)) {
-        // Make sure ad-hoc changes to extras are saved before swiping away
-        syncMesToSwipe();
-        lastMessage.swipe_id = newSwipeId;
-        lastMessage.mes = lastMessage.swipes[newSwipeId];
-        lastMessage.extra = structuredClone(lastMessage.swipe_info?.[newSwipeId]?.extra ?? lastMessage.extra ?? {});
-    }
-
-    await saveChatConditional();
-    await reloadCurrentChat();
-
-    return String(newSwipeId);
-}
-
-async function deleteSwipeCallback(_, arg) {
-    // Take the provided argument. Null if none provided, which will target the current swipe.
-    const swipeId = arg && !isNaN(Number(arg)) ? (Number(arg) - 1) : null;
-
-    const newSwipeId = await deleteSwipe(swipeId);
-
-    return String(newSwipeId);
-}
-
 async function askCharacter(args, text) {
     // Prevent generate recursion
     clearComposerValue();
@@ -4857,94 +4558,6 @@ async function deleteCharacterCallback(args) {
     }
 }
 
-async function continueChatCallback(args, prompt) {
-    const shouldAwait = isTrueBoolean(args?.await);
-
-    const outerPromise = new Promise((resolve, reject) => {
-        (async () => {
-            try {
-                await waitUntilCondition(() => !is_send_press, 10000, 100);
-            } catch {
-                console.warn('Timeout waiting for generation unlock');
-                toastr.warning(t`Cannot run /continue command while the reply is being generated.`);
-                return reject();
-            }
-
-            try {
-                // Prevent infinite recursion
-                clearComposerValue();
-
-                const options = prompt?.trim() ? { quiet_prompt: prompt.trim(), quietToLoud: true } : {};
-                await Generate('continue', options);
-
-                resolve();
-            } catch (error) {
-                console.error('Error running /continue command:', error);
-                reject(error);
-            }
-        })();
-    });
-
-    if (shouldAwait) {
-        await outerPromise;
-    }
-
-    return '';
-}
-
-async function regenerateChatCallback(args) {
-    const shouldAwait = isTrueBoolean(args?.await);
-
-    const outerPromise = new Promise((outerResolve) => setTimeout(async () => {
-        try {
-            await waitUntilCondition(() => !is_send_press, 10000, 100);
-        } catch {
-            console.warn('Timeout waiting for generation unlock');
-            toastr.warning(t`Cannot run /regenerate command while the reply is being generated.`);
-            outerResolve(Promise.resolve(''));
-            return '';
-        }
-
-        outerResolve(new Promise(innerResolve => setTimeout(() => {
-            innerResolve(Generate('regenerate'));
-        }, 1)));
-        return '';
-    }, 1));
-
-    if (shouldAwait) {
-        const innerPromise = await outerPromise;
-        await innerPromise;
-    }
-
-    return '';
-}
-
-async function swipeChatCallback(args) {
-    const shouldAwait = isTrueBoolean(args?.await);
-    const direction = args?.direction === SWIPE_DIRECTION.LEFT ? SWIPE_DIRECTION.LEFT : SWIPE_DIRECTION.RIGHT;
-
-    const outerPromise = new Promise((outerResolve) => setTimeout(async () => {
-        try {
-            await waitUntilCondition(() => !is_send_press, 10000, 100);
-        } catch {
-            console.warn('Timeout waiting for generation unlock');
-            toastr.warning(t`Cannot run /swipe command while the reply is being generated.`);
-            outerResolve(Promise.resolve(''));
-            return '';
-        }
-
-        outerResolve(Promise.resolve(swipe(null, direction, { source: SWIPE_SOURCE.SLASH_COMMAND, repeated: false })));
-        return '';
-    }, 1));
-
-    if (shouldAwait) {
-        const innerPromise = await outerPromise;
-        await innerPromise;
-    }
-
-    return '';
-}
-
 export async function generateSystemMessage(args, prompt) {
     clearComposerValue();
 
@@ -5199,21 +4812,6 @@ export async function sendMessageAs(args, text) {
             model: 'slash command',
         },
     };
-
-    message.swipe_id = 0;
-    message.swipes = [message.mes];
-    message.swipe_info = [{
-        send_date: message.send_date,
-        gen_started: null,
-        gen_finished: null,
-        extra: {
-            bias: message.extra.bias,
-            gen_id: message.extra.gen_id,
-            isSmallSys: compact,
-            api: 'manual',
-            model: 'slash command',
-        },
-    }];
 
     let insertAt = Number(args.at);
 

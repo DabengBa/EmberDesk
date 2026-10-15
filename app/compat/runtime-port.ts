@@ -25,10 +25,8 @@ export interface SettingsDocument {
 export interface RuntimeCommands {
     submitMessage(input: string): Promise<void>;
     stopGeneration(): void;
-    retryMessage(messageId: string): Promise<void>;
     loadEarlier(anchorId?: string): Promise<void>;
     saveSettings(settings: SettingsDocument): Promise<void>;
-    openWorkspaceDrawer(hostId: string): Promise<void>;
     connectProvider(): Promise<void>;
     testProviderConnection(): Promise<void>;
 }

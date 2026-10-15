@@ -5,7 +5,6 @@ export function resolveStartupSettingsPlan({ data, currentVersion: _currentVersi
     return {
         hasSettings,
         settings,
-        firstRun: Boolean(settings?.firstRun),
     };
 }
 

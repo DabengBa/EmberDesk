@@ -21,10 +21,8 @@ describe('React runtime provider', () => {
             commands: {
                 submitMessage: () => undefined,
                 stopGeneration: () => undefined,
-                retryMessage: () => undefined,
                 loadEarlier: () => undefined,
                 saveSettings: () => undefined,
-                openWorkspaceDrawer: () => undefined,
                 connectProvider: () => undefined,
                 testProviderConnection: () => undefined,
             },
@@ -47,10 +45,8 @@ describe('React runtime provider', () => {
         const commands = {
             submitMessage: jest.fn(),
             stopGeneration: jest.fn(),
-            retryMessage: jest.fn(),
             loadEarlier: jest.fn(),
             saveSettings: jest.fn(),
-            openWorkspaceDrawer: jest.fn(),
             connectProvider: jest.fn(),
             testProviderConnection: jest.fn(),
         };
@@ -94,19 +90,15 @@ describe('React runtime provider', () => {
 
         await runtime.commands.submitMessage('hello');
         runtime.commands.stopGeneration();
-        await runtime.commands.retryMessage('4');
         await runtime.commands.loadEarlier('2');
         await runtime.commands.saveSettings({ oai_settings: { temperature: 0.7 } });
-        runtime.commands.openWorkspaceDrawer('user-settings-block');
         await runtime.commands.connectProvider();
         await runtime.commands.testProviderConnection();
 
         expect(commands.submitMessage).toHaveBeenCalledWith('hello');
         expect(commands.stopGeneration).toHaveBeenCalledTimes(1);
-        expect(commands.retryMessage).toHaveBeenCalledWith('4');
         expect(commands.loadEarlier).toHaveBeenCalledWith('2');
         expect(commands.saveSettings).toHaveBeenCalledWith({ oai_settings: { temperature: 0.7 } });
-        expect(commands.openWorkspaceDrawer).toHaveBeenCalledWith('user-settings-block');
         expect(commands.connectProvider).toHaveBeenCalledTimes(1);
         expect(commands.testProviderConnection).toHaveBeenCalledTimes(1);
     });
@@ -131,10 +123,8 @@ describe('React runtime provider', () => {
             commands: {
                 submitMessage: () => undefined,
                 stopGeneration: () => undefined,
-                retryMessage: () => undefined,
                 loadEarlier: () => undefined,
                 saveSettings: () => undefined,
-                openWorkspaceDrawer: () => undefined,
                 connectProvider: () => undefined,
                 testProviderConnection: () => undefined,
             },
@@ -185,10 +175,8 @@ describe('React runtime provider', () => {
             commands: {
                 submitMessage: () => undefined,
                 stopGeneration: () => undefined,
-                retryMessage: () => undefined,
                 loadEarlier: () => undefined,
                 saveSettings: () => undefined,
-                openWorkspaceDrawer: () => undefined,
                 connectProvider: () => undefined,
                 testProviderConnection: () => undefined,
             },

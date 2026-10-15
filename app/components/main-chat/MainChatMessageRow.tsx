@@ -19,8 +19,6 @@ function normalizeClassNames(message: MainChatMessageRecord, isLast: boolean) {
         ...message.rootClassNames.filter(className => className !== 'mes'),
         ...(message.role === 'user' ? ['is_user'] : []),
         ...(message.lastInContext ? ['lastInContext'] : []),
-        ...(message.swipesVisible ? ['swipes_visible'] : []),
-        ...(message.lastSwipe ? ['last_swipe'] : []),
         ...(isLast ? ['last_mes'] : []),
     ].join(' ');
 }
@@ -28,7 +26,7 @@ function normalizeClassNames(message: MainChatMessageRecord, isLast: boolean) {
 // Native buttons dispatch their own click for Enter/Space; keep those keydowns
 // from reaching the document-level interactable shim (public/scripts/keyboard.js),
 // which fires a second click() on elements matching its selectors
-// (.mes_button, .menu_button, .swipe_left/.swipe_right).
+// (.mes_button, .menu_button).
 const stopActivationKeyPropagation = (event: KeyboardEvent<HTMLElement>) => {
     if (event.key === 'Enter' || event.key === ' ') {
         event.stopPropagation();
@@ -36,18 +34,12 @@ const stopActivationKeyPropagation = (event: KeyboardEvent<HTMLElement>) => {
 };
 
 // Clicks inside the reasoning disclosure must not bubble to document-level
-// delegated handlers. <details> is not an interactive element, so the
-// isolation attaches a native listener instead of an onClick prop.
-function isolateDetailsClicks(element: HTMLDetailsElement | null) {
-    if (!element) {
-        return;
-    }
-    const stopClickPropagation = (event: MouseEvent) => event.stopPropagation();
-    element.addEventListener('click', stopClickPropagation);
-    return () => {
-        element.removeEventListener('click', stopClickPropagation);
-    };
-}
+// delegated handlers. The inner controls each call event.stopPropagation() in
+// their React onClick, which already blocks document-level delegated handlers
+// (React dispatches at the mount root); the legacy reasoning handlers also
+// early-return for React-owned rows via isReactMainChatMessageRow. A native
+// stopPropagation on <details> would additionally swallow the event before it
+// reaches the React root, killing every onClick inside — so none is attached.
 
 function MessageActionShell({
     message,
@@ -61,11 +53,6 @@ function MessageActionShell({
     const canAddressMessage = Number.isInteger(numericMessageId) && numericMessageId >= 0;
     const hintRef = useRef<HTMLButtonElement>(null);
     const menuRef = useRef<HTMLDivElement>(null);
-    const retryGeneration = () => {
-        if (canAddressMessage) {
-            void commands?.triggerVisibleGeneration({ kind: 'retryGeneration', messageId: numericMessageId });
-        }
-    };
     const startEditing = () => {
         if (canAddressMessage) {
             void commands?.toggleMessageActionsShell({ kind: 'close' });
@@ -122,17 +109,6 @@ function MessageActionShell({
                 }
             }}
         >
-            {message.failureRetryVisible ? (
-                <button
-                    type="button"
-                    className="mes_button generation_failure_retry fa-solid fa-rotate-right"
-                    tabIndex={0}
-                    title="Retry generation"
-                    aria-label="Retry generation"
-                    onClick={retryGeneration}
-                    onKeyDown={stopActivationKeyPropagation}
-                />
-            ) : null}
             <button
                 type="button"
                 ref={hintRef}
@@ -174,9 +150,6 @@ function MessageActionShell({
                 <span className="mes_menu_group">
                     <button type="button" title="Prompt" className="mes_button mes_prompt fa-solid fa-square-poll-horizontal" data-i18n="[title]Prompt;[aria-label]Prompt" aria-label="Prompt" tabIndex={0} onKeyDown={stopActivationKeyPropagation} style={{ display: message.promptButtonVisible ? undefined : 'none' }}>
                         <span className="mes_menu_label">{translate('Prompt')}</span>
-                    </button>
-                    <button type="button" title="Jump to swipe history" className="mes_button mes_swipe_picker fa-solid fa-bookmark" data-i18n="[title]Jump to swipe history;[aria-label]Jump to swipe history" aria-label="Jump to swipe history" tabIndex={0} onKeyDown={stopActivationKeyPropagation} style={{ display: message.swipePickerEnabled ? undefined : 'none' }}>
-                        <span className="mes_menu_label">{translate('Jump to swipe history')}</span>
                     </button>
                     <button type="button" title="Create branch" className="mes_button mes_create_branch fa-regular fa-code-branch" data-i18n="[title]Create Branch;[aria-label]Create branch" aria-label="Create branch" tabIndex={0} onKeyDown={stopActivationKeyPropagation}>
                         <span className="mes_menu_label">{translate('Create branch')}</span>
@@ -340,18 +313,6 @@ export function MainChatMessageRow({
                 </div>
                 <div className="mes_timer" title={message.timerTitle || undefined}>{message.timer}</div>
             </div>
-            <button
-                type="button"
-                className="swipe_left fa-solid fa-chevron-left"
-                aria-label="Previous swipe"
-                tabIndex={0}
-                onClick={() => {
-                    if (canAddressMessage) {
-                        void commands?.triggerVisibleGeneration({ kind: 'swipeLeft', messageId: numericMessageId });
-                    }
-                }}
-                onKeyDown={stopActivationKeyPropagation}
-            />
             <div className="mes_block">
                 <div className="ch_name flex-container justifySpaceBetween">
                     <div className="flex-container flex1 alignitemscenter">
@@ -466,7 +427,6 @@ export function MainChatMessageRow({
                         </div>
                 </div>
                 <details
-                    ref={isolateDetailsClicks}
                     className="mes_reasoning_details"
                     open={message.reasoningOpen}
                     data-state={message.reasoningState ?? undefined}
@@ -622,56 +582,14 @@ export function MainChatMessageRow({
                     <output
                         className="generation_failure_notice"
                         style={{ display: 'block' }}
-                        data-i18n="Generation failed. You can retry this response or keep chatting."
+                        data-i18n="Generation failed. You can retry by sending a new message or keep chatting."
                     >
-                        Generation failed. You can retry this response or keep chatting.
+                        Generation failed. You can retry by sending a new message or keep chatting.
                     </output>
-                ) : null}
-                {message.emptyReplyRegenerateVisible ? (
-                    <button
-                        type="button"
-                        className="empty_reply_regenerate"
-                        tabIndex={0}
-                        onClick={() => {
-                            if (canAddressMessage) {
-                                void commands?.triggerVisibleGeneration({ kind: 'retryGeneration', messageId: numericMessageId });
-                            }
-                        }}
-                    >
-                        <i className="fa-solid fa-arrow-rotate-right" aria-hidden="true" />
-                        <span data-i18n="Regenerate">{translate('Regenerate')}</span>
-                    </button>
                 ) : null}
                 <div className="mes_media_wrapper" dangerouslySetInnerHTML={{ __html: render.mediaHtml }} />
                 <div className="mes_file_wrapper" dangerouslySetInnerHTML={{ __html: render.fileHtml }} />
                 <div className="mes_bias" dangerouslySetInnerHTML={{ __html: render.biasHtml }} />
-            </div>
-            <div className="flex-container swipeRightBlock flexFlowColumn flexNoGap">
-                <button
-                    type="button"
-                    className="swipe_right fa-solid fa-chevron-right"
-                    aria-label="Next swipe"
-                    tabIndex={0}
-                    onClick={() => {
-                        if (canAddressMessage) {
-                            void commands?.triggerVisibleGeneration({ kind: 'swipeRight', messageId: numericMessageId });
-                        }
-                    }}
-                    onKeyDown={stopActivationKeyPropagation}
-                />
-                <div
-                    className={message.swipePickerEnabled ? 'swipes-counter swipe-picker-enabled interactable' : 'swipes-counter'}
-                    hidden={message.swipeCounterHidden}
-                    role={message.swipePickerEnabled ? 'button' : undefined}
-                    title={message.swipePickerEnabled
-                        ? (message.swipePickerCanJump ? translate('Click to jump to a swipe') : translate('Click to view swipe history'))
-                        : undefined}
-                    tabIndex={message.swipePickerEnabled ? 0 : undefined}
-                >
-                    {message.swipeCount > 0
-                        ? `${message.swipeIndex + 1}\u200b/\u200b${message.swipeCount}`
-                        : ''}
-                </div>
             </div>
         </div>
     );

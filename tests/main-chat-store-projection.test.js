@@ -191,8 +191,6 @@ describe('main chat store projection', () => {
                 mes: '',
                 is_user: false,
                 is_system: false,
-                swipe_id: 1,
-                swipes: ['first', 'second'],
                 extra: {},
             }],
             formatMessage: createFormatMessage(),
@@ -202,8 +200,6 @@ describe('main chat store projection', () => {
                     recoveryStatus: '正在使用备用服务商',
                     recoveryStage: 'fallback',
                     failureNoticeVisible: true,
-                    failureRetryVisible: false,
-                    emptyReplyRegenerateVisible: true,
                     actionsExpanded: true,
                 },
             },
@@ -213,24 +209,16 @@ describe('main chat store projection', () => {
             recoveryStatus: '正在使用备用服务商',
             recoveryStage: 'fallback',
             failureNoticeVisible: true,
-            failureRetryVisible: false,
-            emptyReplyRegenerateVisible: true,
             actionsExpanded: true,
-            swipeIndex: 1,
-            swipeCount: 2,
-            swipesVisible: true,
-            lastSwipe: true,
         }));
     });
 
-    test('projects legacy DOM affordances (timer, prompt, swipe picker, media display) as data', () => {
+    test('projects legacy DOM affordances (timer, prompt, media display) as data', () => {
         const record = buildMainChatMessageRecord({
             name: 'Assistant',
             mes: 'Answer',
             is_user: false,
             is_system: false,
-            swipe_id: 0,
-            swipes: ['a', 'b'],
             extra: {
                 token_count: 42,
                 reasoning_duration: 1200,
@@ -244,15 +232,12 @@ describe('main chat store projection', () => {
             timerForMessage: () => ({ timerValue: '4.2s', timerTitle: 'Generation took 4.2s' }),
             mediaDisplayForMessage: () => 'gallery',
             hasItemizedPromptForMessage: () => true,
-            swipePickerForMessage: () => ({ canOpen: true, canJump: false }),
         });
 
         expect(record).toEqual(expect.objectContaining({
             timer: '4.2s',
             timerTitle: 'Generation took 4.2s',
             promptButtonVisible: true,
-            swipePickerEnabled: true,
-            swipePickerCanJump: false,
             mediaDisplay: 'gallery',
             inlineMediaText: true,
             reasoningState: 'hidden',

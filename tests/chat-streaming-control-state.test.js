@@ -12,12 +12,9 @@ describe('chat streaming control state', () => {
             composerDisabled: false,
             sendVisible: true,
             stopVisible: false,
-            continueVisible: false,
-            continueSurface: 'hidden',
             canRecoverInput: true,
             activeMessageId: null,
             recoveryStatusLabel: null,
-            failureRetryVisible: false,
             failureNoticeVisible: false,
         }],
         ['streaming', { isGenerating: true, hasStreamingProcessor: true }, {
@@ -26,12 +23,9 @@ describe('chat streaming control state', () => {
             composerDisabled: true,
             sendVisible: false,
             stopVisible: true,
-            continueVisible: false,
-            continueSurface: 'hidden',
             canRecoverInput: false,
             activeMessageId: null,
             recoveryStatusLabel: null,
-            failureRetryVisible: false,
             failureNoticeVisible: false,
         }],
         ['primary recovery', { isRecovering: true, isGenerating: true, recoveryStage: 'primary', recoveryStatusLabel: '正在重试', activeMessageId: 2 }, {
@@ -40,12 +34,9 @@ describe('chat streaming control state', () => {
             composerDisabled: true,
             sendVisible: false,
             stopVisible: true,
-            continueVisible: false,
-            continueSurface: 'hidden',
             canRecoverInput: false,
             activeMessageId: 2,
             recoveryStatusLabel: '正在重试',
-            failureRetryVisible: false,
             failureNoticeVisible: false,
         }],
         ['fallback recovery', { isRecovering: true, hasStreamingProcessor: true, recoveryStage: 'fallback', recoveryStatusLabel: '正在使用备用服务商', activeMessageId: 3 }, {
@@ -54,12 +45,9 @@ describe('chat streaming control state', () => {
             composerDisabled: true,
             sendVisible: false,
             stopVisible: true,
-            continueVisible: false,
-            continueSurface: 'hidden',
             canRecoverInput: false,
             activeMessageId: 3,
             recoveryStatusLabel: '正在使用备用服务商',
-            failureRetryVisible: false,
             failureNoticeVisible: false,
         }],
         ['stopped', { isStopped: true }, {
@@ -68,12 +56,9 @@ describe('chat streaming control state', () => {
             composerDisabled: false,
             sendVisible: true,
             stopVisible: false,
-            continueVisible: true,
-            continueSurface: 'legacy',
             canRecoverInput: true,
             activeMessageId: null,
             recoveryStatusLabel: null,
-            failureRetryVisible: false,
             failureNoticeVisible: false,
         }],
         ['completed', { isFinished: true }, {
@@ -82,26 +67,20 @@ describe('chat streaming control state', () => {
             composerDisabled: false,
             sendVisible: true,
             stopVisible: false,
-            continueVisible: true,
-            continueSurface: 'legacy',
             canRecoverInput: true,
             activeMessageId: null,
             recoveryStatusLabel: null,
-            failureRetryVisible: false,
             failureNoticeVisible: false,
         }],
-        ['error', { hasError: true, activeMessageId: 4, failureRetryVisible: true, failureNoticeVisible: true }, {
+        ['error', { hasError: true, activeMessageId: 4, failureNoticeVisible: true }, {
             state: 'error',
             phase: 'error',
             composerDisabled: false,
             sendVisible: true,
             stopVisible: false,
-            continueVisible: true,
-            continueSurface: 'legacy',
             canRecoverInput: true,
             activeMessageId: 4,
             recoveryStatusLabel: null,
-            failureRetryVisible: true,
             failureNoticeVisible: true,
         }],
     ])('classifies %s control recovery without token or provider decisions', async (_name, input, expected) => {
@@ -129,7 +108,6 @@ describe('chat streaming control state', () => {
             recoveryStage: 'fallback',
             activeMessageId: 7,
             recoveryStatusLabel: '正在使用备用服务商',
-            failureRetryVisible: true,
             failureNoticeVisible: true,
         });
 
@@ -138,7 +116,6 @@ describe('chat streaming control state', () => {
             phase: 'recoveringFallback',
             activeMessageId: 7,
             recoveryStatusLabel: '正在使用备用服务商',
-            failureRetryVisible: false,
             failureNoticeVisible: false,
         });
     });
@@ -151,13 +128,11 @@ describe('chat streaming control state', () => {
             recoveryStage: 'unexpected',
             activeMessageId: '3',
             recoveryStatusLabel: '',
-            failureRetryVisible: 'yes',
             failureNoticeVisible: 1,
         })).toMatchObject({
             phase: 'recoveringPrimary',
             activeMessageId: null,
             recoveryStatusLabel: null,
-            failureRetryVisible: false,
             failureNoticeVisible: false,
         });
 
@@ -165,30 +140,12 @@ describe('chat streaming control state', () => {
             hasError: true,
             activeMessageId: -1,
             recoveryStatusLabel: 42,
-            failureRetryVisible: 'yes',
             failureNoticeVisible: 1,
         })).toMatchObject({
             phase: 'error',
             activeMessageId: null,
             recoveryStatusLabel: null,
-            failureRetryVisible: true,
             failureNoticeVisible: true,
-        });
-    });
-
-    test('derives continue visibility from the observed legacy continue surface', async () => {
-        const { getStreamingControlState } = await importFreshControlStateModule();
-
-        expect(getStreamingControlState({ hasError: true, continueSurface: 'hidden' })).toMatchObject({
-            state: 'error',
-            continueVisible: false,
-            continueSurface: 'hidden',
-        });
-
-        expect(getStreamingControlState({ hasError: true, continueSurface: 'legacy' })).toMatchObject({
-            state: 'error',
-            continueVisible: true,
-            continueSurface: 'legacy',
         });
     });
 });

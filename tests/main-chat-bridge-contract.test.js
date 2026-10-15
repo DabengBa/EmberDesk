@@ -15,10 +15,6 @@ describe('main chat bridge contract', () => {
     test('publishes the shared visible transport contract constants', () => {
         expect(SUPPORTED_REACT_VISIBLE_GENERATION_KINDS).toEqual([
             'submitComposer',
-            'continueLast',
-            'retryGeneration',
-            'swipeLeft',
-            'swipeRight',
         ]);
         expect(MAIN_CHAT_VISIBLE_TRANSPORT_STATUSES).toEqual({
             SERVICE_OWNED: 'service-owned',

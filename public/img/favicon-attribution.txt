@@ -1,0 +1,13 @@
+EmberDesk icon notice
+
+The EmberDesk fire icon uses the Twemoji "fire" artwork packaged by
+Favicon.io (https://favicon.io/emoji-favicons/fire/).
+
+Twemoji graphics copyright 2020 Twitter, Inc and other contributors.
+Graphics licensed under CC-BY 4.0:
+https://creativecommons.org/licenses/by/4.0/
+
+Source artwork: https://github.com/twitter/twemoji/blob/v14.0.2/assets/svg/1f525.svg
+
+The artwork was resized for use as application and browser icons. No other
+modifications were made.

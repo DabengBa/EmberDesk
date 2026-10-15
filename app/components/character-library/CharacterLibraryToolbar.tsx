@@ -270,25 +270,6 @@ export function CharacterLibraryToolbar({
                     <ToolbarActionButton label="URL" icon="fa-link" compact title="Import content from external URL" onClick={() => bridge.clickLegacyAction('external_import_button')} />
                     <HostedDomSlot factory={extensionButtonsFactory} />
                 </div>
-                <div {...stylex.props(characterLibraryStyles.toolbarSearchField)}>
-                    <toolbarForm.Field name="searchQuery">
-                        {field => (
-                            <input
-                                id="emberdesk-react-character-search"
-                                className={`text_pole textarea_compact ${stylex.props(characterLibraryStyles.toolbarInput).className ?? ''}`}
-                                type="search"
-                                aria-label="Search characters"
-                                placeholder="Search..."
-                                value={field.state.value}
-                                onChange={event => {
-                                    const searchQuery = event.target.value;
-                                    field.handleChange(searchQuery);
-                                    bridge.applySearchQuery(searchQuery);
-                                }}
-                            />
-                        )}
-                    </toolbarForm.Field>
-                </div>
                 <div {...stylex.props(characterLibraryStyles.toolbarActionsInnerNoWrap)}>
                     {state.isBulkEdit ? (
                         <>
@@ -328,6 +309,25 @@ export function CharacterLibraryToolbar({
                         onClick={() => bridge.toggleGrid()}
                     />
                     <ToolbarActionButton label="Bulk" icon="fa-list-check" compact title="Bulk edit characters" onClick={() => bridge.toggleBulkEdit()} />
+                </div>
+                <div {...stylex.props(characterLibraryStyles.toolbarSearchField)}>
+                    <toolbarForm.Field name="searchQuery">
+                        {field => (
+                            <input
+                                id="emberdesk-react-character-search"
+                                className={`text_pole textarea_compact ${stylex.props(characterLibraryStyles.toolbarInput).className ?? ''}`}
+                                type="search"
+                                aria-label="Search characters"
+                                placeholder="Search..."
+                                value={field.state.value}
+                                onChange={event => {
+                                    const searchQuery = event.target.value;
+                                    field.handleChange(searchQuery);
+                                    bridge.applySearchQuery(searchQuery);
+                                }}
+                            />
+                        )}
+                    </toolbarForm.Field>
                 </div>
             </div>
             <div

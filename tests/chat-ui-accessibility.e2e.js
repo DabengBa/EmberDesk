@@ -15,7 +15,7 @@ async function mountSurfaces(page) {
     await page.route('**/api/**', route => route.fulfill({ status: 418, json: { error: 'Unmocked API operation' } }));
     await page.route('**/api/backups/chat/get', route => route.fulfill({ json: [backup] }));
     await page.route('**/api/backups/chat/download', route => route.fulfill({ body: JSON.stringify({ name: 'Assistant', send_date: '2026-10-12', mes: 'Backup preview.' }) }));
-    await page.route('**/scripts/i18n.js', route => route.fulfill({ contentType: 'text/javascript', body: 'export const t=(parts,...values)=>typeof parts==="string"?parts:parts.reduce((text,part,index)=>text+part+(values[index]??""),"");' }));
+    await page.route('**/scripts/i18n.js', route => route.fulfill({ contentType: 'text/javascript', body: 'export const t=(parts,...values)=>typeof parts==="string"?parts:parts.reduce((text,part,index)=>text+part+(values[index]??""),""); export const translate=(key)=>String(key); export const getCurrentLocale=()=>"zh-cn";' }));
     await page.route('**/scripts/RossAscends-mods.js', route => route.fulfill({ contentType: 'text/javascript', body: 'export const shouldSendOnEnter=()=>true; export const isMobile=()=>false;' }));
     await page.route('**/scripts/power-user.js', route => route.fulfill({ contentType: 'text/javascript', body: 'export const toastPositionClasses=[];' }));
     await page.route('**/scripts/utils.js', route => route.fulfill({ contentType: 'text/javascript', body: `
@@ -23,20 +23,14 @@ async function mountSurfaces(page) {
         export const uuidv4=()=>crypto.randomUUID();
         export const removeFromArray=(array,value)=>array.splice(array.indexOf(value),1);
         export const runAfterAnimation=(element,callback)=>queueMicrotask(callback);
-        export const copyText=async text=>{window.copiedSwipe=text;};
+        export const copyText=async text=>{window.copiedText=text;};
         export const addLongPressEvent=()=>{};
         export const timestampToMoment=()=>({format:()=>''});
     ` }));
     await page.route('**/scripts/tokenizers.js', route => route.fulfill({ contentType: 'text/javascript', body: 'export const getTokenCountAsync=async()=>10;' }));
     await page.route('**/scripts/chat-branch.js', route => route.fulfill({ contentType: 'text/javascript', body: 'export const branchChat=async()=>{};' }));
     await page.route('**/script.js', route => route.fulfill({ contentType: 'text/javascript', body: `
-        export const chat=[{swipes:['First candidate','Second candidate'],swipe_id:0,is_user:false}];
-        export const ensureSwipes=()=>false;
-        export const syncMesToSwipe=()=>{};
-        export const isSwipingAllowed=()=>true;
-        export const isMessageSwipeable=()=>true;
-        export const swipe=async()=>{};
-        export const deleteSwipe=async()=>0;
+        export const chat=[{mes:'First message',is_user:false}];
     ` }));
     await page.route('**/chat-ui-test', route => route.fulfill({ contentType: 'text/html', body: `<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">
         <link rel="stylesheet" href="/webfonts/NotoSans/stylesheet.css">
@@ -45,7 +39,7 @@ async function mountSurfaces(page) {
         <link rel="stylesheet" href="/react/login/assets/workspace-panels.css">
         </head><body class="no-blur noShadows"><button id="background-action">Background action</button>
         ${popupTemplate}${pastChatTemplate}${historyShell}<div id="send_form"></div><div id="options" style="display:none"></div>
-        <div id="chat"><div class="mes" mesid="0"><button class="mes_swipe_picker">Choose candidate</button></div></div>
+        <div id="chat"><div class="mes" mesid="0"><div class="mes_text">First message</div></div></div>
         <script src="/lib/jquery-3.5.1.min.js"></script></body></html>` }));
     await page.goto('/chat-ui-test');
     await page.evaluate(async () => {
@@ -168,25 +162,6 @@ for (const width of [1440, 390]) {
     });
 }
 
-test('candidate copy and expansion are keyboard buttons', async ({ page }) => {
-    await page.evaluate(async () => {
-        const shell = document.getElementById('shadow_select_chat_popup');
-        if (shell instanceof HTMLDialogElement) shell.close();
-        else shell.style.display = 'none';
-        (await import('/scripts/swipe-picker.js')).initSwipePicker();
-    });
-    await page.getByRole('button', { name: 'Choose candidate' }).click();
-    const dialog = page.getByRole('dialog', { name: 'Swipe Selection' });
-    const copy = dialog.getByRole('button', { name: 'Copy' }).first();
-    await copy.focus();
-    await page.keyboard.press('Enter');
-    expect(await page.evaluate(() => window.copiedSwipe)).toBe('First candidate');
-    const expand = dialog.getByRole('button', { name: 'Expand/Collapse' }).first();
-    await expand.focus();
-    await page.keyboard.press('Space');
-    await expect(expand).toHaveAttribute('aria-expanded', 'true');
-    await expect(dialog.getByRole('button', { name: 'Delete Swipe' }).first()).toBeVisible();
-});
 
 test('generic rename input and actions expose native accessible controls', async ({ page }) => {
     await page.evaluate(async () => {

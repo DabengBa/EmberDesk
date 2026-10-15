@@ -1,7 +1,6 @@
 import { throttle } from './utils.js';
-import { SWIPE_DIRECTION, SWIPE_STATE, debounce_timeout } from './constants.js';
+import { debounce_timeout } from './constants.js';
 import { eventSource, event_types } from './events.js';
-import { swipe } from './generation-service.js';
 import { updateMessageElement } from './message-service.js';
 import { requireDomHandlersShellContext } from './dom-handlers-shell-context.js';
 import { initMainChatComposerService } from './main-chat-composer-service.js';
@@ -21,7 +20,6 @@ const state = new Proxy({}, {
     getOwnPropertyDescriptor: (_, key) => Object.getOwnPropertyDescriptor(shell().state, key),
 });
 
-const Generate = (...args) => shell().Generate(...args);
 const bootstrapWorkspace = (...args) => shell().bootstrapWorkspace(...args);
 const buildCascadeSectionHtml = (...args) => shell().buildCascadeSectionHtml(...args);
 const buildTemporaryChatDeleteWarningHtml = (...args) => shell().buildTemporaryChatDeleteWarningHtml(...args);
@@ -31,6 +29,7 @@ const chooseBogusFolder = (...args) => shell().chooseBogusFolder(...args);
 const closeCharacterExportPopup = (...args) => shell().closeCharacterExportPopup(...args);
 const closeCurrentChat = (...args) => shell().closeCurrentChat(...args);
 const closeMessageEditor = (...args) => shell().closeMessageEditor(...args);
+const closeWorkspaceChildSlotHost = (...args) => shell().closeWorkspaceChildSlotHost(...args);
 const copyText = (...args) => shell().copyText(...args);
 const createChatMessageActionsController = (...args) => shell().createChatMessageActionsController(...args);
 const createOrEditCharacter = (...args) => shell().createOrEditCharacter(...args);
@@ -51,7 +50,6 @@ const getCharacterSource = (...args) => shell().getCharacterSource(...args);
 const getOptionsPopper = (...args) => shell().getOptionsPopper(...args);
 const getRequestHeaders = (...args) => shell().getRequestHeaders(...args);
 const handleUnifiedImport = (...args) => shell().handleUnifiedImport(...args);
-const hideSwipeButtons = (...args) => shell().hideSwipeButtons(...args);
 const importCharacter = (...args) => shell().importCharacter(...args);
 const importCharacterChat = (...args) => shell().importCharacterChat(...args);
 const importEmbeddedWorldInfo = (...args) => shell().importEmbeddedWorldInfo(...args);
@@ -72,7 +70,6 @@ const mountCharacterPopup = (...args) => shell().mountCharacterPopup(...args);
 const mountChatComposer = (...args) => shell().mountChatComposer(...args);
 const mountDialogueDelMesControls = (...args) => shell().mountDialogueDelMesControls(...args);
 const mountDialoguePopupControls = (...args) => shell().mountDialoguePopupControls(...args);
-const mountOnboardingActions = (...args) => shell().mountOnboardingActions(...args);
 const mountExportFormatPopup = (...args) => shell().mountExportFormatPopup(...args);
 const mountOptionsMenu = (...args) => shell().mountOptionsMenu(...args);
 const mountReactMainChatMessageListPanel = (...args) => shell().mountReactMainChatMessageListPanel(...args);
@@ -104,17 +101,14 @@ const select_rm_create = (...args) => shell().select_rm_create(...args);
 const select_selected_character = (...args) => shell().select_selected_character(...args);
 const sendTextareaMessage = (...args) => shell().sendTextareaMessage(...args);
 const setCharacterSettingsOverrides = (...args) => shell().setCharacterSettingsOverrides(...args);
-const setMainChatMessageUiState = (...args) => shell().setMainChatMessageUiState(...args);
 const showBranchChatButtons = (...args) => shell().showBranchChatButtons(...args);
 const showDeleteConfirmWithCascade = (...args) => shell().showDeleteConfirmWithCascade(...args);
-const showSwipeButtons = (...args) => shell().showSwipeButtons(...args);
 const stopGeneration = (...args) => shell().stopGeneration(...args);
 const stopScriptExecution = (...args) => shell().stopScriptExecution(...args);
 const t = (...args) => shell().t(...args);
 const toggleCharacterExportPopup = (...args) => shell().toggleCharacterExportPopup(...args);
 const getVisibleCharacterExportTrigger = (...args) => shell().getVisibleCharacterExportTrigger(...args);
 const toggleDrawer = (...args) => shell().toggleDrawer(...args);
-const translate = (...args) => shell().translate(...args);
 const updateCharListGridToggleLabel = (...args) => shell().updateCharListGridToggleLabel(...args);
 const updateCharacterRow = (...args) => shell().updateCharacterRow(...args);
 const updateFavButtonState = (...args) => shell().updateFavButtonState(...args);
@@ -141,7 +135,6 @@ export async function bindLegacyShellHandlers() {
         mountExportFormatPopup(),
         mountDialoguePopupControls(),
         mountDialogueDelMesControls(),
-        mountOnboardingActions(),
     ]);
 
     //////////INPUT BAR FOCUS-KEEPING LOGIC/////////////
@@ -149,14 +142,14 @@ export async function bindLegacyShellHandlers() {
     $('#send_textarea').on('focusin focus click', () => {
         S_TAPreviouslyFocused = true;
     });
-    $('#send_but, #option_regenerate, #option_continue').on('click', () => {
+    $('#send_but').on('click', () => {
         if (S_TAPreviouslyFocused) {
             $('#send_textarea').trigger('focus');
         }
     });
     $(document).on('click', event => {
         if ($(':focus').attr('id') !== 'send_textarea') {
-            var validIDs = ['options_button', 'send_but', 'send_textarea', 'option_regenerate', 'option_continue'];
+            var validIDs = ['options_button', 'send_but', 'send_textarea'];
             if (!validIDs.includes($(event.target).attr('id'))) {
                 S_TAPreviouslyFocused = false;
             }
@@ -165,21 +158,6 @@ export async function bindLegacyShellHandlers() {
         }
     });
 
-    ///// SWIPE BUTTON CLICKS ///////
-
-    //limit swiping to only last message clicks
-    $(document).on('click', '.last_mes .swipe_right', async (e, data) => await swipe(e, SWIPE_DIRECTION.RIGHT, data));
-    $(document).on('click', '.last_mes .swipe_left', async (e, data) => await swipe(e, SWIPE_DIRECTION.LEFT, data));
-    $(document).on('click keydown', '.generation_failure_retry', function (event) {
-        if (isReactMainChatOwner() && $(this).closest('[data-main-chat-message-row-owner="react"]').length > 0) {
-            return;
-        }
-        if (event.type === 'keydown' && !['Enter', ' '].includes(event.key)) {
-            return;
-        }
-        event.preventDefault();
-        $('#option_regenerate').trigger('click');
-    });
 
     initCharacterSearch();
 
@@ -532,7 +510,6 @@ export async function bindLegacyShellHandlers() {
         '#creator_textarea': function () { state.create_save.creator = String($('#creator_textarea').val()); },
         '#tags_textarea': function () { state.create_save.tags = String($('#tags_textarea').val()); },
         '#scenario_pole': function () { state.create_save.scenario = String($('#scenario_pole').val()); },
-        '#mes_example_textarea': function () { state.create_save.mes_example = String($('#mes_example_textarea').val()); },
         '#firstmessage_textarea': function () { state.create_save.first_message = String($('#firstmessage_textarea').val()); },
         '#depth_prompt_prompt': function () { state.create_save.depth_prompt_prompt = String($('#depth_prompt_prompt').val()); },
         '#depth_prompt_depth': function () { state.create_save.depth_prompt_depth = Number($('#depth_prompt_depth').val()); },
@@ -727,13 +704,6 @@ export async function bindLegacyShellHandlers() {
         const fromSlashCommand = customData?.fromSlashCommand || false;
         var id = $(this).attr('id');
 
-        // Check whether a custom prompt was provided via custom data (for example through a slash command)
-        const additionalPrompt = customData?.additionalPrompt?.trim() || undefined;
-        const buildOrFillAdditionalArgs = (args = {}) => ({
-            ...args,
-            ...(additionalPrompt !== undefined && { quiet_prompt: additionalPrompt, quietToLoud: true }),
-        });
-
         if (id == 'option_select_chat') {
             if ((state.this_chid !== undefined && !state.is_send_press) || fromSlashCommand) {
                 await displayPastChats();
@@ -763,35 +733,6 @@ export async function bindLegacyShellHandlers() {
             if (state.this_chid === undefined && !state.is_send_press) {
                 await newAssistantChat();
             }
-        } else if (id == 'option_regenerate') {
-            //Attempting to regenerate a user message will instead generate a new message.
-            if (state.chat.length && state.chat.length - 1 === state.this_edit_mes_id && state.chat[state.this_edit_mes_id]?.is_user == false) {
-                toastr.warning(t`Finish the edit before starting a generation.`, t`You cannot regenerate the message you are editing.`);
-                return;
-            }
-            if (state.is_send_press == false) {
-                state.is_send_press = true;
-                Generate('regenerate', buildOrFillAdditionalArgs());
-            }
-        } else if (id == 'option_impersonate') {
-            if (state.is_send_press == false || fromSlashCommand) {
-                state.is_send_press = true;
-                Generate('impersonate', buildOrFillAdditionalArgs());
-            }
-        } else if (id == 'option_continue') {
-            if (state.swipeState == SWIPE_STATE.EDITING) {
-                toastr.warning(t`Confirm the edit to start a generation.`, t`You cannot send a message during a swipe-edit.`);
-                return;
-            }
-            if (state.chat.length && state.chat.length - 1 === state.this_edit_mes_id) {
-                toastr.warning(t`Finish the edit before starting a generation.`, t`You cannot continue the message you are editing.`);
-                return;
-            }
-
-            if (state.is_send_press == false || fromSlashCommand) {
-                state.is_send_press = true;
-                Generate('continue', buildOrFillAdditionalArgs());
-            }
         } else if (id == 'option_delete_mes') {
             setTimeout(() => openMessageDelete(fromSlashCommand), state.animation_duration);
         } else if (id == 'option_close_chat') {
@@ -819,7 +760,6 @@ export async function bindLegacyShellHandlers() {
             row.removeClass('selected');
             checkbox.prop('checked', false);
         });
-        showSwipeButtons();
         state.this_del_mes = -1;
         state.is_delete_mode = false;
         $('#send_textarea').trigger('focus');
@@ -860,7 +800,6 @@ export async function bindLegacyShellHandlers() {
             $('#send_form').css('display', state.css_send_form_display);
             $('#dialogue_del_mes_cancel').prop('disabled', false);
             $('#send_textarea').trigger('focus');
-            showSwipeButtons();
             state.this_del_mes = -1;
             state.is_delete_mode = false;
         }
@@ -963,17 +902,6 @@ export async function bindLegacyShellHandlers() {
 
             if (state.this_edit_mes_id >= 0) {
                 let mes_edited = state.chatElement.find(`[mesid="${state.this_edit_mes_id}"]`).find('.mes_edit_done');
-                if (Number(edit_mes_id) == state.chat.length - 1) { //if the generating swipe (...)
-                    let run_edit = true;
-                    if (state.chat[edit_mes_id].swipe_id !== undefined) {
-                        if (state.chat[edit_mes_id].swipes.length === state.chat[edit_mes_id].swipe_id) {
-                            run_edit = false;
-                        }
-                    }
-                    if (run_edit) {
-                        hideSwipeButtons();
-                    }
-                }
                 await messageEditDone(mes_edited);
             }
             var edit_mes_id = Number($(this).closest('.mes').attr('mesid'));
@@ -1028,7 +956,6 @@ export async function bindLegacyShellHandlers() {
             return;
         }
 
-        hideSwipeButtons();
         const oldScroll = state.chatElement[0].scrollTop;
         const clone = structuredClone(state.chat[state.this_edit_mes_id]);
         clone.send_date = Date.now();
@@ -1044,16 +971,11 @@ export async function bindLegacyShellHandlers() {
         updateViewMessageIds();
         await saveChatConditional();
         state.chatElement[0].scrollTop = oldScroll;
-        showSwipeButtons();
     });
 
     $(document).on('click', '.mes_edit_delete', async function (event, customData) {
         const fromSlashCommand = customData?.fromSlashCommand || false;
-        const message = state.chat[state.this_edit_mes_id];
-        const selectedSwipe = message.swipe_id ?? undefined;
-        const swipesArray = Array.isArray(message.swipes) ? message.swipes : [];
-        const canDeleteSwipe = !fromSlashCommand && !message.is_user && swipesArray.length > 1 && state.this_edit_mes_id === state.chat.length - 1 && selectedSwipe !== undefined;
-        await deleteMessage(Number(state.this_edit_mes_id), canDeleteSwipe ? selectedSwipe : undefined, fromSlashCommand !== true);
+        await deleteMessage(Number(state.this_edit_mes_id), fromSlashCommand !== true);
     });
 
     $(document).on('click', '.mes_edit_done', async function () {
@@ -1242,11 +1164,18 @@ export async function bindLegacyShellHandlers() {
         }
 
         // This autocloses open drawers that are not pinned if a click happens inside the app which does not target them.
+        // Route through closeWorkspaceChildSlotHost so persistence keys, close
+        // guards, and the dock-change notification all apply — a bare class
+        // toggle left stale "opened" keys that resurrected drawers on reload.
         const targetParentHasOpenDrawer = clickTarget.parents('.openDrawer').length;
         if (!clickTarget.hasClass('openDrawer')) {
             const $openDrawers = $('.openDrawer').not('.pinnedOpen');
             if ($openDrawers.length && targetParentHasOpenDrawer === 0) {
-                $openDrawers.toggleClass('closedDrawer openDrawer');
+                $openDrawers.each(function () {
+                    if (this.id) {
+                        closeWorkspaceChildSlotHost(this.id);
+                    }
+                });
             }
         }
     });
@@ -1375,11 +1304,6 @@ export async function bindLegacyShellHandlers() {
             }
             if (state.this_edit_mes_id === undefined && $('#mes_stop').is(':visible')) {
                 $('#mes_stop').trigger('click');
-                if (state.chat.length === 0) return;
-                const lastMessage = state.chat[state.chat.length - 1];
-                if (Array.isArray(lastMessage.swipes) && lastMessage.swipe_id == lastMessage.swipes.length) {
-                    $('.last_mes .swipe_left').trigger('click');
-                }
             }
         }
     });
@@ -1634,31 +1558,6 @@ export async function bindLegacyShellHandlers() {
         const popup = state.Popup.util.popups.find(popup => popup.dlg.contains(this));
         await popup?.completeAffirmative();
         await shell().openCharacterLibrary();
-    });
-
-    // Show regenerate button for empty AI replies
-    eventSource.on(event_types.CHARACTER_MESSAGE_RENDERED, (messageId) => {
-        if (messageId !== state.chat.length - 1) return;
-        const message = state.chat[messageId];
-        if (!message || message.is_user || message.is_system) return;
-        const visibleText = (message.extra?.display_text ?? message.mes ?? '').trim();
-        if (isReactMainChatOwner()) {
-            setMainChatMessageUiState(messageId, {
-                emptyReplyRegenerateVisible: visibleText.length === 0,
-            });
-            return;
-        }
-        if (visibleText.length > 0) return;
-        const mesBlock = $(`.mes[mesid="${messageId}"] .mes_block`);
-        if (mesBlock.length === 0 || mesBlock.find('.empty_reply_regenerate').length > 0) return;
-        mesBlock.append(
-            $('<div>')
-                .addClass('empty_reply_regenerate')
-                .append($('<i>').addClass('fa-solid fa-arrow-rotate-right'))
-                .append($('<span>').attr('data-i18n', 'Regenerate').text(translate('Regenerate')))
-                .on('click', () => { $('#option_regenerate').trigger('click'); }),
-        );
-        void mountReactMainChatMessageListPanel();
     });
 
     eventSource.on(event_types.CHAT_CHANGED, () => {

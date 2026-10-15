@@ -4,7 +4,7 @@ import { getThemeObject } from './scripts/power-user';
 import { oai_settings } from './scripts/openai';
 import { FileAttachment } from './scripts/chats';
 import { ReasoningMessageExtra } from './scripts/reasoning';
-import { IGNORE_SYMBOL, OVERSWIPE_BEHAVIOR } from './scripts/constants';
+import { IGNORE_SYMBOL } from './scripts/constants';
 import { ToolInvocation } from './scripts/tool-calling';
 import { getWorldInfoSettings } from './scripts/world-info';
 
@@ -67,16 +67,6 @@ declare global {
         is_system?: boolean;
         force_avatar?: string;
         original_avatar?: string;
-        swipes?: string[];
-        swipe_info?: SwipeInfo[];
-        swipe_id?: number;
-        extra?: ChatMessageExtra;
-    };
-
-    interface SwipeInfo {
-        send_date?: MessageTimestamp;
-        gen_started?: MessageTimestamp;
-        gen_finished?: MessageTimestamp;
         extra?: ChatMessageExtra;
     }
 
@@ -94,9 +84,6 @@ declare global {
         title?: string;
         isSmallSys?: boolean;
         token_count?: number;
-        /** When false, the message cannot be swiped. */
-        swipeable?: boolean;
-        overswipe_behavior?: OVERSWIPE_BEHAVIOR;
         files?: FileAttachment[];
         inline_image?: boolean;
         media_display?: string;
@@ -226,7 +213,6 @@ declare global {
         }
     };
 
-    type SwipeEvent = JQuery.TriggeredEvent<any, any, HTMLElement, HTMLElement>;
 }
 
 //Overrides for public/scripts/chats.js

@@ -36,7 +36,6 @@ import { SlashCommandEnumValue, enumTypes } from './slash-commands/SlashCommandE
 import { commonEnumProviders, enumIcons } from './slash-commands/SlashCommandCommonEnumsProvider.js';
 import { accountStorage } from './util/AccountStorage.js';
 import { fixToastrForDialogs } from './popup.js';
-import { loadWorkspacePanelsModule } from './workspace-panels-react-bridge.js';
 import { DEFAULT_FRONTEND_FRAME_SETTINGS, normalizeFrontendFramesSettings } from './frontend-frame.js';
 
 export const toastPositionClasses = [
@@ -271,13 +270,6 @@ export async function loadPowerUserSettings(settings) {
     }
 
 
-    $('#frontend_frames_enabled').prop('checked', power_user.frontend_frames.enabled);
-    $('#frontend_frames_depth').val(power_user.frontend_frames.depth);
-    $('#frontend_frames_depth_ignore_hidden').prop('checked', power_user.frontend_frames.depth_ignore_hidden);
-    $('#frontend_frames_collapse_code_block').val(power_user.frontend_frames.collapse_code_block);
-    $('#frontend_frames_skip_highlight').prop('checked', power_user.frontend_frames.skip_highlight);
-    $('#frontend_frames_use_blob_url').prop('checked', power_user.frontend_frames.use_blob_url);
-    $('#frontend_frames_allow_streaming').prop('checked', power_user.frontend_frames.allow_streaming);
     $(`#character_sort_order option[data-order="${power_user.sort_order}"][data-field="${power_user.sort_field}"]`).prop('selected', true);
     switchReducedMotion();
     reloadMarkdownProcessor();
@@ -637,7 +629,7 @@ async function doMesCut(_, text) {
         }
 
         setEditedMessageId(mesIDToCut);
-        await deleteMessage(mesIDToCut, null, false);
+        await deleteMessage(mesIDToCut);
     }
 
     await saveChatConditional();
@@ -753,43 +745,6 @@ jQuery(() => {
             power_user.sort_rule = $(this).find(':selected').data('rule');
         }
         printCharactersDebounced();
-        saveSettingsDebounced();
-    });
-
-    $('#frontend_frames_enabled').on('input', function () {
-        power_user.frontend_frames.enabled = !!$(this).prop('checked');
-        saveSettingsDebounced();
-    });
-
-    $('#frontend_frames_depth').on('input', function () {
-        const depth = Math.trunc(Number($(this).val()));
-        power_user.frontend_frames.depth = Number.isFinite(depth) && depth >= 0 ? depth : 0;
-        saveSettingsDebounced();
-    });
-
-    $('#frontend_frames_depth_ignore_hidden').on('input', function () {
-        power_user.frontend_frames.depth_ignore_hidden = !!$(this).prop('checked');
-        saveSettingsDebounced();
-    });
-
-    $('#frontend_frames_collapse_code_block').on('change', function () {
-        const value = String($(this).val());
-        power_user.frontend_frames.collapse_code_block = ['all', 'frontend_only', 'none'].includes(value) ? value : 'frontend_only';
-        saveSettingsDebounced();
-    });
-
-    $('#frontend_frames_skip_highlight').on('input', function () {
-        power_user.frontend_frames.skip_highlight = !!$(this).prop('checked');
-        saveSettingsDebounced();
-    });
-
-    $('#frontend_frames_use_blob_url').on('input', function () {
-        power_user.frontend_frames.use_blob_url = !!$(this).prop('checked');
-        saveSettingsDebounced();
-    });
-
-    $('#frontend_frames_allow_streaming').on('input', function () {
-        power_user.frontend_frames.allow_streaming = !!$(this).prop('checked');
         saveSettingsDebounced();
     });
 
@@ -954,32 +909,4 @@ jQuery(() => {
         `,
     }));
 });
-
-/**
- * Mounts the React-owned User Settings (power-user) drawer content.
- * Must run before getSettings(): loadPowerUserSettings binds every element
- * ID that the React surface preserves.
- */
-export async function mountPowerUserPanel() {
-    const drawerContent = document.getElementById('user-settings-block');
-    if (!drawerContent) {
-        console.warn('User Settings drawer not found');
-        return;
-    }
-    if (drawerContent.dataset.reactPowerUserMounted === 'true') {
-        return;
-    }
-
-    const host = document.createElement('div');
-    host.id = 'emberdesk-react-power-user-host';
-    drawerContent.replaceChildren(host);
-
-    try {
-        const module = await loadWorkspacePanelsModule();
-        module.mountPowerUserPanel(host);
-        drawerContent.dataset.reactPowerUserMounted = 'true';
-    } catch (error) {
-        console.error('Failed to mount power-user panel:', error);
-    }
-}
 

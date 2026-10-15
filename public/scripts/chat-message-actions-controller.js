@@ -1,6 +1,6 @@
 export const MESSAGE_ACTION_TIERS = Object.freeze({
     highFrequency: ['extraMesButtonsHint', 'mes_copy', 'mes_edit'],
-    secondary: ['mes_swipe_picker', 'mes_reasoning_copy', 'mes_translate', 'mes_narrate', 'mes_hide'],
+    secondary: ['mes_reasoning_copy', 'mes_translate', 'mes_narrate', 'mes_hide'],
     danger: ['mes_edit_delete', 'mes_reasoning_delete'],
 });
 
@@ -41,9 +41,6 @@ function getMessageActionNameFromClassList(classList) {
 
         if (
             className === 'extraMesButtonsHint'
-            || className === 'swipe_left'
-            || className === 'swipe_right'
-            || className === 'generation_failure_retry'
             || className.startsWith('sd_')
         ) {
             return className;

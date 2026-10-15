@@ -43,7 +43,6 @@ export function buildChatMessageRenderDescriptor(message, { messageId, timestamp
         state: getMessageState(flags),
         attributes: {
             mesid: messageId,
-            swipeid: message?.swipe_id ?? 0,
             ch_name: message?.name,
             is_user: isUser,
             is_system: isSystem,

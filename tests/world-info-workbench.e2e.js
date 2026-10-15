@@ -166,9 +166,9 @@ test.describe('UI hardening', () => {
         await testSetup.awaitST({ page });
         await page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: '正则' }).click();
         await expect(page.locator('#RegexPanel')).toBeVisible();
-        if (!await page.locator('#open_regex_editor').isVisible()) {
-            await page.locator('.regex_settings > .inline-drawer > .inline-drawer-toggle').click();
-        }
+        // No inline-drawer shell anymore: the chrome shows the controls
+        // directly once the React surface mounts.
+        await expect(page.locator('#open_regex_editor')).toBeVisible({ timeout: 15_000 });
     }
 
     test('world entry reports rejected saves and retries the retained draft', async ({ page }) => {

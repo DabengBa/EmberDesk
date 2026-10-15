@@ -231,10 +231,10 @@ async function openMessageActions(page, messageId) {
     const row = page.locator(`#chat .mes[mesid="${messageId}"]`);
     await expect(row).toBeVisible();
     await row.hover();
-    const hint = row.getByRole('button', { name: 'Message Actions' });
+    const hint = row.getByRole('button', { name: '消息操作' });
     await expect(hint).toBeVisible();
     await hint.click();
-    await expect(row.getByRole('button', { name: 'Copy' })).toBeVisible();
+    await expect(row.getByRole('button', { name: '复制' })).toBeVisible();
     return row;
 }
 
@@ -362,15 +362,15 @@ test.describe('main chat message list walkthrough', () => {
         await expect(page.locator('#chat .mes[mesid]')).toHaveCount(seededMessages.length);
         await expectMainChatHostPresent(page, seededMessages.length);
         const assistantRow = page.locator(`#chat .mes[mesid="${assistantMessageIndex}"]`);
-        await expect(assistantRow.locator('.swipe_left')).toHaveCount(1);
-        await expect(assistantRow.locator('.swipe_right')).toHaveCount(1);
+        await expect(assistantRow.locator('.mes_block')).toHaveCount(1);
+        await expect(assistantRow.locator('.mes_text')).toBeVisible();
 
         const actionRow = await openMessageActions(page, seededMessages.length - 1);
-        await expect(actionRow.getByRole('button', { name: 'Edit' })).toBeVisible();
-        await actionRow.getByRole('button', { name: 'Copy' }).click();
+        await expect(actionRow.getByRole('button', { name: '编辑' })).toBeVisible();
+        await actionRow.getByRole('button', { name: '复制' }).click();
         await expectClipboardText(page, seededMessages.at(-1).mes);
         await page.locator('#send_textarea').click();
-        await expect(actionRow.getByRole('button', { name: 'Copy' })).toBeHidden();
+        await expect(actionRow.getByRole('button', { name: '复制' })).toBeHidden();
 
         await openPastChat(page, longChatName);
         await expect(page.locator('#show_more_messages')).toBeVisible();
@@ -396,9 +396,9 @@ test.describe('main chat message list walkthrough', () => {
         await search.fill('walkthrough query with no matching chat');
         await expect(page.locator('#select_chat_div .select_chat_block')).toHaveCount(0);
         await expect(noMatches).toBeVisible();
-        await expect(noMatches).toContainText('No chats match your search.');
+        await expect(noMatches).toContainText('没有匹配搜索条件的聊天记录。');
 
-        const clearSearchButton = noMatches.getByRole('button', { name: 'Clear search' });
+        const clearSearchButton = noMatches.getByRole('button', { name: '清除搜索' });
         await expect(clearSearchButton).toHaveCSS('white-space', 'nowrap');
         await clearSearchButton.click();
         await expect(search).toHaveValue('');
@@ -413,16 +413,16 @@ test.describe('main chat message list walkthrough', () => {
         await openPastChatsPopup(page);
         await expect(page.getByRole('button', { name: 'Chat options' })).toHaveAttribute('aria-expanded', 'false');
         const row = page.locator(`.select_chat_block[file_name="${seededChatName}"]`);
-        await row.getByRole('button', { name: 'Rename chat file' }).click();
-        const dialog = page.getByRole('dialog', { name: 'Enter the new name for the chat:' });
+        await row.getByRole('button', { name: '重命名聊天文件' }).click();
+        const dialog = page.getByRole('dialog', { name: '输入聊天的新名称：' });
         const name = dialog.getByRole('textbox');
         await name.fill('Rename draft retained after failure');
         await page.route('**/api/chats/rename', route => route.fulfill({ status: 500, json: { error: 'rejected' } }));
-        await dialog.getByRole('button', { name: 'Rename chat', exact: true }).click();
+        await dialog.getByRole('button', { name: '重命名聊天', exact: true }).click();
         await expect(dialog.getByRole('alert')).toContainText('Chat was not renamed');
         await expect(name).toHaveValue('Rename draft retained after failure');
         await expect(name).toBeEnabled();
-        await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+        await dialog.getByRole('button', { name: '取消', exact: true }).click();
         await expect(page.locator('#shadow_select_chat_popup')).toBeVisible();
     });
 
@@ -448,9 +448,9 @@ test.describe('main chat message list walkthrough', () => {
         await firstReasoningRow.locator('.mes_reasoning_header').click();
         await expect(firstReasoningDetails).toHaveAttribute('open', '');
         // Expanding must be owned by the React snapshot, not a transient legacy DOM mutation.
-        await firstReasoningRow.getByRole('button', { name: 'Message Actions' }).click();
+        await firstReasoningRow.getByRole('button', { name: '消息操作' }).click();
         await expect(firstReasoningDetails).toHaveAttribute('open', '');
-        const firstActionsButton = firstReasoningRow.getByRole('button', { name: 'Message Actions' });
+        const firstActionsButton = firstReasoningRow.getByRole('button', { name: '消息操作' });
         await expect(firstActionsButton).toHaveAttribute('aria-expanded', 'true');
         await page.keyboard.press('Escape');
         await expect(firstActionsButton).toHaveAttribute('aria-expanded', 'false');
@@ -469,7 +469,7 @@ test.describe('main chat message list walkthrough', () => {
         const persistedReasoning = 'Persisted reasoning from the React command boundary.';
         await firstReasoningRow.locator('.mes_reasoning_edit').click();
         await firstReasoningRow.locator('.reasoning_edit_textarea').fill(persistedReasoning);
-        await firstReasoningRow.getByRole('button', { name: 'Confirm Edit' }).click();
+        await firstReasoningRow.getByRole('button', { name: '确认' }).click();
         await expect(firstReasoningRow.locator('.mes_reasoning')).toHaveText(persistedReasoning);
 
         await secondReasoningRow.locator('.mes_reasoning_header').click();

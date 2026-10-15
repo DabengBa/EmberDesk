@@ -10,7 +10,6 @@ function createMessage(overrides = {}) {
         mes: 'Hello',
         is_user: false,
         is_system: false,
-        swipe_id: 0,
         send_date: '2026-06-08T00:00:00.000Z',
         extra: {},
         ...overrides,
@@ -23,7 +22,6 @@ describe('chat message render descriptor', () => {
 
         const descriptor = buildChatMessageRenderDescriptor(createMessage({
             name: 'Ember',
-            swipe_id: 2,
             extra: {
                 type: 'narrator',
                 token_count: 42,
@@ -39,7 +37,6 @@ describe('chat message render descriptor', () => {
             state: 'complete',
             attributes: {
                 mesid: 7,
-                swipeid: 2,
                 ch_name: 'Ember',
                 is_user: false,
                 is_system: false,

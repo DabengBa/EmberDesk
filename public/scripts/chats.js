@@ -21,7 +21,6 @@ import {
     getSystemMessageByType,
     printMessages,
     clearChat,
-    refreshSwipeButtons,
     getMediaIndex,
     getMediaDisplay,
     chatElement,
@@ -148,9 +147,6 @@ export async function hideChatMessageRange(start, end, unhide, nameFitler = null
         if (!messageBlock.length) continue;
         messageBlock.attr('is_system', String(hide));
     }
-
-    // Reload swipes. Useful when a last message is hidden.
-    refreshSwipeButtons();
 
     await saveChatConditional();
 }

@@ -12,8 +12,7 @@ test.describe('chat message layout', () => {
                 </head>
                 <body>
                     <main id="chat">
-                        <article class="mes last_mes swipes_visible last_swipe" is_user="false" is_system="false">
-                            <div class="swipe_left fa-solid fa-chevron-left" role="button" aria-label="Previous swipe" tabindex="0"></div>
+                        <article class="mes last_mes" is_user="false" is_system="false">
                             <section class="mes_block">
                                 <div class="ch_name flex-container justifySpaceBetween">
                                     <div class="mes_buttons">
@@ -29,7 +28,6 @@ test.describe('chat message layout', () => {
                                     This message keeps normal text alignment while the message box is centered.
                                 </div>
                             </section>
-                            <div class="swipe_right fa-solid fa-chevron-right" role="button" aria-label="Next swipe" tabindex="0"></div>
                         </article>
                     </main>
                     <form id="send_form">
@@ -39,9 +37,7 @@ test.describe('chat message layout', () => {
                         <button id="options_button" type="button" aria-label="Options">Options</button>
                         <button id="mes_stop" class="mes_stop" type="button" aria-label="Abort request">Stop</button>
                     </form>
-                    <div id="options" style="display: block;">
-                        <button id="option_continue" type="button">Continue</button>
-                    </div>
+                    <div id="options" style="display: block;"></div>
                 </body>
             </html>
         `);
@@ -89,8 +85,6 @@ test.describe('chat message layout', () => {
         await expect(page.getByRole('button', { name: 'Copy' })).toBeVisible();
         await expect(page.getByRole('button', { name: 'Edit' })).toBeVisible();
         await expect(page.getByRole('button', { name: 'Create branch' })).toBeVisible();
-        await expect(page.getByRole('button', { name: 'Previous swipe' })).toBeVisible();
-        await expect(page.getByRole('button', { name: 'Next swipe' })).toBeVisible();
     });
 
     for (const viewport of [
@@ -105,8 +99,6 @@ test.describe('chat message layout', () => {
             await expect(page.getByRole('button', { name: 'Send message' })).toBeVisible();
 
             await expect(page.locator('#options_button')).toBeVisible();
-            // Quick-continue is retired; continue runs through the options menu.
-            await expect(page.locator('#option_continue')).toBeVisible();
 
             const messageActions = page.getByRole('button', { name: 'Message Actions' });
             await expect(messageActions).toBeVisible();
@@ -120,8 +112,6 @@ test.describe('chat message layout', () => {
             await expect(page.getByRole('button', { name: 'Copy' })).toBeVisible();
             await expect(page.getByRole('button', { name: 'Edit' })).toBeVisible();
             await expect(page.getByRole('button', { name: 'Create branch' })).toBeVisible();
-            await expect(page.getByRole('button', { name: 'Previous swipe' })).toBeVisible();
-            await expect(page.getByRole('button', { name: 'Next swipe' })).toBeVisible();
 
             const geometry = await page.evaluate(() => {
                 const text = document.querySelector('.mes_text');

@@ -116,6 +116,7 @@ describe('React workspace panels bridge helpers', () => {
         const scriptSource = read('public/script.js');
         const bridgeSource = read('public/scripts/workspace-panels-react-bridge.js');
         const workspacePanelSource = read('app/workspace-panels.tsx');
+        const settingsSurfaceSource = read('app/components/settings/SettingsSurface.tsx');
 
         expect(scriptSource).toContain('WORKSPACE_SHELL_CHROME_HOST_ID');
         expect(scriptSource).toContain('ensureWorkspaceShellChromeHost');
@@ -146,11 +147,15 @@ describe('React workspace panels bridge helpers', () => {
         expect(workspacePanelSource).not.toContain('Backgrounds');
         expect(workspacePanelSource).not.toContain('openExtensions');
         expect(workspacePanelSource).toContain('设置');
-        expect(scriptSource).toContain("openWorkspaceSettingsOverlay");
-        expect(scriptSource).toContain("openSettings: () => openWorkspaceSettingsOverlay({ tab: null, panelKind: 'settings' })");
+        expect(scriptSource).toContain("openWorkspaceShellSettings");
+        expect(scriptSource).toContain("openSettings: openWorkspaceShellSettings");
         expect(scriptSource).not.toContain("window.location.assign('/settings");
         expect(scriptSource).not.toContain("await openWorkspaceShellDrawer('user-settings-block');");
-        expect(workspacePanelSource).toContain('data-settings-overlay');
+        // Settings mounts into the #SettingsPanel drawer host as a drawer
+        // variant of the shared surface; the data attribute lives on the
+        // surface markup itself.
+        expect(workspacePanelSource).toContain('variant="drawer"');
+        expect(settingsSurfaceSource).toContain('data-settings-surface');
         expect(workspacePanelSource).toContain('SettingsSurface');
     });
 
@@ -211,7 +216,7 @@ describe('React workspace panels bridge helpers', () => {
         expect(scriptSource).toContain('setWorkspaceShellSlotPinned,');
         expect(scriptSource).toContain('openCharacterLibrary: openWorkspaceShellCharacterLibrary,');
         expect(workspacePanelSource).toContain("panelKind: 'characterLibrary'");
-        expect(scriptSource).toContain('async function openWorkspaceShellWorldInfo()');
+        expect(scriptSource).toContain('async function openWorkspaceShellWorldInfo({ preserveOpenDrawers = false } = {})');
         expect(scriptSource).toContain('function waitForWorkspaceShellPanelOpenTask()');
         expect(scriptSource).toContain('await waitForWorkspaceShellPanelOpenTask();');
         expect(scriptSource).toContain("void ensureWorkspaceShellDeferredPanel('world-info-body');");
@@ -219,7 +224,7 @@ describe('React workspace panels bridge helpers', () => {
         expect(scriptSource.indexOf("const worldInfoMount = await mountReactWorldInfoPanel();")).toBeLessThan(scriptSource.indexOf("void ensureWorkspaceShellDeferredPanel('world-info-body');"));
         expect(scriptSource.indexOf("await openWorkspaceChildSlotHost('WorldInfo');")).toBeLessThan(scriptSource.indexOf("const worldInfoMount = await mountReactWorldInfoPanel();"));
         expect(scriptSource.indexOf("const worldInfoMount = await mountReactWorldInfoPanel();")).toBeLessThan(scriptSource.indexOf("return createWorkspaceShellPanelResult('worldInfo', worldInfoMount);"));
-        expect(scriptSource).toContain('function openWorkspaceChildSlotHostImmediate(hostId)');
+        expect(scriptSource).toContain('function openWorkspaceChildSlotHostImmediate(hostId, { preserveOpenDrawers = false } = {})');
         expect(scriptSource).toContain("drawer.style.opacity = '1';");
         expect(scriptSource).toContain('function closeWorkspaceChildSlotHost(hostId, { force = false } = {})');
         expect(scriptSource).toContain('function deactivateWorkspaceChildSlotByKind(slotKey, options = {})');
@@ -247,8 +252,8 @@ describe('React workspace panels bridge helpers', () => {
         expect(scriptSource).not.toContain('pinned: dockState.pinned,');
         expect(scriptSource).toContain("return createWorkspaceShellPanelResult('characterLibrary',");
         expect(scriptSource).toContain("return createWorkspaceShellPanelResult('worldInfo', worldInfoMount);");
-        expect(scriptSource).toContain("openWorkspaceSettingsOverlay");
-        expect(scriptSource).toContain("openSettings: () => openWorkspaceSettingsOverlay({ tab: null, panelKind: 'settings' })");
+        expect(scriptSource).toContain("openWorkspaceShellSettings");
+        expect(scriptSource).toContain("openSettings: openWorkspaceShellSettings");
         expect(scriptSource).not.toContain("window.location.assign('/settings');");
         expect(scriptSource).not.toContain("openWorkspaceShellDrawer('user-settings-block')");
         expect(scriptSource).not.toContain('reactPages?.settings');
@@ -366,7 +371,6 @@ describe('React workspace panels bridge helpers', () => {
         expect(workspacePanelSource).toContain('data-react-authoring-field="description"');
         expect(workspacePanelSource).toContain('data-react-authoring-field="firstMessage"');
         expect(workspacePanelSource).toContain('data-react-authoring-field="scenario"');
-        expect(workspacePanelSource).toContain('data-react-authoring-field="exampleMessages"');
         expect(workspacePanelSource).toContain('data-react-authoring-field="creatorNotes"');
         expect(workspacePanelSource).toContain('data-react-authoring-field="systemPrompt"');
         expect(workspacePanelSource).toContain('data-react-authoring-field="postHistoryInstructions"');

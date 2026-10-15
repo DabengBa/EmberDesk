@@ -18,10 +18,6 @@ export const GENERATION_SERVICE_OWNER = 'generation-service';
 /** Visible React composer / message-action command kinds. */
 export const GENERATION_VISIBLE_COMMAND_KINDS = Object.freeze([
     'submitComposer',
-    'continueLast',
-    'retryGeneration',
-    'swipeLeft',
-    'swipeRight',
 ]);
 
 /** Non-visible automation / helper command kinds. */
@@ -85,12 +81,6 @@ const allKindSet = new Set(GENERATION_COMMAND_KINDS);
  */
 export function mapLegacyGenerationTypeToCommandKind(type, options = {}) {
     switch (String(type ?? '')) {
-        case 'continue':
-            return 'continueLast';
-        case 'regenerate':
-            return 'retryGeneration';
-        case 'swipe':
-            return options.swipeDirection === 'left' ? 'swipeLeft' : 'swipeRight';
         case 'quiet':
             if (options.backgroundGeneration) {
                 return 'backgroundGeneration';
@@ -109,13 +99,6 @@ export function mapLegacyGenerationTypeToCommandKind(type, options = {}) {
  */
 export function mapGenerationCommandKindToLifecycleType(kind) {
     switch (String(kind ?? '')) {
-        case 'continueLast':
-            return 'continue';
-        case 'retryGeneration':
-            return 'regenerate';
-        case 'swipeLeft':
-        case 'swipeRight':
-            return 'swipe';
         case 'quietPrompt':
         case 'quietToLoud':
         case 'backgroundGeneration':
@@ -465,7 +448,6 @@ export function simulateGenerationCommandOutcome(plan, scenario = {}) {
     if (outcome === 'success') {
         const finalization = getGenerationSuccessFinalization({
             hasActiveRecoveryMessage,
-            originalType: plan?.command?.lifecycleType,
             type: plan?.command?.lifecycleType,
         });
         return {

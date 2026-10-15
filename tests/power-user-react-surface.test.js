@@ -1,68 +1,53 @@
 import { describe, expect, test } from '@jest/globals';
 import { readRepoFile } from './helpers/frontend-compatibility-contract.js';
 
-describe('power-user settings drawer React surface (Wave A)', () => {
-    test('React owns the drawer markup; only Frontend Frames remains', () => {
-        const panel = readRepoFile('app/components/power-user/PowerUserPanel.tsx');
+describe('merged message-rendering settings (former user-settings drawer)', () => {
+    test('Frontend Frames fields are bound into the settings form; the separate drawer is gone', () => {
+        const surface = readRepoFile('app/components/settings/SettingsSurface.tsx');
+        const helpers = readRepoFile('app/lib/settings-helpers.js');
         const indexHtml = readRepoFile('public/index.html');
-
-        // The surviving controls are the Frontend Frames settings bound by ID
-        // in loadPowerUserSettings / registerPowerUserEvents.
-        for (const id of [
-            'user-settings-block-content',
-            'frontend_frames_enabled',
-            'frontend_frames_depth',
-            'frontend_frames_depth_ignore_hidden',
-            'frontend_frames_collapse_code_block',
-            'frontend_frames_skip_highlight',
-            'frontend_frames_use_blob_url',
-            'frontend_frames_allow_streaming',
-        ]) {
-            expect(panel).toContain(`id="${id}"`);
-        }
-
-        // Retired controls are gone from the drawer markup.
-        for (const id of [
-            'ui_language_select',
-            'version_display',
-            'settingsSearch',
-            'account_button',
-            'admin_button',
-            'logout_button',
-            'swipes-checkbox',
-            'example_messages_behavior',
-            'reload_chat',
-            'debug_menu',
-            'data_maid_button',
-            'smooth_streaming',
-            'stscript_autocomplete_state',
-            'stscript_matching',
-        ]) {
-            expect(panel).not.toContain(`id="${id}"`);
-        }
-
-        // The drawer-content element stays as the mount shell.
-        expect(indexHtml).toContain('id="user-settings-block"');
-        // The inner markup moved out of index.html.
-        expect(indexHtml).not.toContain('user-settings-block-content');
-        expect(indexHtml).not.toContain('id="ui_language_select"');
-    });
-
-    test('mount runs before getSettings bindings attach', () => {
         const powerUser = readRepoFile('public/scripts/power-user.js');
         const script = readRepoFile('public/script.js');
-        const workspacePanels = readRepoFile('app/workspace-panels.tsx');
 
-        expect(powerUser).toContain('export async function mountPowerUserPanel(');
-        expect(powerUser).toContain('loadWorkspacePanelsModule');
-        expect(powerUser).toContain('module.mountPowerUserPanel(host)');
-        expect(workspacePanels).toContain('export function mountPowerUserPanel(');
-        expect(workspacePanels).toContain('PowerUserPanel');
+        // Every former drawer control is now a React-bound form field on the
+        // providers tab, mapped to power_user.frontend_frames.* in the doc.
+        for (const settingsPath of [
+            'power_user.frontend_frames.enabled',
+            'power_user.frontend_frames.depth',
+            'power_user.frontend_frames.depth_ignore_hidden',
+            'power_user.frontend_frames.collapse_code_block',
+            'power_user.frontend_frames.skip_highlight',
+            'power_user.frontend_frames.use_blob_url',
+            'power_user.frontend_frames.allow_streaming',
+        ]) {
+            expect(helpers).toContain(`settingsPath: '${settingsPath}'`);
+        }
+        for (const formPath of [
+            'rendering.frontendFramesEnabled',
+            'rendering.frontendFramesDepth',
+            'rendering.frontendFramesDepthIgnoreHidden',
+            'rendering.frontendFramesCollapseCodeBlock',
+            'rendering.frontendFramesSkipHighlight',
+            'rendering.frontendFramesUseBlobUrl',
+            'rendering.frontendFramesAllowStreaming',
+        ]) {
+            expect(surface).toContain(`name="${formPath}"`);
+        }
 
-        const mountIndex = script.indexOf("measureStartupStage('mountPowerUserPanel'");
-        const settingsIndex = script.indexOf('await getSettings(initLoaderHandle)');
-        expect(mountIndex).toBeGreaterThan(-1);
-        expect(settingsIndex).toBeGreaterThan(-1);
-        expect(mountIndex).toBeLessThan(settingsIndex);
+        // The retired drawer host, icon, mount path, and legacy per-element
+        // bindings are gone; the runtime openWorkspaceDrawer command went with
+        // them.
+        expect(indexHtml).not.toContain('id="user-settings-block"');
+        expect(indexHtml).not.toContain('id="user-settings-button"');
+        expect(powerUser).not.toContain('mountPowerUserPanel');
+        expect(powerUser).not.toContain("$('#frontend_frames_");
+        expect(script).not.toContain('mountPowerUserPanel');
+        expect(script).not.toContain('USNavOpened');
+        expect(script).not.toContain('openWorkspaceDrawer');
+
+        // In-memory normalization stays: consumers read
+        // power_user.frontend_frames without a settings-form round-trip.
+        expect(powerUser).toContain('normalizeFrontendFramesSettings');
+        expect(powerUser).toContain('DEFAULT_FRONTEND_FRAME_SETTINGS');
     });
 });

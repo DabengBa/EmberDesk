@@ -1,9 +1,5 @@
 export const SUPPORTED_REACT_VISIBLE_GENERATION_KINDS = Object.freeze([
     'submitComposer',
-    'continueLast',
-    'retryGeneration',
-    'swipeLeft',
-    'swipeRight',
 ]);
 
 export const MAIN_CHAT_VISIBLE_TRANSPORT_STATUSES = Object.freeze({

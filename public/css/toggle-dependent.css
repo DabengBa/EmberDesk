@@ -227,10 +227,6 @@ body.documentstyle #chat .last_mes:has(.del_checkbox[style*="display: block"]) .
     margin-left: 0px;
 }
 
-body.documentstyle #chat .last_mes .swipe_left {
-    left: 5px;
-}
-
 body.documentstyle #chat .mes .mesAvatarWrapper,
 body.documentstyle #chat .mes .mes_block .ch_name .name_text,
 body.documentstyle #chat .mes .mes_block .ch_name .timestamp,

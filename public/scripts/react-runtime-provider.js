@@ -93,7 +93,7 @@ export function createReactRuntimeProvider({
         throw new TypeError('React runtime provider requires named commands');
     }
 
-    const commandNames = ['submitMessage', 'stopGeneration', 'retryMessage', 'loadEarlier', 'saveSettings', 'openWorkspaceDrawer', 'connectProvider', 'testProviderConnection'];
+    const commandNames = ['submitMessage', 'stopGeneration', 'loadEarlier', 'saveSettings', 'connectProvider', 'testProviderConnection'];
     for (const commandName of commandNames) {
         if (typeof commands[commandName] !== 'function') {
             throw new TypeError(`React runtime provider requires command ${commandName}`);
@@ -125,10 +125,8 @@ export function createReactRuntimeProvider({
         commands: Object.freeze({
             submitMessage: input => Promise.resolve(commands.submitMessage(input)),
             stopGeneration: () => commands.stopGeneration(),
-            retryMessage: messageId => Promise.resolve(commands.retryMessage(messageId)),
             loadEarlier: anchorId => Promise.resolve(commands.loadEarlier(anchorId)),
             saveSettings: settings => Promise.resolve(commands.saveSettings(settings)),
-            openWorkspaceDrawer: hostId => Promise.resolve(commands.openWorkspaceDrawer(hostId)),
             connectProvider: () => Promise.resolve(commands.connectProvider()),
             testProviderConnection: () => Promise.resolve(commands.testProviderConnection()),
         }),

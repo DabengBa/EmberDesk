@@ -10,9 +10,7 @@
  * @param {'primary'|'fallback'} [input.recoveryStage='primary'] Recovery attempt stage
  * @param {number|null} [input.activeMessageId=null] Message row associated with the control state
  * @param {string|null} [input.recoveryStatusLabel=null] Visible recovery status copy
- * @param {boolean} [input.failureRetryVisible=false] Whether final retry is visible
  * @param {boolean} [input.failureNoticeVisible=false] Whether final failure notice is visible
- * @param {'hidden'|'legacy'} [input.continueSurface='legacy'] Observed legacy continue surface
  * @returns {object} Control recovery decisions
  *
  * Priority is intentionally fail-closed for the bridge: recovery wins over
@@ -28,15 +26,11 @@ export function getStreamingControlState({
     recoveryStage = 'primary',
     activeMessageId = null,
     recoveryStatusLabel = null,
-    failureRetryVisible = false,
     failureNoticeVisible = false,
-    continueSurface = 'legacy',
 } = {}) {
-    const observedContinueSurface = continueSurface === 'legacy' ? 'legacy' : 'hidden';
     const metadata = {
         activeMessageId: Number.isInteger(activeMessageId) && activeMessageId >= 0 ? activeMessageId : null,
         recoveryStatusLabel: typeof recoveryStatusLabel === 'string' && recoveryStatusLabel ? recoveryStatusLabel : null,
-        failureRetryVisible: Boolean(failureRetryVisible),
         failureNoticeVisible: Boolean(failureNoticeVisible),
     };
 
@@ -47,25 +41,22 @@ export function getStreamingControlState({
             composerDisabled: true,
             sendVisible: false,
             stopVisible: Boolean(isGenerating || hasStreamingProcessor),
-            continueVisible: false,
-            continueSurface: 'hidden',
             canRecoverInput: false,
             ...metadata,
-            failureRetryVisible: false,
             failureNoticeVisible: false,
         };
     }
 
     if (hasError) {
-        return createRecoverableState('error', metadata, observedContinueSurface);
+        return createRecoverableState('error', metadata);
     }
 
     if (isStopped) {
-        return createRecoverableState('stopped', metadata, observedContinueSurface);
+        return createRecoverableState('stopped', metadata);
     }
 
     if (isFinished) {
-        return createRecoverableState('completed', metadata, observedContinueSurface);
+        return createRecoverableState('completed', metadata);
     }
 
     if (isGenerating || hasStreamingProcessor) {
@@ -75,8 +66,6 @@ export function getStreamingControlState({
             composerDisabled: true,
             sendVisible: false,
             stopVisible: true,
-            continueVisible: false,
-            continueSurface: 'hidden',
             canRecoverInput: false,
             ...metadata,
         };
@@ -88,22 +77,18 @@ export function getStreamingControlState({
         composerDisabled: false,
         sendVisible: true,
         stopVisible: false,
-        continueVisible: false,
-        continueSurface: 'hidden',
         canRecoverInput: true,
         ...metadata,
     };
 }
 
-function createRecoverableState(state, metadata, continueSurface) {
+function createRecoverableState(state, metadata) {
     return {
         state,
         phase: state,
         composerDisabled: false,
         sendVisible: true,
         stopVisible: false,
-        continueVisible: continueSurface === 'legacy',
-        continueSurface,
         canRecoverInput: true,
         ...metadata,
     };

@@ -249,21 +249,6 @@ async function startGeneration(page, prompt) {
     }, prompt);
 }
 
-async function startContinueGeneration(page) {
-    await page.evaluate(() => {
-        const context = window.SillyTavern.getContext();
-        window.__emberdeskStreamingGeneration = context.generate('continue', { automatic_trigger: false })
-            .then(result => {
-                window.__emberdeskStreamingGenerationResult = String(result ?? '');
-                return result;
-            })
-            .catch(error => {
-                window.__emberdeskStreamingGenerationError = String(error?.message ?? error);
-                throw error;
-            });
-    });
-}
-
 async function startQuietPromptGeneration(page, options = {}) {
     await page.evaluate((payload) => {
         const context = window.SillyTavern.getContext();
@@ -279,9 +264,6 @@ async function startQuietPromptGeneration(page, options = {}) {
     }, options);
 }
 
-async function startRightSwipeGeneration(page, messageId) {
-    await page.locator(`#chat .mes[mesid="${messageId}"] .swipe_right`).click();
-}
 
 async function triggerStopGeneration(page, { throughDom = false } = {}) {
     if (throughDom) {
@@ -661,8 +643,8 @@ test.describe('chat message streaming', () => {
             expectFallback: false,
         });
         await expect(page.locator(`#chat .mes[mesid="${messageId}"]`)).toHaveCount(1);
-        await expect(page.locator(`#chat .mes[mesid="${messageId}"]`).getByRole('button', { name: 'Message Actions' })).toBeVisible();
-        await expect(page.getByRole('button', { name: 'Abort request' })).not.toBeVisible();
+        await expect(page.locator(`#chat .mes[mesid="${messageId}"]`).getByRole('button', { name: '消息操作' })).toBeVisible();
+        await expect(page.getByRole('button', { name: '中止请求' })).not.toBeVisible();
         await expectMainChatTransportMarkersRetired(page);
 
         const request = await page.evaluate(() => window.__emberdeskStreamingRequests.at(-1));
@@ -700,8 +682,8 @@ test.describe('chat message streaming', () => {
         });
 
         await expect(page.locator('#mes_stop')).toBeVisible();
-        await page.getByRole('button', { name: 'Abort request' }).click({ timeout: 5_000 });
-        await expect(page.getByRole('button', { name: 'Abort request' })).not.toBeVisible();
+        await page.getByRole('button', { name: '中止请求' }).click({ timeout: 5_000 });
+        await expect(page.getByRole('button', { name: '中止请求' })).not.toBeVisible();
         await expectMainChatStreamingTransportState(page, {
             phase: 'stopped',
             messageId: Number(messageId),
@@ -894,8 +876,8 @@ test.describe('chat message streaming', () => {
         await expectMainChatStreamingRendererStaysOnSameReactRow(page, assistantMessageId);
         await expect(streamingRow.locator('.mes_text')).toContainText('Unified composer transport.');
 
-        await page.getByRole('button', { name: 'Abort request' }).click({ timeout: 5_000 });
-        await expect(page.getByRole('button', { name: 'Abort request' })).not.toBeVisible();
+        await page.getByRole('button', { name: '中止请求' }).click({ timeout: 5_000 });
+        await expect(page.getByRole('button', { name: '中止请求' })).not.toBeVisible();
         await expect(page.locator('body')).not.toHaveAttribute('data-generating', 'true');
         await expectMainChatTransportMarkersRetired(page);
     });
@@ -933,94 +915,6 @@ test.describe('chat message streaming', () => {
             context: 'character',
         });
         await expectMainChatComposerVisibleOwner(page, true);
-    });
-
-    test('visible continue dispatches a service-owned request while the streaming renderer retains its row', async ({ page }) => {
-        test.skip(!reactMainChatMessageListEnabled, 'React composer proof requires the main-chat message-list panel flag');
-
-        await testSetup.awaitST({ page });
-        await selectCharacterInFreshChat(page, characterName);
-        await enableOpenAiStreaming(page);
-        await installStreamingFetchStub(page, {
-            chunks: ['Continue baseline.'],
-            delayMs: 35,
-        });
-
-        const lastVisibleMessageIdBeforeSeedGeneration = await getLastVisibleMessageId(page);
-        await startGeneration(page, 'Create an assistant row for visible continue transport.');
-        await waitForGeneration(page);
-
-        const continuedMessageId = assistantMessageIdForGeneration(lastVisibleMessageIdBeforeSeedGeneration);
-        await installStreamingFetchStub(page, {
-            chunks: [' Continued ', 'via the unified service.'],
-            delayMs: 120,
-            keepOpenAfterChunks: true,
-        });
-
-        // Quick-continue is retired; continue runs through the options-menu entry.
-        await page.evaluate(() => document.getElementById('option_continue')?.click());
-
-        const continuedRow = page.locator(`#chat .mes[mesid="${continuedMessageId}"]`);
-        await expectMainChatTransportMarkersRetired(page);
-        await expectMainChatStreamingTransportState(page, {
-            phase: 'streaming',
-            generationPhase: 'streaming',
-            tokenCountAtLeast: 1,
-            messageId: continuedMessageId,
-            expectFallback: false,
-        });
-        await expectMainChatStreamingRendererStaysOnSameReactRow(page, continuedMessageId);
-        await expect(continuedRow.locator('.mes_text')).toContainText('Continued via the unified service.');
-
-        const stopped = await triggerStopGeneration(page, { throughDom: true });
-        expect(stopped).toBe(true);
-        await expect(page.locator('body')).not.toHaveAttribute('data-generating', 'true');
-        await expectMainChatTransportMarkersRetired(page);
-    });
-
-    test('visible regenerate dispatches a service-owned request and reuses one assistant row', async ({ page }) => {
-        test.skip(!reactMainChatMessageListEnabled, 'React composer proof requires the main-chat message-list panel flag');
-
-        await testSetup.awaitST({ page });
-        await selectCharacterInFreshChat(page, characterName);
-        await enableOpenAiStreaming(page);
-        await installStreamingFetchStub(page, {
-            chunks: ['Seed assistant row.'],
-            delayMs: 35,
-        });
-
-        const lastVisibleMessageIdBeforeSeedGeneration = await getLastVisibleMessageId(page);
-        await startGeneration(page, 'Create an assistant row for visible regenerate transport.');
-        await waitForGeneration(page);
-
-        const regeneratedMessageId = assistantMessageIdForGeneration(lastVisibleMessageIdBeforeSeedGeneration);
-        await installStreamingFetchStub(page, {
-            chunks: ['Unified regenerate result.'],
-            delayMs: 120,
-        });
-
-        await page.evaluate(() => {
-            const regenerateButton = document.getElementById('option_regenerate');
-            if (regenerateButton instanceof HTMLElement) {
-                regenerateButton.classList.remove('displayNone');
-                regenerateButton.style.display = '';
-                regenerateButton.click();
-            }
-        });
-
-        const regeneratedRow = page.locator(`#chat .mes[mesid="${regeneratedMessageId}"]`);
-        await expectMainChatTransportMarkersRetired(page);
-        await expectMainChatStreamingTransportState(page, {
-            phase: ['streaming', 'completed'],
-            generationPhase: ['streaming', 'completed', 'idle'],
-            tokenCountAtLeast: 1,
-            messageId: regeneratedMessageId,
-            expectFallback: false,
-        });
-        await expect(regeneratedRow.locator('.mes_text')).toContainText('Unified regenerate result.');
-        await waitForGeneration(page);
-        await expect(regeneratedRow).toHaveCount(1);
-        await expectMainChatTransportMarkersRetired(page);
     });
 
     test('non-streaming stop does not reuse the previous assistant message id in transport state', async ({ page }) => {
@@ -1068,7 +962,7 @@ test.describe('chat message streaming', () => {
         });
         expect(String(abortedMessage ?? '')).toMatch(/Aborted|Generation was aborted/i);
         await expect(page.locator('body')).not.toHaveAttribute('data-generating', 'true');
-        await expect(page.getByRole('button', { name: 'Retry generation' })).toHaveCount(1);
+        await expect(page.getByRole('button', { name: 'Retry generation' })).toHaveCount(0);
     });
 
     test('quiet helper generation returns text without a visible row or transport-owner marker', async ({ page }) => {
@@ -1405,7 +1299,7 @@ test.describe('chat message streaming', () => {
         await expect(assistantRowsAfterFailure).toHaveCount(1);
         await expect(assistantRowsAfterFailure.locator('.mes_text')).not.toContainText('Failure path partial text.');
 
-        const recovery = page.getByRole('button', { name: /Retry generation|Continue last message|Send message/ }).first();
+        const recovery = page.locator('#send_but');
         await expect(recovery).toBeVisible();
         await expect(assistantRowsAfterFailure.locator('.generation_failure_notice')).toContainText('Generation failed.');
         await page.locator('#send_textarea').fill('Follow-up after provider failure.');
@@ -1432,7 +1326,8 @@ test.describe('chat message streaming', () => {
         });
         await recovery.click();
         await expectMainChatTransportMarkersRetired(page);
-        await expect(assistantRowsAfterFailure.locator('.mes_text')).toContainText('Recovered retry text.');
+        const recoveredRow = assistantRowForGeneration(page, lastVisibleMessageIdBeforeGeneration + 2);
+        await expect(recoveredRow.locator('.mes_text')).toContainText('Recovered retry text.');
         await expect(page.locator('body')).not.toHaveAttribute('data-generating', 'true');
         await expect.poll(async () => page.evaluate(() => window.SillyTavern.getContext().streamingProcessor === null)).toBe(true);
         await expect(userRow).toHaveCount(1);
@@ -1491,124 +1386,7 @@ test.describe('chat message streaming', () => {
         expect(renderedEvents[0].messageId).toBe(assistantMessageIdForGeneration(lastVisibleMessageIdBeforeGeneration));
     });
 
-    test('recovered overswipe appends a new swipe without replacing the existing swipe', async ({ page }) => {
-        await testSetup.awaitST({ page });
-        await selectCharacterInFreshChat(page, characterName);
-        await enableOpenAiStreaming(page);
-        await enableFallbackProvider(page);
-        await installStreamingFetchSequenceStub(page, {
-            responses: [
-                { chunks: ['Original swipe baseline.'], delayMs: 30 },
-                { chunks: ['Discarded overswipe partial.'], delayMs: 30, failAfterChunks: true },
-                { chunks: [], delayMs: 30, failAfterChunks: true },
-                { chunks: ['Recovered overswipe text.'], delayMs: 30 },
-            ],
-        });
-
-        const lastVisibleMessageIdBeforeGeneration = await getLastVisibleMessageId(page);
-        await startGeneration(page, 'Create an assistant row for overswipe recovery.');
-        await waitForGeneration(page);
-        const messageId = assistantMessageIdForGeneration(lastVisibleMessageIdBeforeGeneration);
-
-        const beforeSwipe = await page.evaluate((targetMessageId) => {
-            const message = window.SillyTavern.getContext().chat[targetMessageId];
-            return {
-                swipeId: message.swipe_id,
-                swipes: [...message.swipes],
-            };
-        }, messageId);
-        expect(beforeSwipe.swipeId).toBe(0);
-        expect(beforeSwipe.swipes).toEqual(['Original swipe baseline.']);
-
-        await startRightSwipeGeneration(page, messageId);
-        await expectMainChatTransportMarkersRetired(page);
-        await expectMainChatStreamingTransportState(page, {
-            phase: ['streaming', 'recoveringPrimary', 'recoveringFallback', 'completed'],
-            generationPhase: ['streaming', 'recoveringPrimary', 'recoveringFallback', 'completed', 'idle'],
-            tokenCountAtLeast: 1,
-            messageId,
-            expectFallback: true,
-        });
-        await expectMainChatStreamingTransportState(page, {
-            phase: ['completed', 'idle'],
-            generationPhase: ['completed', 'idle'],
-            messageId,
-            expectFallback: true,
-        });
-        await expect.poll(async () => page.evaluate((targetMessageId) => {
-            const message = window.SillyTavern.getContext().chat[targetMessageId];
-            return {
-                text: String(message?.mes ?? ''),
-                swipeId: message?.swipe_id ?? null,
-                swipes: Array.isArray(message?.swipes) ? [...message.swipes] : [],
-            };
-        }, messageId)).toEqual({
-            text: 'Recovered overswipe text.',
-            swipeId: 1,
-            swipes: ['Original swipe baseline.', 'Recovered overswipe text.'],
-        });
-
-        const afterSwipe = await page.evaluate((targetMessageId) => {
-            const message = window.SillyTavern.getContext().chat[targetMessageId];
-            return {
-                text: message.mes,
-                swipeId: message.swipe_id,
-                swipes: [...message.swipes],
-            };
-        }, messageId);
-        expect(afterSwipe.text).toContain('Recovered overswipe text.');
-        expect(afterSwipe.swipeId).toBe(1);
-        expect(afterSwipe.swipes).toEqual(['Original swipe baseline.', 'Recovered overswipe text.']);
-        expect(afterSwipe.swipes[0]).not.toContain('Discarded overswipe partial.');
-
-        const requests = await page.evaluate(() => window.__emberdeskStreamingRequests);
-        expect(requests).toHaveLength(4);
-        expect(requests[3].model).toBe('fallback-model');
-        expect(requests[3].custom_url).toBe(requests[0].custom_url);
-        expect(requests[3]).not.toHaveProperty('openai_secret_marker');
-    });
-
-    test('continue auto recovery final failure preserves the original assistant message', async ({ page }) => {
-        await testSetup.awaitST({ page });
-        await selectCharacterInFreshChat(page, characterName);
-        await enableOpenAiStreaming(page);
-        await enableFallbackProvider(page);
-        await installStreamingFetchSequenceStub(page, {
-            responses: [
-                { chunks: ['Discarded continue partial.'], delayMs: 30, failAfterChunks: true },
-                { chunks: [], delayMs: 30 },
-                { chunks: [], delayMs: 30 },
-            ],
-        });
-
-        const original = await page.evaluate(() => {
-            const context = window.SillyTavern.getContext();
-            const messageId = context.chat.length - 1;
-            return {
-                messageId,
-                text: String(context.chat[messageId]?.mes ?? ''),
-            };
-        });
-        expect(original.text.trim().length).toBeGreaterThan(0);
-
-        await startContinueGeneration(page);
-        await waitForGeneration(page, { allowFailure: true });
-
-        const restored = await page.evaluate((messageId) => {
-            const context = window.SillyTavern.getContext();
-            return String(context.chat[messageId]?.mes ?? '');
-        }, original.messageId);
-        expect(restored).toBe(original.text);
-
-        const continuedRow = page.locator(`#chat .mes[mesid="${original.messageId}"]`);
-        await expect(continuedRow).toHaveCount(1);
-        await expect(continuedRow.locator('.mes_text')).not.toContainText('Discarded continue partial.');
-        await expect(continuedRow.getByRole('button', { name: 'Retry generation' })).toBeVisible();
-        const requestCount = await page.evaluate(() => window.__emberdeskStreamingRequests.length);
-        expect(requestCount).toBe(3);
-    });
-
-    test('provider failure before first token still restores retry recovery', async ({ page }) => {
+    test('provider failure before first token still restores composer recovery', async ({ page }) => {
         await testSetup.awaitST({ page });
         await selectCharacterInFreshChat(page, characterName);
         await enableOpenAiStreaming(page);
@@ -1628,7 +1406,6 @@ test.describe('chat message streaming', () => {
         const failedRow = assistantRowForGeneration(page, lastVisibleMessageIdBeforeGeneration);
         await expect(failedRow).toHaveCount(1);
         await expect(failedRow.locator('.generation_failure_notice')).toContainText('Generation failed.');
-        await expect(failedRow.getByRole('button', { name: 'Retry generation' })).toBeVisible();
         await page.locator('#send_textarea').fill('Follow-up after pre-token provider failure.');
         await expect(page.locator('#send_textarea')).toHaveValue('Follow-up after pre-token provider failure.');
         await expect(page.locator('body')).not.toHaveAttribute('data-generating', 'true');
@@ -1694,15 +1471,7 @@ test.describe('chat message streaming', () => {
 
             const failedRow = assistantRowForGeneration(page, lastVisibleMessageIdBeforeGeneration);
             await expect(failedRow.locator('.mes_text')).not.toContainText(`${viewport.name} failure recovery text.`);
-            const retry = failedRow.getByRole('button', { name: 'Retry generation' });
-            await expect(retry, `${viewport.name} retry`).toBeVisible();
-            await retry.focus();
-            await expect(retry, `${viewport.name} retry focus`).toBeFocused();
-            await expectReachableControlGeometry(
-                page,
-                `#chat .mes[mesid="${assistantMessageIdForGeneration(lastVisibleMessageIdBeforeGeneration)}"] .generation_failure_retry`,
-                `${viewport.name} retry`,
-            );
+            await expect(failedRow.locator('.generation_failure_notice')).toContainText('Generation failed.');
             const failedRequestCount = await page.evaluate(() => window.__emberdeskStreamingRequests.length);
             expect(failedRequestCount).toBe(2);
         }

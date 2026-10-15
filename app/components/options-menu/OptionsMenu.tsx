@@ -32,9 +32,6 @@ export function OptionsMenu({ showBackToMain = false }: { showBackToMain?: boole
             <ContractButton id="option_select_chat" variant="ghost" xstyle={optionStyles.item} label="Manage chat files" icon={<i className="fa-lg fa-solid fa-address-book" aria-hidden="true" />} tabIndex={0} />
             <hr />
             <ContractButton id="option_delete_mes" variant="ghost" xstyle={optionStyles.item} label="Delete messages" icon={<i className="fa-lg fa-solid fa-trash-can" aria-hidden="true" />} tabIndex={0} className="options-menu-danger" />
-            <ContractButton id="option_regenerate" variant="ghost" xstyle={optionStyles.item} label="Regenerate" icon={<i className="fa-lg fa-solid fa-repeat" aria-hidden="true" />} tabIndex={0} />
-            <ContractButton id="option_impersonate" variant="ghost" xstyle={optionStyles.item} label="Impersonate" title="Ask AI to write your message for you" nativeTitle icon={<i className="fa-lg fa-solid fa-user-secret" aria-hidden="true" />} tabIndex={0} />
-            <ContractButton id="option_continue" variant="ghost" xstyle={optionStyles.item} label="Continue" title="Continue the last message" nativeTitle icon={<i className="fa-lg fa-solid fa-arrow-right" aria-hidden="true" />} tabIndex={0} />
         </div>
         </>
     );

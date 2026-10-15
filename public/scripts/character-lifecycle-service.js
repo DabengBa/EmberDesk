@@ -361,7 +361,6 @@ export function select_selected_character(chid, { switchMenu = true } = {}) {
     $('#depth_prompt_prompt').val(character.data?.extensions?.depth_prompt?.prompt ?? '');
     $('#depth_prompt_depth').val(character.data?.extensions?.depth_prompt?.depth ?? state.depth_prompt_depth_default);
     $('#depth_prompt_role').val(character.data?.extensions?.depth_prompt?.role ?? state.depth_prompt_role_default);
-    $('#mes_example_textarea').val(character.mes_example);
     $('#selected_chat_pole').val(character.chat);
     $('#create_date_pole').val(timestampToMoment(character.create_date).toISOString());
     $('#avatar_url_pole').val(character.avatar);
@@ -549,7 +548,6 @@ export async function createOrEditCharacter(e) {
                 { id: '#depth_prompt_prompt', callback: value => state.create_save.depth_prompt_prompt = value },
                 { id: '#depth_prompt_depth', callback: value => state.create_save.depth_prompt_depth = value, defaultValue: state.depth_prompt_depth_default },
                 { id: '#depth_prompt_role', callback: value => state.create_save.depth_prompt_role = value, defaultValue: state.depth_prompt_role_default },
-                { id: '#mes_example_textarea', callback: value => state.create_save.mes_example = value },
                 { id: '#character_json_data', callback: () => { } },
                 { id: '#alternate_greetings_template', callback: value => state.create_save.alternate_greetings = value, defaultValue: [] },
                 { id: '#character_world', callback: value => state.create_save.world = value },

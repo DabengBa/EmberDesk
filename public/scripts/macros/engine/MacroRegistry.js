@@ -25,7 +25,7 @@ export const MacroCategory = Object.freeze({
     NAMES: 'names',
     /** Character card fields and retired tombstones (description, scenario, mesExamples, persona) */
     CHARACTER: 'character',
-    /** Chat history, messages, and swipes */
+    /** Chat history and messages */
     CHAT: 'chat',
     /** Date, time, and duration macros */
     TIME: 'time',

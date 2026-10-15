@@ -1645,7 +1645,6 @@ async function seedSettings(dataRoot) {
     const sourcePath = path.join(repoRoot, 'default', 'content', SETTINGS_FILE);
     const targetPath = path.join(dataRoot, DEFAULT_USER.handle, SETTINGS_FILE);
     const settings = JSON.parse(await fs.promises.readFile(sourcePath, 'utf8'));
-    settings.firstRun = false;
 
     await fs.promises.mkdir(path.dirname(targetPath), { recursive: true });
     await fs.promises.writeFile(targetPath, `${JSON.stringify(settings, null, 4)}\n`, 'utf8');

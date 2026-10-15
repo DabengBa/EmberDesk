@@ -28,7 +28,7 @@ describe('right navigation panel React surface', () => {
     test('React component preserves contract IDs and data attributes', () => {
         const ids = [
             'right-nav-panelheader', 'CharListButtonAndHotSwaps',
-            'rm_button_panel_pin_div', 'rm_button_panel_pin', 'rm_button_characters',
+            'rm_button_characters',
             'HotSwapWrapper', 'rm_PinAndTabs', 'right-nav-panel-tabs',
             'rm_button_selected_ch', 'temporary_chat_status', 'result_info',
             'result_info_text', 'result_info_total_tokens', 'result_info_permanent_tokens',
@@ -74,11 +74,11 @@ describe('right navigation panel React surface', () => {
     });
 
     test('RossAscends panel captures resolve at init, not module eval', () => {
-        expect(rossMods).toContain('RPanelPin = document.getElementById(\'rm_button_panel_pin\')');
+        expect(rossMods).toContain('RightNavPanel = document.getElementById(\'right-nav-panel\')');
         expect(rossMods).toContain('SelectedCharacterTab = document.getElementById(\'rm_button_selected_ch\')');
-        expect(rossMods).not.toContain('var RPanelPin = document.getElementById');
+        expect(rossMods).not.toContain('var RightNavPanel = document.getElementById');
         // Module-level bindings moved into initRossMods.
-        const initIdx = rossMods.indexOf('export function initRossMods()');
+        const initIdx = rossMods.indexOf('export function initRossMods(');
         const bindIdx = rossMods.indexOf("$('#rm_ch_create_block').on('input'");
         expect(bindIdx).toBeGreaterThan(initIdx);
     });

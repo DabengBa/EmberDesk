@@ -38,8 +38,6 @@ const isDataURL = (...args) => shell().isDataURL(...args);
 const isReactMainChatOwner = (...args) => shell().isReactMainChatOwner(...args);
 const mountReactMainChatMessageListPanel = (...args) => shell().mountReactMainChatMessageListPanel(...args);
 const onlyUnique = (...args) => shell().onlyUnique(...args);
-const parseReasoningInSwipes = (...args) => shell().parseReasoningInSwipes(...args);
-const refreshSwipeButtons = (...args) => shell().refreshSwipeButtons(...args);
 const saveBase64AsFile = (...args) => shell().saveBase64AsFile(...args);
 const saveImageToMessage = (...args) => shell().saveImageToMessage(...args);
 const scheduleMainChatMessageListPanelRefresh = (...args) => shell().scheduleMainChatMessageListPanelRefresh(...args);
@@ -48,7 +46,6 @@ const t = (...args) => shell().t(...args);
 const timestampToMoment = (...args) => shell().timestampToMoment(...args);
 const updateEditArrowClasses = (...args) => shell().updateEditArrowClasses(...args);
 const updateReasoningUI = (...args) => shell().updateReasoningUI(...args);
-const updateSwipeCounter = (...args) => shell().updateSwipeCounter(...args);
 
 let requestId = null;
 
@@ -725,15 +722,13 @@ function buildChatMessageRichBody(message, { messageId = state.chat.indexOf(mess
  * Adds a single message to the chat.
  * @param {ChatMessage} mes Message object
  * @param {object} [options] Options
- * @param {string} [options.type=undefined|'swipe'] Deprecated. Use updateMessageElement instead.
  * @param {number} [options.insertAfter=null] Message ID to insert the new message after
  * @param {boolean} [options.scroll=true] Whether to scroll to the new message
  * @param {number} [options.insertBefore=null] Message ID to insert the new message before
  * @param {number} [options.forceId=null] Force the message ID
- * @param {boolean} [options.showSwipes=true] Whether to refresh the swipe buttons.
  * @returns {JQuery<HTMLElement>} The newly added message element
  */
-export function addOneMessage(mes, { type = undefined, insertAfter = null, scroll = true, insertBefore = null, forceId = null, showSwipes = true } = {}) {
+export function addOneMessage(mes, { insertAfter = null, scroll = true, insertBefore = null, forceId = null } = {}) {
     // Callers push the new message to chat before calling addOneMessage
     const messageId = (() => {
         if (typeof forceId === 'number') {
@@ -762,25 +757,15 @@ export function addOneMessage(mes, { type = undefined, insertAfter = null, scrol
 
     let messageElement;
 
-    if (type === 'swipe') {
-        // Forbidden black magic
-        // This allows to use "continue" on user messages
-        mes.swipe_id ??= 0;
-        mes.swipes ??= [mes.mes];
-        //This keeps listeners intact.
-        messageElement = state.chatElement.find(`[mesid="${messageId}"]`);
-        updateMessageElement(mes, { messageId, messageElement, adjustMediaScroll: scroll ? SCROLL_BEHAVIOR.ADJUST : SCROLL_BEHAVIOR.NONE });
+    messageElement = updateMessageElement(mes, { messageId, adjustMediaScroll: scroll ? SCROLL_BEHAVIOR.ADJUST : SCROLL_BEHAVIOR.NONE });
+    if (typeof insertAfter === 'number' && insertAfter >= 0) {
+        const target = state.chatElement.find(`.mes[mesid="${insertAfter}"]`);
+        $(messageElement).insertAfter(target);
+    } else if (typeof insertBefore === 'number' && insertBefore >= 0) {
+        const target = state.chatElement.find(`.mes[mesid="${insertBefore}"]`);
+        $(messageElement).insertBefore(target);
     } else {
-        messageElement = updateMessageElement(mes, { messageId, adjustMediaScroll: scroll ? SCROLL_BEHAVIOR.ADJUST : SCROLL_BEHAVIOR.NONE });
-        if (typeof insertAfter === 'number' && insertAfter >= 0) {
-            const target = state.chatElement.find(`.mes[mesid="${insertAfter}"]`);
-            $(messageElement).insertAfter(target);
-        } else if (typeof insertBefore === 'number' && insertBefore >= 0) {
-            const target = state.chatElement.find(`.mes[mesid="${insertBefore}"]`);
-            $(messageElement).insertBefore(target);
-        } else {
-            state.chatElement.append(messageElement);
-        }
+        state.chatElement.append(messageElement);
     }
 
 
@@ -788,7 +773,6 @@ export function addOneMessage(mes, { type = undefined, insertAfter = null, scrol
     state.chatElement.find('.mes').removeClass('last_mes');
     state.chatElement.find('.mes').last().addClass('last_mes');
 
-    if (showSwipes) refreshSwipeButtons();
     // Don't scroll if not inserting last
     if (!insertAfter && !insertBefore && scroll) {
         scrollChatToBottom({ waitForFrame: true });
@@ -869,11 +853,6 @@ export function updateMessageElement(mes, { messageId = state.chat.length - 1, m
     appendMediaToMessage(mes, messageElement, adjustMediaScroll);
     messageElement.find('.mes_text').html(messageHTML);
     addCopyToCodeBlocks(messageElement);
-
-    // Set the swipes counter for all non-user messages.
-    if (!mes.is_user) {
-        updateSwipeCounter(messageId, { message: mes, messageElement });
-    }
 
     return messageElement;
 }
@@ -969,19 +948,17 @@ export function scrollChatToBottom({ waitForFrame } = {}) {
  * Formats a message according to user settings
  * @param {object} [options] - Additional options.
  * @param {string} [options.getMessage] The message to clean up
- * @param {boolean} [options.isImpersonate] Whether this is an impersonated message
- * @param {boolean} [options.isContinue] Whether this is a continued message
  * @param {boolean} [options.displayIncompleteSentences] Whether to keep incomplete sentences at the end.
  * @param {array} [options.stoppingStrings] Array of stopping strings.
  * @param {boolean} [options.trimNames] Whether to allow trimming "{{char}}:" or "{{user}}:" from the beginning.
- * @param {boolean} [options.trimWrongNames] Whether to allow deleting responses prefixed by the incorrect name, depending on isImpersonate
+ * @param {boolean} [options.trimWrongNames] Whether to allow deleting responses prefixed by the incorrect name
  *
  * @returns {string} The formatted message
  */
-export function cleanUpMessage({ getMessage, isImpersonate, isContinue, displayIncompleteSentences: _displayIncompleteSentences = false, stoppingStrings = null, trimNames = true, trimWrongNames = true } = {}) {
+export function cleanUpMessage({ getMessage, displayIncompleteSentences: _displayIncompleteSentences = false, stoppingStrings = null, trimNames = true, trimWrongNames = true } = {}) {
     if (arguments.length > 0 && typeof arguments[0] !== 'object') {
         console.trace('cleanUpMessage called with positional arguments. Please use an object instead.');
-        [getMessage, isImpersonate, isContinue, _displayIncompleteSentences, stoppingStrings, trimNames, trimWrongNames] = arguments;
+        [getMessage, _displayIncompleteSentences, stoppingStrings, trimNames, trimWrongNames] = arguments;
     }
 
     if (!getMessage) {
@@ -991,7 +968,7 @@ export function cleanUpMessage({ getMessage, isImpersonate, isContinue, displayI
     // Allow for caching of stopping strings. getStoppingStrings is an expensive function, especially with macros
     // enabled, so for streaming, we call it once and then pass it into each cleanUpMessage call.
     if (!stoppingStrings) {
-        stoppingStrings = getStoppingStrings(isImpersonate, isContinue, state.main_api);
+        stoppingStrings = getStoppingStrings(state.main_api);
     }
 
     for (const stoppingString of stoppingStrings) {
@@ -1006,7 +983,7 @@ export function cleanUpMessage({ getMessage, isImpersonate, isContinue, displayI
     }
 
     // Regex uses vars, so add before formatting
-    getMessage = getRegexedString(getMessage, isImpersonate ? state.regex_placement.USER_INPUT : state.regex_placement.AI_OUTPUT);
+    getMessage = getRegexedString(getMessage, state.regex_placement.AI_OUTPUT);
 
     // trailing invisible whitespace before every newlines, on a multiline string
     // "trailing whitespace on newlines       \nevery line of the string    \n?sample text" ->
@@ -1014,12 +991,11 @@ export function cleanUpMessage({ getMessage, isImpersonate, isContinue, displayI
     getMessage = getMessage.replace(/[^\S\r\n]+$/gm, '');
 
     if (trimWrongNames) {
-        // If this is an impersonation, delete the entire response if it starts with "{{char}}:"
-        // If this isn't an impersonation, delete the entire response if it starts with "{{user}}:"
+        // Delete the entire response if it starts with "{{user}}:"
         // Also delete any trailing text that starts with the wrong name.
         // This only occurs if the corresponding "power_user.allow_nameX_display" is false.
 
-        let wrongName = isImpersonate ? state.name2 : state.name1;
+        let wrongName = state.name1;
 
         if (wrongName) {
             // If the message starts with the wrong name, delete the entire response
@@ -1043,27 +1019,16 @@ export function cleanUpMessage({ getMessage, isImpersonate, isContinue, displayI
     const name2Escaped = escapeRegex(state.name2);
     getMessage = getMessage.replace(new RegExp(`(^|\n)${name2Escaped}:\\s*`, 'g'), '$1');
 
-    if (isImpersonate) {
-        getMessage = getMessage.trim();
-    }
-
-
     if (trimNames) {
-        // If this is an impersonation, trim "{{user}}:" from the beginning
-        // If this isn't an impersonation, trim "{{char}}:" from the beginning.
+        // Trim "{{char}}:" from the beginning.
         // Only applied when the corresponding "power_user.allow_nameX_display" is false.
-        const nameToTrim2 = isImpersonate ? state.name1 : state.name2;
+        const nameToTrim2 = state.name2;
 
         if (nameToTrim2 && getMessage.startsWith(nameToTrim2 + ':')) {
             getMessage = getMessage.replace(nameToTrim2 + ':', '');
             getMessage = getMessage.trimStart();
         }
     }
-
-    if (isImpersonate) {
-        getMessage = getMessage.trim();
-    }
-
 
     if (!state.PromptReasoning.getLatestPrefix()) {
         getMessage = getMessage.trim();
@@ -1110,7 +1075,6 @@ export async function processImageAttachment(message, { imageUrls }) {
  * @property {string} getMessage Generated message
  * @property {boolean} [fromStreaming] If the message is from streaming
  * @property {string} [title] Message tooltip
- * @property {string[]} [swipes] Extra swipes
  * @property {string} [reasoning] Message reasoning
  * @property {string[]} [imageUrls] Links to images
  * @property {string?} [reasoningSignature] Encrypted signature of the reasoning text
@@ -1119,27 +1083,11 @@ export async function processImageAttachment(message, { imageUrls }) {
  * @property {string} type Type of generation
  * @property {string} getMessage Generated message
  */
-export async function saveReply({ type, getMessage, fromStreaming = false, title = '', swipes = [], reasoning = '', imageUrls = [], reasoningSignature = null }) {
+export async function saveReply({ type, getMessage, fromStreaming = false, title = '', reasoning = '', imageUrls = [], reasoningSignature = null }) {
     // Backward compatibility
     if (arguments.length > 1 && typeof arguments[0] !== 'object') {
         console.trace('saveReply called with positional arguments. Please use an object instead.');
-        [type, getMessage, fromStreaming, title, swipes, reasoning, imageUrls, reasoningSignature] = arguments;
-    }
-
-    const lastMessage = state.chat[state.chat.length - 1];
-
-    if (type != 'append' && type != 'continue' && type != 'appendFinal' && state.chat.length && (lastMessage.swipe_id === undefined ||
-        lastMessage.is_user)) {
-        type = 'normal';
-    }
-
-    if (state.chat.length && (!lastMessage.extra || typeof lastMessage.extra !== 'object')) {
-        lastMessage.extra = {};
-    }
-
-    // Coerce null/undefined to empty string
-    if (state.chat.length && !lastMessage.extra.reasoning) {
-        lastMessage.extra.reasoning = '';
+        [type, getMessage, fromStreaming, title, reasoning, imageUrls, reasoningSignature] = arguments;
     }
 
     if (!reasoning) {
@@ -1147,133 +1095,31 @@ export async function saveReply({ type, getMessage, fromStreaming = false, title
     }
 
     const generationFinished = new Date();
-    if (type === 'swipe') {
-        lastMessage.swipes.length++;
-        if (lastMessage.swipe_id === lastMessage.swipes.length - 1) {
-            lastMessage.title = title;
-            lastMessage.mes = getMessage;
-            lastMessage.gen_started = state.generation_started;
-            lastMessage.gen_finished = generationFinished;
-            lastMessage.send_date = getMessageTimeStamp();
-            lastMessage.extra.api = getGeneratingApi();
-            lastMessage.extra.model = getGeneratingModel();
-            lastMessage.extra.reasoning = reasoning;
-            lastMessage.extra.reasoning_duration = null;
-            lastMessage.extra.reasoning_signature = reasoningSignature;
-            await processImageAttachment(lastMessage, { imageUrls });
-
-            const chat_id = (state.chat.length - 1);
-            if (!fromStreaming) await eventSource.emit(event_types.MESSAGE_RECEIVED, chat_id, type);
-            addOneMessage(state.chat[chat_id], { type: 'swipe' });
-            if (!fromStreaming) await eventSource.emit(event_types.CHARACTER_MESSAGE_RENDERED, chat_id, type);
-        } else {
-            lastMessage.mes = getMessage;
-        }
-    } else if (type === 'append' || type === 'continue') {
-        console.debug('Trying to append.');
-        lastMessage.title = title;
-        lastMessage.mes += getMessage;
-        lastMessage.gen_started = state.generation_started;
-        lastMessage.gen_finished = generationFinished;
-        lastMessage.send_date = getMessageTimeStamp();
-        lastMessage.extra.api = getGeneratingApi();
-        lastMessage.extra.model = getGeneratingModel();
-        lastMessage.extra.reasoning = reasoning;
-        lastMessage.extra.reasoning_duration = null;
-        lastMessage.extra.reasoning_signature = reasoningSignature;
-        await processImageAttachment(lastMessage, { imageUrls });
-
-        const chat_id = (state.chat.length - 1);
-        if (!fromStreaming) await eventSource.emit(event_types.MESSAGE_RECEIVED, chat_id, type);
-        addOneMessage(state.chat[chat_id], { type: 'swipe' });
-        if (!fromStreaming) await eventSource.emit(event_types.CHARACTER_MESSAGE_RENDERED, chat_id, type);
-    } else if (type === 'appendFinal') {
-        console.debug('Trying to appendFinal.');
-        lastMessage.title = title;
-        lastMessage.mes = getMessage;
-        lastMessage.gen_started = state.generation_started;
-        lastMessage.gen_finished = generationFinished;
-        lastMessage.send_date = getMessageTimeStamp();
-        lastMessage.extra.api = getGeneratingApi();
-        lastMessage.extra.model = getGeneratingModel();
-        lastMessage.extra.reasoning += reasoning;
-        lastMessage.extra.reasoning_signature = reasoningSignature;
-        await processImageAttachment(lastMessage, { imageUrls });
-        // We don't know if the reasoning duration extended, so we don't update it here on purpose.
-
-        const chat_id = (state.chat.length - 1);
-        if (!fromStreaming) await eventSource.emit(event_types.MESSAGE_RECEIVED, chat_id, type);
-        addOneMessage(state.chat[chat_id], { type: 'swipe' });
-        if (!fromStreaming) await eventSource.emit(event_types.CHARACTER_MESSAGE_RENDERED, chat_id, type);
-    } else {
-        console.debug('entering chat update routine for non-swipe post');
-        const newMessage = {};
-        state.chat.push(newMessage);
-        newMessage.extra = {};
-        newMessage.name = state.name2;
-        newMessage.is_user = false;
-        newMessage.send_date = getMessageTimeStamp();
-        newMessage.extra.api = getGeneratingApi();
-        newMessage.extra.model = getGeneratingModel();
-        newMessage.extra.reasoning = reasoning;
-        newMessage.extra.reasoning_duration = null;
-        newMessage.extra.reasoning_signature = reasoningSignature;
-        getMessage = getMessage.trim();
-        newMessage.mes = getMessage;
-        newMessage.title = title;
-        newMessage.gen_started = state.generation_started;
-        newMessage.gen_finished = generationFinished;
+    console.debug('entering chat update routine');
+    const newMessage = {};
+    state.chat.push(newMessage);
+    newMessage.extra = {};
+    newMessage.name = state.name2;
+    newMessage.is_user = false;
+    newMessage.send_date = getMessageTimeStamp();
+    newMessage.extra.api = getGeneratingApi();
+    newMessage.extra.model = getGeneratingModel();
+    newMessage.extra.reasoning = reasoning;
+    newMessage.extra.reasoning_duration = null;
+    newMessage.extra.reasoning_signature = reasoningSignature;
+    getMessage = getMessage.trim();
+    newMessage.mes = getMessage;
+    newMessage.title = title;
+    newMessage.gen_started = state.generation_started;
+    newMessage.gen_finished = generationFinished;
 
 
-        await processImageAttachment(newMessage, { imageUrls });
-        const chat_id = (state.chat.length - 1);
+    await processImageAttachment(newMessage, { imageUrls });
+    const chat_id = (state.chat.length - 1);
 
-        if (!fromStreaming) await eventSource.emit(event_types.MESSAGE_RECEIVED, chat_id, type);
-        addOneMessage(state.chat[chat_id]);
-        if (!fromStreaming) await eventSource.emit(event_types.CHARACTER_MESSAGE_RENDERED, chat_id, type);
-    }
-
-    const item = state.chat[state.chat.length - 1];
-    if (item.swipe_info === undefined) {
-        item.swipe_info = [];
-    }
-    if (item.swipe_id !== undefined) {
-        const swipeId = item.swipe_id;
-        item.swipes[swipeId] = item.mes;
-        item.swipe_info[swipeId] = {
-            send_date: item.send_date,
-            gen_started: item.gen_started,
-            gen_finished: item.gen_finished,
-            extra: structuredClone(item.extra),
-        };
-    } else {
-        item.swipe_id = 0;
-        item.swipes = [];
-        item.swipes[0] = item.mes;
-        item.swipe_info[0] = {
-            send_date: item.send_date,
-            gen_started: item.gen_started,
-            gen_finished: item.gen_finished,
-            extra: structuredClone(item.extra),
-        };
-    }
-
-    if (Array.isArray(swipes) && swipes.length > 0) {
-        const swipeInfoExtra = structuredClone(item.extra ?? {});
-        delete swipeInfoExtra.token_count;
-        delete swipeInfoExtra.reasoning;
-        delete swipeInfoExtra.reasoning_duration;
-        const swipeInfo = {
-            send_date: item.send_date,
-            gen_started: item.gen_started,
-            gen_finished: item.gen_finished,
-            extra: swipeInfoExtra,
-        };
-        const swipeInfoArray = Array(swipes.length).fill().map(() => structuredClone(swipeInfo));
-        parseReasoningInSwipes(swipes, swipeInfoArray, item.extra?.reasoning_duration);
-        item.swipes.push(...swipes);
-        item.swipe_info.push(...swipeInfoArray);
-    }
+    if (!fromStreaming) await eventSource.emit(event_types.MESSAGE_RECEIVED, chat_id, type);
+    addOneMessage(state.chat[chat_id]);
+    if (!fromStreaming) await eventSource.emit(event_types.CHARACTER_MESSAGE_RENDERED, chat_id, type);
 
     return { type, getMessage };
 }

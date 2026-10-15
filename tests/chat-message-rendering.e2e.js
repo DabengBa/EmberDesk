@@ -398,9 +398,6 @@ test.describe('chat message rendering', () => {
         await expect(sampleRow.locator('.mes_file_wrapper')).toHaveCount(1);
         await expectReactMessageRowState(page, characterMessageIndex, true);
         await expectReactRichBodyState(page, characterMessageIndex);
-        await expect(sampleRow.locator('.swipe_left')).toHaveCount(1);
-        await expect(sampleRow.locator('.swipe_right')).toHaveCount(1);
-
         const textAlign = await sampleRow.locator('.mes_text').evaluate(element => getComputedStyle(element).textAlign);
         expect(textAlign).not.toBe('center');
 
@@ -411,9 +408,9 @@ test.describe('chat message rendering', () => {
 
         const actionRow = renderedMessages.last();
         await actionRow.hover();
-        const messageActionsButton = actionRow.getByRole('button', { name: 'Message Actions' });
+        const messageActionsButton = actionRow.getByRole('button', { name: '消息操作' });
         await expect(messageActionsButton).toBeVisible();
-        await expect(actionRow.getByRole('button', { name: 'Edit' })).toBeVisible();
+        await expect(actionRow.getByRole('button', { name: '编辑' })).toBeVisible();
         // Focus+assert must be atomic: React row re-renders can replace this
         // legacy-injected button between the two calls, so re-focus each poll.
         await expect.poll(async () => messageActionsButton.evaluate(element => {
@@ -432,7 +429,7 @@ test.describe('chat message rendering', () => {
             && actionButtonBox.y + actionButtonBox.height > messageTextBox.y;
         expect(overlapsMessageText).toBe(false);
         await messageActionsButton.click();
-        await expect(actionRow.getByRole('button', { name: 'Copy' })).toBeVisible();
+        await expect(actionRow.getByRole('button', { name: '复制' })).toBeVisible();
 
         const longMessages = longChat.slice(1);
         await openCharacterChat(page, longChatName);
@@ -516,27 +513,27 @@ test.describe('chat message rendering', () => {
             expanded: false,
             availableIncludes: ['extraMesButtonsHint', 'mes_copy', 'mes_edit', 'mes_edit_delete'],
             highFrequencyIncludes: ['extraMesButtonsHint', 'mes_copy', 'mes_edit'],
-            secondaryIncludes: ['mes_swipe_picker'],
+            secondaryIncludes: ['mes_translate', 'mes_hide'],
             dangerIncludes: ['mes_edit_delete'],
         });
 
-        const messageActionsButton = assistantRow.getByRole('button', { name: 'Message Actions' });
+        const messageActionsButton = assistantRow.getByRole('button', { name: '消息操作' });
         await expect(messageActionsButton).toBeVisible();
         await clickControlAtCenter(page, messageActionsButton);
         await expectReactMessageActionState(page, assistantMessageIndex, {
             expanded: true,
             availableIncludes: ['extraMesButtonsHint', 'mes_copy', 'mes_edit', 'mes_edit_delete'],
             highFrequencyIncludes: ['extraMesButtonsHint', 'mes_copy', 'mes_edit'],
-            secondaryIncludes: ['mes_swipe_picker'],
+            secondaryIncludes: ['mes_translate', 'mes_hide'],
             dangerIncludes: ['mes_edit_delete'],
         });
 
-        const copyButton = assistantRow.getByRole('button', { name: 'Copy' });
+        const copyButton = assistantRow.getByRole('button', { name: '复制' });
         await expect(copyButton).toBeVisible();
         await clickControlAtCenter(page, copyButton);
         await expectClipboardText(page, seededMessages[assistantMessageIndex].mes);
 
-        const editButton = assistantRow.getByRole('button', { name: 'Edit' });
+        const editButton = assistantRow.getByRole('button', { name: '编辑' });
         await expect(editButton).toBeVisible();
         await clickControlAtCenter(page, editButton);
 
@@ -548,12 +545,12 @@ test.describe('chat message rendering', () => {
         await expect(assistantRow).toHaveAttribute('data-main-chat-message-row-state', 'editing');
 
         const renderedMessageCount = await page.locator('#chat .mes[mesid]').count();
-        await clickControlAtCenter(page, assistantRow.getByRole('button', { name: 'Delete this message' }));
-        const deleteDialog = page.getByRole('dialog').filter({ hasText: 'Are you sure you want to delete this message?' });
+        await clickControlAtCenter(page, assistantRow.getByRole('button', { name: '删除此消息' }));
+        const deleteDialog = page.getByRole('dialog').filter({ hasText: '确定删除这条消息吗？' });
         await expect(deleteDialog).toBeVisible();
-        await expect(deleteDialog.getByRole('button', { name: 'Delete Message' })).toBeVisible();
+        await expect(deleteDialog.getByRole('button', { name: '删除消息' })).toBeVisible();
         await expect(page.locator('#chat .mes[mesid]')).toHaveCount(renderedMessageCount);
-        await deleteDialog.getByRole('button', { name: 'Cancel' }).click();
+        await deleteDialog.getByRole('button', { name: '取消' }).click();
         await expect(deleteDialog).toHaveCount(0);
 
         await assistantRow.locator('.mes_edit_cancel').evaluate(element => element.click());
@@ -589,7 +586,7 @@ test.describe('chat message rendering', () => {
         await expectReactMessageRowState(page, assistantMessageIndex, true);
 
         await page.getByRole('button', { name: 'Chat options' }).click();
-        await page.getByRole('button', { name: 'Delete messages' }).click();
+        await page.getByRole('button', { name: '删除消息' }).click();
         await expect(page.locator('#dialogue_del_mes')).toBeVisible();
         await expect(page.locator('#dialogue_del_mes_ok')).toBeDisabled();
         await expect(page.locator('#dialogue_del_mes_summary')).toContainText('Select a message');
@@ -736,7 +733,7 @@ test.describe('chat message rendering', () => {
             await latestLongMessageRow.scrollIntoViewIfNeeded();
             await expect(latestLongMessageRow, `${viewport.name} latest row`).toBeVisible();
             await expectMessageTextMatches(page, longMessages.length - 1, longMessages.at(-1).mes);
-            const messageActions = latestLongMessageRow.getByRole('button', { name: 'Message Actions' });
+            const messageActions = latestLongMessageRow.getByRole('button', { name: '消息操作' });
             await expect(messageActions, `${viewport.name} message actions`).toBeVisible();
             const actionButtonBox = await messageActions.boundingBox();
             const messageTextBox = await latestLongMessageRow.locator('.mes_text').boundingBox();
@@ -751,7 +748,7 @@ test.describe('chat message rendering', () => {
             // the action button is visible and non-overlapping with .mes_text. Use the same
             // element-owned activation path as load-more (direct element click).
             await messageActions.evaluate(element => element.click());
-            await expect(latestLongMessageRow.getByRole('button', { name: 'Copy' }), `${viewport.name} copy action`).toBeVisible();
+            await expect(latestLongMessageRow.getByRole('button', { name: '复制' }), `${viewport.name} copy action`).toBeVisible();
         }
 
         expect(getUnexpectedConsoleErrors(consoleErrors)).toEqual([]);

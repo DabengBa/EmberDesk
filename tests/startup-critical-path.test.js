@@ -21,22 +21,6 @@ describe('resolveStartupSettingsPlan', () => {
             currentVersion: '1.0.0',
             firstRun: false,
         }));
-        expect(plan.firstRun).toBe(false);
-        expect(plan.extensionPlan).toBeUndefined();
-    });
-
-    test('firstRun is reported independently of legacy extension flags', () => {
-        const plan = resolveStartupSettingsPlan({
-            data: {
-                settings: JSON.stringify({
-                    currentVersion: '1.0.0',
-                    firstRun: true,
-                }),
-            },
-            currentVersion: '1.0.0',
-        });
-
-        expect(plan.firstRun).toBe(true);
         expect(plan.extensionPlan).toBeUndefined();
     });
 

@@ -16,7 +16,24 @@ export const defaultSettingsFormValues = {
         customUrl: '',
         fallbackProviderModel: '',
     },
+    // Mirrors DEFAULT_FRONTEND_FRAME_SETTINGS in public/scripts/frontend-frame.js —
+    // the message-rendering fields merged in from the retired user-settings drawer.
+    rendering: {
+        frontendFramesEnabled: true,
+        frontendFramesDepth: 0,
+        frontendFramesDepthIgnoreHidden: true,
+        frontendFramesCollapseCodeBlock: 'frontend_only',
+        frontendFramesSkipHighlight: true,
+        frontendFramesUseBlobUrl: false,
+        frontendFramesAllowStreaming: false,
+    },
 };
+
+const FRONTEND_FRAME_COLLAPSE_MODES = ['all', 'frontend_only', 'none'];
+
+function boolOr(value, fallback) {
+    return typeof value === 'boolean' ? value : fallback;
+}
 
 const fieldBindings = [
 
@@ -30,6 +47,55 @@ const fieldBindings = [
         // value must not silently re-enable it under "non-empty model = enabled".
         toForm: (value, settings) => (getValueAtPath(settings, 'oai_settings.fallback_provider_enabled') === false ? '' : value),
     },
+    // Frontend Frames rendering settings — previously legacy-bound checkboxes in
+    // the retired #user-settings-block drawer. toForm mirrors
+    // normalizeFrontendFramesSettings so partial/garbage stored values fall back
+    // to shipped defaults instead of leaking into the form.
+    {
+        tab: 'providers',
+        formPath: 'rendering.frontendFramesEnabled',
+        settingsPath: 'power_user.frontend_frames.enabled',
+        toForm: value => boolOr(value, true),
+    },
+    {
+        tab: 'providers',
+        formPath: 'rendering.frontendFramesDepth',
+        settingsPath: 'power_user.frontend_frames.depth',
+        toForm: value => {
+            const numeric = typeof value === 'string' && value.trim() !== '' ? Number(value) : value;
+            return Number.isInteger(numeric) && numeric >= 0 ? numeric : 0;
+        },
+    },
+    {
+        tab: 'providers',
+        formPath: 'rendering.frontendFramesDepthIgnoreHidden',
+        settingsPath: 'power_user.frontend_frames.depth_ignore_hidden',
+        toForm: value => boolOr(value, true),
+    },
+    {
+        tab: 'providers',
+        formPath: 'rendering.frontendFramesCollapseCodeBlock',
+        settingsPath: 'power_user.frontend_frames.collapse_code_block',
+        toForm: value => (FRONTEND_FRAME_COLLAPSE_MODES.includes(value) ? value : 'frontend_only'),
+    },
+    {
+        tab: 'providers',
+        formPath: 'rendering.frontendFramesSkipHighlight',
+        settingsPath: 'power_user.frontend_frames.skip_highlight',
+        toForm: value => boolOr(value, true),
+    },
+    {
+        tab: 'providers',
+        formPath: 'rendering.frontendFramesUseBlobUrl',
+        settingsPath: 'power_user.frontend_frames.use_blob_url',
+        toForm: value => boolOr(value, false),
+    },
+    {
+        tab: 'providers',
+        formPath: 'rendering.frontendFramesAllowStreaming',
+        settingsPath: 'power_user.frontend_frames.allow_streaming',
+        toForm: value => boolOr(value, false),
+    },
 ];
 
 
@@ -38,9 +104,9 @@ const fieldBindings = [
  * reactOwned paths come from fieldBindings; specializedSurfaces stay out of /settings.
  */
 export const settingsOwnerInventory = {
-    drawers: {
-        userSettings: '#user-settings-block',
-    },
+    // No legacy-owned settings drawers remain: the former user-settings-block
+    // Frontend Frames surface is bound into the providers tab above.
+    drawers: {},
     specializedSurfaces: [
         'world_info_settings',
         'feature_settings',
@@ -90,19 +156,14 @@ export const settingsCoverage = {
         'oai_settings.top_p_openai',
         'oai_settings.show_thoughts',
         'oai_settings.reasoning_effort',
-        'oai_settings.continue_prefill',
-        'oai_settings.continue_postfix',
         'oai_settings.squash_system_messages',
-        'oai_settings.n',
         'oai_settings.verbosity',
         'oai_settings.media_inlining',
         'oai_settings.inline_image_quality',
         'oai_settings.tool_reasoning_mode',
         'oai_settings.send_if_empty',
-        'oai_settings.impersonation_prompt',
         'oai_settings.new_chat_prompt',
         'oai_settings.new_example_chat_prompt',
-        'oai_settings.continue_nudge_prompt',
         'oai_settings.wi_format',
         'oai_settings.description_format',
         'oai_settings.names_behavior',
@@ -326,7 +387,7 @@ export function buildSettingsSavePayload(baseSettings, formValues, { settingsRev
         delete powerUser.reasoning;
     }
 
-    // The swipes toggle is retired; swipe buttons are always on.
+    // The swipes toggle and swipe generation are retired; strip on save.
     delete nextSettings.swipes;
 
     if (settingsRevision != null && Number.isFinite(Number(settingsRevision))) {

@@ -49,7 +49,7 @@ test.describe('login page', () => {
         const recoveryCard = page.locator('#recoveryCard');
         await expect(recoveryCard.getByRole('heading', { name: '重置密码' })).toBeVisible();
         await expect(recoveryCard.getByLabel('用户名')).toBeVisible();
-        await expect(recoveryCard.getByRole('button', { name: '发送恢复码' })).toBeVisible();
+        await expect(recoveryCard.getByRole('button', { name: '生成恢复码' })).toBeVisible();
         await expect(recoveryCard.getByRole('button', { name: '返回登录' })).toBeVisible();
     });
 
@@ -74,14 +74,14 @@ test.describe('login page', () => {
 
         const recoveryCard = page.locator('#recoveryCard');
         await recoveryCard.getByLabel('用户名').fill('');
-        await recoveryCard.getByRole('button', { name: '发送恢复码' }).click();
+        await recoveryCard.getByRole('button', { name: '生成恢复码' }).click();
         await expect(recoveryCard.getByRole('alert')).toHaveText('请输入用户名');
 
         await recoveryCard.getByLabel('用户名').fill('default-user');
         await page.route('/api/users/recover-step1', async route => {
             await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
         });
-        await recoveryCard.getByRole('button', { name: '发送恢复码' }).click();
+        await recoveryCard.getByRole('button', { name: '生成恢复码' }).click();
         await expect(recoveryCard.getByLabel('恢复码')).toBeVisible();
 
         await recoveryCard.getByRole('button', { name: '重置密码' }).click();

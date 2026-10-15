@@ -152,8 +152,6 @@ function createSnapshotMessageRow({ expanded = false } = {}) {
     chatRoot.setAttribute('id', 'chat');
     const row = chatRoot.appendChild(new FakeElement(['mes']));
     row.setAttribute('mesid', '12');
-    const swipeLeft = row.appendChild(new FakeElement(['swipe_left']));
-    swipeLeft.setAttribute('role', 'button');
     const block = row.appendChild(new FakeElement(['mes_block']));
     const buttons = block.appendChild(new FakeElement(['mes_buttons']));
     const hint = buttons.appendChild(new FakeElement(['mes_button', 'extraMesButtonsHint']));
@@ -168,18 +166,13 @@ function createSnapshotMessageRow({ expanded = false } = {}) {
         'mes_translate',
         'mes_edit_delete',
         'mes_reasoning_copy',
-        'generation_failure_retry',
     ]) {
         const action = extraButtons.appendChild(new FakeElement(['mes_button', className]));
         action.setAttribute('role', 'button');
     }
 
-    const swipePicker = buttons.appendChild(new FakeElement(['mes_button', 'mes_swipe_picker']));
-    swipePicker.setAttribute('role', 'button');
     const edit = buttons.appendChild(new FakeElement(['mes_button', 'mes_edit']));
     edit.setAttribute('role', 'button');
-    const swipeRight = row.appendChild(new FakeElement(['swipe_right']));
-    swipeRight.setAttribute('role', 'button');
 
     return { chatRoot, row };
 }
@@ -198,9 +191,10 @@ describe('chat message actions controller', () => {
             'mes_edit',
         ]));
         expect(MESSAGE_ACTION_TIERS.secondary).toEqual(expect.arrayContaining([
-            'mes_swipe_picker',
             'mes_reasoning_copy',
             'mes_translate',
+            'mes_narrate',
+            'mes_hide',
         ]));
         expect(MESSAGE_ACTION_TIERS.danger).toEqual(expect.arrayContaining([
             'mes_edit_delete',
@@ -221,19 +215,15 @@ describe('chat message actions controller', () => {
             eligible: true,
             expanded: true,
             availableActions: expect.arrayContaining([
-                'swipe_left',
                 'extraMesButtonsHint',
                 'mes_copy',
                 'mes_translate',
                 'mes_edit_delete',
                 'mes_reasoning_copy',
-                'generation_failure_retry',
-                'mes_swipe_picker',
                 'mes_edit',
-                'swipe_right',
             ]),
             highFrequencyActions: ['extraMesButtonsHint', 'mes_copy', 'mes_edit'],
-            secondaryActions: expect.arrayContaining(['mes_swipe_picker', 'mes_reasoning_copy', 'mes_translate']),
+            secondaryActions: expect.arrayContaining(['mes_reasoning_copy', 'mes_translate']),
             dangerActions: ['mes_edit_delete'],
         });
     });

@@ -12,6 +12,7 @@ export const WORKSPACE_PANEL_DOCK_KINDS = Object.freeze([
     'settings',
     'characterAuthoring',
     'regex',
+    'promptManager',
 ]);
 
 /**
@@ -43,6 +44,18 @@ export const WORKSPACE_SHELL_CHILD_SLOTS = Object.freeze({
         allowedCapabilities: Object.freeze(['editRegexScripts', 'openRegexEditor', 'openRegexDebugger']),
         contentOwner: 'regex',
         mountTarget: '#RegexPanel',
+    }),
+    promptManager: Object.freeze({
+        accessibleName: '提示词',
+        allowedCapabilities: Object.freeze(['selectPromptPreset', 'editPrompts']),
+        contentOwner: 'prompt-panel',
+        mountTarget: '#left-nav-panel',
+    }),
+    settings: Object.freeze({
+        accessibleName: '设置',
+        allowedCapabilities: Object.freeze(['openSettings']),
+        contentOwner: 'settings-panel',
+        mountTarget: '#SettingsPanel',
     }),
     mainChat: Object.freeze({
         accessibleName: '主聊天',

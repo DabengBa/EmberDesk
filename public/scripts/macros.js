@@ -255,19 +255,12 @@ function getChatIdHash() {
  * Optionally can only choose specific messages, if a filter is provided.
  *
  * @param {object} param0 - Optional arguments
- * @param {boolean} [param0.exclude_swipe_in_propress=true] - Whether a message that is currently being swiped should be ignored
  * @param {function(object):boolean} [param0.filter] - A filter applied to the search, ignoring all messages that don't match the criteria. For example to only find user messages, etc.
  * @returns {number|null} The message id, or null if none was found
  */
-export function getLastMessageId({ exclude_swipe_in_propress = true, filter = null } = {}) {
+export function getLastMessageId({ filter = null } = {}) {
     for (let i = chat?.length - 1; i >= 0; i--) {
         let message = chat[i];
-
-        // If ignoring swipes and the message is being swiped, continue
-        // We can check if a message is being swiped by checking whether the current swipe id is not in the list of finished swipes yet
-        if (exclude_swipe_in_propress && message.swipes && message.swipe_id >= message.swipes.length) {
-            continue;
-        }
 
         // Check if no filter is provided, or if the message passes the filter
         if (!filter || filter(message)) {
@@ -330,30 +323,6 @@ function getLastUserMessage() {
 function getLastCharMessage() {
     const mid = getLastMessageId({ filter: m => !m.is_user && !m.is_system });
     return chat[mid]?.mes ?? '';
-}
-
-/**
- * Returns the 1-based ID (number) of the last swipe
- *
- * @returns {number|null} The 1-based ID of the last swipe
- */
-function getLastSwipeId() {
-    // For swipe macro, we are accepting using the message that is currently being swiped
-    const mid = getLastMessageId({ exclude_swipe_in_propress: false });
-    const swipes = chat[mid]?.swipes;
-    return swipes?.length;
-}
-
-/**
- * Returns the 1-based ID (number) of the current swipe
- *
- * @returns {number|null} The 1-based ID of the current swipe
- */
-function getCurrentSwipeId() {
-    // For swipe macro, we are accepting using the message that is currently being swiped
-    const mid = getLastMessageId({ exclude_swipe_in_propress: false });
-    const swipeId = chat[mid]?.swipe_id;
-    return swipeId !== null ? swipeId + 1 : null;
 }
 
 /**
@@ -600,8 +569,6 @@ export function evaluateMacros(content, env, postProcessFn) {
         { regex: /{{lastCharMessage}}/gi, replace: () => getLastCharMessage() },
         { regex: /{{firstIncludedMessageId}}/gi, replace: () => String(getFirstIncludedMessageId() ?? '') },
         { regex: /{{firstDisplayedMessageId}}/gi, replace: () => String(getFirstDisplayedMessageId() ?? '') },
-        { regex: /{{lastSwipeId}}/gi, replace: () => String(getLastSwipeId() ?? '') },
-        { regex: /{{currentSwipeId}}/gi, replace: () => String(getCurrentSwipeId() ?? '') },
         { regex: /{{allChatRange}}/gi, replace: () => chat.length === 0 ? '' : `0-${chat.length - 1}` },
         { regex: /{{reverse:(.+?)}}/gi, replace: (_, str) => Array.from(str).reverse().join('') },
         { regex: /\{\{\/\/([\s\S]*?)\}\}/gm, replace: () => '' },

@@ -123,7 +123,7 @@ describe('chat import converters', () => {
         ]);
     });
 
-    test('flattens Chub JSONL nested message fields and keeps unparsable lines', () => {
+    test('flattens Chub JSONL nested message fields, drops swipe fields, and keeps unparsable lines', () => {
         const flattened = flattenChubChat('User', 'Bot', [
             JSON.stringify({
                 user_name: 'User',
@@ -132,6 +132,8 @@ describe('chat import converters', () => {
                     { message: 'first swipe' },
                     'plain swipe',
                 ],
+                swipe_id: 1,
+                swipe_info: [{ send_date: 'x' }],
             }),
             'not-json',
         ]);
@@ -140,7 +142,6 @@ describe('chat import converters', () => {
             JSON.stringify({
                 user_name: 'User',
                 mes: 'nested message',
-                swipes: ['first swipe', 'plain swipe'],
             }),
             'not-json',
         ]);

@@ -1,14 +1,8 @@
 import * as stylex from '@stylexjs/stylex';
 
-const overlayFadeIn = stylex.keyframes({
-    from: { opacity: 0 },
-    to: { opacity: 1 },
-});
-
 const reducedMotion = '@media (prefers-reduced-motion: reduce)';
 const narrow = '@media (max-width: 720px)';
 const medium = '@media (max-width: 960px)';
-const phone = '@media (max-width: 639px)';
 
 export const settingsStyles = stylex.create({
     page: {
@@ -34,8 +28,15 @@ export const settingsStyles = stylex.create({
     pageOverlay: {
         minHeight: 0,
         height: '100%',
-        backgroundImage: 'radial-gradient(circle at top left, color-mix(in srgb, var(--settings-accent) 8%, transparent) 0 12rem, transparent 22rem)',
-        backgroundColor: 'color-mix(in srgb, var(--settings-surface) 92%, var(--black70a, rgba(0, 0, 0, 0.7)) 8%)',
+        // Drawer variant: become a flex column so `layout` is a shrinkable
+        // flex item — every ancestor height comes from flex-shrink used sizes,
+        // so a height:100% chain never resolves and children would grow past
+        // the drawer cap unbounded.
+        display: 'flex',
+        flexDirection: 'column',
+        // Let the .drawer-content blur tint show through — no overlay-only
+        // gradient or opaque surface of its own.
+        backgroundColor: 'transparent',
     },
     layout: {
         display: 'flex',
@@ -54,18 +55,12 @@ export const settingsStyles = stylex.create({
     layoutOverlay: {
         width: '100%',
         maxWidth: 'none',
-        height: {
-            default: '100%',
-            // On phone the dialog itself scrolls; letting the layout grow
-            // naturally keeps the tab panel readable instead of squeezing it
-            // against the fixed-height side panels.
-            [phone]: 'auto',
-        },
+        // Shrink to the drawer-bounded .settings-page instead of a percentage
+        // height — the unresolved 100% chain let this layer overflow the drawer.
+        flex: '1 1 auto',
+        minHeight: 0,
         margin: 0,
-        padding: '15px',
-        minHeight: {
-            [phone]: '100%',
-        },
+        padding: '8px 10px',
     },
     panel: {
         borderWidth: '1px',
@@ -93,6 +88,8 @@ export const settingsStyles = stylex.create({
         maxHeight: '100%',
         overflow: 'hidden',
         flexDirection: 'column',
+        // Drawer variant: the host already pads; skip the page-level inset.
+        padding: 0,
     },
     pageHeaderRow: {
         display: 'flex',
@@ -120,10 +117,6 @@ export const settingsStyles = stylex.create({
         fontSize: '1.5rem',
         fontWeight: 700,
         lineHeight: 1.4,
-    },
-    pageTitleOverlay: {
-        fontSize: '1.05rem',
-        fontWeight: 600,
     },
     pageSummary: {
         maxWidth: '72ch',
@@ -190,10 +183,6 @@ export const settingsStyles = stylex.create({
     },
     buttonSecondary: {
         backgroundColor: 'transparent',
-    },
-    overlayClose: {
-        width: 'auto',
-        flex: '0 0 auto',
     },
     tab: {
         display: 'inline-flex',
@@ -502,6 +491,12 @@ export const settingsStyles = stylex.create({
     saveBarOverlay: {
         flex: '0 0 auto',
     },
+    saveBarNote: {
+        display: 'flex',
+        alignItems: 'center',
+        gap: '10px',
+        minWidth: 0,
+    },
     side: {
         display: 'flex',
         width: 'min(100%, 360px)',
@@ -581,77 +576,5 @@ export const settingsStyles = stylex.create({
         overflow: 'auto',
         paddingRight: '2px',
         flex: '1 1 auto',
-    },
-    overlay: {
-        position: {
-            default: 'relative',
-            [phone]: 'absolute',
-        },
-        margin: 'auto',
-        padding: 0,
-        zIndex: 1,
-        maxWidth: 'none',
-        maxHeight: 'none',
-        width: {
-            default: 'min(92vw, 1180px)',
-            [phone]: '100vw',
-        },
-        height: {
-            default: 'min(92dvh, 880px)',
-            [phone]: 'calc(100dvh - var(--topBarBlockSize, 40px))',
-        },
-        pointerEvents: 'auto',
-        borderWidth: '1px',
-        borderStyle: 'solid',
-        borderColor: 'color-mix(in srgb, var(--SmartThemeBorderColor, rgba(0,0,0,0.5)) 72%, var(--SmartThemeBodyColor, rgb(220,220,210)) 12%)',
-        borderRadius: {
-            default: '10px',
-            [phone]: 0,
-        },
-        overflow: 'hidden',
-        backgroundColor: 'color-mix(in srgb, var(--SmartThemeBlurTintColor, rgb(23, 23, 23)) 78%, rgba(0, 0, 0, 0.7) 22%)',
-        boxShadow: '0 8px 32px color-mix(in srgb, rgba(0, 0, 0, 0.7) 55%, transparent)',
-        animation: {
-            default: `${overlayFadeIn} 120ms ease-out both`,
-            [phone]: `${overlayFadeIn} 150ms ease-out both`,
-            [reducedMotion]: 'none',
-        },
-        outline: {
-            ':focus': 'none',
-        },
-        top: {
-            [phone]: 'var(--topBarBlockSize, 40px)',
-        },
-        left: {
-            [phone]: 0,
-        },
-        overflowY: {
-            [phone]: 'auto',
-        },
-    },
-    overlayHost: {
-        position: 'fixed',
-        inset: 0,
-        zIndex: 4150,
-        display: {
-            default: 'grid',
-            [phone]: 'block',
-        },
-        placeItems: 'center',
-        pointerEvents: 'none',
-    },
-    overlayBackdrop: {
-        position: 'absolute',
-        inset: 0,
-        top: 'var(--topBarBlockSize, 40px)',
-        zIndex: 0,
-        pointerEvents: 'auto',
-        backgroundColor: 'color-mix(in srgb, var(--SmartThemeBlurTintColor, rgb(23, 23, 23)) 72%, transparent)',
-        backdropFilter: 'blur(calc(var(--SmartThemeBlurStrength, 10) * 2px))',
-        WebkitBackdropFilter: 'blur(calc(var(--SmartThemeBlurStrength, 10) * 2px))',
-        animation: {
-            default: `${overlayFadeIn} 150ms ease-out both`,
-            [reducedMotion]: 'none',
-        },
     },
 });

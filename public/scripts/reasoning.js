@@ -2,8 +2,7 @@ import {
     moment,
 } from '../lib.js';
 import { REASONING_PREFIX, REASONING_SUFFIX, REASONING_SEPARATOR } from './constants.js';
-import { getComposerValue, setComposerValue } from './main-chat-composer-service.js';
-import { chat, closeMessageEditor, main_api, messageFormatting, saveChatConditional, saveChatDebounced, substituteParams, syncMesToSwipe, updateMessageBlock } from '../script.js';
+import { chat, closeMessageEditor, main_api, messageFormatting, saveChatConditional, saveChatDebounced, substituteParams, updateMessageBlock } from '../script.js';
 import { eventSource, event_types } from './events.js';
 import { getRegexedString, regex_placement } from './extensions/regex/engine.js';
 import { getCurrentLocale, t, translate } from './i18n.js';
@@ -1254,34 +1253,6 @@ export function formatReasoning(reasoning, content, template = null) {
     return { formatted, contentOnly: content };
 }
 
-/**
- * Parse reasoning in an array of swipe strings if auto-parsing is enabled.
- * @param {string[]} swipes Array of swipe strings
- * @param {{extra: Partial<ReasoningMessageExtra>}[]} swipeInfoArray Array of swipe info objects
- * @param {number?} duration Duration of the reasoning
- * @typedef {object} ReasoningMessageExtra Extra reasoning data
- * @property {string} reasoning Reasoning block
- * @property {number} reasoning_duration Duration of the reasoning block
- * @property {string} reasoning_type Type of reasoning block
- * @property {string?} reasoning_signature Encrypted signature of the reasoning text
- */
-export function parseReasoningInSwipes(swipes, swipeInfoArray, duration) {
-    // Something ain't right, don't parse
-    if (!Array.isArray(swipes) || !Array.isArray(swipeInfoArray) || swipes.length !== swipeInfoArray.length) {
-        return;
-    }
-
-    for (let index = 0; index < swipes.length; index++) {
-        const parsedReasoning = parseReasoningFromString(swipes[index]);
-        if (parsedReasoning) {
-            swipes[index] = getRegexedString(parsedReasoning.content, regex_placement.REASONING);
-            swipeInfoArray[index].extra.reasoning = parsedReasoning.reasoning;
-            swipeInfoArray[index].extra.reasoning_duration = duration;
-            swipeInfoArray[index].extra.reasoning_type = ReasoningType.Parsed;
-        }
-    }
-}
-
 function registerReasoningAppEvents() {
     const eventHandler = (/** @type {string} */ type, /** @type {number} */ idx) => {
         console.debug('[Reasoning] Auto-parsing reasoning block for message', idx);
@@ -1329,7 +1300,6 @@ function registerReasoningAppEvents() {
         }
 
         if (contentUpdated) {
-            syncMesToSwipe();
             saveChatDebounced();
 
             // Find if a message already exists in DOM and must be updated
@@ -1348,18 +1318,6 @@ function registerReasoningAppEvents() {
     for (const event of [event_types.GENERATION_STOPPED, event_types.GENERATION_ENDED, event_types.CHAT_CHANGED]) {
         eventSource.on(event, () => PromptReasoning.clearLatest());
     }
-
-    eventSource.makeFirst(event_types.IMPERSONATE_READY, async () => {
-        console.debug('[Reasoning] Auto-parsing reasoning block for impersonation');
-
-        const currentValue = getComposerValue();
-        if (!currentValue) {
-            console.debug('[Reasoning] Reasoning is empty, skipping');
-            return;
-        }
-
-        setComposerValue(removeReasoningFromString(currentValue));
-    });
 }
 
 /**

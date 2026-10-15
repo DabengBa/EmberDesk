@@ -10,7 +10,6 @@ function createMessage(overrides = {}) {
         mes: 'Hello **world**',
         is_user: false,
         is_system: false,
-        swipe_id: 0,
         send_date: '2026-06-08T00:00:00.000Z',
         extra: {},
         ...overrides,

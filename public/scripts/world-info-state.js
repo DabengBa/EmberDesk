@@ -33,14 +33,6 @@ export const scan_state = {
      * Initial state.
      */
     INITIAL: 1,
-    /**
-     * The scan is triggered by a recursion step.
-     */
-    RECURSION: 2,
-    /**
-     * The scan is triggered by a min activations depth skew.
-     */
-    MIN_ACTIVATIONS: 3,
 };
 
 export const METADATA_KEY = 'world_info';
@@ -60,19 +52,10 @@ export let selected_world_info = [];
 /** @type {string[]} */
 export let world_names;
 export let world_info_depth = 2;
-export let world_info_min_activations = 0; // if > 0, will continue seeking chat until minimum world infos are activated
-export let world_info_min_activations_depth_max = 0; // used when (world_info_min_activations > 0)
-
-export let world_info_budget = 25;
 export let world_info_include_names = true;
-export let world_info_recursive = false;
-export let world_info_overflow_alert = false;
 export let world_info_case_sensitive = false;
 export let world_info_match_whole_words = false;
-export let world_info_use_group_scoring = false;
 export let world_info_character_strategy = world_info_insertion_strategy.character_first;
-export let world_info_budget_cap = 0;
-export let world_info_max_recursion_steps = 0;
 
 /**
  * The cache of all world info data that was loaded from the backend.
@@ -91,35 +74,19 @@ export function getWorldInfoSettings() {
     return {
         world_info,
         world_info_depth,
-        world_info_min_activations,
-        world_info_min_activations_depth_max,
-        world_info_budget,
         world_info_include_names,
-        world_info_recursive,
-        world_info_overflow_alert,
         world_info_case_sensitive,
         world_info_match_whole_words,
         world_info_character_strategy,
-        world_info_budget_cap,
-        world_info_use_group_scoring,
-        world_info_max_recursion_steps,
     };
 }
 
 const WORLD_INFO_SETTING_SETTERS = {
     world_info_depth: (value) => world_info_depth = Number(value),
-    world_info_min_activations: (value) => world_info_min_activations = Number(value),
-    world_info_min_activations_depth_max: (value) => world_info_min_activations_depth_max = Number(value),
-    world_info_budget: (value) => world_info_budget = Number(value),
     world_info_include_names: (value) => world_info_include_names = Boolean(value),
-    world_info_recursive: (value) => world_info_recursive = Boolean(value),
-    world_info_overflow_alert: (value) => world_info_overflow_alert = Boolean(value),
     world_info_case_sensitive: (value) => world_info_case_sensitive = Boolean(value),
     world_info_match_whole_words: (value) => world_info_match_whole_words = Boolean(value),
     world_info_character_strategy: (value) => world_info_character_strategy = Number(value),
-    world_info_budget_cap: (value) => world_info_budget_cap = Number(value),
-    world_info_use_group_scoring: (value) => world_info_use_group_scoring = Boolean(value),
-    world_info_max_recursion_steps: (value) => world_info_max_recursion_steps = Number(value),
     // Unused
     world_info: (_value) => { },
 };
@@ -168,15 +135,6 @@ export function setWorldNames(list) {
  */
 export function applyWorldInfoSettings(settings, data) {
     updateWorldInfoRuntimeSettings(settings);
-
-    // Migrate old settings
-    if (world_info_budget > 100) {
-        world_info_budget = 25;
-    }
-
-    if (world_info_use_group_scoring === undefined) {
-        world_info_use_group_scoring = false;
-    }
 
     // Reset selected world from old string and delete old keys
     // TODO: Remove next release

@@ -35,7 +35,7 @@ export async function initSystemMessages() {
         force_avatar: system_avatar,
         is_user: false,
         is_system: true,
-        extra: { swipeable: false },
+        extra: {},
     };
     /** @type {Record<string, ChatMessage>} */
     const result = {
@@ -94,8 +94,6 @@ export async function initSystemMessages() {
 
 /**
  * Gets a system message by type.
- * By default system messages are not swipeable.
- * This can be overridden by setting extra.swipeable to true.
  * @param {string} type Type of system message
  * @param {string} [text] Text to be sent
  * @param {ChatMessageExtra} [extra] Additional data to be added to the message

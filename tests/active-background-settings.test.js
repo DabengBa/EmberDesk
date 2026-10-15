@@ -110,14 +110,7 @@ describe('active background settings', () => {
     });
 
     test('restores Image Gallery translations', () => {
-        const expectedTranslations = {
-            'public/locales/fr-fr.json': 'Show Gallery',
-            'public/locales/zh-cn.json': '展示图库',
-            'public/locales/zh-tw.json': '檢視相簿',
-        };
-        for (const [relativePath, translation] of Object.entries(expectedTranslations)) {
-            const locale = JSON.parse(fs.readFileSync(path.join(repoRoot, relativePath), 'utf8'));
-            expect(locale['Show Gallery']).toBe(translation);
-        }
+        const locale = JSON.parse(fs.readFileSync(path.join(repoRoot, 'public/locales/zh-cn.json'), 'utf8'));
+        expect(locale['Show Gallery']).toBe('展示图库');
     });
 });

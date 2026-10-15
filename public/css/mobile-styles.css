@@ -1,13 +1,8 @@
 /*will apply to anything 1000px or less. this catches ipads, horizontal phones, and vertical phones)*/
 @media screen and (max-width: 1000px) {
 
-    #UI-Theme-Block,
-    #power-user-options-block {
+    #UI-Theme-Block {
         flex-basis: 100%;
-    }
-
-    #rm_button_panel_pin_div {
-        display: none;
     }
 
     #rm_button_characters {

@@ -39,6 +39,7 @@ describe('React state stores', () => {
             'settings',
             'characterAuthoring',
             'regex',
+            'promptManager',
         ]);
     });
 

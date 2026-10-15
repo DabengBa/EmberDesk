@@ -41,23 +41,14 @@ export interface MainChatMessageRecord {
     readonly recoveryStatus: string | null;
     readonly recoveryStage: MainChatRecoveryStage | null;
     readonly failureNoticeVisible: boolean;
-    readonly failureRetryVisible: boolean;
-    readonly emptyReplyRegenerateVisible: boolean;
     readonly actionsExpanded: boolean;
     readonly editing: boolean;
     readonly editText: string;
     readonly lastInContext: boolean;
-    readonly swipeCounterHidden: boolean;
-    readonly swipeIndex: number;
-    readonly swipeCount: number;
-    readonly swipesVisible: boolean;
-    readonly lastSwipe: boolean;
     readonly extraType: string;
     readonly timer: string;
     readonly timerTitle: string;
     readonly promptButtonVisible: boolean;
-    readonly swipePickerEnabled: boolean;
-    readonly swipePickerCanJump: boolean;
     readonly mediaDisplay: string | null;
     readonly inlineMediaText: boolean;
     readonly reasoningState: string | null;
@@ -164,11 +155,6 @@ function normalizeNonNegativeNumber(value: unknown) {
 
 function normalizeFiniteNumber(value: unknown) {
     return typeof value === 'number' && Number.isFinite(value) ? value : 0;
-}
-
-function normalizeNonNegativeInteger(value: unknown) {
-    const normalized = normalizeNonNegativeNumber(value);
-    return Number.isInteger(normalized) ? normalized : 0;
 }
 
 function normalizeMessageRole(value: unknown): MainChatMessageRole {
@@ -322,23 +308,14 @@ function normalizeMessages(value: unknown) {
             recoveryStatus: normalizeNullableString(message.recoveryStatus),
             recoveryStage: message.recoveryStage === 'fallback' ? 'fallback' : message.recoveryStage === 'primary' ? 'primary' : null,
             failureNoticeVisible: message.failureNoticeVisible === true,
-            failureRetryVisible: message.failureRetryVisible === true,
-            emptyReplyRegenerateVisible: message.emptyReplyRegenerateVisible === true,
             actionsExpanded: message.actionsExpanded === true,
             editing: message.editing === true,
             editText: normalizeString(message.editText),
             lastInContext: message.lastInContext === true,
-            swipeCounterHidden: message.swipeCounterHidden === true,
-            swipeIndex: normalizeNonNegativeInteger(message.swipeIndex),
-            swipeCount: normalizeNonNegativeInteger(message.swipeCount),
-            swipesVisible: message.swipesVisible === true,
-            lastSwipe: message.lastSwipe === true,
             extraType: normalizeString(message.extraType),
             timer: normalizeString(message.timer),
             timerTitle: normalizeString(message.timerTitle),
             promptButtonVisible: message.promptButtonVisible === true,
-            swipePickerEnabled: message.swipePickerEnabled === true,
-            swipePickerCanJump: message.swipePickerCanJump === true,
             mediaDisplay: normalizeNullableString(message.mediaDisplay),
             inlineMediaText: message.inlineMediaText === true,
             reasoningState: normalizeNullableString(message.reasoningState),

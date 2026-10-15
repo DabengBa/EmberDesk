@@ -375,9 +375,6 @@ export class ByafParser {
         const getNewestAiMessage = (message) => {
             return message.outputs.reduce(sortByTimestamp);
         };
-        const getSwipesForAiMessage = (aiMessage) => {
-            return aiMessage.outputs.map(output => output.text);
-        };
 
         const userMessages = scenario?.messages?.filter(msg => msg.type === 'human');
         const characterMessages = scenario?.messages?.filter(msg => msg.type === 'ai');
@@ -396,14 +393,11 @@ export class ByafParser {
                     mes: userMessages[i]?.text,
                 });
                 const aiMessage = getNewestAiMessage(characterMessages[i]);
-                const aiSwipes = getSwipesForAiMessage(characterMessages[i]);
                 chat.push({
                     name: characterName,
                     is_user: false,
                     send_date: Number(aiMessage.createdAt),
                     mes: aiMessage.text,
-                    swipes: aiSwipes,
-                    swipe_id: aiSwipes.findIndex(s => s === aiMessage.text),
                 });
             }
         } else if (scenario?.messages) {
@@ -416,11 +410,6 @@ export class ByafParser {
                     send_date: Number(isUser ? message.createdAt : aiMessage.createdAt),
                     mes: isUser ? message.text : aiMessage.text,
                 };
-                if (!isUser) {
-                    const aiSwipes = getSwipesForAiMessage(message);
-                    chatMessage.swipes = aiSwipes;
-                    chatMessage.swipe_id = aiSwipes.findIndex(s => s === aiMessage.text);
-                }
                 chat.push(chatMessage);
             }
         } else {

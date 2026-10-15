@@ -11,52 +11,48 @@ import { ContractIconButton } from '../contract/ContractIconButton';
 export function RightNavPanel() {
     return (
         <>
-                <ContractIconButton id="right-nav-panelheader" className="drag-grabber" label="Action" icon={<i className="fa-solid fa-grip" aria-hidden="true" />} />
-                <div id="CharListButtonAndHotSwaps" className="flex-container flexnowrap">
-                    <div className="flexFlowColumn flex-container">
-                        <div id="rm_button_panel_pin_div" className="alignitemsflexstart" title="Locked = Character Management panel will stay open" data-i18n="[title]Locked = Character Management panel will stay open">
-                            <input type="checkbox" id="rm_button_panel_pin" />
-                            <label htmlFor="rm_button_panel_pin">
-                                <span className="sr-only" data-i18n="Locked = Character Management panel will stay open">Locked = Character Management panel will stay open</span>
-                                <div className="fa-solid unchecked fa-unlock right_menu_button"></div>
-                                <div className="fa-solid checked fa-lock right_menu_button"></div>
-                            </label>
+                <div id="right-nav-panelheader" className="fa-solid fa-grip drag-grabber" aria-hidden="true"></div>
+
+                {/* Keep this wrapper stable for the right navigation panel. */}
+                <div id="rm_PinAndTabs">
+                    <div id="right-nav-panel-tabs" className="workspace-panel-header">
+                        <div className="workspace-panel-title">
+                            <span className="workspace-panel-title-label" data-i18n="Characters">Characters</span>
+                            <div id="rm_button_selected_ch">
+                                {/* Legacy fills this heading with the selected
+                                    character name; stays empty until one is
+                                    selected so the panel title shows "Characters". */}
+                                <h2 className="interactable"></h2>
+                                <span id="temporary_chat_status" className="temporary-chat-status" data-i18n="Temporary chat" aria-live="polite" aria-hidden="true" hidden>Temporary chat</span>
+                            </div>
                         </div>
-                        <ContractIconButton id="rm_button_characters" tabIndex={0} className="right_menu_button" label="Characters" nativeTitle title="Select/Create Characters" icon={<i className="fa-solid fa-list-ul" aria-hidden="true" />} />
+                        <div className="workspace-panel-actions">
+                            <div id="result_info" className="flex-container" style={{ "display": "none" }}>
+                                <div id="result_info_text" title="Token counts may be inaccurate and provided just for reference." data-i18n="[title]Token counts may be inaccurate and provided just for reference.">
+                                    <div>
+                                        <strong id="result_info_total_tokens" title="Total tokens" data-i18n="[title]Total tokens"><span data-i18n="Calculating...">Calculating...</span></strong>{'\u00a0'}<span data-i18n="Tokens">Tokens</span>
+                                    </div>
+                                    <div>
+                                        <small title="Permanent tokens" data-i18n="[title]Permanent tokens">
+                                            (<span id="result_info_permanent_tokens"></span>{'\u00a0'}<span data-i18n="Permanent">Permanent</span>)
+                                        </small>
+                                    </div>
+                                </div>
+                                <a id="chartokenwarning" className="right_menu_button fa-solid fa-triangle-exclamation" href="usage/core-concepts/characterdesign/#character-tokens" target="_blank" rel="noreferrer" title="About Token 'Limits'" aria-label="About Token 'Limits'" data-i18n="[title]About Token 'Limits';[aria-label]About Token 'Limits'"></a>
+                                <ContractIconButton id="hideCharPanelAvatarButton" className="right_menu_button" label="Toggle character info panel" nativeTitle title="Toggle character info panel" icon={<i className="fa-solid fa-eye" aria-hidden="true" />} />
+                            </div>
+                            <ContractIconButton id="rm_button_characters" tabIndex={0} className="right_menu_button" label="Characters" nativeTitle title="Select/Create Characters" icon={<i className="fa-solid fa-list-ul" aria-hidden="true" />} />
+                        </div>
                     </div>
+                </div>
+                {/* end right navigation panel wrapper */}
+
+                <div id="CharListButtonAndHotSwaps" className="flex-container flexnowrap">
                     <div id="HotSwapWrapper" className="alignitemscenter flex-container margin0auto wide100p">
                         <div className="hotswap avatars_inline scroll-reset-container expander" data-i18n="[no_favs]Favorite characters to add them to HotSwaps" no_favs="Favorite characters to add them to HotSwaps">
                         </div>
                     </div>
                 </div>
-
-                {/* Keep this wrapper stable for the right navigation panel. */}
-                <div id="rm_PinAndTabs">
-                    <div id="right-nav-panel-tabs" className="">
-                        <div id="rm_button_selected_ch">
-                            {/* Legacy fills this heading with the selected
-                                character name; fallback text keeps it
-                                non-empty for assistive tech. */}
-                            <h2 className="interactable">Character</h2>
-                            <span id="temporary_chat_status" className="temporary-chat-status" data-i18n="Temporary chat" aria-live="polite" aria-hidden="true" hidden>Temporary chat</span>
-                        </div>
-                        <div id="result_info" className="flex-container" style={{ "display": "none" }}>
-                            <div id="result_info_text" title="Token counts may be inaccurate and provided just for reference." data-i18n="[title]Token counts may be inaccurate and provided just for reference.">
-                                <div>
-                                    <strong id="result_info_total_tokens" title="Total tokens" data-i18n="[title]Total tokens"><span data-i18n="Calculating...">Calculating...</span></strong>{'\u00a0'}<span data-i18n="Tokens">Tokens</span>
-                                </div>
-                                <div>
-                                    <small title="Permanent tokens" data-i18n="[title]Permanent tokens">
-                                        (<span id="result_info_permanent_tokens"></span>{'\u00a0'}<span data-i18n="Permanent">Permanent</span>)
-                                    </small>
-                                </div>
-                            </div>
-                            <a id="chartokenwarning" className="right_menu_button fa-solid fa-triangle-exclamation" href="usage/core-concepts/characterdesign/#character-tokens" target="_blank" rel="noreferrer" title="About Token 'Limits'" aria-label="About Token 'Limits'" data-i18n="[title]About Token 'Limits';[aria-label]About Token 'Limits'"></a>
-                            <ContractIconButton id="hideCharPanelAvatarButton" className="right_menu_button" label="Toggle character info panel" nativeTitle title="Toggle character info panel" icon={<i className="fa-solid fa-eye" aria-hidden="true" />} />
-                        </div>
-                    </div>
-                </div>
-                {/* end right navigation panel wrapper */}
 
                 <div className="scrollableInner">
                     <div name="Solo Char Create/Edit Panel" id="rm_ch_create_block" className="right_menu flex-container flexFlowColumn character-detail-panel" style={{ "display": "none" }}>
@@ -171,7 +167,7 @@ export function RightNavPanel() {
                                 <div id="description_div" className="title_restorable character-detail-section-header">
                                     <div className="flex-container alignitemscenter">
                                         <span data-i18n="Character Description" className="mdhotkey_location">Description</span>
-                                        <ContractIconButton className="editor_maximize right_menu_button" data-for="description_textarea" label="Expand the editor" title="Expand the editor" nativeTitle icon={<i className="fa-solid fa-maximize" aria-hidden="true" />} />
+                                        <ContractIconButton className="editor_maximize right_menu_button" data-for="description_textarea" label="Expand the editor" title="Expand the editor" nativeTitle icon={<i className="fa-solid fa-expand" aria-hidden="true" />} />
                                         <a href="usage/core-concepts/characterdesign/#character-description" className="notes-link" target="_blank" rel="noreferrer" aria-label="Character description documentation">
                                             <span className="fa-solid fa-circle-question note-link-span" aria-hidden="true"></span>
                                         </a>
@@ -193,7 +189,7 @@ export function RightNavPanel() {
                                 <div id="first_message_div" className="title_restorable character-detail-section-header">
                                     <div className="flex-container alignitemscenter flex1">
                                         <span data-i18n="First message" className="mdhotkey_location">First message</span>
-                                        <ContractIconButton className="editor_maximize right_menu_button" data-for="firstmessage_textarea" label="Expand the editor" title="Expand the editor" nativeTitle icon={<i className="fa-solid fa-maximize" aria-hidden="true" />} />
+                                        <ContractIconButton className="editor_maximize right_menu_button" data-for="firstmessage_textarea" label="Expand the editor" title="Expand the editor" nativeTitle icon={<i className="fa-solid fa-expand" aria-hidden="true" />} />
                                         <a href="usage/core-concepts/characterdesign/#first-message" className="notes-link" target="_blank" rel="noreferrer" aria-label="First message documentation">
                                             <span className="fa-solid fa-circle-question note-link-span" aria-hidden="true"></span>
                                         </a>

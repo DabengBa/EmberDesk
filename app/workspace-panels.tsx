@@ -50,7 +50,7 @@ import {
 } from './world-info-workbench';
 import { SettingsSurface } from './components/settings/SettingsSurface';
 import { ChatBackupsBrowser, type ChatBackupsCommands } from './components/chat-backups/ChatBackupsBrowser';
-import { PowerUserPanel } from './components/power-user/PowerUserPanel';
+
 import { TagManagement } from './components/tags/TagManagement';
 import { TagChipInput } from './components/fields/TagChipInput';
 import { useAutosizeTextareaRef } from './lib/autosize-textarea';
@@ -60,9 +60,13 @@ import { RegexDebugger } from './components/regex/RegexDebugger';
 import { RegexImportTarget } from './components/regex/RegexImportTarget';
 import { MacroBrowserPanel, type MacroBrowserProps } from './components/macros/MacroBrowser';
 import { WorldInfoPanel } from './components/panels/WorldInfoPanel';
+import { WorkspacePanelChrome } from './components/panels/WorkspacePanelChrome';
 import { ChatComposer } from './components/composer/ChatComposer';
 import { CharacterPopup } from './components/character-popup/CharacterPopup';
 import { RightNavPanel } from './components/right-nav/RightNavPanel';
+import { AiConfigPanel } from './components/ai-config/AiConfigPanel';
+import { PresetSaveButton } from './components/ai-config/PresetActionsMenu';
+import { PromptManagerAddButton, PromptManagerList, type PromptPanelBridge } from './components/prompt-panel/PromptPanel';
 import { SelectChatPopup } from './components/select-chat/SelectChatPopup';
 import {
     SelectChatList,
@@ -72,14 +76,12 @@ import {
 import { CharacterContextMenu } from './components/context-menu/CharacterContextMenu';
 import { OptionsMenu } from './components/options-menu/OptionsMenu';
 import { DialogueDelMesControls, DialoguePopupControls } from './components/dialogue-popups/DialoguePopups';
-import { OnboardingActions } from './components/onboarding/OnboardingActions';
 import { ExportFormatPopup } from './components/export-format/ExportFormatPopup';
 import * as stylex from '@stylexjs/stylex';
 import type { StyleXStyles } from '@stylexjs/stylex';
 import { authoringStyles, workspacePanelStyles, workspaceShellStyles } from './styles/workspace-panels.styles.js';
 import { Theme } from '@astryxdesign/core';
 import { emberDeskTheme } from './lib/theme-tokens';
-import { settingsStyles } from './styles/settings-surface.styles';
 import '@astryxdesign/core/astryx.css';
 
 export type WorkspacePanelKind = 'worldInfo' | 'mainChatMessageList' | 'characterAuthoring';
@@ -234,17 +236,14 @@ const queryClient = new QueryClient();
 const mountedPanels = new Map<WorkspacePanelKind, WorkspacePanelMount>();
 let mountedShellChrome: WorkspaceShellChromeMount | null = null;
 
-interface SettingsOverlayMount {
+interface SettingsPanelMount {
     root: Root;
     host: HTMLElement;
-    returnFocusTo: HTMLElement | null;
     runtime: RuntimePort;
     initialTab: string | null;
-    panelKind: WorkspaceDockPanelKind;
-    onRequestClose?: () => void;
 }
 
-let mountedSettingsOverlay: SettingsOverlayMount | null = null;
+let mountedSettingsPanel: SettingsPanelMount | null = null;
 
 function asMainChatMessageListState(state: unknown): MainChatMessageListWorkspacePanelState {
     if (!state || typeof state !== 'object') {
@@ -501,7 +500,7 @@ function AuthoringActionsMenu({
             <button
                 ref={triggerRef}
                 type="button"
-                className={`menu_button fa-solid fa-ellipsis ${stylex.props(authoringStyles.toolAction).className ?? ''}`}
+                className={`menu_button ${stylex.props(authoringStyles.toolAction).className ?? ''}`}
                 disabled={disabled}
                 title="More character actions"
                 aria-label="More character actions"
@@ -515,7 +514,9 @@ function AuthoringActionsMenu({
                     }
                     setOpen(next);
                 }}
-            />
+            >
+                <i className="fa-solid fa-ellipsis" aria-hidden="true" />
+            </button>
             {open ? (
                 <div ref={menuRef} role="menu" {...stylex.props(authoringStyles.actionMenu)}>
                     {orderedActions.map(action => (
@@ -548,8 +549,8 @@ function AuthoringFieldLabel({ text, dirty, meta, onExpand }: { text: string; di
                 <button
                     type="button"
                     {...stylex.props(authoringStyles.iconAction)}
-                    title="Open in full editor"
-                    aria-label={`Open ${text} in full editor`}
+                    title="放大编辑"
+                    aria-label={`放大编辑 ${text}`}
                     onClick={onExpand}
                 >
                     <i className="fa-solid fa-expand" aria-hidden="true" />
@@ -726,7 +727,6 @@ function AuthoringWorkspacePanel({
         stringDraft('systemPrompt').trim() ? { label: 'System prompt', field: 'systemPrompt' } : null,
         stringDraft('postHistoryInstructions').trim() ? { label: 'Post-history', field: 'postHistoryInstructions' } : null,
         stringDraft('scenario').trim() ? { label: 'Scenario', field: 'scenario' } : null,
-        stringDraft('exampleMessages').trim() ? { label: 'Examples', field: 'exampleMessages' } : null,
         (depthPrompt.prompt?.trim() || depthPrompt.depth != null) ? { label: `Depth note @${depthPrompt.depth ?? 4}`, field: 'depthPrompt.prompt' } : null,
         stringDraft('creator').trim() ? { label: 'Creator', field: 'creator' } : null,
         stringDraft('characterVersion').trim() ? { label: `Version ${stringDraft('characterVersion').trim()}`, field: 'characterVersion' } : null,
@@ -1111,16 +1111,6 @@ function AuthoringWorkspacePanel({
                                             onChange={(event) => updateDraft({ scenario: event.target.value })}
                                         />
                                     </label>
-                                    <label {...stylex.props(authoringStyles.field)} htmlFor="authoring-example-messages" data-react-authoring-field="exampleMessages">
-                                        <AuthoringFieldLabel text="Example messages" dirty={isFieldDirty('exampleMessages')} meta={stringDraft('exampleMessages').trim() ? `${stringDraft('exampleMessages').length} chars` : undefined} onExpand={() => setExpandedField({ key: 'exampleMessages', label: 'Example messages' })} />
-                                        <AuthoringTextarea
-                                            id="authoring-example-messages"
-                                            rows={3}
-                                            value={stringDraft('exampleMessages')}
-                                            placeholder="Example dialogue. Begin each example with <START> on a new line."
-                                            onChange={(event) => updateDraft({ exampleMessages: event.target.value })}
-                                        />
-                                    </label>
                                 </div>
                                 <div {...stylex.props(authoringStyles.advancedSubgroup)}>
                                     <h4 {...stylex.props(authoringStyles.subsectionLabel)}>Character&apos;s note</h4>
@@ -1358,25 +1348,17 @@ function MainChatMessageListWorkspacePanel({
         <>
             {/* Message-row controls render as native <button> elements carrying
                 the legacy icon classes; reset the UA button chrome those classes
-                never specified (.menu_button/.empty_reply_regenerate provide
-                their own background/border, so only appearance is reset). */}
+                never specified (.menu_button provides its own background/border,
+                so only appearance is reset). */}
             <style>{`
-button.mes_button,
-button.swipe_left,
-button.swipe_right {
+button.mes_button {
     -webkit-appearance: none;
     appearance: none;
     background: none;
     border: none;
 }
 
-button.swipe_left,
-button.swipe_right {
-    padding: 0;
-}
-
-button.menu_button,
-button.empty_reply_regenerate {
+button.menu_button {
     -webkit-appearance: none;
     appearance: none;
 }
@@ -1498,10 +1480,11 @@ function WorkspacePanelRoot({
 }
 
 const workspaceShellNavigationEntries: WorkspaceShellNavigationEntry[] = [
+    { command: 'openPromptManager', icon: 'fa-sliders', label: '提示词', panelKind: 'promptManager', slotKey: 'promptManager' },
     { command: 'openCharacterLibrary', icon: 'fa-address-book', label: '角色库', panelKind: 'characterLibrary', slotKey: 'characterLibrary' },
     { command: 'openWorldInfo', icon: 'fa-book-atlas', label: '世界书', panelKind: 'worldInfo', slotKey: 'worldInfo' },
     { command: 'openRegex', icon: 'fa-code', label: '正则', panelKind: 'regex', slotKey: 'regex' },
-    { command: 'openSettings', icon: 'fa-gear', label: '设置', panelKind: 'settings' },
+    { command: 'openSettings', icon: 'fa-gear', label: '设置', panelKind: 'settings', slotKey: 'settings' },
 ];
 
 function asWorkspacePanelDockDispatchResult(result: unknown): WorkspacePanelDockDispatchResult {
@@ -1592,6 +1575,8 @@ function executeWorkspaceShellNavigationCommand(
             return commands.openCharacterAuthoring();
         case 'openRegex':
             return commands.openRegex();
+        case 'openPromptManager':
+            return commands.openPromptManager();
         case 'activateWorkspaceShellSlot':
         case 'deactivateWorkspaceShellSlot':
         case 'closeWorkspacePanel':
@@ -1618,6 +1603,34 @@ function ReactWorkspaceShellChrome({
     // click in that window must mean "reopen" (supersede the close), not a
     // second close that would outlive the reopen.
     const pendingCloseIntentRef = useRef<string | null>(null);
+
+    // Drawers can close without a nav dispatch (Escape, the chrome close
+    // button, mutual exclusion when another drawer opens). The legacy shell
+    // emits emberdesk:workspace-drawer-change from its open/close funnels;
+    // reconcile the dock highlight so a closed drawer's entry does not stay
+    // pressed.
+    useEffect(() => {
+        const reconcileDockWithDrawers = () => {
+            const dock = getWorkspacePanelDockSnapshot();
+            const active = dock.activePanelKind;
+            if (!active) {
+                return;
+            }
+            const entry = workspaceShellNavigationEntries.find(
+                candidate => candidate.panelKind === active && candidate.slotKey,
+            );
+            if (!entry?.slotKey) {
+                return;
+            }
+            const slot = getWorkspaceShellChildSlot(entry.slotKey);
+            const drawer = document.querySelector(slot.mountTarget)?.closest('.drawer-content');
+            if (drawer && !drawer.classList.contains('openDrawer')) {
+                recordWorkspacePanelDockClose(active);
+            }
+        };
+        window.addEventListener('emberdesk:workspace-drawer-change', reconcileDockWithDrawers);
+        return () => window.removeEventListener('emberdesk:workspace-drawer-change', reconcileDockWithDrawers);
+    }, []);
 
     const dispatchCommand = useCallback(async (entry: WorkspaceShellNavigationEntry) => {
         const dispatchSequence = panelDispatchSequenceRef.current + 1;
@@ -1669,6 +1682,13 @@ function ReactWorkspaceShellChrome({
             if (panelDispatchSequenceRef.current !== dispatchSequence) {
                 return;
             }
+            // A close guard (e.g. unsaved settings) may have refused the close;
+            // the drawer is still open, so keep the dock highlight.
+            const slot = entry.slotKey ? getWorkspaceShellChildSlot(entry.slotKey) : null;
+            if (slot?.mountTarget
+                && document.querySelector(slot.mountTarget)?.closest('.drawer-content')?.classList.contains('openDrawer')) {
+                return;
+            }
             recordWorkspacePanelDockClose(entry.panelKind);
         } catch (error) {
             if (panelDispatchSequenceRef.current !== dispatchSequence) {
@@ -1697,10 +1717,10 @@ function ReactWorkspaceShellChrome({
                 {workspaceShellNavigationEntries.map(entry => {
                     const isPanelEntryActive = Boolean(entry.panelKind && dockSnapshot.activePanelKind === entry.panelKind);
                     const childSlot = entry.slotKey ? getWorkspaceShellChildSlot(entry.slotKey) : null;
-                    // Drawer pinning is owned by the legacy in-drawer lock toggle
-                    // (e.g. #lm_button_panel_pin), which writes .pinnedOpen on the
-                    // drawer host. Lock toggles do not trigger a React re-render,
-                    // so the click guard must re-read the class at click time.
+                    // Drawer lock state is the .pinnedOpen class on the drawer
+                    // host, restored by the legacy init pass from the NavLockOn /
+                    // LNavLockOn storage seeds. The class changes without a React
+                    // re-render, so the click guard re-reads it at click time.
                     const isDrawerPinned = () => Boolean(childSlot?.mountTarget
                         && document.querySelector(childSlot.mountTarget)?.closest('.drawer-content')?.classList.contains('pinnedOpen'));
                     const isPinned = isDrawerPinned();
@@ -1799,127 +1819,47 @@ function renderIntoPanel(mount: WorkspacePanelMount) {
 }
 
 
-function SettingsOverlayHost({
+/**
+ * Settings drawer content host. The drawer chrome (title/pin/close) is shared
+ * with the other top-center panels via WorkspacePanelChrome; Escape,
+ * mutual-exclusion, pin refusal, and the unsaved-changes guard all run
+ * through closeWorkspaceChildSlotHost in script.js. The dirty flag is
+ * mirrored to globalThis.__emberDeskSettingsDirty for that close guard.
+ */
+function SettingsDrawerHost({
     initialTab,
-    panelKind,
-    onRequestClose,
     runtime,
 }: {
     initialTab?: string | null;
-    panelKind: WorkspaceDockPanelKind;
-    onRequestClose?: () => void;
     runtime: RuntimePort;
 }) {
-    const settingsDirtyRef = useRef(false);
     const handleSettingsDirtyChange = useCallback((dirty: boolean) => {
-        settingsDirtyRef.current = dirty;
+        (globalThis as Record<string, unknown>).__emberDeskSettingsDirty = dirty;
     }, []);
-    const handleClose = useCallback(() => {
-        if (settingsDirtyRef.current && !window.confirm('当前设置有未保存的修改。离开将丢弃这些修改，确定关闭吗？')) {
-            return;
-        }
-        settingsDirtyRef.current = false;
-        recordWorkspacePanelDockClose(panelKind);
-        onRequestClose?.();
-    }, [onRequestClose, panelKind]);
-    const dialogRef = useRef<HTMLDialogElement>(null);
-    const backdropRef = useRef<HTMLDivElement>(null);
-
-    useEffect(() => {
-        const previousOverflow = document.body.style.overflow;
-        document.body.style.overflow = 'hidden';
-        const dialog = dialogRef.current;
-        const backdrop = backdropRef.current;
-        if (dialog && !dialog.open) {
-            dialog.showModal();
-            dialog.focus();
-        }
-        const onKeyDown = (event: KeyboardEvent) => {
-            if (event.key === 'Escape') {
-                event.preventDefault();
-                event.stopPropagation();
-                handleClose();
-                return;
-            }
-            if (event.key !== 'Tab' || !dialog) {
-                return;
-            }
-            const focusable = Array.from(
-                dialog.querySelectorAll<HTMLElement>(
-                    'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
-                ),
-            ).filter(node => !node.hasAttribute('disabled') && node.getAttribute('aria-hidden') !== 'true');
-            if (focusable.length === 0) {
-                return;
-            }
-            const first = focusable[0];
-            const last = focusable[focusable.length - 1];
-            const active = document.activeElement as HTMLElement | null;
-            if (!active || !dialog.contains(active)) {
-                event.preventDefault();
-                (event.shiftKey ? last : first).focus();
-            } else if (event.shiftKey && active === first) {
-                event.preventDefault();
-                last.focus();
-            } else if (!event.shiftKey && active === last) {
-                event.preventDefault();
-                first.focus();
-            }
-        };
-        const onBackdropClick = () => handleClose();
-        window.addEventListener('keydown', onKeyDown, true);
-        backdrop?.addEventListener('click', onBackdropClick);
-
-        return () => {
-            document.body.style.overflow = previousOverflow;
-            window.removeEventListener('keydown', onKeyDown, true);
-            backdrop?.removeEventListener('click', onBackdropClick);
-            if (dialog?.open) {
-                dialog.close();
-            }
-        };
-    }, [handleClose]);
 
     return (
-        <>
-            <div
-                ref={backdropRef}
-                {...stylex.props(settingsStyles.overlayBackdrop)}
-                data-settings-overlay-backdrop="true"
+        <WorkspacePanelChrome
+            title="设置"
+            icon="fa-solid fa-gear"
+            grabberId="SettingsPanelheader"
+        >
+            <SettingsSurface
+                variant="drawer"
+                initialTab={initialTab}
+                onDirtyStateChange={handleSettingsDirtyChange}
+                runtime={runtime}
             />
-            <dialog
-                ref={dialogRef}
-                {...stylex.props(settingsStyles.overlay)}
-                data-settings-overlay="true"
-                aria-label="Settings"
-                tabIndex={-1}
-                data-doc-id="page.settings feature.next_workspace_shell"
-                onCancel={(event) => {
-                    event.preventDefault();
-                    handleClose();
-                }}
-            >
-                <SettingsSurface
-                    variant="overlay"
-                    initialTab={initialTab}
-                    onRequestClose={handleClose}
-                    onDirtyStateChange={handleSettingsDirtyChange}
-                    runtime={runtime}
-                />
-            </dialog>
-        </>
+        </WorkspacePanelChrome>
     );
 }
 
-function renderSettingsOverlay(mount: SettingsOverlayMount) {
+function renderSettingsPanel(mount: SettingsPanelMount) {
     mount.root.render(
         <StrictMode>
             <Theme theme={emberDeskTheme} mode="dark">
                 <QueryClientProvider client={queryClient}>
-                    <SettingsOverlayHost
+                    <SettingsDrawerHost
                         initialTab={mount.initialTab}
-                        panelKind={mount.panelKind}
-                        onRequestClose={mount.onRequestClose}
                         runtime={mount.runtime}
                     />
                 </QueryClientProvider>
@@ -1928,56 +1868,51 @@ function renderSettingsOverlay(mount: SettingsOverlayMount) {
     );
 }
 
-export function mountSettingsOverlay(options: {
+/**
+ * Mounts the settings surface inside the #SettingsPanel drawer-content host.
+ * The React root persists while the drawer toggles, so form state survives
+ * close/reopen; the surface only re-renders when a new initialTab is passed.
+ */
+export function mountSettingsPanel(options: {
     runtime: RuntimePort;
     initialTab?: string | null;
-    panelKind?: WorkspaceDockPanelKind;
-    onRequestClose?: () => void;
 }) {
     attachGlobalCompatibilityBridge();
     const initialTab = typeof options.initialTab === 'string' ? options.initialTab : null;
-    const panelKind: WorkspaceDockPanelKind = 'settings';
-    if (mountedSettingsOverlay) {
-        mountedSettingsOverlay.initialTab = initialTab;
-        mountedSettingsOverlay.panelKind = panelKind;
-        mountedSettingsOverlay.onRequestClose = options.onRequestClose;
-        mountedSettingsOverlay.runtime = options.runtime;
-        renderSettingsOverlay(mountedSettingsOverlay);
-        return { kind: panelKind, mounted: true, status: 'mounted' as const };
+    if (mountedSettingsPanel) {
+        mountedSettingsPanel.initialTab = initialTab;
+        mountedSettingsPanel.runtime = options.runtime;
+        renderSettingsPanel(mountedSettingsPanel);
+        return { kind: 'settings', mounted: true, status: 'mounted' as const };
     }
 
-    const activeElement = document.activeElement;
-    const returnFocusTo = activeElement instanceof HTMLElement ? activeElement : null;
+    const drawer = document.getElementById('SettingsPanel');
+    if (!(drawer instanceof HTMLElement)) {
+        return { kind: 'settings', mounted: false, status: 'error' as const, reason: 'host-missing' as const };
+    }
     const host = document.createElement('div');
-    host.id = 'emberdesk-react-settings-overlay-host';
-    host.setAttribute('data-react-settings-overlay-host', 'true');
-    host.className = stylex.props(settingsStyles.overlayHost).className ?? '';
-    document.body.appendChild(host);
+    host.id = 'emberdesk-react-settings-panel-host';
+    host.setAttribute('data-react-settings-panel-host', 'true');
+    drawer.replaceChildren(host);
 
-    mountedSettingsOverlay = {
+    mountedSettingsPanel = {
         root: createRoot(host),
         host,
-        returnFocusTo,
         runtime: options.runtime,
         initialTab,
-        panelKind,
-        onRequestClose: options.onRequestClose,
     };
-    renderSettingsOverlay(mountedSettingsOverlay);
-    return { kind: panelKind, mounted: true, status: 'mounted' as const };
+    renderSettingsPanel(mountedSettingsPanel);
+    return { kind: 'settings', mounted: true, status: 'mounted' as const };
 }
 
-export function unmountSettingsOverlay() {
-    if (!mountedSettingsOverlay) {
+export function unmountSettingsPanel() {
+    if (!mountedSettingsPanel) {
         return;
     }
-    const { host, returnFocusTo, root } = mountedSettingsOverlay;
-    root.unmount();
-    host.remove();
-    mountedSettingsOverlay = null;
-    if (returnFocusTo?.isConnected) {
-        returnFocusTo.focus({ preventScroll: true });
-    }
+    mountedSettingsPanel.root.unmount();
+    mountedSettingsPanel.host.remove();
+    mountedSettingsPanel = null;
+    (globalThis as Record<string, unknown>).__emberDeskSettingsDirty = false;
     if (mountedPanels.size === 0 && !mountedShellChrome) {
         detachGlobalCompatibilityBridge();
     }
@@ -2138,49 +2073,7 @@ export function unmountChatBackupsBrowser() {
     mountedChatBackups.root.unmount();
     mountedChatBackups.host.remove();
     mountedChatBackups = null;
-    if (mountedPanels.size === 0 && !mountedShellChrome && !mountedSettingsOverlay) {
-        detachGlobalCompatibilityBridge();
-    }
-}
-
-let mountedPowerUser: { root: Root; container: HTMLElement } | null = null;
-
-/**
- * Mounts the User Settings (power-user) drawer content. Presentation-only:
- * power-user.js and related modules keep behavior ownership via the
- * preserved element IDs and class contracts.
- */
-export function mountPowerUserPanel(container: HTMLElement) {
-    attachGlobalCompatibilityBridge();
-    if (mountedPowerUser) {
-        if (mountedPowerUser.container !== container) {
-            mountedPowerUser.root.unmount();
-        } else {
-            return;
-        }
-    }
-
-    mountedPowerUser = {
-        root: createRoot(container),
-        container,
-    };
-    mountedPowerUser.root.render(
-        <StrictMode>
-            <Theme theme={emberDeskTheme} mode="dark">
-                <PowerUserPanel />
-            </Theme>
-        </StrictMode>,
-    );
-}
-
-export function unmountPowerUserPanel() {
-    if (!mountedPowerUser) {
-        return;
-    }
-
-    mountedPowerUser.root.unmount();
-    mountedPowerUser = null;
-    if (mountedPanels.size === 0 && !mountedShellChrome && !mountedSettingsOverlay && !mountedChatBackups) {
+    if (mountedPanels.size === 0 && !mountedShellChrome && !mountedSettingsPanel) {
         detachGlobalCompatibilityBridge();
     }
 }
@@ -2290,6 +2183,17 @@ export function mountCharacterPopup(container: HTMLElement) {
  */
 export function mountRightNavPanel(container: HTMLElement) {
     mountSmallPanel(container, <RightNavPanel />);
+}
+
+/**
+ * Mounts the AI response configuration drawer into #left-nav-panel.
+ * The outer markup preserves legacy IDs so openai.js bindings, the preset
+ * manager, and settings_map wiring reactivate unchanged; the prompt list
+ * inside #completion_prompt_manager is a React view over the legacy bridge
+ * (oai_settings.prompts / prompt_order).
+ */
+export function mountPromptPanel(container: HTMLElement, bridge: PromptPanelBridge) {
+    mountSmallPanel(container, <AiConfigPanel promptList={<PromptManagerList bridge={bridge} />} presetSaveButton={<PresetSaveButton bridge={bridge} />} promptHeaderActions={<PromptManagerAddButton bridge={bridge} />} />);
 }
 
 /**
@@ -2425,13 +2329,4 @@ export function mountDialoguePopupControls(container: HTMLElement) {
  */
 export function mountDialogueDelMesControls(container: HTMLElement) {
     mountSmallPanel(container, <DialogueDelMesControls />);
-}
-
-/**
- * Mounts one onboarding action button into its host span inside
- * #onboarding_template's .onboarding markup. The markup is moved — not
- * cloned — into the onboarding popup, carrying the mounted host along.
- */
-export function mountOnboardingAction(container: HTMLElement, which: 'import' | 'library') {
-    mountSmallPanel(container, <OnboardingActions which={which} />);
 }

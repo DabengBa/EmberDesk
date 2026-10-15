@@ -27,7 +27,6 @@ describe('options menu + character context menu React surfaces', () => {
         const ids = [
             'option_back_to_main',
             'option_start_new_chat', 'option_close_chat', 'option_select_chat', 'option_delete_mes',
-            'option_regenerate', 'option_impersonate', 'option_continue',
         ];
         for (const id of ids) {
             expect(options).toContain(`id="${id}"`);

@@ -298,6 +298,11 @@ export const authoringStyles = stylex.create({
         fontWeight: 700,
     },
     toolAction: {
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        whiteSpace: 'nowrap',
+        minWidth: 'calc(var(--mainFontSize) * 1.9)',
         opacity: 0.82,
         filter: 'grayscale(0.35)',
         backgroundColor: 'color-mix(in srgb, var(--SmartThemeBlurTintColor) 72%, transparent)',
@@ -763,6 +768,8 @@ export const characterLibraryStyles = stylex.create({
         flexDirection: 'column',
         gap: '7px',
         padding: '1px 0 2px',
+        maxWidth: '100%',
+        overflowX: 'clip',
     },
     toolbarAction: {
         margin: 0,
@@ -788,13 +795,11 @@ export const characterLibraryStyles = stylex.create({
     toolbarActionFull: {
         gap: '5px',
         paddingInline: '8px',
+        whiteSpace: 'nowrap',
     },
     toolbarActions: {
         display: 'flex',
-        flexWrap: {
-            default: 'nowrap',
-            '@media screen and (max-width: 600px)': 'wrap',
-        },
+        flexWrap: 'wrap',
         gap: '8px',
         alignItems: 'center',
         minWidth: 0,
@@ -809,28 +814,24 @@ export const characterLibraryStyles = stylex.create({
     toolbarActionsInner: {
         display: 'flex',
         minWidth: 0,
-        flexWrap: 'wrap',
+        flexShrink: 0,
+        flexWrap: 'nowrap',
         gap: '8px',
         alignItems: 'center',
     },
     toolbarActionsInnerNoWrap: {
         display: 'flex',
         flexWrap: 'nowrap',
+        flexShrink: 0,
         gap: '8px',
         alignItems: 'center',
         minWidth: 0,
     },
     toolbarSearchField: {
         display: 'flex',
-        flex: {
-            default: '1 1 auto',
-            '@media screen and (max-width: 600px)': '1 1 100%',
-        },
+        flex: '1 1 100%',
         alignItems: 'center',
-        minWidth: {
-            default: 'calc(var(--mainFontSize) * 8)',
-            '@media screen and (max-width: 600px)': '100%',
-        },
+        minWidth: 0,
     },
     toolbarFields: {
         display: 'grid',

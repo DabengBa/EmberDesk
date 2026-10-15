@@ -614,39 +614,6 @@ input[type='checkbox']:focus-visible {
     animation-duration: 300ms;
 }
 
-.empty_reply_regenerate {
-    color: var(--SmartThemeBodyColor);
-    background-color: var(--SmartThemeBlurTintColor);
-    border: 1px solid var(--SmartThemeBorderColor);
-    border-radius: 5px;
-    padding: 6px 16px;
-    cursor: pointer;
-    transition: var(--animation-duration-2x);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    width: fit-content;
-    margin: 12px auto;
-    opacity: 0.85;
-}
-
-.empty_reply_regenerate i {
-    font-size: 0.85em;
-}
-
-.empty_reply_regenerate:hover {
-    opacity: 1;
-    border-color: var(--SmartThemeQuoteColor);
-    color: var(--SmartThemeQuoteColor);
-}
-
-.mes_block:has(.empty_reply_regenerate) > .mes_text {
-    background-color: color-mix(in oklch, var(--SmartThemeBodyColor) 4%, transparent);
-    border-radius: 5px;
-    padding: 8px;
-}
-
 .mes .mes_timer {
     cursor: default;
     opacity: 0.7;
@@ -1265,154 +1232,8 @@ body .panelControlBar {
     margin-bottom: var(--mes-right-spacing);
 }
 
-/* SWIPE RELATED STYLES*/
-
-.mes {
-    --swipeCounterHeight: 15px;
-    --swipeCounterMargin: 5px;
-}
-
-/* https://stackoverflow.com/a/31819499 */
-/* This has much better performance than .transform on large chats*/
-.slide {
-    animation: slide calc(var(--slide-mes-x-duration, var(--animation-duration, 125ms))) ease-in-out forwards;
-    -webkit-animation: slide calc(var(--slide-mes-x-duration, var(--animation-duration, 125ms))) ease-in-out forwards;
-    will-change: transform;
-}
-
-.swipe_right,
-.swipe_left {
-    width: 25px;
-    height: 25px;
-    opacity: 0.4;
-    align-items: center;
-    justify-content: center;
-    z-index: 9999;
-    grid-row-start: 2;
-    font-size: 20px;
-    cursor: pointer;
-    align-self: center;
-    pointer-events: auto;
-}
-
-.swipe_left {
-    position: absolute;
-    bottom: calc(var(--swipeCounterHeight) + var(--swipeCounterMargin));
-    flex-flow: column;
-}
-
-.swipeRightBlock {
-    position: absolute;
-    right: 0;
-    bottom: 0;
-    pointer-events: none;
-}
-
-.swipes-counter {
-    opacity: 0.3;
-    color: var(--SmartThemeBodyColor);
-    font-size: 12px;
-    padding: 0 5px;
-    font-family: var(--mainFontFamily);
-    font-weight: 400;
-    align-self: center;
-    min-width: 40px;
-    display: flex;
-    justify-content: center;
-    margin-bottom: var(--swipeCounterMargin);
-    height: var(--swipeCounterHeight);
-    pointer-events: auto;
-}
-
-.swipes-counter.swipe-picker-enabled {
-    cursor: pointer;
-}
-
-.swipes-counter.swipe-picker-enabled:hover,
-.swipes-counter.swipe-picker-enabled:focus-visible {
-    opacity: 0.7;
-}
-
-.swipe_picker_header {
-    position: sticky;
-    top: 0;
-    z-index: 1;
-}
-
-.swipe_picker_popup .popup-body,
-.swipe_picker_popup .popup-content {
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
-    overflow: hidden;
-}
 
 
-body.swipeAllMessages .mes:not(.last_mes) .swipes-counter {
-    /* Avoid expensive DOM queries */
-    opacity: 0.3;
-    display: flex;
-}
-
-.swipe_left {
-    right: auto;
-    left: 20px;
-}
-
-.swipe_right {
-    right: 5px;
-    align-self: center;
-    display: flex;
-}
-
-.swipe_right:hover,
-.swipe_left:hover {
-    opacity: 0.8;
-}
-
-/* The last swipe must be highlighted */
-.last_swipe :is(.swipes-counter, .swipe_right) {
-    opacity: 0.7;
-    /* Doubled opacity needs a longer transition to match a non active arrow. */
-    /* (Duration * Active Opacity / Inactive Opacity * 2) */
-    transition-duration: calc(var(--animation-duration-2x) * 0.7/0.3);
-}
-
-.fade :is(.swipes-counter, .swipe_left, .swipe_right){
-    /* Fade in and out: */
-    /* https://nerdy.dev/using-starting-style-and-transition-behavior-for-enter-and-exit-stage-effects */
-    /* https://developer.mozilla.org/en-US/docs/Web/CSS/transition-behavior#description */
-    transition: opacity calc(var(--animation-duration) * 2) ease-in;
-
-    /* Fade in. */
-    @supports (transition-behavior: allow-discrete) {
-        transition:
-            opacity var(--animation-duration-2x) ease-in,
-            display var(--animation-duration-2x) ease-in,
-            visibility var(--animation-duration-2x) ease-in;
-        transition-behavior: allow-discrete;
-    }
-}
-
-/* Hide all but the last message. */
-body:not(.swipeAllMessages) .mes:not(.last_mes) :is(.swipe_left, .swipe_right, .swipes-counter),
-/* Hide non-visible swipe_left. */
-.mes:not(.swipes_visible) .swipe_left,
-/* Only hide swipe_right if it's not visible, and not the last swipe. */
-.mes:not(.swipes_visible, .last_swipe) :is(.swipe_right),
-/* Hide all swipe buttons if .hideAllSwipeButtons. */
-body.hideAllSwipeButtons :is(.swipe_left, .swipe_right),
-.swipes-counter[hidden],
-.swipe_right[hidden],
-.swipe_left[hidden] {
-    /* Fade out */
-    opacity: 0 !important;
-    /* With display:none, the swipes-counter div wil collapse, shifting the chevron. */
-    visibility: hidden;
-    /* Interactivity has limited availability https://caniuse.com/?search=interactivity */
-    interactivity: inert;
-    pointer-events: none;
-}
 
 .range-block-range-and-counter {
     flex: 1;
@@ -2788,51 +2609,10 @@ input[type="file"] {
     filter: brightness(150%);
 }
 
-    #rm_button_characters,
-    #rm_button_panel_pin_div {
+    #rm_button_characters {
     font-size: 24px;
     display: inline;
     padding: 1px;
-}
-
-    #rm_button_panel_pin_div {
-    opacity: 0.5;
-    transition: var(--animation-duration-2x);
-}
-
-    #rm_button_panel_pin_div:hover,
-    #rm_button_panel_pin_div:has(:focus-visible) {
-    opacity: 1;
-}
-
-#rm_button_panel_pin,
-#WI_panel_pin {
-    display: none;
-}
-
-#rm_button_panel_pin:checked+label,
-#WI_panel_pin:checked+label {
-    display: inline;
-}
-
-#rm_button_panel_pin:checked+label .checked,
-#WI_panel_pin:checked+label .checked {
-    display: inline;
-}
-
-#rm_button_panel_pin:checked+label .unchecked,
-#WI_panel_pin:checked+label .unchecked {
-    display: none;
-}
-
-#rm_button_panel_pin:not(:checked)+label .checked,
-#WI_panel_pin:not(:checked)+label .checked {
-    display: none;
-}
-
-#rm_button_panel_pin:not(:checked)+label .unchecked,
-#WI_panel_pin:not(:checked)+label .unchecked {
-    display: inline;
 }
 
 #rm_button_selected_ch {
@@ -3133,7 +2913,30 @@ input[type="file"] {
 }
 
 #rm_print_characters_pagination {
-    min-height: 0;
+    display: flex;
+    align-items: center;
+    min-height: calc(var(--mainFontSize) * 2.1);
+    padding-bottom: 5px;
+}
+
+/* React authoring avatar: the upload trigger is a raw input[type=button];
+   without this it renders as a default grey pill above the avatar image. */
+.avatar-upload-trigger {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    opacity: 0;
+    cursor: pointer;
+}
+
+.avatar-upload-trigger:focus-visible + img {
+    outline: 2px solid var(--active);
+    outline-offset: 1px;
 }
 
 #rm_buttons_container {
@@ -4207,6 +4010,21 @@ button.menu_button {
     font: inherit;
 }
 
+/* font: inherit above strips the icon font from FA classes applied directly to
+   <button>; restore it on the ::before that carries the glyph. */
+button.fa-solid::before {
+    font-family: "Font Awesome 6 Free";
+    font-weight: 900;
+}
+button.fa-regular::before {
+    font-family: "Font Awesome 6 Free";
+    font-weight: 400;
+}
+button.fa-brands::before {
+    font-family: "Font Awesome 6 Brands";
+    font-weight: 400;
+}
+
 .menu_button.fa-fw {
     /* Font Awesome icons that are a menu button and should be fixed width need a slight fix. 1.25em is their default, but we need to account for button spacing. */
     min-width: calc(1.25em + 12px);
@@ -5007,13 +4825,6 @@ body:is([data-generating="true"], [data-swiping="true"]) :is(
     display: none !important;
 }
 
-    #power-user-option-checkboxes {
-    display: flex;
-    flex-direction: column;
-    flex-grow: 1;
-}
-
-    #power-user-option-checkboxes label,
     .checkbox_label {
     display: flex;
     flex-direction: row;
@@ -5152,15 +4963,13 @@ h5 {
     border: 1px solid var(--SmartThemeBorderColor);
 }
 
-#select_chat_div,
-.swipe_picker_div {
+#select_chat_div {
     padding: 0;
     height: 100%;
     overflow-y: auto;
 }
 
-#select_chat_div hr,
-.swipe_picker_div hr {
+#select_chat_div hr {
     margin: 0;
 }
 
@@ -5185,71 +4994,30 @@ h5 {
     cursor: pointer;
 }
 
-.select_chat_block,
-.swipe_picker_block {
+.select_chat_block {
     border-radius: 5px;
     margin-top: 5px;
     border: 1px solid var(--SmartThemeBorderColor);
     padding: 5px 7px;
 }
 
-.select_chat_block:hover,
-.swipe_picker_block:hover {
+.select_chat_block:hover {
     background-color: var(--white30a);
 }
 
-.select_chat_block[highlight],
-.swipe_picker_block[highlight] {
+.select_chat_block[highlight] {
     background-color: var(--cobalt30a);
 }
 
-.swipe_picker_block {
-    cursor: pointer;
-    -webkit-user-select: none;
-    user-select: none;
-}
 
-.swipe_picker_block .select_chat_block_mes {
-    text-align: left;
-}
 
-.swipe_picker_block .select_chat_actions {
-    align-items: baseline;
-}
 
-.swipe_picker_expand_toggle {
-    display: none !important;
-}
 
-.swipe_picker_block:has(.swipe_picker_expand_toggle:checked) .select_chat_block_mes {
-    display: block;
-    -webkit-line-clamp: unset;
-    line-clamp: unset;
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
-}
 
-.swipe_picker_expand_label {
-    cursor: pointer;
-    opacity: 1;
-}
 
-.swipe_picker_expand_label:hover {
-    opacity: 1;
-}
 
-.swipe_picker_copy {
-    cursor: pointer;
-    opacity: 1;
-}
 
-.swipe_picker_copy:hover {
-    opacity: 1;
-}
 
-.swipe_picker_block:has(.swipe_picker_expand_toggle:checked) .swipe_picker_expand_label {
-    transform: rotate(180deg);
-}
 
 .select_chat_block {
     display: grid;
@@ -5429,19 +5197,7 @@ h5 {
     background: var(--crimson-hover);
 }
 
-.swipe_picker_delete.disabled {
-    cursor: default !important;
-    opacity: 0.2;
-}
 
-.swipe_picker_delete.disabled:hover {
-    cursor: default !important;
-    color: inherit;
-    filter: none;
-    -webkit-animation: none;
-    animation: none;
-    opacity: 0.2 !important;
-}
 
 body .ui-autocomplete {
     max-height: 300px;
@@ -5935,7 +5691,6 @@ body:not(.caption) .mes_img_caption {
     display: inline-flex;
 }
 
-#user-settings-block h4,
 .standoutHeader {
     background-image: linear-gradient(348deg, var(--white30a)2%, var(--grey30a)10%, var(--black70a)95%, var(--SmartThemeQuoteColor)100%);
     margin-bottom: 5px;
@@ -6171,8 +5926,8 @@ body:has(#character_popup.open) #top-settings-holder:has(.drawer-content.openDra
 }
 
 .fillRight {
-    width: calc((100vw - var(--sheldWidth) - 2px) /2);
-    width: calc((100dvw - var(--sheldWidth) - 2px) /2);
+    width: clamp(340px, calc((100vw - var(--sheldWidth) - 2px) /2), 420px);
+    width: clamp(340px, calc((100dvw - var(--sheldWidth) - 2px) /2), 420px);
     max-height: calc(100vh - var(--topBarBlockSize));
     max-height: calc(100dvh - var(--topBarBlockSize));
     height: 0;
@@ -6198,6 +5953,524 @@ body:has(#character_popup.open) #top-settings-holder:has(.drawer-content.openDra
     @starting-style {
         height: 0;
     }
+}
+
+.fillLeft {
+    width: clamp(340px, calc((100vw - var(--sheldWidth) - 2px) /2), 420px);
+    width: clamp(340px, calc((100dvw - var(--sheldWidth) - 2px) /2), 420px);
+    max-height: calc(100vh - var(--topBarBlockSize));
+    max-height: calc(100dvh - var(--topBarBlockSize));
+    height: 0;
+    position: fixed;
+    top: 0;
+    left: 0;
+    margin: 0;
+    box-shadow: none;
+    overflow: hidden;
+    flex-flow: column;
+    min-width: 100px;
+    z-index: 3000;
+}
+
+.fillLeft.openDrawer {
+    display: flex;
+    height: 100%;
+
+    @starting-style {
+        height: 0;
+    }
+}
+
+/* Narrow viewports cannot afford the 340px floor — an open side panel would
+   cover most of the chat. Fall back to exactly half of the remaining width,
+   matching the legacy drawer geometry on both sides. */
+@media (max-width: 759px) {
+    .fillLeft,
+    .fillRight {
+        width: calc((100vw - var(--sheldWidth) - 2px) /2);
+        width: calc((100dvw - var(--sheldWidth) - 2px) /2);
+    }
+}
+
+/* Unified side-panel header: one row with title + panel actions + pin on
+   both navigation panels; content scrolls below it. */
+.workspace-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 4px 4px 6px;
+    border-bottom: 1px solid color-mix(in srgb, var(--SmartThemeBorderColor) 52%, transparent);
+    flex-shrink: 0;
+    width: 100%;
+}
+
+.workspace-panel-title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    font-weight: 600;
+}
+
+.workspace-panel-title h2 {
+    margin: 0;
+    font-size: 1em;
+    font-weight: inherit;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.workspace-panel-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.workspace-panel-actions #result_info {
+    align-items: center;
+}
+
+/* Both side panels are flex columns: header stays fixed, body scrolls. */
+#left-nav-panel > .scrollableInner,
+#right-nav-panel > .scrollableInner {
+    flex: 1;
+    min-height: 0;
+}
+
+/* Unified top-center drawer chrome (WorkspacePanelChrome): one title row;
+   body fills the rest of the drawer and either scrolls with it or hosts an
+   internally scrolling surface. Drawers close via nav entry, mutual
+   exclusion, or Escape — the header carries no controls. */
+.workspace-panel-chrome {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+}
+
+.wpc-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 2px 4px 8px;
+    border-bottom: 1px solid color-mix(in srgb, var(--SmartThemeBorderColor) 52%, transparent);
+    margin-bottom: 8px;
+    flex-shrink: 0;
+}
+
+.wpc-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    font-weight: 600;
+}
+
+.wpc-title-icon {
+    opacity: 0.7;
+}
+
+.wpc-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.wpc-body > * {
+    min-height: 0;
+}
+
+/* The settings drawer grows with its content like the other central drawers;
+   capped at 94dvh/920px, after which the tab panel scrolls internally while
+   the chrome header and the form save bar stay put. */
+#SettingsPanel.openDrawer {
+    height: auto;
+    max-height: min(94dvh, 920px);
+    display: flex;
+    flex-direction: column;
+    overflow-y: hidden;
+}
+
+#SettingsPanel > #emberdesk-react-settings-panel-host {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+#SettingsPanel .wpc-body {
+    overflow: hidden;
+}
+
+#SettingsPanel .wpc-body > .settings-page {
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+/* Narrow viewports: the 450px drawer floor overflows a phone screen — let the
+   central drawers shrink like #WorldInfo does (min-width 100px there). */
+@media (max-width: 639px) {
+    #SettingsPanel,
+    #RegexPanel {
+        min-width: 0;
+        width: calc(100vw - 10px);
+        width: calc(100dvw - 10px);
+    }
+}
+
+/* AI config: visually grouped sections share one spacing rhythm. */
+.ai-config-section {
+    padding: 4px 0;
+}
+
+.ai-config-section + .ai-config-section {
+    border-top: 1px solid color-mix(in srgb, var(--SmartThemeBorderColor) 40%, transparent);
+}
+
+/* Slim the side panels' inner scrollbars — the global 0.7rem webkit bar
+   reads as a heavy gray gutter on narrow columns. */
+#left-nav-panel .scrollableInner::-webkit-scrollbar,
+#right-nav-panel .scrollableInner::-webkit-scrollbar,
+#right-nav-panel #rm_print_characters_block::-webkit-scrollbar,
+#right-nav-panel #rm_ch_create_block::-webkit-scrollbar {
+    width: 8px;
+}
+
+#left-nav-panel .scrollableInner,
+#right-nav-panel .scrollableInner,
+#right-nav-panel #rm_print_characters_block,
+#right-nav-panel #rm_ch_create_block {
+    scrollbar-width: thin;
+}
+
+/* .menu_button is width:min-content — CJK text wraps per character and
+   collapses to a vertical strip; keep toolbar buttons on one line. */
+#rm_button_bar .menu_button {
+    width: auto;
+    white-space: nowrap;
+}
+
+#completion_prompt_manager {
+    width: 100%;
+    min-width: 0;
+}
+
+.prompt-panel-root {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+}
+
+.prompt-panel-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.prompt-panel-list-head,
+.prompt-panel-item-row {
+    display: grid;
+    grid-template-columns: 28px 14px minmax(0, 1fr) 3.5rem;
+    align-items: center;
+    gap: 6px;
+}
+
+.prompt-panel-list-head {
+    padding: 0 7px;
+    font-size: calc(var(--mainFontSize) * 0.85);
+    opacity: 0.6;
+}
+
+.prompt-panel-head-name {
+    grid-column: 1 / 4;
+    min-width: 0;
+}
+
+.prompt-panel-head-tokens {
+    grid-column: 4;
+    text-align: right;
+}
+
+.prompt-panel-tokens {
+    min-width: 0;
+    text-align: right;
+    font-family: var(--monoFontFamily, monospace);
+    font-size: calc(var(--mainFontSize) * 0.85);
+    opacity: 0.7;
+}
+
+.prompt-panel-item-expanded {
+    border-color: var(--SmartThemeEmColor);
+}
+
+.prompt-panel-item {
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 6px;
+    padding: 4px 6px;
+    background-color: var(--black30a);
+}
+
+.prompt-panel-item-disabled .prompt-panel-item-name,
+.prompt-panel-item-disabled .prompt-panel-tokens,
+.prompt-panel-item-disabled .prompt-panel-drag-handle {
+    opacity: 0.55;
+}
+
+.prompt-panel-enabled {
+    flex-shrink: 0;
+    accent-color: var(--SmartThemeEmColor);
+}
+
+.prompt-panel-item-name {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    background: none;
+    border: none;
+    color: var(--SmartThemeBodyColor);
+    font-family: inherit;
+    font-size: var(--mainFontSize);
+    text-align: left;
+    cursor: pointer;
+    padding: 4px 2px;
+}
+
+.prompt-panel-item-name:hover {
+    color: var(--SmartThemeEmColor);
+}
+
+.prompt-panel-item-name-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.prompt-panel-item-meta {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 4px;
+    flex-shrink: 0;
+    max-width: 50%;
+}
+
+.prompt-panel-badge {
+    font-size: calc(var(--mainFontSize) * 0.8);
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 4px;
+    padding: 0 4px;
+    opacity: 0.7;
+}
+
+.prompt-panel-badge-marker {
+    color: var(--SmartThemeEmColor);
+}
+
+.prompt-panel-drag-handle {
+    width: 28px;
+    min-height: 32px;
+    padding: 0;
+    border: none;
+    background: none;
+    color: inherit;
+    font: inherit;
+    cursor: grab;
+    touch-action: none;
+    user-select: none;
+}
+
+.prompt-panel-drag-handle:active {
+    cursor: grabbing;
+}
+
+.prompt-panel-drag-handle:focus-visible {
+    outline: 2px solid var(--SmartThemeEmColor);
+    border-radius: 4px;
+}
+
+.prompt-panel-item-dragging {
+    opacity: 0.5;
+}
+
+.prompt-panel-item[data-drop-position="before"] {
+    box-shadow: 0 -3px 0 var(--SmartThemeEmColor);
+}
+
+.prompt-panel-item[data-drop-position="after"] {
+    box-shadow: 0 3px 0 var(--SmartThemeEmColor);
+}
+
+.prompt-panel-item-editor {
+    margin-top: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    border-top: 1px solid var(--SmartThemeBorderColor);
+    padding-top: 8px;
+}
+
+.prompt-panel-field {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.prompt-panel-field-pair {
+    display: flex;
+    gap: 8px;
+}
+
+.prompt-panel-field-pair .prompt-panel-field {
+    flex: 1;
+    min-width: 0;
+}
+
+.prompt-panel-field-label {
+    font-size: calc(var(--mainFontSize) * 0.85);
+    opacity: 0.75;
+}
+
+.prompt-panel-field .text_pole {
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.prompt-panel-field-checks,
+.prompt-panel-trigger-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+}
+
+.prompt-panel-title-row::after {
+    order: 2;
+}
+
+/* Not inside .prompt-panel-root, so it misses the menu_button CJK-wrap
+   exemption — restate it here along with the compact sizing. */
+.prompt-panel-add-btn {
+    order: 3;
+    margin: 0;
+    padding: 2px 8px;
+    font-size: calc(var(--mainFontSize) * 0.8);
+    width: auto;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+/* .menu_button is width:min-content — CJK text wraps per character and
+   collapses to a vertical strip; keep panel buttons on one line. */
+.prompt-panel-root .menu_button {
+    width: auto;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.prompt-panel-field-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+}
+
+.prompt-panel-expand {
+    flex-shrink: 0;
+    opacity: 0.65;
+}
+
+.prompt-panel-expand:hover {
+    opacity: 1;
+}
+
+.prompt-content-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 4000;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4vh 4vw;
+    box-sizing: border-box;
+}
+
+.prompt-content-modal {
+    width: 900px;
+    max-width: 100%;
+    height: 720px;
+    max-height: 100%;
+    background-color: var(--SmartThemeBlurTintColor);
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 10px;
+    box-shadow: 0 8px 40px rgba(0, 0, 0, 0.5);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 14px;
+    box-sizing: border-box;
+}
+
+.prompt-content-modal-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.prompt-content-modal-title {
+    font-weight: bold;
+    opacity: 0.9;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.prompt-content-modal-textarea {
+    flex: 1;
+    min-height: 0;
+    width: 100%;
+    resize: none;
+    font-family: var(--monoFontFamily, monospace);
+    font-size: calc(var(--mainFontSize) * 0.9);
+    box-sizing: border-box;
+}
+
+.prompt-content-modal-foot {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.prompt-panel-content {
+    width: 100%;
+    min-height: 120px;
+    max-height: 45vh;
+    resize: vertical;
+    font-family: var(--monoFontFamily, monospace);
+    font-size: calc(var(--mainFontSize) * 0.9);
+    box-sizing: border-box;
+}
+
+.prompt-panel-marker-note,
+.prompt-panel-empty {
+    opacity: 0.7;
+    font-size: calc(var(--mainFontSize) * 0.9);
+    padding: 6px 2px;
 }
 
 /*
@@ -6236,13 +6509,47 @@ body:has(#character_popup.open) #top-settings-holder:has(.drawer-content.openDra
     width: 100%;
 }
 
+.preset-actions-row {
+    display: flex;
+    align-items: stretch;
+    gap: 6px;
+    margin-top: 6px;
+}
+
+.preset-actions-row > .menu_button {
+    flex: 1;
+    margin: 0;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+}
+
+.preset-actions-row .preset-actions-menu {
+    flex-shrink: 0;
+}
+
 .preset-actions-menu {
     position: relative;
     display: inline-flex;
+    height: 100%;
+}
+
+.preset-save-button.is-dirty {
+    color: var(--SmartThemeEmColor);
+    border-color: var(--SmartThemeEmColor);
+    font-weight: 600;
 }
 
 .preset-menu-trigger {
     cursor: pointer;
+    height: 100%;
+    margin: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    aspect-ratio: 1;
 }
 
 .preset-popup-menu {
@@ -6250,9 +6557,11 @@ body:has(#character_popup.open) #top-settings-holder:has(.drawer-content.openDra
     position: absolute;
     top: 100%;
     right: 0;
-    z-index: 10;
+    margin-top: 4px;
+    z-index: 100;
     min-width: 120px;
     background-color: var(--SmartThemeBlurTintColor);
+    backdrop-filter: blur(12px);
     border: 1px solid var(--SmartThemeBorderColor);
     border-radius: 5px;
     padding: 2px 0;
@@ -6517,33 +6826,15 @@ body:has(#character_popup.open) #top-settings-holder:has(.drawer-content.openDra
     width: auto;
 }
 
-.onboarding {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    text-align: left;
-    height: 100%;
-}
-
-.onboarding span.menu_button {
-    display: inline-flex;
-}
-
 @media (max-width: 600px), (pointer: coarse) {
-    .onboarding .menu_button,
     .popup .checkbox_label {
         min-height: 44px;
     }
 
     .popup input[type="text"],
-    .popup textarea,
-    .onboarding select {
+    .popup textarea {
         font-size: max(16px, var(--mainFontSize));
     }
-}
-
-.onboarding>h3 {
-    align-self: center;
 }
 
 #show_more_messages {
@@ -6820,14 +7111,6 @@ body:has(#character_popup.open) #top-settings-holder:has(.drawer-content.openDra
     .mes_text {
         padding-right: 10px;
         max-width: 100%;
-    }
-
-    .swipe_left {
-        left: 10px;
-    }
-
-    .swipe_right {
-        right: 2px;
     }
 
 }

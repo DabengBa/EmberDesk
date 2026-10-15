@@ -353,10 +353,6 @@ function insertStagedChatRecord(db, record) {
             created_at_ms
         ) VALUES (?, ?, ?, ?, ?, ?)
     `);
-    const insertSwipe = db.prepare(`
-        INSERT INTO chat_message_swipes (message_id, swipe_order, payload_json)
-        VALUES (?, ?, ?)
-    `);
     const insertAttachment = db.prepare(`
         INSERT INTO chat_attachment_refs (message_id, blob_id, role, compatibility_json)
         VALUES (?, ?, ?, ?)
@@ -371,9 +367,6 @@ function insertStagedChatRecord(db, record) {
             message.payloadJson,
             message.createdAtMs,
         );
-        for (const [swipeOrder, swipe] of (Array.isArray(message.payload?.swipes) ? message.payload.swipes : []).entries()) {
-            insertSwipe.run(message.id, swipeOrder, JSON.stringify(swipe));
-        }
         for (const attachment of message.attachments) {
             insertAttachment.run(
                 message.id,

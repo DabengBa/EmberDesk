@@ -9,7 +9,6 @@
 import {
     METADATA_KEY,
     DEFAULT_DEPTH,
-    DEFAULT_WEIGHT,
     MAX_SCAN_DEPTH,
     KNOWN_DECORATORS,
     world_info_insertion_strategy,
@@ -21,19 +20,11 @@ import {
     world_info,
     selected_world_info,
     world_info_depth,
-    world_info_min_activations,
-    world_info_min_activations_depth_max,
-    world_info_budget,
-    world_info_recursive,
-    world_info_overflow_alert,
     world_info_case_sensitive,
     world_info_match_whole_words,
-    world_info_use_group_scoring,
     world_info_character_strategy,
-    world_info_budget_cap,
-    world_info_max_recursion_steps,
 } from './world-info-state.js';
-import { wi_anchor_position, parseRegexFromString } from './world-info-domain.js';
+import { parseRegexFromString } from './world-info-domain.js';
 import { getStringHash, escapeRegex } from './util/primitives.js';
 import { getWorldInfoShellEventSourceProperty, requireWorldInfoShellContext } from './world-info-shell-context.js';
 
@@ -63,10 +54,6 @@ function getCharaFilename(chid) {
 
 function getTagKeyForEntity(entityId) {
     return getWorldInfoShell().getTagKeyForEntity(entityId);
-}
-
-function getTokenCountAsync(text, padding) {
-    return getWorldInfoShell().getTokenCountAsync(text, padding);
 }
 
 function getRegexedString(content, placement, options) {
@@ -159,7 +146,7 @@ const extension_prompt_roles = new Proxy({}, {
  * @property {number} [scanDepth] The depth of the scan
  * @property {boolean} [caseSensitive] If the scan is case sensitive
  * @property {boolean} [matchWholeWords] If the scan should match whole words
- * @property {boolean} [useGroupScoring] If the scan should use group scoring
+ * @property {boolean} [useGroupScoring] Inert compatibility field; group scoring is retired
  * @property {boolean} [matchCharacterDescription] If the scan should match against the character description
  * @property {boolean} [matchCharacterDepthPrompt] If the scan should match against the character depth prompt
  * @property {boolean} [matchScenario] If the scan should match against the character scenario
@@ -194,7 +181,6 @@ const extension_prompt_roles = new Proxy({}, {
  * @property {string} worldInfo - Merged world info for the single WI prompt marker
  * @property {string} worldInfoBefore - World info that goes before the prompt (story-string bucket)
  * @property {string} worldInfoAfter - World info that goes after the prompt (story-string bucket)
- * @property {Array} worldInfoExamples - Array of example entries
  * @property {Array} worldInfoDepth - Array of depth entries
  * @property {{[key: string]: string[]}} outletEntries - Array of entries to be added to an outlet
  */
@@ -203,7 +189,6 @@ const extension_prompt_roles = new Proxy({}, {
  * @typedef {object} WIActivated
  * @property {string} worldInfoBefore The world info before the chat.
  * @property {string} worldInfoAfter The world info after the chat.
- * @property {any[]} EMEntries The entries for examples.
  * @property {any[]} WIDepthEntries The depth entries.
  * @property {{[key: string]: string[]}} outletEntries - Array of entries to be added to an outlet
  * @property {Set<any>} allActivatedEntries All entries.
@@ -247,19 +232,9 @@ export class WorldInfoBuffer {
     #depthBuffer = [];
 
     /**
-     * @type {string[]} Array of strings added by recursive scanning
-     */
-    #recurseBuffer = [];
-
-    /**
      * @type {string[]} Array of strings added by prompt injections that are valid for the current scan
      */
     #injectBuffer = [];
-
-    /**
-     * @type {number} The skew of the global scan depth. Used in "min activations"
-     */
-    #skew = 0;
 
     /**
      * @type {number} The starting depth of the global scan depth.
@@ -305,13 +280,12 @@ export class WorldInfoBuffer {
     }
 
     /**
-     * Gets all messages up to the given depth + recursion buffer.
+     * Gets all messages up to the global scan depth (or the entry's own scanDepth).
      * @param {WIScanEntry} entry The entry that triggered the scan
-     * @param {number} scanState The state of the scan
      * @returns {string} A slice of buffer until the given depth (inclusive)
      */
-    get(entry, scanState) {
-        let depth = entry.scanDepth ?? this.getDepth();
+    get(entry) {
+        let depth = entry.scanDepth ?? world_info_depth;
         if (depth <= this.#startDepth) {
             return '';
         }
@@ -345,11 +319,6 @@ export class WorldInfoBuffer {
 
         if (this.#injectBuffer.length > 0) {
             result += JOINER + this.#injectBuffer.join(JOINER);
-        }
-
-        // Min activations should not include the recursion buffer
-        if (this.#recurseBuffer.length > 0 && scanState !== scan_state.MIN_ACTIVATIONS) {
-            result += JOINER + this.#recurseBuffer.join(JOINER);
         }
 
         return result;
@@ -394,41 +363,11 @@ export class WorldInfoBuffer {
     }
 
     /**
-     * Adds a message to the recursion buffer.
-     * @param {string} message The message to add
-     */
-    addRecurse(message) {
-        this.#recurseBuffer.push(message);
-    }
-
-    /**
      * Adds an injection to the buffer.
      * @param {string} message The injection to add
      */
     addInject(message) {
         this.#injectBuffer.push(message);
-    }
-
-    /**
-     * Checks if the recursion buffer is not empty.
-     * @returns {boolean} Returns true if the recursion buffer is not empty, otherwise false
-     */
-    hasRecurse() {
-        return this.#recurseBuffer.length > 0;
-    }
-
-    /**
-     * Increments skew to advance the scan range.
-     */
-    advanceScan() {
-        this.#skew++;
-    }
-
-    /**
-     * @returns {number} Settings' depth + current skew.
-     */
-    getDepth() {
-        return world_info_depth + this.#skew;
     }
 
     /**
@@ -445,59 +384,6 @@ export class WorldInfoBuffer {
      */
     resetExternalEffects() {
         WorldInfoBuffer.externalActivations = new Map();
-    }
-
-    /**
-     * Gets the match score for the given entry.
-     * @param {WIScanEntry} entry Entry to check
-     * @param {number} scanState The state of the scan
-     * @returns {number} The number of key activations for the given entry
-     */
-    getScore(entry, scanState) {
-        const bufferState = this.get(entry, scanState);
-        let numberOfPrimaryKeys = 0;
-        let numberOfSecondaryKeys = 0;
-        let primaryScore = 0;
-        let secondaryScore = 0;
-
-        // Increment score for every key found in the buffer
-        if (Array.isArray(entry.key)) {
-            numberOfPrimaryKeys = entry.key.length;
-            for (const key of entry.key) {
-                if (this.matchKeys(bufferState, key, entry)) {
-                    primaryScore++;
-                }
-            }
-        }
-
-        // Increment score for every secondary key found in the buffer
-        if (Array.isArray(entry.keysecondary)) {
-            numberOfSecondaryKeys = entry.keysecondary.length;
-            for (const key of entry.keysecondary) {
-                if (this.matchKeys(bufferState, key, entry)) {
-                    secondaryScore++;
-                }
-            }
-        }
-
-        // No keys == no score
-        if (!numberOfPrimaryKeys) {
-            return 0;
-        }
-
-        // Only positive logic influences the score
-        if (numberOfSecondaryKeys > 0) {
-            switch (entry.selectiveLogic) {
-                // AND_ANY: Add both scores
-                case world_info_logic.AND_ANY:
-                    return primaryScore + secondaryScore;
-                // AND_ALL: Add both scores if all secondary keys are found, otherwise only primary score
-                case world_info_logic.AND_ALL:
-                    return secondaryScore === numberOfSecondaryKeys ? primaryScore + secondaryScore : primaryScore;
-            }
-        }
-
-        return primaryScore;
     }
 }
 
@@ -1067,49 +953,22 @@ export async function checkWorldInfo(chat, maxContext, isDryRun, globalScanData 
 
     /** @type {scan_state} */
     let scanState = scan_state.INITIAL;
-    let token_budget_overflowed = false;
     let count = 0;
     let allActivatedEntries = new Map();
     let failedProbabilityChecks = new Set();
-    let allActivatedText = '';
 
-    let budget = Math.round(world_info_budget * maxContext / 100) || 1;
-
-    if (world_info_budget_cap > 0 && budget > world_info_budget_cap) {
-        console.debug(`[WI] Budget ${budget} exceeds cap ${world_info_budget_cap}, using cap`);
-        budget = world_info_budget_cap;
-    }
-
-    console.debug(`[WI] Context size: ${maxContext}; WI budget: ${budget} (max% = ${world_info_budget}%, cap = ${world_info_budget_cap})`);
     const sortedEntries = await getSortedEntries();
     const timedEffects = new WorldInfoTimedEffects(chat, sortedEntries, isDryRun);
 
     timedEffects.checkTimedEffects();
 
     if (sortedEntries.length === 0) {
-        return { worldInfoBefore: '', worldInfoAfter: '', WIDepthEntries: [], EMEntries: [], outletEntries: {}, allActivatedEntries: new Set() };
+        return { worldInfoBefore: '', worldInfoAfter: '', WIDepthEntries: [], outletEntries: {}, allActivatedEntries: new Set() };
     }
 
-    /** @type {number[]} Represents the delay levels for entries that are delayed until recursion */
-    const availableRecursionDelayLevels = [...new Set(sortedEntries
-        .filter(entry => entry.delayUntilRecursion)
-        .map(entry => entry.delayUntilRecursion === true ? 1 : entry.delayUntilRecursion),
-    )].sort((a, b) => a - b);
-    // Already preset with the first level
-    let currentRecursionDelayLevel = availableRecursionDelayLevels.shift() ?? 0;
-    if (currentRecursionDelayLevel > 0 && availableRecursionDelayLevels.length) {
-        console.debug('[WI] Preparing first delayed recursion level', currentRecursionDelayLevel, '. Still delayed:', availableRecursionDelayLevels);
-    }
-
-    console.debug(`[WI] --- SEARCHING ENTRIES (on ${sortedEntries.length} entries) ---`);
+    console.debug(`[WI] --- SEARCHING ENTRIES (on ${sortedEntries.length} entries, context size ${maxContext}) ---`);
 
     while (scanState) {
-        //if world_info_max_recursion_steps is non-zero min activations are disabled, and vice versa
-        if (world_info_max_recursion_steps && world_info_max_recursion_steps <= count) {
-            console.debug('[WI] Search stopped by reaching max recursion steps', world_info_max_recursion_steps);
-            break;
-        }
-
         // Track how many times the loop has run. May be useful for debugging.
         count++;
 
@@ -1143,9 +1002,13 @@ export async function checkWorldInfo(chat, maxContext, isDryRun, globalScanData 
                 continue;
             }
 
-            // Check for generation type trigger filter
-            if (Array.isArray(entry.triggers) && entry.triggers.length > 0) {
-                const isTriggered = entry.triggers.includes(globalScanData.trigger);
+            // Check for generation type trigger filter. Retired trigger values
+            // are ignored, so an entry that only targeted them matches all types.
+            const triggers = Array.isArray(entry.triggers)
+                ? entry.triggers.filter(value => value === 'all' || value === 'normal')
+                : [];
+            if (triggers.length > 0) {
+                const isTriggered = triggers.includes('all') || triggers.includes(globalScanData.trigger);
                 if (!isTriggered) {
                     log(`skipped by generation type trigger filter (${globalScanData.trigger} ∉ ${entry.triggers})`);
                     continue;
@@ -1196,22 +1059,6 @@ export async function checkWorldInfo(chat, maxContext, isDryRun, globalScanData 
                 continue;
             }
 
-            // Only use checks for recursion flags if the scan step was activated by recursion
-            if (scanState !== scan_state.RECURSION && entry.delayUntilRecursion && !isSticky) {
-                log('suppressed by delay until recursion');
-                continue;
-            }
-
-            if (scanState === scan_state.RECURSION && entry.delayUntilRecursion && entry.delayUntilRecursion > currentRecursionDelayLevel && !isSticky) {
-                log('suppressed by delay until recursion level', entry.delayUntilRecursion, '. Currently', currentRecursionDelayLevel);
-                continue;
-            }
-
-            if (scanState === scan_state.RECURSION && world_info_recursive && entry.excludeRecursion && !isSticky) {
-                log('suppressed by exclude recursion');
-                continue;
-            }
-
             if (entry.decorators.includes('@@activate')) {
                 log('activated by @@activate decorator');
                 activatedNow.add(entry);
@@ -1248,7 +1095,7 @@ export async function checkWorldInfo(chat, maxContext, isDryRun, globalScanData 
             }
 
             // Cache the text to scan before the loop, it won't change its content
-            const textToScan = buffer.get(entry, scanState);
+            const textToScan = buffer.get(entry);
 
             // PRIMARY KEYWORDS
             let primaryKeyMatch = entry.key.find(key => {
@@ -1339,25 +1186,10 @@ export async function checkWorldInfo(chat, maxContext, isDryRun, globalScanData 
             });
 
 
-        let newContent = '';
-        const textToScanTokens = await getTokenCountAsync(allActivatedText);
-
-        filterByInclusionGroups(newEntries, allActivatedEntries, buffer, scanState, timedEffects);
-
         console.debug('[WI] --- PROBABILITY CHECKS ---');
         if (!newEntries.length) console.debug('[WI] No probability checks to do');
 
-        let ignoresBudget = newEntries.filter(e => e.ignoreBudget).length;
-
         for (const entry of newEntries) {
-            ignoresBudget -= (entry.ignoreBudget ? 1 : 0);
-            if (token_budget_overflowed && !entry.ignoreBudget) {
-                if (ignoresBudget > 0) {
-                    continue;
-                }
-                break;
-            }
-
             function verifyProbability() {
                 // If we don't need to roll, it's always true
                 if (!entry.useProbability || entry.probability === 100) {
@@ -1389,28 +1221,12 @@ export async function checkWorldInfo(chat, maxContext, isDryRun, globalScanData 
 
             // Substitute macros inline, for both this checking and also future processing
             entry.content = substituteParams(entry.content);
-            newContent += `${entry.content}\n`;
-
-            if (!entry.ignoreBudget && (textToScanTokens + (await getTokenCountAsync(newContent))) >= budget) {
-                if (!token_budget_overflowed) {
-                    console.debug('[WI] --- BUDGET OVERFLOW CHECK ---');
-                    if (world_info_overflow_alert) {
-                        console.warn(`[WI] budget of ${budget} reached, stopping after ${allActivatedEntries.size} entries`);
-                        getWorldInfoShell().showWarningToast(`World info budget reached after ${allActivatedEntries.size} entries.`, 'World Info');
-                    } else {
-                        console.debug(`[WI] budget of ${budget} reached, stopping after ${allActivatedEntries.size} entries`);
-                    }
-                    token_budget_overflowed = true;
-                }
-                continue;
-            }
 
             allActivatedEntries.set(`${entry.world}.${entry.uid}`, entry);
             console.debug(`[WI] Entry ${entry.uid} activation successful, adding to prompt`, entry);
         }
 
         const successfulNewEntries = newEntries.filter(x => !failedProbabilityChecks.has(x));
-        const successfulNewEntriesForRecursion = successfulNewEntries.filter(x => !x.preventRecursion);
 
         console.debug(`[WI] --- LOOP #${count} RESULT ---`);
         if (!newEntries.length) {
@@ -1421,65 +1237,13 @@ export async function checkWorldInfo(chat, maxContext, isDryRun, globalScanData 
             console.debug(`[WI] Successfully activated ${successfulNewEntries.length} new entries to prompt. ${allActivatedEntries.size} total entries activated.`, successfulNewEntries);
         }
 
-        function logNextState(...args) {
-            if (args.length) console.debug(args.shift(), ...args);
-            console.debug('[WI] Setting scan state', Object.entries(scan_state).find(x => x[1] === scanState));
-        }
-
-        // After processing and rolling entries is done, see if we should continue with normal recursion
-        if (world_info_recursive && !token_budget_overflowed && successfulNewEntriesForRecursion.length) {
-            nextScanState = scan_state.RECURSION;
-            logNextState('[WI] Found', successfulNewEntriesForRecursion.length, 'new entries for recursion');
-        }
-
-        // If we are inside min activations scan, and we have recursive buffer, we should do a recursive scan before increasing the buffer again
-        // There might be recurse-trigger-able entries that match the buffer, so we need to check that
-        if (world_info_recursive && !token_budget_overflowed && scanState === scan_state.MIN_ACTIVATIONS && buffer.hasRecurse()) {
-            nextScanState = scan_state.RECURSION;
-            logNextState('[WI] Min Activations run done, whill will always be followed by a recursive scan');
-        }
-
-        // If scanning is planned to stop, but min activations is set and not satisfied, check if we should continue
-        const minActivationsNotSatisfied = world_info_min_activations > 0 && (allActivatedEntries.size < world_info_min_activations);
-        if (!nextScanState && !token_budget_overflowed && minActivationsNotSatisfied) {
-            console.debug('[WI] --- MIN ACTIVATIONS CHECK ---');
-
-            let over_max = (
-                world_info_min_activations_depth_max > 0 &&
-                buffer.getDepth() > world_info_min_activations_depth_max
-            ) || (buffer.getDepth() > chat.length);
-
-            if (!over_max) {
-                nextScanState = scan_state.MIN_ACTIVATIONS; // loop
-                logNextState(`[WI] Min activations not reached (${allActivatedEntries.size}/${world_info_min_activations}), advancing depth to ${buffer.getDepth() + 1}, starting another scan`);
-                buffer.advanceScan();
-            } else {
-                console.debug(`[WI] Min activations not reached (${allActivatedEntries.size}/${world_info_min_activations}), but reached on of depth. Stopping`);
-            }
-        }
-
-        // If the scan is done, but we still have open "delay until recursion" levels, we should continue with the next one
-        if (nextScanState === scan_state.NONE && availableRecursionDelayLevels.length) {
-            nextScanState = scan_state.RECURSION;
-            currentRecursionDelayLevel = availableRecursionDelayLevels.shift();
-            logNextState('[WI] Open delayed recursion levels left. Preparing next delayed recursion level', currentRecursionDelayLevel, '. Still delayed:', availableRecursionDelayLevels);
-        }
-
-        // Final check if we should really continue scan, and extend the current WI recurse buffer
+        // The scan always ends after a single pass; recursion and budget
+        // tracking are retired.
         const curScanState = scanState;
         scanState = nextScanState;
-        if (scanState) {
-            const text = successfulNewEntriesForRecursion
-                .map(x => x.content).join('\n');
-            if (text) {
-                buffer.addRecurse(text);
-                allActivatedText = (text + '\n' + allActivatedText);
-            }
-        } else {
-            logNextState('[WI] Scan done. No new entries to prompt. Stopping.');
-        }
 
-        // Fire an event after each scan loop, so extensions can hook into the current scanning state
+        // Fire an event after each scan loop, so listeners can hook into the
+        // current scanning state and force another pass via `state.next`.
         const args = {
             state: {
                 current: curScanState,
@@ -1492,31 +1256,16 @@ export async function checkWorldInfo(chat, maxContext, isDryRun, globalScanData 
             },
             activated: {
                 entries: allActivatedEntries,
-                text: allActivatedText,
             },
             sortedEntries,
-            recursionDelay: {
-                availableLevels: availableRecursionDelayLevels,
-                currentLevel: currentRecursionDelayLevel,
-            },
-            budget: {
-                current: budget,
-                overflowed: token_budget_overflowed,
-            },
             timedEffects,
         };
         await eventSource.emit(event_types.WORLDINFO_SCAN_DONE, args);
 
-        // Some fields are allowed to be changed by listeners, those will be handled here manually. They can be updated via changed the args from the listeners.
-        // Any array provided directly can be modified by updating it's elements, adding or removing elements. This has to be done consistently.
         if (args.state.next !== scanState) {
-            logNextState('[WI] Scan state changed from', scanState, 'to', args.state.next);
+            console.debug('[WI] Scan state changed from', scanState, 'to', args.state.next);
             scanState = args.state.next;
         }
-        allActivatedText = args.activated.text;
-        currentRecursionDelayLevel = args.recursionDelay.currentLevel;
-        budget = args.budget.current;
-        token_budget_overflowed = args.budget.overflowed;
     }
 
     console.debug('[WI] --- BUILDING PROMPT ---');
@@ -1524,7 +1273,6 @@ export async function checkWorldInfo(chat, maxContext, isDryRun, globalScanData 
     // Forward-sorted list of entries for joining
     const WIBeforeEntries = [];
     const WIAfterEntries = [];
-    const EMEntries = [];
     const WIDepthEntries = [];
     /** @type {{[key: string]: string[]}} */
     const WIOutletEntries = {};
@@ -1546,25 +1294,18 @@ export async function checkWorldInfo(chat, maxContext, isDryRun, globalScanData 
         }
 
         switch (position) {
-            // Author's-Note positions are retired; they fold into the merged
-            // World Info block (top entries first, bottom entries last).
+            // Author's-Note and Example-Message positions are retired; they
+            // fold into the merged World Info block (top entries first,
+            // bottom entries last).
             case world_info_position.ANTop:
+            case world_info_position.EMTop:
             case world_info_position.before:
                 WIBeforeEntries.unshift(content);
                 break;
             case world_info_position.ANBottom:
+            case world_info_position.EMBottom:
             case world_info_position.after:
                 WIAfterEntries.unshift(content);
-                break;
-            case world_info_position.EMTop:
-                EMEntries.unshift(
-                    { position: wi_anchor_position.before, content: content },
-                );
-                break;
-            case world_info_position.EMBottom:
-                EMEntries.unshift(
-                    { position: wi_anchor_position.after, content: content },
-                );
                 break;
             case world_info_position.atDepth: {
                 const existingDepthIndex = WIDepthEntries.findIndex((e) => e.depth === (entry.depth ?? DEFAULT_DEPTH) && e.role === (entry.role ?? extension_prompt_roles.SYSTEM));
@@ -1608,201 +1349,9 @@ export async function checkWorldInfo(chat, maxContext, isDryRun, globalScanData 
     console.log(`[WI] ${isDryRun ? 'Hypothetically adding' : 'Adding'} ${allActivatedEntries.size} entries to prompt`, Array.from(allActivatedEntries.values()));
     console.debug(`[WI] --- DONE${isDryRun ? ' (DRY RUN)' : ''} ---`);
 
-    return { worldInfoBefore, worldInfoAfter, EMEntries, WIDepthEntries, outletEntries: WIOutletEntries, allActivatedEntries: new Set(allActivatedEntries.values()) };
+    return { worldInfoBefore, worldInfoAfter, WIDepthEntries, outletEntries: WIOutletEntries, allActivatedEntries: new Set(allActivatedEntries.values()) };
 }
 
-/**
- * Only leaves entries with the highest key matching score in each group.
- * @param {Record<string, WIScanEntry[]>} groups The groups to filter
- * @param {WorldInfoBuffer} buffer The buffer to use for scoring
- * @param {(entry: WIScanEntry) => void} removeEntry The function to remove an entry
- * @param {number} scanState The current scan state
- * @param {Map<string, boolean>} hasStickyMap The sticky entries map
- */
-function filterGroupsByScoring(groups, buffer, removeEntry, scanState, hasStickyMap) {
-    for (const [key, group] of Object.entries(groups)) {
-        // Group scoring is disabled both globally and for the group entries
-        if (!world_info_use_group_scoring && !group.some(x => x.useGroupScoring)) {
-            console.debug(`[WI] Skipping group scoring for group '${key}'`);
-            continue;
-        }
-
-        // If the group has any sticky entries, the rest are already removed by the timed effects filter
-        const hasAnySticky = hasStickyMap.get(key);
-        if (hasAnySticky) {
-            console.debug(`[WI] Skipping group scoring check, group '${key}' has sticky entries`);
-            continue;
-        }
-
-        const scores = group.map(entry => buffer.getScore(entry, scanState));
-        const maxScore = Math.max(...scores);
-        console.debug(`[WI] Group '${key}' max score:`, maxScore);
-        //console.table(group.map((entry, i) => ({ uid: entry.uid, key: JSON.stringify(entry.key), score: scores[i] })));
-
-        for (let i = 0; i < group.length; i++) {
-            const isScored = group[i].useGroupScoring ?? world_info_use_group_scoring;
-
-            if (!isScored) {
-                continue;
-            }
-
-            if (scores[i] < maxScore) {
-                console.debug(`[WI] Entry ${group[i].uid}`, `removed as score loser from inclusion group '${key}'`, group[i]);
-                removeEntry(group[i]);
-                group.splice(i, 1);
-                scores.splice(i, 1);
-                i--;
-            }
-        }
-    }
-}
-
-/**
- * Removes entries on cooldown and forces sticky entries as winners.
- * @param {Record<string, WIScanEntry[]>} groups The groups to filter
- * @param {WorldInfoTimedEffects} timedEffects The timed effects to use
- * @param {(entry: WIScanEntry) => void} removeEntry The function to remove an entry
- * @returns {Map<string, boolean>} If any sticky entries were found
- */
-function filterGroupsByTimedEffects(groups, timedEffects, removeEntry) {
-    /** @type {Map<string, boolean>} */
-    const hasStickyMap = new Map();
-
-    for (const [key, group] of Object.entries(groups)) {
-        hasStickyMap.set(key, false);
-
-        // If the group has any sticky entries, leave only the sticky entries
-        const stickyEntries = group.filter(x => timedEffects.isEffectActive('sticky', x));
-        if (stickyEntries.length) {
-            for (const entry of group) {
-                if (stickyEntries.includes(entry)) {
-                    continue;
-                }
-
-                console.debug(`[WI] Entry ${entry.uid}`, `removed as a non-sticky loser from inclusion group '${key}'`, entry);
-                removeEntry(entry);
-            }
-
-            hasStickyMap.set(key, true);
-        }
-
-        // It should not be possible for an entry on cooldown/delay to event get into the grouping phase but @Wolfsblvt told me to leave it here.
-        const cooldownEntries = group.filter(x => timedEffects.isEffectActive('cooldown', x));
-        if (cooldownEntries.length) {
-            console.debug(`[WI] Inclusion group '${key}' has entries on cooldown. They will be removed.`, cooldownEntries);
-            for (const entry of cooldownEntries) {
-                removeEntry(entry);
-            }
-        }
-
-        const delayEntries = group.filter(x => timedEffects.isEffectActive('delay', x));
-        if (delayEntries.length) {
-            console.debug(`[WI] Inclusion group '${key}' has entries with delay. They will be removed.`, delayEntries);
-            for (const entry of delayEntries) {
-                removeEntry(entry);
-            }
-        }
-    }
-
-    return hasStickyMap;
-}
-
-/**
- * Filters entries by inclusion groups.
- * @param {object[]} newEntries Entries activated on current recursion level
- * @param {Map<string, object>} allActivatedEntries Map of all activated entries
- * @param {WorldInfoBuffer} buffer The buffer to use for scanning
- * @param {number} scanState The current scan state
- * @param {WorldInfoTimedEffects} timedEffects The timed effects currently active
- */
-function filterByInclusionGroups(newEntries, allActivatedEntries, buffer, scanState, timedEffects) {
-    console.debug('[WI] --- INCLUSION GROUP CHECKS ---');
-
-    const grouped = newEntries.filter(x => x.group).reduce((acc, item) => {
-        item.group.split(/,\s*/).filter(x => x).forEach(group => {
-            if (!acc[group]) {
-                acc[group] = [];
-            }
-            acc[group].push(item);
-        });
-        return acc;
-    }, {});
-
-    if (Object.keys(grouped).length === 0) {
-        console.debug('[WI] No inclusion groups found');
-        return;
-    }
-
-    const removeEntry = (entry) => newEntries.splice(newEntries.indexOf(entry), 1);
-    function removeAllBut(group, chosen, logging = true) {
-        for (const entry of group) {
-            if (entry === chosen) {
-                continue;
-            }
-
-            if (logging) console.debug(`[WI] Entry ${entry.uid}`, `removed as loser from inclusion group '${entry.group}'`, entry);
-            removeEntry(entry);
-        }
-    }
-
-    const hasStickyMap = filterGroupsByTimedEffects(grouped, timedEffects, removeEntry);
-    filterGroupsByScoring(grouped, buffer, removeEntry, scanState, hasStickyMap);
-
-    for (const [key, group] of Object.entries(grouped)) {
-        console.debug(`[WI] Checking inclusion group '${key}' with ${group.length} entries`, group);
-
-        // If the group has any sticky entries, the rest are already removed by the timed effects filter
-        const hasAnySticky = hasStickyMap.get(key);
-        if (hasAnySticky) {
-            console.debug(`[WI] Skipping inclusion group check, group '${key}' has sticky entries`);
-            continue;
-        }
-
-        if (Array.from(allActivatedEntries.values()).some(x => x.group === key)) {
-            console.debug(`[WI] Skipping inclusion group check, group '${key}' was already activated`);
-            // We need to forcefully deactivate all other entries in the group
-            removeAllBut(group, null, false);
-            continue;
-        }
-
-        if (!Array.isArray(group) || group.length <= 1) {
-            console.debug('[WI] Skipping inclusion group check, only one entry');
-            continue;
-        }
-
-        // Check for group prio
-        const prios = group.filter(x => x.groupOverride).sort(sortFn);
-        if (prios.length) {
-            console.debug(`[WI] Entry ${prios[0].uid}`, `activated as prio winner from inclusion group '${key}'`, prios[0]);
-            removeAllBut(group, prios[0]);
-            continue;
-        }
-
-        // Do weighted random using entry's weight
-        const totalWeight = group.reduce((acc, item) => acc + (item.groupWeight ?? DEFAULT_WEIGHT), 0);
-        const rollValue = Math.random() * totalWeight;
-        let currentWeight = 0;
-        let winner = null;
-
-        for (const entry of group) {
-            currentWeight += (entry.groupWeight ?? DEFAULT_WEIGHT);
-
-            if (rollValue <= currentWeight) {
-                console.debug(`[WI] Entry ${entry.uid}`, `activated as roll winner from inclusion group '${key}'`, entry);
-                winner = entry;
-                break;
-            }
-        }
-
-        if (!winner) {
-            console.debug(`[WI] Failed to activate inclusion group '${key}', no winner found`);
-            continue;
-        }
-
-        // Remove every group item from newEntries but the winner
-        removeAllBut(group, winner);
-    }
-}
 
 /**
  * Gets the world info based on chat messages.
@@ -1829,7 +1378,6 @@ export async function getWorldInfoPrompt(chat, maxContext, isDryRun, globalScanD
         worldInfo,
         worldInfoBefore,
         worldInfoAfter,
-        worldInfoExamples: activatedWorldInfo.EMEntries ?? [],
         worldInfoDepth: activatedWorldInfo.WIDepthEntries ?? [],
         outletEntries: activatedWorldInfo.outletEntries ?? {},
     };

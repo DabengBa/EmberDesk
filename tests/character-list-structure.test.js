@@ -446,7 +446,6 @@ describe('character list structure', () => {
         const overlaySource = read('public/scripts/BulkEditOverlay.js');
         const cascadeDialogSource = read('public/scripts/world-cascade-dialog.js');
         const zhCnLocale = read('public/locales/zh-cn.json');
-        const zhTwLocale = read('public/locales/zh-tw.json');
         const lifecycleSource = read('public/scripts/character-lifecycle-service.js');
         const domHandlersSource = read('public/scripts/dom-handlers.js');
         const rightNavSource = read('app/components/right-nav/RightNavPanel.tsx');
@@ -475,7 +474,6 @@ describe('character list structure', () => {
         expect(domHandlersSource).toMatch(/deleteCharacter\(avatarToDelete,\s*\{[\s\S]*deleteChats,[\s\S]*temporaryChatAcknowledged: inTempChat[\s\S]*\}\)/);
         expect(domHandlersSource).toMatch(/deleteCharacter\(avatarToDelete,\s*\{[\s\S]*deleteWorlds: \[\],[\s\S]*clearWorldReferences: false[\s\S]*\}\)/);
         expect(zhCnLocale).toContain('"Delete character \\"${0}\\"?": "删除角色「${0}」？"');
-        expect(zhTwLocale).toContain('"Delete character \\"${0}\\"?": "刪除角色「${0}」？"');
 
         expect(overlaySource).toContain('temporaryChatAcknowledged: inTempChat');
         expect(overlaySource).toContain('deleteContext: { source: \'bulk\', selectedCount: count }');

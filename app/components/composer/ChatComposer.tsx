@@ -6,7 +6,7 @@ import { ContractIconButton } from '../contract/ContractIconButton';
  * Chat composer markup (React-owned shell inside #send_form).
  * The textarea stays UNCONTROLLED as a render target: its text value is owned
  * by public/scripts/main-chat-composer-service.js — the single command/state
- * path used by submit flows, STscript commands, macros, impersonate injection,
+ * path used by submit flows, STscript commands, macros, and injected composer text,
  * and autocomplete clearing — while user typing reaches the service through
  * native 'input' events. Button visibility is toggled by legacy code
  * (showSendButtons/showStopButtons) via CSS display; this component renders

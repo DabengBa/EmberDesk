@@ -1,10 +1,9 @@
 import { registerDebugFunction } from './power-user.js';
 import { applyI18nTranslations, parseI18nAttributeSpecs } from './i18n-data.js';
 
-const storageKey = 'language';
-const overrideLanguage = localStorage.getItem(storageKey);
-const localeFile = String(overrideLanguage || navigator.language || navigator.userLanguage || 'en').toLowerCase();
-var langs;
+// EmberDesk is Simplified-Chinese only; multilingual locale selection was removed.
+const localeFile = 'zh-cn';
+var langs = [{ lang: 'zh-cn', display: '简体中文' }];
 // Don't change to let/const! It will break module loading.
 var localeData;
 
@@ -15,7 +14,7 @@ export const getCurrentLocale = () => localeFile;
 
 /**
  * Adds additional localization data to the current locale file.
- * @param {string} localeId Locale ID (e.g. 'fr-fr' or 'zh-cn')
+ * @param {string} localeId Locale ID (must be 'zh-cn' to take effect)
  * @param {Record<string, string>} data Localization data to add
  */
 export function addLocaleData(localeId, data) {
@@ -138,8 +137,7 @@ async function getLocaleData(language) {
 function findLang(language) {
     const supportedLang = langs.find(x => x.lang === language);
 
-    const isEn = language.startsWith('en'); // includes 'en', and more specific locales like 'en-us', 'en-au', etc
-    if (!supportedLang && !isEn) {
+    if (!supportedLang) {
         console.warn(`Unsupported language: ${language}`);
     }
     return supportedLang;
@@ -154,13 +152,12 @@ function translateElement(element) {
 }
 
 /**
- * Checks if the given locale is supported and not English.
+ * Checks if the given locale has a translation file.
  * @param {string} [locale=null] The locale to check (defaults to the current locale)
- * @returns {boolean} True if the locale is not English and supported
+ * @returns {boolean} True if the locale is supported
  */
-function isSupportedNonEnglish(locale = null) {
-    const lang = locale || localeFile;
-    return lang && lang != 'en' && findLang(lang);
+function isSupportedLocale(locale = null) {
+    return !!findLang(locale || localeFile);
 }
 
 async function getMissingTranslations() {
@@ -171,10 +168,7 @@ async function getMissingTranslations() {
         missingData.push(...Array.from(trackMissingDynamicTranslate).map(key => ({ key, language: localeFile, value: key })));
     }
 
-    // Determine locales to search for untranslated strings
-    const langsToProcess = isSupportedNonEnglish() ? [findLang(localeFile)] : langs;
-
-    for (const language of langsToProcess) {
+    for (const language of langs) {
         const localeData = await getLocaleData(language.lang);
         $(document).find('[data-i18n]').each(function () {
             for (const entry of parseI18nAttributeSpecs($(this).data('i18n'))) {
@@ -246,39 +240,10 @@ export function applyLocale(root = document) {
     document.dispatchEvent(new CustomEvent('i18n:applied'));
 }
 
-function addLanguagesToDropdown() {
-    const uiLanguageSelects = $('#ui_language_select, #onboarding_ui_language_select');
-    for (const langObj of langs) { // Set the value to the language code
-        const option = document.createElement('option');
-        option.value = langObj.lang; // Set the value to the language code
-        option.innerText = langObj.display; // Set the display text to the language name
-        uiLanguageSelects.append(option);
-    }
-
-    const selectedLanguage = localStorage.getItem(storageKey);
-    if (selectedLanguage) {
-        uiLanguageSelects.val(selectedLanguage);
-    }
-}
-
 export async function initLocales() {
-    langs = await fetch('/locales/lang.json').then(response => response.json());
     localeData = await getLocaleData(localeFile);
     document.documentElement.lang = localeFile;
     applyLocale();
-    addLanguagesToDropdown();
-
-    $('#ui_language_select, #onboarding_ui_language_select').on('change', async function () {
-        const language = String($(this).val());
-
-        if (language) {
-            localStorage.setItem(storageKey, language);
-        } else {
-            localStorage.removeItem(storageKey);
-        }
-
-        location.reload();
-    });
 
     observer.observe(document, {
         childList: true,
@@ -287,27 +252,23 @@ export async function initLocales() {
         attributeFilter: ['data-i18n'],
     });
 
-    if (localStorage.getItem('trackDynamicTranslate') === 'true' && isSupportedNonEnglish()) {
+    if (localStorage.getItem('trackDynamicTranslate') === 'true' && isSupportedLocale()) {
         trackMissingDynamicTranslate = new Set();
     }
 
     registerDebugFunction('getMissingTranslations', 'Get missing translations',
-        'Detects missing localization data in the current locale and dumps the data into the browser console. ' +
-        'If the current locale is English, searches all other locales.',
+        'Detects missing localization data in the current locale and dumps the data into the browser console.',
         getMissingTranslations);
     registerDebugFunction('trackDynamicTranslate', 'Track dynamic translation',
         'Toggles tracking of dynamic translations, which will be dumped into the missing translations translations too. ' +
         'This includes things translated via the t`...` function and translate(). It will only track strings translated <b>after</b> this is toggled on, '
-        + 'and when they actually pop up, so refreshing the page and opening popups, etc, is needed. Will only track if the current locale is not English.',
+        + 'and when they actually pop up, so refreshing the page and opening popups, etc, is needed.',
         () => {
             const isTracking = localStorage.getItem('trackDynamicTranslate') !== 'true';
             localStorage.setItem('trackDynamicTranslate', isTracking ? 'true' : 'false');
-            if (isTracking && isSupportedNonEnglish()) {
+            if (isTracking) {
                 trackMissingDynamicTranslate = new Set();
                 toastr.success('Dynamic translation tracking enabled.');
-            } else if (isTracking) {
-                trackMissingDynamicTranslate = null;
-                toastr.warning('Dynamic translation tracking enabled, but will not be tracked with locale English.');
             } else {
                 trackMissingDynamicTranslate = null;
                 toastr.info('Dynamic translation tracking disabled.');

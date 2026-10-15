@@ -4,14 +4,17 @@ export type WorkspaceShellSlotKey =
     | 'characterLibrary'
     | 'worldInfo'
     | 'characterAuthoring'
-    | 'regex';
+    | 'regex'
+    | 'promptManager'
+    | 'settings';
 
 export type WorkspaceDockPanelKind =
     | 'characterLibrary'
     | 'worldInfo'
     | 'settings'
     | 'characterAuthoring'
-    | 'regex';
+    | 'regex'
+    | 'promptManager';
 
 export interface WorkspaceShellCommands {
     openCharacterLibrary(): CommandResult;
@@ -19,13 +22,14 @@ export interface WorkspaceShellCommands {
     openSettings(): CommandResult;
     openCharacterAuthoring(): CommandResult;
     openRegex(): CommandResult;
+    openPromptManager(): CommandResult;
     activateWorkspaceShellSlot(slotKey: WorkspaceShellSlotKey): CommandResult;
     deactivateWorkspaceShellSlot(slotKey: WorkspaceShellSlotKey): CommandResult;
     closeWorkspacePanel(kind: WorkspaceDockPanelKind): CommandResult;
     setWorkspaceShellSlotPinned(slotKey: WorkspaceShellSlotKey, pinned: boolean): CommandResult;
 }
 
-export type MainChatGenerationKind = 'submitComposer' | 'continueLast' | 'retryGeneration' | 'swipeLeft' | 'swipeRight';
+export type MainChatGenerationKind = 'submitComposer';
 
 export interface MainChatGenerationCommand {
     kind: MainChatGenerationKind;

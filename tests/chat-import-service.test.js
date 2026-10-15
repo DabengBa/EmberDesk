@@ -171,7 +171,7 @@ describe('chat import service', () => {
                 filePath: path.join('/data/default-user/chats', 'Ada', 'Ada - 2026-06-30 @08h00m00s imported.jsonl'),
                 contents: [
                     JSON.stringify({ chat_metadata: {} }),
-                    JSON.stringify({ mes: 'nested', swipes: ['first'] }),
+                    JSON.stringify({ mes: 'nested' }),
                 ].join('\n'),
             }],
         });

@@ -41,11 +41,7 @@ describe('chat generation auto recovery helpers', () => {
 
     test.each([
         ['normal', true],
-        ['regenerate', true],
-        ['continue', true],
-        ['swipe', true],
         ['quiet', false],
-        ['impersonate', false],
     ])('classifies visible main chat generation type %s', (type, expected) => {
         expect(isMainChatVisibleGeneration({ type, mainApi: 'openai', dryRun: false, depth: 0 })).toBe(expected);
     });

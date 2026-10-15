@@ -36,7 +36,6 @@ import EventSourceStream from './sse-stream.js';
 /**
  * @typedef {Object} StreamResponse
  * @property {string} text - Generated text.
- * @property {string[]} swipes - Generated swipes
  * @property {Object} state - Generated state
  * @property {string?} [state.reasoning] - Generated reasoning
  * @property {string?} [state.image] - Generated image
@@ -130,7 +129,6 @@ export class ChatCompletionService {
         const reader = eventStream.readable.getReader();
         return async function* streamData() {
             let text = '';
-            const swipes = [];
             const state = { reasoning: '', images: [], signature: '', toolSignatures: {} };
             while (true) {
                 const { done, value } = await reader.read();
@@ -144,14 +142,9 @@ export class ChatCompletionService {
                     chatCompletionSource: data.chat_completion_source,
                     overrideShowThoughts: true,
                 });
-                if (Array.isArray(parsed?.choices) && parsed?.choices?.[0]?.index > 0) {
-                    const swipeIndex = parsed.choices[0].index - 1;
-                    swipes[swipeIndex] = (swipes[swipeIndex] || '') + reply;
-                } else {
-                    text += reply;
-                }
+                text += reply;
 
-                yield { text, swipes: swipes, state };
+                yield { text, state };
             }
         };
     }

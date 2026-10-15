@@ -148,7 +148,7 @@ export function importKoboldLiteChat(_userName, _characterName, data) {
 }
 
 /**
- * Flattens `msg` and `swipes` data from Chub Chat format.
+ * Flattens nested `msg` data and drops swipe fields from Chub Chat format.
  * Only changes enough to make it compatible with the standard chat serialization format.
  * @param {string} userName User name
  * @param {string} characterName Character name
@@ -156,10 +156,6 @@ export function importKoboldLiteChat(_userName, _characterName, data) {
  * @returns {string} Converted data
  */
 export function flattenChubChat(userName, characterName, lines) {
-    function flattenSwipe(swipe) {
-        return swipe.message ? swipe.message : swipe;
-    }
-
     function convert(line) {
         const lineData = tryParse(line);
         if (!lineData) return line;
@@ -168,9 +164,9 @@ export function flattenChubChat(userName, characterName, lines) {
             lineData.mes = lineData?.mes.message;
         }
 
-        if (lineData?.swipes && Array.isArray(lineData.swipes)) {
-            lineData.swipes = lineData.swipes.map(swipe => flattenSwipe(swipe));
-        }
+        delete lineData.swipes;
+        delete lineData.swipe_id;
+        delete lineData.swipe_info;
 
         return JSON.stringify(lineData);
     }

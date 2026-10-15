@@ -1,16 +1,11 @@
 import { ContractButton } from '../contract/ContractButton';
 import { ContractIconButton } from '../contract/ContractIconButton';
+import { WorkspacePanelChrome } from '../panels/WorkspacePanelChrome';
 export function RegexSettingsPanel() {
     return (
 <div className="regex_settings">
-    <div className="inline-drawer">
-        <div className="inline-drawer-toggle inline-drawer-header">
-            <b data-i18n="ext_regex_title">
-                Regex
-            </b>
-            <div className="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
-        </div>
-        <div className="inline-drawer-content">
+    <WorkspacePanelChrome title="正则" icon="fa-solid fa-code" grabberId="RegexPanelheader">
+        <div>
             <div className="flex-container">
                 <ContractButton id="open_regex_editor" className="menu_button menu_button_icon" label="+ Global" labelKey="ext_regex_new_global_script" nativeTitle title="New global regex script" icon={<i className="fa-solid fa-pen-to-square" aria-hidden="true" />} />
                 <ContractButton id="open_preset_editor" className="menu_button menu_button_icon" label="+ Preset" labelKey="ext_regex_new_preset_script" nativeTitle title="New preset regex script" icon={<i className="fa-solid fa-sliders" aria-hidden="true" />} />
@@ -94,7 +89,7 @@ export function RegexSettingsPanel() {
                 <div id="saved_scoped_scripts" no-scripts-text="No scripts found" data-i18n="[no-scripts-text]No scripts found" className="flex-container regex-script-container flexFlowColumn"></div>
             </div>
         </div>
-    </div>
+    </WorkspacePanelChrome>
 </div>
     );
 }

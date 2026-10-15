@@ -14,7 +14,7 @@ related: [page.chat_workspace, feature.chat_completion_select, feature.custom_ba
 
 ## Page Purpose
 
-Authenticated users complete supported settings work on `/settings`. The workspace shell `设置` entry opens the same React Settings surface as an in-workspace overlay; `/settings` remains the deep-link and full-page mount. Missing React build returns a clear rebuild error rather than a legacy drawer fallback.
+Authenticated users complete supported settings work on `/settings`. The workspace shell `设置` entry opens the same React Settings surface as a top-center drawer (`#SettingsPanel`, same chrome as World Info/Regex); `/settings` remains the deep-link and full-page mount. Missing React build returns a clear rebuild error rather than a legacy drawer fallback.
 
 ## Page Structure (UI Layout)
 
@@ -26,14 +26,14 @@ Authenticated users complete supported settings work on `/settings`. The workspa
 
 6. **Diagnostics sidebar**: collapsed by default behind the header `诊断` toggle; when expanded it shows the optional ownership ledger and payload summary for debugging.
 7. **Save bar**: submits a compatibility payload derived from the loaded document while rewriting only the React-bound fields the user changed; save stays disabled until the form is dirty.
-8. **Workspace panels section (overlay only)**: the in-workspace overlay ends the Providers page with a `消息渲染设置` link that closes the overlay and opens the User Settings drawer (`user-settings-block`), which hosts only the Frontend Frames settings (enable, render depth, ignore-hidden, collapse code block, skip highlight, blob-URL debug, render-while-streaming). Swipe arrows are always on, and the initial long-chat window is fixed at `CHAT_TRUNCATION` = 100 with load-more paginating the same step.
+8. **消息渲染设置 section**: the Providers page ends with the merged Frontend Frames fields (enable, render depth, ignore-hidden, collapse code block, skip highlight, blob-URL debug, render-while-streaming) bound to `power_user.frontend_frames.*` — the former `user-settings-block` drawer is retired, and the fields save through the same dirty-aware form bar. Swipe arrows are always on, and the initial long-chat window is fixed at `CHAT_TRUNCATION` = 100 with load-more paginating the same step.
 
 ## Page-Level Semantic IDs
 
 - `feature.chat_completion_select`: provider and model selection in Providers.
 - `feature.custom_base_url`: the single base URL and unified key in Providers.
 - `feature.fallback_provider`: the model-only fallback field in Providers.
-- `page.chat_workspace`: workspace shell mounts this shared surface's overlay variant through a single Chinese `设置` entry.
+- `page.chat_workspace`: workspace shell mounts this shared surface's drawer variant through a single Chinese `设置` entry.
 
 ## Included Features
 
@@ -45,7 +45,7 @@ Authenticated users complete supported settings work on `/settings`. The workspa
 
 - **Sole-owner route state**: authenticated `/settings` always serves the React settings shell when the React app build exists.
 - **Missing-build state**: absent `app/dist` returns HTTP 503 with rebuild instructions; there is no redirect into workspace legacy settings drawers.
-- **Workspace navigation state**: the shell's single `设置` entry opens the React Settings surface as an in-workspace overlay on the last-used tab without leaving `/`. Direct `/settings` and `/settings?tab=...` remain full-page mounts for deep links, refresh, and share; unknown `?tab=` values fall back to the first tab.
+- **Workspace navigation state**: the shell's single `设置` entry opens the React Settings surface as a top-center drawer (`#SettingsPanel`) on the last-used tab without leaving `/`; it shares drawer mutual exclusion, Escape, and dirty-close guarding with the other central drawers. Direct `/settings` and `/settings?tab=...` remain full-page mounts for deep links, refresh, and share; unknown `?tab=` values fall back to the first tab.
 - **Generation defaults state**: preset selection, context/token limits, sampling, reasoning, continue, prompt-format, and names-behavior values (`oai_settings.*` generation keys) have no editing surface; stored values continue to drive generation unchanged, and React Settings loads and saves them untouched as part of the document.
 - **Auth state**: unauthenticated users are redirected to login.
 - **Dirty / busy / error states**: save is disabled until dirty; save/secret actions expose busy and error feedback without fake success.
@@ -59,10 +59,10 @@ Authenticated users complete supported settings work on `/settings`. The workspa
 
 ## Navigation
 
-- Primary daily entry: workspace shell overlay on [Chat Workspace](page.chat_workspace).
+- Primary daily entry: workspace shell `设置` entry → `#SettingsPanel` top-center drawer on [Chat Workspace](page.chat_workspace).
 - Deep-link / full-page entry: `/settings` for authenticated users.
-- Workspace chrome: the single `设置` entry opens the overlay on the last-used tab (session memory).
-- Full-page return: header link back to [Chat Workspace](page.chat_workspace); overlay uses a close control instead.
+- Workspace chrome: the single `设置` entry opens the drawer on the last-used tab (session memory).
+- Full-page return: header link back to [Chat Workspace](page.chat_workspace); the drawer uses its chrome close control instead.
 
 ## Canonical Settings Document Authority
 

@@ -33,12 +33,6 @@ describe('thumbnail lazy image loading templates', () => {
         expect(indexHtml).not.toContain('id="group_avatars_template"');
     });
 
-    test('swipe picker removes inherited past-chat avatars', () => {
-        const swipePicker = read('public/scripts/swipe-picker.js');
-
-        expect(swipePicker).toContain('template.find(\'.avatar\').remove();');
-    });
-
     test('character past chats keep their avatar template', () => {
         const chatOpsSource = read('public/scripts/chat-ops-service.js');
         const selectChatSource = read('app/components/select-chat/SelectChatList.tsx');

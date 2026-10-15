@@ -68,18 +68,10 @@ import {
     selected_world_info,
     world_names,
     world_info_depth,
-    world_info_min_activations,
-    world_info_min_activations_depth_max,
-    world_info_budget,
     world_info_include_names,
-    world_info_recursive,
-    world_info_overflow_alert,
     world_info_case_sensitive,
     world_info_match_whole_words,
-    world_info_use_group_scoring,
     world_info_character_strategy,
-    world_info_budget_cap,
-    world_info_max_recursion_steps,
     setWorldInfoSetting,
     setSelectedWorldInfo,
     setWorldNames,
@@ -107,18 +99,10 @@ export {
     selected_world_info,
     world_names,
     world_info_depth,
-    world_info_min_activations,
-    world_info_min_activations_depth_max,
-    world_info_budget,
     world_info_include_names,
-    world_info_recursive,
-    world_info_overflow_alert,
     world_info_case_sensitive,
     world_info_match_whole_words,
-    world_info_use_group_scoring,
     world_info_character_strategy,
-    world_info_budget_cap,
-    world_info_max_recursion_steps,
     getWorldInfoSettings,
 } from './world-info-state.js';
 export {
@@ -698,7 +682,7 @@ const MAX_COMMENT_LENGTH = 100;
  * @property {string} characterDepthPrompt Character depth prompt (sometimes referred to as character notes)
  * @property {string} scenario Character defined scenario
  * @property {string} creatorNotes Character creator notes
- * @property {string} trigger The type that triggered the scan, e.g. 'normal', 'continue', etc.
+ * @property {string} trigger The type that triggered the scan, e.g. 'normal', 'quiet', etc.
  */
 
 
@@ -735,30 +719,12 @@ export function setWorldInfoSettings(settings, data) {
     $('#world_info_depth_counter').val(world_info_depth);
     $('#world_info_depth').val(world_info_depth);
 
-    $('#world_info_min_activations_counter').val(world_info_min_activations);
-    $('#world_info_min_activations').val(world_info_min_activations);
-
-    $('#world_info_min_activations_depth_max_counter').val(world_info_min_activations_depth_max);
-    $('#world_info_min_activations_depth_max').val(world_info_min_activations_depth_max);
-
-    $('#world_info_budget_counter').val(world_info_budget);
-    $('#world_info_budget').val(world_info_budget);
-
     $('#world_info_include_names').prop('checked', world_info_include_names);
-    $('#world_info_recursive').prop('checked', world_info_recursive);
-    $('#world_info_overflow_alert').prop('checked', world_info_overflow_alert);
     $('#world_info_case_sensitive').prop('checked', world_info_case_sensitive);
     $('#world_info_match_whole_words').prop('checked', world_info_match_whole_words);
-    $('#world_info_use_group_scoring').prop('checked', world_info_use_group_scoring);
 
     $(`#world_info_character_strategy option[value='${world_info_character_strategy}']`).prop('selected', true);
     $('#world_info_character_strategy').val(world_info_character_strategy);
-
-    $('#world_info_budget_cap').val(world_info_budget_cap);
-    $('#world_info_budget_cap_counter').val(world_info_budget_cap);
-
-    $('#world_info_max_recursion_steps').val(world_info_max_recursion_steps);
-    $('#world_info_max_recursion_steps_counter').val(world_info_max_recursion_steps);
 
     syncWorldInfoSettingsUi();
     ensureWorldInfoRuntimeInitialized();
@@ -2428,7 +2394,7 @@ function registerWorldInfoSlashCommands() {
             <div>
                 Set a timed effect for the record with the UID from the specified book. The duration must be set in the entry itself.
                 Will only be applied for the current chat. Enabling an effect that was already active refreshes the duration.
-                If the last chat message is swiped or deleted, the effect will be removed.
+                If the last chat message is deleted, the effect will be removed.
             </div>
             <div>
                 <strong>Example:</strong>
@@ -3640,8 +3606,6 @@ function setupEditFormBindings(editTemplate, outlet, name, data, entry) {
     const $posControl = $('<div class="world_entry_form_control"><small class="textAlignCenter" data-i18n="Position">Position</small></div>');
     const $posSelect = $(`<select name="position" class="text_pole widthNatural margin0">
         <option value="0" data-role="">WI</option>
-        <option value="5" data-role="">↑EM</option>
-        <option value="6" data-role="">↓EM</option>
         <option value="4" data-role="0">@D ⚙️</option>
         <option value="4" data-role="1">@D 👤</option>
         <option value="4" data-role="2">@D 🤖</option>
@@ -3942,73 +3906,14 @@ function setupEditFormBindings(editTemplate, outlet, name, data, entry) {
     });
     scanDepthInput.val(entry.scanDepth ?? null).trigger('input', { noSave: true });
 
-    // Group
-    const groupInput = editTemplate.find('input[name="group"]');
-    groupInput.data('uid', entry.uid);
-    groupInput.on('input', async function (_, { noSave = false } = {}) {
-        const uid = $(this).data('uid');
-        const value = String($(this).val()).trim();
-        data.entries[uid].group = value;
-        setWIOriginalDataValue(data, uid, 'extensions.group', data.entries[uid].group);
-        if (!noSave) await saveWorldInfo(name, data);
-    });
-    groupInput.val(entry.group ?? '').trigger('input', { noSave: true });
-    setTimeout(() => createEntryInputAutocomplete(groupInput, getInclusionGroupCallback(data), { allowMultiple: true }), 1);
-
-    // Inclusion priority
-    const groupOverrideInput = editTemplate.find('input[name="groupOverride"]');
-    groupOverrideInput.data('uid', entry.uid);
-    groupOverrideInput.on('input', async function (_, { noSave = false } = {}) {
-        const uid = $(this).data('uid');
-        const value = $(this).prop('checked');
-        data.entries[uid].groupOverride = value;
-        setWIOriginalDataValue(data, uid, 'extensions.group_override', data.entries[uid].groupOverride);
-        if (!noSave) await saveWorldInfo(name, data);
-    });
-    groupOverrideInput.prop('checked', entry.groupOverride).trigger('input', { noSave: true });
-
-    // Group weight, sticky, cooldown, delay
-    handleNumberInputHelper({ inputElem: editTemplate.find('input[name="groupWeight"]'), entry, entryKey: 'groupWeight', data, name, min: 1, max: 10000, clamp: true });
+    // Sticky, cooldown, delay
     handleNumberInputHelper({ inputElem: editTemplate.find('input[name="sticky"]'), entry, entryKey: 'sticky', data, name, min: 1, max: 10000, clamp: false });
     handleNumberInputHelper({ inputElem: editTemplate.find('input[name="cooldown"]'), entry, entryKey: 'cooldown', data, name, min: 1, max: 10000, clamp: false });
     handleNumberInputHelper({ inputElem: editTemplate.find('input[name="delay"]'), entry, entryKey: 'delay', data, name, min: 1, max: 10000, clamp: false });
 
-    // Exclude/prevent recursion
-    handleMatchCheckboxHelper({ template: editTemplate, entry, fieldName: 'excludeRecursion', data, name });
-    handleMatchCheckboxHelper({ template: editTemplate, entry, fieldName: 'preventRecursion', data, name });
-
-    // Delay until recursion
-    const delayUntilRecursionInput = editTemplate.find('input[name="delay_until_recursion"]');
-    delayUntilRecursionInput.data('uid', entry.uid);
-    const delayUntilRecursionLevelInput = editTemplate.find('input[name="delayUntilRecursionLevel"]');
-    delayUntilRecursionLevelInput.data('uid', entry.uid);
-    delayUntilRecursionInput.on('input', async function (_, { noSave = false } = {}) {
-        const uid = $(this).data('uid');
-        const toggled = $(this).prop('checked');
-        const value = toggled ? data.entries[uid].delayUntilRecursion || true : false;
-        if (!toggled) delayUntilRecursionLevelInput.val('');
-        data.entries[uid].delayUntilRecursion = value;
-        setWIOriginalDataValue(data, uid, 'extensions.delay_until_recursion', data.entries[uid].delayUntilRecursion);
-        if (!noSave) await saveWorldInfo(name, data);
-    });
-    delayUntilRecursionInput.prop('checked', entry.delayUntilRecursion).trigger('input', { noSave: true });
-    delayUntilRecursionLevelInput.on('input', async function (_, { noSave = false } = {}) {
-        const uid = $(this).data('uid');
-        const content = $(this).val();
-        const value = content === '' ? (typeof data.entries[uid].delayUntilRecursion === 'boolean' ? data.entries[uid].delayUntilRecursion : true)
-            : content === 1 ? true
-                : !isNaN(Number(content)) ? Number(content)
-                    : false;
-        data.entries[uid].delayUntilRecursion = value;
-        setWIOriginalDataValue(data, uid, 'extensions.delay_until_recursion', data.entries[uid].delayUntilRecursion);
-        if (!noSave) await saveWorldInfo(name, data);
-    });
-    delayUntilRecursionLevelInput.val(['number', 'string'].includes(typeof entry.delayUntilRecursion) ? entry.delayUntilRecursion : '').trigger('input', { noSave: true });
-
     // Boolean selects
     handleBooleanSelectHelper({ selectElem: editTemplate.find('select[name="caseSensitive"]'), entry, entryKey: 'caseSensitive', data, name });
     handleBooleanSelectHelper({ selectElem: editTemplate.find('select[name="matchWholeWords"]'), entry, entryKey: 'matchWholeWords', data, name });
-    handleBooleanSelectHelper({ selectElem: editTemplate.find('select[name="useGroupScoring"]'), entry, entryKey: 'useGroupScoring', data, name });
 
     // Match checkboxes
     handleMatchCheckboxHelper({ template: editTemplate, entry, fieldName: 'matchCharacterDescription', data, name });
@@ -4043,18 +3948,6 @@ function setupEditFormBindings(editTemplate, outlet, name, data, entry) {
         generationTypeTriggers.select2({ placeholder: t`All types (default)`, width: '100%', closeOnSelect: false, allowClear: true });
     }
     generationTypeTriggers.val(Array.isArray(entry.triggers) ? entry.triggers : []).trigger('input', { noSave: true }).trigger('change');
-
-    // Ignore budget
-    const ignoreBudgetInput = editTemplate.find('input[name="ignoreBudget"]');
-    ignoreBudgetInput.data('uid', entry.uid);
-    ignoreBudgetInput.on('input', async function (_, { noSave = false } = {}) {
-        const uid = $(this).data('uid');
-        const value = $(this).prop('checked');
-        data.entries[uid].ignoreBudget = value;
-        setWIOriginalDataValue(data, uid, 'extensions.ignore_budget', data.entries[uid].ignoreBudget);
-        if (!noSave) await saveWorldInfo(name, data);
-    });
-    ignoreBudgetInput.prop('checked', entry.ignoreBudget ?? false).trigger('input', { noSave: true });
 
     countTokensDebounced(counter, contentInput.val());
 
@@ -4130,36 +4023,10 @@ function buildAutocompleteCallback({ data, collectValues, includeExtras = () => 
 }
 
 /**
- * Splits a string into an array of strings, separated by commas and trimmed
- * @param {string} s - The string to split
- * @returns {string[]} An array of strings, separated by commas and trimmed
- */
-const splitCsv = s => String(s ?? '').split(/,\s*/).filter(Boolean);
-
-/**
- * Get the inclusion groups for the autocomplete.
+ * Get the automation IDs for the autocomplete.
  * @param {any} data WI data
  * @returns {(input: any, output: any) => any} Callback function for the autocomplete
  */
-function getInclusionGroupCallback(data) {
-    return buildAutocompleteCallback({
-        data,
-        collectValues: entry => entry.group ? splitCsv(entry.group) : [],
-        postFilter: ({ result, control, input, haystack }) => {
-            const thisGroups = splitCsv(String($(control).val()));
-            const needle = String(input.term ?? '').toLowerCase();
-            const hasExactMatch = haystack.some(x => x.toLowerCase() === needle);
-
-            // include suggestion if it contains the needle AND
-            // (not already present OR (exact match typed && appears only once))
-            return result.filter(x =>
-                !thisGroups.includes(x) ||
-                (hasExactMatch && thisGroups.filter(g => g === x).length === 1),
-            );
-        },
-    });
-}
-
 function getAutomationIdCallback(data) {
     return buildAutocompleteCallback({
         data,
@@ -5259,38 +5126,8 @@ export function initWorldInfo() {
             saveSettings();
         });
 
-        $('#world_info_min_activations').on('input', function () {
-            setWorldInfoSetting('world_info_min_activations', $(this).val());
-            $('#world_info_min_activations_counter').val(world_info_min_activations);
-
-            if (world_info_min_activations !== 0 && world_info_max_recursion_steps !== 0) {
-                $('#world_info_max_recursion_steps').val(0).trigger('input');
-                flashHighlight($('#world_info_max_recursion_steps').parent());
-                console.info('[WI] Max recursion steps set to 0, as min activations is set to', world_info_min_activations);
-            } else {
-                saveSettings();
-            }
-        });
-
-        $('#world_info_min_activations_depth_max').on('input', function () {
-            setWorldInfoSetting('world_info_min_activations_depth_max', $(this).val());
-            $('#world_info_min_activations_depth_max_counter').val($(this).val());
-            saveSettings();
-        });
-
-        $('#world_info_budget').on('input', function () {
-            setWorldInfoSetting('world_info_budget', $(this).val());
-            $('#world_info_budget_counter').val($(this).val());
-            saveSettings();
-        });
-
         $('#world_info_include_names').on('input', function () {
             setWorldInfoSetting('world_info_include_names', $(this).prop('checked'));
-            saveSettings();
-        });
-
-        $('#world_info_recursive').on('input', function () {
-            setWorldInfoSetting('world_info_recursive', $(this).prop('checked'));
             saveSettings();
         });
 
@@ -5307,34 +5144,6 @@ export function initWorldInfo() {
         $('#world_info_character_strategy').on('change', function () {
             setWorldInfoSetting('world_info_character_strategy', $(this).val());
             saveSettings();
-        });
-
-        $('#world_info_overflow_alert').on('change', function () {
-            setWorldInfoSetting('world_info_overflow_alert', $(this).prop('checked'));
-            saveSettingsDebounced();
-        });
-
-        $('#world_info_use_group_scoring').on('change', function () {
-            setWorldInfoSetting('world_info_use_group_scoring', $(this).prop('checked'));
-            saveSettingsDebounced();
-        });
-
-        $('#world_info_budget_cap').on('input', function () {
-            setWorldInfoSetting('world_info_budget_cap', $(this).val());
-            $('#world_info_budget_cap_counter').val(world_info_budget_cap);
-            saveSettings();
-        });
-
-        $('#world_info_max_recursion_steps').on('input', function () {
-            setWorldInfoSetting('world_info_max_recursion_steps', $(this).val());
-            $('#world_info_max_recursion_steps_counter').val(world_info_max_recursion_steps);
-            if (world_info_max_recursion_steps !== 0 && world_info_min_activations !== 0) {
-                $('#world_info_min_activations').val(0).trigger('input');
-                flashHighlight($('#world_info_min_activations').parent());
-                console.info('[WI] Min activations set to 0, as max recursion steps is set to', world_info_max_recursion_steps);
-            } else {
-                saveSettings();
-            }
         });
 
         $('#world_button').on('click', async function (event) {
@@ -5529,7 +5338,7 @@ export function initWorldInfo() {
         }
 
         $('#WorldInfo').on('scroll', () => {
-            $('.world_entry input[name="group"], .world_entry input[name="automationId"]').each((_, el) => {
+            $('.world_entry input[name="automationId"]').each((_, el) => {
                 const instance = $(el).autocomplete('instance');
 
                 if (instance !== undefined) {

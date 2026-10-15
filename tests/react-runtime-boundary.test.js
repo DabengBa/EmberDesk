@@ -24,7 +24,7 @@ describe('React runtime boundary', () => {
         );
 
         expect(commandsSource).toContain(
-            "export type MainChatGenerationKind = 'submitComposer' | 'continueLast' | 'retryGeneration' | 'swipeLeft' | 'swipeRight';",
+            "export type MainChatGenerationKind = 'submitComposer';",
         );
         expect(commandsSource).toContain('kind: MainChatGenerationKind;');
         expect(commandsSource).not.toContain('export interface MainChatGenerationCommand {\n    kind: string;');
@@ -103,7 +103,7 @@ describe('React runtime boundary', () => {
         expect(recoveryBlock).toContain('setMainChatMessageUiState');
         expect(recoveryBlock.indexOf('return;')).toBeLessThan(recoveryBlock.indexOf('const messageElement'));
         expect(recoveryBlock).toContain("messageElement.find('.mes_text').after");
-        expect(recoveryBlock).toContain("messageElement.find('.mes_buttons').append");
+        expect(recoveryBlock).toContain("messageElement.find('.generation_failure_notice').length");
 
         const editorBlock = scriptSource.match(
             /export async function messageEdit\([\s\S]*?async function messageEditDone/,
@@ -116,85 +116,21 @@ describe('React runtime boundary', () => {
         expect(editorBlock.indexOf('return;')).toBeLessThan(editorBlock.indexOf('const messageElement'));
     });
 
-    test('does not let legacy retry delegation re-fire React-owned generation commands', () => {
-        const scriptSource = fs.readFileSync(
-            path.join(repoRoot, 'public', 'scripts', 'dom-handlers.js'),
-            'utf8',
-        );
-        const retryHandler = scriptSource.match(
-            /\$\(document\)\.on\('click keydown', '\.generation_failure_retry', function \(event\) \{[\s\S]*?\n    \}\);/,
-        )?.[0] ?? '';
-
-        expect(retryHandler).toContain(
-            "if (isReactMainChatOwner() && $(this).closest('[data-main-chat-message-row-owner=\"react\"]').length > 0) {",
-        );
-        expect(retryHandler.indexOf('return;')).toBeLessThan(retryHandler.indexOf("$('#option_regenerate').trigger('click');"));
-    });
-
-    test('keeps React-owned swipe transitions data-driven instead of reading message DOM', () => {
-        const scriptSource = fs.readFileSync(
-            path.join(repoRoot, 'public', 'scripts', 'generation-service.js'),
-            'utf8',
-        );
-        const reactSwipeStart = scriptSource.indexOf(
-            'if (isReactMainChatOwner()) {\n        return runReactMainChatSwipe();',
-        );
-        const reactSwipeEnd = scriptSource.indexOf(
-            '\n    if ([SWIPE_SOURCE.DELETE',
-            reactSwipeStart,
-        );
-        const reactSwipeBlock = reactSwipeStart >= 0 && reactSwipeEnd > reactSwipeStart
-            ? scriptSource.slice(reactSwipeStart, reactSwipeEnd)
-            : '';
-
-        expect(reactSwipeBlock).toContain('syncSwipeToMes');
-        expect(reactSwipeBlock).toContain('void mountReactMainChatMessageListPanel();');
-        expect(reactSwipeBlock).not.toMatch(/querySelector|closest\('\.mes'\)|\.mes_text|innerHTML|scrollHeight/);
-    });
-
-    test('projects swipe visibility semantics into React message rows', () => {
-        const projectionSource = fs.readFileSync(
-            path.join(repoRoot, 'public', 'scripts', 'main-chat-store-projection.js'),
-            'utf8',
-        );
-        const rowSource = fs.readFileSync(
-            path.join(repoRoot, 'app', 'components', 'main-chat', 'MainChatMessageRow.tsx'),
-            'utf8',
-        );
-
-        expect(projectionSource).toContain('swipesVisible');
-        expect(projectionSource).toContain('lastSwipe');
-        expect(rowSource).toContain("...(message.swipesVisible ? ['swipes_visible'] : [])");
-        expect(rowSource).toContain("...(message.lastSwipe ? ['last_swipe'] : [])");
-    });
-
-    test('keeps React-owned context and swipe controls in the snapshot path', () => {
+    test('keeps React-owned in-context marker in the snapshot path', () => {
         const scriptSource = fs.readFileSync(
             path.join(repoRoot, 'public', 'script.js'),
-            'utf8',
-        );
-        const generationServiceSource = fs.readFileSync(
-            path.join(repoRoot, 'public', 'scripts', 'generation-service.js'),
             'utf8',
         );
         const contextBlock = scriptSource.match(
             /function setInContextMessages\([\s\S]*?\n\}\n\n\/\*\*\n \* @typedef \{object\} AdditionalRequestOptions/,
         )?.[0] ?? '';
-        const refreshBlock = generationServiceSource.match(
-            /export function refreshSwipeButtons\([\s\S]*?\n\}\n+\/\*\*\n \* This function is misleadingly named/,
-        )?.[0] ?? '';
         const reactContextBranch = contextBlock.match(
-            /if \(isReactMainChatOwner\(\)\) \{[\s\S]*?return;\n    \}/,
-        )?.[0] ?? '';
-        const reactRefreshBranch = refreshBlock.match(
             /if \(isReactMainChatOwner\(\)\) \{[\s\S]*?return;\n    \}/,
         )?.[0] ?? '';
 
         expect(reactContextBranch).toContain('if (isReactMainChatOwner())');
         expect(reactContextBranch).toContain("setMainChatMessageUiState(lastMessageId, { lastInContext: true });");
         expect(reactContextBranch).not.toContain("chatElement.find('.mes').removeClass('lastInContext')");
-        expect(reactRefreshBranch).toContain('if (isReactMainChatOwner())');
-        expect(reactRefreshBranch).not.toContain("chatElement.children('.mes[mesid]')");
     });
 
     test('moves React-owned messages without reading legacy message DOM', () => {
@@ -240,7 +176,7 @@ describe('React runtime boundary', () => {
         expect(rowSource).toContain('commands?.moveMessage(numericMessageId,');
         expect(scriptSource).toContain('copyMessage: messageId => copyMainChatMessage(messageId)');
         expect(scriptSource).toContain('duplicateMessage: messageId => duplicateMainChatMessage(messageId)');
-        expect(scriptSource).toContain('deleteMessage(\n                messageId,\n                undefined,\n                true,');
+        expect(scriptSource).toContain('deleteMessage(\n                messageId,\n                true,');
         expect(scriptSource).toContain('moveMessage: (messageId, direction) =>');
     });
 

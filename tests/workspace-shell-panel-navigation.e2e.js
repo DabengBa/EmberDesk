@@ -30,10 +30,29 @@ async function expectShellPanelVisible(page, entry) {
     await expect(page.locator(entry.visibleSelector)).toBeVisible({ timeout: 10_000 });
 }
 
+// Wide-desktop first runs seed both side drawers open+locked; tests that
+// exercise the open→close toggle contract must unpin and close them first so
+// the shell starts from a deterministic state.
+async function resetSeededSideDrawers(page) {
+    await page.evaluate(() => {
+        for (const id of ['left-nav-panel', 'right-nav-panel']) {
+            document.getElementById(id)?.classList.remove('pinnedOpen');
+        }
+    });
+    for (const label of ['提示词', '角色库']) {
+        const button = page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: label });
+        if (await button.getAttribute('aria-pressed') === 'true') {
+            await clickShellPanel(page, label);
+            await expect(button).toHaveAttribute('aria-pressed', 'false', { timeout: 15_000 });
+        }
+    }
+}
+
 test.describe('workspace shell panel navigation', () => {
     test('primary registry entries expose unified pressed state without redundant status copy', async ({ page }) => {
         test.setTimeout(120_000);
         await testSetup.awaitST({ page });
+        await resetSeededSideDrawers(page);
 
         const registryEntries = [
             { label: '角色库', visibleSelector: '#right-nav-panel.openDrawer #rm_characters_block' },
@@ -62,6 +81,7 @@ test.describe('workspace shell panel navigation', () => {
 
     test('panel entries can close and reopen the same panel', async ({ page }) => {
         await testSetup.awaitST({ page });
+        await resetSeededSideDrawers(page);
 
         await clickShellPanel(page, '角色库');
         await expectActivePanel(page, '角色库');
@@ -69,6 +89,27 @@ test.describe('workspace shell panel navigation', () => {
 
         await clickShellPanel(page, '角色库');
         await expectNoActivePanel(page);
+    });
+
+    test('clicking outside a drawer persists the closed state across reload', async ({ page }) => {
+        await testSetup.awaitST({ page });
+        await resetSeededSideDrawers(page);
+
+        await clickShellPanel(page, '正则');
+        await expect(page.locator('#RegexPanel')).toHaveClass(/openDrawer/, { timeout: 15_000 });
+
+        // Clicking elsewhere in the app autocloses the drawer; the close must
+        // persist — a stale "opened" key used to resurrect it on every reload.
+        await page.locator('#send_textarea').click();
+        await expect(page.locator('#RegexPanel')).toHaveClass(/closedDrawer/, { timeout: 15_000 });
+        await expect.poll(async () => page.evaluate(async () => {
+            const { accountStorage } = await import('/scripts/util/AccountStorage.js');
+            return accountStorage.getItem('RegexNavOpened');
+        })).toBe('false');
+
+        await page.reload();
+        await testSetup.awaitST({ page });
+        await expect(page.locator('#RegexPanel')).toHaveClass(/closedDrawer/, { timeout: 15_000 });
         await expect(page.locator('#right-nav-panel')).toHaveClass(/closedDrawer/);
 
         await clickShellPanel(page, '角色库');
@@ -83,16 +124,13 @@ test.describe('workspace shell panel navigation', () => {
         await panelButton.click({ timeout: 10_000 });
         await expect(panelButton).toHaveAttribute('aria-pressed', 'true', { timeout: 10_000 });
 
-        // The top bar no longer renders a pin toggle; pinning is owned by the
-        // drawer's own lock checkbox (writes .pinnedOpen on the drawer host).
+        // No pin toggles render anywhere; lock state is the .pinnedOpen class
+        // on the drawer host (seeded by the init pass / persisted storage).
         await expect(page.locator('[data-workspace-shell-panel-pin]')).toHaveCount(0);
+        await expect(page.locator('#rm_button_panel_pin, #lm_button_panel_pin, .wpc-pin-input')).toHaveCount(0);
 
         await page.evaluate(() => {
-            const pinCheckbox = document.getElementById('rm_button_panel_pin');
-            if (!(pinCheckbox instanceof HTMLInputElement)) {
-                throw new Error('right-nav drawer pin checkbox missing');
-            }
-            pinCheckbox.click();
+            document.getElementById('right-nav-panel')?.classList.add('pinnedOpen');
         });
         await expect(page.locator('#right-nav-panel')).toHaveClass(/pinnedOpen/);
 
@@ -183,83 +221,85 @@ test.describe('workspace shell panel navigation', () => {
         await expect(page.locator('#RegexPanel .regex_settings')).toHaveCount(1);
         await expect(page.locator('#regex_container')).toHaveCount(0);
 
-        // The settings inline drawer starts collapsed; expanding reveals the feature controls.
-        await page.locator('#RegexPanel .regex_settings .inline-drawer-toggle').click();
+        // The regex drawer shares the top-center chrome (title row only — no
+        // pin/close controls) and shows the feature controls directly — no
+        // nested inline-drawer shell.
+        await expect(page.locator('#RegexPanel .workspace-panel-chrome .wpc-header')).toHaveCount(1);
+        await expect(page.locator('#RegexPanel .workspace-panel-chrome .wpc-pin-input, #RegexPanel .wpc-close')).toHaveCount(0);
         await expect(page.locator('#RegexPanel .regex_settings #open_regex_editor')).toBeVisible({ timeout: 10_000 });
     });
-    test('opens Settings shell entry as in-workspace overlay instead of leaving chat', async ({ page }) => {
+    test('opens Settings shell entry as an in-workspace drawer instead of leaving chat', async ({ page }) => {
         test.setTimeout(120_000);
         await testSetup.awaitST({ page });
         const settingsButton = page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: '设置' });
         await settingsButton.click({ timeout: 10_000 });
         await expect(page).toHaveURL(/\/(?:\?|$)/);
-        await expect(page.locator('[data-settings-overlay="true"]')).toBeVisible({ timeout: 15_000 });
-        await expect(page.locator('[data-settings-overlay="true"] .settings-page')).toBeVisible({ timeout: 15_000 });
+        await expect(page.locator('#SettingsPanel.openDrawer')).toBeVisible({ timeout: 15_000 });
+        await expect(page.locator('#SettingsPanel [data-settings-surface="drawer"]')).toBeVisible({ timeout: 15_000 });
         await expect(page.locator('#user-settings-block.openDrawer')).toHaveCount(0);
         await expect(settingsButton).toHaveAttribute('aria-pressed', 'true');
-        // The advanced tab is retired; the overlay is a single providers page
+        // The advanced tab is retired; the drawer hosts a single providers page
         // with no tab strip.
-        await expect(page.locator('[data-settings-overlay="true"] .settings-tab')).toHaveCount(0);
-        const modelField = page.locator('[data-settings-overlay="true"] #settings-providers-fallbackProviderModel');
+        await expect(page.locator('#SettingsPanel .settings-tab')).toHaveCount(0);
+        const modelField = page.locator('#SettingsPanel #settings-providers-fallbackProviderModel');
         await expect(modelField).toBeVisible();
         // The fallback model is auxiliary: editing it dirties the form without
         // touching fields sibling tests depend on. Restore it before closing.
         const originalFallback = await modelField.inputValue();
         await modelField.fill('e2e-shell-fallback');
-        const saveButton = page.locator('[data-settings-overlay="true"] button[type="submit"]');
+        const saveButton = page.locator('#SettingsPanel button[type="submit"]');
         await expect(saveButton).toBeEnabled();
         await saveButton.focus();
         await page.keyboard.press('Enter');
-        await expect(page.locator('[data-settings-overlay="true"] .settings-status--success')).toContainText('已保存', { timeout: 30_000 });
+        await expect(page.locator('#SettingsPanel .settings-status--success')).toContainText('已保存', { timeout: 30_000 });
         await modelField.fill(originalFallback);
         if (await saveButton.isEnabled()) {
             await saveButton.click();
-            await expect(page.locator('[data-settings-overlay="true"] .settings-status--success')).toContainText('已保存', { timeout: 30_000 });
+            await expect(page.locator('#SettingsPanel .settings-status--success')).toContainText('已保存', { timeout: 30_000 });
         }
         await page.keyboard.press('Escape');
-        await expect(page.locator('[data-settings-overlay="true"]')).toHaveCount(0, { timeout: 15_000 });
-        await expect(settingsButton).toBeFocused();
-        await expect(settingsButton).toHaveAttribute('aria-pressed', 'false');
+        await expect(page.locator('#SettingsPanel')).toHaveClass(/closedDrawer/, { timeout: 15_000 });
+        await expect(settingsButton).toHaveAttribute('aria-pressed', 'false', { timeout: 15_000 });
 
         await settingsButton.click({ timeout: 10_000 });
-        await expect(page.locator('[data-settings-overlay="true"]')).toBeVisible({ timeout: 15_000 });
+        await expect(page.locator('#SettingsPanel.openDrawer')).toBeVisible({ timeout: 15_000 });
         await settingsButton.click({ timeout: 10_000 });
-        await expect(page.locator('[data-settings-overlay="true"]')).toHaveCount(0, { timeout: 15_000 });
+        await expect(page.locator('#SettingsPanel')).toHaveClass(/closedDrawer/, { timeout: 15_000 });
         await expect(settingsButton).toHaveAttribute('aria-pressed', 'false');
         await expect(page.locator('#send_textarea')).toBeVisible();
     });
 
-    test('keeps Settings fields reachable in a narrow workspace overlay', async ({ page }) => {
+    test('keeps Settings fields reachable in a narrow workspace drawer', async ({ page }) => {
         test.setTimeout(120_000);
         await page.setViewportSize({ width: 375, height: 812 });
         await testSetup.awaitST({ page });
 
         const settingsButton = page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: '设置' });
         await settingsButton.click({ timeout: 10_000 });
-        const overlay = page.locator('[data-settings-overlay="true"]');
-        await expect(overlay).toBeVisible({ timeout: 15_000 });
-        await expect(overlay.locator('input, select, textarea').first()).toBeVisible({ timeout: 30_000 });
-        const closeButton = overlay.getByRole('button', { name: '关闭设置' });
-        await expect(closeButton).toBeVisible();
-        await expect.poll(async () => closeButton.evaluate(node => {
-            const panel = node.closest('.settings-page');
+        const drawer = page.locator('#SettingsPanel.openDrawer');
+        await expect(drawer).toBeVisible({ timeout: 15_000 });
+        await expect(drawer.locator('input, select, textarea').first()).toBeVisible({ timeout: 30_000 });
+        const titleRow = drawer.locator('.wpc-title');
+        await expect(titleRow).toBeVisible();
+        await expect.poll(async () => titleRow.evaluate(node => {
+            const panel = node.closest('.drawer-content');
             return panel
                 ? node.getBoundingClientRect().width < panel.getBoundingClientRect().width / 2
                 : false;
         })).toBe(true);
-        await expect.poll(async () => overlay.locator('.settings-tab-panel').evaluate(node => ({
+        await expect.poll(async () => drawer.locator('.settings-tab-panel').evaluate(node => ({
             clientHeight: node.clientHeight,
             scrollHeight: node.scrollHeight,
         }))).toEqual(expect.objectContaining({
             clientHeight: expect.any(Number),
             scrollHeight: expect.any(Number),
         }));
-        await expect.poll(async () => overlay.locator('.settings-tab-panel').evaluate(node => (
+        await expect.poll(async () => drawer.locator('.settings-tab-panel').evaluate(node => (
             node.clientHeight > 100 && node.scrollHeight >= node.clientHeight
         ))).toBe(true);
     });
 
-    test('opens the unified Settings shell entry into the settings overlay without route jump', async ({ page }) => {
+    test('opens the unified Settings shell entry into the settings drawer without route jump', async ({ page }) => {
         await testSetup.awaitST({ page });
 
         // AI Config / Formatting / Settings were merged into a single 设置 entry.
@@ -269,53 +309,57 @@ test.describe('workspace shell panel navigation', () => {
         const settingsButton = page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: '设置' });
         await settingsButton.click({ timeout: 10_000 });
         await expect(page).toHaveURL(/\/(?:\?|$)/);
-        await expect(page.locator('[data-settings-overlay="true"]')).toBeVisible({ timeout: 15_000 });
+        await expect(page.locator('#SettingsPanel.openDrawer')).toBeVisible({ timeout: 15_000 });
         // Single-tab settings: no tab strip, providers fields render directly.
-        await expect(page.locator('[data-settings-overlay="true"] .settings-tab')).toHaveCount(0);
-        await expect(page.locator('[data-settings-overlay="true"] #settings-providers-openaiModel')).toBeVisible({ timeout: 15_000 });
+        await expect(page.locator('#SettingsPanel .settings-tab')).toHaveCount(0);
+        await expect(page.locator('#SettingsPanel #settings-providers-openaiModel')).toBeVisible({ timeout: 15_000 });
 
         await page.keyboard.press('Escape');
-        await expect(page.locator('[data-settings-overlay="true"]')).toHaveCount(0, { timeout: 10_000 });
-        await expect(settingsButton).toBeFocused();
+        await expect(page.locator('#SettingsPanel')).toHaveClass(/closedDrawer/, { timeout: 10_000 });
 
         await settingsButton.focus();
         await page.keyboard.press('Tab');
         await expect(page.locator(':focus')).toBeVisible();
     });
 
-    test('opens legacy-owned workspace drawers from the settings overlay links', async ({ page }) => {
+    test('hosts the merged message-rendering fields inside the settings drawer', async ({ page }) => {
         await testSetup.awaitST({ page });
 
         const settingsButton = page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: '设置' });
         await settingsButton.click({ timeout: 10_000 });
-        await expect(page.locator('[data-settings-overlay="true"]')).toBeVisible({ timeout: 15_000 });
+        await expect(page.locator('#SettingsPanel.openDrawer')).toBeVisible({ timeout: 15_000 });
 
-        await expect(page.locator('[data-settings-overlay="true"] .settings-tab')).toHaveCount(0);
+        await expect(page.locator('#SettingsPanel .settings-tab')).toHaveCount(0);
 
-        // The AI Response Configuration / API Connections drawers are retired;
-        // no such workspace links may exist.
-        const aiConfigLink = page.locator('[data-settings-overlay="true"] button').filter({ hasText: '打开 AI 响应配置' });
-        const apiConnectionsLink = page.locator('[data-settings-overlay="true"] button').filter({ hasText: 'Open API Connections' });
+        // The user-settings drawer is gone entirely — no host, no link out.
+        await expect(page.locator('#user-settings-block, #user-settings-button')).toHaveCount(0);
+        const aiConfigLink = page.locator('#SettingsPanel button').filter({ hasText: '打开 AI 响应配置' });
+        const apiConnectionsLink = page.locator('#SettingsPanel button').filter({ hasText: 'Open API Connections' });
         await expect(aiConfigLink).toHaveCount(0);
         await expect(apiConnectionsLink).toHaveCount(0);
 
-        const userSettingsLink = page.locator('[data-settings-overlay="true"] button').filter({ hasText: '打开用户设置' });
-        await expect(userSettingsLink).toBeVisible();
-        await userSettingsLink.click();
-        await expect(page.locator('[data-settings-overlay="true"]')).toHaveCount(0, { timeout: 10_000 });
-        await expect(page.locator('#user-settings-block.openDrawer')).toBeVisible({ timeout: 10_000 });
-        // The Frontend Frames controls live inside a collapsed inline drawer;
-        // assert its always-visible toggle header as proof the panel mounted.
-        await expect(page.locator('#user-settings-block .inline-drawer-toggle').filter({ hasText: 'Frontend Frames' })).toBeVisible({ timeout: 10_000 });
+        // The Frontend Frames fields render inline as React form fields.
+        await expect(page.locator('#SettingsPanel')).toContainText('消息渲染设置');
+        const framesToggle = page.locator('#settings-rendering-frontendFramesEnabled');
+        await expect(framesToggle).toBeVisible();
+        await expect(page.locator('#settings-rendering-frontendFramesDepth')).toBeVisible();
+        await expect(page.locator('#settings-rendering-frontendFramesCollapseCodeBlock')).toBeVisible();
+        await expect(page.locator('#settings-rendering-frontendFramesAllowStreaming')).toBeVisible();
 
-        await settingsButton.click({ timeout: 10_000 });
-        await expect(page.locator('[data-settings-overlay="true"]')).toBeVisible({ timeout: 15_000 });
-        // Named formatting presets and the advanced tab are retired; the user
-        // settings drawer link lives on the single providers page.
-        await expect(page.locator('[data-settings-overlay="true"] [data-formatting-preset-row]')).toHaveCount(0);
-        await expect(page.locator('[data-settings-overlay="true"] [data-formatting-master-actions]')).toHaveCount(0);
-        await expect(page.locator('[data-settings-overlay="true"] button').filter({ hasText: '打开高级格式' })).toHaveCount(0);
-        await expect(page.locator('[data-settings-overlay="true"] button').filter({ hasText: '打开用户设置' })).toBeVisible();
+        // Toggling a merged field dirties the form through the normal save flow:
+        // the save button enables and the dirty-close guard intercepts Escape —
+        // auto-dismissed confirms refuse the close, so the drawer stays open.
+        const saveButton = page.locator('#SettingsPanel button[type="submit"]');
+        await expect(saveButton).toBeDisabled();
+        await framesToggle.click();
+        await expect(saveButton).toBeEnabled({ timeout: 10_000 });
+        await page.keyboard.press('Escape');
+        await expect(page.locator('#SettingsPanel.openDrawer')).toBeVisible();
+
+        // Named formatting presets and the advanced tab are retired.
+        await expect(page.locator('#SettingsPanel [data-formatting-preset-row]')).toHaveCount(0);
+        await expect(page.locator('#SettingsPanel [data-formatting-master-actions]')).toHaveCount(0);
+        await expect(page.locator('#SettingsPanel button').filter({ hasText: '打开高级格式' })).toHaveCount(0);
     });
 
     test('exposes no retired AI Response Configuration shell entry', async ({ page }) => {
@@ -323,15 +367,16 @@ test.describe('workspace shell panel navigation', () => {
 
         const presetsButton = page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: 'AI 响应配置' });
         await expect(presetsButton).toHaveCount(0);
-        await expect(page.locator('#left-nav-panel')).toHaveCount(0);
+        // #left-nav-panel survives as the live prompt-manager drawer host.
+        await expect(page.locator('#left-nav-panel')).toHaveCount(1);
     });
 
-    test('keeps a reopened Settings overlay mounted when a deferred close is superseded', async ({ page }) => {
+    test('keeps a reopened Settings drawer mounted when a deferred close is superseded', async ({ page }) => {
         await testSetup.awaitST({ page });
 
         const settingsButton = page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: '设置' });
         await settingsButton.click({ timeout: 10_000 });
-        await expect(page.locator('[data-settings-overlay="true"]')).toBeVisible({ timeout: 15_000 });
+        await expect(page.locator('#SettingsPanel.openDrawer')).toBeVisible({ timeout: 15_000 });
 
         await page.evaluate(() => {
             const buttons = Array.from(document.querySelectorAll('[data-react-workspace-shell-chrome] nav button'));
@@ -340,9 +385,9 @@ test.describe('workspace shell panel navigation', () => {
             settings?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
         });
 
-        await expect(page.locator('[data-settings-overlay="true"]')).toBeVisible({ timeout: 15_000 });
-        await expect(page.locator('[data-settings-overlay="true"] .settings-tab')).toHaveCount(0);
-        await expect(page.locator('[data-settings-overlay="true"] #settings-providers-openaiModel')).toBeVisible({ timeout: 15_000 });
+        await expect(page.locator('#SettingsPanel.openDrawer')).toBeVisible({ timeout: 15_000 });
+        await expect(page.locator('#SettingsPanel .settings-tab')).toHaveCount(0);
+        await expect(page.locator('#SettingsPanel #settings-providers-openaiModel')).toBeVisible({ timeout: 15_000 });
         await expect(settingsButton).toHaveAttribute('aria-pressed', 'true');
     });
 });

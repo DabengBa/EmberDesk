@@ -12,9 +12,9 @@ import {
     menu_type,
     substituteParams,
     sendTextareaMessage,
-    isSwipingAllowed,
     openWorkspaceChildSlotHost,
     closeWorkspaceChildSlotHost,
+    openWorkspaceShellPromptManager,
     openWorkspaceShellWorldInfo,
 } from '../script.js';
 
@@ -30,7 +30,7 @@ import {
 import { debounce, getStringHash, isValidUrl } from './utils.js';
 import { chat_completion_sources, connectProviderConnection, oai_settings } from './openai.js';
 import { getTokenCountAsync } from './tokenizers.js';
-import { debounce_timeout, SWIPE_SOURCE } from './constants.js';
+import { debounce_timeout } from './constants.js';
 
 import { Popup } from './popup.js';
 import { accountStorage } from './util/AccountStorage.js';
@@ -38,11 +38,12 @@ import { getCurrentUserHandle } from './user.js';
 import { getComposerValue, setComposerValue } from './main-chat-composer-service.js';
 
 // Populated in initRossMods: drawer/panel markup is React-mounted after module eval.
-var RPanelPin = null;
-var WIPanelPin = null;
+// The settings drawer opener is injected by script.js — importing it here would
+// add a new script.js reverse import (composition-root contract forbids that).
+var injectedOpenWorkspaceShellSettings = null;
 
 var RightNavPanel = null;
-var WorldInfo = null;
+var LNavPanel = null;
 
 var SelectedCharacterTab = null;
 
@@ -269,17 +270,33 @@ function RA_autoconnect(_PrevApi) {
 }
 
 function OpenNavPanels() {
-    if (!isMobile()) {
-        //auto-open R nav if locked and previously open
-        if (accountStorage.getItem('NavLockOn') == 'true' && accountStorage.getItem('NavOpened') == 'true') {
-            //console.log("RA -- opening right nav");
-            void openWorkspaceChildSlotHost('right-nav-panel');
+    // Below 1000px the mobile stylesheet renders open drawers as full-screen
+    // overlays — auto-opening one would cover the whole workspace even on a
+    // narrow desktop window, so the auto-open only applies on wide viewports.
+    if (!isMobile() && window.innerWidth > 1000) {
+        // Restore drawers that were open when the shell last unloaded. The
+        // restore must not close sibling drawers: these opens land
+        // asynchronously and would otherwise clobber whatever the user just
+        // opened (including each other).
+        if (accountStorage.getItem('LNavOpened') == 'true') {
+            void openWorkspaceShellPromptManager({ preserveOpenDrawers: true });
         }
 
-        //auto-open WI if locked and previously open
-        if (accountStorage.getItem('WINavLockOn') == 'true' && accountStorage.getItem('WINavOpened') == 'true') {
+        if (accountStorage.getItem('NavOpened') == 'true') {
+            void openWorkspaceChildSlotHost('right-nav-panel', { preserveOpenDrawers: true });
+        }
+
+        if (accountStorage.getItem('WINavOpened') == 'true') {
             console.debug('RA -- opening WI panel');
-            void openWorkspaceShellWorldInfo();
+            void openWorkspaceShellWorldInfo({ preserveOpenDrawers: true });
+        }
+
+        if (accountStorage.getItem('RegexNavOpened') == 'true') {
+            void openWorkspaceChildSlotHost('RegexPanel', { preserveOpenDrawers: true });
+        }
+
+        if (accountStorage.getItem('SettingsNavOpened') == 'true') {
+            void injectedOpenWorkspaceShellSettings?.({ preserveOpenDrawers: true });
         }
     }
 }
@@ -487,12 +504,12 @@ export const autoFitSendTextAreaDebounced = debounce(autoFitSendTextArea, deboun
 
 // ---------------------------------------------------
 
-export function initRossMods() {
+export function initRossMods({ openWorkspaceShellSettings = null } = {}) {
+    injectedOpenWorkspaceShellSettings = openWorkspaceShellSettings;
     sendTextArea = document.querySelector('#send_textarea');
-    RPanelPin = document.getElementById('rm_button_panel_pin');
-    WIPanelPin = document.getElementById('WI_panel_pin');
+
     RightNavPanel = document.getElementById('right-nav-panel');
-    WorldInfo = document.getElementById('WorldInfo');
+    LNavPanel = document.getElementById('left-nav-panel');
     SelectedCharacterTab = document.getElementById('rm_button_selected_ch');
 
     //when "+New Character" is clicked
@@ -512,59 +529,22 @@ export function initRossMods() {
         RA_autoconnect();
     }
 
-    //toggle pin class when lock toggle clicked
-    $(RPanelPin).on('click', function () {
-        accountStorage.setItem('NavLockOn', $(RPanelPin).prop('checked'));
-        if ($(RPanelPin).prop('checked') == true) {
-            //console.log('adding pin class to right nav');
-            $(RightNavPanel).addClass('pinnedOpen');
-        } else {
-            //console.log('removing pin class from right nav');
-            $(RightNavPanel).removeClass('pinnedOpen');
-
-            if ($(RightNavPanel).hasClass('openDrawer') && $('.openDrawer').length > 1) {
-                closeWorkspaceChildSlotHost('right-nav-panel');
-            }
-        }
-    });
-    $(WIPanelPin).on('click', async function () {
-        accountStorage.setItem('WINavLockOn', $(WIPanelPin).prop('checked'));
-        if ($(WIPanelPin).prop('checked') == true) {
-            console.debug('adding pin class to WI');
-            $(WorldInfo).addClass('pinnedOpen');
-        } else {
-            console.debug('removing pin class from WI');
-            $(WorldInfo).removeClass('pinnedOpen');
-
-            if ($(WorldInfo).hasClass('openDrawer') && $('.openDrawer').length > 1) {
-                console.debug('closing WI after lock removal');
-                closeWorkspaceChildSlotHost('WorldInfo');
-            }
-        }
-    });
-
     if (!isMobile()) { //only read/set pin states on non-mobile devices
-        // read the state of right Nav Lock and apply to rightnav classlist
-        $(RPanelPin).prop('checked', accountStorage.getItem('NavLockOn') == 'true');
-        if (accountStorage.getItem('NavLockOn') == 'true') {
-            //console.log('setting pin class via local var');
-            $(RightNavPanel).addClass('pinnedOpen');
-        }
-        if ($(RPanelPin).prop('checked')) {
-            console.debug('setting pin class via checkbox state');
-            $(RightNavPanel).addClass('pinnedOpen');
-        }
-        // read the state of the World Info lock and apply to its classlist
-        $(WIPanelPin).prop('checked', accountStorage.getItem('WINavLockOn') === 'true');
-        if (accountStorage.getItem('WINavLockOn') == 'true') {
-            //console.log('setting pin class via local var');
-            $(WorldInfo).addClass('pinnedOpen');
+        // First-run defaults are viewport-aware: wide desktops start with
+        // both side panels open and locked; narrower contexts start closed
+        // and unlocked. Stored explicit values are never overridden.
+        const sidePanelDefault = window.innerWidth > 1000 ? 'true' : 'false';
+        for (const key of ['LNavOpened', 'NavOpened', 'LNavLockOn', 'NavLockOn']) {
+            if (accountStorage.getItem(key) === null) {
+                accountStorage.setItem(key, sidePanelDefault);
+            }
         }
 
-        if ($(WIPanelPin).prop('checked')) {
-            console.debug('setting pin class via checkbox state');
-            $(WorldInfo).addClass('pinnedOpen');
-        }
+        // The header pin toggles are gone; stored lock state applies
+        // .pinnedOpen on each host directly, which the close paths and the
+        // shell dock read as the lock authority.
+        $(LNavPanel).toggleClass('pinnedOpen', accountStorage.getItem('LNavLockOn') == 'true');
+        $(RightNavPanel).toggleClass('pinnedOpen', accountStorage.getItem('NavLockOn') == 'true');
     }
 
     // Drawer open/closed persistence (NavOpened/WINavOpened) is written by
@@ -640,71 +620,6 @@ export function initRossMods() {
 
     restoreUserInput();
 
-    // Swipe gestures (see: https://www.npmjs.com/package/swiped-events)
-    document.addEventListener('swiped-left', function (e) {
-        if (Popup.util.isPopupOpen()) {
-            return;
-        }
-        if (!$(e.target).closest('#sheld').length) {
-            return;
-        }
-        if ($('#curEditTextarea').length) {
-            // Don't swipe while in text edit mode
-            // the ios selection gestures get picked up
-            // as swipe gestures
-            return;
-        }
-        var SwipeButR = $('.swipe_right:last');
-        var SwipeTargetMesClassParent = $(e.target).closest('.last_mes');
-        if (SwipeTargetMesClassParent !== null) {
-            if (SwipeButR.is(':visible')) {
-                SwipeButR.trigger('click');
-            }
-        }
-    });
-    document.addEventListener('swiped-right', function (e) {
-        if (Popup.util.isPopupOpen()) {
-            return;
-        }
-        if (!$(e.target).closest('#sheld').length) {
-            return;
-        }
-        if ($('#curEditTextarea').length) {
-            // Don't swipe while in text edit mode
-            // the ios selection gestures get picked up
-            // as swipe gestures
-            return;
-        }
-        var SwipeButL = $('.swipe_left:last');
-        var SwipeTargetMesClassParent = $(e.target).closest('.last_mes');
-        if (SwipeTargetMesClassParent !== null) {
-            if (SwipeButL.is(':visible')) {
-                SwipeButL.trigger('click');
-            }
-        }
-    });
-
-
-    function isInputElementInFocus() {
-        //return $(document.activeElement).is(":input");
-        var focused = $(':focus');
-        if (focused.is('input') || focused.is('textarea') || focused.prop('contenteditable') == 'true') {
-            if (focused.attr('id') === 'send_textarea') {
-                return false;
-            }
-            return true;
-        }
-        return false;
-    }
-
-    function isModifiedKeyboardEvent(event) {
-        return (event instanceof KeyboardEvent &&
-            (event.shiftKey ||
-            event.ctrlKey ||
-            event.altKey ||
-            event.metaKey));
-    }
-
     $(document).on('keydown', async function (event) {
         await processHotkeys(event.originalEvent);
     });
@@ -760,16 +675,7 @@ export function initRossMods() {
             return;
         }
 
-        // Alt+Enter or AltGr+Enter to Continue
-        if ((event.altKey || (event.altKey && event.ctrlKey)) && event.key == 'Enter') {
-            if (is_send_press == false) {
-                console.debug('Continuing with Alt+Enter');
-                $('#option_continue').trigger('click');
-                return;
-            }
-        }
-
-        // Ctrl+Enter for Regeneration Last Response. If editing, accept the edits instead
+        // Ctrl+Enter accepts the edits when a message or reasoning editor is open
         if (event.ctrlKey && event.key == 'Enter') {
             const editMesDone = $('.mes_edit_done:visible');
             const reasoningMesDone = $('.mes_reasoning_edit_done:visible');
@@ -783,93 +689,14 @@ export function initRossMods() {
                 $('#send_textarea').trigger('focus');
                 reasoningMesDone.trigger('click');
                 return;
-            } else if (is_send_press == false) {
-                const skipConfirmKey = 'RegenerateWithCtrlEnter';
-                const skipConfirm = accountStorage.getItem(skipConfirmKey) === 'true';
-                function doRegenerate() {
-                    console.debug('Regenerating with Ctrl+Enter');
-                    $('#option_regenerate').trigger('click');
-                    $('#options').hide();
-                }
-
-                // If there is input text, we do not trigger a regenerate - we just send it
-                if (getComposerValue() !== '') {
-                    if (shouldSendOnEnter()) {
-                        console.debug('Sending with Ctrl+Enter');
-                        event.preventDefault();
-                        sendTextareaMessage();
-                    } else {
-                        console.debug('Text area is not empty, but send on enter is disabled');
-                    }
-                    return;
-                }
-
-                if (skipConfirm) {
-                    doRegenerate();
-                } else {
-                    let regenerateWithCtrlEnter = false;
-                    const result = await Popup.show.confirm('Regenerate Message', 'Are you sure you want to regenerate the latest message?', {
-                        customInputs: [{ id: 'regenerateWithCtrlEnter', label: 'Don\'t ask again' }],
-                        onClose: (popup) => {
-                            regenerateWithCtrlEnter = Boolean(popup.inputResults.get('regenerateWithCtrlEnter') ?? false);
-                        },
-                    });
-                    if (!result) {
-                        return;
-                    }
-
-                    accountStorage.setItem(skipConfirmKey, String(regenerateWithCtrlEnter));
-                    doRegenerate();
-                }
-                return;
-            } else {
-                console.debug('Ctrl+Enter ignored');
             }
         }
-
-        // Helper function to check if nanogallery2's lightbox is active
-        function isNanogallery2LightboxActive() {
-            // Check if the body has the 'nGY2On' class, adjust this based on actual behavior
-            return document.body.classList.contains('nGY2_body_scrollbar');
-        }
-
-        if (event.key == 'ArrowLeft') {        //swipes left
-            if (
-                isSwipingAllowed() &&
-                !isNanogallery2LightboxActive() &&  // Check if lightbox is NOT active
-                getComposerValue() === '' &&
-                $('#character_popup').css('display') === 'none' &&
-                $('#shadow_select_chat_popup').css('display') === 'none' &&
-                !isInputElementInFocus() &&
-                !isModifiedKeyboardEvent(event) &&
-                !(document.activeElement instanceof HTMLVideoElement)
-            ) {
-                $('.swipe_left:last').trigger('click', { source: SWIPE_SOURCE.KEYBOARD, repeated: event.repeat });
-                return;
-            }
-        }
-        if (event.key == 'ArrowRight') { //swipes right
-            if (
-                isSwipingAllowed() &&
-                !isNanogallery2LightboxActive() &&  // Check if lightbox is NOT active
-                getComposerValue() === '' &&
-                $('#character_popup').css('display') === 'none' &&
-                $('#shadow_select_chat_popup').css('display') === 'none' &&
-                !isInputElementInFocus() &&
-                !isModifiedKeyboardEvent(event) &&
-                !(document.activeElement instanceof HTMLVideoElement)
-            ) {
-                $('.swipe_right:last').trigger('click', { source: SWIPE_SOURCE.KEYBOARD, repeated: event.repeat });
-                return;
-            }
-        }
-
 
         if (event.ctrlKey && event.key == 'ArrowUp') { //edits last USER message if chatbar is empty and focused
             if (
                 getComposerValue() === '' &&
                 chatbarInFocus === true &&
-                ($('.swipe_right:last').css('display') === 'flex' || $('.last_mes').attr('is_system') === 'true') &&
+                $('.last_mes').attr('is_system') === 'true' &&
                 $('#character_popup').css('display') === 'none' &&
                 $('#shadow_select_chat_popup').css('display') === 'none'
             ) {
@@ -888,7 +715,6 @@ export function initRossMods() {
             if (
                 getComposerValue() === '' &&
                 chatbarInFocus === true &&
-                //$('.swipe_right:last').css('display') === 'flex' &&
                 $('.last_mes .mes_buttons').is(':visible') &&
                 $('#character_popup').css('display') === 'none' &&
                 $('#shadow_select_chat_popup').css('display') === 'none'
@@ -960,7 +786,7 @@ export function initRossMods() {
             }
 
             if ($('#right-nav-panel').is(':visible') &&
-                $(RPanelPin).prop('checked') === false) {
+                !$('#right-nav-panel').hasClass('pinnedOpen')) {
                 closeWorkspaceChildSlotHost('right-nav-panel');
                 return;
             }

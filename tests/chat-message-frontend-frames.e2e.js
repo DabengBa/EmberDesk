@@ -392,7 +392,7 @@ async function startGeneration(page, prompt) {
 }
 
 async function stopAndFinalize(page) {
-    await page.getByRole('button', { name: 'Abort request' }).click({ timeout: 10_000 });
+    await page.getByRole('button', { name: '中止请求' }).click({ timeout: 10_000 });
     await expect.poll(() => page.evaluate(() => window.SillyTavern.getContext().streamingProcessor === null), { timeout: 15_000 }).toBe(true);
     // Bounded wait — the generate() promise may already be settled.
     await page.evaluate(() => Promise.race([

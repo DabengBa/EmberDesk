@@ -8,8 +8,6 @@ const buttonSelectors = [
     '.right_menu_button',
     '.mes_button',
     '.inline-drawer-icon',
-    '.swipe_left',
-    '.swipe_right',
     '.character_select',
     '.tags .tag',
     '.paginationjs-pages li a',

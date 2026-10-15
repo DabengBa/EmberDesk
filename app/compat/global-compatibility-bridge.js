@@ -133,7 +133,6 @@ function sanitizeWorkspacePanelState(kind, state) {
                 ? {
                     phase: state.generationControl.phase,
                     activeMessageId: state.generationControl.activeMessageId,
-                    failureRetryVisible: state.generationControl.failureRetryVisible,
                     failureNoticeVisible: state.generationControl.failureNoticeVisible,
                 }
                 : undefined,

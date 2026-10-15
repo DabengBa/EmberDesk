@@ -66,5 +66,5 @@ export function isMainChatVisibleGeneration({ type, mainApi, dryRun, depth } = {
         return false;
     }
 
-    return ['normal', undefined, 'regenerate', 'continue', 'swipe'].includes(type);
+    return ['normal', undefined].includes(type);
 }

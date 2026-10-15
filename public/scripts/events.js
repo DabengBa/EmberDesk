@@ -4,7 +4,6 @@ export const event_types = {
     APP_INITIALIZED: 'app_initialized',
     APP_READY: 'app_ready',
     EXTRAS_CONNECTED: 'extras_connected',
-    MESSAGE_SWIPED: 'message_swiped',
     MESSAGE_SENT: 'message_sent',
     MESSAGE_RECEIVED: 'message_received',
     MESSAGE_EDITED: 'message_edited',
@@ -13,9 +12,7 @@ export const event_types = {
     MESSAGE_FILE_EMBEDDED: 'message_file_embedded',
     MESSAGE_REASONING_EDITED: 'message_reasoning_edited',
     MESSAGE_REASONING_DELETED: 'message_reasoning_deleted',
-    MESSAGE_SWIPE_DELETED: 'message_swipe_deleted',
     MORE_MESSAGES_LOADED: 'more_messages_loaded',
-    IMPERSONATE_READY: 'impersonate_ready',
     CHAT_CHANGED: 'chat_id_changed',
     // TODO: Naming convention is inconsistent with other events
     CHAT_LOADED: 'chatLoaded',

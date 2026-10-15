@@ -18,6 +18,7 @@ Let users browse, search, filter, sort, bulk-select, and choose [character cards
 ## User-Visible Contract
 
 - The library lists characters and folder/tag entities only; there are no group rows or group create controls.
+- The drawer shares the side-panel chrome contract with the left prompt panel: the same `clamp(340px, half-remaining-width, 420px)` width formula, a `.workspace-panel-header` row carrying the `人物` title plus the selected-character tab (`#rm_button_selected_ch`), panel actions (`#rm_button_characters`, `#result_info`) and the pin toggle, and a thin-scrollbar scrolling body. Toolbar controls are tiered: create/import actions and search on the primary row, sort/tag filters on a collapsible secondary row, list status and pagination above the card list.
 
 - Protected row selectors and identity attributes are gated by the `selectors` contract family in `tests/helpers/frontend-compatibility-contract.js` before legacy list-owner deletion.
 

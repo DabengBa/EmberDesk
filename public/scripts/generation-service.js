@@ -1,17 +1,16 @@
 import { eventSource, event_types } from './events.js';
-import { GENERATION_TYPE_TRIGGERS, OVERSWIPE_BEHAVIOR, SWIPE_DIRECTION, SWIPE_SOURCE, SWIPE_STATE, TOKEN_PADDING, inject_ids } from './constants.js';
+import { TOKEN_PADDING, inject_ids } from './constants.js';
 import { executeGenerationAttempts, createGenerationCommandPlan } from './chat-generation-command-service.js';
 import {
     getGenerationFailureDecision,
     getGenerationSuccessFinalization,
-    getGenerationAttemptBaseline as getLifecycleGenerationAttemptBaseline,
     hasFallbackProviderForGeneration,
 } from './chat-generation-lifecycle.js';
 import { getWorldInfoPrompt } from './world-info-service.js';
-import { wi_anchor_position } from './world-info-domain.js';
 import { world_info_include_names } from './world-info-state.js';
 import { requireGenerationShellContext } from './generation-shell-context.js';
-import { getComposerValue, setComposerValue, clearComposerValue } from './main-chat-composer-service.js';
+import { getComposerValue, clearComposerValue } from './main-chat-composer-service.js';
+import { t } from './i18n.js';
 
 function shell() {
     return requireGenerationShellContext();
@@ -29,18 +28,15 @@ const state = new Proxy({}, {
 });
 
 const addChatsSeparator = (...args) => shell().addChatsSeparator(...args);
-const baseChatReplace = (...args) => shell().baseChatReplace(...args);
 const cleanUpMessage = (...args) => shell().cleanUpMessage(...args);
 const clearGenerationAttemptMessage = (...args) => shell().clearGenerationAttemptMessage(...args);
 const clearGenerationAutoRecoveryStatus = (...args) => shell().clearGenerationAutoRecoveryStatus(...args);
-const createExistingMessageRecoveryBaseline = (...args) => shell().createExistingMessageRecoveryBaseline(...args);
 const deactivateSendButtons = (...args) => shell().deactivateSendButtons(...args);
 const deleteLastMessage = (...args) => shell().deleteLastMessage(...args);
 const doChatInject = (...args) => shell().doChatInject(...args);
 const extractImagesFromData = (...args) => shell().extractImagesFromData(...args);
 const extractJsonFromData = (...args) => shell().extractJsonFromData(...args);
 const extractMessageFromData = (...args) => shell().extractMessageFromData(...args);
-const extractMultiSwipes = (...args) => shell().extractMultiSwipes(...args);
 const extractTitleFromData = (...args) => shell().extractTitleFromData(...args);
 const flushWIInjections = (...args) => shell().flushWIInjections(...args);
 const formatMessageHistoryItem = (...args) => shell().formatMessageHistoryItem(...args);
@@ -52,13 +48,10 @@ const getGenerationLifecycleStatusLabels = (...args) => shell().getGenerationLif
 const getMaxPromptTokens = (...args) => shell().getMaxPromptTokens(...args);
 const isAssistantRecoveryMessageId = (...args) => shell().isAssistantRecoveryMessageId(...args);
 const isStreamingEnabled = (...args) => shell().isStreamingEnabled(...args);
-const parseMesExamples = (...args) => shell().parseMesExamples(...args);
 const pingServer = (...args) => shell().pingServer(...args);
-const prepareGenerationRetrySwipe = (...args) => shell().prepareGenerationRetrySwipe(...args);
 const processCommands = (...args) => shell().processCommands(...args);
 const rememberMainChatStreamingTransportProcessorTerminal = (...args) => shell().rememberMainChatStreamingTransportProcessorTerminal(...args);
 const removeDepthPrompts = (...args) => shell().removeDepthPrompts(...args);
-const removeLastMessage = (...args) => shell().removeLastMessage(...args);
 const removeMacros = (...args) => shell().removeMacros(...args);
 const replaceAssistantRecoveryMessage = (...args) => shell().replaceAssistantRecoveryMessage(...args);
 const saveChatConditional = (...args) => shell().saveChatConditional(...args);
@@ -97,26 +90,10 @@ const STREAMING_FPS = 30;
 const sendSystemMessage = (...args) => shell().sendSystemMessage(...args);
 const prepareOpenAIMessages = (...args) => shell().prepareOpenAIMessages(...args);
 const renderStoryString = (...args) => shell().renderStoryString(...args);
-const setOpenAIMessageExamples = (...args) => shell().setOpenAIMessageExamples(...args);
 const setOpenAIMessages = (...args) => shell().setOpenAIMessages(...args);
-const shiftDownByOne = (...args) => shell().shiftDownByOne(...args);
-const parseReasoningInSwipes = (...args) => shell().parseReasoningInSwipes(...args);
-
 const countOccurrences = (...args) => shell().countOccurrences(...args);
 const isOdd = (...args) => shell().isOdd(...args);
 const delay = (...args) => shell().delay(...args);
-const addOneMessage = (...args) => shell().addOneMessage(...args);
-const cancelDebouncedChatSave = (...args) => shell().cancelDebouncedChatSave(...args);
-const closeMessageEditor = (...args) => shell().closeMessageEditor(...args);
-const isGenerating = (...args) => shell().isGenerating(...args);
-const redisplayChat = (...args) => shell().redisplayChat(...args);
-const reloadCurrentChat = (...args) => shell().reloadCurrentChat(...args);
-const saveChatDebounced = (...args) => shell().saveChatDebounced(...args);
-const clamp = (...args) => shell().clamp(...args);
-const createTimeout = (...args) => shell().createTimeout(...args);
-const shakeElement = (...args) => shell().shakeElement(...args);
-const updateReasoningUI = (...args) => shell().updateReasoningUI(...args);
-const t = (strings, ...values) => shell().t(strings, ...values);
 
 export class GenerationStreamSession {
     /**
@@ -124,10 +101,9 @@ export class GenerationStreamSession {
      * @param {string} type Generation type
      * @param {boolean} forceName2 If true, force the use of name2
      * @param {Date} timeStarted Date when generation was started
-     * @param {string} continueMessage Previous message if the type is 'continue'
      * @param {PromptReasoning} promptReasoning Prompt reasoning instance
      */
-    constructor(type, forceName2, timeStarted, continueMessage, promptReasoning) {
+    constructor(type, forceName2, timeStarted, promptReasoning) {
         this.result = '';
         this.messageId = -1;
         /** @type {HTMLElement} */
@@ -147,8 +123,6 @@ export class GenerationStreamSession {
         /** @type {number?} */
         this.timeToFirstToken = null;
         this.createdAt = new Date();
-        this.continueMessage = type === 'continue' ? continueMessage : '';
-        this.swipes = [];
         this.toolCalls = [];
         // Initialize reasoning in its own handler
         this.reasoningHandler = new state.ReasoningHandler(timeStarted);
@@ -170,11 +144,8 @@ export class GenerationStreamSession {
      * @param {number} messageId Current message ID
      * @param {boolean?} continueOnReasoning If continuing on reasoning
      */
-    async #checkDomElements(messageId, continueOnReasoning = null) {
+    async #checkDomElements(messageId) {
         if (isReactMainChatOwner()) {
-            if (continueOnReasoning) {
-                await this.reasoningHandler.process(messageId, false, this.promptReasoning);
-            }
             return;
         }
 
@@ -182,9 +153,6 @@ export class GenerationStreamSession {
             this.messageDom = document.querySelector(`#chat .mes[mesid="${messageId}"]`);
             this.messageTextDom = this.messageDom?.querySelector('.mes_text');
             this.messageTimerDom = this.messageDom?.querySelector('.mes_timer');
-        }
-        if (continueOnReasoning) {
-            await this.reasoningHandler.process(messageId, false, this.promptReasoning);
         }
         this.reasoningHandler.updateDom(messageId);
     }
@@ -209,46 +177,17 @@ export class GenerationStreamSession {
     }
 
     async onStartStreaming(text) {
-        const continueOnReasoning = !!(this.type === 'continue' && this.promptReasoning.prefixReasoning);
-        if (continueOnReasoning) {
-            this.reasoningHandler.initContinue(this.promptReasoning);
-        }
-
-        let messageId = -1;
-
-        if (this.type == 'impersonate') {
-            clearComposerValue();
-        } else {
-            await saveReply({ type: this.type, getMessage: text, fromStreaming: true });
-            messageId = state.chat.length - 1;
-            await this.#checkDomElements(messageId, continueOnReasoning);
-            this.markUIGenStarted();
-        }
-        hideSwipeButtons({ hideCounters: true });
+        await saveReply({ type: this.type, getMessage: text, fromStreaming: true });
+        const messageId = state.chat.length - 1;
+        await this.#checkDomElements(messageId);
+        this.markUIGenStarted();
         scrollChatToBottom({ waitForFrame: true });
         return messageId;
     }
 
     async onProgressStreaming(messageId, text, isFinal) {
-        const isImpersonate = this.type == 'impersonate';
-        const isContinue = this.type == 'continue';
-
-        if (!isImpersonate && !isContinue && Array.isArray(this.swipes) && this.swipes.length > 0) {
-            for (let i = 0; i < this.swipes.length; i++) {
-                this.swipes[i] = cleanUpMessage({
-                    getMessage: this.swipes[i],
-                    isImpersonate: false,
-                    isContinue: false,
-                    displayIncompleteSentences: true,
-                    stoppingStrings: this.stoppingStrings,
-                });
-            }
-        }
-
         let processedText = cleanUpMessage({
             getMessage: text,
-            isImpersonate: isImpersonate,
-            isContinue: isContinue,
             displayIncompleteSentences: !isFinal,
             stoppingStrings: this.stoppingStrings,
         });
@@ -261,60 +200,43 @@ export class GenerationStreamSession {
             }
         }
 
-        if (isImpersonate) {
-            setComposerValue(processedText);
+        const mesChanged = state.chat[messageId].mes !== processedText;
+        await this.#checkDomElements(messageId);
+        this.#updateMessageBlockVisibility();
+        const currentTime = new Date();
+        state.chat[messageId].mes = processedText;
+        state.chat[messageId].gen_started = this.timeStarted;
+        state.chat[messageId].gen_finished = currentTime;
+        if (!state.chat[messageId].extra) {
+            state.chat[messageId].extra = {};
+        }
+        state.chat[messageId].extra.time_to_first_token = this.timeToFirstToken;
+
+        // Update reasoning
+        await this.reasoningHandler.process(messageId, mesChanged, this.promptReasoning);
+        processedText = state.chat[messageId].mes;
+
+        if (!isReactMainChatOwner()) {
+            const formattedText = messageFormatting(
+                processedText,
+                state.chat[messageId].name,
+                state.chat[messageId].is_system,
+                state.chat[messageId].is_user,
+                messageId,
+                {},
+                false,
+            );
+            if (this.messageTextDom instanceof HTMLElement) {
+                this.messageTextDom.innerHTML = formattedText;
+            }
+
+            const timePassed = formatGenerationTimer(this.timeStarted, currentTime, 0, this.reasoningHandler.getDuration(), this.timeToFirstToken);
+            if (this.messageTimerDom instanceof HTMLElement) {
+                this.messageTimerDom.textContent = timePassed.timerValue;
+                this.messageTimerDom.title = timePassed.timerTitle;
+            }
         } else {
-            const mesChanged = state.chat[messageId].mes !== processedText;
-            await this.#checkDomElements(messageId);
-            this.#updateMessageBlockVisibility();
-            const currentTime = new Date();
-            state.chat[messageId].mes = processedText;
-            state.chat[messageId].gen_started = this.timeStarted;
-            state.chat[messageId].gen_finished = currentTime;
-            if (!state.chat[messageId].extra) {
-                state.chat[messageId].extra = {};
-            }
-            state.chat[messageId].extra.time_to_first_token = this.timeToFirstToken;
-
-            // Update reasoning
-            await this.reasoningHandler.process(messageId, mesChanged, this.promptReasoning);
-            processedText = state.chat[messageId].mes;
-
-            if ((this.type == 'swipe' || this.type === 'continue') && Array.isArray(state.chat[messageId].swipes)) {
-                state.chat[messageId].swipes[state.chat[messageId].swipe_id] = processedText;
-                state.chat[messageId].swipe_info[state.chat[messageId].swipe_id] = {
-                    'send_date': state.chat[messageId].send_date,
-                    'gen_started': state.chat[messageId].gen_started,
-                    'gen_finished': state.chat[messageId].gen_finished,
-                    'extra': structuredClone(state.chat[messageId].extra),
-                };
-            }
-
-            if (!isReactMainChatOwner()) {
-                const formattedText = messageFormatting(
-                    processedText,
-                    state.chat[messageId].name,
-                    state.chat[messageId].is_system,
-                    state.chat[messageId].is_user,
-                    messageId,
-                    {},
-                    false,
-                );
-                if (this.messageTextDom instanceof HTMLElement) {
-                    this.messageTextDom.innerHTML = formattedText;
-                }
-
-                const timePassed = formatGenerationTimer(this.timeStarted, currentTime, 0, this.reasoningHandler.getDuration(), this.timeToFirstToken);
-                if (this.messageTimerDom instanceof HTMLElement) {
-                    this.messageTimerDom.textContent = timePassed.timerValue;
-                    this.messageTimerDom.title = timePassed.timerTitle;
-                }
-            }
-
-            this.setFirstSwipe(messageId);
-            if (isReactMainChatOwner()) {
-                scheduleMainChatMessageListPanelRefresh();
-            }
+            scheduleMainChatMessageListPanelRefresh();
         }
 
         if (!state.scrollLock) {
@@ -324,8 +246,8 @@ export class GenerationStreamSession {
 
     /**
      * Finalizes an intermediary message after generation is complete, or a tool call is performed.
-     * Performs essential message processing (code blocks, reasoning, swipes, attachments, events)
-     * without the heavier finish operations (UI unlock - optional, auto-swipe, sound, save chat).
+     * Performs essential message processing (code blocks, reasoning, attachments, events)
+     * without the heavier finish operations (UI unlock - optional, sound, save chat).
      * @param {number} messageId - The message ID to finalize.
      * @param {string} text - The message text.
      * @param {Object} options - Additional options for finalization.
@@ -342,25 +264,6 @@ export class GenerationStreamSession {
         }
 
         await this.reasoningHandler.finish(messageId);
-
-        if (Array.isArray(this.swipes) && this.swipes.length > 0) {
-            const swipeInfoExtra = structuredClone(message.extra ?? {});
-            delete swipeInfoExtra.token_count;
-            delete swipeInfoExtra.reasoning;
-            delete swipeInfoExtra.reasoning_duration;
-            const swipeInfo = {
-                send_date: message.send_date,
-                gen_started: message.gen_started,
-                gen_finished: message.gen_finished,
-                extra: swipeInfoExtra,
-            };
-            const swipeInfoArray = Array(this.swipes.length).fill().map(() => structuredClone(swipeInfo));
-            parseReasoningInSwipes(this.swipes, swipeInfoArray, message.extra?.reasoning_duration);
-            message.swipes.push(...this.swipes);
-            message.swipe_info.push(...swipeInfoArray);
-        }
-
-        syncMesToSwipe(messageId);
 
         if (Array.isArray(this.images) && this.images.length > 0) {
             await processImageAttachment(message, { imageUrls: this.images });
@@ -381,14 +284,9 @@ export class GenerationStreamSession {
             this.markUIGenStopped();
         }
 
-        if (this.type !== 'impersonate') {
-            await eventSource.emit(event_types.MESSAGE_RECEIVED, this.messageId, this.type);
-            await eventSource.emit(event_types.CHARACTER_MESSAGE_RENDERED, this.messageId, this.type);
-        } else {
-            await eventSource.emit(event_types.IMPERSONATE_READY, text);
-        }
+        await eventSource.emit(event_types.MESSAGE_RECEIVED, this.messageId, this.type);
+        await eventSource.emit(event_types.CHARACTER_MESSAGE_RENDERED, this.messageId, this.type);
 
-        updateSwipeCounter(messageId, { message, messageElement });
         this.isFinalizing = false;
         void mountReactMainChatMessageListPanel();
     }
@@ -404,7 +302,7 @@ export class GenerationStreamSession {
         this.isFinalizing = false;
 
         if (this.messageId !== -1 && this.result) {
-            await this.onProgressStreaming(this.messageId, this.continueMessage + this.result, true);
+            await this.onProgressStreaming(this.messageId, this.result, true);
         }
 
         this.markUIGenStopped();
@@ -414,25 +312,8 @@ export class GenerationStreamSession {
 
         showGenerationFailureRecovery(this.messageId);
 
-        const noEmitTypes = ['swipe', 'impersonate', 'continue'];
-        if (!noEmitTypes.includes(this.type)) {
-            eventSource.emit(event_types.MESSAGE_RECEIVED, this.messageId, this.type);
-            eventSource.emit(event_types.CHARACTER_MESSAGE_RENDERED, this.messageId, this.type);
-        }
-    }
-
-    setFirstSwipe(messageId) {
-        if (this.type !== 'swipe' && this.type !== 'impersonate') {
-            if (Array.isArray(state.chat[messageId].swipes) && state.chat[messageId].swipes.length === 1 && state.chat[messageId].swipe_id === 0) {
-                state.chat[messageId].swipes[0] = state.chat[messageId].mes;
-                state.chat[messageId].swipe_info[0] = {
-                    'send_date': state.chat[messageId].send_date,
-                    'gen_started': state.chat[messageId].gen_started,
-                    'gen_finished': state.chat[messageId].gen_finished,
-                    'extra': structuredClone(state.chat[messageId].extra),
-                };
-            }
-        }
+        eventSource.emit(event_types.MESSAGE_RECEIVED, this.messageId, this.type);
+        eventSource.emit(event_types.CHARACTER_MESSAGE_RENDERED, this.messageId, this.type);
     }
 
     onStopStreaming() {
@@ -445,7 +326,7 @@ export class GenerationStreamSession {
     }
 
     /**
-     * @returns {AsyncGenerator<{ text: string, swipes: string[], toolCalls: any[], state: any }, void, void>}
+     * @returns {AsyncGenerator<{ text: string, toolCalls: any[], state: any }, void, void>}
      */
     async* nullStreamingGeneration() {
         yield* [];
@@ -461,14 +342,12 @@ export class GenerationStreamSession {
 
         // Stopping strings are expensive to calculate, especially with macros enabled. To remove stopping strings
         // when streaming, we cache the result of getStoppingStrings instead of calling it once per token.
-        const isImpersonate = this.type == 'impersonate';
-        const isContinue = this.type == 'continue';
-        this.stoppingStrings = getStoppingStrings(isImpersonate, isContinue, state.main_api);
+        this.stoppingStrings = getStoppingStrings(state.main_api);
 
         try {
             const sw = new state.Stopwatch(1000 / STREAMING_FPS);
             const timestamps = [];
-            for await (const { text, swipes, toolCalls, state } of this.generator()) {
+            for await (const { text, toolCalls, state } of this.generator()) {
                 const now = Date.now();
                 timestamps.push(now);
                 if (!this.timeToFirstToken) {
@@ -480,7 +359,6 @@ export class GenerationStreamSession {
 
                 this.toolCalls = toolCalls;
                 this.result = text;
-                this.swipes = Array.from(swipes ?? []);
                 this.observedTokenCount += 1;
                 this.observedChunkCount += 1;
                 scheduleMainChatMessageListPanelRefresh();
@@ -489,7 +367,7 @@ export class GenerationStreamSession {
                 this.images = state?.images ?? [];
                 this.reasoningSignature = state?.signature ?? null;
                 await eventSource.emit(event_types.STREAM_TOKEN_RECEIVED, text);
-                await sw.tick(async () => await this.onProgressStreaming(this.messageId, this.continueMessage + text));
+                await sw.tick(async () => await this.onProgressStreaming(this.messageId, text));
             }
             const seconds = (timestamps[timestamps.length - 1] - timestamps[0]) / 1000;
             console.warn(`Stream stats: ${timestamps.length} tokens, ${seconds.toFixed(2)} seconds, rate: ${Number(timestamps.length / seconds).toFixed(2)} TPS`);
@@ -541,9 +419,7 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
         state.abortController = new AbortController();
     }
 
-    const isImpersonate = type == 'impersonate';
-
-    if (!(dryRun || depth || type == 'regenerate' || type == 'swipe' || type == 'quiet')) {
+    if (!(dryRun || depth || type == 'quiet')) {
         const interruptedByCommand = await processCommands(getComposerValue());
 
         if (interruptedByCommand) {
@@ -565,8 +441,6 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
             throw new Error('Server unreachable');
         }
 
-        // Hide swipes if not in a dry run.
-        hideSwipeButtons();
         // If generated any message, set the flag to indicate it can't be recreated again.
         state.chat_metadata.tainted = true;
     }
@@ -586,36 +460,13 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
         return Promise.resolve();
     }
 
-    const lastMessage = state.chat[state.chat.length - 1];
-
     let textareaText;
-    if (type !== 'regenerate' && type !== 'swipe' && type !== 'quiet' && !isImpersonate && !dryRun && !depth) {
+    if (type !== 'quiet' && !dryRun && !depth) {
         state.is_send_press = true;
         textareaText = getComposerValue();
         clearComposerValue();
     } else {
         textareaText = '';
-        if (state.chat.length && lastMessage.is_user) {
-            //do nothing? why does this check exist?
-        } else if (type !== 'quiet' && type !== 'swipe' && !isImpersonate && !dryRun && !depth && state.chat.length) {
-            state.chat.length = state.chat.length - 1;
-            await removeLastMessage();
-            await eventSource.emit(event_types.MESSAGE_DELETED, state.chat.length);
-        }
-    }
-
-    const isContinue = type == 'continue';
-
-    // Rewrite the generation timer to account for the time passed for all the continuations.
-    if (isContinue && state.chat.length) {
-        const prevFinished = lastMessage.gen_finished;
-        const prevStarted = lastMessage.gen_started;
-
-        if (prevFinished && prevStarted) {
-            const timePassed = Number(prevFinished) - Number(prevStarted);
-            state.generation_started = new Date(Date.now() - timePassed);
-            lastMessage.gen_started = state.generation_started;
-        }
     }
 
     if (!dryRun) {
@@ -628,13 +479,9 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
     //PRE FORMATING STRING
     //*********************************
 
-    // These generation types should not attach pending files to the chat
+    // Quiet background requests should not attach pending files to the chat
     const noAttachTypes = [
-        'regenerate',
-        'swipe',
-        'impersonate',
         'quiet',
-        'continue',
     ];
     //for normal messages sent from user..
     if ((textareaText != '' || (hasPendingFileAttachment() && !noAttachTypes.includes(type))) && !automatic_trigger && type !== 'quiet' && !dryRun && !depth) {
@@ -651,7 +498,6 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
 
     let {
         description,
-        mesExamples,
         system,
         charDepthPrompt,
         creatorNotes,
@@ -674,14 +520,11 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
     const canUseTools = state.ToolManager.isToolCallingSupported();
     const canPerformToolCalls = !dryRun && state.ToolManager.canPerformToolCalls(type) && depth < state.ToolManager.RECURSE_LIMIT;
     let coreChat = state.chat.filter(x => !x.is_system || (canUseTools && Array.isArray(x.extra?.tool_invocations)));
-    if (type === 'swipe') {
-        coreChat.pop();
-    }
 
     coreChat = await Promise.all(coreChat.map(async (/** @type {ChatMessage} */ chatItem, index) => {
         let message = chatItem.mes;
         let regexType = chatItem.is_user ? state.regex_placement.USER_INPUT : state.regex_placement.AI_OUTPUT;
-        let options = { isPrompt: true, depth: (coreChat.length - index - (isContinue ? 2 : 1)) };
+        let options = { isPrompt: true, depth: (coreChat.length - index - 1) };
 
         let regexedMessage = getRegexedString(message, regexType, options);
         regexedMessage = await appendFileContent(chatItem, regexedMessage);
@@ -710,8 +553,7 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
 
     const promptReasoning = new state.PromptReasoning();
     for (let i = coreChat.length - 1; i >= 0; i--) {
-        const depth = coreChat.length - i - (isContinue ? 2 : 1);
-        const isPrefix = isContinue && i === coreChat.length - 1;
+        const depth = coreChat.length - i - 1;
 
         coreChat[i] = {
             ...coreChat[i],
@@ -722,7 +564,7 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
                     state.regex_placement.REASONING,
                     { isPrompt: true, depth: depth },
                 ),
-                isPrefix,
+                false,
                 coreChat[i].extra?.reasoning_duration,
             ),
         };
@@ -739,12 +581,6 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
 
     force_name2 = true;
 
-    if (isImpersonate) {
-        force_name2 = false;
-    }
-
-    let mesExamplesArray = parseMesExamples(mesExamples);
-
     // Add WI to prompt (and also inject WI to AN value via hijack)
     // Make quiet prompt available for WIAN
     setExtensionPrompt(inject_ids.QUIET_PROMPT, quiet_prompt || '', state.extension_prompt_types.IN_PROMPT, 0, true);
@@ -755,32 +591,10 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
         characterDepthPrompt: charDepthPrompt,
         creatorNotes: creatorNotes,
         scenario: scenario,
-        trigger: GENERATION_TYPE_TRIGGERS.includes(type) ? type : 'normal',
+        trigger: 'normal',
     };
-    const { worldInfo, worldInfoBefore, worldInfoAfter, worldInfoExamples, worldInfoDepth, outletEntries } = await getWorldInfoPrompt(chatForWI, this_max_context, dryRun, globalScanData);
+    const { worldInfo, worldInfoBefore, worldInfoAfter, worldInfoDepth, outletEntries } = await getWorldInfoPrompt(chatForWI, this_max_context, dryRun, globalScanData);
     setExtensionPrompt(inject_ids.QUIET_PROMPT, '', state.extension_prompt_types.IN_PROMPT, 0, true);
-
-    // Add message example WI
-    for (const example of worldInfoExamples) {
-        const exampleMessage = example.content;
-
-        if (exampleMessage.length === 0) {
-            continue;
-        }
-
-        const formattedExample = baseChatReplace(exampleMessage);
-        const cleanedExample = parseMesExamples(formattedExample);
-
-        // Insert depending on before or after position
-        if (example.position === wi_anchor_position.before) {
-            mesExamplesArray.unshift(...cleanedExample);
-        } else {
-            mesExamplesArray.push(...cleanedExample);
-        }
-    }
-
-    // At this point, the raw message examples can be created
-    const mesExamplesRawArray = [...mesExamplesArray];
 
     if (skipWIAN !== true) {
         console.log('skipWIAN not active, adding WIAN');
@@ -817,8 +631,8 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
         anchorBefore: beforeScenarioAnchor.trim(),
         anchorAfter: afterScenarioAnchor.trim(),
         scenario: scenario,
-        mesExamples: mesExamplesArray.join(''),
-        mesExamplesRaw: mesExamplesRawArray.join(''),
+        mesExamples: '',
+        mesExamplesRaw: '',
     };
 
     // Render the story string and combine with injections
@@ -831,29 +645,18 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
     // Inject all Depth prompts. Chat Completion does it separately
     let injectedIndices = [];
     if (state.main_api !== 'openai') {
-        injectedIndices = await doChatInject(coreChat, isContinue);
+        injectedIndices = await doChatInject(coreChat);
     }
 
     let chat2 = [];
-    let continue_mag = '';
     let userMessageIndices = [];
     for (let i = coreChat.length - 1, j = 0; i >= 0; i--, j++) {
         if (state.main_api == 'openai') {
             chat2[i] = coreChat[j].mes;
-            if (i === 0 && isContinue) {
-                chat2[i] = chat2[i].slice(0, chat2[i].lastIndexOf(coreChat[j].mes) + coreChat[j].mes.length);
-                continue_mag = coreChat[j].mes;
-            }
             continue;
         }
 
         chat2[i] = formatMessageHistoryItem(coreChat[j]);
-
-        // Do not suffix the message for continuation
-        if (i === 0 && isContinue) {
-            chat2[i] = chat2[i].slice(0, chat2[i].lastIndexOf(coreChat[j].mes) + coreChat[j].mes.length);
-            continue_mag = coreChat[j].mes;
-        }
 
         if (coreChat[j].is_user) {
             userMessageIndices.push(i);
@@ -863,11 +666,9 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
     const userAlignmentMessage = '';
 
     let oaiMessages = [];
-    let oaiMessageExamples = [];
 
     if (state.main_api === 'openai') {
         oaiMessages = setOpenAIMessages(coreChat);
-        oaiMessageExamples = setOpenAIMessageExamples(mesExamplesArray);
     }
 
     // hack for regeneration of the first message
@@ -875,28 +676,16 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
         chat2.push('');
     }
 
-    let examplesString = '';
     let chatString = addChatsSeparator('');
-    let cyclePrompt = '';
 
     async function getMessagesTokenCount() {
         const encodeString = [
             combinedStoryString,
-            examplesString,
             userAlignmentMessage,
             chatString,
             modifyLastPromptLine(''),
-            cyclePrompt,
         ].join('').replace(/\r/gm, '');
         return getTokenCountAsync(encodeString, TOKEN_PADDING);
-    }
-
-    // Only add the chat in context if past the greeting message
-    if (isContinue && (chat2.length > 1 || state.main_api === 'openai')) {
-        cyclePrompt = chat2.shift();
-        // Adjust indices to account for the shift
-        injectedIndices = injectedIndices.map(shiftDownByOne).filter(x => x >= 0);
-        userMessageIndices = userMessageIndices.map(shiftDownByOne).filter(x => x >= 0);
     }
 
     // Collect enough messages to fill the context
@@ -974,41 +763,15 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
         setInContextMessages(arrMes.length - injectedIndices.length, type);
     }
 
-    // Estimate how many unpinned example messages fit in the context
-    tokenCount = await getMessagesTokenCount();
-    let count_exm_add = 0;
-    for (let example of mesExamplesArray) {
-        tokenCount += await getTokenCountAsync(example.replace(/\r/gm, ''));
-        examplesString += example;
-        if (tokenCount < this_max_context) {
-            count_exm_add++;
-        } else {
-            break;
-        }
-    }
-
     let mesSend = [];
     console.debug('calling runGenerate');
-
-    if (isContinue) {
-        // Coping mechanism for OAI spacing
-        if (state.main_api === 'openai' && !cyclePrompt.endsWith(' ')) {
-            cyclePrompt += state.oai_settings.continue_postfix;
-            continue_mag += state.oai_settings.continue_postfix;
-        }
-    }
-
-    const originalType = type;
 
     if (!dryRun) {
         state.is_send_press = true;
     }
 
-    const existingMessageRecoveryBaseline = createExistingMessageRecoveryBaseline(type);
-    const getGenerationAttemptBaseline = (messageId) => getLifecycleGenerationAttemptBaseline(messageId, existingMessageRecoveryBaseline);
-
-    let generatedPromptCache = cyclePrompt || '';
-    if (generatedPromptCache.length == 0 || type === 'continue') {
+    let generatedPromptCache = '';
+    if (generatedPromptCache.length == 0) {
         console.debug('generating prompt');
         chatString = '';
         arrMes = arrMes.reverse();
@@ -1020,7 +783,7 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
 
             // Cohee: This removes a newline from the end of the last message in the context
             // Last prompt line will add a newline if it's not a continuation
-            if (i === arrMes.length - 1 && type !== 'continue') {
+            if (i === arrMes.length - 1) {
                 item = item.replace(/\n?$/, '');
             }
 
@@ -1036,7 +799,6 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
         }
 
         console.debug('--setting Prompt string');
-        mesExmString = mesExamplesArray.slice(0, count_exm_add).join('');
 
         if (mesSend.length) {
             mesSend[mesSend.length - 1].message = modifyLastPromptLine(mesSend[mesSend.length - 1].message);
@@ -1064,25 +826,12 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
         }
 
 
-        // Get impersonation line
-        if (isImpersonate && !isContinue) {
-            const name = state.name1;
-            if (!lastMesString.endsWith('\n')) {
-                lastMesString += '\n';
-            }
-            lastMesString += name + ':';
-        }
-
         // Add character's name
-        // Force name append on continue (if not continuing on user message or first message)
-        const isContinuingOnFirstMessage = state.chat.length === 1 && isContinue;
-        if (force_name2 && !isContinuingOnFirstMessage) {
+        if (force_name2) {
             if (!lastMesString.endsWith('\n')) {
                 lastMesString += '\n';
             }
-            if (!isContinue || !(state.chat[state.chat.length - 1]?.is_user)) {
-                lastMesString += `${state.name2}:`;
-            }
+            lastMesString += `${state.name2}:`;
         }
 
         return lastMesString;
@@ -1103,10 +852,7 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
         let thisPromptContextSize = await getTokenCountAsync(prompt, TOKEN_PADDING);
 
         if (thisPromptContextSize > this_max_context) {        //if the prepared prompt is larger than the max context size...
-            if (count_exm_add > 0) {                            // ..and we have example messages..
-                count_exm_add--;                            // remove the example messages...
-                await checkPromptSize();                            // and try agin...
-            } else if (mesSend.length > 0) {                    // if the chat history is longer than 0
+            if (mesSend.length > 0) {                    // if the chat history is longer than 0
                 mesSend.shift();                            // remove the first (oldest) chat entry..
                 await checkPromptSize();                            // and check size again..
             } else {
@@ -1136,14 +882,11 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
         let finalMesSend = structuredClone(mesSend);
 
         // Add prompt bias after everything else
-        // Always run with continue
-        if (!isImpersonate) {
-            if (promptBias.trim().length !== 0) {
-                finalMesSend[finalMesSend.length - 1].message +=
-                    /\s/.test(finalMesSend[finalMesSend.length - 1].message.slice(-1))
-                        ? promptBias.trimStart()
-                        : ` ${promptBias.trimStart()}`;
-            }
+        if (promptBias.trim().length !== 0) {
+            finalMesSend[finalMesSend.length - 1].message +=
+                /\s/.test(finalMesSend[finalMesSend.length - 1].message.slice(-1))
+                    ? promptBias.trimStart()
+                    : ` ${promptBias.trimStart()}`;
         }
 
         // Flattens the multiple prompt objects to a string.
@@ -1211,9 +954,7 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
                 type: type,
                 quietPrompt: quiet_prompt,
                 quietImage: quietImage,
-                cyclePrompt: cyclePrompt,
                 messages: oaiMessages,
-                messageExamples: oaiMessageExamples,
             }, dryRun);
             generate_data = { prompt: prompt };
 
@@ -1267,8 +1008,6 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
 
             const text = cleanUpMessage({
                 getMessage: extractMessageFromData(result),
-                isImpersonate: isImpersonate,
-                isContinue: isContinue,
                 displayIncompleteSentences: false,
             });
             return String(text ?? '').trim().length === 0;
@@ -1297,42 +1036,30 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
             };
 
             if (isStreamingEnabled() && type !== 'quiet') {
-                const attemptContinueMessage = promptReasoning.removePrefix(continue_mag);
-                state.streamingProcessor = new GenerationStreamSession(type, force_name2, state.generation_started, attemptContinueMessage, promptReasoning);
+                state.streamingProcessor = new GenerationStreamSession(type, force_name2, state.generation_started, promptReasoning);
                 state.streamingProcessor.suppressErrorRecovery = isIntermediateAttempt;
                 state.streamingProcessor.fromFallbackAttempt = Boolean(attempt.fallbackProvider);
                 if (activeRecoveryMessageId !== null && activeRecoveryMessageId >= 0) {
                     state.streamingProcessor.messageId = activeRecoveryMessageId;
                 }
-                if (isContinue) {
-                    // Save reply does add cycle text to the prompt, so it's not needed here
-                    state.streamingProcessor.firstMessageText = '';
-                }
 
                 state.streamingProcessor.generator = await sendStreamingRequest(type, generate_data, requestOptions);
 
-                hideSwipeButtons();
                 let getMessage = await state.streamingProcessor.generate();
                 if (state.streamingProcessor.abortController.signal.aborted && state.streamingProcessor.isFinished) {
                     throw new Error('Generation was aborted.');
                 }
                 let messageChunk = cleanUpMessage({
                     getMessage: getMessage,
-                    isImpersonate: isImpersonate,
-                    isContinue: isContinue,
                     displayIncompleteSentences: false,
                 });
-
-                if (isContinue) {
-                    getMessage = attemptContinueMessage + getMessage;
-                }
 
                 const isStreamFinished = state.streamingProcessor && !state.streamingProcessor.isStopped && state.streamingProcessor.isFinished;
                 const isStreamWithToolCalls = state.streamingProcessor && Array.isArray(state.streamingProcessor.toolCalls) && state.streamingProcessor.toolCalls.length;
                 if (canPerformToolCalls && isStreamFinished && isStreamWithToolCalls) {
                     const lastMessage = state.chat[state.chat.length - 1];
                     const hasToolCalls = state.ToolManager.hasToolCalls(state.streamingProcessor.toolCalls);
-                    const shouldDeleteMessage = type !== 'swipe' && ['', '...'].includes(lastMessage?.mes) && !lastMessage?.extra?.reasoning && ['', '...'].includes(state.streamingProcessor?.result);
+                    const shouldDeleteMessage = ['', '...'].includes(lastMessage?.mes) && !lastMessage?.extra?.reasoning && ['', '...'].includes(state.streamingProcessor?.result);
                     if (hasToolCalls && shouldDeleteMessage) await deleteLastMessage();
                     if (hasToolCalls && !shouldDeleteMessage) {
                         await state.streamingProcessor.finalizeIntermediaryMessage(state.streamingProcessor.messageId, getMessage, { unlockUI: false });
@@ -1397,9 +1124,7 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
 
             await ensureRecoveryMessage(activeRecoveryMessageId);
 
-            const retryBaseline = getGenerationAttemptBaseline(activeRecoveryMessageId);
-            clearGenerationAttemptMessage(activeRecoveryMessageId, retryBaseline);
-            prepareGenerationRetrySwipe(activeRecoveryMessageId, retryBaseline);
+            clearGenerationAttemptMessage(activeRecoveryMessageId);
             showGenerationAutoRecoveryStatus(activeRecoveryMessageId, attempt.status, attempt.label === 'fallback' ? 'fallback' : 'primary');
             deactivateSendButtons();
             showStopButton();
@@ -1418,7 +1143,7 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
             if (failureDecision.action !== 'retry') {
                 if (failureDecision.shouldRestoreAttemptMessage) {
                     await ensureRecoveryMessage(candidateRecoveryMessageId);
-                    clearGenerationAttemptMessage(activeRecoveryMessageId, getGenerationAttemptBaseline(activeRecoveryMessageId));
+                    clearGenerationAttemptMessage(activeRecoveryMessageId);
                 } else if (isAssistantRecoveryMessageId(candidateRecoveryMessageId)) {
                     activeRecoveryMessageId = candidateRecoveryMessageId;
                 }
@@ -1434,7 +1159,7 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
             }
 
             await ensureRecoveryMessage(candidateRecoveryMessageId);
-            clearGenerationAttemptMessage(activeRecoveryMessageId, getGenerationAttemptBaseline(activeRecoveryMessageId));
+            clearGenerationAttemptMessage(activeRecoveryMessageId);
             return {
                 action: 'retry',
                 exception,
@@ -1498,12 +1223,8 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
         let imageUrls = extractImagesFromData(data);
         const reasoningSignature = extractReasoningSignatureFromData(data);
 
-        const swipes = extractMultiSwipes(data, type);
-
         messageChunk = cleanUpMessage({
             getMessage: getMessage,
-            isImpersonate: isImpersonate,
-            isContinue: isContinue,
             displayIncompleteSentences: false,
         });
 
@@ -1512,54 +1233,39 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
 
         reasoning = reasoning.trim();
 
-        if (isContinue) {
-            continue_mag = promptReasoning.removePrefix(continue_mag);
-            getMessage = continue_mag + getMessage;
-        }
-
         //Formating
         const displayIncomplete = type === 'quiet' && !quietToLoud;
         getMessage = cleanUpMessage({
             getMessage: getMessage,
-            isImpersonate: isImpersonate,
-            isContinue: isContinue,
             displayIncompleteSentences: displayIncomplete,
         });
 
-        if (isImpersonate) {
-            setComposerValue(getMessage);
-            await eventSource.emit(event_types.IMPERSONATE_READY, getMessage);
-        } else if (type == 'quiet') {
+        if (type == 'quiet') {
             unblockGeneration(type);
             return getMessage;
         } else {
-            // Without streaming we'll be having a full message on continuation. Treat it as a last chunk.
             const finalization = getGenerationSuccessFinalization({
                 hasActiveRecoveryMessage: isAssistantRecoveryMessageId(activeRecoveryMessageId),
-                originalType,
                 type,
             });
             if (finalization.action === 'replace_recovery_message') {
-                const recoveryBaseline = getGenerationAttemptBaseline(activeRecoveryMessageId);
                 ({ type, getMessage } = await replaceAssistantRecoveryMessage(activeRecoveryMessageId, {
                     type,
                     getMessage,
                     title,
-                    swipes,
                     reasoning,
                     imageUrls,
                     reasoningSignature,
-                    recoverySwipeId: recoveryBaseline?.recoverySwipeId,
                 }));
                 clearGenerationAutoRecoveryStatus(activeRecoveryMessageId);
             } else {
-                ({ type, getMessage } = await saveReply({ type: finalization.type, getMessage, title, swipes, reasoning, imageUrls, reasoningSignature }));
+                ({ type, getMessage } = await saveReply({ type: finalization.type, getMessage, title, reasoning, imageUrls, reasoningSignature }));
             }
         }
 
         if (canPerformToolCalls) {
             const hasToolCalls = state.ToolManager.hasToolCalls(data);
-            const shouldDeleteMessage = type !== 'swipe' && ['', '...'].includes(getMessage) && !reasoning;
+            const shouldDeleteMessage = ['', '...'].includes(getMessage) && !reasoning;
             if (hasToolCalls && shouldDeleteMessage) await deleteLastMessage();
             const invocationResult = await state.ToolManager.invokeFunctionTools(data, { reasoningText: reasoning });
             const shouldStopGeneration = (!invocationResult.invocations.length && shouldDeleteMessage) || invocationResult.stealthCalls.length;
@@ -1606,1080 +1312,6 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
 }
 //MARK: Generate() ends
 
-/**
- * Handles the swipe event.
- * @param {SwipeEvent} event Event.
- * @param {SWIPE_DIRECTION} direction The direction to swipe.
- * @param {object} params Additional parameters.
- * @param {import('./constants.js').SWIPE_SOURCE} [params.source]  The source of the swipe event.
- * @param {boolean} [params.repeated] Is the swipe event repeated.
- * @param {ChatMessage} [params.message=chat[chat.length - 1]] The chat message to swipe.
- * @param {number} [params.forceMesId] The message id to swipe.
- * @param {number} [params.forceSwipeId] The target swipe_id. When out of range, it will be looped or clamped.
- * @param {number} [params.forceDuration] Overwrites the default swipe duration.
- */
-export async function swipe(event, direction, {
-    source,
-    repeated,
-    message = state.chat[state.chat.length - 1],
-    forceMesId,
-    forceSwipeId,
-    forceDuration,
-} = {}) {
-    if (state.chat.length === 0) {
-        console.warn('Swipe was called on an empty chat.');
-        return;
-    }
-
-    let messageIndex;
-
-    //Only set messageIndex if message exists because -1 is truthy.
-    if (message) {
-        messageIndex = state.chat.indexOf(message);
-        if (messageIndex === -1 && typeof (forceMesId) != 'number') {
-            console.error(`The message must exist in chat. ${message};`);
-            return;
-        }
-    }
-
-    const mesId = Number(
-        forceMesId
-        ?? messageIndex
-        ?? (isReactMainChatOwner() ? NaN : event?.currentTarget?.closest('.mes')?.getAttribute('mesid'))
-        ?? state.chat.length - 1,
-    );
-
-    if (isReactMainChatOwner()) {
-        return runReactMainChatSwipe();
-    }
-
-    async function runReactMainChatSwipe() {
-        const targetMessage = state.chat[mesId];
-        if (!Number.isInteger(mesId) || mesId < 0 || !targetMessage) {
-            return;
-        }
-
-        const bypassSwipeChecks = [
-            SWIPE_SOURCE.DELETE,
-            SWIPE_SOURCE.BACK,
-            SWIPE_SOURCE.SLASH_COMMAND,
-            SWIPE_SOURCE.SWIPE_PICKER,
-        ].includes(source);
-
-        if (!bypassSwipeChecks) {
-            if (isGenerating() && state.swipes && !state.swipesHidden && state.swipeState === SWIPE_STATE.NONE) {
-                toastr.warning(t`Cannot swipe while generating. Stop the request and try again.`, t`Swipe aborted`);
-                return;
-            }
-            if (!isSwipingAllowed() || !isMessageSwipeable(mesId, targetMessage)) {
-                return;
-            }
-        }
-
-        cancelDebouncedChatSave();
-        ensureSwipes(targetMessage);
-        syncMesToSwipe(mesId);
-
-        const originalSwipeId = Number(targetMessage.swipe_id ?? 0);
-        let newSwipeId = Number(forceSwipeId ?? originalSwipeId);
-        const isRight = direction === SWIPE_DIRECTION.RIGHT;
-
-        if (forceSwipeId == null) {
-            newSwipeId += isRight ? 1 : -1;
-        }
-
-        if (!isRight && newSwipeId < 0) {
-            newSwipeId = Math.max(0, targetMessage.swipes.length - 1);
-        }
-
-        if (isRight && newSwipeId >= targetMessage.swipes.length) {
-            newSwipeId = targetMessage.swipes.length;
-            targetMessage.swipe_id = newSwipeId;
-
-            const overswipe = getOverswipeBehavior(mesId, targetMessage);
-            if (overswipe === OVERSWIPE_BEHAVIOR.NONE) {
-                targetMessage.swipe_id = originalSwipeId;
-                showSwipeButtons();
-                return;
-            }
-            if (overswipe === OVERSWIPE_BEHAVIOR.REGENERATE) {
-                clearMessageData(targetMessage);
-                await eventSource.emit(event_types.MESSAGE_SWIPED, mesId);
-                if (!state.is_send_press) {
-                    state.is_send_press = true;
-                    return Generate('swipe');
-                }
-                return;
-            }
-            if (overswipe === OVERSWIPE_BEHAVIOR.LOOP || overswipe === OVERSWIPE_BEHAVIOR.PRISTINE_GREETING) {
-                newSwipeId = 0;
-            }
-        }
-
-        if (newSwipeId < 0 || newSwipeId >= targetMessage.swipes.length) {
-            targetMessage.swipe_id = originalSwipeId;
-            showSwipeButtons();
-            return;
-        }
-
-        if (!syncSwipeToMes(mesId, newSwipeId, targetMessage)) {
-            targetMessage.swipe_id = originalSwipeId;
-            showSwipeButtons();
-            return;
-        }
-
-        await eventSource.emit(event_types.MESSAGE_SWIPED, mesId);
-        if (source !== SWIPE_SOURCE.BACK) {
-            saveChatDebounced();
-        }
-        showSwipeButtons();
-        void mountReactMainChatMessageListPanel();
-    }
-
-    if ([SWIPE_SOURCE.DELETE, SWIPE_SOURCE.BACK, SWIPE_SOURCE.SLASH_COMMAND, SWIPE_SOURCE.SWIPE_PICKER].includes(source)) {
-        console.info(`The ${direction} swipe source on message #${mesId} is ${source}, Most checks have been bypassed. `);
-    } else {
-        //Only show an error if swipes are not hidden and a message is generating.
-        if (isGenerating() && (state.swipes && !state.swipesHidden && (state.swipeState === SWIPE_STATE.NONE))) {
-            toastr.warning(t`Cannot swipe while generating. Stop the request and try again.`, t`Swipe aborted`);
-            return;
-        }
-        //Only allow one concurrent swipe.
-        if (!isSwipingAllowed()) {
-            console.info('The swipe has been ignored messages cannot currently be swiped.');
-            return;
-        }
-        if (!isMessageSwipeable(mesId, message)) {
-            console.info(`Message #${mesId} cannot be swiped. ${message}`);
-            return;
-        }
-    }
-
-    // Cancel pending save to prevent accidental swipe_id overwrites.
-    cancelDebouncedChatSave();
-
-    state.swipeState = SWIPE_STATE.SWIPING;
-    let generation;
-
-    const thisMesDiv = state.chatElement.children('.mes').filter(`[mesid="${mesId}"]`);
-    const thisMesText = thisMesDiv.find('.mes_block .mes_text');
-    const thisMesDivHeight = thisMesDiv[0]?.scrollHeight;
-    const thisMesTextHeight = thisMesText[0]?.scrollHeight;
-    if (![thisMesDiv.length, thisMesText.length].every(num => num > 0)) {
-        console.error(`Message #${mesId}'s DOM element is not valid.`);
-        return;
-    }
-    const originalSwipeId = Number(state.chat[mesId]?.swipe_id ?? 0);
-    let newSwipeId = Number(forceSwipeId ?? originalSwipeId);
-
-    /**
-     * Calculates the next swipe duration with how many swipes have been repeated.
-     * @param {number} animation_duration
-     * @returns {number} The adjusted swipe duration.
-     */
-    function getSwipeDuration(_animation_duration) {
-        const now = performance.now();
-        const resetTime = state.animation_duration * 2 + 300;
-
-        //Reset the counter if the last swipe was more than half a second ago.
-        if (now - state.lastSwipeInfo.now >= resetTime || direction !== state.lastSwipeInfo.direction) state.recentSwipes = 0;
-        state.recentSwipes++;
-        state.lastSwipeInfo = { now, direction };
-
-        //At 4 swipes, animation_duration will be halved.
-        const sigmoid = 1 / (1 + Math.exp(state.recentSwipes - 4));
-
-        return state.animation_duration * sigmoid;
-    }
-
-    const swipeDuration = forceDuration ?? getSwipeDuration(state.animation_duration);
-
-    //The offscreen messages may be visible if the user resizes the viewport during a swipe.
-    const thisMesDivWidth = thisMesDiv.width() + 30;
-    let swipeRange = (direction === SWIPE_DIRECTION.RIGHT) ? -thisMesDivWidth : thisMesDivWidth;
-
-    /**
-     * Waits for the generation to end, reverts the swipe if swipe_id has not changed.
-     * @param {boolean} revert Attept to revert the swipe without saving.
-     */
-    async function endSwipe(revert = false) {
-        //Wait for the generation to end.
-        try {
-            //`mes_buttons` need to be hidden until the animation completes.
-            if (generation) {
-                document.body.dataset.swiping = 'true';
-                await generation;
-            }
-        } catch (error) {
-            console.warn(`Swipe failed, Swiping back. ${error}`);
-        }
-
-        //Clamp Id between swipes.
-        let clampedId = clamp(state.chat[mesId].swipe_id, 0, Math.max(0, state.chat[mesId].swipes.length - 1));
-
-        await updateSwipeCounter(mesId);
-        //Fallback.
-        if (mesId != state.chat.length - 1) {
-            await updateSwipeCounter(state.chat.length - 1);
-        }
-
-        // If swipe_id has not changed, give the user feedback.
-        if (clampedId == originalSwipeId && source != SWIPE_SOURCE.DELETE) {
-            try {
-                //Shake 700/140=5px
-                shakeElement(thisMesDiv, -swipeRange / 140, state.animation_duration, 'ease-in');
-                //Flash red.
-                const flashTime = Math.max(state.animation_duration * 2, 100);
-                await Promise.race([thisMesDiv.find('.swipes-counter').animate({ color: 'red' }, flashTime).animate({ color: '' }).promise(), createTimeout(flashTime * 4, `The shake animation did not end within ${flashTime * 4}ms`)].filter(Boolean));
-            } catch (error) {
-                console.warn(error);
-            }
-        }
-
-        //If the id is not within bounds, Swipe back.
-        if (state.chat[mesId]?.swipe_id !== clampedId || revert) {
-            // Prevent recursion.
-            if (source != SWIPE_SOURCE.BACK) {
-                source = SWIPE_SOURCE.BACK;
-                state.chat[mesId].swipe_id = clampedId;
-
-                //Update the chat.
-                await loadFromSwipeId(mesId, state.chat[mesId].swipe_id);
-                await redisplayChat({ startIndex: mesId });
-            } else {
-                await state.Popup.show.confirm(
-                    t`ERROR: <code>syncSwipeToMes</code> has failed to revert the failed ${direction} swipe on message #${mesId}.`,
-                    t`<p>After you click OK, the chat will be reloaded to prevent data corruption.</p>`,
-                    { okButton: 'OK', cancelButton: false },
-                );
-                console.trace(`Error! Recursion detected when reverting failed ${direction} swipe on message #${mesId}. Something has broken.`);
-                await reloadCurrentChat();
-            }
-            //Out of bounds swipes should not be saved.
-        } else if (source != SWIPE_SOURCE.BACK) {
-            //Save the chat if swipe_id has changed.
-            saveChatDebounced();
-        }
-
-        //Allow for another swipe.
-        state.swipeState = SWIPE_STATE.NONE;
-        delete document.body.dataset.swiping;
-        showSwipeButtons();
-    }
-
-    async function standardSwipe(newSwipeId) {
-        //If swipe_id has changed, or the source is being deleted.
-        if (newSwipeId !== originalSwipeId || source == SWIPE_SOURCE.DELETE || source == SWIPE_SOURCE.BACK) {
-            //Update the chat.
-            await loadFromSwipeId(mesId, newSwipeId);
-            //Transition to the new chat.
-            await animateSwipe();
-        }
-        await endSwipe();
-    }
-
-    /**
-     * Removes a message's extra and gen times.
-     * @param {ChatMessage} message
-     */
-    function clearMessageData(message) {
-        if (message.extra && typeof message.extra === 'object') {
-            delete message.extra.memory;
-            delete message.extra.display_text;
-            delete message.extra.media;
-            delete message.extra.inline_image;
-            delete message.extra.files;
-            delete message.extra.fileLength;
-            delete message.extra.generationType;
-            delete message.extra.negative;
-            delete message.extra.title;
-            delete message.extra.append_title;
-        }
-        delete message.gen_started;
-        delete message.gen_finished;
-    }
-
-    /**
-     * Sets the message to the newSwipeId and loads it.
-     * @param {number} mesId
-     * @param {number} newSwipeId
-     */
-    async function loadFromSwipeId(mesId, newSwipeId) {
-        //Update the swipe_id.
-        state.chat[mesId].swipe_id = newSwipeId;
-
-        clearMessageData(state.chat[mesId]);
-
-        //Load from swipes.
-        if (syncSwipeToMes(mesId, newSwipeId) == false) {
-            let errorMessage = t`When swiping ${direction} on message ${mesId}, syncSwipeToMes has returned false. Attempting to swipe back!`;
-            toastr.error(errorMessage);
-
-            state.chat[mesId].swipe_id = originalSwipeId;
-            await endSwipe(true);
-        }
-        return true;
-    }
-
-    /**
-     * Animates a swipe for all messages >= mesId.
-     * @param {number} mesId
-     * @param {object} params
-     * @param {string} [params.xStart='opx']
-     * @param {string} [params.xEnd='0px']
-     * @param {number} [params.duration=animation_duration]
-     * @param {string} [params.classes=''] Additional CSS classes to target during the swipe.
-     * @param {boolean} [params.freeze=true] When true, do not remove the class from the animation, leaving it stuck at xEnd.
-     * @returns {Promise<boolean|Function>} endSlide unfreezes the messages from xEnd.
-     */
-    async function animateSwipeTransition(mesId, { xStart = '0px', xEnd = '0px', duration = state.animation_duration, classes = '', freeze = false } = {}) {
-        // If the animation_duration is zero, the 'animationend' promise will never resolve.
-        //Skip the animation if it's faster than 50ms.
-        if (duration <= 50) return;
-
-        //Select MAXIMUM_ANIMATED messages after mesId. Ideally, only visible messages would be animated.
-        const MAXIMUM_ANIMATED = 100;
-
-        const messages = state.chatElement.children('.mes');
-        const firstDisplayedMesId = Number(messages.first().attr('mesid'));
-
-        const swipedMessagesDiv = messages.filter((index, _div) => {
-            // const messageId = Number($(div).attr('mesid')); //Slower.
-            //This assumes the messages are in order and their Id's are accurate.
-            const divMessageId = firstDisplayedMesId + index;
-
-            return (divMessageId < mesId + MAXIMUM_ANIMATED && divMessageId >= mesId);
-        });
-        if (swipedMessagesDiv.length > 0) {
-            let swipeClasses = '.mes_block, .mesAvatarWrapper';
-            swipeClasses += classes;
-
-            //Select only the target classes.
-            const swipedElementsDiv = swipedMessagesDiv.children(swipeClasses);
-            if (swipedElementsDiv.length > 0) {
-                //This is a global variable, only one swipe transition can occur concurrently.
-                document.documentElement.style.setProperty('--slide-mes-x-start', xStart);
-                document.documentElement.style.setProperty('--slide-mes-x-end', xEnd);
-                document.documentElement.style.setProperty('--slide-mes-x-duration', `${duration}ms`);
-
-                //The class must be removed to unfreze previous slides.
-                swipedElementsDiv.removeClass('slide');
-                //CSS starts the animation.
-                void swipedElementsDiv[0].offsetWidth;
-                swipedElementsDiv.addClass('slide');
-
-                const endSlide = () => {
-                    //Remove the style when done.
-                    swipedElementsDiv.removeClass('slide');
-
-                    document.documentElement.style.setProperty('--slide-mes-x-start', '');
-                    document.documentElement.style.setProperty('--slide-mes-x-end', '');
-                    document.documentElement.style.setProperty('--slide-mes-duration', '');
-                    return true;
-                };
-                //Wait for the animation's end. https://developer.mozilla.org/en-US/docs/Web/API/Animation/finished
-                const animations = swipedElementsDiv[0]?.getAnimations() ?? [];
-                const animation = animations.filter((a) => a instanceof globalThis.CSSAnimation && a.animationName == 'slide')[0];
-                try {
-                    await Promise.race([animation?.finished, createTimeout(duration * 2, `The ${duration}ms swipe animation has not ended after ${duration * 2}ms. It has been skipped.`)].filter(Boolean));
-                } catch (error) {
-                    console.warn(error);
-                }
-
-                //If not frozen, end the slide now.
-                return freeze ? endSlide : endSlide();
-            }
-        }
-        console.warn(`No animatable messages were found after message #${mesId}.`);
-        return false;
-    }
-
-    function getMessageBottomHeight(thisMesDiv) {
-        const thisMesRect = thisMesDiv[0].getBoundingClientRect();
-        //Scroll position + Chat height = Bottom of chat height.
-        const chatBottom = state.chatElement.scrollTop() - state.chatElement.height();
-        //Message offset from viewport top + height = Bottom of message offset.
-        const messageBottom = thisMesRect.top + thisMesDiv.height();
-        // Bottom of chat + Bottom of message offset = target scroll position.
-        const scrollHeight = (chatBottom + messageBottom);
-        return scrollHeight;
-    }
-
-    function expandNewMessage(thisMesDiv) {
-        //Only scroll if the view is not near the bottom.
-        const is_animation_scroll = (state.chatElement.scrollTop() >= (state.chatElement.prop('scrollHeight') - state.chatElement.outerHeight()) - 10);
-
-        let new_height = thisMesDivHeight - (thisMesTextHeight - thisMesText[0].scrollHeight);
-        if (new_height < 103) new_height = 103;
-
-        //Keep the swipe buttons at the same height when scrolling is finished.
-
-        //Expand new message.
-        thisMesDiv.animate({ height: new_height + 'px' }, {
-            duration: 0, //used to be 100 //Disabled on Cohee's request. https://github.com/SillyTavern/SillyTavern/pull/4610/files#r2408731744
-            queue: false,
-            progress: function (_animation, _progress, _remainingMs) {
-                if (is_animation_scroll) state.chatElement.scrollTop(getMessageBottomHeight(thisMesDiv));
-            },
-            complete: function () {
-                thisMesDiv.css('height', 'auto');
-                //Correct height auto offset.
-                if (is_animation_scroll) state.chatElement.scrollTop(getMessageBottomHeight(thisMesDiv));
-            },
-        });
-    }
-
-    /**
-     * Anime a swipe, optionally running a generation.
-     * @param {boolean} run_generate
-     * @param {boolean} [skipSwipeOut=false]
-     */
-    async function animateSwipe(run_generate = false, skipSwipeOut = false) {
-        if (!skipSwipeOut) {
-            //Swipe out.
-            await animateSwipeTransition(mesId, { xEnd: `${swipeRange}px`, duration: swipeDuration });
-        }
-
-
-        if (run_generate) {
-            await updateSwipeCounter(mesId);
-            //shows "..." while generating
-            thisMesDiv.find('.mes_text').html('...');
-            // resets the timer
-            thisMesDiv.find('.mes_timer').html('');
-            updateReasoningUI(thisMesDiv, { reset: true });
-        } else {
-            //console.log('showing previously generated swipe candidate, or "..."');
-            //console.log('onclick right swipe calling addOneMessage');
-
-            //Only scroll when swiping the last message.
-            const scroll = (mesId == state.chat.length - 1);
-            //The swipe buttons will be refreshed in endSwipe(), refreshing them now will cause flickering.
-            addOneMessage(state.chat[mesId], { type: 'swipe', forceId: mesId, scroll: scroll, showSwipes: false });
-        }
-
-        //Animate expanding to the new message height.
-        thisMesDiv.css('height', thisMesDivHeight);
-        expandNewMessage(thisMesDiv);
-
-        if (run_generate) {
-            appendMediaToMessage(state.chat[mesId], thisMesDiv);
-        }
-
-        await eventSource.emit(event_types.MESSAGE_SWIPED, (mesId));
-
-        if (run_generate && !state.is_send_press) {
-            state.is_send_press = true;
-            generation = Generate('swipe');
-        }
-
-        //Swipe in from the opposite side.
-        await animateSwipeTransition(mesId, { xStart: `${-swipeRange}px`, xEnd: `${0}px`, duration: swipeDuration });
-    }
-
-    if (mesId === Number(state.this_edit_mes_id)) {
-        closeMessageEditor();
-    }
-    if (isStreamingEnabled() && state.streamingProcessor) {
-        state.streamingProcessor.onStopStreaming();
-    }
-
-    //If the swipe is not being deleted.
-    if (source != SWIPE_SOURCE.DELETE && source != SWIPE_SOURCE.BACK) {
-        // Make sure ad-hoc changes to extras are saved before swiping away
-        syncMesToSwipe(mesId);
-
-        if (state.chat[mesId].swipe_id === undefined) {              // if there is no swipe-message in the last spot of the chat array
-            state.chat[mesId].swipe_id = 0;                        // set it to id 0
-            state.chat[mesId].swipes = [];                         // empty the array
-            state.chat[mesId].swipe_info = [];
-            state.chat[mesId].swipes[0] = state.chat[mesId].mes;  //assign swipe array with last chat[mesId] from chat
-            state.chat[mesId].swipe_info[0] = {
-                'send_date': state.chat[mesId].send_date,
-                'gen_started': state.chat[mesId].gen_started,
-                'gen_finished': state.chat[mesId].gen_finished,
-                'extra': structuredClone(state.chat[mesId].extra),
-            };
-        }
-        // If the user is holding down the key and we're at the last or first swipe, don't do anything.
-        let isLastSwipe = (direction === SWIPE_DIRECTION.RIGHT) ? (state.chat[mesId].swipe_id === Math.max(0, state.chat[mesId].swipes.length - 1)) : state.chat[mesId].swipe_id === 0;
-        if (source === SWIPE_SOURCE.KEYBOARD && repeated && isLastSwipe) {
-            await endSwipe();
-            return;
-        }
-    } else if (source == SWIPE_SOURCE.DELETE || source == SWIPE_SOURCE.BACK) {
-        //If the swipe is being deleted or reverted.
-        await standardSwipe(newSwipeId);
-        return;
-    }
-
-    //If swiping left.
-    if (direction === SWIPE_DIRECTION.LEFT) {
-        if (forceSwipeId == null) newSwipeId--;
-        //Loop to last swipe if negative.
-        if (newSwipeId < 0) {
-            newSwipeId = Math.max(0, state.chat[mesId].swipes.length - 1);
-        }
-        //Limit swipe_id to swipes.
-        if (newSwipeId > state.chat[mesId].swipes.length - 1) {
-            toastr.warning(`The swipe_id for message #${mesId} was ${newSwipeId}. It has been reset to ${state.chat[mesId].swipes.length - 1}.`);
-            state.chat[mesId].swipe_id = state.chat[mesId].swipes.length - 1;
-            await endSwipe();
-            return;
-        }
-        await standardSwipe(newSwipeId);
-        return;
-    } else if (direction === SWIPE_DIRECTION.RIGHT) {
-        //If swiping right.
-        // make new slot in array
-        if (forceSwipeId == null) newSwipeId++;
-
-        //Minimum of zero.
-        if (newSwipeId < 0) {
-            toastr.warning(`The swipe_id for message #${mesId} was ${newSwipeId}. It has been reset to zero.`);
-            state.chat[mesId].swipe_id = 0;
-            await endSwipe();
-            return;
-        }
-
-        //If overswiping.
-        if (newSwipeId >= state.chat[mesId].swipes.length) {
-            newSwipeId = state.chat[mesId].swipes.length;
-
-            //Update the swipe_id.
-            state.chat[mesId].swipe_id = newSwipeId;
-
-            const overswipe = getOverswipeBehavior(mesId);
-
-            //Cancel the generation.
-            if (overswipe == OVERSWIPE_BEHAVIOR.NONE) {
-                //Cancel swipe.
-                state.chat[mesId].swipe_id = originalSwipeId;
-                await endSwipe();
-                return;
-            } else if (overswipe == OVERSWIPE_BEHAVIOR.REGENERATE) {
-                //Regenerate the message
-                clearMessageData(state.chat[mesId]);
-                let run_generate = true;
-                //Generate.
-                await animateSwipe(run_generate);
-                await endSwipe();
-                return;
-            } else if (overswipe == OVERSWIPE_BEHAVIOR.LOOP || overswipe == OVERSWIPE_BEHAVIOR.PRISTINE_GREETING) {
-                // Loop to the first swipe.
-                newSwipeId = 0;
-            }
-        }
-        await standardSwipe(newSwipeId);
-        return;
-    }
-}
-
-const setMainChatMessageUiFlag = (...args) => shell().setMainChatMessageUiFlag(...args);
-const canOpenSwipePickerForMessage = (...args) => shell().canOpenSwipePickerForMessage(...args);
-const canJumpToSwipeForMessage = (...args) => shell().canJumpToSwipeForMessage(...args);
-
-/**
- * Creates a message's `swipes`, `swipe_id` and `swipe_info` if necessary.
- * @param {ChatMessage} message
- * @returns {boolean} true if the message was updated.
- */
-export function ensureSwipes(message) {
-    let updated = false;
-
-    if (!message || typeof message !== 'object') {
-        console.trace(`[ensureSwipes] failed. '${message}' is not an object.`);
-        return updated;
-    }
-
-    //Small system messages and user messages should not have swipes.
-    if (message?.is_user || message?.extra?.isSmallSys) {
-        return updated;
-    }
-
-    if (!Array.isArray(message.swipes)) {
-        message.swipes = [message.mes ?? ''];
-        updated = true;
-    }
-
-    if (typeof message.swipe_id !== 'number') {
-        message.swipe_id = 0;
-        updated = true;
-    }
-
-    /** @type {() => SwipeInfo} */
-    const createSwipeInfo = () => ({
-        send_date: message.send_date,
-        gen_started: message.gen_started,
-        gen_finished: message.gen_finished,
-        extra: {},
-    });
-
-    if (!Array.isArray(message.swipe_info)) {
-        message.swipe_info = message.swipes.map(_ => createSwipeInfo());
-        updated = true;
-    }
-
-    for (let i = 0; i < message.swipes.length; i++) {
-        if (typeof message.swipes[i] !== 'string') {
-            updated = true;
-            console.warn('The message had a swipe that is not a string. It has has been set to \'\'.', message);
-            message.swipes[i] = '';
-        }
-        if (!message.swipe_info[i] || typeof message.swipe_info[i] !== 'object') {
-            updated = true;
-            console.warn('The message had missing or invalid swipe_info for a swipe. It has been backfilled.', message);
-            message.swipe_info[i] = createSwipeInfo();
-        }
-    }
-
-    return updated;
-}
-
-/**
- * Syncs the current message and all its data into the swipe data at the given message ID (or the last message if no ID is given).
- *
- * If the swipe data is invalid in some way, this function will exit out without doing anything.
- * @param {number?} [messageId=null] - The ID of the message to sync with the swipe data. If no ID is given, the last message is used.
- * @returns {boolean} Whether the message was successfully synced
- */
-export function syncMesToSwipe(messageId = null) {
-    if (!state.chat.length) {
-        return false;
-    }
-
-    const targetMessageId = messageId ?? state.chat.length - 1;
-    if (targetMessageId >= state.chat.length || targetMessageId < 0) {
-        console.warn(`[syncMesToSwipe] Invalid message ID: ${messageId}`);
-        return false;
-    }
-
-    const targetMessage = state.chat[targetMessageId];
-    if (!targetMessage) {
-        return false;
-    }
-
-    // No swipe data there yet, exit out
-    if (typeof targetMessage.swipe_id !== 'number') {
-        return false;
-    }
-    // If swipes structure is invalid, exit out (for now?)
-    if (!Array.isArray(targetMessage.swipe_info) || !Array.isArray(targetMessage.swipes)) {
-        return false;
-    }
-    // If the swipe is not present yet, exit out (will likely be copied later)
-    // "" is falsy. An empty string is a valid message.
-    if (typeof targetMessage.swipes[targetMessage.swipe_id] !== 'string' || !targetMessage.swipe_info[targetMessage.swipe_id]) {
-        return false;
-    }
-
-    const targetSwipeInfo = targetMessage.swipe_info[targetMessage.swipe_id];
-    if (typeof targetSwipeInfo !== 'object') {
-        return false;
-    }
-
-    // Only sync swipes if the chat is not pristine, so that macros in the greeting can resolve again on swipe
-    if (state.chat_metadata.tainted || state.chat.length > 1) {
-        targetMessage.swipes[targetMessage.swipe_id] = targetMessage.mes;
-    }
-
-    targetSwipeInfo.send_date = targetMessage.send_date;
-    targetSwipeInfo.gen_started = targetMessage.gen_started;
-    targetSwipeInfo.gen_finished = targetMessage.gen_finished;
-    targetSwipeInfo.extra = structuredClone(targetMessage.extra);
-
-    return true;
-}
-
-/**
- * Syncs swipe data back to the message data at the given message ID (or the last message if no ID is given).
- * If the swipe ID is not provided, the current swipe ID in the message object is used.
- *
- * If the swipe data is invalid in some way, this function will exit out without doing anything.
- * @param {number?} [messageId=null] - The ID of the message to sync with the swipe data. If no ID is given, the last message is used.
- * @param {number?} [swipeId=null] - The ID of the swipe to sync. If no ID is given, the current swipe ID in the message object is used.
- * @param {ChatMessage?} [targetMessage=null] - The message object to sync instead of resolving one from `chat`.
- * @returns {boolean} Whether the swipe data was successfully synced to the message
- */
-export function syncSwipeToMes(messageId = null, swipeId = null, targetMessage = null) {
-    if (!targetMessage && !state.chat.length) {
-        return false;
-    }
-
-    if (!targetMessage) {
-        const targetMessageId = messageId ?? state.chat.length - 1;
-        if (targetMessageId >= state.chat.length || targetMessageId < 0) {
-            console.warn(`[syncSwipeToMes] Invalid message ID: ${messageId}`);
-            return false;
-        }
-
-        targetMessage = state.chat[targetMessageId];
-    }
-
-    if (!targetMessage) {
-        return false;
-    }
-
-    if (swipeId !== null) {
-        if (isNaN(swipeId) || swipeId < 0) {
-            console.warn(`[syncSwipeToMes] Invalid swipe ID: ${swipeId}`);
-            return false;
-        }
-        targetMessage.swipe_id = swipeId;
-    }
-
-    // No swipe data there yet, exit out
-    if (typeof targetMessage.swipe_id !== 'number') {
-        return false;
-    }
-    // If swipes structure is invalid, exit out
-    if (!Array.isArray(targetMessage.swipes)) {
-        return false;
-    }
-
-    // Backfill swipe_info if missing.
-    if (!Array.isArray(targetMessage.swipe_info)) {
-        targetMessage.swipe_info = targetMessage.swipes.map(_ => ({
-            send_date: targetMessage.send_date,
-            gen_started: void 0,
-            gen_finished: void 0,
-            extra: {},
-        }));
-    }
-
-    const targetSwipeId = targetMessage.swipe_id;
-    if (typeof targetMessage.swipes[targetSwipeId] !== 'string') {
-        console.warn(`[syncSwipeToMes] Invalid swipe ID: ${targetSwipeId}`);
-        return false;
-    }
-
-    const targetSwipeInfo = targetMessage?.swipe_info?.[targetSwipeId];
-    if (typeof targetSwipeInfo !== 'object') {
-        console.warn(`[syncSwipeToMes] Invalid swipe info: ${targetSwipeId}`);
-    }
-
-    targetMessage.mes = targetMessage.swipes[targetSwipeId];
-    targetMessage.send_date = targetSwipeInfo?.send_date;
-    targetMessage.gen_started = targetSwipeInfo?.gen_started;
-    targetMessage.gen_finished = targetSwipeInfo?.gen_finished;
-    targetMessage.extra = structuredClone(targetSwipeInfo?.extra) ?? {};
-
-    return true;
-}
-
-/**
- * Update the swipe counter for mesId.
- * By default, the swipe counter's opacity will appear greyed out. The opacity is changed with CSS.
- * @param {Number} mesId
- * @param {object} [options] Options
- * @param {ChatMessage} [options.message=undefined] Swipe numbers from this message will be used instead of mesId.
- * @param {JQuery<HTMLElement>} [options.messageElement=undefined] Target Element. Passing in the message's element will save a DOM query.
- */
-export async function updateSwipeCounter(mesId, { message = undefined, messageElement = undefined } = {}) {
-    message ??= state.chat[mesId];
-
-    //If the message does not have swipes, create them.
-    if (ensureSwipes(message)) {
-        syncMesToSwipe(mesId);
-    }
-
-    if (isReactMainChatOwner()) {
-        scheduleMainChatMessageListPanelRefresh();
-        return;
-    }
-
-    messageElement ??= state.chatElement.children('.mes').filter(`[mesid="${mesId}"]`);
-
-    const swipeCounterText = formatSwipeCounter((message?.swipe_id + 1), message?.swipes?.length);
-    const swipeCounter = messageElement.find('.swipes-counter');
-    const swipePickerButton = messageElement.find('.mes_swipe_picker');
-    const canOpenSwipePicker = canOpenSwipePickerForMessage(mesId);
-    const canJumpToSwipe = canJumpToSwipeForMessage(mesId);
-
-    swipeCounter
-        .text(swipeCounterText)
-        .prop('hidden', false)
-        .toggleClass('swipe-picker-enabled', canOpenSwipePicker)
-        .toggleClass(state.INTERACTABLE_CONTROL_CLASS, canOpenSwipePicker)
-        .attr('role', canOpenSwipePicker ? 'button' : null)
-        .attr('title', canJumpToSwipe ? t`Click to jump to a swipe` : canOpenSwipePicker ? t`Click to view swipe history` : null);
-    swipePickerButton.toggle(canOpenSwipePicker);
-
-    if (!canOpenSwipePicker) {
-        swipeCounter.removeAttr('tabindex');
-    }
-}
-
-/**
- * Returns true if messages are generally swipeable.
- * @returns {boolean}
- */
-export function isSwipingAllowed() {
-    return (
-        //Swipe cannot be called on an empty chat.
-        state.chat.length !== 0 &&
-        //The swipes setting must be enabled, and swipes can't be hidden.
-        state.swipes && !state.swipesHidden &&
-        //Cannot swipe while generating.
-        !isGenerating() &&
-        //If mid-swipe, the message cannot be swiped.
-        state.swipeState === SWIPE_STATE.NONE
-    );
-}
-
-/**
- * Returns true if the message is swipeable.
- * This does not check if messages are generally swipeable. See isSwipingAllowed().
- * This does not check if the swipes exist or are valid.
- * @param {number} messageId The message Id to check.
- * @param {ChatMessage} [message=undefined] If undefined, then the message checks will be skipped.
- * @returns {boolean}
- */
-export function isMessageSwipeable(messageId, message = undefined) {
-    message ??= state.chat[messageId];
-
-    //If the message does not have swipes, create them.
-    if (ensureSwipes(message)) {
-        syncMesToSwipe(messageId);
-    }
-
-    if (
-        //Only messages below the currently edited message can be swiped, if it's not mid-swipe edit.
-        ((messageId > (state.this_edit_mes_id ?? -1)) && (state.swipeState != SWIPE_STATE.EDITING)) &&
-
-        //If the message is the last message, and it exists.
-        (messageId == state.chat.length - 1) &&
-        (message &&
-            //Small system messages cannot be swiped.
-            !(message?.extra?.isSmallSys) &&
-            //Some messages, like the welcome screen, are not swipeable.
-            !(message?.extra?.swipeable === false) &&
-            //User messages are not swipeable.
-            !message.is_user
-        )
-    ) {
-        // The message is swipeable.
-        return true;
-    } else {
-        // The message is not swipeable.
-        return false;
-    }
-}
-
-/**
- * Returns the message's behavior when swiped past it's last branch.
- * This does not check if the message can currently be swiped. See isMessageSwipeable().
- * This does not check if messages are generally swipeable. See isSwipingAllowed().
- * This does not check if the swipes exist or are valid.
- * @param {number} messageId The message Id to check.
- * @param {ChatMessage} [message=undefined] If defined, this will be used instead of chat[messageId].
- * @returns {OVERSWIPE_BEHAVIOR}
- */
-export function getOverswipeBehavior(messageId, message = undefined) {
-    message ??= state.chat[messageId];
-
-    const isPristine = !state.chat_metadata?.tainted;
-    const isGreeting = messageId === 0;
-
-    //Do not override explicitly set overswipe_behavior.
-    if (typeof message?.extra?.overswipe_behavior == 'string') return message.extra.overswipe_behavior;
-    //Some messages, like the welcome screen, are not swipeable.
-    else if (message?.extra?.swipeable === false) return OVERSWIPE_BEHAVIOR.NONE;
-    //Small System messages can't be swiped.
-    else if (message?.extra?.isSmallSys) return OVERSWIPE_BEHAVIOR.NONE;
-    //The first message in a priistine chat will loop. It's chevrons will always be visible https://github.com/SillyTavern/SillyTavern/pull/4712#issuecomment-3557893373
-    else if (isGreeting && isPristine) return OVERSWIPE_BEHAVIOR.PRISTINE_GREETING;
-    //Non-user and non-prompt hidden messages will regenerate.
-    else if (!message?.is_user && !message?.is_system) return OVERSWIPE_BEHAVIOR.REGENERATE;
-    //By default, all other messages will loop. Their swipe chevrons will only be shown if there is more than one swipe.
-    else { return OVERSWIPE_BEHAVIOR.LOOP; }
-}
-
-/**
- * Refreshes all swipe buttons and updates their swipe counters.
- * This has been optimized for bulk updates by minimizing DOM queries.
- * @param {boolean} updateCounters When true, the swipe counters will also be updated. Typically redundant because addOneMessage updates the counters.
- * @param {boolean} fade By default, the chevrons fade in and out.
- * @returns
- */
-export function refreshSwipeButtons(updateCounters = false, fade = true) {
-    //Never show swipe buttons on an empty chat.
-    if (state.chat?.length === 0) return false;
-
-    //If swipes are disabled or hidden, hide all swipe buttons.
-    if (!isSwipingAllowed()) {
-        $('body').addClass('hideAllSwipeButtons');
-        return;
-        //Don't hide all swipe buttons.
-    } else {
-        //CSS will hide all messages.
-        $('body').removeClass('hideAllSwipeButtons');
-    }
-
-    if (isReactMainChatOwner()) {
-        if (updateCounters) {
-            scheduleMainChatMessageListPanelRefresh();
-        }
-        return;
-    }
-
-    //Non-messages can appear in chat. '.mes' is required.
-    const messageElements = state.chatElement.children('.mes[mesid]');
-
-    const firstDisplayedMesId = Number(messageElements.first().attr('mesid'));
-
-    //Group each message.
-    messageElements.each((index, div) => {
-        //This assumes the messages are in order and their Id's are accurate.
-        const messageId = firstDisplayedMesId + index;
-        //Number($(div).attr('mesid')); Would not misscount due to a missing div, but is much slower.
-
-        const message = state.chat[messageId];
-
-        //Chevrons should not fade-in during printMessages. //https://github.com/SillyTavern/SillyTavern/pull/4712#issuecomment-3539315919
-        div.classList.toggle('fade', fade);
-
-        if (isMessageSwipeable(messageId, message)) {
-            //If a right swipe would trigger a generation or loop to the first swipe.
-            const isLastSwipe = (message?.swipes?.length ?? 1) - 1 <= (message?.swipe_id ?? 0);
-            const hasSwipes = (message?.swipes?.length > 1);
-            const overswipe = getOverswipeBehavior(messageId, message);
-            const swipePickerButton = $(div).find('.mes_swipe_picker');
-            const canOpenSwipePicker = canOpenSwipePickerForMessage(messageId);
-
-            // Chevrons should always be shown on pristine greetings: https://github.com/SillyTavern/SillyTavern/pull/4712#issuecomment-3557893373
-            const pristineGreeting = overswipe == OVERSWIPE_BEHAVIOR.PRISTINE_GREETING;
-
-            //The swipe button will be shown if an overswipe would trigger REGENERATE or EDIT_GENERATE.
-            const isOverswipeable = isLastSwipe &&
-                overswipe == OVERSWIPE_BEHAVIOR.REGENERATE ||
-                overswipe == OVERSWIPE_BEHAVIOR.EDIT_GENERATE;
-
-            div.classList.toggle('last_swipe', isOverswipeable);
-
-            //If there's only one swipe, the left arrow should not be shown.
-            div.classList.toggle('swipes_visible', hasSwipes || pristineGreeting);
-            swipePickerButton.toggle(canOpenSwipePicker);
-
-            //updateSwipeCounter does not need to be awaited, It can run a bit later.
-            if (updateCounters) updateSwipeCounter(messageId, { message, messageElement: $(div) });
-        } else {
-            //Hide all messages that are not swipeable.
-            div.classList.remove('swipes_visible', 'last_swipe');
-            $(div).find('.mes_swipe_picker').toggle(canOpenSwipePickerForMessage(messageId));
-        }
-    });
-}
-
-/**
- * This function is misleadingly named. It allows generation then refreshes the swipe buttons and counters.
- */
-export function showSwipeButtons() {
-    state.swipesHidden = false;
-    if (isReactMainChatOwner()) {
-        setMainChatMessageUiFlag('swipeCounterHidden', false);
-    }
-    refreshSwipeButtons();
-}
-
-/**
- * This function is misleadingly named. It blocks generation then refreshes the swipe buttons and counters.
- * @param {object} [options] Options
- * @param {boolean} [options.hideCounters=false] Also hide the swipes counter.
- */
-export function hideSwipeButtons({ hideCounters = false } = {}) {
-    state.swipesHidden = true;
-    if (isReactMainChatOwner()) {
-        if (hideCounters) {
-            setMainChatMessageUiFlag('swipeCounterHidden', true, state.chat.length - 1);
-        }
-        refreshSwipeButtons();
-        return;
-    }
-
-    refreshSwipeButtons();
-
-    if (hideCounters === true) {
-        state.chatElement.find('.last_mes .swipes-counter').prop('hidden', true);
-    }
-}
-
-/**
- * Deletes a swipe from the chat.
- *
- * @param {number?} [swipeId = null] - The ID of the swipe to delete. If not provided, the current swipe will be deleted.
- * @param {number?} [messageId = chat.length - 1] - The ID of the message to delete from. If not provided, the last message will be targeted.
- * @returns {Promise<number>|undefined} - The ID of the new swipe after deletion.
- */
-export async function deleteSwipe(swipeId = null, messageId = state.chat.length - 1) {
-    if (swipeId != null) {
-        swipeId = Number(swipeId);
-        if (!Number.isInteger(swipeId) || swipeId < 0) {
-            toastr.warning(t`Invalid swipe ID.`);
-            return;
-        }
-    }
-
-    const message = state.chat[messageId];
-    if (!message || !Array.isArray(message.swipes) || !message.swipes.length) {
-        toastr.warning(t`No messages to delete swipes from.`);
-        return;
-    }
-
-    if (message.swipes.length <= 1) {
-        toastr.warning(t`Can't delete the last swipe.`);
-        return;
-    }
-
-    swipeId = Number(swipeId ?? message.swipe_id);
-    const currentSwipeId = clamp(Number(message.swipe_id ?? 0), 0, message.swipes.length - 1);
-
-    if (swipeId < 0 || swipeId >= message.swipes.length) {
-        toastr.warning(t`Invalid swipe ID: ${swipeId + 1}`);
-        return;
-    }
-
-    message.swipes.splice(swipeId, 1);
-
-    if (Array.isArray(message.swipe_info) && message.swipe_info.length) {
-        message.swipe_info.splice(swipeId, 1);
-    }
-
-    let newSwipeId;
-    if (swipeId < currentSwipeId) {
-        newSwipeId = currentSwipeId - 1;
-    } else if (swipeId > currentSwipeId) {
-        newSwipeId = currentSwipeId;
-    } else {
-        // Select the next swipe, or the one before if it was the last one.
-        newSwipeId = Math.min(swipeId, message.swipes.length - 1);
-    }
-
-    state.chat_metadata.tainted = true;
-
-    messageId = Number(messageId);
-    swipeId = Number(swipeId);
-    message.swipe_id = newSwipeId;
-    await eventSource.emit(event_types.MESSAGE_SWIPE_DELETED, { messageId, swipeId, newSwipeId });
-
-    if (swipeId === currentSwipeId) {
-        const direction = (swipeId <= newSwipeId) ? SWIPE_DIRECTION.RIGHT : SWIPE_DIRECTION.LEFT;
-        // Animate swipe and swap displayed message when the currently visible swipe was deleted.
-        await swipe(null, direction, { source: SWIPE_SOURCE.DELETE, repeated: false, forceMesId: messageId, forceSwipeId: newSwipeId });
-    } else {
-        await updateSwipeCounter(messageId);
-        if (messageId !== state.chat.length - 1) {
-            await updateSwipeCounter(state.chat.length - 1);
-        }
-        refreshSwipeButtons();
-        saveChatDebounced();
-    }
-
-    await saveChatConditional();
-
-    return newSwipeId;
-}
-
 export function updateEditArrowClasses() {
     if (!(state.this_edit_mes_id >= 0)) {
         return;
@@ -2704,18 +1336,5 @@ export function updateEditArrowClasses() {
     downButton.toggleClass('disabled', lastId === Number(state.this_edit_mes_id));
     // The first message cannot be moved up.
     upButton.toggleClass('disabled', firstId === Number(state.this_edit_mes_id));
-}
-
-/**
- * Formats a counter for a swipe view.
- * @param {number} current The current number of items.
- * @param {number} total The total number of items.
- * @returns {string} The formatted counter.
- */
-function formatSwipeCounter(current, total) {
-    if (isNaN(current) && isNaN(total)) {
-        return '';
-    }
-    return `${!isNaN(current) ? current : '?'}\u200b/\u200b${!isNaN(total) ? total : '?'}`;
 }
 

@@ -31,7 +31,7 @@ describe('Advanced Definitions popup React surface', () => {
             'creator_notes_textarea', 'tags_textarea',
             'scenario_div', 'scenario_pole',
             'depth_prompt_div', 'depth_prompt_prompt', 'depth_prompt_depth',
-            'depth_prompt_role', 'mes_example_div', 'mes_example_textarea',
+            'depth_prompt_role',
             'character_popup_ok',
         ];
         for (const id of ids) {

@@ -63,10 +63,10 @@ export function t(strings, ...values) {
     return strings.reduce((result, str, i) => result + str + (values[i] !== undefined ? String(values[i]) : ''), '');
 }
 
-/** Current locale id (e.g. 'zh-cn'); falls back to navigator.language/'en'. */
+/** Current locale id. EmberDesk ships zh-cn only; the fallback matches. */
 export function getCurrentLocale() {
     const i18n = resolveI18n();
-    return i18n ? i18n.getCurrentLocale() : String(globalThis.navigator?.language || 'en').toLowerCase();
+    return i18n ? i18n.getCurrentLocale() : 'zh-cn';
 }
 
 /**

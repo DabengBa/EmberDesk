@@ -604,7 +604,7 @@ class PromptManager {
 
     /**
      * Returns a full list of prompts whose content markers have been substituted.
-     * @param {string} generationType - The type of generation, e.g., 'continue' or 'quiet'.
+     * @param {string} generationType - The type of generation, e.g., 'normal' or 'quiet'.
      * @returns {PromptCollection} A PromptCollection object
      */
     getPromptCollection(generationType) {
@@ -637,6 +637,7 @@ class PromptManager {
     shouldTrigger(prompt, generationType) {
         if (!Array.isArray(prompt?.injection_trigger)) return true;
         if (!prompt.injection_trigger.length) return true;
+        if (prompt.injection_trigger.includes('all')) return true;
         return prompt.injection_trigger.includes(generationType);
     }
 

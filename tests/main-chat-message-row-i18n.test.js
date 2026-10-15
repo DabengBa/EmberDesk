@@ -20,7 +20,7 @@ function extractTemplateRegion(source, startMarker, endMarker) {
 }
 
 describe('main chat message row i18n parity', () => {
-    const template = extractTemplateRegion(indexHtml, 'id="message_template"', 'id="onboarding_template"');
+    const template = extractTemplateRegion(indexHtml, 'id="message_template"', 'id="bogus_folder_template"');
     const templateSpecs = [...template.matchAll(/data-i18n="([^"]+)"/g)].map(m => m[1]);
 
     test('message template exposes data-i18n specs', () => {
@@ -45,13 +45,7 @@ describe('main chat message row i18n parity', () => {
 
     test('React row uses the shared i18n bridge for programmatic strings', () => {
         expect(rowSource).toContain("from '../../compat/i18n.js'");
-        expect(rowSource).toContain("translate('Regenerate')");
-        expect(rowSource).not.toContain('重新生成');
-    });
-
-    test('legacy empty-reply regenerate path no longer hardcodes Chinese', () => {
-        const domHandlersSource = fs.readFileSync(path.join(repoRoot, 'public/scripts/dom-handlers.js'), 'utf8');
-        expect(domHandlersSource).toContain(".attr('data-i18n', 'Regenerate').text(translate('Regenerate'))");
-        expect(domHandlersSource).not.toContain(".text('重新生成')");
+        expect(rowSource).toContain("translate('Translate message')");
+        expect(rowSource).not.toContain('翻译消息');
     });
 });

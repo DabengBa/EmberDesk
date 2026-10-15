@@ -50,7 +50,7 @@ describe('chat workspace structure', () => {
             'ensureWorkspaceShellChromeHost',
             'data-react-workspace-shell-chrome-status',
             'function getWorkspaceShellCommands()',
-            "openSettings: () => openWorkspaceSettingsOverlay({ tab: null, panelKind: 'settings' })",
+            "openSettings: openWorkspaceShellSettings",
         ], { contractName: 'same-entry React workspace chrome host' });
         expect(scriptSource).not.toContain('openWorkspaceShellDrawer');
         expect(scriptSource).not.toContain('closeWorkspaceShellPanel');
@@ -73,15 +73,22 @@ describe('chat workspace structure', () => {
         expect(styleSource).not.toContain('.drawer-icon');
     });
 
-    test('does not restore the legacy left AI config drawer on startup', () => {
+    test('restores both side panels through workspace slot hosts, not the retired drawer icons', () => {
         const rossAscendsSource = readRepoFile('public/scripts/RossAscends-mods.js');
         const openNavPanels = rossAscendsSource.match(/function OpenNavPanels\(\) \{[\s\S]*?\n\}/)?.[0] ?? '';
 
-        expect(openNavPanels).not.toContain("accountStorage.getItem('LNavLockOn')");
-        expect(openNavPanels).not.toContain("accountStorage.getItem('LNavOpened')");
+        // The left drawer is the prompt preset panel; it opens via the
+        // workspace child-slot host, never via the retired leftNavDrawerIcon.
+        // Restore is gated on last-open state alone (pinning stays opt-in) and
+        // must preserve open drawers so the deferred restores cannot clobber
+        // a user-initiated drawer open.
+        expect(openNavPanels).toContain("accountStorage.getItem('LNavOpened')");
+        expect(openNavPanels).toContain("openWorkspaceShellPromptManager({ preserveOpenDrawers: true })");
         expect(openNavPanels).not.toContain("$('#leftNavDrawerIcon').trigger('click')");
-        expect(openNavPanels).toContain("accountStorage.getItem('NavLockOn')");
-        expect(openNavPanels).toContain("accountStorage.getItem('WINavLockOn')");
+        expect(openNavPanels).toContain("accountStorage.getItem('NavOpened')");
+        expect(openNavPanels).toContain("accountStorage.getItem('WINavOpened')");
+        expect(openNavPanels).toContain("openWorkspaceChildSlotHost('right-nav-panel', { preserveOpenDrawers: true })");
+        expect(openNavPanels).toContain("openWorkspaceShellWorldInfo({ preserveOpenDrawers: true })");
     });
 
     test('lets React own main-chat outer layout without wrapping protected rows', () => {
@@ -98,7 +105,7 @@ describe('chat workspace structure', () => {
         expect(rowSource).toContain('mesid: message.id');
         expect(rowSource).toContain("'mes_text inline_media' : 'mes_text'");
         expect(rowSource).toContain('data-main-chat-message-row-owner="react"');
-        expect(rowSource).toContain("'swipes-counter swipe-picker-enabled interactable' : 'swipes-counter'");
+        expect(rowSource).toContain('mes_media_wrapper');
     });
 
     test('keeps send-form controls discoverable by role and accessible name', () => {
@@ -145,9 +152,6 @@ describe('chat workspace structure', () => {
             'option_start_new_chat',
             'option_select_chat',
             'option_delete_mes',
-            'option_regenerate',
-            'option_impersonate',
-            'option_continue',
         ].forEach((id) => {
             // ContractButton renders a real <button> — implicitly
             // keyboard-reachable; tabIndex is forwarded for parity.
@@ -170,7 +174,6 @@ describe('chat workspace structure', () => {
         [
             'id="message_template"',
             'class="mes"',
-            'class="swipe_left fa-solid fa-chevron-left"',
             'class="mes_block"',
             'class="mes_buttons"',
             'class="mes_edit_buttons"',
@@ -180,8 +183,6 @@ describe('chat workspace structure', () => {
             'class="mes_media_wrapper"',
             'class="mes_file_wrapper"',
             'class="mes_bias"',
-            'class="swipe_right fa-solid fa-chevron-right"',
-            'class="swipes-counter"',
         ].forEach(marker => expect(indexHtml).toContain(marker));
 
         expect(indexHtml.indexOf('class="mes_reasoning_details"')).toBeLessThan(indexHtml.indexOf('class="mes_text"'));
@@ -260,7 +261,6 @@ describe('chat workspace structure', () => {
             ['mes_media_gallery', 'Toggle media display style'],
             ['mes_media_list', 'Toggle media display style'],
             ['mes_embed', 'Embed file or image'],
-            ['mes_swipe_picker', 'Jump to swipe history'],
             ['mes_create_branch', 'Create branch'],
             ['mes_copy', 'Copy'],
             ['mes_edit', 'Edit'],
@@ -277,8 +277,6 @@ describe('chat workspace structure', () => {
             ['mes_reasoning_close_all', 'Collapse all reasoning blocks'],
             ['mes_reasoning_copy', 'Copy reasoning'],
             ['mes_reasoning_edit', 'Edit reasoning'],
-            ['swipe_left', 'Previous swipe'],
-            ['swipe_right', 'Next swipe'],
             ['mes_img_swipe_left', 'Swipe left'],
             ['mes_img_swipe_right', 'Swipe right'],
         ].forEach(([className, label]) => {
@@ -362,7 +360,7 @@ describe('chat workspace structure', () => {
         expect(scriptSource).toContain("messageElement.find('.mes_text').after(statusRow);");
         expect(scriptSource).not.toContain("messageElement.find('.mes_text').text(status");
         expect(scriptSource).toContain("messageElement.find('.generation_auto_recovery_status').remove();");
-        expect(scriptSource).toContain("messageElement.find('.generation_failure_retry').toggle(!isRecovering);");
+        expect(scriptSource).not.toContain('generation_failure_retry');
 
         expect(styleSource).toContain('.generation_auto_recovery_status');
         expect(styleSource).toContain('@media (prefers-reduced-motion: reduce)');
@@ -380,7 +378,7 @@ describe('chat workspace structure', () => {
         expect(generationServiceSource).toContain('getGenerationFailureDecision({');
         expect(generationServiceSource).toContain('failureDecision.shouldRestoreAttemptMessage');
         expect(generationServiceSource).toContain('hasFallbackProviderForGeneration({');
-        expect(generationServiceSource).toContain('clearGenerationAttemptMessage(activeRecoveryMessageId, getGenerationAttemptBaseline(activeRecoveryMessageId));');
+        expect(generationServiceSource).toContain('clearGenerationAttemptMessage(activeRecoveryMessageId);');
 
         expect(lifecycleSource).toContain("label: 'primary'");
         expect(lifecycleSource).toContain("label: 'primary_retry'");

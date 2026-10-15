@@ -11,7 +11,7 @@ function readRepoFile(relativePath) {
 }
 
 function extractWorldInfoBlock(html) {
-    const match = html.match(/<div id="WorldInfo"[^>]*>([\s\S]*?)<\/div>\s*<div id="user-settings-button"/);
+    const match = html.match(/<div id="WorldInfo"[^>]*>([\s\S]*?)<\/div>\s*<div id="settings-panel-button"/);
     return match ? match[0] : '';
 }
 
@@ -33,22 +33,18 @@ describe('World Info drawer React surface', () => {
     });
 
     test('React component preserves all legacy IDs and contract classes', () => {
+        // The drawer header is shared chrome (WorkspacePanelChrome); the
+        // grabber id arrives as a prop value rather than raw markup.
+        expect(panel).toContain('grabberId="WorldInfoheader"');
         const ids = [
-            'WorldInfoheader', 'WI_panel_pin_div', 'WI_panel_pin', 'wi-holder',
+            'wi-holder',
             'wiGlobalPanel', 'wiGlobalPanelTitle', 'wiGlobalCount', 'wiTopBlock',
             'WIMultiSelector', 'world_info', 'wiActivationSettings', 'wiSliders',
             'wiCheckboxes', 'wiEditorPanel', 'wiEditorPanelTitle', 'world_popup',
-            'world_info_depth', 'world_info_depth_counter', 'world_info_budget',
-            'world_info_budget_counter', 'world_info_budget_cap',
-            'world_info_budget_cap_counter', 'world_info_case_sensitive',
-            'world_info_match_whole_words', 'world_info_use_group_scoring',
-            'world_info_include_names', 'world_info_overflow_alert',
-            'world_info_min_activations', 'world_info_min_activations_counter',
-            'world_info_min_activations_depth_max',
-            'world_info_min_activations_depth_max_counter',
-            'world_info_max_recursion_steps',
-            'world_info_max_recursion_steps_counter',
-            'world_info_recursive', 'world_info_character_strategy',
+            'world_info_depth', 'world_info_depth_counter',
+            'world_info_case_sensitive',
+            'world_info_match_whole_words',
+            'world_info_include_names', 'world_info_character_strategy',
         ];
         for (const id of ids) {
             expect(panel).toContain(`id="${id}"`);

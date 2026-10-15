@@ -78,7 +78,7 @@ describe('select chat popup React surface', () => {
         expect(script).toContain('renderSelectChatListReact: (...args) => renderSelectChatListReact(...args)');
     });
 
-    test('past_chat_template stays for swipe-picker; popup never empties the React list', () => {
+    test('past_chat_template stays for the chat list; popup never empties the React list', () => {
         expect(indexHtml).toContain('id="past_chat_template"');
         const displayPastChatsBody = script.match(/export async function displayPastChats[\s\S]*?\n}/)?.[0] ?? '';
         expect(displayPastChatsBody).not.toContain('$(\'#select_chat_div\').empty()');

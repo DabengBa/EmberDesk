@@ -67,11 +67,9 @@ import {
     forceCharacterEditorTokenize,
     applyPowerUserSettings,
     applyStylePins,
-    mountPowerUserPanel,
 } from './scripts/power-user.js';
 
 import {
-    setOpenAIMessageExamples,
     setOpenAIMessages,
     setupChatCompletionPromptManager,
     prepareOpenAIMessages,
@@ -79,8 +77,10 @@ import {
     loadOpenAISettings,
     oai_settings,
     openai_messages_count,
+    promptManager,
     chat_completion_sources,
     getChatCompletionModel,
+    isOpenAIPresetDirty,
     initOpenAI,
     connectProviderConnection,
     testProviderConnection,
@@ -129,7 +129,7 @@ import {
     createTimeout,
     cancelDebounce,
 } from './scripts/utils.js';
-import { CHAT_TRUNCATION, debounce_timeout, IGNORE_SYMBOL, inject_ids, MEDIA_SOURCE, MEDIA_TYPE, SCROLL_BEHAVIOR, SWIPE_DIRECTION, SWIPE_STATE } from './scripts/constants.js';
+import { CHAT_TRUNCATION, debounce_timeout, IGNORE_SYMBOL, inject_ids, MEDIA_SOURCE, MEDIA_TYPE, SCROLL_BEHAVIOR } from './scripts/constants.js';
 
 import {
     cancelDebouncedMetadataSave,
@@ -167,10 +167,6 @@ import {
 import { initSecrets, readSecretState, secret_state, SECRET_KEYS } from './scripts/secrets.js';
 import {
     createQuietGenerationLifecycleContract,
-    getGenerationRecoveryBaselineSwipeId,
-    getGenerationRecoveryRetrySwipeId,
-    getGenerationRecoverySuccessReasoningState,
-    getGenerationRecoverySuccessSwipeId,
 } from './scripts/chat-generation-lifecycle.js';
 import {
     createGenerationCommand,
@@ -182,7 +178,7 @@ import { registerPromptManagerMigration } from './scripts/PromptManager.js';
 import { getRegexedString, regex_placement } from './scripts/extensions/regex/engine.js';
 import { FILTER_STATES, FILTER_TYPES, FilterHelper, isFilterState } from './scripts/filters.js';
 import { initLocales, t, translate } from './scripts/i18n.js';
-import { getFriendlyTokenizerName, getTokenCountAsync, initTokenizers, saveTokenCache } from './scripts/tokenizers.js';
+import { countTokensOpenAIAsync, getFriendlyTokenizerName, getTokenCountAsync, initTokenizers, saveTokenCache } from './scripts/tokenizers.js';
 import { loader } from './scripts/action-loader.js';
 import { createSingleFlightTask, resolvePersistedCurrentVersion, resolveStartupSettingsPlan } from './scripts/startup-helpers.js';
 import { ensurePanel, registerPanelHook } from './scripts/deferred-panels.js';
@@ -221,7 +217,7 @@ import { addShowdownPatch } from './scripts/util/showdown-patch.js';
 import { applyBrowserFixes } from './scripts/browser-fixes.js';
 import { initBulkEdit } from './scripts/bulk-edit.js';
 import { getContext } from './scripts/st-context.js';
-import { extractReasoningFromData, extractReasoningSignatureFromData, initReasoning, parseReasoningInSwipes, PromptReasoning, ReasoningHandler, removeReasoningFromString, updateReasoningUI } from './scripts/reasoning.js';
+import { extractReasoningFromData, extractReasoningSignatureFromData, initReasoning, PromptReasoning, ReasoningHandler, removeReasoningFromString, updateReasoningUI } from './scripts/reasoning.js';
 import { accountStorage } from './scripts/util/AccountStorage.js';
 
 import { getSystemMessageByType, initSystemMessages, SAFETY_CHAT, sendSystemMessage, system_message_types, system_messages } from './scripts/system-messages.js';
@@ -234,7 +230,6 @@ import { MacroEnvBuilder } from './scripts/macros/engine/MacroEnvBuilder.js';
 import { MacroEngine } from './scripts/macros/engine/MacroEngine.js';
 import { addChatBackupsBrowser } from './scripts/chat-backups.js';
 import { compressRequest, setRequestCompressionConfig } from './scripts/request-compression.js';
-import { canJumpToSwipeForMessage, canOpenSwipePickerForMessage, initSwipePicker } from './scripts/swipe-picker.js';
 import {
     createCharacterAuthoringDraft,
     createCharacterAuthoringDraftFromCreateState,
@@ -244,19 +239,7 @@ import { mountWorkspacePanelHost, createWorkspacePanelCommandPort } from './scri
 import { registerWorldInfoShellContext } from './scripts/world-info-shell-context.js';
 import {
     executeGenerationRequestInShell,
-    swipe,
-    deleteSwipe,
-    ensureSwipes,
-    getOverswipeBehavior,
-    hideSwipeButtons,
-    isMessageSwipeable,
-    isSwipingAllowed,
-    refreshSwipeButtons,
-    showSwipeButtons,
-    syncMesToSwipe,
-    syncSwipeToMes,
     updateEditArrowClasses,
-    updateSwipeCounter,
 } from './scripts/generation-service.js';
 import {
     createOrEditCharacter,
@@ -287,7 +270,6 @@ import {
 } from './scripts/message-service.js';
 import { registerMessageShellContext } from './scripts/message-shell-context.js';
 import { registerDomHandlersShellContext } from './scripts/dom-handlers-shell-context.js';
-export { swipe };
 export {
     clearChat,
     closeCurrentChatForDelete,
@@ -311,18 +293,7 @@ export {
     select_selected_character,
 };
 export {
-    deleteSwipe,
-    ensureSwipes,
-    getOverswipeBehavior,
-    hideSwipeButtons,
-    isMessageSwipeable,
-    isSwipingAllowed,
-    refreshSwipeButtons,
-    showSwipeButtons,
-    syncMesToSwipe,
-    syncSwipeToMes,
     updateEditArrowClasses,
-    updateSwipeCounter,
 };
 export {
     addCopyToCodeBlocks,
@@ -377,7 +348,7 @@ import {
     parseCharacterLibraryFetchResponse,
     projectCharacterLibraryQueryAgainstDeletedAvatars,
 } from './scripts/character-library-query-helpers.js';
-import { ensureReactPanelStylesheet, mountReactWorkspaceShellChrome, mountReactSettingsOverlay, unmountReactSettingsOverlay, loadWorkspacePanelsModule } from './scripts/workspace-panels-react-bridge.js';
+import { ensureReactPanelStylesheet, mountReactWorkspaceShellChrome, mountReactSettingsPanel, loadWorkspacePanelsModule } from './scripts/workspace-panels-react-bridge.js';
 import { getRequestHeaders, installAjaxCsrfPrefilter, loadCsrfToken } from './scripts/request-context.js';
 import { installPublicBrowserApi } from './scripts/public-api.js';
 import { createReactRuntimeProvider } from './scripts/react-runtime-provider.js';
@@ -395,10 +366,6 @@ const reactRuntimePort = createReactRuntimeProvider({
             return mainChatVisibleGenerationMutex.update();
         },
         stopGeneration: () => stopGeneration(),
-        retryMessage: messageId => executeMainChatVisibleGenerationAction({
-            kind: 'retryGeneration',
-            messageId: Number(messageId),
-        }),
         loadEarlier: anchorId => {
             const numericAnchorId = Number(anchorId);
             return loadEarlierChatMessages(
@@ -446,18 +413,6 @@ const reactRuntimePort = createReactRuntimeProvider({
         },
         connectProvider: () => connectProviderConnection(),
         testProviderConnection: () => testProviderConnection(),
-        // Drawer-content host id (e.g. 'user-settings-block').
-        // Settings overlay links use this to reach legacy-owned surfaces that
-        // still live inside workspace drawers. The allowlist keeps the command
-        // from turning into generic "open any element by id" DOM access.
-        openWorkspaceDrawer: hostId => {
-            const normalizedHostId = String(hostId ?? '');
-            if (!WORKSPACE_DRAWER_COMMAND_HOST_IDS.has(normalizedHostId)) {
-                console.warn('openWorkspaceDrawer rejected unknown drawer host id.', normalizedHostId);
-                return;
-            }
-            openWorkspaceChildSlotHostImmediate(normalizedHostId);
-        },
     },
 });
 
@@ -560,16 +515,7 @@ registerGenerationShellContext({
         get generation_started() { return generation_started; },
         set generation_started(value) { generation_started = value; },
         get animation_duration() { return animation_duration; },
-        get lastSwipeInfo() { return lastSwipeInfo; },
-        set lastSwipeInfo(value) { lastSwipeInfo = value; },
-        get recentSwipes() { return recentSwipes; },
-        set recentSwipes(value) { recentSwipes = value; },
-        get swipeState() { return swipeState; },
-        set swipeState(value) { swipeState = value; },
         get Popup() { return Popup; },
-        get swipes() { return swipes; },
-        get swipesHidden() { return swipesHidden; },
-        set swipesHidden(value) { swipesHidden = value; },
         get this_edit_mes_id() { return this_edit_mes_id; },
     },
     addChatsSeparator: (...args) => addChatsSeparator(...args),
@@ -577,14 +523,12 @@ registerGenerationShellContext({
     cleanUpMessage: (...args) => cleanUpMessage(...args),
     clearGenerationAttemptMessage: (...args) => clearGenerationAttemptMessage(...args),
     clearGenerationAutoRecoveryStatus: (...args) => clearGenerationAutoRecoveryStatus(...args),
-    createExistingMessageRecoveryBaseline: (...args) => createExistingMessageRecoveryBaseline(...args),
     deactivateSendButtons: (...args) => deactivateSendButtons(...args),
     deleteLastMessage: (...args) => deleteLastMessage(...args),
     doChatInject: (...args) => doChatInject(...args),
     extractImagesFromData: (...args) => extractImagesFromData(...args),
     extractJsonFromData: (...args) => extractJsonFromData(...args),
     extractMessageFromData: (...args) => extractMessageFromData(...args),
-    extractMultiSwipes: (...args) => extractMultiSwipes(...args),
     extractTitleFromData: (...args) => extractTitleFromData(...args),
     flushWIInjections: (...args) => flushWIInjections(...args),
     formatMessageHistoryItem: (...args) => formatMessageHistoryItem(...args),
@@ -596,12 +540,10 @@ registerGenerationShellContext({
     getGenerationLifecycleStatusLabels: (...args) => getGenerationLifecycleStatusLabels(...args),
     getMaxPromptTokens: (...args) => getMaxPromptTokens(...args),
     getNextMessageId: (...args) => getNextMessageId(...args),
-    hideSwipeButtons: (...args) => hideSwipeButtons(...args),
     isAssistantRecoveryMessageId: (...args) => isAssistantRecoveryMessageId(...args),
     isStreamingEnabled: (...args) => isStreamingEnabled(...args),
     parseMesExamples: (...args) => parseMesExamples(...args),
     pingServer: (...args) => pingServer(...args),
-    prepareGenerationRetrySwipe: (...args) => prepareGenerationRetrySwipe(...args),
     processCommands: (...args) => processCommands(...args),
     rememberMainChatStreamingTransportProcessorTerminal: (...args) => rememberMainChatStreamingTransportProcessorTerminal(...args),
     removeDepthPrompts: (...args) => removeDepthPrompts(...args),
@@ -621,7 +563,6 @@ registerGenerationShellContext({
     showGenerationFailureRecovery: (...args) => showGenerationFailureRecovery(...args),
     showStopButton: (...args) => showStopButton(...args),
     substituteParams: (...args) => substituteParams(...args),
-    swipe: (...args) => swipe(...args),
     unblockGeneration: (...args) => unblockGeneration(...args),
     unshallowCharacter: (...args) => unshallowCharacter(...args),
     addCopyToCodeBlocks: (...args) => addCopyToCodeBlocks(...args),
@@ -633,8 +574,6 @@ registerGenerationShellContext({
     mountReactMainChatMessageListPanel: (...args) => mountReactMainChatMessageListPanel(...args),
     processImageAttachment: (...args) => processImageAttachment(...args),
     scrollChatToBottom: (...args) => scrollChatToBottom(...args),
-    syncMesToSwipe: (...args) => syncMesToSwipe(...args),
-    updateSwipeCounter: (...args) => updateSwipeCounter(...args),
     appendFileContent: (...args) => appendFileContent(...args),
     extractReasoningFromData: (...args) => extractReasoningFromData(...args),
     extractReasoningSignatureFromData: (...args) => extractReasoningSignatureFromData(...args),
@@ -649,11 +588,9 @@ registerGenerationShellContext({
     prepareOpenAIMessages: (...args) => prepareOpenAIMessages(...args),
     renderStoryString: (...args) => renderStoryString(...args),
 
-    setOpenAIMessageExamples: (...args) => setOpenAIMessageExamples(...args),
     setOpenAIMessages: (...args) => setOpenAIMessages(...args),
     shiftDownByOne: (...args) => shiftDownByOne(...args),
     shiftUpByOne: (...args) => shiftUpByOne(...args),
-    parseReasoningInSwipes: (...args) => parseReasoningInSwipes(...args),
 
     countOccurrences: (...args) => countOccurrences(...args),
     isOdd: (...args) => isOdd(...args),
@@ -662,24 +599,16 @@ registerGenerationShellContext({
     addOneMessage: (...args) => addOneMessage(...args),
     cancelDebouncedChatSave: (...args) => cancelDebouncedChatSave(...args),
     closeMessageEditor: (...args) => closeMessageEditor(...args),
-    ensureSwipes: (...args) => ensureSwipes(...args),
-    getOverswipeBehavior: (...args) => getOverswipeBehavior(...args),
     isGenerating: (...args) => isGenerating(...args),
-    isMessageSwipeable: (...args) => isMessageSwipeable(...args),
-    isSwipingAllowed: (...args) => isSwipingAllowed(...args),
     redisplayChat: (...args) => redisplayChat(...args),
     reloadCurrentChat: (...args) => reloadCurrentChat(...args),
     saveChatDebounced: (...args) => saveChatDebounced(...args),
-    showSwipeButtons: (...args) => showSwipeButtons(...args),
-    syncSwipeToMes: (...args) => syncSwipeToMes(...args),
     clamp: (...args) => clamp(...args),
     createTimeout: (...args) => createTimeout(...args),
     shakeElement: (...args) => shakeElement(...args),
     updateReasoningUI: (...args) => updateReasoningUI(...args),
     get t() { return t; },
     setMainChatMessageUiFlag: (...args) => setMainChatMessageUiFlag(...args),
-    canOpenSwipePickerForMessage: (...args) => canOpenSwipePickerForMessage(...args),
-    canJumpToSwipeForMessage: (...args) => canJumpToSwipeForMessage(...args),
 });
 registerChatOpsShellContext({
     state: {
@@ -857,7 +786,6 @@ registerMessageShellContext({
         get messageTemplate() { return messageTemplate; },
         get name1() { return name1; },
         get name2() { return name2; },
-        get swipes() { return swipes; },
         get systemUserName() { return systemUserName; },
         get system_avatar() { return system_avatar; },
         get this_chid() { return this_chid; },
@@ -894,8 +822,6 @@ registerMessageShellContext({
     isReactMainChatOwner: (...args) => isReactMainChatOwner(...args),
     mountReactMainChatMessageListPanel: (...args) => mountReactMainChatMessageListPanel(...args),
     onlyUnique: (...args) => onlyUnique(...args),
-    parseReasoningInSwipes: (...args) => parseReasoningInSwipes(...args),
-    refreshSwipeButtons: (...args) => refreshSwipeButtons(...args),
     saveBase64AsFile: (...args) => saveBase64AsFile(...args),
     saveImageToMessage: (...args) => saveImageToMessage(...args),
     scheduleMainChatMessageListPanelRefresh: (...args) => scheduleMainChatMessageListPanelRefresh(...args),
@@ -904,7 +830,6 @@ registerMessageShellContext({
     trimToEndSentence: (...args) => trimToEndSentence(...args),
     updateEditArrowClasses: (...args) => updateEditArrowClasses(...args),
     updateReasoningUI: (...args) => updateReasoningUI(...args),
-    updateSwipeCounter: (...args) => updateSwipeCounter(...args),
 });
 registerDomHandlersShellContext({
     state: {
@@ -957,9 +882,6 @@ registerDomHandlersShellContext({
         set selected_button(value) { selected_button = value; },
         get SimpleMutex() { return SimpleMutex; },
         get streamingProcessor() { return streamingProcessor; },
-        get swipes() { return swipes; },
-        set swipes(value) { swipes = value; },
-        get swipeState() { return swipeState; },
         get tag_import_setting() { return tag_import_setting; },
         get this_chid() { return this_chid; },
         get this_del_mes() { return this_del_mes; },
@@ -976,6 +898,7 @@ registerDomHandlersShellContext({
     closeCharacterExportPopup: (...args) => closeCharacterExportPopup(...args),
     closeCurrentChat: (...args) => closeCurrentChat(...args),
     closeMessageEditor: (...args) => closeMessageEditor(...args),
+    closeWorkspaceChildSlotHost: (...args) => closeWorkspaceChildSlotHost(...args),
     copyText: (...args) => copyText(...args),
     createChatMessageActionsController: (...args) => createChatMessageActionsController(...args),
     createOrEditCharacter: (...args) => createOrEditCharacter(...args),
@@ -1000,7 +923,6 @@ registerDomHandlersShellContext({
     getOptionsPopper: (...args) => getOptionsPopper(...args),
     getRequestHeaders: (...args) => getRequestHeaders(...args),
     handleUnifiedImport: (...args) => handleUnifiedImport(...args),
-    hideSwipeButtons: (...args) => hideSwipeButtons(...args),
     importCharacter: (...args) => importCharacter(...args),
     importCharacterChat: (...args) => importCharacterChat(...args),
     importEmbeddedWorldInfo: (...args) => importEmbeddedWorldInfo(...args),
@@ -1023,7 +945,6 @@ registerDomHandlersShellContext({
     mountChatComposer: (...args) => mountChatComposer(...args),
     mountDialogueDelMesControls: (...args) => mountDialogueDelMesControls(...args),
     mountDialoguePopupControls: (...args) => mountDialoguePopupControls(...args),
-    mountOnboardingActions: (...args) => mountOnboardingActions(...args),
     mountExportFormatPopup: (...args) => mountExportFormatPopup(...args),
     mountOptionsMenu: (...args) => mountOptionsMenu(...args),
     mountReactMainChatMessageListPanel: (...args) => mountReactMainChatMessageListPanel(...args),
@@ -1060,7 +981,6 @@ registerDomHandlersShellContext({
     setMainChatMessageUiState: (...args) => setMainChatMessageUiState(...args),
     showBranchChatButtons: (...args) => showBranchChatButtons(...args),
     showDeleteConfirmWithCascade: (...args) => showDeleteConfirmWithCascade(...args),
-    showSwipeButtons: (...args) => showSwipeButtons(...args),
     stopGeneration: (...args) => stopGeneration(...args),
     stopScriptExecution: (...args) => stopScriptExecution(...args),
     t: (strings, ...values) => t(strings, ...values),
@@ -1162,29 +1082,55 @@ function getWorkspaceShellChromeState() {
 }
 
 const WORKSPACE_DRAWER_OPENED_STORAGE_KEYS = {
+    'left-nav-panel': 'LNavOpened',
     'right-nav-panel': 'NavOpened',
     WorldInfo: 'WINavOpened',
+    RegexPanel: 'RegexNavOpened',
+    SettingsPanel: 'SettingsNavOpened',
 };
 
-// Drawer-content host ids reachable through the openWorkspaceDrawer runtime
-// command. These are the legacy-owned surfaces the Settings overlay links to.
-const WORKSPACE_DRAWER_COMMAND_HOST_IDS = new Set([
-    'user-settings-block',
-    'RegexPanel',
-]);
+/**
+ * Optional per-host close guards. Return false to refuse a close — used by
+ * the settings drawer to intercept with a dirty-changes confirm.
+ * @type {Record<string, () => boolean>}
+ */
+const WORKSPACE_DRAWER_CLOSE_GUARDS = {};
 
-export async function openWorkspaceChildSlotHost(hostId) {
+export function setWorkspaceDrawerCloseGuard(hostId, guard) {
+    if (typeof guard === 'function') {
+        WORKSPACE_DRAWER_CLOSE_GUARDS[hostId] = guard;
+    } else {
+        delete WORKSPACE_DRAWER_CLOSE_GUARDS[hostId];
+    }
+}
+
+// The settings drawer refuses to close while its React form reports unsaved
+// changes. The surface mirrors its dirty flag to
+// globalThis.__emberDeskSettingsDirty on every change.
+setWorkspaceDrawerCloseGuard('SettingsPanel', () => {
+    if (!globalThis.__emberDeskSettingsDirty) {
+        return true;
+    }
+    return window.confirm('当前设置有未保存的修改。离开将丢弃这些修改，确定关闭吗？');
+});
+
+export async function openWorkspaceChildSlotHost(hostId, { preserveOpenDrawers = false } = {}) {
     const drawer = document.getElementById(hostId);
     if (!(drawer instanceof HTMLElement)) {
         return;
     }
 
-    openWorkspaceChildSlotHostImmediate(hostId);
+    openWorkspaceChildSlotHostImmediate(hostId, { preserveOpenDrawers });
 }
 
 export function closeWorkspaceChildSlotHost(hostId, { force = false } = {}) {
     const drawer = document.getElementById(hostId);
     if (!(drawer instanceof HTMLElement) || (!force && drawer.classList.contains('pinnedOpen'))) {
+        return false;
+    }
+
+    const closeGuard = WORKSPACE_DRAWER_CLOSE_GUARDS[hostId];
+    if (closeGuard && !closeGuard()) {
         return false;
     }
 
@@ -1197,21 +1143,33 @@ export function closeWorkspaceChildSlotHost(hostId, { force = false } = {}) {
     if (storageKey) {
         accountStorage.setItem(storageKey, 'false');
     }
+    notifyWorkspaceDrawerStateChange();
     return true;
 }
 
-function openWorkspaceChildSlotHostImmediate(hostId) {
+function openWorkspaceChildSlotHostImmediate(hostId, { preserveOpenDrawers = false } = {}) {
     const drawer = document.getElementById(hostId);
     if (!(drawer instanceof HTMLElement)) {
         return;
     }
 
-    document.querySelectorAll('.openDrawer:not(.pinnedOpen)').forEach(openDrawer => {
-        if (openDrawer !== drawer) {
+    if (!preserveOpenDrawers) {
+        document.querySelectorAll('.openDrawer:not(.pinnedOpen)').forEach(openDrawer => {
+            if (openDrawer === drawer) {
+                return;
+            }
+            const guard = WORKSPACE_DRAWER_CLOSE_GUARDS[openDrawer.id];
+            if (guard && !guard()) {
+                return;
+            }
             openDrawer.classList.remove('openDrawer');
             openDrawer.classList.add('closedDrawer');
-        }
-    });
+            const openStorageKey = WORKSPACE_DRAWER_OPENED_STORAGE_KEYS[openDrawer.id];
+            if (openStorageKey) {
+                accountStorage.setItem(openStorageKey, 'false');
+            }
+        });
+    }
 
     drawer.classList.add('openDrawer');
     drawer.classList.remove('closedDrawer');
@@ -1220,6 +1178,17 @@ function openWorkspaceChildSlotHostImmediate(hostId) {
     if (storageKey) {
         accountStorage.setItem(storageKey, 'true');
     }
+    notifyWorkspaceDrawerStateChange();
+}
+
+/**
+ * The React workspace dock derives its pressed/active state from the dock
+ * store; legacy-driven drawer transitions (Escape, the chrome close button,
+ * mutual exclusion) never reach it. A single change event lets the dock
+ * reconcile highlight state with the actual .openDrawer classes.
+ */
+function notifyWorkspaceDrawerStateChange() {
+    window.dispatchEvent(new CustomEvent('emberdesk:workspace-drawer-change'));
 }
 
 function showWorkspaceChildSlotContent(selectedMenuId) {
@@ -1264,6 +1233,8 @@ function getWorkspaceChildSlotHostId(slotKey) {
         worldInfo: 'WorldInfo',
         characterAuthoring: 'right-nav-panel',
         regex: 'RegexPanel',
+        promptManager: 'left-nav-panel',
+        settings: 'SettingsPanel',
     }[slotKey];
 }
 
@@ -1322,6 +1293,10 @@ async function activateWorkspaceShellSlot(slotKey) {
             return openWorkspaceShellCharacterAuthoring();
         case 'regex':
             return openWorkspaceShellRegex();
+        case 'promptManager':
+            return openWorkspaceShellPromptManager();
+        case 'settings':
+            return openWorkspaceShellSettings();
         default:
             throw new Error(`Unsupported workspace shell slot: ${String(slotKey)}`);
     }
@@ -1333,6 +1308,8 @@ function deactivateWorkspaceShellSlot(slotKey) {
         worldInfo: 'worldInfo',
         characterAuthoring: 'characterAuthoring',
         regex: 'regex',
+        promptManager: 'promptManager',
+        settings: 'settings',
     }[slotKey];
 
     if (!kind) {
@@ -1356,56 +1333,23 @@ function setWorkspaceShellSlotPinned(slotKey, pinned) {
 }
 
 
-let workspaceSettingsOverlayPanelKind = 'settings';
-let workspaceSettingsOverlayCloseGeneration = 0;
-
-async function openWorkspaceSettingsOverlay({ tab = null, panelKind = 'settings' } = {}) {
-    // A new open invalidates any deferred close queued by a previous shell click.
-    workspaceSettingsOverlayCloseGeneration += 1;
-    workspaceSettingsOverlayPanelKind = panelKind;
-    const result = await mountReactSettingsOverlay({
-        initialTab: tab,
-        panelKind,
-        runtime: reactRuntimePort,
-        onRequestClose: () => {
-            void closeWorkspaceSettingsOverlay();
-        },
-    });
-    return createWorkspaceShellPanelResult(panelKind, {
-        kind: panelKind,
+export async function openWorkspaceShellSettings({ preserveOpenDrawers = false, initialTab = null } = {}) {
+    await waitForWorkspaceShellPanelOpenTask();
+    await openWorkspaceChildSlotHost('SettingsPanel', { preserveOpenDrawers });
+    await waitForWorkspaceShellPanelOpenTask();
+    const result = await mountReactSettingsPanel({ runtime: reactRuntimePort, initialTab });
+    return createWorkspaceShellPanelResult('settings', {
+        kind: 'settings',
         mounted: result?.mounted !== false,
         status: result?.status === 'error' ? 'error' : 'success',
         reason: result?.reason,
     });
 }
 
-async function closeWorkspaceSettingsOverlay(reservedGeneration = null) {
-    const panelKind = workspaceSettingsOverlayPanelKind || 'settings';
-    const closeGeneration = Number.isInteger(reservedGeneration)
-        ? reservedGeneration
-        : workspaceSettingsOverlayCloseGeneration + 1;
-    workspaceSettingsOverlayCloseGeneration = Math.max(workspaceSettingsOverlayCloseGeneration, closeGeneration);
-    // Defer unmount so the originating click/keyboard event can finish cleanly.
-    await new Promise(resolve => {
-        window.setTimeout(() => {
-            if (closeGeneration !== workspaceSettingsOverlayCloseGeneration) {
-                resolve();
-                return;
-            }
-            void unmountReactSettingsOverlay().finally(resolve);
-        }, 0);
-    });
-    return createWorkspaceShellPanelResult(panelKind, {
-        kind: panelKind,
-        mounted: false,
-        status: 'success',
-    });
-}
-
-export async function openWorkspaceShellWorldInfo() {
+export async function openWorkspaceShellWorldInfo({ preserveOpenDrawers = false } = {}) {
     await waitForWorkspaceShellPanelOpenTask();
     // React sole-owner: open drawer and mount workbench; deferred body is hidden activation-rules DOM only.
-    await openWorkspaceChildSlotHost('WorldInfo');
+    await openWorkspaceChildSlotHost('WorldInfo', { preserveOpenDrawers });
     await waitForWorkspaceShellPanelOpenTask();
     const worldInfoMount = await mountReactWorldInfoPanel();
     void ensureWorkspaceShellDeferredPanel('world-info-body');
@@ -1425,16 +1369,18 @@ async function openWorkspaceShellRegex() {
     });
 }
 
+export async function openWorkspaceShellPromptManager({ preserveOpenDrawers = false } = {}) {
+    await waitForWorkspaceShellPanelOpenTask();
+    openWorkspaceChildSlotHostImmediate('left-nav-panel', { preserveOpenDrawers });
+    await mountPromptPanel();
+    return createWorkspaceShellPanelResult('promptManager', {
+        kind: 'promptManager',
+        mounted: true,
+        status: 'success',
+    });
+}
+
 async function closeWorkspacePanel(kind) {
-    if (kind === 'settings') {
-        // Reserve the close generation before awaiting; a superseding reopen
-        // must always observe a higher generation or the deferred unmount
-        // would unmount the freshly mounted overlay.
-        workspaceSettingsOverlayCloseGeneration += 1;
-        const reservedGeneration = workspaceSettingsOverlayCloseGeneration;
-        await waitForWorkspaceShellPanelOpenTask();
-        return closeWorkspaceSettingsOverlay(reservedGeneration);
-    }
     await waitForWorkspaceShellPanelOpenTask();
     return createWorkspaceShellPanelResult(kind, { kind, mounted: false, status: 'success' });
 }
@@ -1446,10 +1392,11 @@ function getWorkspaceShellCommands() {
         setWorkspaceShellSlotPinned,
         openCharacterLibrary: openWorkspaceShellCharacterLibrary,
         openWorldInfo: openWorkspaceShellWorldInfo,
-        openSettings: () => openWorkspaceSettingsOverlay({ tab: null, panelKind: 'settings' }),
+        openSettings: openWorkspaceShellSettings,
         closeWorkspacePanel,
         openCharacterAuthoring: openWorkspaceShellCharacterAuthoring,
         openRegex: openWorkspaceShellRegex,
+        openPromptManager: openWorkspaceShellPromptManager,
     };
 }
 
@@ -1669,14 +1616,11 @@ function setMainChatMessageUiState(messageId, patch) {
     const next = { ...current, ...patch };
     const hasVisibleState = next.recoveryStatus
         || next.failureNoticeVisible
-        || next.failureRetryVisible
-        || next.emptyReplyRegenerateVisible
         || next.actionsExpanded
         || next.editing
         || typeof next.reasoningOpen === 'boolean'
         || next.reasoningEditing
-        || next.lastInContext
-        || next.swipeCounterHidden;
+        || next.lastInContext;
     if (!hasVisibleState) {
         mainChatMessageUiState.delete(key);
     } else {
@@ -1712,14 +1656,11 @@ function setMainChatMessageUiFlag(flag, enabled, messageId = null) {
         delete next[flag];
         const hasVisibleState = next.recoveryStatus
             || next.failureNoticeVisible
-            || next.failureRetryVisible
-            || next.emptyReplyRegenerateVisible
             || next.actionsExpanded
             || next.editing
             || typeof next.reasoningOpen === 'boolean'
             || next.reasoningEditing
-            || next.lastInContext
-            || next.swipeCounterHidden;
+            || next.lastInContext;
         if (hasVisibleState) {
             mainChatMessageUiState.set(key, next);
         } else {
@@ -1771,25 +1712,15 @@ function getMainChatRecoveryUiState() {
                 stage: state.recoveryStage === 'fallback' ? 'fallback' : 'primary',
             };
         }
-        if (state.failureNoticeVisible || state.failureRetryVisible) {
+        if (state.failureNoticeVisible) {
             failure = {
                 messageId: Number(messageId),
-                noticeVisible: state.failureNoticeVisible === true,
-                retryVisible: state.failureRetryVisible === true,
+                noticeVisible: true,
             };
         }
     }
 
     return { recovery, failure };
-}
-
-function isMainChatGenerationControlElementVisible(element) {
-    if (!(element instanceof HTMLElement)) {
-        return false;
-    }
-
-    const style = getComputedStyle(element);
-    return style.display !== 'none' && style.visibility !== 'hidden' && element.getClientRects().length > 0;
 }
 
 function getMainChatGenerationControlMessageId(element) {
@@ -1832,17 +1763,15 @@ function getMainChatGenerationControlBridgeState() {
     const recoveryUi = reactOwner ? getMainChatRecoveryUiState() : null;
     const recoveryStatus = reactOwner ? null : document.querySelector('#chat > .mes .generation_auto_recovery_status');
     const recoveryStatusText = reactOwner ? recoveryUi?.recovery?.status ?? '' : recoveryStatus?.textContent?.trim() ?? '';
-    const failureRetry = reactOwner ? null : document.querySelector('#chat > .mes .generation_failure_retry');
     const failureNotice = reactOwner ? null : document.querySelector('#chat > .mes .generation_failure_notice');
     const hasFailure = reactOwner
-        ? Boolean(recoveryUi?.failure?.noticeVisible || recoveryUi?.failure?.retryVisible)
-        : Boolean(failureNotice || failureRetry);
-    const continueSurface = 'hidden';
+        ? recoveryUi?.failure?.noticeVisible === true
+        : Boolean(failureNotice);
     const shouldPreferStoppedTerminal = shouldPreferStoppedMainChatTerminalSnapshot(
         hasFailure ? 'error' : streamingProcessor?.isStopped ? 'stopped' : null,
     );
     const activeMessageId = (reactOwner ? recoveryUi?.recovery?.messageId : getMainChatGenerationControlMessageId(recoveryStatus))
-        ?? (reactOwner ? recoveryUi?.failure?.messageId : getMainChatGenerationControlMessageId(failureRetry))
+        ?? (reactOwner ? recoveryUi?.failure?.messageId : getMainChatGenerationControlMessageId(failureNotice))
         ?? (Number.isInteger(streamingProcessor?.messageId) && streamingProcessor.messageId >= 0 ? streamingProcessor.messageId : null);
 
     return {
@@ -1858,13 +1787,9 @@ function getMainChatGenerationControlBridgeState() {
                 : recoveryStatus?.dataset?.recoveryStage === 'fallback' ? 'fallback' : 'primary',
             activeMessageId,
             recoveryStatusLabel: recoveryStatusText || null,
-            failureRetryVisible: reactOwner
-                ? recoveryUi?.failure?.retryVisible === true
-                : isMainChatGenerationControlElementVisible(failureRetry),
             failureNoticeVisible: reactOwner
                 ? recoveryUi?.failure?.noticeVisible === true
                 : Boolean(failureNotice),
-            continueSurface,
         }),
     };
 }
@@ -2061,14 +1986,12 @@ function getMainChatStreamingTransportBridgeState() {
     const reactOwner = isReactMainChatOwner();
     const recoveryUi = reactOwner ? getMainChatRecoveryUiState() : null;
     const recoveryStatus = reactOwner ? null : document.querySelector('#chat > .mes .generation_auto_recovery_status');
-    const failureRetry = reactOwner ? null : document.querySelector('#chat > .mes .generation_failure_retry');
     const failureNotice = reactOwner ? null : document.querySelector('#chat > .mes .generation_failure_notice');
     const hasFailure = reactOwner
-        ? Boolean(recoveryUi?.failure?.noticeVisible || recoveryUi?.failure?.retryVisible)
-        : Boolean(failureNotice || failureRetry);
+        ? recoveryUi?.failure?.noticeVisible === true
+        : Boolean(failureNotice);
     const activeMessageId = (reactOwner ? recoveryUi?.recovery?.messageId : getMainChatGenerationControlMessageId(recoveryStatus))
-        ?? (reactOwner ? recoveryUi?.failure?.messageId : getMainChatGenerationControlMessageId(failureRetry))
-        ?? getMainChatGenerationControlMessageId(failureNotice)
+        ?? (reactOwner ? recoveryUi?.failure?.messageId : getMainChatGenerationControlMessageId(failureNotice))
         ?? (Number.isInteger(streamingProcessor?.messageId) && streamingProcessor.messageId >= 0 ? streamingProcessor.messageId : null);
     const hasActiveStreamingProcessor = Boolean(streamingProcessor && !streamingProcessor.isStopped && !streamingProcessor.isFinished);
     const snapshot = getMainChatStreamingTransportState({
@@ -2409,7 +2332,6 @@ function applyCharacterAuthoringSaveModel(saveModel = {}, { submit: _submit = tr
     setAuthoringInputValue('#description_textarea', fields.description);
     setAuthoringInputValue('#scenario_pole', fields.scenario);
     setAuthoringInputValue('#firstmessage_textarea', fields.first_mes);
-    setAuthoringInputValue('#mes_example_textarea', fields.mes_example);
     setAuthoringInputValue('#creator_notes_textarea', fields.creator_notes);
     setAuthoringInputValue('#system_prompt_textarea', fields.system_prompt);
     setAuthoringInputValue('#post_history_instructions_textarea', fields.post_history_instructions);
@@ -2813,14 +2735,13 @@ function bindMainChatReactComposerCommandPort() {
     const sendTextarea = document.getElementById('send_textarea');
     const sendButton = document.getElementById('send_but');
     const stopButton = document.getElementById('mes_stop');
-    const regenerateButton = document.getElementById('option_regenerate');
 
     if (!(sendTextarea instanceof HTMLTextAreaElement) || !(sendButton instanceof HTMLElement)) {
         return;
     }
 
     const isGenerationFocusTarget = target => {
-        return [sendButton, stopButton, regenerateButton].some(control => (
+        return [sendButton, stopButton].some(control => (
             control instanceof HTMLElement
             && (target === control || control.contains(target))
         ));
@@ -2879,12 +2800,6 @@ function bindMainChatReactComposerCommandPort() {
         event.stopPropagation();
         stopVisibleGeneration();
     };
-    const handleRegenerateButtonClick = event => {
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        event.stopPropagation();
-        dispatchGeneration('retryGeneration');
-    };
     const handleComposerFocus = () => {
         mainChatComposerFocusRestoreRequested = true;
         scheduleMainChatMessageListPanelRefresh();
@@ -2902,7 +2817,6 @@ function bindMainChatReactComposerCommandPort() {
     sendTextarea.addEventListener('focus', handleComposerFocus, true);
     sendButton.addEventListener('click', handleSendButtonClick, true);
     stopButton?.addEventListener('click', handleStopButtonClick, true);
-    regenerateButton?.addEventListener('click', handleRegenerateButtonClick, true);
     document.addEventListener('focusin', handleDocumentFocusIn, true);
 
     mainChatComposerCommandBindings = () => {
@@ -2910,7 +2824,6 @@ function bindMainChatReactComposerCommandPort() {
         sendTextarea.removeEventListener('focus', handleComposerFocus, true);
         sendButton.removeEventListener('click', handleSendButtonClick, true);
         stopButton?.removeEventListener('click', handleStopButtonClick, true);
-        regenerateButton?.removeEventListener('click', handleRegenerateButtonClick, true);
         document.removeEventListener('focusin', handleDocumentFocusIn, true);
         mainChatComposerFocusRestoreRequested = false;
     };
@@ -2961,22 +2874,6 @@ async function runMainChatVisibleGenerationAction({ kind, messageId } = {}) {
         case 'submitComposer':
             await sendTextareaMessage();
             break;
-        case 'continueLast':
-            document.getElementById('option_continue')?.click();
-            break;
-        case 'retryGeneration':
-            document.getElementById('option_regenerate')?.click();
-            break;
-        case 'swipeLeft':
-            if (Number.isInteger(messageId) && messageId >= 0) {
-                await swipe(null, SWIPE_DIRECTION.LEFT, { repeated: false, forceMesId: messageId });
-            }
-            break;
-        case 'swipeRight':
-            if (Number.isInteger(messageId) && messageId >= 0) {
-                await swipe(null, SWIPE_DIRECTION.RIGHT, { repeated: false, forceMesId: messageId });
-            }
-            break;
         default:
             console.warn('Unknown main-chat visible generation action', kind);
     }
@@ -2986,26 +2883,6 @@ async function executeMainChatVisibleGenerationAction({ kind, messageId } = {}) 
     switch (kind) {
         case 'submitComposer':
             return await sendTextareaMessage();
-        case 'continueLast':
-            return await Generate('continue');
-        case 'retryGeneration':
-            return await Generate('regenerate');
-        case 'swipeLeft':
-            if (Number.isInteger(messageId) && messageId >= 0) {
-                return await swipe(null, SWIPE_DIRECTION.LEFT, {
-                    repeated: false,
-                    forceMesId: messageId,
-                });
-            }
-            return undefined;
-        case 'swipeRight':
-            if (Number.isInteger(messageId) && messageId >= 0) {
-                return await swipe(null, SWIPE_DIRECTION.RIGHT, {
-                    repeated: false,
-                    forceMesId: messageId,
-                });
-            }
-            return undefined;
         default:
             return await runMainChatVisibleGenerationAction({ kind, messageId });
     }
@@ -3109,7 +2986,6 @@ function getMainChatMessageListReactBridgeState() {
     const mainChatSnapshot = buildMainChatSnapshotFromLegacyChat({
         chatId: getCurrentChatId(),
         chat: projectedChat,
-        pristineChat: !chat_metadata?.tainted,
         formatMessage: messageFormatting,
         timestampForMessage: message => {
             const momentDate = timestampToMoment(message?.send_date);
@@ -3141,10 +3017,6 @@ function getMainChatMessageListReactBridgeState() {
         mediaDisplayForMessage: message => getMediaDisplay(message),
         hasItemizedPromptForMessage: (message, messageId) => Array.isArray(itemizedPrompts)
             && itemizedPrompts.some(prompt => Number(prompt?.mesId) === Number(messageId)),
-        swipePickerForMessage: messageId => ({
-            canOpen: canOpenSwipePickerForMessage(messageId),
-            canJump: canJumpToSwipeForMessage(messageId),
-        }),
         visibleMessageIds,
         composer: {
             value: getComposerValue(),
@@ -3267,7 +3139,6 @@ function getMainChatMessageListReactCommands() {
             duplicateMessage: messageId => duplicateMainChatMessage(messageId),
             deleteMessage: messageId => deleteMessage(
                 messageId,
-                undefined,
                 true,
             ),
             moveMessage: (messageId, direction) => messageEditMove(
@@ -3985,14 +3856,9 @@ export let name2 = systemUserName;
 /** @type {ChatMessage[]} */
 export let chat = [];
 
-/**
- * @type {import('./scripts/constants.js').SWIPE_STATE}
- */
-export let swipeState = SWIPE_STATE.NONE;
 let chatSaveTimeout;
 let importFlashTimeout;
 export let isChatSaving = false;
-let firstRun = false;
 export let settingsReady = false;
 let currentVersion = '0.0.0';
 let deferredCoreFeatureTask = null;
@@ -4361,14 +4227,6 @@ export function loadBackgroundSettings(settings) {
 export let amount_gen = 80; //default max length of AI generated responses
 export let max_context = 2048;
 
-/** User preference for swipeable messages */
-let swipes = true;
-/** Forcefully hide swipes. */
-export let swipesHidden = false;
-/** @type {{ now: number, direction: string }} */
-export let lastSwipeInfo = { now: performance.now(), direction: SWIPE_DIRECTION.RIGHT };
-export let recentSwipes = 0;
-
 export let extension_prompts = {};
 
 export let main_api;// = "kobold";
@@ -4465,13 +4323,13 @@ async function bootstrapWorkspace() {
 
     await measureStartupStage('mountCharacterPopup', () => mountCharacterPopup());
     await measureStartupStage('mountRightNavPanel', () => mountRightNavPanel());
+    await measureStartupStage('mountPromptPanel', () => mountPromptPanel());
     await measureStartupStage('mountSelectChatPopup', () => mountSelectChatPopup());
     await measureStartupStage('mountCharacterContextMenu', () => mountCharacterContextMenu());
     await measureStartupStage('mountOptionsMenu', () => mountOptionsMenu());
     await measureStartupStage('mountExportFormatPopup', () => mountExportFormatPopup());
     await measureStartupStage('mountDialoguePopupControls', () => mountDialoguePopupControls());
     await measureStartupStage('mountDialogueDelMesControls', () => mountDialogueDelMesControls());
-    await measureStartupStage('mountOnboardingActions', () => mountOnboardingActions());
     await measureStartupStage('initSecrets', () => initSecrets());
     await measureStartupStage('readSecretState', () => readSecretState());
     await measureStartupStage('initLocales', () => initLocales());
@@ -4485,7 +4343,6 @@ async function bootstrapWorkspace() {
     }));
     await measureStartupStage('initPresetManager', () => initPresetManager());
     await measureStartupStage('initSystemMessages', () => initSystemMessages());
-    await measureStartupStage('mountPowerUserPanel', () => mountPowerUserPanel());
     await measureStartupStage('mountConfigDrawers', () => mountWorldInfoPanel());
     await getSettings(initLoaderHandle);
     await measureStartupStage('bindPostSettingsUi', () => Promise.resolve().then(() => {
@@ -4503,14 +4360,15 @@ async function bootstrapWorkspace() {
         // Register deferred panel hooks before initWorldInfo so they capture any needed state
         registerPanelHook('world-info-body', _replayWorldInfoSettings);
         initWorldInfo();
-        initRossMods();
+        initRossMods({
+            openWorkspaceShellSettings,
+        });
         initBulkEdit();
         initReasoning();
     });
     await measureStartupStage('lateFeatureInit', () => Promise.resolve().then(() => {
         initCustomSelectedSamplers();
         initAccessibility();
-        initSwipePicker();
         initFrontendFrameController();
         addDebugFunctions();
     }));
@@ -5192,14 +5050,12 @@ function clearGenerationAutoRecoveryStatus(messageId) {
             recoveryStatus: null,
             recoveryStage: null,
             failureNoticeVisible: false,
-            failureRetryVisible: false,
         });
         return;
     }
 
     const messageElement = chatElement.find(`.mes[mesid="${messageId}"]`);
     messageElement.find('.generation_auto_recovery_status').remove();
-    messageElement.find('.generation_failure_retry').toggle(true);
     void mountReactMainChatMessageListPanel();
 }
 
@@ -5209,7 +5065,6 @@ function showGenerationAutoRecoveryStatus(messageId, status, recoveryStage = 'pr
             recoveryStatus: String(status ?? ''),
             recoveryStage: recoveryStage === 'fallback' ? 'fallback' : 'primary',
             failureNoticeVisible: false,
-            failureRetryVisible: false,
         });
         return;
     }
@@ -5227,45 +5082,19 @@ function showGenerationAutoRecoveryStatus(messageId, status, recoveryStage = 'pr
     statusRow.append($('<i class="fa-solid fa-circle-notch"></i>'));
     statusRow.append($('<span></span>').text(status));
     messageElement.find('.mes_text').after(statusRow);
-    messageElement.find('.generation_failure_retry').toggle(false);
     void mountReactMainChatMessageListPanel();
 }
 
-function clearGenerationAttemptMessage(messageId, baseline = null) {
+function clearGenerationAttemptMessage(messageId) {
     const message = chat[messageId];
-    const hasBaseline = baseline?.messageId === messageId;
     if (message && !message.is_user && !message.is_system) {
-        message.mes = hasBaseline ? baseline.mes : '';
-        if (hasBaseline) {
-            if (Array.isArray(baseline.swipes)) {
-                message.swipes = structuredClone(baseline.swipes);
-            }
-            if (baseline.swipe_id !== undefined) {
-                message.swipe_id = baseline.swipe_id;
-            }
-            if (Array.isArray(baseline.swipe_info)) {
-                message.swipe_info = structuredClone(baseline.swipe_info);
-            }
-            if (baseline.extra && typeof baseline.extra === 'object') {
-                message.extra = structuredClone(baseline.extra);
-            }
-        } else if (Array.isArray(message.swipes)) {
-            message.swipes = [''];
-            message.swipe_id = 0;
-            message.swipe_info = [{
-                send_date: message.send_date,
-                gen_started: message.gen_started,
-                gen_finished: message.gen_finished,
-                extra: structuredClone(message.extra ?? {}),
-            }];
-        }
-        if (!hasBaseline && message.extra) {
+        message.mes = '';
+        if (message.extra) {
             delete message.extra.reasoning;
             delete message.extra.reasoning_duration;
             delete message.extra.token_count;
             delete message.extra.time_to_first_token;
         }
-        syncMesToSwipe(messageId);
     }
 
     if (isReactMainChatOwner()) {
@@ -5275,18 +5104,9 @@ function clearGenerationAttemptMessage(messageId, baseline = null) {
     }
 
     const messageElement = chatElement.find(`.mes[mesid="${messageId}"]`);
-    if (hasBaseline && message) {
-        updateMessageElement(message, {
-            messageId,
-            messageElement,
-            adjustMediaScroll: SCROLL_BEHAVIOR.ADJUST,
-        });
-    } else {
-        messageElement.find('.mes_text').empty();
-        messageElement.find('.mes_reasoning').empty();
-    }
+    messageElement.find('.mes_text').empty();
+    messageElement.find('.mes_reasoning').empty();
     messageElement.find('.generation_failure_notice').remove();
-    messageElement.find('.generation_failure_retry').remove();
     void mountReactMainChatMessageListPanel();
 }
 
@@ -5295,54 +5115,7 @@ function isAssistantRecoveryMessageId(messageId) {
     return typeof messageId === 'number' && messageId >= 0 && message && !message.is_user && !message.is_system;
 }
 
-function createExistingMessageRecoveryBaseline(type) {
-    if (!['continue', 'swipe'].includes(type)) {
-        return null;
-    }
-
-    const messageId = chat.length - 1;
-    if (!isAssistantRecoveryMessageId(messageId)) {
-        return null;
-    }
-
-    const message = chat[messageId];
-    const swipes = Array.isArray(message.swipes) ? structuredClone(message.swipes) : null;
-    const recoverySwipeId = message.swipe_id;
-    return {
-        type,
-        messageId,
-        mes: String(message.mes ?? ''),
-        swipes,
-        recoverySwipeId,
-        swipe_id: getGenerationRecoveryBaselineSwipeId({
-            type,
-            swipeId: recoverySwipeId,
-            swipeCount: swipes?.length ?? 0,
-        }),
-        swipe_info: Array.isArray(message.swipe_info) ? structuredClone(message.swipe_info) : null,
-        extra: message.extra && typeof message.extra === 'object' ? structuredClone(message.extra) : null,
-    };
-}
-
-function prepareGenerationRetrySwipe(messageId, baseline = null) {
-    const message = chat[messageId];
-    if (!message || baseline?.messageId !== messageId) {
-        return;
-    }
-
-    const retrySwipeId = getGenerationRecoveryRetrySwipeId({
-        type: baseline.type,
-        swipeId: message.swipe_id,
-        recoverySwipeId: baseline.recoverySwipeId,
-        swipeCount: Array.isArray(message.swipes) ? message.swipes.length : 0,
-    });
-
-    if (typeof retrySwipeId === 'number') {
-        message.swipe_id = retrySwipeId;
-    }
-}
-
-async function replaceAssistantRecoveryMessage(messageId, { type, getMessage, title = '', swipes = [], reasoning = '', imageUrls = [], reasoningSignature = null, recoverySwipeId = undefined }) {
+async function replaceAssistantRecoveryMessage(messageId, { type, getMessage, title = '', reasoning = '', imageUrls = [], reasoningSignature = null }) {
     if (!isAssistantRecoveryMessageId(messageId)) {
         return null;
     }
@@ -5355,16 +5128,10 @@ async function replaceAssistantRecoveryMessage(messageId, { type, getMessage, ti
     message.gen_finished = generationFinished;
     message.send_date = getMessageTimeStamp();
     message.extra = message.extra || {};
-    const reasoningState = getGenerationRecoverySuccessReasoningState({
-        type,
-        existingReasoning: message.extra.reasoning,
-        existingReasoningDuration: message.extra.reasoning_duration,
-        reasoning,
-    });
     message.extra.api = getGeneratingApi();
     message.extra.model = getGeneratingModel();
-    message.extra.reasoning = reasoningState.reasoning;
-    message.extra.reasoning_duration = reasoningState.reasoningDuration;
+    message.extra.reasoning = String(reasoning ?? '');
+    message.extra.reasoning_duration = null;
     message.extra.reasoning_signature = reasoningSignature;
     await processImageAttachment(message, { imageUrls });
 
@@ -5377,51 +5144,8 @@ async function replaceAssistantRecoveryMessage(messageId, { type, getMessage, ti
         });
     }
 
-    syncMesToSwipe(messageId);
     if (isReactMainChatOwner()) {
         scheduleMainChatMessageListPanelRefresh();
-    }
-    const swipeInfo = {
-        send_date: message.send_date,
-        gen_started: message.gen_started,
-        gen_finished: message.gen_finished,
-        extra: structuredClone(message.extra ?? {}),
-    };
-    const successSwipeId = getGenerationRecoverySuccessSwipeId({
-        type,
-        swipeId: message.swipe_id,
-        recoverySwipeId,
-        swipeCount: Array.isArray(message.swipes) ? message.swipes.length : 0,
-    });
-
-    if (successSwipeId === null || !Array.isArray(message.swipes)) {
-        message.swipe_id = 0;
-        message.swipes = [message.mes];
-        message.swipe_info = [swipeInfo];
-    } else {
-        message.swipe_id = successSwipeId;
-        if (!Array.isArray(message.swipe_info)) {
-            message.swipe_info = [];
-        }
-        message.swipes[successSwipeId] = message.mes;
-        message.swipe_info[successSwipeId] = swipeInfo;
-    }
-
-    if (Array.isArray(swipes) && swipes.length > 0) {
-        const swipeInfoExtra = structuredClone(message.extra ?? {});
-        delete swipeInfoExtra.token_count;
-        delete swipeInfoExtra.reasoning;
-        delete swipeInfoExtra.reasoning_duration;
-        const swipeInfo = {
-            send_date: message.send_date,
-            gen_started: message.gen_started,
-            gen_finished: message.gen_finished,
-            extra: swipeInfoExtra,
-        };
-        const swipeInfoArray = Array(swipes.length).fill().map(() => structuredClone(swipeInfo));
-        parseReasoningInSwipes(swipes, swipeInfoArray, message.extra?.reasoning_duration);
-        message.swipes.push(...swipes);
-        message.swipe_info.push(...swipeInfoArray);
     }
 
     await eventSource.emit(event_types.MESSAGE_RECEIVED, messageId, type);
@@ -5436,30 +5160,25 @@ function getGenerationLifecycleStatusLabels() {
     };
 }
 
-function showGenerationFailureRecovery(messageId, isRecovering = false) {
+function showGenerationFailureRecovery(messageId) {
     if (isReactMainChatOwner()) {
         setMainChatMessageUiState(messageId, {
             recoveryStatus: null,
             recoveryStage: null,
             failureNoticeVisible: true,
-            failureRetryVisible: !isRecovering,
         });
         return;
     }
 
     const messageElement = chatElement.find(`.mes[mesid="${messageId}"]`);
 
-    if (!messageElement.length || messageElement.find('.generation_failure_retry').length) {
-        messageElement.find('.generation_failure_retry').toggle(!isRecovering);
+    if (!messageElement.length || messageElement.find('.generation_failure_notice').length) {
         void mountReactMainChatMessageListPanel();
         return;
     }
 
-    const notice = $('<div class="generation_failure_notice" role="status" data-i18n="Generation failed. You can retry this response or keep chatting.">Generation failed. You can retry this response or keep chatting.</div>');
-    const retryButton = $('<div class="mes_button generation_failure_retry fa-solid fa-rotate-right" role="button" tabindex="0" title="Retry generation" aria-label="Retry generation" data-i18n="[title]Retry generation;[aria-label]Retry generation"></div>');
+    const notice = $('<div class="generation_failure_notice" role="status" data-i18n="Generation failed. You can retry by sending a new message or keep chatting.">Generation failed. You can retry by sending a new message or keep chatting.</div>');
     messageElement.find('.mes_text').after(notice);
-    messageElement.find('.mes_buttons').append(retryButton);
-    messageElement.find('.generation_failure_retry').toggle(!isRecovering);
     void mountReactMainChatMessageListPanel();
 }
 
@@ -5468,7 +5187,7 @@ function showGenerationFailureRecovery(messageId, isRecovering = false) {
  * @param {object} [options] Options
  * @param {ChatMessage[]} [options.targetChat=chat] All messages in chat before startIndex will remain unchanged.
  * @param {Number} [options.startIndex=0] Everything including and after startIndex will be replaced.
- * @param {Boolean} [options.fade=true] When false, the swipe chevrons will not fade in.
+ * @param {Boolean} [options.fade=true] Kept for API compatibility; no longer used.
  */
 export async function redisplayChat({ targetChat = chat, startIndex = 0, fade = true } = {}) {
     if (isReactMainChatOwner()) {
@@ -5503,7 +5222,6 @@ export async function redisplayChat({ targetChat = chat, startIndex = 0, fade = 
         applyCharacterTagsToMessageDivs({ mesIds: lodash.range(startIndex, targetChat.length, 1) });
     }
 
-    refreshSwipeButtons(false, fade);
     applyStylePins();
     updateEditArrowClasses();
 
@@ -5586,39 +5304,17 @@ export async function deleteLastMessage() {
 /**
  * Deletes a message from the chat by its ID, optionally asking for confirmation.
  * @param {number} id The ID of the message to delete.
- * @param {number} [swipeDeletionIndex] Deletes the swipe with that index.
  * @param {boolean} [askConfirmation=false] Whether to ask for confirmation before deleting.
  */
-export async function deleteMessage(id, swipeDeletionIndex = undefined, askConfirmation = false) {
-    const canDeleteSwipe = swipeDeletionIndex !== undefined && swipeDeletionIndex !== null;
-    if (canDeleteSwipe) {
-        if (swipeDeletionIndex < 0) {
-            throw new Error('Swipe index cannot be negative');
-        }
-        if (!Array.isArray(chat[id].swipes)) {
-            throw new Error('Message has no swipes to delete');
-        }
-        if (chat[id].swipes.length <= swipeDeletionIndex) {
-            throw new Error('Swipe index out of bounds');
-        }
-    }
-
-    let deleteOnlySwipe = canDeleteSwipe;
+export async function deleteMessage(id, askConfirmation = false) {
     if (askConfirmation) {
         const result = await callGenericPopup(t`Are you sure you want to delete this message?`, POPUP_TYPE.CONFIRM, null, {
-            okButton: canDeleteSwipe ? t`Delete Swipe` : t`Delete Message`,
+            okButton: t`Delete Message`,
             cancelButton: 'Cancel',
-            customButtons: canDeleteSwipe ? [t`Delete Message`] : null,
         });
         if (!result) {
             return;
         }
-        deleteOnlySwipe = canDeleteSwipe && result === POPUP_RESULT.AFFIRMATIVE; // Default button, not the custom one
-    }
-
-    if (deleteOnlySwipe) {
-        await deleteSwipe(swipeDeletionIndex, id);
-        return;
     }
 
     if (isReactMainChatOwner()) {
@@ -5654,7 +5350,6 @@ export async function deleteMessage(id, swipeDeletionIndex = undefined, askConfi
         this_edit_mes_id = undefined;
     }
 
-    refreshSwipeButtons();
 
     await eventSource.emit(event_types.MESSAGE_DELETED, chat.length);
 }
@@ -5680,35 +5375,22 @@ export async function reloadCurrentChatUnsafe() {
         await printMessages();
         await eventSource.emit(event_types.CHAT_CHANGED, getCurrentChatId());
     }
-
-    refreshSwipeButtons();
 }
 
 /**
  * Send the message currently typed into the chat box.
  */
 export async function sendTextareaMessage() {
-    // don't proceed during swipeGenerate()
-    if (swipeState == SWIPE_STATE.EDITING) {
-        toastr.warning(t`Confirm the edit to start a generation.`, t`You cannot send a message during a swipe-edit.`);
-        return;
-    }
-    if (swipeState !== SWIPE_STATE.NONE) return; // don't proceed if mid-swipe.
     if (is_send_press) return;
     if (isExecutingCommandsFromChatInput) return;
 
-    hideSwipeButtons(); //Swipe buttons must be hidden now, otherwise concurrent generations are possible.
-
-    let generateType = 'normal';
     const textareaText = getComposerValue();
 
     if (textareaText && this_chid === undefined && name2 !== neutralCharacterName) {
         await newAssistantChat({ temporary: false });
     }
 
-    let generation = await Generate(generateType);
-    showSwipeButtons();
-    return generation;
+    return await Generate('normal');
 }
 
 
@@ -5802,12 +5484,10 @@ export function substituteParams(content, options = {}) {
 
 /**
  * Gets stopping sequences for the prompt.
- * @param {boolean} _isImpersonate A request is made to impersonate a user
- * @param {boolean} _isContinue A request is made to continue the message
  * @param {string} [_api] Optional API name to get API-specific stopping sequences for
  * @returns {string[]} Array of stopping strings
  */
-export function getStoppingStrings(_isImpersonate, _isContinue, _api = main_api) {
+export function getStoppingStrings(_api = main_api) {
     return getCustomStoppingStrings();
 }
 
@@ -6385,8 +6065,6 @@ export async function generateRaw({ prompt = '', api = null, instructOverride = 
     // format result, exclude user prompt bias
     const message = cleanUpMessage({
         getMessage: extractMessageFromData(data, api),
-        isImpersonate: false,
-        isContinue: false,
         displayIncompleteSentences: true,
         trimNames: trimNames,
         trimWrongNames: trimNames,
@@ -6579,10 +6257,9 @@ export function stopGeneration() {
 /**
  * Injects extension prompts into chat messages.
  * @param {object[]} messages Array of chat messages
- * @param {boolean} isContinue Whether the generation is a continuation. If true, the extension prompts of depth 0 are injected at position 1.
  * @returns {Promise<number[]>} Array of indices where the extension prompts were injected
  */
-async function doChatInject(messages, isContinue) {
+async function doChatInject(messages) {
     const injectedMessages = [];
     let totalInsertedMessages = 0;
     messages.reverse();
@@ -6619,7 +6296,7 @@ async function doChatInject(messages, isContinue) {
         }
 
         if (roleMessages.length) {
-            const depth = isContinue && i === 0 ? 1 : i;
+            const depth = i;
             const injectIdx = Math.min(depth + totalInsertedMessages, messages.length);
             messages.splice(injectIdx, 0, ...roleMessages);
             totalInsertedMessages += roleMessages.length;
@@ -6661,14 +6338,10 @@ function unblockGeneration(type) {
 }
 
 export function getNextMessageId(type) {
-    return type == 'swipe' ? chat.length - 1 : chat.length;
+    return chat.length;
 }
 
 export function getBiasStrings(textareaText, type) {
-    if (type == 'impersonate' || type == 'continue') {
-        return { messageBias: '', promptBias: '', isUserPromptBias: false };
-    }
-
     let promptBias = '';
     let messageBias = extractMessageBias(textareaText);
 
@@ -6676,9 +6349,6 @@ export function getBiasStrings(textareaText, type) {
     if (!textareaText) {
         for (let i = chat.length - 1; i >= 0; i--) {
             const mes = chat[i];
-            if (type === 'swipe' && chat.length - 1 === i) {
-                continue;
-            }
             if (mes && (mes.is_user || mes.is_system || mes.extra?.type === system_message_types.NARRATOR)) {
                 if (mes.extra?.bias?.trim()?.length > 0) {
                     promptBias = mes.extra.bias;
@@ -6879,10 +6549,6 @@ export async function duplicateCharacter({ avatar = null, silent = false } = {})
 
 function setInContextMessages(msgInContextCount, type) {
     if (isReactMainChatOwner()) {
-        if (type === 'swipe' || type === 'regenerate' || type === 'continue') {
-            msgInContextCount++;
-        }
-
         const lastMessageId = Math.max(0, chat.length - msgInContextCount);
         chat_metadata.lastInContextMessageId = lastMessageId;
         setMainChatMessageUiFlag('lastInContext', false);
@@ -6891,10 +6557,6 @@ function setInContextMessages(msgInContextCount, type) {
     }
 
     chatElement.find('.mes').removeClass('lastInContext');
-
-    if (type === 'swipe' || type === 'regenerate' || type === 'continue') {
-        msgInContextCount++;
-    }
 
     const lastMessageBlock = chatElement.find('.mes:not([is_system="true"]), .mes.toolCall').eq(-msgInContextCount);
     lastMessageBlock.addClass('lastInContext');
@@ -7061,50 +6723,6 @@ export function extractJsonFromData(data, { mainApi = null, chatCompletionSource
     return JSON.stringify(result ?? {});
 }
 
-/**
- * Extracts multiswipe swipes from the response data.
- * @param {Object} data Response data
- * @param {string} type Type of generation
- * @returns {string[]} Array of extra swipes
- */
-function extractMultiSwipes(data, type) {
-    const swipes = [];
-
-    if (!data) {
-        return swipes;
-    }
-
-    if (type === 'continue' || type === 'impersonate' || type === 'quiet') {
-        return swipes;
-    }
-
-    if (main_api === 'openai') {
-        if (!Array.isArray(data.choices)) {
-            return swipes;
-        }
-
-        const multiSwipeCount = data.choices.length - 1;
-
-        if (multiSwipeCount <= 0) {
-            return swipes;
-        }
-
-        for (let i = 1; i < data.choices.length; i++) {
-            const text = data?.choices[i]?.message?.content ?? data?.choices[i]?.text ?? '';
-            swipes.push(text);
-        }
-    }
-
-    const cleanedSwipes = swipes.map(text => cleanUpMessage({
-        getMessage: text,
-        isImpersonate: false,
-        isContinue: false,
-        displayIncompleteSentences: false,
-    }));
-
-    return cleanedSwipes;
-}
-
 
 /**
  * Saves the image to the message object.
@@ -7150,7 +6768,6 @@ export function getGeneratingModel(_mes) {
 export function activateSendButtons() {
     is_send_press = false;
     applyGenerationControlState(getStreamingControlState({ isFinished: true }));
-    showSwipeButtons();
 }
 
 /**
@@ -7158,7 +6775,6 @@ export function activateSendButtons() {
  */
 export function deactivateSendButtons() {
     applyGenerationControlState(getStreamingControlState({ isGenerating: true, hasStreamingProcessor: Boolean(streamingProcessor) }));
-    hideSwipeButtons();
 }
 
 function applyGenerationControlState(controlState) {
@@ -7445,22 +7061,8 @@ function getFirstMessage() {
         extra: {},
     };
 
-    if (Array.isArray(alternateGreetings) && alternateGreetings.length > 0) {
-        const swipes = [message.mes, ...(alternateGreetings.map(greeting => getRegexedString(greeting, regex_placement.AI_OUTPUT)))];
-
-        if (!message.mes) {
-            swipes.shift();
-            message.mes = swipes[0];
-        }
-
-        message.swipe_id = 0;
-        message.swipes = swipes;
-        message.swipe_info = swipes.map(_ => ({
-            send_date: message.send_date,
-            gen_started: void 0,
-            gen_finished: void 0,
-            extra: {},
-        }));
+    if (!message.mes && Array.isArray(alternateGreetings) && alternateGreetings.length > 0) {
+        message.mes = getRegexedString(alternateGreetings[0], regex_placement.AI_OUTPUT);
     }
 
     return message;
@@ -7514,11 +7116,6 @@ export function changeMainAPI(api = null) {
     forceCharacterEditorTokenize();
 }
 
-async function doOnboarding() {
-    const template = $('#onboarding_template .onboarding');
-    await callGenericPopup(template, POPUP_TYPE.TEXT, '', { wider: true, cancelButton: false });
-}
-
 function reloadLoop() {
     const MAX_RELOADS = 5;
     let reloads = Number(sessionStorage.getItem('reloads') || 0);
@@ -7569,7 +7166,6 @@ async function applyStartupSettingsCore(data, initLoaderHandle = null) {
         if (settings.max_context !== undefined)
             max_context = parseInt(settings.max_context);
 
-        refreshSwipeButtons();
 
         // OpenAI
         loadOpenAISettings(data, settings.oai_settings ?? settings);
@@ -7620,14 +7216,6 @@ async function applyStartupSettingsCore(data, initLoaderHandle = null) {
         // Lazy migration: feature_settings replaced extension_settings; the old
         // key is accepted on load and simply not written back on next save.
         Object.assign(feature_settings, (settings.feature_settings ?? settings.extension_settings ?? {}));
-
-        firstRun = !!settings.firstRun;
-
-        if (firstRun) {
-            await initLoaderHandle?.hide();
-            await doOnboarding();
-            firstRun = false;
-        }
     }
 
     configureDeferredStartupTasks();
@@ -7678,7 +7266,6 @@ export async function saveSettings(loopCounter = 0) {
     });
 
     const payload = {
-        firstRun: firstRun,
         accountStorage: accountStorage.getState(),
         currentVersion: persistedCurrentVersion ?? undefined,
         active_character: active_character,
@@ -7801,10 +7388,6 @@ function applyMessageEditText(messageId, inputText) {
         text = removeMacros(text);
     }
     mes.mes = text;
-    if (mes.swipe_id !== undefined) {
-        ensureSwipes(mes);
-        mes.swipes[mes.swipe_id] = text;
-    }
 
     if (mes?.is_system || mes?.is_user || mes.extra?.type === system_message_types.NARRATOR) {
         mes.extra.bias = bias ?? null;
@@ -7830,7 +7413,6 @@ function updateMessage(div) {
 
 function openMessageDelete(fromSlashCommand) {
     closeMessageEditor();
-    hideSwipeButtons();
     if (fromSlashCommand || !is_send_press) {
         $('#dialogue_del_mes').css('display', 'block');
         $('#dialogue_del_mes_summary').text(t`Select a message to delete it and every message after it.`);
@@ -7938,7 +7520,6 @@ async function commitMainChatMessageEdit(messageId) {
     }
     await eventSource.emit(event_types.MESSAGE_UPDATED, normalizedMessageId);
     await saveChatConditional();
-    showSwipeButtons();
     void mountReactMainChatMessageListPanel();
     return true;
 }
@@ -7956,7 +7537,6 @@ async function cancelMainChatMessageEdit(messageId) {
     if (this_edit_mes_id === normalizedMessageId) {
         this_edit_mes_id = undefined;
     }
-    showSwipeButtons();
     void mountReactMainChatMessageListPanel();
     return true;
 }
@@ -8147,7 +7727,6 @@ export async function messageEdit(editMessageId) {
     this_edit_mes_id = editMessageId;
     this_edit_mes_chname = editMessage.name || (editMessage.is_user ? name1 : name2);
 
-    refreshSwipeButtons();
 
     const chatScrollPosition = chatElement.scrollTop();
     const messageBlock = messageElement.find('.mes_block');
@@ -8240,7 +7819,6 @@ async function messageEditCancel(messageId = this_edit_mes_id) {
         console.warn(`The message editor was closed on message #${messageId} while #${this_edit_mes_id} is being edited.`);
     }
 
-    showSwipeButtons();
     void mountReactMainChatMessageListPanel();
 }
 
@@ -8305,7 +7883,6 @@ async function messageEditMove(sourceId, targetId) {
     }
 
     updateViewMessageIds();
-    refreshSwipeButtons();
     await saveChatConditional();
     return true;
 }
@@ -8351,7 +7928,6 @@ async function messageEditDone(div) {
     await eventSource.emit(event_types.MESSAGE_UPDATED, this_edit_mes_id);
     this_edit_mes_id = undefined;
     await saveChatConditional();
-    showSwipeButtons();
     void mountReactMainChatMessageListPanel();
 }
 
@@ -8584,7 +8160,6 @@ function select_rm_create({ switchMenu = true } = {}) {
     $('#depth_prompt_prompt').val(create_save.depth_prompt_prompt);
     $('#depth_prompt_depth').val(create_save.depth_prompt_depth);
     $('#depth_prompt_role').val(create_save.depth_prompt_role);
-    $('#mes_example_textarea').val(create_save.mes_example);
     $('#character_json_data').val('');
     $('#avatar_div').css('display', 'flex');
     $('#avatar_load_preview').attr('src', default_avatar);
@@ -8710,10 +8285,6 @@ export async function setCharacterSettingsOverrides() {
     $scenario.val(scenarioOverrideValue).on('input', function () {
         pendingChanges.scenario = String($(this).val());
     });
-    const $examples = $template.find('.chat_examples');
-    $examples.val(exampleMessagesValue).on('input', function () {
-        pendingChanges.examples = String($(this).val());
-    });
     const $systemPrompt = $template.find('.chat_system_prompt');
     $systemPrompt.val(systemPromptValue).on('input', function () {
         pendingChanges.system_prompt = String($(this).val());
@@ -8727,7 +8298,6 @@ export async function setCharacterSettingsOverrides() {
 
         $scenario.val('');
         pendingChanges.scenario = '';
-        $examples.val('');
         pendingChanges.examples = '';
         $systemPrompt.val('');
         pendingChanges.system_prompt = '';
@@ -9062,33 +8632,6 @@ function addAlternateGreeting(template, greeting, index, getArray, popup) {
     template.find('.alternate_greetings_list').append(greetingBlock);
 }
 
-
-/**
- * @deprecated Use `swipe` instead.
- * Handles the swipe to the left event.
- * @param {SwipeEvent} [event] Event.
- * @param {object} params Additional parameters.
- * @param {import('./scripts/constants.js').SWIPE_SOURCE} [params.source]  The source of the swipe event.
- * @param {boolean} [params.repeated] Is the swipe event repeated.
- * @param {object} [params.message] The chat message to swipe.
- */
-export async function swipe_left(event, { source, repeated, message } = {}) {
-    await swipe.call(this, event, SWIPE_DIRECTION.LEFT, { source: source, repeated: repeated, message: message });
-}
-
-/**
- * @deprecated Use `swipe` instead.
- * Handles the swipe to the right event.
- * @param {SwipeEvent} [event] Event.
- * @param {object} params Additional parameters.
- * @param {import('./scripts/constants.js').SWIPE_SOURCE} [params.source] The source of the swipe event.
- * @param {boolean} [params.repeated] Is the swipe event repeated.
- * @param {object} [params.message] The chat message to swipe.
- */
-//MARK: swipe_right
-export async function swipe_right(event = null, { source, repeated, message } = {}) {
-    await swipe.call(this, event, SWIPE_DIRECTION.RIGHT, { source: source, repeated: repeated, message: message });
-}
 
 /**
  * Imports supported files dropped into the app window.
@@ -9572,12 +9115,6 @@ function addDebugFunctions() {
         await reloadCurrentChat();
     };
 
-    registerDebugFunction('forceOnboarding', 'Force onboarding', 'Forces the onboarding process to restart.', async () => {
-        firstRun = true;
-        await saveSettings();
-        location.reload();
-    });
-
     registerDebugFunction('backfillTokenCounts', 'Backfill token counters',
         `Recalculates token counts of all messages in the current chat to refresh the counters.
         Useful when you switch between models that have different tokenizers.
@@ -9592,11 +9129,6 @@ function addDebugFunctions() {
     registerDebugFunction('toggleEventTracing', 'Toggle event tracing', 'Useful to see what triggered a certain event.', () => {
         localStorage.setItem('eventTracing', localStorage.getItem('eventTracing') === 'true' ? 'false' : 'true');
         toastr.info('Event tracing is now ' + (localStorage.getItem('eventTracing') === 'true' ? 'enabled' : 'disabled'));
-    });
-
-    registerDebugFunction('toggleRegenerateWarning', 'Toggle Ctrl+Enter regeneration confirmation', 'Toggle the warning when regenerating a message with a Ctrl+Enter hotkey.', () => {
-        accountStorage.setItem('RegenerateWithCtrlEnter', accountStorage.getItem('RegenerateWithCtrlEnter') === 'true' ? 'false' : 'true');
-        toastr.info('Regenerate warning is now ' + (accountStorage.getItem('RegenerateWithCtrlEnter') === 'true' ? 'disabled' : 'enabled'));
     });
 
     registerDebugFunction('copySetup', 'Copy ST setup to clipboard [WIP]', 'Useful data when reporting bugs', async () => {
@@ -9818,6 +9350,284 @@ async function mountRightNavPanel() {
     }
 }
 
+async function mountPromptPanel() {
+    const panel = document.getElementById('left-nav-panel');
+    if (!panel) {
+        console.warn('Left nav panel not found');
+        return;
+    }
+    if (panel.dataset.reactPromptPanelMounted === 'true') {
+        return;
+    }
+
+    const host = document.createElement('div');
+    host.id = 'emberdesk-react-prompt-panel-host';
+    panel.replaceChildren(host);
+
+    try {
+        const module = await loadWorkspacePanelsModule();
+        module.mountPromptPanel(host, getPromptPanelBridge());
+        panel.dataset.reactPromptPanelMounted = 'true';
+    } catch (error) {
+        console.error('Failed to mount prompt panel:', error);
+    }
+}
+
+/**
+ * Runtime bridge consumed by the React prompt-manager list inside
+ * #completion_prompt_manager. It exposes prompt ordering, enablement, and
+ * per-prompt field editing over the live oai_settings/promptManager state.
+ * Preset selection stays with the legacy settings_preset_openai binding,
+ * which owns the same data.
+ * getState results are cached until an invalidating event so
+ * useSyncExternalStore sees stable snapshots.
+ * @returns {object} Bridge object for the React prompt list
+ */
+function getPromptPanelBridge() {
+    if (globalThis.__emberDeskPromptPanelBridge) {
+        return globalThis.__emberDeskPromptPanelBridge;
+    }
+
+    const listeners = new Set();
+    let cachedState = null;
+    let cachedOrder = null;
+    let eventsBound = false;
+    let tokenCountOverrides = {};
+    let recountTimer = null;
+    let recountGeneration = 0;
+
+    const emit = (scheduleTokens = true) => {
+        cachedState = null;
+        for (const listener of listeners) {
+            try {
+                listener();
+            } catch (error) {
+                console.error('Prompt panel listener failed:', error);
+            }
+        }
+        if (scheduleTokens) {
+            scheduleRecount();
+        }
+    };
+
+    /**
+     * Recomputes the per-prompt token column. Regular prompts are counted
+     * through countTokensOpenAIAsync (content-hash cached, so edits only
+     * retokenize the changed entry). Markers have no static content — they
+     * report the last assembled request's actual count instead, or null when
+     * no generation has run yet.
+     */
+    const recountTokens = async () => {
+        const generation = ++recountGeneration;
+        const prompts = Array.isArray(oai_settings.prompts) ? oai_settings.prompts : [];
+        const lastRunCounts = promptManager?.tokenHandler?.getCounts?.() ?? {};
+        const entries = await Promise.all(getOrderList().map(async entry => {
+            const prompt = prompts.find(item => item?.identifier === entry.identifier);
+            if (!prompt) {
+                return [entry.identifier, null];
+            }
+            if (prompt.marker) {
+                const lastRun = lastRunCounts[entry.identifier];
+                return [entry.identifier, typeof lastRun === 'number' && lastRun > 0 ? lastRun : null];
+            }
+            try {
+                return [entry.identifier, await countTokensOpenAIAsync({ role: prompt.role ?? 'system', content: prompt.content ?? '' })];
+            } catch {
+                return [entry.identifier, null];
+            }
+        }));
+        if (generation !== recountGeneration) {
+            return;
+        }
+        const nextCounts = Object.fromEntries(entries);
+        const unchanged = Object.keys(nextCounts).length === Object.keys(tokenCountOverrides).length
+            && Object.entries(nextCounts).every(([identifier, count]) => tokenCountOverrides[identifier] === count);
+        if (unchanged) {
+            return;
+        }
+        tokenCountOverrides = nextCounts;
+        emit(false);
+    };
+
+    const scheduleRecount = () => {
+        clearTimeout(recountTimer);
+        recountTimer = setTimeout(() => {
+            void recountTokens();
+        }, 400);
+    };
+
+    const getOrderList = () => promptManager?.getPromptOrderForCharacter(promptManager.activeCharacter) ?? [];
+
+    /**
+     * Reuses the previous order snapshot while its contents are unchanged so
+     * useSyncExternalStore keeps a stable reference across unrelated emits.
+     * A fresh array identity would trip the list's order-change effect and
+     * cancel a pointer drag still in flight.
+     * @param {object[]} order Freshly mapped order entries
+     * @returns {object[]} Stable order snapshot
+     */
+    const stabilizeOrder = (order) => {
+        if (cachedOrder?.length === order.length && cachedOrder.every((entry, index) => entry.identifier === order[index].identifier && entry.enabled === order[index].enabled)) {
+            return cachedOrder;
+        }
+        cachedOrder = order;
+        return order;
+    };
+
+    /**
+     * Normalizes a stored injection_trigger list to the supported vocabulary.
+     * 'all' dominates and represents every generation type; retired trigger
+     * values are dropped. Legacy empty arrays mean 'all'.
+     * @param {unknown} triggers Stored trigger list
+     * @returns {string[]} Normalized trigger list
+     */
+    const normalizeInjectionTriggers = (triggers) => {
+        const allowed = ['all', 'normal'];
+        const list = Array.isArray(triggers) ? triggers.filter(value => allowed.includes(value)) : [];
+        return (!list.length || list.includes('all')) ? ['all'] : list;
+    };
+
+    /**
+     * Returns the live prompt-order array for the active character, creating
+     * the per-character bucket first when the preset has none so appended
+     * entries actually persist.
+     * @returns {object[]} Mutable order entry list
+     */
+    const ensureOrderList = () => {
+        const order = getOrderList();
+        if (order.length || !promptManager?.activeCharacter) {
+            return order;
+        }
+        const bucketExists = (promptManager.serviceSettings?.prompt_order ?? [])
+            .some(list => String(list.character_id) === String(promptManager.activeCharacter.id));
+        if (!bucketExists) {
+            promptManager.addPromptOrderForCharacter(promptManager.activeCharacter, []);
+        }
+        return getOrderList();
+    };
+
+    const persist = () => {
+        void promptManager?.saveServiceSettings();
+        emit();
+    };
+
+    globalThis.__emberDeskPromptPanelBridge = {
+        subscribe(listener) {
+            if (!eventsBound) {
+                eventsBound = true;
+                [
+                    event_types.OAI_PRESET_CHANGED_AFTER,
+                    event_types.PRESET_CHANGED,
+                    event_types.SETTINGS_UPDATED,
+                    event_types.CHAT_LOADED,
+                    event_types.CHAT_CHANGED,
+                    event_types.APP_INITIALIZED,
+                    event_types.CHAT_COMPLETION_PROMPT_READY,
+                ].forEach(eventType => eventSource.on(eventType, () => emit()));
+            }
+            scheduleRecount();
+            listeners.add(listener);
+            return () => listeners.delete(listener);
+        },
+        getState() {
+            if (cachedState) {
+                return cachedState;
+            }
+            const prompts = Array.isArray(oai_settings.prompts) ? oai_settings.prompts : [];
+            const promptsById = {};
+            for (const prompt of prompts) {
+                if (prompt?.identifier) {
+                    promptsById[prompt.identifier] = {
+                        identifier: prompt.identifier,
+                        name: prompt.name ?? prompt.identifier,
+                        role: prompt.role ?? null,
+                        content: prompt.content ?? '',
+                        marker: Boolean(prompt.marker),
+                        system_prompt: Boolean(prompt.system_prompt),
+                        forbid_overrides: Boolean(prompt.forbid_overrides),
+                        injection_position: prompt.injection_position ?? 0,
+                        injection_depth: prompt.injection_depth ?? null,
+                        injection_order: prompt.injection_order ?? null,
+                        injection_trigger: normalizeInjectionTriggers(prompt.injection_trigger),
+                    };
+                }
+            }
+            cachedState = {
+                promptsById,
+                order: stabilizeOrder(getOrderList().map(entry => ({ identifier: entry.identifier, enabled: Boolean(entry.enabled) }))),
+                tokenCounts: { ...tokenCountOverrides },
+                presetDirty: isOpenAIPresetDirty(),
+            };
+            return cachedState;
+        },
+        setPromptEnabled(identifier, enabled) {
+            const entry = getOrderList().find(item => item.identifier === identifier);
+            if (!entry) {
+                return;
+            }
+            entry.enabled = Boolean(enabled);
+            persist();
+        },
+        movePrompt(identifier, targetIndex) {
+            const order = getOrderList();
+            const index = order.findIndex(item => item.identifier === identifier);
+            if (index < 0 || !Number.isInteger(targetIndex) || targetIndex < 0 || targetIndex >= order.length || index === targetIndex) {
+                return;
+            }
+            order.splice(targetIndex, 0, ...order.splice(index, 1));
+            persist();
+        },
+        updatePrompt(identifier, patch) {
+            const prompt = (oai_settings.prompts ?? []).find(item => item?.identifier === identifier);
+            if (!prompt || prompt.marker) {
+                return;
+            }
+            if (patch && Object.prototype.hasOwnProperty.call(patch, 'injection_trigger')) {
+                patch = { ...patch, injection_trigger: normalizeInjectionTriggers(patch.injection_trigger) };
+            }
+            Object.assign(prompt, patch);
+            persist();
+        },
+        addPrompt() {
+            if (!Array.isArray(oai_settings.prompts)) {
+                oai_settings.prompts = [];
+            }
+            const identifier = promptManager?.getUuidv4?.() ?? uuidv4();
+            oai_settings.prompts.push({
+                identifier,
+                name: 'New Prompt',
+                role: 'system',
+                system_prompt: false,
+                marker: false,
+                content: '',
+                injection_position: 0,
+                injection_depth: 4,
+                injection_order: 100,
+                injection_trigger: ['all'],
+            });
+            ensureOrderList().push({ identifier, enabled: true });
+            persist();
+            return identifier;
+        },
+        deletePrompt(identifier) {
+            const prompts = Array.isArray(oai_settings.prompts) ? oai_settings.prompts : [];
+            const prompt = prompts.find(item => item?.identifier === identifier);
+            if (!prompt || prompt.marker) {
+                return;
+            }
+            oai_settings.prompts = prompts.filter(item => item?.identifier !== identifier);
+            const order = getOrderList();
+            const index = order.findIndex(item => item.identifier === identifier);
+            if (index >= 0) {
+                order.splice(index, 1);
+            }
+            persist();
+        },
+    };
+
+    return globalThis.__emberDeskPromptPanelBridge;
+}
+
 /**
  * Renders the React-owned chat rows inside #select_chat_div. Called by
  * displayChats (chat-ops-service) with projected row data; rows replicate the
@@ -10029,42 +9839,6 @@ async function mountDialogueDelMesControls() {
         container.dataset.reactDialogueDelMesMounted = 'true';
     } catch (error) {
         console.error('Failed to mount dialogue delete-message controls:', error);
-    }
-}
-
-/**
- * Mounts the onboarding action buttons into their host spans inside
- * #onboarding_template. The .onboarding markup is moved — not cloned — into
- * the onboarding popup on first run, carrying the mounted hosts along.
- */
-async function mountOnboardingActions() {
-    const hosts = document.querySelectorAll('#onboarding_template [data-onboarding-host]');
-    if (!hosts.length) {
-        return;
-    }
-    let module = null;
-    for (const host of hosts) {
-        if (host.dataset.reactOnboardingMounted === 'true') {
-            continue;
-        }
-        if (!module) {
-            try {
-                module = await loadWorkspacePanelsModule();
-            } catch (error) {
-                console.error('Failed to load workspace panels module:', error);
-                return;
-            }
-        }
-        const which = host.dataset.onboardingHost;
-        if (which !== 'import' && which !== 'library') {
-            continue;
-        }
-        try {
-            module.mountOnboardingAction(host, which);
-            host.dataset.reactOnboardingMounted = 'true';
-        } catch (error) {
-            console.error(`Failed to mount onboarding action ${which}:`, error);
-        }
     }
 }
 

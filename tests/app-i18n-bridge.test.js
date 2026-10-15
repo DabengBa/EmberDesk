@@ -10,7 +10,7 @@ describe('app i18n bridge', () => {
     test('falls back to source text without SillyTavern context', () => {
         expect(translate('Hello')).toBe('Hello');
         expect(t`Count ${3} items`).toBe('Count 3 items');
-        expect(getCurrentLocale()).toBe(String(navigator.language || 'en').toLowerCase());
+        expect(getCurrentLocale()).toBe('zh-cn');
     });
 
     test('delegates to legacy i18n via SillyTavern.getContext', () => {

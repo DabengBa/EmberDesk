@@ -3,7 +3,6 @@ import { CHAT_TRUNCATION, debounce_timeout } from './constants.js';
 import { getRequestHeaders } from './request-context.js';
 import { createOrEditCharacter } from './character-lifecycle-service.js';
 import { ensureMessageMediaIsArray, scrollChatToBottom, updateMessageElement } from './message-service.js';
-import { refreshSwipeButtons } from './generation-service.js';
 import { runDeleteCharacterClosePreflight } from './delete-character-preflight.js';
 import { requireChatOpsShellContext } from './chat-ops-shell-context.js';
 
@@ -173,8 +172,6 @@ export async function loadEarlierChatMessages(messagesToLoad = null) {
     } else {
         state.chatElement.prepend(messageNodes);
     }
-    refreshSwipeButtons();
-
     if (firstId === 0) {
         showMoreButton.remove();
     }
@@ -463,9 +460,11 @@ export async function getChat() {
         await getChatResult();
         eventSource.emit(event_types.CHAT_LOADED, { detail: { id: state.this_chid, character: state.characters[state.this_chid] } });
 
-        // Focus on the textarea if not already focused on a visible text input
+        // Focus on the textarea if not already focused on a visible interactive
+        // element — a button/control the user just activated (e.g. an opened
+        // preview's close button) must not lose focus to this delayed refocus.
         delay(debounce_timeout.short).then(() => {
-            if ($(document.activeElement).is('input:visible, textarea:visible')) {
+            if ($(document.activeElement).is('input:visible, textarea:visible, select:visible, button:visible, a:visible, [contenteditable]:visible')) {
                 return;
             }
             $('#send_textarea').trigger('focus');

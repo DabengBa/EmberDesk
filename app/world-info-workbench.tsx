@@ -176,14 +176,13 @@ function iconClass(faIcon: string, ...styles: StyleArg[]): string {
 function isAdvancedDefault(entry: WorldInfoWorkbenchEntryDetail | null | undefined): {
     timing: boolean;
     scope: boolean;
-    group: boolean;
     automation: boolean;
 } {
     if (!entry) {
-        return { timing: false, scope: false, group: false, automation: false };
+        return { timing: false, scope: false, automation: false };
     }
     return {
-        timing: Boolean(entry.sticky || entry.cooldown || entry.delay || entry.delayUntilRecursion || entry.excludeRecursion || entry.preventRecursion),
+        timing: Boolean(entry.sticky || entry.cooldown || entry.delay),
         scope: Boolean(
             entry.matchCharacterDescription
             || entry.matchCharacterDepthPrompt
@@ -192,7 +191,6 @@ function isAdvancedDefault(entry: WorldInfoWorkbenchEntryDetail | null | undefin
             || entry.characterFilterNames.length
             || entry.characterFilterTags.length,
         ),
-        group: Boolean(entry.group || entry.groupOverride),
         automation: Boolean(entry.automationId || entry.triggers.length || entry.outletName),
     };
 }
@@ -212,9 +210,6 @@ function buildAdvancedSummary(entry: WorldInfoWorkbenchEntryDetail | null | unde
     }
     if (flags.scope) {
         parts.push('Scope filters');
-    }
-    if (flags.group) {
-        parts.push(entry.group ? `Group: ${entry.group}` : 'Inclusion group');
     }
     if (flags.automation) {
         parts.push(entry.automationId ? `Automation: ${entry.automationId}` : 'Automation');
@@ -844,7 +839,7 @@ function EntryEditor({
                         </label>
                     </AdvancedSection>
                 ) : null}
-                <AdvancedSection id="timing" title="递归与时序" summary={advanced.timing ? buildAdvancedSummary(entry).split(' · ')[0] : ''}>
+                <AdvancedSection id="timing" title="时序" summary={advanced.timing ? buildAdvancedSummary(entry).split(' · ')[0] : ''}>
                     <div {...stylex.props(s.flexRow)}>
                         <label {...stylex.props(s.field, s.fieldGrow)}>
                             <span {...stylex.props(s.fieldLabel)}>黏性</span>
@@ -868,32 +863,6 @@ function EntryEditor({
                             />
                         </label>
                     </div>
-                    <div {...stylex.props(s.checkboxRow)}>
-                        <label className="checkbox_label">
-                            <input type="checkbox" checked={draft.excludeRecursion} data-world-info-react-field="excludeRecursion"
-                                onChange={event => saveFields({ excludeRecursion: event.target.checked })} />
-                            <span>排除递归</span>
-                        </label>
-                        <label className="checkbox_label">
-                            <input type="checkbox" checked={draft.preventRecursion} data-world-info-react-field="preventRecursion"
-                                onChange={event => saveFields({ preventRecursion: event.target.checked })} />
-                            <span>阻止递归</span>
-                        </label>
-                    </div>
-                </AdvancedSection>
-                <AdvancedSection id="group" title="包含组" summary={advanced.group ? (entry.group ? `组：${entry.group}` : '已配置') : ''}>
-                    <label {...stylex.props(s.field)}>
-                        <span {...stylex.props(s.fieldLabel)}>组名</span>
-                        <input className="text_pole" value={draft.group} data-world-info-react-field="group"
-                            onChange={event => setDraft({ ...draft, group: event.target.value })}
-                            onBlur={event => saveFields({ group: event.target.value })}
-                        />
-                    </label>
-                    <label className="checkbox_label">
-                        <input type="checkbox" checked={draft.groupOverride} data-world-info-react-field="groupOverride"
-                            onChange={event => saveFields({ groupOverride: event.target.checked })} />
-                        <span>优先覆盖</span>
-                    </label>
                 </AdvancedSection>
                 <AdvancedSection id="automation" title="自动化与 Outlet" summary={advanced.automation ? (entry.automationId || entry.outletName || '已配置') : ''}>
                     <label {...stylex.props(s.field)}>

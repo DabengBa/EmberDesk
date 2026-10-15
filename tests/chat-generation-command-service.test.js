@@ -20,10 +20,6 @@ describe('chat generation command service', () => {
     test('exposes the complete public command kind matrix', () => {
         expect(GENERATION_COMMAND_KINDS).toEqual([
             'submitComposer',
-            'continueLast',
-            'retryGeneration',
-            'swipeLeft',
-            'swipeRight',
             'quietPrompt',
             'quietToLoud',
             'backgroundGeneration',
@@ -32,10 +28,6 @@ describe('chat generation command service', () => {
 
     test.each([
         ['submitComposer', 'normal'],
-        ['continueLast', 'continue'],
-        ['retryGeneration', 'regenerate'],
-        ['swipeLeft', 'swipe'],
-        ['swipeRight', 'swipe'],
         ['quietPrompt', 'quiet'],
         ['quietToLoud', 'quiet'],
         ['backgroundGeneration', 'quiet'],
@@ -88,48 +80,6 @@ describe('chat generation command service', () => {
                 status: GENERATION_COMMAND_STATUSES.SERVICE_OWNED,
                 path: GENERATION_COMMAND_PATHS.NESTED_VISIBLE_GENERATION,
                 reason: GENERATION_COMMAND_REASONS.NESTED_GENERATION,
-                visibility: GENERATION_COMMAND_VISIBILITY.VISIBLE,
-                executable: true,
-            },
-        ],
-        [
-            'continue last',
-            { kind: 'continueLast', mainApi: 'openai' },
-            {
-                owner: GENERATION_SERVICE_OWNER,
-                status: GENERATION_COMMAND_STATUSES.SERVICE_OWNED,
-                path: GENERATION_COMMAND_PATHS.STANDARD_OPENAI_VISIBLE_DIRECT_CHAT,
-                reason: GENERATION_COMMAND_REASONS.SUPPORTED_KIND,
-                visibility: GENERATION_COMMAND_VISIBILITY.VISIBLE,
-                executable: true,
-            },
-        ],
-        [
-            'retry generation',
-            { kind: 'retryGeneration', mainApi: 'openai' },
-            {
-                owner: GENERATION_SERVICE_OWNER,
-                status: GENERATION_COMMAND_STATUSES.SERVICE_OWNED,
-                visibility: GENERATION_COMMAND_VISIBILITY.VISIBLE,
-                executable: true,
-            },
-        ],
-        [
-            'swipe left',
-            { kind: 'swipeLeft', mainApi: 'openai' },
-            {
-                owner: GENERATION_SERVICE_OWNER,
-                status: GENERATION_COMMAND_STATUSES.SERVICE_OWNED,
-                visibility: GENERATION_COMMAND_VISIBILITY.VISIBLE,
-                executable: true,
-            },
-        ],
-        [
-            'swipe right',
-            { kind: 'swipeRight', mainApi: 'openai' },
-            {
-                owner: GENERATION_SERVICE_OWNER,
-                status: GENERATION_COMMAND_STATUSES.SERVICE_OWNED,
                 visibility: GENERATION_COMMAND_VISIBILITY.VISIBLE,
                 executable: true,
             },
@@ -291,10 +241,6 @@ describe('chat generation command service', () => {
             { kind: 'submitComposer', mainApi: 'kobold' },
             { kind: 'submitComposer', mainApi: 'openai', dryRun: true },
             { kind: 'submitComposer', mainApi: 'openai', depth: 2 },
-            { kind: 'continueLast', mainApi: 'openai' },
-            { kind: 'retryGeneration', mainApi: 'openai' },
-            { kind: 'swipeLeft', mainApi: 'openai' },
-            { kind: 'swipeRight', mainApi: 'openai' },
             { kind: 'quietPrompt', mainApi: 'openai' },
             { kind: 'quietToLoud', mainApi: 'openai' },
             { kind: 'backgroundGeneration', mainApi: 'openai' },
@@ -313,10 +259,6 @@ describe('chat generation command service', () => {
 
     test.each([
         ['normal', {}, 'submitComposer'],
-        ['continue', {}, 'continueLast'],
-        ['regenerate', {}, 'retryGeneration'],
-        ['swipe', { swipeDirection: 'left' }, 'swipeLeft'],
-        ['swipe', { swipeDirection: 'right' }, 'swipeRight'],
         ['quiet', {}, 'quietPrompt'],
         ['quiet', { quietToLoud: true }, 'quietToLoud'],
         ['quiet', { backgroundGeneration: true }, 'backgroundGeneration'],

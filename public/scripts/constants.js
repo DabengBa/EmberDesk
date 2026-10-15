@@ -31,15 +31,12 @@ export const IGNORE_SYMBOL = Symbol.for('ignore');
 export const VIDEO_EXTENSIONS = ['mp4', 'avi', 'mov', 'wmv', 'flv', 'webm', '3gp', 'mkv', 'mpg'];
 
 /**
- * Known generation triggers that can be passed to Generate function.
+ * Generation triggers that can be selected in prompt and World Info injection filters.
+ * 'all' matches every generation type; 'normal' matches only foreground reply generation.
  */
 export const GENERATION_TYPE_TRIGGERS = [
+    'all',
     'normal',
-    'continue',
-    'impersonate',
-    'swipe',
-    'regenerate',
-    'quiet',
 ];
 
 /**
@@ -139,48 +136,9 @@ export const SCROLL_BEHAVIOR = {
  * @readonly
  * @enum {string}
  */
-export const OVERSWIPE_BEHAVIOR = {
-    /** The overswipe right chevron will not be displayed. */
-    NONE: 'none',
-    /** An overswipe will loop to the first swipe. */
-    LOOP: 'loop',
-    /** Pristine greetings will loop, and chevrons will always be shown: https://github.com/SillyTavern/SillyTavern/pull/4712#issuecomment-3557893373 */
-    PRISTINE_GREETING: 'pristine_greeting',
-    /** If chat tree is enabled, then an overswipe will allow the user to edit the message before starting a new generation. */
-    EDIT_GENERATE: 'edit_generate',
-    /** This is the default behavior on character messages. */
-    REGENERATE: 'regenerate',
-};
-
-/**
- * @readonly
- * @enum {string}
- */
 export const SWIPE_DIRECTION = {
     LEFT: 'left',
     RIGHT: 'right',
-};
-
-/**
- * @readonly
- * @enum {string}
- */
-export const SWIPE_SOURCE = {
-    DELETE: 'delete',
-    KEYBOARD: 'keyboard',
-    BACK: 'back',
-    SLASH_COMMAND: 'slash_command',
-    SWIPE_PICKER: 'swipe_picker',
-};
-
-/**
- * @readonly
- * @enum {string}
- */
-export const SWIPE_STATE = {
-    NONE: 'none',
-    SWIPING: 'swiping',
-    EDITING: 'editing',
 };
 
 // Reasoning blocks are always parsed with these fixed markers; the

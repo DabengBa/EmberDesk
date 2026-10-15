@@ -13,17 +13,17 @@ import {
 
 describe('frontend structure contract helpers', () => {
     test('reads repository files and locates tags by id or class', () => {
-        const powerUserPanel = readRepoFile('app/components/power-user/PowerUserPanel.tsx');
+        const rightNavPanel = readRepoFile('app/components/right-nav/RightNavPanel.tsx');
 
-        expect(getTagById(powerUserPanel, 'user-settings-block-content')).toContain('className="flex-container spaceEvenly"');
-        expect(getTagByClass(powerUserPanel, 'checkbox_label')).toContain('htmlFor="frontend_frames_enabled"');
+        expect(getTagById(rightNavPanel, 'result_info')).toContain('className="flex-container"');
+        expect(getTagByClass(rightNavPanel, 'character_search_status')).toContain('id="character_search_status"');
     });
 
     test('checks button affordance and readable marker failures', () => {
         const indexHtml = readRepoFile('public/index.html');
 
-        expectButtonAffordance(getTagByClass(indexHtml, 'swipe_left'), 'Previous swipe', {
-            contractName: 'previous swipe button',
+        expectButtonAffordance(getTagByClass(indexHtml, 'mes_img_swipe_left'), 'Swipe left', {
+            contractName: 'previous image button',
         });
 
         expect(() => getTagByClass(indexHtml, 'missing_contract_class', { contractName: 'sample contract' }))
