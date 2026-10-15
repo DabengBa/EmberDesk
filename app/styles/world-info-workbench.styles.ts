@@ -988,6 +988,20 @@ export const worldInfoWorkbenchStyles = stylex.create({
         whiteSpace: 'nowrap',
     },
 
+    content: {
+        minHeight: '200px',
+        maxHeight: 'min(46vh, 420px)',
+        resize: 'vertical',
+        padding: '10px 12px',
+        borderRadius: '8px',
+        fontFamily: 'var(--monoFontFamily)',
+        fontSize: 'calc(var(--mainFontSize) * 0.88)',
+        lineHeight: 1.65,
+        backgroundColor: 'color-mix(in srgb, var(--black70a) 26%, var(--SmartThemeBlurTintColor) 74%)',
+        backgroundImage: 'linear-gradient(90deg, color-mix(in srgb, var(--SmartThemeQuoteColor) 10%, transparent), transparent 3px)',
+        backgroundRepeat: 'no-repeat',
+    },
+
     /* ---------- Ops & callouts ---------- */
     callout: {
         display: 'flex',

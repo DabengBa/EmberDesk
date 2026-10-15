@@ -2,11 +2,33 @@ import { expect, test } from '@playwright/test';
 import { testSetup } from './frontend/frontent-test-utils.js';
 
 async function openWorldInfo(page) {
-    // React shell nav is the only opener — the legacy #WIDrawerIcon is retired.
-    const panelButton = page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: '世界书' });
-    await expect(panelButton).toHaveCount(1, { timeout: 15_000 });
-    await panelButton.click({ timeout: 10_000 });
+    // Startup restores the drawer asynchronously (~300ms after settings load)
+    // when accountStorage WINavOpened was persisted by an earlier test on this
+    // shard. Clicking the nav button on an already-open drawer re-mounts the
+    // React workbench (replaceChildren) and drops the session-bound selection,
+    // so when a restore is pending we wait for it instead of double-opening.
+    const wiRestoring = await page.evaluate(() => (
+        window.innerWidth > 1000
+        && window.SillyTavern?.getContext?.()?.accountStorage?.getItem('WINavOpened') === 'true'
+    ));
+    if (wiRestoring) {
+        const restored = await page.locator('#WorldInfo.openDrawer')
+            .waitFor({ state: 'visible', timeout: 10_000 })
+            .then(() => true).catch(() => false);
+        if (!restored) {
+            // Restore was skipped or already superseded — open manually.
+            await page.locator('[data-react-workspace-shell-chrome] nav button')
+                .filter({ hasText: '世界书' }).click({ timeout: 10_000 });
+        }
+    } else {
+        // React shell nav is the only opener — the legacy #WIDrawerIcon is retired.
+        const panelButton = page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: '世界书' });
+        await expect(panelButton).toHaveCount(1, { timeout: 15_000 });
+        await panelButton.click({ timeout: 10_000 });
+    }
     await expect(page.locator('#WorldInfo.openDrawer')).toBeVisible({ timeout: 15_000 });
+    // Mount is async after the drawer opens — settle before interacting.
+    await expect(page.locator('[data-world-info-react-workflow="workbench"]')).toBeVisible({ timeout: 15_000 });
 }
 
 test.describe('world info workbench', () => {
@@ -166,8 +188,23 @@ test.describe('UI hardening', () => {
 
     async function openRegex(page) {
         await testSetup.awaitST({ page });
+        // Startup asynchronously restores the World Info drawer when
+        // accountStorage WINavOpened was persisted by an earlier test — with
+        // preserveOpenDrawers, so it can land after our nav click and (z-index
+        // 4010) cover the regex drawer. Wait for that restore to settle first;
+        // the regex open path then closes the unpinned drawer.
+        const wiRestorePending = await page.evaluate(() => (
+            window.innerWidth > 1000
+            && window.SillyTavern?.getContext?.()?.accountStorage?.getItem('WINavOpened') === 'true'
+        ));
+        if (wiRestorePending) {
+            await expect(page.locator('#WorldInfo.openDrawer')).toBeVisible({ timeout: 15_000 });
+        }
         await page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: '正则' }).click();
         await expect(page.locator('#RegexPanel')).toBeVisible();
+        if (wiRestorePending) {
+            await expect(page.locator('#WorldInfo.openDrawer')).toHaveCount(0);
+        }
         // No inline-drawer shell anymore: the chrome shows the controls
         // directly once the React surface mounts.
         await expect(page.locator('#open_regex_editor')).toBeVisible({ timeout: 15_000 });

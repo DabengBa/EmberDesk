@@ -571,6 +571,19 @@ function EntryEditor({
                 )}
             </section>
 
+            <section {...stylex.props(s.editorSection)} data-world-info-react-section="content">
+                <SectionHeader icon="fa-align-left" title="注入内容" />
+                <textarea
+                    className={`text_pole ${stylex.props(s.content).className ?? ''}`}
+                    aria-label="注入内容"
+                    value={draft.content}
+                    data-world-info-react-field="content"
+                    rows={12}
+                    onChange={event => setDraft({ ...draft, content: event.target.value })}
+                    onBlur={event => saveFields({ content: event.target.value })}
+                />
+            </section>
+
             <section {...stylex.props(s.editorSection)} data-world-info-react-section="placement">
                 <SectionHeader icon="fa-location-crosshairs" title="注入位置" />
                 <div {...stylex.props(s.placementGrid)}>
