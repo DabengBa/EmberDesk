@@ -40,7 +40,6 @@ import {
     duplicateCurrentWorldInfo,
     deleteCurrentWorldInfo,
     refreshCurrentWorldInfoEditor,
-    openWorldInfoEntryByUid,
     selectWorldInfoWorkbenchEntry,
     updateWorldInfoWorkbenchEntryFields,
     getWorldInfoWorkbenchFacadeSnapshot,
@@ -50,6 +49,7 @@ import {
     bulkDeleteWorldInfoEntries,
     bulkSetWorldInfoEntriesEnabled,
     promptMoveOrCopyWorldInfoEntry,
+    updateWorldInfoScanDepth,
 } from './scripts/world-info.js';
 import { scanImportedCharacter, showUnifiedImportConfirm, applyImportChoices, buildSkipAllChoices } from './scripts/import-confirm-dialog.js';
 
@@ -2164,7 +2164,7 @@ function ensureWorldInfoReactHost() {
     return host;
 }
 
-function hideLegacyWorldInfoWorkbench(hidden, { revealGlobalPanel = false } = {}) {
+function hideLegacyWorldInfoWorkbench(hidden) {
     const workbench = document.getElementById('wi-holder');
     const host = document.getElementById(WORLD_INFO_REACT_HOST_ID);
     if (!(workbench instanceof HTMLElement)) {
@@ -2176,57 +2176,18 @@ function hideLegacyWorldInfoWorkbench(hidden, { revealGlobalPanel = false } = {}
             return;
         }
 
-        const isGlobalPanel = child.id === 'wiGlobalPanel';
-        const shouldHide = hidden && !(revealGlobalPanel && isGlobalPanel);
-        child.hidden = shouldHide;
-        child.setAttribute('aria-hidden', shouldHide ? 'true' : 'false');
-        if (shouldHide) {
+        child.hidden = hidden;
+        child.setAttribute('aria-hidden', hidden ? 'true' : 'false');
+        if (hidden) {
             child.setAttribute('inert', '');
         } else {
             child.removeAttribute('inert');
         }
-        child.dataset.legacyWorldInfoHiddenByReact = shouldHide ? 'true' : 'false';
+        child.dataset.legacyWorldInfoHiddenByReact = hidden ? 'true' : 'false';
     });
 
     workbench.classList.toggle('wi-workbench-react-owned', hidden);
     workbench.dataset.worldInfoVisibleOwner = hidden ? 'react' : 'legacy';
-    workbench.dataset.worldInfoActivationRulesOpen = hidden && revealGlobalPanel ? 'true' : 'false';
-
-    if (hidden && revealGlobalPanel) {
-        const globalPanel = document.getElementById('wiGlobalPanel');
-        const multiSelector = document.getElementById('WIMultiSelector');
-        const sectionHeader = globalPanel?.querySelector?.('.wi-section-header');
-        // Keep React as the sole global-activation summary owner; only rules controls surface.
-        for (const node of [multiSelector, sectionHeader]) {
-            if (!(node instanceof HTMLElement)) continue;
-            node.hidden = true;
-            node.setAttribute('aria-hidden', 'true');
-            node.setAttribute('inert', '');
-            node.dataset.legacyWorldInfoHiddenByReact = 'true';
-        }
-        const rulesToggle = document.querySelector('#wiGlobalPanel .wi-settings-toggle');
-        const rulesContent = document.querySelector('#wiGlobalPanel .wi-global-rules-content');
-        if (rulesContent instanceof HTMLElement) {
-            // Prefer opening the rules drawer when it is collapsed.
-            const isCollapsed = rulesContent.hidden
-                || rulesContent.style.display === 'none'
-                || rulesContent.classList.contains('displayNone')
-                || !rulesContent.classList.contains('openInlineDrawer');
-            if (isCollapsed) {
-                rulesToggle?.dispatchEvent(new Event('click', { bubbles: true }));
-            }
-        }
-    }
-}
-
-function setWorldInfoActivationRulesVisible(open) {
-    const workbench = document.getElementById('wi-holder');
-    const reactOwned = workbench?.dataset.worldInfoVisibleOwner === 'react';
-    if (!reactOwned) {
-        return false;
-    }
-    hideLegacyWorldInfoWorkbench(true, { revealGlobalPanel: Boolean(open) });
-    return true;
 }
 
 function ensureCharacterAuthoringReactHost() {
@@ -2665,10 +2626,9 @@ function getWorldInfoReactCommands() {
             deleteWorld: () => deleteCurrentWorldInfo(),
             refreshWorld: () => refreshCurrentWorldInfoEditor(),
             openEntry: uid => selectWorldInfoWorkbenchEntry(uid),
-            expandLegacyEntry: uid => openWorldInfoEntryByUid(uid),
             updateEntryFields: (uid, fields) => updateWorldInfoWorkbenchEntryFields(uid, fields),
             clearSelectedEntry: () => selectWorldInfoWorkbenchEntry(''),
-            toggleActivationRules: open => setWorldInfoActivationRulesVisible(open),
+            setScanDepth: depth => updateWorldInfoScanDepth(depth),
             backfillMemos: () => backfillWorldInfoMemosFromWorkbench(),
             applyCurrentSorting: () => promptApplyWorldInfoCurrentSorting(),
             bulkDeleteEntries: uids => bulkDeleteWorldInfoEntries(uids),
@@ -2676,8 +2636,8 @@ function getWorldInfoReactCommands() {
             moveOrCopyEntry: uid => promptMoveOrCopyWorldInfoEntry(uid),
         },
         shouldRemount(_result, commandName) {
-            // Field edits keep local draft focus; activation toggle is DOM-only under React owner.
-            return commandName !== 'updateEntryFields' && commandName !== 'toggleActivationRules';
+            // Field edits keep local draft focus; the scan depth input commits on blur.
+            return commandName !== 'updateEntryFields' && commandName !== 'setScanDepth';
         },
         remount: () => {
             void mountReactWorldInfoPanel();
@@ -2700,11 +2660,7 @@ async function mountReactWorldInfoPanel() {
     });
 
     // Sole-owner: React host owns the workbench; legacy editor stays hidden/inert.
-    hideLegacyWorldInfoWorkbench(true, {
-        revealGlobalPanel: Boolean(
-            document.getElementById('wi-holder')?.dataset?.worldInfoActivationRulesOpen === 'true',
-        ),
-    });
+    hideLegacyWorldInfoWorkbench(true);
     return result;
 }
 
@@ -6311,10 +6267,9 @@ async function doChatInject(messages) {
 
 function flushWIInjections() {
     const depthPrefix = inject_ids.CUSTOM_WI_DEPTH;
-    const outletPrefix = inject_ids.CUSTOM_WI_OUTLET('');
 
     for (const key of Object.keys(extension_prompts)) {
-        if (key.startsWith(depthPrefix) || key.startsWith(outletPrefix)) {
+        if (key.startsWith(depthPrefix)) {
             delete extension_prompts[key];
         }
     }

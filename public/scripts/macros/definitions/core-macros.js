@@ -481,8 +481,8 @@ export function registerCoreMacros() {
                 type: 'string',
             },
         ],
-        description: 'Returns the world info outlet prompt for a given outlet key.',
-        returns: 'World info outlet prompt.',
+        description: 'Retired compatibility macro: world info outlets are gone, so this always resolves to an empty string.',
+        returns: 'Empty string.',
         exampleUsage: ['{{outlet::character-achievements}}'],
         handler: ({ unnamedArgs: [outlet] }) => {
             if (!outlet) return '';

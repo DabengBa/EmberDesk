@@ -82,10 +82,9 @@ export interface WorldInfoCommands {
     deleteWorld(): CommandResult;
     refreshWorld(): CommandResult;
     openEntry(uid: string): CommandResult;
-    expandLegacyEntry(uid: string): CommandResult;
     updateEntryFields(uid: string, fields: Record<string, unknown>): CommandResult;
     clearSelectedEntry(): CommandResult;
-    toggleActivationRules(open: boolean): CommandResult;
+    setScanDepth(depth: number): CommandResult;
     backfillMemos(): CommandResult;
     applyCurrentSorting(): CommandResult;
     bulkDeleteEntries(uids: string[]): CommandResult;

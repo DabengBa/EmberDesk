@@ -179,40 +179,17 @@ test.describe('UI hardening', () => {
             return route.fulfill({ status: rejectSave ? 500 : 200, json: {} });
         });
         await openEntry(page);
-        const content = page.locator('[data-world-info-react-field="content"]');
-        const draft = `${await content.inputValue()}\nRetained audit draft`;
-        await content.fill(draft);
-        await page.locator('[data-world-info-react-field="comment"]').focus();
+        const comment = page.locator('[data-world-info-react-field="comment"]');
+        const draft = `${await comment.inputValue()} (audited)`;
+        await comment.fill(draft);
+        await page.locator('[data-world-info-react-field="order"]').focus();
         const status = page.locator('[data-world-info-react-section="ops"]');
         await expect(status).toContainText('保存失败');
-        await expect(content).toHaveValue(draft);
+        await expect(comment).toHaveValue(draft);
         rejectSave = false;
         await page.locator('[data-world-info-react-action="retry-save"]').click();
         await expect(status).toContainText('已保存');
-        expect(Object.values(writes.at(-1).data.entries).some(entry => entry.content === draft)).toBe(true);
-    });
-
-    test('expanded world editor is modal and restores focus on desktop and mobile', async ({ page }) => {
-        await openEntry(page);
-        for (const width of [1440, 390]) {
-            await page.setViewportSize({ width, height: 844 });
-            if (width < 768) {
-                await page.locator('[data-world-info-react-entry]').first().click();
-            }
-            const trigger = page.locator('[data-world-info-react-action="expand-content"]');
-            await trigger.click();
-            const dialog = page.locator('[data-world-info-react-modal="content"]');
-            await expect(dialog).toBeVisible();
-            expect(await dialog.evaluate(element => element.matches(':modal'))).toBe(true);
-            await dialog.locator('textarea').focus();
-            for (let index = 0; index < 7; index++) {
-                await page.keyboard.press('Tab');
-                expect(await dialog.evaluate(element => element.contains(document.activeElement))).toBe(true);
-            }
-            await page.keyboard.press('Escape');
-            await expect(dialog).toHaveCount(0);
-            await expect(trigger).toBeFocused();
-        }
+        expect(Object.values(writes.at(-1).data.entries).some(entry => entry.comment === draft)).toBe(true);
     });
 
     test('regex import cancellation never imports and clears the file input', async ({ page }) => {
@@ -259,14 +236,6 @@ test.describe('UI hardening', () => {
         await expect(dialog.locator('#regex_placement_error')).toBeVisible();
         await expect(dialog).toBeVisible();
         await page.keyboard.press('Escape');
-    });
-
-    test('world editor expand controls have touch-sized targets on mobile', async ({ page }) => {
-        await page.setViewportSize({ width: 390, height: 844 });
-        await openEntry(page);
-        const bounds = await page.locator('[data-world-info-react-action="expand-content"]').boundingBox();
-        expect(bounds.width).toBeGreaterThanOrEqual(44);
-        expect(bounds.height).toBeGreaterThanOrEqual(44);
     });
 
     test('confirmed regex import remains usable in the debugger', async ({ page }) => {

@@ -7,7 +7,6 @@ import {
     hasFallbackProviderForGeneration,
 } from './chat-generation-lifecycle.js';
 import { getWorldInfoPrompt } from './world-info-service.js';
-import { world_info_include_names } from './world-info-state.js';
 import { requireGenerationShellContext } from './generation-shell-context.js';
 import { getComposerValue, clearComposerValue } from './main-chat-composer-service.js';
 import { t } from './i18n.js';
@@ -584,7 +583,7 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
     // Add WI to prompt (and also inject WI to AN value via hijack)
     // Make quiet prompt available for WIAN
     setExtensionPrompt(inject_ids.QUIET_PROMPT, quiet_prompt || '', state.extension_prompt_types.IN_PROMPT, 0, true);
-    const chatForWI = coreChat.map(x => world_info_include_names ? `${x.name}: ${x.mes}` : x.mes).reverse();
+    const chatForWI = coreChat.map(x => x.mes).reverse();
     /** @type {import('./world-info.js').WIGlobalScanData} */
     const globalScanData = {
         characterDescription: description,
@@ -593,7 +592,7 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
         scenario: scenario,
         trigger: 'normal',
     };
-    const { worldInfo, worldInfoBefore, worldInfoAfter, worldInfoDepth, outletEntries } = await getWorldInfoPrompt(chatForWI, this_max_context, dryRun, globalScanData);
+    const { worldInfo, worldInfoBefore, worldInfoAfter, worldInfoDepth } = await getWorldInfoPrompt(chatForWI, this_max_context, dryRun, globalScanData);
     setExtensionPrompt(inject_ids.QUIET_PROMPT, '', state.extension_prompt_types.IN_PROMPT, 0, true);
 
     if (skipWIAN !== true) {
@@ -604,11 +603,6 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
             worldInfoDepth.forEach((e) => {
                 const joinedEntries = e.entries.join('\n');
                 setExtensionPrompt(inject_ids.CUSTOM_WI_DEPTH_ROLE(e.depth, e.role), joinedEntries, state.extension_prompt_types.IN_CHAT, e.depth, false, e.role);
-            });
-        }
-        if (outletEntries && typeof outletEntries === 'object' && Object.keys(outletEntries).length > 0) {
-            Object.entries(outletEntries).forEach(([key, value]) => {
-                setExtensionPrompt(inject_ids.CUSTOM_WI_OUTLET(key), value.join('\n'), state.extension_prompt_types.NONE, 0);
             });
         }
     } else {

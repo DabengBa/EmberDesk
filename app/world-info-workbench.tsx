@@ -1,5 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from 'react';
-import { createPortal } from 'react-dom';
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { useForm } from '@tanstack/react-form';
 import { z } from 'zod';
@@ -121,6 +120,7 @@ export interface WorldInfoWorkspacePanelState {
     deleteMenuPresent?: boolean;
     globalActiveNames?: string[];
     globalActiveCount?: number;
+    scanDepth?: number | null;
     selectedEntryUid?: string;
     selectedEntry?: WorldInfoWorkbenchEntryDetail | null;
     hasEditorWorld?: boolean;
@@ -136,10 +136,7 @@ const worldInfoPanelFormSchema = z.object({
 
 const POSITION_OPTIONS = [
     { value: 0, label: '世界书' },
-    { value: 5, label: '示例消息顶部' },
-    { value: 6, label: '示例消息底部' },
     { value: 4, label: '按深度' },
-    { value: 7, label: '出口' },
 ] as const;
 
 const SELECTIVE_LOGIC_OPTIONS = [
@@ -174,47 +171,23 @@ function iconClass(faIcon: string, ...styles: StyleArg[]): string {
 }
 
 function isAdvancedDefault(entry: WorldInfoWorkbenchEntryDetail | null | undefined): {
-    timing: boolean;
     scope: boolean;
-    automation: boolean;
 } {
-    if (!entry) {
-        return { timing: false, scope: false, automation: false };
-    }
     return {
-        timing: Boolean(entry.sticky || entry.cooldown || entry.delay),
         scope: Boolean(
-            entry.matchCharacterDescription
-            || entry.matchCharacterDepthPrompt
-            || entry.matchScenario
-            || entry.matchCreatorNotes
-            || entry.characterFilterNames.length
-            || entry.characterFilterTags.length,
+            entry
+            && (entry.matchCharacterDescription
+                || entry.matchCharacterDepthPrompt
+                || entry.matchScenario
+                || entry.matchCreatorNotes
+                || entry.characterFilterNames.length
+                || entry.characterFilterTags.length),
         ),
-        automation: Boolean(entry.automationId || entry.triggers.length || entry.outletName),
     };
 }
 
 function buildAdvancedSummary(entry: WorldInfoWorkbenchEntryDetail | null | undefined): string {
-    if (!entry) {
-        return '';
-    }
-    const parts: string[] = [];
-    const flags = isAdvancedDefault(entry);
-    if (flags.timing) {
-        const timing: string[] = [];
-        if (entry.sticky) timing.push(`Sticky ${entry.sticky}`);
-        if (entry.cooldown) timing.push(`Cooldown ${entry.cooldown}`);
-        if (entry.delay) timing.push(`Delay ${entry.delay}`);
-        parts.push(timing.join(' · ') || 'Timing configured');
-    }
-    if (flags.scope) {
-        parts.push('Scope filters');
-    }
-    if (flags.automation) {
-        parts.push(entry.automationId ? `Automation: ${entry.automationId}` : 'Automation');
-    }
-    return parts.join(' · ');
+    return isAdvancedDefault(entry).scope ? 'Scope filters' : '';
 }
 
 function SectionHeader({ icon, title, aside }: { icon: string; title: string; aside?: ReactNode }) {
@@ -487,13 +460,8 @@ function EntryEditor({
     const [draftEntry, setDraftEntry] = useState(entry);
     const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
     const saveSeqRef = useRef(0);
-    const [contentModalOpen, setContentModalOpen] = useState(false);
     const titleInputRef = useRef<HTMLInputElement>(null);
-    const contentInputRef = useRef<HTMLTextAreaElement>(null);
-    const modalContentRef = useRef<HTMLTextAreaElement>(null);
-    const modalDialogRef = useRef<HTMLDialogElement>(null);
     const pendingFieldsRef = useRef<Record<string, unknown>>({});
-    const advanced = isAdvancedDefault(entry);
     const entryUid = entry?.uid;
     const focusTitleOnOpen = Boolean(onBack);
     const regexKeywordCount = countRegexKeywords([...(draft?.key ?? []), ...(draft?.keysecondary ?? [])]);
@@ -525,23 +493,6 @@ function EntryEditor({
         return () => cancelAnimationFrame(frame);
     }, [entryUid, focusTitleOnOpen]);
 
-    useEffect(() => {
-        if (!contentModalOpen) {
-            return undefined;
-        }
-
-        const dialog = modalDialogRef.current;
-        const previousFocus = document.activeElement;
-        dialog?.showModal();
-        modalContentRef.current?.focus({ preventScroll: true });
-        return () => {
-            dialog?.close();
-            if (previousFocus instanceof HTMLElement && previousFocus.isConnected) {
-                previousFocus.focus({ preventScroll: true });
-            }
-        };
-    }, [contentModalOpen]);
-
     if (!entry || !draft) {
         return (
             <div {...stylex.props(s.editor, s.editorEmpty)} data-world-info-react-editor="empty">
@@ -570,43 +521,6 @@ function EntryEditor({
                     setSaveState('error');
                 }
             });
-    };
-
-    const insertMacro = (macro: string, targetRef: RefObject<HTMLTextAreaElement | null> = contentInputRef) => {
-        const element = targetRef.current;
-        const source = draft.content ?? '';
-        const start = element?.selectionStart ?? source.length;
-        const end = element?.selectionEnd ?? source.length;
-        const next = `${source.slice(0, start)}${macro}${source.slice(end)}`;
-        saveFields({ content: next });
-        if (element) {
-            requestAnimationFrame(() => {
-                element.focus();
-                element.setSelectionRange(start + macro.length, start + macro.length);
-            });
-        }
-    };
-
-    const closeContentModal = () => {
-        saveFields({ content: draft.content ?? '' });
-        setContentModalOpen(false);
-    };
-
-    const onModalKeyDown = (event: KeyboardEvent) => {
-        if (event.key === 'Tab') {
-            const controls = modalDialogRef.current?.querySelectorAll<HTMLElement>('button:not([disabled]), textarea');
-            const first = controls?.[0];
-            const last = controls?.[controls.length - 1];
-            if (event.shiftKey ? document.activeElement === first : document.activeElement === last) {
-                event.preventDefault();
-                (event.shiftKey ? last : first)?.focus();
-            }
-        }
-        if (event.key === 'Escape' || ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's')) {
-            event.preventDefault();
-            event.stopPropagation();
-            closeContentModal();
-        }
     };
 
     return (<>
@@ -683,45 +597,6 @@ function EntryEditor({
                 )}
             </section>
 
-            <section {...stylex.props(s.editorSection)} data-world-info-react-section="content">
-                <SectionHeader icon="fa-align-left" title="注入内容" aside={(
-                    <button
-                        type="button"
-                        {...stylex.props(s.sectionAction)}
-                        title="放大编辑"
-                        aria-label="放大编辑注入内容"
-                        data-world-info-react-action="expand-content"
-                        onClick={() => setContentModalOpen(true)}
-                    >
-                        <i className="fa-solid fa-expand" aria-hidden="true" />
-                    </button>
-                )} />
-                <div {...stylex.props(s.macroBar)} role="toolbar" aria-label="插入宏">
-                    {['{{user}}', '{{char}}', '{{// }}'].map(macro => (
-                        <button
-                            key={macro}
-                            type="button"
-                            {...stylex.props(s.macroChip)}
-                            data-world-info-react-macro={macro}
-                            onClick={() => insertMacro(macro)}
-                        >
-                            {macro}
-                        </button>
-                    ))}
-                    <span {...stylex.props(s.macroHint)}>点击插入到光标处</span>
-                </div>
-                <textarea
-                    className={`text_pole ${stylex.props(s.content).className ?? ''}`}
-                    ref={contentInputRef}
-                    aria-label="注入内容"
-                    value={draft.content}
-                    data-world-info-react-field="content"
-                    rows={12}
-                    onChange={event => setDraft({ ...draft, content: event.target.value })}
-                    onBlur={event => saveFields({ content: event.target.value })}
-                />
-            </section>
-
             <section {...stylex.props(s.editorSection)} data-world-info-react-section="placement">
                 <SectionHeader icon="fa-location-crosshairs" title="注入位置" />
                 <label {...stylex.props(s.field)}>
@@ -735,6 +610,11 @@ function EntryEditor({
                         {POSITION_OPTIONS.map(option => (
                             <option key={option.value} value={option.value}>{option.label}</option>
                         ))}
+                        {POSITION_OPTIONS.some(option => option.value === draft.position) ? null : (
+                            <option value={draft.position} disabled>
+                                {entry.positionLabel ? `${entry.positionLabel}（已退役）` : `已退役位置 ${draft.position}`}
+                            </option>
+                        )}
                     </select>
                 </label>
                 <div {...stylex.props(s.flexRow)}>
@@ -839,47 +719,6 @@ function EntryEditor({
                         </label>
                     </AdvancedSection>
                 ) : null}
-                <AdvancedSection id="timing" title="时序" summary={advanced.timing ? buildAdvancedSummary(entry).split(' · ')[0] : ''}>
-                    <div {...stylex.props(s.flexRow)}>
-                        <label {...stylex.props(s.field, s.fieldGrow)}>
-                            <span {...stylex.props(s.fieldLabel)}>黏性</span>
-                            <input className="text_pole" type="number" value={draft.sticky ?? ''} data-world-info-react-field="sticky"
-                                onBlur={event => saveFields({ sticky: event.target.value === '' ? null : Number(event.target.value) })}
-                                onChange={event => setDraft({ ...draft, sticky: event.target.value === '' ? null : Number(event.target.value) })}
-                            />
-                        </label>
-                        <label {...stylex.props(s.field, s.fieldGrow)}>
-                            <span {...stylex.props(s.fieldLabel)}>冷却</span>
-                            <input className="text_pole" type="number" value={draft.cooldown ?? ''} data-world-info-react-field="cooldown"
-                                onBlur={event => saveFields({ cooldown: event.target.value === '' ? null : Number(event.target.value) })}
-                                onChange={event => setDraft({ ...draft, cooldown: event.target.value === '' ? null : Number(event.target.value) })}
-                            />
-                        </label>
-                        <label {...stylex.props(s.field, s.fieldGrow)}>
-                            <span {...stylex.props(s.fieldLabel)}>延迟</span>
-                            <input className="text_pole" type="number" value={draft.delay ?? ''} data-world-info-react-field="delay"
-                                onBlur={event => saveFields({ delay: event.target.value === '' ? null : Number(event.target.value) })}
-                                onChange={event => setDraft({ ...draft, delay: event.target.value === '' ? null : Number(event.target.value) })}
-                            />
-                        </label>
-                    </div>
-                </AdvancedSection>
-                <AdvancedSection id="automation" title="自动化与 Outlet" summary={advanced.automation ? (entry.automationId || entry.outletName || '已配置') : ''}>
-                    <label {...stylex.props(s.field)}>
-                        <span {...stylex.props(s.fieldLabel)}>自动化 ID</span>
-                        <input className="text_pole" value={draft.automationId} data-world-info-react-field="automationId"
-                            onChange={event => setDraft({ ...draft, automationId: event.target.value })}
-                            onBlur={event => saveFields({ automationId: event.target.value })}
-                        />
-                    </label>
-                    <label {...stylex.props(s.field)}>
-                        <span {...stylex.props(s.fieldLabel)}>出口</span>
-                        <input className="text_pole" value={draft.outletName} data-world-info-react-field="outletName"
-                            onChange={event => setDraft({ ...draft, outletName: event.target.value })}
-                            onBlur={event => saveFields({ outletName: event.target.value })}
-                        />
-                    </label>
-                </AdvancedSection>
             </section>
         </div>
         <footer {...stylex.props(s.statusBar)} data-world-info-react-section="ops">
@@ -914,81 +753,7 @@ function EntryEditor({
                     重试保存
                 </button>
             ) : null}
-            <button
-                type="button"
-                {...stylex.props(s.sectionAction)}
-                aria-label="放大编辑"
-                title="放大编辑"
-                onClick={() => setContentModalOpen(true)}
-            >
-                <i className="fa-solid fa-expand" aria-hidden="true" />
-            </button>
         </footer>
-        {contentModalOpen ? createPortal(
-            <div
-                {...stylex.props(s.modalOverlay)}
-                role="presentation"
-                onMouseDown={event => {
-                    event.stopPropagation();
-                    if (event.target === event.currentTarget) {
-                        closeContentModal();
-                    }
-                }}
-                onMouseUp={event => event.stopPropagation()}
-                onClick={event => event.stopPropagation()}
-                onKeyDown={onModalKeyDown}
-            >
-                <dialog
-                    ref={modalDialogRef}
-                    {...stylex.props(s.modalPanel)}
-                    data-world-info-react-modal="content"
-                    aria-modal="true"
-                    aria-label="放大编辑注入内容"
-                    onCancel={event => { event.preventDefault(); closeContentModal(); }}
-                    onClick={event => {
-                        if (event.target !== event.currentTarget) return;
-                        const bounds = event.currentTarget.getBoundingClientRect();
-                        if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) {
-                            closeContentModal();
-                        }
-                    }}
-                >
-                    <header {...stylex.props(s.modalHead)}>
-                        <span {...stylex.props(s.modalTitle)}>注入内容</span>
-                        <div {...stylex.props(s.macroBar)}>
-                            {['{{user}}', '{{char}}', '{{// }}'].map(macro => (
-                                <button
-                                    key={macro}
-                                    type="button"
-                                    {...stylex.props(s.macroChip)}
-                                    onClick={() => insertMacro(macro, modalContentRef)}
-                                >
-                                    {macro}
-                                </button>
-                            ))}
-                        </div>
-                        <button
-                            type="button"
-                            {...stylex.props(s.sectionAction)}
-                            aria-label="关闭"
-                            title="关闭"
-                            onClick={closeContentModal}
-                        >
-                            <i className="fa-solid fa-xmark" aria-hidden="true" />
-                        </button>
-                    </header>
-                    <textarea
-                        {...stylex.props(s.modalTextarea)}
-                        ref={modalContentRef}
-                        aria-label="注入内容（放大编辑）"
-                        value={draft.content}
-                        onChange={event => setDraft({ ...draft, content: event.target.value })}
-                    />
-                    <footer {...stylex.props(s.modalFoot)}>Esc 或点击遮罩关闭并保存 · Ctrl/⌘+S 保存并关闭</footer>
-                </dialog>
-            </div>,
-            document.body,
-        ) : null}
     </>);
 }
 
@@ -1022,10 +787,6 @@ export function WorldInfoWorkbenchPanel({
         retry: false,
     });
     const [mobileView, setMobileView] = useState<'list' | 'editor'>('list');
-    const [activationOpen, setActivationOpen] = useState(
-        () => typeof document !== 'undefined'
-            && document.getElementById('wi-holder')?.dataset.worldInfoActivationRulesOpen === 'true',
-    );
     const [listScrollTop, setListScrollTop] = useState(0);
     const [returnEntryUid, setReturnEntryUid] = useState('');
     const [isNarrow, setIsNarrow] = useState(false);
@@ -1069,6 +830,17 @@ export function WorldInfoWorkbenchPanel({
     const activeSearchQuery = String(bridgeState.searchQuery ?? '').trim();
     const globalNames = bridgeState.globalActiveNames ?? [];
     const globalCount = bridgeState.globalActiveCount ?? globalNames.length;
+    const scanDepth = Number.isFinite(bridgeState.scanDepth) ? Number(bridgeState.scanDepth) : null;
+    const commitScanDepth = (input: HTMLInputElement) => {
+        const parsed = Math.floor(Number(input.value));
+        const next = Number.isFinite(parsed) ? Math.min(Math.max(parsed, 0), 1000) : null;
+        if (next === null || next === scanDepth) {
+            input.value = scanDepth !== null ? String(scanDepth) : '';
+            return;
+        }
+        input.value = String(next);
+        worldInfoCommandMutation.mutate(() => commands.setScanDepth(next));
+    };
     const recoveryActions: Array<{ id: string; label: string; disabled?: boolean; onClick: () => void }> = [];
 
     if (status === 'error' && bridgeState.refreshMenuPresent) {
@@ -1189,35 +961,28 @@ export function WorldInfoWorkbenchPanel({
                             {globalCount} 本激活
                         </span>
                         <span {...stylex.props(s.globalSummary)} title={globalSummary}>{globalSummary}</span>
-                        <button
-                            type="button"
-                            {...stylex.props(s.rulesToggle)}
-                            data-world-info-react-action="toggle-activation-rules"
-                            aria-expanded={activationOpen}
-                            onClick={() => {
-                                const next = !activationOpen;
-                                setActivationOpen(next);
-                                worldInfoCommandMutation.mutate(() => commands.toggleActivationRules(next), {
-                                    onSuccess: () => {
-                                        if (next) {
-                                            requestAnimationFrame(() => {
-                                                document.getElementById('wiGlobalPanel')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
-                                            });
-                                        }
-                                    },
-                                });
-                            }}
-                        >
-                            <i className={iconClass('fa-sliders', s.rulesToggleIcon)} aria-hidden="true" />
-                            扫描规则
-                        </button>
+                        <label {...stylex.props(s.scanDepthField)}>
+                            <span {...stylex.props(s.scanDepthLabel)}>扫描深度</span>
+                            <input
+                                className={`text_pole ${stylex.props(s.scanDepthInput).className ?? ''}`}
+                                type="number"
+                                min={0}
+                                max={1000}
+                                step={1}
+                                key={scanDepth ?? 'unset'}
+                                defaultValue={scanDepth ?? ''}
+                                aria-label="扫描深度"
+                                data-world-info-react-field="scan-depth"
+                                onBlur={event => commitScanDepth(event.currentTarget)}
+                                onKeyDown={event => {
+                                    if (event.key === 'Enter') {
+                                        event.currentTarget.blur();
+                                    }
+                                }}
+                            />
+                        </label>
                     </div>
                 </div>
-                {activationOpen ? (
-                    <p {...stylex.props(s.rulesHint)} data-world-info-react-global="rules-hint">
-                        全局扫描规则已展开。
-                    </p>
-                ) : null}
 
                 <header {...stylex.props(s.bookHeader)} data-world-info-react-header="editor-book">
                     <div {...stylex.props(s.bookRow)}>

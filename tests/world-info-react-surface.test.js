@@ -39,20 +39,31 @@ describe('World Info drawer React surface', () => {
         const ids = [
             'wi-holder',
             'wiGlobalPanel', 'wiGlobalPanelTitle', 'wiGlobalCount', 'wiTopBlock',
-            'WIMultiSelector', 'world_info', 'wiActivationSettings', 'wiSliders',
-            'wiCheckboxes', 'wiEditorPanel', 'wiEditorPanelTitle', 'world_popup',
-            'world_info_depth', 'world_info_depth_counter',
-            'world_info_case_sensitive',
-            'world_info_match_whole_words',
-            'world_info_include_names', 'world_info_character_strategy',
+            'WIMultiSelector', 'world_info',
+            'wiEditorPanel', 'wiEditorPanelTitle', 'world_popup',
         ];
         for (const id of ids) {
             expect(panel).toContain(`id="${id}"`);
         }
         expect(panel).toContain('className="wi-section wi-global-panel"');
         expect(panel).toContain('className="wi-global-grid inline-drawer wide100p"');
-        expect(panel).toContain('wi-settings-toggle inline-drawer-toggle inline-drawer-header');
-        expect(panel).toContain('fa-solid fa-circle-chevron-down inline-drawer-icon down');
+    });
+
+    test('activation rules drawer and retired global controls are gone', () => {
+        // Only Scan Depth remains configurable, surfaced as a plain number
+        // input inside the React workbench global summary row.
+        const retiredIds = [
+            'wiActivationSettings', 'wiSliders', 'wiCheckboxes',
+            'world_info_depth', 'world_info_depth_counter',
+            'world_info_case_sensitive', 'world_info_match_whole_words',
+            'world_info_include_names', 'world_info_character_strategy',
+        ];
+        for (const id of retiredIds) {
+            expect(panel).not.toContain(`id="${id}"`);
+        }
+        expect(panel).not.toContain('wi-settings-toggle');
+        expect(panel).not.toContain('wi-global-rules-content');
+        expect(panel).not.toContain('data-i18n="Activation Rules"');
     });
 
     test('workspace bundle exports the mount entry and world-info.js adapts it', () => {

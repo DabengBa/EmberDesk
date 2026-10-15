@@ -52,10 +52,13 @@ export let selected_world_info = [];
 /** @type {string[]} */
 export let world_names;
 export let world_info_depth = 2;
-export let world_info_include_names = true;
-export let world_info_case_sensitive = false;
-export let world_info_match_whole_words = false;
-export let world_info_character_strategy = world_info_insertion_strategy.character_first;
+/**
+ * Fixed global matching defaults. Entries may still override these via
+ * their per-entry tri-state fields (`??` fallback), but the legacy global
+ * toggles are retired: scans are case-insensitive and whole-word.
+ */
+export const world_info_case_sensitive = false;
+export const world_info_match_whole_words = true;
 
 /**
  * The cache of all world info data that was loaded from the backend.
@@ -74,19 +77,11 @@ export function getWorldInfoSettings() {
     return {
         world_info,
         world_info_depth,
-        world_info_include_names,
-        world_info_case_sensitive,
-        world_info_match_whole_words,
-        world_info_character_strategy,
     };
 }
 
 const WORLD_INFO_SETTING_SETTERS = {
     world_info_depth: (value) => world_info_depth = Number(value),
-    world_info_include_names: (value) => world_info_include_names = Boolean(value),
-    world_info_case_sensitive: (value) => world_info_case_sensitive = Boolean(value),
-    world_info_match_whole_words: (value) => world_info_match_whole_words = Boolean(value),
-    world_info_character_strategy: (value) => world_info_character_strategy = Number(value),
     // Unused
     world_info: (_value) => { },
 };

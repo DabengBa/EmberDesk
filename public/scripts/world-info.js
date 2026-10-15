@@ -68,10 +68,6 @@ import {
     selected_world_info,
     world_names,
     world_info_depth,
-    world_info_include_names,
-    world_info_case_sensitive,
-    world_info_match_whole_words,
-    world_info_character_strategy,
     setWorldInfoSetting,
     setSelectedWorldInfo,
     setWorldNames,
@@ -80,7 +76,6 @@ import {
 } from './world-info-state.js';
 import {
     WorldInfoBuffer,
-    WorldInfoTimedEffects,
     getSortedEntries,
     loadWorldInfo,
 } from './world-info-service.js';
@@ -99,10 +94,6 @@ export {
     selected_world_info,
     world_names,
     world_info_depth,
-    world_info_include_names,
-    world_info_case_sensitive,
-    world_info_match_whole_words,
-    world_info_character_strategy,
     getWorldInfoSettings,
 } from './world-info-state.js';
 export {
@@ -716,16 +707,6 @@ export function updateWorldInfoSettings(settings, activeWorldInfo) {
 export function setWorldInfoSettings(settings, data) {
     applyWorldInfoSettings(settings, data);
 
-    $('#world_info_depth_counter').val(world_info_depth);
-    $('#world_info_depth').val(world_info_depth);
-
-    $('#world_info_include_names').prop('checked', world_info_include_names);
-    $('#world_info_case_sensitive').prop('checked', world_info_case_sensitive);
-    $('#world_info_match_whole_words').prop('checked', world_info_match_whole_words);
-
-    $(`#world_info_character_strategy option[value='${world_info_character_strategy}']`).prop('selected', true);
-    $('#world_info_character_strategy').val(world_info_character_strategy);
-
     syncWorldInfoSettingsUi();
     ensureWorldInfoRuntimeInitialized();
 }
@@ -909,6 +890,23 @@ export function setWorldInfoGlobalActiveNames(names) {
     saveSettingsDebounced();
     void eventSource.emit(event_types.WORLDINFO_SETTINGS_UPDATED);
     return [...selected_world_info];
+}
+
+/**
+ * Updates the global World Info scan depth (the only remaining editable
+ * global WI setting) from the React workbench.
+ * @param {number|string} value New scan depth
+ * @returns {number} The applied depth
+ */
+export function updateWorldInfoScanDepth(value) {
+    const parsed = Math.floor(Number(value));
+    const depth = Number.isFinite(parsed)
+        ? Math.min(Math.max(parsed, 0), MAX_SCAN_DEPTH)
+        : world_info_depth;
+    setWorldInfoSetting('world_info_depth', depth);
+    saveSettingsDebounced();
+    void eventSource.emit(event_types.WORLDINFO_SETTINGS_UPDATED);
+    return world_info_depth;
 }
 
 export async function createWorldInfoEntryFromEditor() {
@@ -1533,6 +1531,7 @@ export async function getWorldInfoReactPanelState(meta = {}) {
     return session.getReactPanelState({
         worldNames: Array.isArray(world_names) ? world_names : [],
         importBusy: Boolean(worldInfoImportBusy),
+        scanDepth: world_info_depth,
         ...meta,
     });
 }
@@ -1540,16 +1539,6 @@ export async function getWorldInfoReactPanelState(meta = {}) {
 
 //MARK: regWISlashCommands
 function registerWorldInfoSlashCommands() {
-    /**
-     * Gets a *rough* approximation of the current chat context.
-     * Normally, it is provided externally by the prompt builder.
-     * Don't use for anything critical!
-     * @returns {string[]}
-     */
-    function getScanningChat() {
-        return getContext().chat.filter(x => !x.is_system).map(x => x.mes);
-    }
-
     async function getEntriesFromFile(file, { args = {}, unnamed = null, callbackName = 'getEntriesFromFile' } = {}) {
         if (!file || !world_names.includes(file)) {
             toastr.warning(t`Valid World Info file name is required`);
@@ -1926,122 +1915,6 @@ function registerWorldInfoSlashCommands() {
         return '';
     }
 
-    async function getTimedEffectCallback(args, value) {
-        if (!getCurrentChatId()) {
-            throw new Error('This command can only be used in chat');
-        }
-
-        const file = args.file;
-        const uid = value;
-        const effect = args.effect;
-
-        const entries = await getEntriesFromFile(file, { args, unnamed: { uid }, callbackName: 'getTimedEffectCallback' });
-
-        if (!entries) {
-            return '';
-        }
-
-        /** @type {WIScanEntry} */
-        const entry = structuredClone(entries.find(x => String(x.uid) === String(uid)));
-
-        if (!entry) {
-            toastr.warning('Valid UID is required');
-            logSlashCommandWarn('getTimedEffectCallback: Valid UID is required', args, { uid });
-            return '';
-        }
-
-        entry.world = file; // Required by the timed effects manager
-        const chat = getScanningChat();
-        const timedEffects = new WorldInfoTimedEffects(chat, [entry]);
-
-        if (!timedEffects.isValidEffectType(effect)) {
-            toastr.warning('Valid effect type is required');
-            logSlashCommandWarn('getTimedEffectCallback: Valid effect type is required', args, { uid });
-            return '';
-        }
-
-        const data = timedEffects.getEffectMetadata(effect, entry);
-
-        if (String(args.format).trim().toLowerCase() === ARGUMENT_TYPE.NUMBER) {
-            return String(data ? (data.end - chat.length) : 0);
-        }
-
-        return String(!!data);
-    }
-
-    async function setTimedEffectCallback(args, value) {
-        if (!getCurrentChatId()) {
-            throw new Error('This command can only be used in chat');
-        }
-
-        const file = args.file;
-        const uid = args.uid;
-        const effect = args.effect;
-
-        if (value === undefined) {
-            toastr.warning('New state is required');
-            logSlashCommandWarn('setTimedEffectCallback: New state is required', args, { value });
-            return '';
-        }
-
-        const entries = await getEntriesFromFile(file, { args, unnamed: { value }, callbackName: 'setTimedEffectCallback' });
-
-        if (!entries) {
-            return '';
-        }
-
-        /** @type {WIScanEntry} */
-        const entry = structuredClone(entries.find(x => String(x.uid) === String(uid)));
-
-        if (!entry) {
-            toastr.warning('Valid UID is required');
-            logSlashCommandWarn('setTimedEffectCallback: Valid UID is required', args, { value });
-            return '';
-        }
-
-        entry.world = file; // Required by the timed effects manager
-        const chat = getScanningChat();
-        const timedEffects = new WorldInfoTimedEffects(chat, [entry]);
-
-        if (!timedEffects.isValidEffectType(effect)) {
-            toastr.warning('Valid effect type is required');
-            logSlashCommandWarn('setTimedEffectCallback: Valid effect type is required', args, { value });
-            return '';
-        }
-
-        if (!entry[effect]) {
-            toastr.warning('This entry does not have the selected effect. Configure it in the editor first.');
-            logSlashCommandWarn('setTimedEffectCallback: This entry does not have the selected effect', args, { value });
-            return '';
-        }
-
-        const getNewEffectState = () => {
-            const currentState = !!timedEffects.getEffectMetadata(effect, entry);
-
-            if (['toggle', 't', ''].includes(value.trim().toLowerCase())) {
-                return !currentState;
-            }
-
-            if (isTrueBoolean(value)) {
-                return true;
-            }
-
-            if (isFalseBoolean(value)) {
-                return false;
-            }
-
-            return currentState;
-        };
-
-        const newEffectState = getNewEffectState();
-        timedEffects.setTimedEffect(effect, entry, newEffectState);
-
-        await saveMetadata();
-        toastr.success(`Timed effect "${effect}" for entry ${entry.uid} is now ${newEffectState ? 'active' : 'inactive'}`);
-
-        return '';
-    }
-
     /** A collection of local enum providers for this context of world info */
     const localEnumProviders = {
         /** All possible fields that can be set in a WI entry */
@@ -2061,11 +1934,6 @@ function registerWorldInfoSlashCommands() {
                 new SlashCommandEnumValue(uid, `${data.comment ? `${data.comment}: ` : ''}${data.key.join(', ')}${data.keysecondary?.length ? ` [${Object.entries(world_info_logic).find(([_, value]) => value == data.selectiveLogic)[0]}] ${data.keysecondary.join(', ')}` : ''} [${getWiPositionString(data)}]`,
                     enumTypes.enum, enumIcons.getWiStatusIcon(data)));
         },
-
-        timedEffects: () => [
-            new SlashCommandEnumValue('sticky', 'Stays active for N messages', enumTypes.enum, '📌'),
-            new SlashCommandEnumValue('cooldown', 'Cooldown for N messages', enumTypes.enum, '⌛'),
-        ],
     };
 
     function getWiPositionString(entry) {
@@ -2354,110 +2222,6 @@ function registerWorldInfoSlashCommands() {
                 </ul>
             </div>
         `,
-    }));
-    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
-        name: 'wi-set-timed-effect',
-        callback: setTimedEffectCallback,
-        namedArgumentList: [
-            SlashCommandNamedArgument.fromProps({
-                name: 'file',
-                description: 'book name',
-                typeList: [ARGUMENT_TYPE.STRING],
-                isRequired: true,
-                enumProvider: commonEnumProviders.worlds,
-            }),
-            SlashCommandNamedArgument.fromProps({
-                name: 'uid',
-                description: 'record UID',
-                typeList: [ARGUMENT_TYPE.STRING],
-                isRequired: true,
-                enumProvider: localEnumProviders.wiUids,
-            }),
-            SlashCommandNamedArgument.fromProps({
-                name: 'effect',
-                description: 'effect name',
-                typeList: [ARGUMENT_TYPE.STRING],
-                isRequired: true,
-                enumProvider: localEnumProviders.timedEffects,
-            }),
-        ],
-        unnamedArgumentList: [
-            SlashCommandArgument.fromProps({
-                description: 'new state of the effect',
-                typeList: [ARGUMENT_TYPE.STRING],
-                isRequired: true,
-                acceptsMultiple: false,
-                enumList: commonEnumProviders.boolean('onOffToggle')(),
-            }),
-        ],
-        helpString: `
-            <div>
-                Set a timed effect for the record with the UID from the specified book. The duration must be set in the entry itself.
-                Will only be applied for the current chat. Enabling an effect that was already active refreshes the duration.
-                If the last chat message is deleted, the effect will be removed.
-            </div>
-            <div>
-                <strong>Example:</strong>
-                <ul>
-                    <li>
-                        <pre><code>/wi-set-timed-effect file=chatLore uid=123 effect=sticky on</code></pre>
-                    </li>
-                </ul>
-            </div>
-        `,
-    }));
-    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
-        name: 'wi-get-timed-effect',
-        callback: getTimedEffectCallback,
-        helpString: `
-            <div>
-                Get the current state of the timed effect for the record with the UID from the specified book.
-            </div>
-            <div>
-                <strong>Example:</strong>
-                <ul>
-                    <li>
-                        <code>/wi-get-timed-effect file=chatLore format=bool effect=sticky 123</code> - returns true or false if the effect is active or not
-                    </li>
-                    <li>
-                        <code>/wi-get-timed-effect file=chatLore format=number effect=sticky 123</code> - returns the remaining duration of the effect, or 0 if inactive
-                    </li>
-                </ul>
-            </div>
-        `,
-        returns: 'state of the effect',
-        namedArgumentList: [
-            SlashCommandNamedArgument.fromProps({
-                name: 'file',
-                description: 'book name',
-                typeList: [ARGUMENT_TYPE.STRING],
-                isRequired: true,
-                enumProvider: commonEnumProviders.worlds,
-            }),
-            SlashCommandNamedArgument.fromProps({
-                name: 'effect',
-                description: 'effect name',
-                typeList: [ARGUMENT_TYPE.STRING],
-                isRequired: true,
-                enumProvider: localEnumProviders.timedEffects,
-            }),
-            SlashCommandNamedArgument.fromProps({
-                name: 'format',
-                description: 'output format',
-                isRequired: false,
-                typeList: [ARGUMENT_TYPE.STRING],
-                defaultValue: ARGUMENT_TYPE.BOOLEAN,
-                enumList: [ARGUMENT_TYPE.BOOLEAN, ARGUMENT_TYPE.NUMBER],
-            }),
-        ],
-        unnamedArgumentList: [
-            SlashCommandArgument.fromProps({
-                description: 'record UID',
-                typeList: [ARGUMENT_TYPE.STRING],
-                isRequired: true,
-                enumProvider: localEnumProviders.wiUids,
-            }),
-        ],
     }));
 }
 
@@ -3609,7 +3373,6 @@ function setupEditFormBindings(editTemplate, outlet, name, data, entry) {
         <option value="4" data-role="0">@D ⚙️</option>
         <option value="4" data-role="1">@D 👤</option>
         <option value="4" data-role="2">@D 🤖</option>
-        <option value="7" data-role="">➡️ Outlet</option>
     </select>`);
     $posSelect.data('uid', entry.uid);
     $posSelect.on('input', async function (_, { noSave = false } = {}) {
@@ -3878,19 +3641,6 @@ function setupEditFormBindings(editTemplate, outlet, name, data, entry) {
     });
     contentInput.val(entry.content).trigger('input', { skipCount: true, noSave: true });
 
-    // Outlet name
-    const outletNameInput = editTemplate.find('input[name="outletName"]');
-    outletNameInput.data('uid', entry.uid);
-    outletNameInput.on('input', async function (_, { noSave = false } = {}) {
-        const uid = $(this).data('uid');
-        const value = $(this).val();
-        data.entries[uid].outletName = value;
-        setWIOriginalDataValue(data, uid, 'extensions.outlet_name', data.entries[uid].outletName);
-        if (!noSave) await saveWorldInfo(name, data);
-    });
-    outletNameInput.val(entry.outletName ?? '').trigger('input', { noSave: true });
-    setTimeout(() => createEntryInputAutocomplete(outletNameInput, getOutletNameCallback(data), { allowMultiple: true }), 1);
-
     // Scan depth
     const scanDepthInput = editTemplate.find('input[name="scanDepth"]');
     scanDepthInput.data('uid', entry.uid);
@@ -3906,11 +3656,6 @@ function setupEditFormBindings(editTemplate, outlet, name, data, entry) {
     });
     scanDepthInput.val(entry.scanDepth ?? null).trigger('input', { noSave: true });
 
-    // Sticky, cooldown, delay
-    handleNumberInputHelper({ inputElem: editTemplate.find('input[name="sticky"]'), entry, entryKey: 'sticky', data, name, min: 1, max: 10000, clamp: false });
-    handleNumberInputHelper({ inputElem: editTemplate.find('input[name="cooldown"]'), entry, entryKey: 'cooldown', data, name, min: 1, max: 10000, clamp: false });
-    handleNumberInputHelper({ inputElem: editTemplate.find('input[name="delay"]'), entry, entryKey: 'delay', data, name, min: 1, max: 10000, clamp: false });
-
     // Boolean selects
     handleBooleanSelectHelper({ selectElem: editTemplate.find('select[name="caseSensitive"]'), entry, entryKey: 'caseSensitive', data, name });
     handleBooleanSelectHelper({ selectElem: editTemplate.find('select[name="matchWholeWords"]'), entry, entryKey: 'matchWholeWords', data, name });
@@ -3920,19 +3665,6 @@ function setupEditFormBindings(editTemplate, outlet, name, data, entry) {
     handleMatchCheckboxHelper({ template: editTemplate, entry, fieldName: 'matchCharacterDepthPrompt', data, name });
     handleMatchCheckboxHelper({ template: editTemplate, entry, fieldName: 'matchScenario', data, name });
     handleMatchCheckboxHelper({ template: editTemplate, entry, fieldName: 'matchCreatorNotes', data, name });
-
-    // Automation ID
-    const automationIdInput = editTemplate.find('input[name="automationId"]');
-    automationIdInput.data('uid', entry.uid);
-    automationIdInput.on('input', async function (_, { noSave = false } = {}) {
-        const uid = $(this).data('uid');
-        const value = $(this).val();
-        data.entries[uid].automationId = value;
-        setWIOriginalDataValue(data, uid, 'extensions.automation_id', data.entries[uid].automationId);
-        if (!noSave) await saveWorldInfo(name, data);
-    });
-    automationIdInput.val(entry.automationId ?? '').trigger('input', { noSave: true });
-    setTimeout(() => createEntryInputAutocomplete(automationIdInput, getAutomationIdCallback(data)), 1);
 
     // Generation Type Triggers
     const generationTypeTriggers = editTemplate.find('select[name="triggers"]');
@@ -3972,117 +3704,6 @@ function setupEditFormBindings(editTemplate, outlet, name, data, entry) {
     });
 
     outlet.append(editTemplate);
-}
-
-
-/**
- * Builds a jQuery UI autocomplete callback: (control, request, response) => void
- * @param {object} [opt={}] - Optional arguments
- * @param {{entries: Record<string, any>}} [opt.data]   - Your WI data
- * @param {(entry:any)=>string|string[]|null|undefined} [opt.collectValues] - Extract values from one entry
- * @param {() => Iterable<string>} [opt.includeExtras] - Optional global extras to include
- * @param {(ctx:{result:string[], control:JQuery, input:any, haystack:string[]})=>string[]} [opt.postFilter] - Optional final filter step (for special rules like your "group" de-dupe logic)
- */
-function buildAutocompleteCallback({ data, collectValues, includeExtras = () => [], postFilter } = {}) {
-    return function (control, input, output) {
-        const uid = $(control).data('uid');
-
-        // Collect unique values from all *other* entries
-        const values = new Set();
-        for (const entry of Object.values(data.entries ?? {})) {
-            if (entry?.uid == uid) continue;
-            const raw = collectValues(entry);
-            if (raw == null) continue;
-            const arr = Array.isArray(raw) ? raw : [raw];
-            for (const v of arr) {
-                const s = String(v).trim();
-                if (s) values.add(s);
-            }
-        }
-
-        // Add optional global extras
-        for (const v of includeExtras()) {
-            const s = String(v).trim();
-            if (s) values.add(s);
-        }
-
-        // Sort stable & locale-aware
-        const haystack = Array.from(values).sort((a, b) => a.localeCompare(b));
-
-        // Case-insensitive contains
-        const needle = String(input.term ?? '').toLowerCase();
-        let result = haystack.filter(x => x.toLowerCase().includes(needle));
-
-        // Optional final-pass semantics
-        if (postFilter) {
-            result = postFilter({ result, control: $(control), input, haystack });
-        }
-
-        output(result);
-    };
-}
-
-/**
- * Get the automation IDs for the autocomplete.
- * @param {any} data WI data
- * @returns {(input: any, output: any) => any} Callback function for the autocomplete
- */
-function getAutomationIdCallback(data) {
-    return buildAutocompleteCallback({
-        data,
-        collectValues: entry => entry.automationId != null ? [String(entry.automationId)] : [],
-        includeExtras: () =>
-            ('quickReplyApi' in globalThis && globalThis.quickReplyApi?.listAutomationIds)
-                ? globalThis.quickReplyApi.listAutomationIds()
-                : [],
-    });
-}
-
-function getOutletNameCallback(data) {
-    return buildAutocompleteCallback({
-        data,
-        collectValues: entry => normalizeWorldInfoEntryPosition(entry.position) === world_info_position.outlet && entry.outletName ? [entry.outletName] : [],
-    });
-}
-
-/**
- * Create an autocomplete for an input element.
- * @param {JQuery<HTMLElement>} input - Input element to attach the autocomplete to
- * @param {(control: JQuery<HTMLElement>, input: any, output: any) => any} callback - Source data callbacks
- * @param {object} [options={}] - Optional arguments
- * @param {boolean} [options.allowMultiple=false] - Whether to allow multiple comma-separated values
- */
-function createEntryInputAutocomplete(input, callback, { allowMultiple = false } = {}) {
-    const handleSelect = (event, ui) => {
-        // Prevent default autocomplete select, so we can manually set the value
-        event.preventDefault();
-        if (!allowMultiple) {
-            $(input).val(ui.item.value).trigger('input').trigger('blur');
-        } else {
-            var terms = String($(input).val()).split(/,\s*/);
-            terms.pop(); // remove the current input
-            terms.push(ui.item.value); // add the selected item
-            $(input).val(terms.filter(x => x).join(', ')).trigger('input').trigger('blur');
-        }
-    };
-
-    $(input).autocomplete({
-        minLength: 0,
-        source: function (request, response) {
-            if (!allowMultiple) {
-                callback(input, request, response);
-            } else {
-                const term = request.term.split(/,\s*/).pop();
-                request.term = term;
-                callback(input, request, response);
-            }
-        },
-        select: handleSelect,
-    });
-
-    $(input).on('focus click', function () {
-        $(input).autocomplete('search', allowMultiple ? String($(input).val()).split(/,\s*/).pop() : String($(input).val()));
-    });
 }
 
 
@@ -5115,37 +4736,6 @@ export function initWorldInfo() {
             onWorldInfoChange('__notSlashCommand__');
         });
 
-        const saveSettings = () => {
-            saveSettingsDebounced();
-            eventSource.emit(event_types.WORLDINFO_SETTINGS_UPDATED);
-        };
-
-        $('#world_info_depth').on('input', function () {
-            setWorldInfoSetting('world_info_depth', $(this).val());
-            $('#world_info_depth_counter').val($(this).val());
-            saveSettings();
-        });
-
-        $('#world_info_include_names').on('input', function () {
-            setWorldInfoSetting('world_info_include_names', $(this).prop('checked'));
-            saveSettings();
-        });
-
-        $('#world_info_case_sensitive').on('input', function () {
-            setWorldInfoSetting('world_info_case_sensitive', $(this).prop('checked'));
-            saveSettings();
-        });
-
-        $('#world_info_match_whole_words').on('input', function () {
-            setWorldInfoSetting('world_info_match_whole_words', $(this).prop('checked'));
-            saveSettings();
-        });
-
-        $('#world_info_character_strategy').on('change', function () {
-            setWorldInfoSetting('world_info_character_strategy', $(this).val());
-            saveSettings();
-        });
-
         $('#world_button').on('click', async function (event) {
             const openSetWorldMenu = () => $('#char-management-dropdown').val($('#set_character_world').val()).trigger('change');
             const chid = $('#set_character_world').data('chid');
@@ -5336,16 +4926,6 @@ export function initWorldInfo() {
                 language: getWorldInfoSelect2Language(),
             });
         }
-
-        $('#WorldInfo').on('scroll', () => {
-            $('.world_entry input[name="automationId"]').each((_, el) => {
-                const instance = $(el).autocomplete('instance');
-
-                if (instance !== undefined) {
-                    $(el).autocomplete('close');
-                }
-            });
-        });
 
         worldInfoPanelInitialized = true;
     }

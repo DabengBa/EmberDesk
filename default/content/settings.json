@@ -8,11 +8,7 @@
         "world_info": {
             "globalSelect": []
         },
-        "world_info_depth": 2,
-        "world_info_include_names": true,
-        "world_info_case_sensitive": false,
-        "world_info_match_whole_words": true,
-        "world_info_character_strategy": 1
+        "world_info_depth": 2
     },
     "horde_settings": {
         "models": [],

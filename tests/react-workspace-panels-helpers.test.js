@@ -777,7 +777,6 @@ describe('React workspace panels bridge helpers', () => {
         expect(scriptSource).toContain('requestWorldInfoImportSelection');
         expect(scriptSource).toContain('exportCurrentWorldInfo');
         expect(scriptSource).toContain('refreshCurrentWorldInfoEditor');
-        expect(scriptSource).toContain('openWorldInfoEntryByUid');
         expect(scriptSource).toContain('renameCurrentWorldInfo');
         expect(scriptSource).toContain('duplicateCurrentWorldInfo');
         expect(scriptSource).toContain('deleteCurrentWorldInfo');
@@ -1046,8 +1045,7 @@ describe('React workspace panels bridge helpers', () => {
         expect(worldInfoSource).toContain('export async function getWorldInfoWorkbenchFacadeSnapshot');
         expect(worldInfoSource).toContain('getWorldInfoFilter().applyFilters(entriesArray)');
         expect(worldInfoSource).toContain('sortWorldInfoEntries(entriesArray)');
-        expect(scriptSource).toContain("commandName !== 'updateEntryFields' && commandName !== 'toggleActivationRules'");
-        expect(scriptSource).toContain('WIMultiSelector');
+        expect(scriptSource).toContain("commandName !== 'updateEntryFields' && commandName !== 'setScanDepth'");
 
         expect(worldInfoSource).toContain('export async function updateWorldInfoWorkbenchEntryFields');
         expect(worldInfoSource).toContain('export async function selectWorldInfoWorkbenchEntry');
@@ -1056,8 +1054,10 @@ describe('React workspace panels bridge helpers', () => {
         expect(scriptSource).toContain('getWorldInfoReactBridgeStateAsync');
         expect(scriptSource).toContain('updateEntryFields: (uid, fields) => updateWorldInfoWorkbenchEntryFields(uid, fields)');
         expect(scriptSource).toContain("clearSelectedEntry: () => selectWorldInfoWorkbenchEntry('')");
-        expect(scriptSource).toContain('toggleActivationRules: open => setWorldInfoActivationRulesVisible(open)');
-        expect(scriptSource).toContain('setWorldInfoActivationRulesVisible');
+        expect(scriptSource).toContain('setScanDepth: depth => updateWorldInfoScanDepth(depth)');
+        expect(worldInfoSource).toContain('export function updateWorldInfoScanDepth');
+        expect(scriptSource).not.toContain('setWorldInfoActivationRulesVisible');
+        expect(scriptSource).not.toContain('toggleActivationRules');
         expect(scriptSource).toContain('selectWorldInfoWorkbenchEntry');
         expect(scriptSource).toContain('updateWorldInfoWorkbenchEntryFields');
         expect(scriptSource).not.toContain("document.getElementById('world_import_menu_item')?.click();");
@@ -1066,7 +1066,10 @@ describe('React workspace panels bridge helpers', () => {
         expect(workbenchSource).toContain('data-world-info-react-layout="split"');
         expect(workbenchSource).toContain('data-world-info-react-mobile-view');
         expect(workbenchSource).toContain('返回条目列表');
-        expect(workbenchSource).toContain('扫描规则');
+        expect(workbenchSource).toContain('扫描深度');
+        expect(workbenchSource).toContain('data-world-info-react-field="scan-depth"');
+        expect(workbenchSource).not.toContain('扫描规则');
+        expect(workbenchSource).not.toContain('toggleActivationRules');
         expect(workbenchSource).not.toContain('可向量化');
         expect(workbenchSource).not.toContain('Vectorized');
     });

@@ -507,7 +507,8 @@ function getTimeDiffMacro() {
 }
 
 /**
- * Returns the outlet prompt for a given outlet key.
+ * Returns the outlet prompt for a given outlet key. Outlet injections are
+ * retired, so this resolves legacy {{outlet::name}} macros to an empty string.
  * @param {string} key - The outlet key
  * @returns {string} The outlet prompt
  */

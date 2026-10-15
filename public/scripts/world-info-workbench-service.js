@@ -106,6 +106,7 @@ export function buildWorldInfoReactPanelState(snapshot, meta = {}) {
         deleteMenuPresent: true,
         globalActiveNames: Array.isArray(snapshot?.globalActiveNames) ? snapshot.globalActiveNames : [],
         globalActiveCount: snapshot?.globalActiveCount ?? 0,
+        scanDepth: Number.isFinite(meta.scanDepth) ? meta.scanDepth : null,
         selectedEntryUid: snapshot?.selectedEntryUid ?? '',
         selectedEntry: snapshot?.selectedEntry ?? null,
         hasEditorWorld: Boolean(snapshot?.hasEditorWorld ?? selectedWorldName),

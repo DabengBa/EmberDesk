@@ -59,7 +59,7 @@ describe('world info card rendering', () => {
     test('collapsed cards can rebuild the lazy edit form after being collapsed', () => {
         const source = read('public/scripts/world-info.js');
         const createCardStart = source.indexOf('export function createWorldEntryCard');
-        const createCardEnd = source.indexOf('function buildAutocompleteCallback', createCardStart);
+        const createCardEnd = source.indexOf('function setupEditFormBindings', createCardStart);
         const createCardSource = source.slice(createCardStart, createCardEnd);
 
         expect(createCardStart).toBeGreaterThanOrEqual(0);
@@ -131,17 +131,16 @@ describe('world info card rendering', () => {
         expect(panelTsx).toContain('data-i18n="Global World Info"');
         expect(panelTsx).not.toContain('data-i18n="Enabled worlds"');
         expect(panelTsx).toContain('id="wiGlobalCount"');
-        expect(panelTsx).toContain('data-i18n="Activation Rules"');
+        expect(panelTsx).not.toContain('data-i18n="Activation Rules"');
         expect(panelTsx).toContain('id="wiEditorPanel"');
         expect(panelTsx).toContain('data-i18n="World Info Editor"');
         expect(panelTsx).toContain('id="wiTopBlock" className="wi-global-grid inline-drawer wide100p"');
-        expect(panelTsx).toContain('className="inline-drawer-content wi-global-rules-content"');
+        expect(panelTsx).not.toContain('wi-global-rules-content');
         expect(panelHtml).toContain('id="world_editor_select"');
         expect(css).toContain('.wi-global-grid');
         expect(css).toContain('.wi-global-count');
-        expect(css).toContain('.wi-global-rules-content');
-        expect(css).toContain('grid-column: 1 / -1;');
-        expect(css).toContain('.wi-settings-toggle');
+        expect(css).not.toContain('.wi-global-rules-content');
+        expect(css).not.toContain('.wi-settings-toggle');
     });
 
     test('global world selector refreshes selected Select2 labels after option replay', () => {
@@ -359,9 +358,8 @@ describe('world info card rendering', () => {
         expect(script).toContain("setAttribute('inert'");
                 expect(script).toContain('// Sole-owner: never re-enable the legacy workbench editor.');
         expect(script).toContain('// Sole-owner: React host owns the workbench; legacy editor stays hidden/inert.');
-        expect(script).toContain('revealGlobalPanel');
-        expect(script).toContain('setWorldInfoActivationRulesVisible');
-        expect(script).toContain("document.getElementById('WIMultiSelector')");
+        expect(script).not.toContain('revealGlobalPanel');
+        expect(script).not.toContain('setWorldInfoActivationRulesVisible');
         expect(script).toContain("const workbench = document.getElementById('wi-holder')");
         expect(script).toContain('hostParent.prepend(host)');
         expect(script).toContain("host.setAttribute('data-doc-id', 'feature.world_info_panel')");

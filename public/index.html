@@ -237,7 +237,6 @@
                                         <option value="4" data-role="0">@D ⚙️</option>
                                         <option value="4" data-role="1">@D 👤</option>
                                         <option value="4" data-role="2">@D 🤖</option>
-                                        <option value="7" data-role="">➡️ Outlet</option>
                                     </select>
                                     <select name="entryStateSelector" class="text_pole widthNatural margin0" data-i18n="[title]WI Entry Status:🔵 Constant🟢 Normal" title="WI Entry Status:&#13;🔵 Constant&#13;🟢 Normal">
                                         <option value="constant" title="Constant" data-i18n="[title]WI_Entry_Status_Constant">🔵</option>
@@ -284,13 +283,6 @@
                         </div>
                     </div>
                     <div name="perEntryOverridesBlock" class="flex-container wide100p alignitemscenter">
-                        <div class="world_entry_form_control flex1" title="Set the outlet name for this WI entry.&#10;&#10;WI entries with position 'outlet' will not be added to the prompt automatically. Instead, they will be collected and can be used as a macro in the prompt.&#10;Add {{outlet::YourName}} to the prompt in any place you want to add all WI entries this specific outlet." data-i18n="[title]wi_outlet_name">
-                            <small class="textAlignCenter">
-                                <span data-i18n="Outlet Name">Outlet Name</span>
-                                <div class="fa-solid fa-circle-info opacity50p"></div>
-                            </small>
-                            <input class="text_pole margin0" name="outletName" type="text" placeholder="Outlet Name" data-i18n="[placeholder]Outlet Name">
-                        </div>
                         <div class="world_entry_form_control flex1">
                             <small class="textAlignCenter" data-i18n="Scan Depth">Scan Depth</small>
                             <input class="text_pole margin0" name="scanDepth" type="number" placeholder="Use global setting" data-i18n="[placeholder]Use global setting" max="1000">
@@ -310,10 +302,6 @@
                                 <option value="true" data-i18n="Yes">Yes</option>
                                 <option value="false" data-i18n="No">No</option>
                             </select>
-                        </div>
-                        <div class="world_entry_form_control flex1" title="Can be used to automatically activate Quick Replies" data-i18n="[title]Can be used to automatically activate Quick Replies">
-                            <small class="textAlignCenter" data-i18n="Automation ID">Automation ID</small>
-                            <input class="text_pole margin0" name="automationId" type="text" placeholder="( None )" data-i18n="[placeholder]( None )">
                         </div>
                     </div>
                     </div></div>
@@ -389,47 +377,6 @@
                 <div class="wi-accordion" data-group="advanced" data-default="closed">
                 <div class="wi-accordion-header" data-i18n="Advanced">Advanced</div>
                 <div class="wi-accordion-content">
-                <div class="flex-container wide100p flexGap10">
-                    <div class="flex2 flex-container flexFlowColumn flexNoGap" data-i18n="[title]Sticky entries will stay active for N messages after being triggered." title="Sticky entries will stay active for N messages after being triggered.">
-                        <div class="flex-container justifySpaceBetween marginBot5">
-                            <small class="flex-container alignItemsBaseline" for="sticky">
-                                <span data-i18n="Sticky">
-                                    Sticky
-                                </span>
-                                <i class="fa-solid fa-comments fa-xs"></i>
-                            </small>
-                        </div>
-                        <div class="range-block-range">
-                            <input class="text_pole margin0" name="sticky" type="number" data-i18n="[placeholder]Non-sticky" placeholder="Non-sticky" min="0" max="999999">
-                        </div>
-                    </div>
-                    <div class="flex2 flex-container flexFlowColumn flexNoGap" data-i18n="[title]Entries with a cooldown can't be activated N messages after being triggered." title="Entries with a cooldown can't be activated N messages after being triggered.">
-                        <div class="flex-container justifySpaceBetween marginBot5">
-                            <small class="flex-container alignItemsBaseline" for="cooldown">
-                                <span data-i18n="Cooldown">
-                                    Cooldown
-                                </span>
-                                <i class="fa-solid fa-comments fa-xs"></i>
-                            </small>
-                        </div>
-                        <div class="range-block-range">
-                            <input class="text_pole margin0" name="cooldown" type="number" data-i18n="[placeholder]No cooldown" placeholder="No cooldown" min="0" max="999999">
-                        </div>
-                    </div>
-                    <div class="flex2 flex-container flexFlowColumn flexNoGap" data-i18n="[title]Entries with a delay can't be activated until there are N messages present in the chat." title="Entries with a delay can't be activated until there are N messages present in the chat.">
-                        <div class="flex-container justifySpaceBetween marginBot5">
-                            <small class="flex-container alignItemsBaseline" for="delay">
-                                <span data-i18n="Delay">
-                                    Delay
-                                </span>
-                                <i class="fa-solid fa-comments fa-xs"></i>
-                            </small>
-                        </div>
-                        <div class="range-block-range">
-                            <input class="text_pole margin0" name="delay" type="number" data-i18n="[placeholder]No delay" placeholder="No delay" min="0" max="999999">
-                        </div>
-                    </div>
-                </div>
                 <div class="flex-container wide100p flexGap10">
                     <div class="flex4 flex-container flexFlowColumn flexNoGap">
                         <div class="flex-container justifySpaceBetween">
