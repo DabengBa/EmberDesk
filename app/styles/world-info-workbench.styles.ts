@@ -658,8 +658,8 @@ export const worldInfoWorkbenchStyles = stylex.create({
     entryToggle: {
         position: 'relative',
         flex: '0 0 auto',
-        width: '22px',
-        height: '12px',
+        width: '34px',
+        height: '18px',
         borderRadius: '999px',
         alignSelf: 'center',
         padding: 0,
@@ -684,10 +684,10 @@ export const worldInfoWorkbenchStyles = stylex.create({
     },
     entryToggleKnob: {
         position: 'absolute',
-        top: '1px',
-        left: '1px',
-        width: '8px',
-        height: '8px',
+        top: '2px',
+        left: '2px',
+        width: '12px',
+        height: '12px',
         borderRadius: '999px',
         backgroundColor: 'color-mix(in srgb, var(--SmartThemeBodyColor) 80%, transparent)',
         transition: {
@@ -695,7 +695,7 @@ export const worldInfoWorkbenchStyles = stylex.create({
         },
     },
     entryToggleKnobOn: {
-        transform: 'translateX(10px)',
+        transform: 'translateX(16px)',
         backgroundColor: '#fff',
     },
     entryTitle: {
@@ -853,61 +853,6 @@ export const worldInfoWorkbenchStyles = stylex.create({
         flexWrap: 'wrap',
         gap: '8px 14px',
         alignItems: 'center',
-    },
-    switchLabel: {
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: '8px',
-        cursor: 'pointer',
-        fontSize: 'calc(var(--mainFontSize) * 0.82)',
-        fontWeight: 600,
-        fontFamily: 'inherit',
-        color: 'color-mix(in srgb, var(--SmartThemeBodyColor) 80%, transparent)',
-        userSelect: 'none',
-        padding: 0,
-        borderWidth: 0,
-        borderStyle: 'none',
-        backgroundColor: 'transparent',
-        outline: {
-            ':focus-visible': '1px solid var(--interactable-outline-color)',
-        },
-        outlineOffset: {
-            ':focus-visible': '2px',
-        },
-    },
-    switch: {
-        position: 'relative',
-        flex: '0 0 auto',
-        width: '30px',
-        height: '17px',
-        borderRadius: '999px',
-        borderWidth: '1px',
-        borderStyle: 'solid',
-        borderColor: 'color-mix(in srgb, var(--SmartThemeBodyColor) 30%, transparent)',
-        backgroundColor: 'color-mix(in srgb, var(--SmartThemeBodyColor) 16%, transparent)',
-        transition: {
-            [motionOk]: 'background-color 0.14s ease, border-color 0.14s ease',
-        },
-    },
-    switchOn: {
-        borderColor: 'color-mix(in srgb, var(--SmartThemeQuoteColor) 60%, transparent)',
-        backgroundColor: 'color-mix(in srgb, var(--SmartThemeQuoteColor) 55%, transparent)',
-    },
-    switchKnob: {
-        position: 'absolute',
-        top: '2px',
-        left: '2px',
-        width: '11px',
-        height: '11px',
-        borderRadius: '999px',
-        backgroundColor: 'color-mix(in srgb, var(--SmartThemeBodyColor) 82%, transparent)',
-        transition: {
-            [motionOk]: 'transform 0.14s ease, background-color 0.14s ease',
-        },
-    },
-    switchKnobOn: {
-        transform: 'translateX(13px)',
-        backgroundColor: '#fff',
     },
     segmented: {
         display: 'inline-flex',

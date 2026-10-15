@@ -311,16 +311,18 @@ function BookActionsMenu({
 
 function EntryRowContent({
     entry,
+    enabledOverride,
     onToggleEnabled,
 }: {
     entry: WorldInfoReactEntrySummary;
+    enabledOverride?: boolean;
     onToggleEnabled: (uid: string, enabled: boolean) => void;
 }) {
     const chips = keywordChips(entry);
     const shownChips = chips.slice(0, MAX_KEYWORD_CHIPS);
     const overflowCount = chips.length - shownChips.length;
     const showProbability = entry.useProbability !== false && Number(entry.probability ?? 100) < 100;
-    const enabled = !entry.disabled;
+    const enabled = enabledOverride ?? !entry.disabled;
 
     return (
         <span {...stylex.props(s.entryRowContent)}>
@@ -475,19 +477,6 @@ function EntryEditor({
                     />
                 </label>
                 <div {...stylex.props(s.switchRow)}>
-                    <button
-                        type="button"
-                        role="switch"
-                        aria-checked={!draft.disable}
-                        {...stylex.props(s.switchLabel)}
-                        data-world-info-react-field="enabled"
-                        onClick={() => saveFields({ disable: !draft.disable })}
-                    >
-                        <span {...stylex.props(s.switch, !draft.disable ? s.switchOn : null)} aria-hidden="true">
-                            <span {...stylex.props(s.switchKnob, !draft.disable ? s.switchKnobOn : null)} />
-                        </span>
-                        <span>启用此条目</span>
-                    </button>
                     <div {...stylex.props(s.segmented)} role="group" aria-label="触发方式" data-world-info-react-field="constant">
                         <button
                             type="button"
@@ -749,6 +738,9 @@ export function WorldInfoWorkbenchPanel({
     const [isNarrow, setIsNarrow] = useState(false);
     const [multiSelectMode, setMultiSelectMode] = useState(false);
     const [selectedUids, setSelectedUids] = useState<ReadonlySet<string>>(new Set());
+    // Optimistic entry-toggle state so the row switch repaints before the
+    // post-command snapshot arrives; reconciled against entrySummaries below.
+    const [enabledOverrides, setEnabledOverrides] = useState<ReadonlyMap<string, boolean>>(new Map());
 
     useEffect(() => {
         if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
@@ -778,6 +770,7 @@ export function WorldInfoWorkbenchPanel({
         setPreviousWorldName(bridgeState.selectedWorldName);
         setMultiSelectMode(false);
         setSelectedUids(new Set());
+        setEnabledOverrides(new Map());
     }
 
     const worldNames = bridgeState.worldNames ?? [];
@@ -788,6 +781,24 @@ export function WorldInfoWorkbenchPanel({
     const globalNames = bridgeState.globalActiveNames ?? [];
     const globalCount = bridgeState.globalActiveCount ?? globalNames.length;
     const isBookGlobal = Boolean(selectedWorldName) && globalNames.includes(selectedWorldName);
+
+    // Drop optimistic overrides once the refreshed snapshot agrees with them.
+    useEffect(() => {
+        setEnabledOverrides(current => {
+            if (current.size === 0) {
+                return current;
+            }
+            const next = new Map(current);
+            for (const summary of entrySummaries) {
+                const uid = String(summary.uid);
+                const override = next.get(uid);
+                if (override !== undefined && !summary.disabled === override) {
+                    next.delete(uid);
+                }
+            }
+            return next.size === current.size ? current : next;
+        });
+    }, [entrySummaries]);
     const totalEntryCount = bridgeState.entryCount ?? entrySummaries.length;
     const toggleBookGlobal = () => {
         if (!selectedWorldName) {
@@ -876,7 +887,20 @@ export function WorldInfoWorkbenchPanel({
     };
 
     const toggleEntryEnabled = (uid: string, enabled: boolean) => {
-        worldInfoCommandMutation.mutate(() => commands.updateEntryFields(uid, { disable: !enabled }));
+        setEnabledOverrides(current => new Map(current).set(uid, enabled));
+        worldInfoCommandMutation.mutate(
+            () => commands.updateEntryFields(uid, { disable: !enabled }),
+            {
+                onError: () => setEnabledOverrides(current => {
+                    if (!current.has(uid)) {
+                        return current;
+                    }
+                    const next = new Map(current);
+                    next.delete(uid);
+                    return next;
+                }),
+            },
+        );
     };
 
     const runBulkCommand = (command: (uids: string[]) => Promise<unknown> | unknown) => {
@@ -1265,10 +1289,10 @@ export function WorldInfoWorkbenchPanel({
                                             <span {...stylex.props(s.entryCheck, selectedUids.has(entry.uid) ? s.entryCheckOn : null)} aria-hidden="true">
                                                 <i className="fa-solid fa-check" aria-hidden="true" />
                                             </span>
-                                            <EntryRowContent entry={entry} onToggleEnabled={toggleEntryEnabled} />
+                                            <EntryRowContent entry={entry} enabledOverride={enabledOverrides.get(entry.uid)} onToggleEnabled={toggleEntryEnabled} />
                                         </span>
                                     ) : (
-                                        <EntryRowContent entry={entry} onToggleEnabled={toggleEntryEnabled} />
+                                        <EntryRowContent entry={entry} enabledOverride={enabledOverrides.get(entry.uid)} onToggleEnabled={toggleEntryEnabled} />
                                     )}
                                 </div>
                             )) : (

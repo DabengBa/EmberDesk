@@ -2662,9 +2662,17 @@ function getWorldInfoReactCommands() {
             bulkSetEntriesEnabled: (uids, enabled) => bulkSetWorldInfoEntriesEnabled(uids, enabled),
             moveOrCopyEntry: uid => promptMoveOrCopyWorldInfoEntry(uid),
         },
-        shouldRemount(_result, commandName) {
+        shouldRemount(result, commandName, args) {
+            if (commandName === 'updateEntryFields') {
+                // The entry-row switch is the sole disable-only writer: remount so
+                // its state repaints from a fresh snapshot. Other field edits keep
+                // local draft focus.
+                const fields = args?.[1];
+                const keys = fields && typeof fields === 'object' ? Object.keys(fields) : [];
+                return result !== false && keys.length > 0 && keys.every(key => key === 'disable');
+            }
             // Field edits keep local draft focus; the scan depth input commits on blur.
-            return commandName !== 'updateEntryFields' && commandName !== 'setScanDepth';
+            return commandName !== 'setScanDepth';
         },
         remount: () => {
             void mountReactWorldInfoPanel();

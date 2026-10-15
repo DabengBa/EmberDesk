@@ -89,6 +89,45 @@ test.describe('world info workbench', () => {
         await expect(firstGlobalWorld).toHaveAttribute('aria-pressed', 'false');
     });
 
+    test('entry row toggle repaints immediately and persists the disable flag', async ({ page }) => {
+        await testSetup.awaitST({ page });
+        await openWorldInfo(page);
+        const worldSelect = page.locator('[data-world-info-react-control="world-select"]');
+        await worldSelect.selectOption({ index: 1 });
+        const worldName = await worldSelect.inputValue();
+        const toggle = page.locator('[data-world-info-react-entry-toggle]').first();
+        await expect(toggle).toBeVisible({ timeout: 15_000 });
+        const uid = await toggle.getAttribute('data-world-info-react-entry-toggle');
+        const before = await toggle.getAttribute('aria-checked');
+        const expected = before === 'true' ? 'false' : 'true';
+        // Disabled entries re-sort to the list bottom — pin the locator by uid.
+        const pinned = page.locator(`[data-world-info-react-entry-toggle="${uid}"]`);
+
+        await toggle.click();
+        // Optimistic repaint — no entry reselect needed to see the flip.
+        await expect(pinned).toHaveAttribute('aria-checked', expected);
+
+        // The refreshed snapshot agrees: the disable flag persisted server-side.
+        const csrfToken = await page.evaluate(async () => {
+            const response = await fetch('/csrf-token');
+            const data = await response.json().catch(() => ({}));
+            return data?.token ?? data?.data?.token ?? null;
+        });
+        await expect.poll(async () => page.evaluate(async ({ name, entryUid, token }) => {
+            const response = await fetch('/api/worldinfo/get', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(token ? { 'X-CSRF-Token': token } : {}),
+                },
+                body: JSON.stringify({ name }),
+            });
+            const book = await response.json();
+            const entry = Object.values(book?.entries ?? {}).find(e => String(e.uid) === entryUid);
+            return entry ? Boolean(entry.disable) : null;
+        }, { name: worldName, entryUid: uid, token: csrfToken }), { timeout: 15_000 }).toBe(expected === 'false');
+    });
+
     test('mobile list/editor states expose a single active pane', async ({ page }) => {
         await testSetup.awaitST({ page });
         await page.setViewportSize({ width: 390, height: 844 });
