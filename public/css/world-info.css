@@ -1100,6 +1100,42 @@ select.keyselect + span.select2-container .select2-selection--multiple {
     min-width: 100px;
 }
 
+/* React-owned workbench: the drawer becomes a fixed-height flex column at
+   every viewport so the chrome header and workbench toolbar stay put while
+   the entry list and editor panes scroll independently. Mirrors the
+   #SettingsPanel.openDrawer pattern in style.css. */
+#WorldInfo.openDrawer {
+    display: flex;
+    flex-direction: column;
+    overflow-y: hidden;
+}
+
+#WorldInfo.openDrawer #emberdesk-react-world-info-host {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+#WorldInfo.openDrawer #wi-holder.wi-workbench-react-owned {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+}
+
+#WorldInfo.openDrawer #wi-holder.wi-workbench-react-owned .emberdesk-react-world-info-panel-host,
+#WorldInfo.openDrawer #wi-holder.wi-workbench-react-owned .emberdesk-react-workspace-panel,
+#WorldInfo.openDrawer #wi-holder.wi-workbench-react-owned .emberdesk-react-workspace-panel > .flex-container {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    flex: 1 1 auto;
+    height: 100%;
+    overflow: hidden;
+}
+
 /* --- Responsive --- */
 @media (max-width: 768px) {
     #WorldInfo.openDrawer {
@@ -1122,22 +1158,8 @@ select.keyselect + span.select2-container .select2-selection--multiple {
     }
 
     #WorldInfo.openDrawer #wi-holder.wi-workbench-react-owned {
-        display: flex;
-        flex-direction: column;
         height: calc(100dvh - var(--topBarBlockSize) - 54px);
         max-height: calc(100dvh - var(--topBarBlockSize) - 54px);
-        overflow: hidden;
-    }
-
-    #WorldInfo.openDrawer #wi-holder.wi-workbench-react-owned .emberdesk-react-world-info-panel-host,
-    #WorldInfo.openDrawer #wi-holder.wi-workbench-react-owned .emberdesk-react-workspace-panel,
-    #WorldInfo.openDrawer #wi-holder.wi-workbench-react-owned .emberdesk-react-workspace-panel > .flex-container {
-        display: flex;
-        flex-direction: column;
-        min-height: 0;
-        flex: 1 1 auto;
-        height: 100%;
-        overflow: hidden;
     }
 
     #world_popup {

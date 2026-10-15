@@ -170,33 +170,12 @@ function iconClass(faIcon: string, ...styles: StyleArg[]): string {
     return `fa-solid ${faIcon} ${stylex.props(...styles).className ?? ''}`;
 }
 
-function isAdvancedDefault(entry: WorldInfoWorkbenchEntryDetail | null | undefined): {
-    scope: boolean;
-} {
-    return {
-        scope: Boolean(
-            entry
-            && (entry.matchCharacterDescription
-                || entry.matchCharacterDepthPrompt
-                || entry.matchScenario
-                || entry.matchCreatorNotes
-                || entry.characterFilterNames.length
-                || entry.characterFilterTags.length),
-        ),
-    };
-}
-
-function buildAdvancedSummary(entry: WorldInfoWorkbenchEntryDetail | null | undefined): string {
-    return isAdvancedDefault(entry).scope ? 'Scope filters' : '';
-}
-
-function SectionHeader({ icon, title, aside }: { icon: string; title: string; aside?: ReactNode }) {
+function SectionHeader({ icon, title }: { icon: string; title: string }) {
     return (
         <header {...stylex.props(s.editorSectionHeader)}>
             <i className={iconClass(icon, s.sectionIcon)} aria-hidden="true" />
             <h4 {...stylex.props(s.editorSectionTitle)}>{title}</h4>
             <span {...stylex.props(s.sectionRule)} aria-hidden="true" />
-            {aside}
         </header>
     );
 }
@@ -223,68 +202,6 @@ function KeywordField({
                 inputProps={{ 'data-world-info-react-field': field }}
                 onCommit={onCommit}
             />
-        </div>
-    );
-}
-
-function AdvancedSection({
-    id,
-    title,
-    summary,
-    defaultOpen = false,
-    children,
-}: {
-    id: string;
-    title: string;
-    summary?: string;
-    defaultOpen?: boolean;
-    children: ReactNode;
-}) {
-    const [open, setOpen] = useState(defaultOpen || Boolean(summary));
-    const bodyRef = useRef<HTMLDivElement>(null);
-
-    const openAndFocus = () => {
-        setOpen(true);
-        requestAnimationFrame(() => {
-            const body = bodyRef.current;
-            body?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-            body?.querySelector<HTMLElement>('[data-world-info-react-field], input, select, textarea')
-                ?.focus({ preventScroll: true });
-        });
-    };
-
-    return (
-        <div {...stylex.props(s.advanced)} data-world-info-react-advanced={id}>
-            <div {...stylex.props(s.advancedHead)}>
-                <button
-                    type="button"
-                    {...stylex.props(s.advancedSummary)}
-                    aria-expanded={open}
-                    data-world-info-react-advanced-toggle={id}
-                    onClick={() => setOpen(value => !value)}
-                >
-                    <i className={`fa-solid fa-chevron-right wi-adv-chevron ${stylex.props(s.advancedChevron).className ?? ''}`} aria-hidden="true" />
-                    <span>{title}</span>
-                </button>
-                {summary ? (
-                    <button
-                        type="button"
-                        {...stylex.props(s.advancedChip, s.advancedChipLink)}
-                        title="展开并定位到字段"
-                        onClick={openAndFocus}
-                    >
-                        {summary}
-                    </button>
-                ) : null}
-            </div>
-            <div
-                {...stylex.props(s.advancedCollapse, open ? s.advancedCollapseOpen : null)}
-                ref={bodyRef}
-                inert={!open}
-                aria-hidden={!open}
-            >
-                <div {...stylex.props(s.advancedBody)}>{children}</div>
-            </div>
         </div>
     );
 }
@@ -399,24 +316,50 @@ function BookActionsMenu({
     );
 }
 
-function EntryRowContent({ entry }: { entry: WorldInfoReactEntrySummary }) {
+function EntryRowContent({
+    entry,
+    onToggleEnabled,
+}: {
+    entry: WorldInfoReactEntrySummary;
+    onToggleEnabled: (uid: string, enabled: boolean) => void;
+}) {
     const chips = keywordChips(entry);
     const shownChips = chips.slice(0, MAX_KEYWORD_CHIPS);
     const overflowCount = chips.length - shownChips.length;
     const showProbability = entry.useProbability !== false && Number(entry.probability ?? 100) < 100;
+    const enabled = !entry.disabled;
 
     return (
         <span {...stylex.props(s.entryRowContent)}>
             <span {...stylex.props(s.entryTitleRow)}>
-                <span
-                    {...stylex.props(s.statusDot, entry.disabled ? s.statusDotOff : null)}
-                    title={entry.disabled ? '停用' : '启用'}
-                    aria-hidden="true"
-                />
+                <button
+                    type="button"
+                    {...stylex.props(s.entryToggle, enabled ? s.entryToggleOn : null)}
+                    role="switch"
+                    aria-checked={enabled}
+                    title={enabled ? '点击停用此条目' : '点击启用此条目'}
+                    aria-label={enabled ? `停用条目 ${entry.title}` : `启用条目 ${entry.title}`}
+                    data-world-info-react-entry-toggle={entry.uid}
+                    onClick={event => {
+                        event.stopPropagation();
+                        onToggleEnabled(entry.uid, !enabled);
+                    }}
+                >
+                    <span {...stylex.props(s.entryToggleKnob, enabled ? s.entryToggleKnobOn : null)} aria-hidden="true" />
+                </button>
                 <span {...stylex.props(s.entryTitle)}>{entry.title}</span>
                 {entry.constant ? (
                     <span {...stylex.props(s.constantBadge)}>常驻</span>
                 ) : null}
+                <span {...stylex.props(s.entryMetaRight)}>
+                    {!entry.constant ? (
+                        <span {...stylex.props(s.metaTag)}>{entry.positionLabel || '未设位置'}</span>
+                    ) : null}
+                    <span {...stylex.props(s.metaTag)}>#{entry.order ?? 0}</span>
+                    {showProbability ? (
+                        <span {...stylex.props(s.metaTag, s.metaTagAccent)}>{entry.probability}%</span>
+                    ) : null}
+                </span>
             </span>
             <span {...stylex.props(s.entryChips)}>
                 {entry.constant ? (
@@ -433,12 +376,8 @@ function EntryRowContent({ entry }: { entry: WorldInfoReactEntrySummary }) {
                 ) : (
                     <span {...stylex.props(s.chip, s.chipMuted)}>无关键词</span>
                 )}
-            </span>
-            <span {...stylex.props(s.entryMeta)}>
-                <span {...stylex.props(s.metaTag)}>{entry.positionLabel || '位置未设'}</span>
-                <span {...stylex.props(s.metaTag)}>排序 {entry.order ?? 0}</span>
-                {showProbability ? (
-                    <span {...stylex.props(s.metaTag, s.metaTagAccent)}>{entry.probability}%</span>
+                {entry.hasSecondaryKeys ? (
+                    <span {...stylex.props(s.secondaryChip)} title="含次要条件词">+条件</span>
                 ) : null}
             </span>
         </span>
@@ -465,11 +404,6 @@ function EntryEditor({
     const entryUid = entry?.uid;
     const focusTitleOnOpen = Boolean(onBack);
     const regexKeywordCount = countRegexKeywords([...(draft?.key ?? []), ...(draft?.keysecondary ?? [])]);
-    const secondaryCount = draft?.keysecondary?.length ?? 0;
-    const secondarySummary = [
-        secondaryCount > 0 ? `${secondaryCount} 个条件词` : '',
-        draft?.selectiveLogic ? (SELECTIVE_LOGIC_OPTIONS.find(o => o.value === draft.selectiveLogic)?.label ?? '') : '',
-    ].filter(Boolean).join(' · ');
 
     // Sync draft in render (not an effect) so the editor fields mount in the
     // same commit that delivers the entry — a downstream focus effect must not
@@ -550,25 +484,46 @@ function EntryEditor({
                         onBlur={event => saveFields({ comment: event.target.value })}
                     />
                 </label>
-                <div {...stylex.props(s.checkboxRow)}>
-                    <label className="checkbox_label">
-                        <input
-                            type="checkbox"
-                            checked={!draft.disable}
-                            data-world-info-react-field="enabled"
-                            onChange={event => saveFields({ disable: !event.target.checked })}
-                        />
-                        <span>{draft.disable ? '已停用' : '已启用'}</span>
-                    </label>
-                    <label className="checkbox_label">
-                        <input
-                            type="checkbox"
-                            checked={draft.constant}
-                            data-world-info-react-field="constant"
-                            onChange={event => saveFields({ constant: event.target.checked })}
-                        />
-                        <span>{draft.constant ? '始终注入' : '关键词触发'}</span>
-                    </label>
+                <div {...stylex.props(s.switchRow)}>
+                    <button
+                        type="button"
+                        role="switch"
+                        aria-checked={!draft.disable}
+                        {...stylex.props(s.switchLabel)}
+                        data-world-info-react-field="enabled"
+                        onClick={() => saveFields({ disable: !draft.disable })}
+                    >
+                        <span {...stylex.props(s.switch, !draft.disable ? s.switchOn : null)} aria-hidden="true">
+                            <span {...stylex.props(s.switchKnob, !draft.disable ? s.switchKnobOn : null)} />
+                        </span>
+                        <span>启用此条目</span>
+                    </button>
+                    <div {...stylex.props(s.segmented)} role="group" aria-label="触发方式" data-world-info-react-field="constant">
+                        <button
+                            type="button"
+                            {...stylex.props(s.segOption, !draft.constant ? s.segOptionOn : null)}
+                            aria-pressed={!draft.constant}
+                            onClick={() => {
+                                if (draft.constant) {
+                                    saveFields({ constant: false });
+                                }
+                            }}
+                        >
+                            关键词触发
+                        </button>
+                        <button
+                            type="button"
+                            {...stylex.props(s.segOption, draft.constant ? s.segOptionOn : null)}
+                            aria-pressed={draft.constant}
+                            onClick={() => {
+                                if (!draft.constant) {
+                                    saveFields({ constant: true });
+                                }
+                            }}
+                        >
+                            始终注入（常驻）
+                        </button>
+                    </div>
                 </div>
             </section>
 
@@ -582,6 +537,25 @@ function EntryEditor({
                             field="key"
                             onCommit={values => saveFields({ key: values })}
                         />
+                        <KeywordField
+                            label="可选条件"
+                            values={draft.keysecondary ?? []}
+                            field="keysecondary"
+                            onCommit={values => saveFields({ keysecondary: values })}
+                        />
+                        <label {...stylex.props(s.field)}>
+                            <span {...stylex.props(s.fieldLabel)}>逻辑</span>
+                            <select
+                                className="text_pole"
+                                value={String(draft.selectiveLogic)}
+                                data-world-info-react-field="selectiveLogic"
+                                onChange={event => saveFields({ selectiveLogic: Number(event.target.value) })}
+                            >
+                                {SELECTIVE_LOGIC_OPTIONS.map(option => (
+                                    <option key={option.value} value={option.value}>{option.label}</option>
+                                ))}
+                            </select>
+                        </label>
                         {regexKeywordCount > 0 ? (
                             <p {...stylex.props(s.callout)} data-world-info-react-regex-hint>
                                 <i className={iconClass('fa-circle-info', s.calloutIcon)} aria-hidden="true" />
@@ -599,26 +573,61 @@ function EntryEditor({
 
             <section {...stylex.props(s.editorSection)} data-world-info-react-section="placement">
                 <SectionHeader icon="fa-location-crosshairs" title="注入位置" />
-                <label {...stylex.props(s.field)}>
-                    <span {...stylex.props(s.fieldLabel)}>位置</span>
-                    <select
-                        className="text_pole"
-                        value={String(draft.position)}
-                        data-world-info-react-field="position"
-                        onChange={event => saveFields({ position: Number(event.target.value) })}
-                    >
-                        {POSITION_OPTIONS.map(option => (
-                            <option key={option.value} value={option.value}>{option.label}</option>
-                        ))}
-                        {POSITION_OPTIONS.some(option => option.value === draft.position) ? null : (
-                            <option value={draft.position} disabled>
-                                {entry.positionLabel ? `${entry.positionLabel}（已退役）` : `已退役位置 ${draft.position}`}
-                            </option>
-                        )}
-                    </select>
-                </label>
-                <div {...stylex.props(s.flexRow)}>
-                    <label {...stylex.props(s.field, s.fieldGrow)}>
+                <div {...stylex.props(s.placementGrid)}>
+                    <div {...stylex.props(s.field)}>
+                        <span {...stylex.props(s.fieldLabel)}>位置</span>
+                        <div {...stylex.props(s.segmented)} role="group" aria-label="注入位置" data-world-info-react-field="position">
+                            {POSITION_OPTIONS.map(option => (
+                                <button
+                                    key={option.value}
+                                    type="button"
+                                    {...stylex.props(s.segOption, draft.position === option.value ? s.segOptionOn : null)}
+                                    aria-pressed={draft.position === option.value}
+                                    onClick={() => {
+                                        if (draft.position !== option.value) {
+                                            saveFields({ position: option.value });
+                                        }
+                                    }}
+                                >
+                                    {option.label}
+                                </button>
+                            ))}
+                            {POSITION_OPTIONS.some(option => option.value === draft.position) ? null : (
+                                <button
+                                    type="button"
+                                    {...stylex.props(s.segOption, s.segOptionDisabled)}
+                                    disabled
+                                    aria-pressed="true"
+                                >
+                                    {entry.positionLabel ? `${entry.positionLabel}（已退役）` : `已退役位置 ${draft.position}`}
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                    <label {...stylex.props(s.field)}>
+                        <span {...stylex.props(s.fieldLabel)}>深度</span>
+                        <input
+                            className="text_pole"
+                            type="number"
+                            value={draft.position === 4 ? draft.depth : ''}
+                            placeholder={draft.position === 4 ? undefined : '—'}
+                            disabled={draft.position !== 4}
+                            data-world-info-react-field="depth"
+                            onChange={event => {
+                                const value = parseFiniteNumber(event.target.value);
+                                if (value !== undefined) {
+                                    setDraft({ ...draft, depth: value });
+                                }
+                            }}
+                            onBlur={event => {
+                                const value = parseFiniteNumber(event.target.value);
+                                if (value !== undefined) {
+                                    saveFields({ depth: value });
+                                }
+                            }}
+                        />
+                    </label>
+                    <label {...stylex.props(s.field)}>
                         <span {...stylex.props(s.fieldLabel)}>顺序</span>
                         <input
                             className="text_pole"
@@ -639,87 +648,35 @@ function EntryEditor({
                             }}
                         />
                     </label>
-                    {draft.position === 4 ? (
-                        <label {...stylex.props(s.field, s.fieldGrow)}>
-                            <span {...stylex.props(s.fieldLabel)}>深度</span>
+                    <label {...stylex.props(s.field)}>
+                        <span {...stylex.props(s.fieldLabel)}>触发概率</span>
+                        <span {...stylex.props(s.probWrap)}>
                             <input
-                                className="text_pole"
+                                className={`text_pole ${stylex.props(s.probInput).className ?? ''}`}
                                 type="number"
-                                value={draft.depth}
-                                data-world-info-react-field="depth"
+                                min={0}
+                                max={100}
+                                value={draft.probability}
+                                data-world-info-react-field="probability"
                                 onChange={event => {
                                     const value = parseFiniteNumber(event.target.value);
                                     if (value !== undefined) {
-                                        setDraft({ ...draft, depth: value });
+                                        setDraft({ ...draft, probability: value });
                                     }
                                 }}
                                 onBlur={event => {
                                     const value = parseFiniteNumber(event.target.value);
                                     if (value !== undefined) {
-                                        saveFields({ depth: value });
+                                        saveFields({ probability: value, useProbability: true });
                                     }
                                 }}
                             />
-                        </label>
-                    ) : null}
-                    <label {...stylex.props(s.field, s.fieldGrow)}>
-                        <span {...stylex.props(s.fieldLabel)}>概率</span>
-                        <input
-                            className="text_pole"
-                            type="number"
-                            min={0}
-                            max={100}
-                            value={draft.probability}
-                            data-world-info-react-field="probability"
-                            onChange={event => {
-                                const value = parseFiniteNumber(event.target.value);
-                                if (value !== undefined) {
-                                    setDraft({ ...draft, probability: value });
-                                }
-                            }}
-                            onBlur={event => {
-                                const value = parseFiniteNumber(event.target.value);
-                                if (value !== undefined) {
-                                    saveFields({ probability: value, useProbability: true });
-                                }
-                            }}
-                        />
+                            <span {...stylex.props(s.probUnit)} aria-hidden="true">%</span>
+                        </span>
                     </label>
                 </div>
             </section>
 
-            <section {...stylex.props(s.editorSection)} data-world-info-react-section="advanced">
-                <SectionHeader
-                    icon="fa-sliders"
-                    title="高级设置"
-                    aside={buildAdvancedSummary(entry) ? (
-                        <span {...stylex.props(s.advancedChip)}>{buildAdvancedSummary(entry)}</span>
-                    ) : null}
-                />
-                {!draft.constant ? (
-                    <AdvancedSection id="secondary" title="可选条件与逻辑" summary={secondarySummary}>
-                        <KeywordField
-                            label="可选条件"
-                            values={draft.keysecondary ?? []}
-                            field="keysecondary"
-                            onCommit={values => saveFields({ keysecondary: values })}
-                        />
-                        <label {...stylex.props(s.field)}>
-                            <span {...stylex.props(s.fieldLabel)}>逻辑</span>
-                            <select
-                                className="text_pole"
-                                value={String(draft.selectiveLogic)}
-                                data-world-info-react-field="selectiveLogic"
-                                onChange={event => saveFields({ selectiveLogic: Number(event.target.value) })}
-                            >
-                                {SELECTIVE_LOGIC_OPTIONS.map(option => (
-                                    <option key={option.value} value={option.value}>{option.label}</option>
-                                ))}
-                            </select>
-                        </label>
-                    </AdvancedSection>
-                ) : null}
-            </section>
         </div>
         <footer {...stylex.props(s.statusBar)} data-world-info-react-section="ops">
             <button
@@ -730,6 +687,21 @@ function EntryEditor({
             >
                 <i className={iconClass('fa-folder-tree', s.buttonIconSlot)} aria-hidden="true" />
                 移动 / 复制
+            </button>
+            <button
+                type="button"
+                className={buttonClass(s.button, s.buttonDanger)}
+                data-world-info-react-action="delete-entry"
+                onClick={() => {
+                    void Promise.resolve(commands.bulkDeleteEntries([entry.uid])).then(deleted => {
+                        if (deleted) {
+                            onBack?.();
+                        }
+                    });
+                }}
+            >
+                <i className={iconClass('fa-trash-can', s.buttonIconSlot)} aria-hidden="true" />
+                删除
             </button>
             <span {...stylex.props(s.statusMeta)} aria-live="polite">
                 <span
@@ -830,6 +802,18 @@ export function WorldInfoWorkbenchPanel({
     const activeSearchQuery = String(bridgeState.searchQuery ?? '').trim();
     const globalNames = bridgeState.globalActiveNames ?? [];
     const globalCount = bridgeState.globalActiveCount ?? globalNames.length;
+    const isBookGlobal = Boolean(selectedWorldName) && globalNames.includes(selectedWorldName);
+    const totalEntryCount = bridgeState.entryCount ?? entrySummaries.length;
+    const toggleBookGlobal = () => {
+        if (!selectedWorldName) {
+            return;
+        }
+        worldInfoCommandMutation.mutate(() => commands.setGlobalWorlds(
+            isBookGlobal
+                ? globalNames.filter(name => name !== selectedWorldName)
+                : [...globalNames, selectedWorldName],
+        ));
+    };
     const scanDepth = Number.isFinite(bridgeState.scanDepth) ? Number(bridgeState.scanDepth) : null;
     const commitScanDepth = (input: HTMLInputElement) => {
         const parsed = Math.floor(Number(input.value));
@@ -906,6 +890,10 @@ export function WorldInfoWorkbenchPanel({
         openEntry(uid);
     };
 
+    const toggleEntryEnabled = (uid: string, enabled: boolean) => {
+        worldInfoCommandMutation.mutate(() => commands.updateEntryFields(uid, { disable: !enabled }));
+    };
+
     const runBulkCommand = (command: (uids: string[]) => Promise<unknown> | unknown) => {
         const uids = [...selectedUids];
         if (uids.length === 0) {
@@ -917,10 +905,6 @@ export function WorldInfoWorkbenchPanel({
 
     const showListPane = !isNarrow || mobileView === 'list';
     const showEditorPane = !isNarrow || mobileView === 'editor';
-
-    const globalSummary = globalCount === 0
-        ? '未启用全局世界书'
-        : `全局启用：${globalNames.slice(0, 3).join('、')}${globalNames.length > 3 ? ` 等 ${globalCount} 本` : ''}`;
 
     return shell({
         status,
@@ -936,31 +920,45 @@ export function WorldInfoWorkbenchPanel({
                     <span {...stylex.props(s.globalIcon)} aria-hidden="true">
                         <i className="fa-solid fa-globe" />
                     </span>
-                    <label {...stylex.props(s.globalField)}>
-                        <span {...stylex.props(s.globalLabel)}>全局启用</span>
-                        <select
-                            className={`text_pole ${stylex.props(s.globalSelect).className ?? ''}`}
-                            multiple
-                            size={Math.min(Math.max(worldNames.length, 1), 4)}
-                            aria-label="选择全局启用的世界书"
+                    <div {...stylex.props(s.globalField)}>
+                        <div {...stylex.props(s.globalLabelRow)}>
+                            <span {...stylex.props(s.globalLabel)}>全局启用</span>
+                            <span {...stylex.props(s.globalCount, globalCount === 0 ? s.globalCountMuted : null)}>
+                                {globalCount} 本激活
+                            </span>
+                        </div>
+                        <div
+                            {...stylex.props(s.globalPills)}
+                            role="group"
+                            aria-label="全局启用的世界书"
                             data-world-info-react-control="global-world-select"
-                            value={globalNames}
-                            onChange={event => {
-                                const names = Array.from(event.currentTarget.selectedOptions, option => option.value);
-                                worldInfoCommandMutation.mutate(() => commands.setGlobalWorlds(names));
-                            }}
                         >
-                            {worldNames.map(world => (
-                                <option key={world.value} value={world.label}>{world.label}</option>
-                            ))}
-                        </select>
-                    </label>
+                            {worldNames.length > 0 ? worldNames.map(world => {
+                                const worldName = world.label;
+                                const active = globalNames.includes(worldName);
+                                return (
+                                    <button
+                                        key={world.value}
+                                        type="button"
+                                        {...stylex.props(s.globalPill, active ? s.globalPillOn : null)}
+                                        aria-pressed={active}
+                                        data-world-info-react-global-world={worldName}
+                                        title={active ? `取消全局启用「${worldName}」` : `全局启用「${worldName}」`}
+                                        onClick={() => worldInfoCommandMutation.mutate(() => commands.setGlobalWorlds(
+                                            active
+                                                ? globalNames.filter(name => name !== worldName)
+                                                : [...globalNames, worldName],
+                                        ))}
+                                    >
+                                        {worldName}
+                                    </button>
+                                );
+                            }) : (
+                                <span {...stylex.props(s.globalEmpty)}>暂无世界书</span>
+                            )}
+                        </div>
+                    </div>
                     <div {...stylex.props(s.globalMeta)}>
-                        <span {...stylex.props(s.globalCount, globalCount === 0 ? s.globalCountMuted : null)}>
-                            <span {...stylex.props(s.pulseDot)} aria-hidden="true" />
-                            {globalCount} 本激活
-                        </span>
-                        <span {...stylex.props(s.globalSummary)} title={globalSummary}>{globalSummary}</span>
                         <label {...stylex.props(s.scanDepthField)}>
                             <span {...stylex.props(s.scanDepthLabel)}>扫描深度</span>
                             <input
@@ -1009,32 +1007,56 @@ export function WorldInfoWorkbenchPanel({
                             )}
                         </worldInfoForm.Field>
                         <output {...stylex.props(s.countBadge)} data-world-info-react-meta="entry-count">
-                            {selectedWorldName ? `${bridgeState.entryCount ?? entrySummaries.length} 条目` : '未选择'}
+                            {selectedWorldName ? `${totalEntryCount} 条目` : '未选择'}
                         </output>
                         <span {...stylex.props(s.spacer)} aria-hidden="true" />
                         {selectedWorldName ? (
+                            <button
+                                type="button"
+                                {...stylex.props(s.globalPill, isBookGlobal ? s.globalPillOn : null)}
+                                role="switch"
+                                aria-checked={isBookGlobal}
+                                title={isBookGlobal ? '取消此书的全局启用' : '将此书设为全局启用'}
+                                data-world-info-react-action="toggle-book-global"
+                                onClick={toggleBookGlobal}
+                            >
+                                <i className="fa-solid fa-globe" aria-hidden="true" /> 全局
+                            </button>
+                        ) : null}
+                        <button
+                            type="button"
+                            className={buttonClass(s.button, s.buttonGhost, s.buttonIcon)}
+                            data-world-info-react-action="new-world"
+                            title="新建世界书"
+                            aria-label="新建世界书"
+                            onClick={() => worldInfoCommandMutation.mutate(() => commands.createWorld())}
+                        >
+                            <i className={iconClass('fa-plus', s.buttonIconSlot)} aria-hidden="true" />
+                        </button>
+                        <button
+                            type="button"
+                            className={buttonClass(s.button, s.buttonGhost, s.buttonIcon)}
+                            data-world-info-react-action="import"
+                            title="导入世界书"
+                            aria-label="导入世界书"
+                            disabled={Boolean(bridgeState.importBusy)}
+                            onClick={() => worldInfoCommandMutation.mutate(() => commands.importWorld())}
+                        >
+                            <i className={iconClass('fa-file-import', s.buttonIconSlot)} aria-hidden="true" />
+                        </button>
+                        <button
+                            type="button"
+                            className={buttonClass(s.button, s.buttonGhost, s.buttonIcon)}
+                            data-world-info-react-action="refresh"
+                            title="刷新"
+                            aria-label="刷新"
+                            disabled={!bridgeState.refreshMenuPresent}
+                            onClick={() => worldInfoCommandMutation.mutate(() => commands.refreshWorld())}
+                        >
+                            <i className={iconClass('fa-arrows-rotate', s.buttonIconSlot)} aria-hidden="true" />
+                        </button>
+                        {selectedWorldName ? (
                             <>
-                                <button
-                                    type="button"
-                                    className={buttonClass(s.button, s.buttonGhost, s.buttonIcon)}
-                                    data-world-info-react-action="new-world"
-                                    title="新建世界书"
-                                    aria-label="新建世界书"
-                                    onClick={() => worldInfoCommandMutation.mutate(() => commands.createWorld())}
-                                >
-                                    <i className={iconClass('fa-plus', s.buttonIconSlot)} aria-hidden="true" />
-                                </button>
-                                <button
-                                    type="button"
-                                    className={buttonClass(s.button, s.buttonGhost, s.buttonIcon)}
-                                    data-world-info-react-action="import"
-                                    title="导入世界书"
-                                    aria-label="导入世界书"
-                                    disabled={Boolean(bridgeState.importBusy)}
-                                    onClick={() => worldInfoCommandMutation.mutate(() => commands.importWorld())}
-                                >
-                                    <i className={iconClass('fa-file-import', s.buttonIconSlot)} aria-hidden="true" />
-                                </button>
                                 <button
                                     type="button"
                                     className={buttonClass(s.button, s.buttonGhost, s.buttonIcon)}
@@ -1045,17 +1067,6 @@ export function WorldInfoWorkbenchPanel({
                                     onClick={() => worldInfoCommandMutation.mutate(() => commands.exportWorld())}
                                 >
                                     <i className={iconClass('fa-file-export', s.buttonIconSlot)} aria-hidden="true" />
-                                </button>
-                                <button
-                                    type="button"
-                                    className={buttonClass(s.button, s.buttonGhost, s.buttonIcon)}
-                                    data-world-info-react-action="refresh"
-                                    title="刷新"
-                                    aria-label="刷新"
-                                    disabled={!bridgeState.refreshMenuPresent}
-                                    onClick={() => worldInfoCommandMutation.mutate(() => commands.refreshWorld())}
-                                >
-                                    <i className={iconClass('fa-arrows-rotate', s.buttonIconSlot)} aria-hidden="true" />
                                 </button>
                                 <BookActionsMenu
                                     commands={commands}
@@ -1076,99 +1087,6 @@ export function WorldInfoWorkbenchPanel({
                             </>
                         ) : null}
                     </div>
-                    <div {...stylex.props(s.bookRow, selectedWorldName ? s.bookRowTools : null)}>
-                        {selectedWorldName ? (
-                            <>
-                                <div {...stylex.props(s.searchWrap)}>
-                                    <i className={iconClass('fa-magnifying-glass', s.searchIcon)} aria-hidden="true" />
-                                    <worldInfoForm.Field name="searchQuery">
-                                        {field => (
-                                            <input
-                                                className={`text_pole ${stylex.props(s.searchInput).className ?? ''}`}
-                                                type="search"
-                                                data-world-info-react-control="search"
-                                                aria-label="搜索条目"
-                                                placeholder="搜索"
-                                                value={field.state.value}
-                                                onChange={event => {
-                                                    const searchQuery = event.target.value;
-                                                    field.handleChange(searchQuery);
-                                                    worldInfoCommandMutation.mutate(() => commands.applySearchQuery(searchQuery));
-                                                }}
-                                            />
-                                        )}
-                                    </worldInfoForm.Field>
-                                </div>
-                                <worldInfoForm.Field name="sortValue">
-                                    {field => (
-                                        <select
-                                            className={`text_pole ${stylex.props(s.sortSelect).className ?? ''}`}
-                                            data-world-info-react-control="sort"
-                                            aria-label="排序"
-                                            value={field.state.value}
-                                            onChange={event => {
-                                                const sortValue = event.target.value;
-                                                field.handleChange(sortValue);
-                                                worldInfoCommandMutation.mutate(() => commands.applySortOption(sortValue));
-                                            }}
-                                        >
-                                            {sortOptions.filter(option => !option.hidden).map(option => (
-                                                <option key={option.value} value={option.value}>{translate(option.label)}</option>
-                                            ))}
-                                        </select>
-                                    )}
-                                </worldInfoForm.Field>
-                                <span {...stylex.props(s.divider)} aria-hidden="true" />
-                                <button
-                                    type="button"
-                                    className={buttonClass(s.button, s.buttonPrimary)}
-                                    data-world-info-react-action="new-entry"
-                                    disabled={!bridgeState.canCreateEntry}
-                                    onClick={() => worldInfoCommandMutation.mutate(() => commands.createEntry())}
-                                >
-                                    <i className={iconClass('fa-plus', s.buttonIconSlot)} aria-hidden="true" />
-                                    新建条目
-                                </button>
-                                <button
-                                    type="button"
-                                    className={buttonClass(s.button, s.buttonGhost, multiSelectMode ? s.buttonGhostActive : null)}
-                                    data-world-info-react-action="toggle-multi-select"
-                                    aria-pressed={multiSelectMode}
-                                    onClick={() => {
-                                        if (multiSelectMode) {
-                                            setSelectedUids(new Set());
-                                        }
-                                        setMultiSelectMode(!multiSelectMode);
-                                    }}
-                                >
-                                    <i className={iconClass('fa-list-check', s.buttonIconSlot)} aria-hidden="true" />
-                                    多选
-                                </button>
-                            </>
-                        ) : (
-                            <>
-                                <button
-                                    type="button"
-                                    className={buttonClass(s.button, s.buttonPrimary)}
-                                    data-world-info-react-action="new-world"
-                                    onClick={() => worldInfoCommandMutation.mutate(() => commands.createWorld())}
-                                >
-                                    <i className={iconClass('fa-plus', s.buttonIconSlot)} aria-hidden="true" />
-                                    新建世界书
-                                </button>
-                                <button
-                                    type="button"
-                                    className={buttonClass(s.button, s.buttonGhost)}
-                                    data-world-info-react-action="import"
-                                    disabled={Boolean(bridgeState.importBusy)}
-                                    onClick={() => worldInfoCommandMutation.mutate(() => commands.importWorld())}
-                                >
-                                    <i className={iconClass('fa-file-import', s.buttonIconSlot)} aria-hidden="true" />
-                                    导入世界书
-                                </button>
-                            </>
-                        )}
-                    </div>
                 </header>
 
                 <div {...stylex.props(s.body)} data-world-info-react-layout="split">
@@ -1177,10 +1095,96 @@ export function WorldInfoWorkbenchPanel({
                         data-world-info-react-pane="list"
                         hidden={!showListPane}
                     >
-                        <div {...stylex.props(s.listHead)} aria-hidden="true">
-                            <span {...stylex.props(s.listHeadTitle)}>条目</span>
+                        <div {...stylex.props(s.listHead)}>
+                            <div {...stylex.props(s.listHeadRow)}>
+                                <span {...stylex.props(s.listHeadTitle)}>条目</span>
+                                {selectedWorldName ? (
+                                    <span {...stylex.props(s.listHeadCount)} data-world-info-react-meta="list-count">
+                                        {activeSearchQuery ? `匹配 ${entrySummaries.length} / 共 ${totalEntryCount}` : `${totalEntryCount}`}
+                                    </span>
+                                ) : null}
+                            </div>
                             {selectedWorldName ? (
-                                <span {...stylex.props(s.listHeadCount)}>{entrySummaries.length}</span>
+                                <div {...stylex.props(s.listHeadTools)}>
+                                    <div {...stylex.props(s.searchWrap)}>
+                                        <i className={iconClass('fa-magnifying-glass', s.searchIcon)} aria-hidden="true" />
+                                        <worldInfoForm.Field name="searchQuery">
+                                            {field => (
+                                                <input
+                                                    className={`text_pole ${stylex.props(s.searchInput).className ?? ''}`}
+                                                    type="search"
+                                                    data-world-info-react-control="search"
+                                                    aria-label="搜索条目"
+                                                    placeholder="搜索"
+                                                    value={field.state.value}
+                                                    onChange={event => {
+                                                        const searchQuery = event.target.value;
+                                                        field.handleChange(searchQuery);
+                                                        worldInfoCommandMutation.mutate(() => commands.applySearchQuery(searchQuery));
+                                                    }}
+                                                />
+                                            )}
+                                        </worldInfoForm.Field>
+                                        {activeSearchQuery ? (
+                                            <button
+                                                type="button"
+                                                className={buttonClass(s.button, s.searchClear)}
+                                                title="清空搜索"
+                                                aria-label="清空搜索"
+                                                data-world-info-react-search-clear
+                                                onClick={clearSearch}
+                                            >
+                                                <i className="fa-solid fa-xmark" aria-hidden="true" />
+                                            </button>
+                                        ) : null}
+                                    </div>
+                                    <worldInfoForm.Field name="sortValue">
+                                        {field => (
+                                            <select
+                                                className={`text_pole ${stylex.props(s.sortSelect).className ?? ''}`}
+                                                data-world-info-react-control="sort"
+                                                aria-label="排序"
+                                                value={field.state.value}
+                                                onChange={event => {
+                                                    const sortValue = event.target.value;
+                                                    field.handleChange(sortValue);
+                                                    worldInfoCommandMutation.mutate(() => commands.applySortOption(sortValue));
+                                                }}
+                                            >
+                                                {sortOptions.filter(option => !option.hidden).map(option => (
+                                                    <option key={option.value} value={option.value}>{translate(option.label)}</option>
+                                                ))}
+                                            </select>
+                                        )}
+                                    </worldInfoForm.Field>
+                                    <button
+                                        type="button"
+                                        className={buttonClass(s.button, s.buttonPrimary, s.buttonIcon)}
+                                        data-world-info-react-action="new-entry"
+                                        title="新建条目"
+                                        aria-label="新建条目"
+                                        disabled={!bridgeState.canCreateEntry}
+                                        onClick={() => worldInfoCommandMutation.mutate(() => commands.createEntry())}
+                                    >
+                                        <i className={iconClass('fa-plus', s.buttonIconSlot)} aria-hidden="true" />
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className={buttonClass(s.button, s.buttonGhost, s.buttonIcon, multiSelectMode ? s.buttonGhostActive : null)}
+                                        data-world-info-react-action="toggle-multi-select"
+                                        title="多选"
+                                        aria-label="多选"
+                                        aria-pressed={multiSelectMode}
+                                        onClick={() => {
+                                            if (multiSelectMode) {
+                                                setSelectedUids(new Set());
+                                            }
+                                            setMultiSelectMode(!multiSelectMode);
+                                        }}
+                                    >
+                                        <i className={iconClass('fa-list-check', s.buttonIconSlot)} aria-hidden="true" />
+                                    </button>
+                                </div>
                             ) : null}
                         </div>
                         {multiSelectMode ? (
@@ -1245,9 +1249,10 @@ export function WorldInfoWorkbenchPanel({
                             tabIndex={-1}
                         >
                             {entrySummaries.length > 0 ? entrySummaries.map(entry => (
-                                <button
+                                <div
                                     key={entry.uid}
-                                    type="button"
+                                    role="button"
+                                    tabIndex={0}
                                     {...stylex.props(
                                         s.entryRow,
                                         bridgeState.selectedEntryUid === entry.uid && !multiSelectMode ? s.entryRowSelected : null,
@@ -1259,9 +1264,15 @@ export function WorldInfoWorkbenchPanel({
                                     aria-pressed={multiSelectMode ? selectedUids.has(entry.uid) : undefined}
                                     data-world-info-react-selected={multiSelectMode && selectedUids.has(entry.uid) ? 'true' : undefined}
                                     onClick={() => handleEntryClick(entry.uid)}
+                                    onKeyDown={event => {
+                                        if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) {
+                                            event.preventDefault();
+                                            handleEntryClick(entry.uid);
+                                        }
+                                    }}
                                 >
                                     <span
-                                        {...stylex.props(s.entryRail, !entry.disabled || bridgeState.selectedEntryUid === entry.uid ? s.entryRailActive : null)}
+                                        {...stylex.props(s.entryRail, bridgeState.selectedEntryUid === entry.uid && !multiSelectMode ? s.entryRailActive : null)}
                                         aria-hidden="true"
                                     />
                                     {multiSelectMode ? (
@@ -1269,12 +1280,12 @@ export function WorldInfoWorkbenchPanel({
                                             <span {...stylex.props(s.entryCheck, selectedUids.has(entry.uid) ? s.entryCheckOn : null)} aria-hidden="true">
                                                 <i className="fa-solid fa-check" aria-hidden="true" />
                                             </span>
-                                            <EntryRowContent entry={entry} />
+                                            <EntryRowContent entry={entry} onToggleEnabled={toggleEntryEnabled} />
                                         </span>
                                     ) : (
-                                        <EntryRowContent entry={entry} />
+                                        <EntryRowContent entry={entry} onToggleEnabled={toggleEntryEnabled} />
                                     )}
-                                </button>
+                                </div>
                             )) : (
                                 <div {...stylex.props(s.empty)} data-world-info-react-empty="entries">
                                     {selectedWorldName ? (
@@ -1295,6 +1306,16 @@ export function WorldInfoWorkbenchPanel({
                                             <>
                                                 <i className={iconClass('fa-feather-pointed', s.emptyBigIcon)} aria-hidden="true" />
                                                 <span>此世界书还没有条目</span>
+                                                <button
+                                                    type="button"
+                                                    className={buttonClass(s.button, s.buttonPrimary, s.emptyAction)}
+                                                    data-world-info-react-action="new-entry-empty"
+                                                    disabled={!bridgeState.canCreateEntry}
+                                                    onClick={() => worldInfoCommandMutation.mutate(() => commands.createEntry())}
+                                                >
+                                                    <i className={iconClass('fa-plus', s.buttonIconSlot)} aria-hidden="true" />
+                                                    新建第一条条目
+                                                </button>
                                             </>
                                         )
                                     ) : (

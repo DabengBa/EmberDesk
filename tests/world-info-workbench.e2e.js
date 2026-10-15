@@ -58,11 +58,13 @@ test.describe('world info workbench', () => {
 
         const globalWorldSelect = page.locator('[data-world-info-react-control="global-world-select"]');
         await expect(globalWorldSelect).toBeVisible();
-        const firstGlobalWorld = globalWorldSelect.locator('option').first();
+        const firstGlobalWorld = globalWorldSelect.locator('[data-world-info-react-global-world]').first();
         await expect(firstGlobalWorld).toHaveCount(1);
-        const globalWorldName = await firstGlobalWorld.getAttribute('value');
-        await globalWorldSelect.selectOption([globalWorldName]);
-        await expect(globalWorldSelect).toHaveValues([globalWorldName]);
+        // Pills toggle independently — a plain click never clears other books.
+        await firstGlobalWorld.click();
+        await expect(firstGlobalWorld).toHaveAttribute('aria-pressed', 'true');
+        await firstGlobalWorld.click();
+        await expect(firstGlobalWorld).toHaveAttribute('aria-pressed', 'false');
     });
 
     test('mobile list/editor states expose a single active pane', async ({ page }) => {
@@ -121,7 +123,7 @@ test.describe('world info workbench', () => {
         await expect(page.locator('[data-world-info-react-action="import"]')).toBeVisible();
         await expect(page.locator('[data-world-info-react-action="new-entry"]')).toHaveCount(0);
         await expect(page.locator('[data-world-info-react-action="export"]')).toHaveCount(0);
-        await expect(page.locator('[data-world-info-react-action="refresh"]')).toHaveCount(0);
+        await expect(page.locator('[data-world-info-react-action="refresh"]')).toBeVisible();
         await expect(page.locator('[data-world-info-react-action="rename"]')).toHaveCount(0);
         await expect(page.locator('[data-world-info-react-action="duplicate"]')).toHaveCount(0);
         await expect(page.locator('[data-world-info-react-action="delete"]')).toHaveCount(0);
