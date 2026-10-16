@@ -6127,6 +6127,20 @@ body:has(#character_popup.open) #top-settings-holder:has(.drawer-content.openDra
     opacity: 0.55;
 }
 
+.respond-option {
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 8px;
+    padding: 4px 10px;
+    margin: 4px 0;
+    cursor: pointer;
+    opacity: 0.85;
+}
+
+.respond-option:hover {
+    opacity: 1;
+    background: var(--SmartThemeBlurTintColor);
+}
+
 .wpc-body {
     flex: 1 1 auto;
     min-height: 0;
