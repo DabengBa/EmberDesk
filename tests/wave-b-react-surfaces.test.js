@@ -76,6 +76,42 @@ describe('Wave B React surfaces', () => {
         }
     });
 
+    test('tool bindings surface lives inside the regex drawer', () => {
+        const settings = readRepoFile('app/components/regex/RegexSettingsPanel.tsx');
+        const editor = readRepoFile('app/components/regex/ToolBindingEditor.tsx');
+        const bindingsJs = readRepoFile('public/scripts/tool-bindings.js');
+        const workspacePanels = readRepoFile('app/workspace-panels.tsx');
+
+        // The regex workbench stays mounted (displayNone toggling) so legacy
+        // handler bindings survive tab switches.
+        expect(settings).toContain('id="regex_tab_content"');
+        expect(settings).toContain('id="tool_bindings_tab_content"');
+        expect(settings).toContain('displayNone');
+        for (const id of ['open_tool_binding_editor', 'saved_tool_bindings']) {
+            expect(settings).toContain(`id="${id}"`);
+        }
+
+        // Editor fields bound by tool-bindings.js.
+        for (const token of [
+            'id="tb_name"',
+            'id="tb_display_name"',
+            'id="tb_description"',
+            'id="tb_parameters"',
+            'id="tb_action_body"',
+            'id="tb_format_message"',
+            'name="tb_enabled"',
+            'name="tb_stealth"',
+            'id="tb_name_error"',
+            'id="tb_parameters_error"',
+        ]) {
+            expect(editor).toContain(token);
+        }
+
+        expect(bindingsJs).toContain('workspacePanels.mountToolBindingEditor(host)');
+        expect(workspacePanels).toContain('export function mountToolBindingEditor(container: HTMLElement)');
+        expect(workspacePanels).toContain('mountSmallPanel(container, <ToolBindingEditor />)');
+    });
+
     test('tag management popup content is React-owned', () => {
         const component = readRepoFile('app/components/tags/TagManagement.tsx');
         const tags = readRepoFile('public/scripts/tags.js');

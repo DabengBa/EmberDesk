@@ -1,11 +1,25 @@
+import { useState } from 'react';
 import { ContractButton } from '../contract/ContractButton';
 import { ContractIconButton } from '../contract/ContractIconButton';
 import { WorkspacePanelChrome } from '../panels/WorkspacePanelChrome';
+
+/**
+ * Regex drawer. Two tabs: the legacy regex workbench (markup kept mounted at
+ * all times because extensions/regex/index.js binds handlers directly to
+ * these ids) and the user-level tool-bindings list managed by
+ * public/scripts/tool-bindings.js.
+ */
 export function RegexSettingsPanel() {
+    const [tab, setTab] = useState<'regex' | 'tools'>('regex');
     return (
 <div className="regex_settings">
     <WorkspacePanelChrome title="正则" icon="fa-solid fa-code" grabberId="RegexPanelheader">
         <div>
+            <div className="wpc-tabs" role="tablist" aria-label="正则面板分区">
+                <button type="button" role="tab" aria-selected={tab === 'regex'} className={`wpc-tab${tab === 'regex' ? ' wpc-tab-active' : ''}`} onClick={() => setTab('regex')}>正则</button>
+                <button type="button" role="tab" aria-selected={tab === 'tools'} className={`wpc-tab${tab === 'tools' ? ' wpc-tab-active' : ''}`} onClick={() => setTab('tools')}>工具绑定</button>
+            </div>
+            <div id="regex_tab_content" className={tab === 'regex' ? '' : 'displayNone'}>
             <div className="flex-container">
                 <ContractButton id="open_regex_editor" className="menu_button menu_button_icon" label="+ Global" labelKey="ext_regex_new_global_script" nativeTitle title="New global regex script" icon={<i className="fa-solid fa-pen-to-square" aria-hidden="true" />} />
                 <ContractButton id="open_preset_editor" className="menu_button menu_button_icon" label="+ Preset" labelKey="ext_regex_new_preset_script" nativeTitle title="New preset regex script" icon={<i className="fa-solid fa-sliders" aria-hidden="true" />} />
@@ -87,6 +101,15 @@ export function RegexSettingsPanel() {
                     Only available for this character. Saved to the card data.
                 </small>
                 <div id="saved_scoped_scripts" no-scripts-text="No scripts found" data-i18n="[no-scripts-text]No scripts found" className="flex-container regex-script-container flexFlowColumn"></div>
+            </div>
+            </div>
+            <div id="tool_bindings_tab_content" className={tab === 'tools' ? '' : 'displayNone'}>
+                <div className="flex-container">
+                    <ContractButton id="open_tool_binding_editor" className="menu_button menu_button_icon" label="+ 工具绑定" nativeTitle title="New tool binding" icon={<i className="fa-solid fa-wrench" aria-hidden="true" />} />
+                </div>
+                <hr />
+                <small>启用后作为真实 function tool 随生成请求发送；action 仅接收 args。</small>
+                <div id="saved_tool_bindings" className="flex-container regex-script-container flexFlowColumn"></div>
             </div>
         </div>
     </WorkspacePanelChrome>

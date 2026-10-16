@@ -2,6 +2,7 @@ import { DOMPurify } from '../lib.js';
 
 import { addOneMessage, chat, getGeneratingApi, getGeneratingModel, main_api, saveChatConditional, system_avatar, systemUserName } from '../script.js';
 import { eventSource, event_types } from './events.js';
+import { feature_settings } from './feature-settings.js';
 import { chat_completion_sources, getChatCompletionModel, model_list, oai_settings } from './openai.js';
 import { Popup } from './popup.js';
 import { SlashCommand } from './slash-commands/SlashCommand.js';
@@ -11,6 +12,7 @@ import { enumIcons } from './slash-commands/SlashCommandCommonEnumsProvider.js';
 import { enumTypes, SlashCommandEnumValue } from './slash-commands/SlashCommandEnumValue.js';
 import { SlashCommandParser } from './slash-commands/SlashCommandParser.js';
 import { slashCommandReturnHelper } from './slash-commands/SlashCommandReturnHelper.js';
+import { hasEnabledToolBindings } from './tool-bindings-core.js';
 import { isTrueBoolean } from './utils.js';
 
 /**
@@ -586,7 +588,7 @@ export class ToolManager {
         settings = settings ?? oai_settings;
         model = model ?? getChatCompletionModel(settings);
 
-        if (main_api !== 'openai' || !settings.function_calling) {
+        if (main_api !== 'openai' || !hasEnabledToolBindings(feature_settings.tool_bindings)) {
             return false;
         }
 

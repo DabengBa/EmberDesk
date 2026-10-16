@@ -84,6 +84,8 @@ export const feature_settings = {
     character_allowed_regex: [],
     /** @type {Record<string, string[]>} */
     preset_allowed_regex: {},
+    /** @type {import('./tool-bindings-core.js').ToolBinding[]} */
+    tool_bindings: [],
     variables: {
         global: {},
     },
@@ -288,6 +290,12 @@ function initCoreFeatureOnce(key, loader) {
 export async function initCoreFeatures() {
     await initCoreFeatureOnce('regex', async () => {
         const { init } = await import('./extensions/regex/index.js');
+        await init();
+    });
+    // Tool bindings init mounts its behavior inside the regex drawer markup,
+    // so it must run after the regex feature init has rendered the panel.
+    await initCoreFeatureOnce('tool-bindings', async () => {
+        const { init } = await import('./tool-bindings.js');
         await init();
     });
 }

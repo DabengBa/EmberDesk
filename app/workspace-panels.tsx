@@ -57,6 +57,7 @@ import { useAutosizeTextareaRef } from './lib/autosize-textarea';
 import { RegexEditor } from './components/regex/RegexEditor';
 import { RegexSettingsPanel } from './components/regex/RegexSettingsPanel';
 import { RegexDebugger } from './components/regex/RegexDebugger';
+import { ToolBindingEditor } from './components/regex/ToolBindingEditor';
 import { RegexImportTarget } from './components/regex/RegexImportTarget';
 import { MacroBrowserPanel, type MacroBrowserProps } from './components/macros/MacroBrowser';
 import { WorldInfoPanel } from './components/panels/WorldInfoPanel';
@@ -2124,6 +2125,14 @@ export function mountRegexEditor(container: HTMLElement) {
  */
 export function mountRegexSettings(container: HTMLElement) {
     mountSmallPanel(container, <RegexSettingsPanel />);
+}
+
+/**
+ * Mounts the Tool Binding editor popup chrome inside a caller-provided node.
+ * public/scripts/tool-bindings.js fills values and owns persistence.
+ */
+export function mountToolBindingEditor(container: HTMLElement) {
+    mountSmallPanel(container, <ToolBindingEditor />);
 }
 
 /**

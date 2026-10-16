@@ -1105,7 +1105,8 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
             }
 
             const result = await sendGenerationRequest(type, generate_data, requestOptions);
-            if (isEmptyGenerationResult(result)) {
+            const carriesToolCalls = canPerformToolCalls && state.ToolManager.hasToolCalls(result);
+            if (!carriesToolCalls && isEmptyGenerationResult(result)) {
                 throw createEmptyReplyFailure(activeRecoveryMessageId);
             }
             return result;

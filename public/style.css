@@ -6074,6 +6074,33 @@ body:has(#character_popup.open) #top-settings-holder:has(.drawer-content.openDra
     opacity: 0.7;
 }
 
+.wpc-tabs {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+
+.wpc-tab {
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--SmartThemeBodyColor);
+    cursor: pointer;
+    font-size: inherit;
+    opacity: 0.65;
+    padding: 2px 6px;
+}
+
+.wpc-tab:hover {
+    opacity: 0.9;
+}
+
+.wpc-tab-active {
+    border-bottom-color: var(--SmartThemeBorderColor);
+    font-weight: 600;
+    opacity: 1;
+}
+
 .wpc-body {
     flex: 1 1 auto;
     min-height: 0;
