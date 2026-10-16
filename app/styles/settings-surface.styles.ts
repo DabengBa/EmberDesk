@@ -300,6 +300,7 @@ export const settingsStyles = stylex.create({
         lineHeight: 1.3,
     },
     fieldDescription: {
+        display: 'block',
         color: 'var(--settings-muted)',
         fontSize: '0.9rem',
         lineHeight: 1.45,
