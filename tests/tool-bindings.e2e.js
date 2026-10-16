@@ -192,6 +192,24 @@ test.describe('tool bindings', () => {
 
         // The final assistant reply is rendered into the chat.
         await expect(page.locator('#chat').last()).toContainText('FINAL_ANSWER_TEXT', { timeout: 15_000 });
+
+        // Flip the required flag — the next request must force a tool call.
+        await page.evaluate(async () => {
+            const script = await import('/script.js');
+            window.SillyTavern.getContext().featureSettings.tool_choice_required = true;
+            await script.saveSettings();
+        });
+        await page.evaluate(() => {
+            const textarea = document.querySelector('#send_textarea');
+            textarea.value = 'required e2e message';
+            textarea.dispatchEvent(new Event('input', { bubbles: true }));
+            window.SillyTavern.getContext()
+                .generate('normal', { automatic_trigger: false })
+                .catch(() => { });
+        });
+        await expect.poll(() => page.evaluate(() =>
+            window.__emberdeskToolRequests?.some(request => request.tool_choice === 'required') ?? false,
+        ), { timeout: 30_000 }).toBe(true);
     });
 
     test('disabled binding is stored but not registered', async ({ page }) => {

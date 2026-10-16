@@ -87,7 +87,7 @@ describe('Wave B React surfaces', () => {
         expect(settings).toContain('id="regex_tab_content"');
         expect(settings).toContain('id="tool_bindings_tab_content"');
         expect(settings).toContain('displayNone');
-        for (const id of ['open_tool_binding_editor', 'saved_tool_bindings']) {
+        for (const id of ['open_tool_binding_editor', 'saved_tool_bindings', 'tool_choice_required']) {
             expect(settings).toContain(`id="${id}"`);
         }
 

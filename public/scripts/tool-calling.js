@@ -416,7 +416,7 @@ export class ToolManager {
             console.log('[ToolManager] Registered function tools:', tools);
 
             data.tools = tools;
-            data.tool_choice = 'auto';
+            data.tool_choice = feature_settings.tool_choice_required ? 'required' : 'auto';
         }
     }
 

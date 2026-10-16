@@ -86,6 +86,7 @@ export const feature_settings = {
     preset_allowed_regex: {},
     /** @type {import('./tool-bindings-core.js').ToolBinding[]} */
     tool_bindings: [],
+    tool_choice_required: false,
     variables: {
         global: {},
     },

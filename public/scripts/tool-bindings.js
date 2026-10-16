@@ -261,6 +261,14 @@ export async function init() {
     });
 
     $(document).on('click', '#open_tool_binding_editor', () => openToolBindingEditor(null));
+    $(document).on('input', '#tool_choice_required', async function () {
+        feature_settings.tool_choice_required = Boolean($(this).prop('checked'));
+        saveSettingsDebounced();
+    });
+    eventSource.on(event_types.SETTINGS_LOADED, () => {
+        $('#tool_choice_required').prop('checked', Boolean(feature_settings.tool_choice_required));
+    });
+    $('#tool_choice_required').prop('checked', Boolean(feature_settings.tool_choice_required));
     renderToolBindingsList();
     document.getElementById('RegexPanel')?.setAttribute('data-tool-bindings-init', 'true');
 }

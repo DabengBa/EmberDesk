@@ -106,6 +106,13 @@ export function RegexSettingsPanel() {
             <div id="tool_bindings_tab_content" className={tab === 'tools' ? '' : 'displayNone'}>
                 <div className="flex-container">
                     <ContractButton id="open_tool_binding_editor" className="menu_button menu_button_icon" label="+ 工具绑定" nativeTitle title="New tool binding" icon={<i className="fa-solid fa-wrench" aria-hidden="true" />} />
+                    <div className="flex1"></div>
+                    <label className="checkbox flex-container margin-r5" htmlFor="tool_choice_required" title="Force the model to call a tool on every request (tool_choice: required)">
+                        <input type="checkbox" id="tool_choice_required" className="enable_scoped tool-binding-enabled" />
+                        <span className="tool-binding-toggle-on fa-solid fa-toggle-on fa-lg" title="tool_choice: required"></span>
+                        <span className="tool-binding-toggle-off fa-solid fa-toggle-off fa-lg" title="tool_choice: auto"></span>
+                    </label>
+                    <span className="marginLeft5 opacity50p" title="tool_choice: auto → required">强制调用</span>
                 </div>
                 <hr />
                 <small>启用后作为真实 function tool 随生成请求发送；action 仅接收 args。</small>
