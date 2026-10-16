@@ -6127,6 +6127,51 @@ body:has(#character_popup.open) #top-settings-holder:has(.drawer-content.openDra
     opacity: 0.55;
 }
 
+.tool-invocation {
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 8px;
+    padding: 6px 10px;
+    margin: 4px 0;
+    font-size: 0.95em;
+}
+
+.tool-invocation-name {
+    font-weight: 600;
+    opacity: 0.75;
+    margin-bottom: 2px;
+}
+
+.tool-invocation-key {
+    font-size: 0.85em;
+    opacity: 0.6;
+    margin-top: 4px;
+}
+
+.tool-invocation-text {
+    white-space: pre-wrap;
+}
+
+.tool-invocation-item {
+    padding: 2px 0;
+    opacity: 0.9;
+}
+
+.tool-invocation-error {
+    border-color: var(--SmartThemeBorderColor);
+}
+
+.tool-invocation-error .tool-invocation-result {
+    color: var(--SmartThemeQuoteColor);
+    font-family: var(--monoFontFamily, monospace);
+    font-size: 0.85em;
+    margin-top: 4px;
+}
+
+.tool-invocations-raw {
+    margin-top: 4px;
+    opacity: 0.8;
+}
+
 .respond-option {
     border: 1px solid var(--SmartThemeBorderColor);
     border-radius: 8px;

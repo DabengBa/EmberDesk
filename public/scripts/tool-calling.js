@@ -800,23 +800,97 @@ export class ToolManager {
      * @param {ToolInvocation[]} invocations Tool invocations.
      * @returns {string} Formatted message with tool invocations.
      */
+    /**
+     * Renders one tool-invocation parameter value as a readable block.
+     * @param {*} value Parameter value (already JSON-parsed)
+     * @returns {HTMLElement} Rendered element
+     */
+    static #renderInvocationValue(value) {
+        const container = document.createElement('div');
+        if (typeof value === 'string') {
+            container.classList.add('tool-invocation-text');
+            container.textContent = value;
+            return container;
+        }
+        if (Array.isArray(value)) {
+            container.classList.add('tool-invocation-list');
+            for (const item of value) {
+                const line = document.createElement('div');
+                line.classList.add('tool-invocation-item');
+                line.textContent = `▸ ${typeof item === 'string' ? item : JSON.stringify(item)}`;
+                container.append(line);
+            }
+            return container;
+        }
+        container.classList.add('tool-invocation-text');
+        container.textContent = JSON.stringify(value);
+        return container;
+    }
+
+    /**
+     * Formats a message with tool invocations.
+     * @param {ToolInvocation[]} invocations Tool invocations.
+     * @returns {string} Formatted message with tool invocations.
+     */
     static #formatToolInvocationMessage(invocations) {
         const data = structuredClone(invocations);
-        const detailsElement = document.createElement('details');
-        const summaryElement = document.createElement('summary');
-        const preElement = document.createElement('pre');
-        const codeElement = document.createElement('code');
-        codeElement.classList.add('language-json');
         data.forEach(i => {
             i.parameters = tryParse(i.parameters);
             i.result = tryParse(i.result);
         });
+
+        const root = document.createElement('div');
+        root.classList.add('tool-invocations');
+
+        for (const invocation of data) {
+            const item = document.createElement('section');
+            item.classList.add('tool-invocation');
+            if (invocation.error) {
+                item.classList.add('tool-invocation-error');
+            }
+            const header = document.createElement('div');
+            header.classList.add('tool-invocation-name');
+            header.textContent = invocation.displayName || invocation.name;
+            item.append(header);
+
+            const params = invocation.parameters;
+            if (params && typeof params === 'object' && !Array.isArray(params)) {
+                const entries = Object.entries(params);
+                for (const [key, value] of entries) {
+                    if (entries.length > 1) {
+                        const label = document.createElement('div');
+                        label.classList.add('tool-invocation-key');
+                        label.textContent = key;
+                        item.append(label);
+                    }
+                    item.append(this.#renderInvocationValue(value));
+                }
+            } else {
+                item.append(this.#renderInvocationValue(params));
+            }
+
+            if (invocation.error) {
+                const resultLine = document.createElement('div');
+                resultLine.classList.add('tool-invocation-result');
+                resultLine.textContent = typeof invocation.result === 'string' ? invocation.result : JSON.stringify(invocation.result);
+                item.append(resultLine);
+            }
+            root.append(item);
+        }
+
+        const detailsElement = document.createElement('details');
+        detailsElement.classList.add('tool-invocations-raw');
+        const summaryElement = document.createElement('summary');
+        const preElement = document.createElement('pre');
+        const codeElement = document.createElement('code');
+        codeElement.classList.add('language-json');
         codeElement.textContent = JSON.stringify(data, null, 2);
         const toolNames = data.map(i => i.displayName || i.name);
         summaryElement.textContent = `Tool calls: ${this.#groupToolNames(toolNames)}`;
         preElement.append(codeElement);
         detailsElement.append(summaryElement, preElement);
-        return detailsElement.outerHTML;
+        root.append(detailsElement);
+        return root.outerHTML;
     }
 
     /**
