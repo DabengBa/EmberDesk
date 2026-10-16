@@ -629,9 +629,6 @@ export function SettingsSurface({
                         <div {...stylex.props(settingsStyles.pageHeaderRow)}>
                             <div>
                                 <h1 {...stylex.props(settingsStyles.pageTitle)}>设置</h1>
-                                <p {...stylex.props(settingsStyles.pageSummary)}>
-                                    服务连接与模型配置的集中管理。
-                                </p>
                             </div>
                             <div {...stylex.props(settingsStyles.headerActions)}>
                                 <button
@@ -744,13 +741,11 @@ export function SettingsSurface({
                             <div>
                                 <SettingsSection
                                     title="服务"
-                                    description="一个 endpoint URL、一个 API key、一个主模型和一个可选 fallback 模型。"
                                 >
                                     <SettingField
                                         form={settingsForm}
                                         name="providers.customUrl"
                                         label="接口地址"
-                                        description="OpenAI-compatible endpoint；留空使用官方 api.openai.com。"
                                         placeholder="https://api.openai.com/v1"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
@@ -759,9 +754,6 @@ export function SettingsSurface({
                                         <div {...stylex.props(settingsStyles.inlineHeader)}>
                                             <div>
                                                 <h3 {...stylex.props(settingsStyles.sectionTitle)}>API Key</h3>
-                                                <p {...stylex.props(settingsStyles.mutedText, settingsStyles.sectionDescription)}>
-                                                    主模型与 fallback 模型共用此 key；secret 与普通设置分开存储。
-                                                </p>
                                             </div>
                                             <span {...stylex.props(settingsStyles.pill)}>
                                                 {unifiedKeyFieldState.placeholder}
@@ -823,7 +815,6 @@ export function SettingsSurface({
                                         form={settingsForm}
                                         name="providers.openaiModel"
                                         label="模型"
-                                        description="主生成模型。"
                                         placeholder="gpt-5.2"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
@@ -832,7 +823,7 @@ export function SettingsSurface({
                                         form={settingsForm}
                                         name="providers.fallbackProviderModel"
                                         label="备选模型"
-                                        description="主请求失败时以同一 URL 与 API key 换用此模型重试；留空即关闭。"
+                                        description="留空即关闭。"
                                         placeholder="gpt-4.1-mini"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
@@ -842,9 +833,6 @@ export function SettingsSurface({
                                             <div {...stylex.props(settingsStyles.inlineHeader)}>
                                                 <div>
                                                     <h3 {...stylex.props(settingsStyles.sectionTitle)}>连接</h3>
-                                                    <p {...stylex.props(settingsStyles.mutedText, settingsStyles.sectionDescription)}>
-                                                        「连接」校验凭证并拉取模型列表；「测试」发送一条探测请求。
-                                                    </p>
                                                 </div>
                                                 <span {...stylex.props(settingsStyles.pill)}>{providerStatusLabel}</span>
                                             </div>
@@ -878,13 +866,12 @@ export function SettingsSurface({
                             {activeTab === 'providers' ? (
                                 <SettingsSection
                                     title="消息渲染设置"
-                                    description="Frontend Frames：把消息代码块中的完整 HTML 文档渲染为同源 iframe，仅对可信卡片内容启用。"
                                 >
                                     <SettingField
                                         form={settingsForm}
                                         name="rendering.frontendFramesEnabled"
                                         label="启用 Frontend Frames"
-                                        description="代码块中的完整 HTML 文档以活 iframe 渲染；框架会执行卡片内的同源脚本。"
+                                        description="会执行卡片内脚本。"
                                         variant="toggle"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
@@ -893,7 +880,6 @@ export function SettingsSurface({
                                         form={settingsForm}
                                         name="rendering.frontendFramesDepth"
                                         label="渲染深度（0 = 全部）"
-                                        description="从最新楼层往回数，多少层允许渲染框架；0 表示全部楼层。"
                                         variant="number"
                                         min={0}
                                         step={1}
@@ -904,7 +890,6 @@ export function SettingsSurface({
                                         form={settingsForm}
                                         name="rendering.frontendFramesDepthIgnoreHidden"
                                         label="深度计数忽略隐藏楼层"
-                                        description="统计渲染深度时跳过隐藏/系统楼层。"
                                         variant="toggle"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
@@ -913,7 +898,6 @@ export function SettingsSurface({
                                         form={settingsForm}
                                         name="rendering.frontendFramesCollapseCodeBlock"
                                         label="折叠代码块"
-                                        description="框架渲染后，何时把源码块收进折叠开关。"
                                         variant="select"
                                         options={[
                                             { value: 'frontend_only', label: '仅前端块' },
@@ -927,7 +911,6 @@ export function SettingsSurface({
                                         form={settingsForm}
                                         name="rendering.frontendFramesSkipHighlight"
                                         label="跳过框架块的语法高亮"
-                                        description="渲染为框架的代码块不再做语法高亮。"
                                         variant="toggle"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
@@ -936,7 +919,6 @@ export function SettingsSurface({
                                         form={settingsForm}
                                         name="rendering.frontendFramesUseBlobUrl"
                                         label="使用 blob URL（调试）"
-                                        description="调试用：以 blob URL 代替 srcdoc 加载框架。"
                                         variant="toggle"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
@@ -945,7 +927,6 @@ export function SettingsSurface({
                                         form={settingsForm}
                                         name="rendering.frontendFramesAllowStreaming"
                                         label="流式期间渲染"
-                                        description="消息仍在流式输出时即渲染框架；只有已闭合的代码围栏会挂载。"
                                         variant="toggle"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
@@ -956,9 +937,6 @@ export function SettingsSurface({
 
                             <div {...stylex.props(settingsStyles.saveBar, isCompact && settingsStyles.saveBarOverlay)}>
                                 <div {...stylex.props(settingsStyles.saveBarNote)}>
-                                    <p {...stylex.props(settingsStyles.mutedText, settingsStyles.sectionDescription)}>
-                                        只保存本页字段。
-                                    </p>
                                     {isCompact ? (
                                     <button
                                         type="button"
@@ -1004,9 +982,6 @@ export function SettingsSurface({
 
                     <section {...stylex.props(settingsStyles.sidePanel)}>
                         <h2 {...stylex.props(settingsStyles.sectionTitle)}>字段归属</h2>
-                        <p {...stylex.props(settingsStyles.mutedText, settingsStyles.sectionDescription)}>
-                            开发调试信息：React 管理的设置字段与仍在 legacy 侧的字段清单。
-                        </p>
                         <div {...stylex.props(settingsStyles.diagnosticsBody)}>
                             <div>
                                 {Object.entries(settingsCoverage.reactOwned as Record<string, string[]>).map(([tabId, paths]) => (

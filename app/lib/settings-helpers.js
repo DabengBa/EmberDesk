@@ -2,7 +2,6 @@ export const settingsTabDefinitions = [
     {
         id: 'providers',
         label: '服务',
-        description: 'endpoint、API key、主模型与备选模型。',
     },
 ];
 

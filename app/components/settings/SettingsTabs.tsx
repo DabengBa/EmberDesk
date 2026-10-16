@@ -4,7 +4,7 @@ import { settingsStyles } from '@/styles/settings-surface.styles';
 type SettingsTab = {
     id: string;
     label: string;
-    description: string;
+    description?: string;
 };
 
 type SettingsTabsProps = {
@@ -39,13 +39,11 @@ export function SettingsTabs({ tabs, activeTab, onChange, showDescription = true
             </div>
             ) : null}
 
-            {showDescription ? (
-                <p {...stylex.props(settingsStyles.tabsDescription)}>{currentTab?.description}</p>
-            ) : (
-                <p {...stylex.props(settingsStyles.tabsDescription, settingsStyles.visuallyHidden)}>
-                    {currentTab?.description}
-                </p>
-            )}
+            {currentTab?.description ? (
+            <p {...stylex.props(settingsStyles.tabsDescription, !showDescription && settingsStyles.visuallyHidden)}>
+                {currentTab.description}
+            </p>
+            ) : null}
         </div>
     );
 }

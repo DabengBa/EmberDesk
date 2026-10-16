@@ -118,13 +118,6 @@ export const settingsStyles = stylex.create({
         fontWeight: 700,
         lineHeight: 1.4,
     },
-    pageSummary: {
-        maxWidth: '72ch',
-        margin: '5px 0 0',
-        color: 'var(--settings-muted)',
-        fontSize: '0.95rem',
-        lineHeight: 1.5,
-    },
     tabs: {
         display: 'flex',
         flexDirection: 'column',
