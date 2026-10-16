@@ -823,7 +823,6 @@ export function SettingsSurface({
                                         form={settingsForm}
                                         name="providers.fallbackProviderModel"
                                         label="备选模型"
-                                        description="留空即关闭。"
                                         placeholder="gpt-4.1-mini"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
