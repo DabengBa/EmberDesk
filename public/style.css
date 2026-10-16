@@ -6101,6 +6101,32 @@ body:has(#character_popup.open) #top-settings-holder:has(.drawer-content.openDra
     opacity: 1;
 }
 
+/* Tool binding rows mirror the regex script-row chrome: the native checkbox
+   stays hidden (enable_scoped) and the toggle-on/off icons swap on :checked. */
+.tool-binding-toggle-on,
+.tool-binding-toggle-off {
+    cursor: pointer;
+}
+
+.tool-binding-enabled:checked ~ .tool-binding-toggle-on,
+.tool-binding-enabled:not(:checked) ~ .tool-binding-toggle-off {
+    display: block;
+}
+
+.tool-binding-enabled:checked ~ .tool-binding-toggle-off,
+.tool-binding-enabled:not(:checked) ~ .tool-binding-toggle-on {
+    display: none;
+}
+
+.tool-binding-toggle-off {
+    opacity: 0.5;
+    filter: grayscale(0.5);
+}
+
+.tool-binding-label:has(.tool-binding-enabled:not(:checked)) .tool-binding-name {
+    opacity: 0.55;
+}
+
 .wpc-body {
     flex: 1 1 auto;
     min-height: 0;

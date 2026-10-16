@@ -120,27 +120,40 @@ function renderToolBindingsList() {
     }
 
     for (const binding of bindings) {
-        const row = $('<div>').addClass('regex-script-label tool-binding-label');
-        const toggle = $('<input>').attr({ type: 'checkbox', title: t`Enabled` })
-            .addClass('tool-binding-enabled')
+        const row = $('<div>').addClass('regex-script-label tool-binding-label flex-container flexnowrap');
+
+        const name = $('<div>').addClass('regex_script_name tool-binding-name flex1 overflow-hidden')
+            .text(binding.displayName ? `${binding.displayName} (${binding.name})` : binding.name)
+            .attr('title', binding.name);
+        if (binding.stealth) {
+            name.append($('<i>').addClass('fa-solid fa-ghost fa-sm marginLeft5').attr('title', t`Stealth: hidden from chat, no follow-up generation`));
+        }
+
+        const toggle = $('<input>').attr('type', 'checkbox')
+            .addClass('enable_scoped tool-binding-enabled')
             .prop('checked', binding.enabled)
             .on('input', async function () {
                 binding.enabled = $(this).prop('checked');
                 await saveBinding(binding);
             });
-        const title = $('<span>').addClass('tool-binding-name flex1')
-            .text(binding.displayName ? `${binding.displayName} (${binding.name})` : binding.name)
-            .attr('title', binding.name);
-        if (binding.stealth) {
-            title.append($('<i>').addClass('fa-solid fa-ghost fa-sm marginLeft5').attr('title', t`Stealth: hidden from chat, no follow-up generation`));
-        }
-        const edit = $('<i>').addClass('edit_existing_regex fa-solid fa-pen-to-square interactable')
+        const toggleLabel = $('<label>').addClass('checkbox flex-container margin-r5')
+            .attr('title', t`Enabled`)
+            .append(
+                toggle,
+                $('<span>').addClass('tool-binding-toggle-on fa-solid fa-toggle-on').attr('title', t`Enabled`),
+                $('<span>').addClass('tool-binding-toggle-off fa-solid fa-toggle-off').attr('title', t`Disabled`),
+            );
+
+        const edit = $('<div>').addClass('menu_button tool-binding-edit')
             .attr({ role: 'button', tabindex: '0', title: t`Edit` })
+            .append($('<i>').addClass('fa-solid fa-pencil'))
             .on('click', () => openToolBindingEditor(binding.id));
-        const del = $('<i>').addClass('fa-solid fa-trash interactable')
+        const del = $('<div>').addClass('menu_button tool-binding-delete')
             .attr({ role: 'button', tabindex: '0', title: t`Delete` })
+            .append($('<i>').addClass('fa-solid fa-trash'))
             .on('click', () => deleteBinding(binding));
-        row.append(toggle, title, edit, del);
+
+        row.append(name, $('<div>').addClass('flex-container flexnowrap').append(toggleLabel, edit, del));
         container.append(row);
     }
 }
