@@ -29,4 +29,5 @@ Let users register real OpenAI-style function tools without writing an extension
 - A non-streaming reply that contains only tool calls (no text content) is valid and must not be treated as an empty reply.
 - Stealth bindings hide the invocation from chat and skip the follow-up generation.
 - Tool invocations are stored on a system chat message (`extra.tool_invocations`) and serialized back into later prompts as `role:"tool"` messages plus the preceding assistant `tool_calls` turn.
+- One response may carry several tool calls (parallel tool calls on the wire). They are executed sequentially in array order and aggregated into a single invocations message; calls in the same batch cannot see each other's results — dependent steps must use recursion rounds.
 - Recursion follows the existing `ToolManager.RECURSE_LIMIT` of 5.
