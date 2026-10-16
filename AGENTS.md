@@ -47,6 +47,7 @@ pnpm run build:lib              # Vite 构建 (主构建)
 pnpm run build:react            # React page app
 pnpm run build:react:character-library
 pnpm run build:react:workspace-panels
+# 每个 vite mode 都会清空 app/dist——三个 React 构建必须全部跑完才完整
 pnpm run start
 pnpm run start:no-csrf
 pnpm run test:unit
