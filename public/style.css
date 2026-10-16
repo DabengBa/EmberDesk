@@ -6127,6 +6127,10 @@ body:has(#character_popup.open) #top-settings-holder:has(.drawer-content.openDra
     opacity: 0.55;
 }
 
+.tool-invocations {
+    text-align: left;
+}
+
 .tool-invocation {
     border: 1px solid var(--SmartThemeBorderColor);
     border-radius: 8px;
