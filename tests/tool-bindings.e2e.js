@@ -592,14 +592,19 @@ test.describe('reply pipeline step editor', () => {
             window.__emberDeskPromptPanelBridge.setPipelineEnabled(true);
         });
 
-        const rows = page.locator('#completion_prompt_manager .prompt-panel-pipeline-row');
+        const rows = page.locator('#completion_prompt_manager .prompt-panel-pipeline .prompt-panel-item');
         await expect(rows).toHaveCount(2);
-        await expect(rows.nth(0).locator('.prompt-panel-pipeline-tool')).toHaveValue('analyze');
-        await expect(rows.nth(0).locator('.prompt-panel-pipeline-instruction')).toHaveValue('PLAN_FIRST');
-        await expect(rows.nth(1).locator('.prompt-panel-pipeline-tool')).toHaveValue('respond');
+        await expect(rows.nth(0).locator('.prompt-panel-item-name-text')).toHaveText('analyze');
+        await expect(rows.nth(1).locator('.prompt-panel-item-name-text')).toHaveText('respond');
         await expect(rows.nth(1)).toContainText('最终');
 
-        // Adding a row appends a step; typing writes straight into oai_settings.
+        // Collapsed rows expand to the same field editor as prompt entries.
+        await rows.nth(0).locator('.prompt-panel-item-name').click();
+        await expect(rows.nth(0).locator('.prompt-panel-pipeline-tool')).toHaveValue('analyze');
+        await expect(rows.nth(0).locator('.prompt-panel-pipeline-instruction')).toHaveValue('PLAN_FIRST');
+
+        // Adding a row appends a step (auto-expanded); typing writes straight
+        // into oai_settings.
         await page.locator('#completion_prompt_manager .prompt-panel-pipeline-head .menu_button').click();
         await expect(rows).toHaveCount(3);
         await rows.nth(2).locator('.prompt-panel-pipeline-tool').fill('temp');
@@ -614,13 +619,15 @@ test.describe('reply pipeline step editor', () => {
         expect(stored.steps[0].reasoning_effort).toBe('low');
         expect(stored.enabled).toBe(true);
 
-        // Reorder rows → execution order changes; `final` follows the last row.
-        await rows.nth(0).locator('button[aria-label*="下移"]').click();
+        // Reorder via the drag handle's keyboard path → execution order
+        // changes; `final` follows the last row.
+        await rows.nth(0).locator('.prompt-panel-drag-handle').press('ArrowDown');
         stored = await page.evaluate(() => window.SillyTavern.getContext().chatCompletionSettings.reply_pipeline);
         expect(stored.steps.map(step => step.tool)).toEqual(['respond', 'analyze', 'temp']);
 
-        // Delete a row → the plan shrinks; last row still owns `final`.
-        await rows.nth(1).locator('button[aria-label*="删除"]').click();
+        // Delete a row via its expanded editor → the plan shrinks.
+        await rows.nth(1).locator('.prompt-panel-item-name').click();
+        await rows.nth(1).locator('.prompt-panel-item-editor .red_button').click();
         stored = await page.evaluate(() => window.SillyTavern.getContext().chatCompletionSettings.reply_pipeline);
         expect(stored.steps.map(step => step.tool)).toEqual(['respond', 'temp']);
         expect(stored.final).toBe('temp');

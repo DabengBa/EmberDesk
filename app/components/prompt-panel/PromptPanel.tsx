@@ -99,25 +99,32 @@ const TRIGGER_OPTIONS: Array<{ value: string; label: string }> = [
     { value: 'normal', label: '常规' },
 ];
 
+interface RowReorderDrag {
+    id: string;
+    targetId: string | null;
+    before: boolean;
+    targetIndex: number;
+}
+
 /**
- * 左侧"提示词"面板内的 Prompt Manager 列表 —— 渲染进 legacy
- * #completion_prompt_manager 容器。预设区与高级设置区由 AiConfigPanel
- * 的 legacy ID 提供,本组件只管 prompt 排序/启停/字段编辑。
- * 状态全部来自 legacy 桥(__emberDeskPromptPanelBridge),不自己维护副本。
+ * Shared pointer/keyboard reorder for the prompt list's row lists (prompts
+ * and pipeline steps share the same drag-handle + drop-indicator UX). Row
+ * elements must carry `data-[idDataKey]` and sit inside the returned
+ * `containerRef` element; the drop indicator styles itself through the
+ * consumer-rendered `data-drop-position` attribute.
  */
-export function PromptManagerList({ bridge }: { bridge: PromptPanelBridge }) {
-    const state = useSyncExternalStore(
-        listener => bridge.subscribe(listener),
-        () => bridge.getState(),
-        () => bridge.getState(),
-    );
-    const [expandedId, setExpandedId] = useState<string | null>(null);
-    const [contentPopup, setContentPopup] = useState<{ id: string; draft: string } | null>(null);
-    const knownIdsRef = useRef<Set<string> | null>(null);
-    const listRef = useRef<HTMLDivElement>(null);
+function useRowReorder<T>({ entries, getId, onMove, rowSelector, idDataKey }: {
+    /** Ordered entries — also the "order settled" signal (reference change → cancel drag + refocus handle). */
+    entries: readonly T[];
+    getId: (entry: T) => string;
+    onMove: (id: string, targetIndex: number) => void;
+    rowSelector: string;
+    idDataKey: string;
+}) {
+    const containerRef = useRef<HTMLDivElement>(null);
+    const pointerRef = useRef<{ id: string; pointerId: number; startX: number; startY: number; x: number; y: number; active: boolean } | null>(null);
     const keyboardFocusRef = useRef<HTMLButtonElement | null>(null);
-    const pointerRef = useRef<{ identifier: string; pointerId: number; startX: number; startY: number; x: number; y: number; active: boolean } | null>(null);
-    const [drag, setDrag] = useState<{ identifier: string; targetIdentifier: string; before: boolean; targetIndex: number } | null>(null);
+    const [drag, setDrag] = useState<RowReorderDrag | null>(null);
 
     const cancelDrag = () => {
         pointerRef.current = null;
@@ -126,7 +133,7 @@ export function PromptManagerList({ bridge }: { bridge: PromptPanelBridge }) {
 
     const updateDragTarget = () => {
         const pointer = pointerRef.current;
-        const list = listRef.current;
+        const list = containerRef.current;
         if (!pointer?.active || !list) return;
         const bounds = list.getBoundingClientRect();
         const viewport = list.closest<HTMLElement>('.scrollableInner')?.getBoundingClientRect() ?? bounds;
@@ -134,18 +141,18 @@ export function PromptManagerList({ bridge }: { bridge: PromptPanelBridge }) {
             setDrag(null);
             return;
         }
-        const rows = Array.from(list.querySelectorAll<HTMLElement>('.prompt-panel-item'));
+        const rows = Array.from(list.querySelectorAll<HTMLElement>(rowSelector));
         const target = rows.find(row => pointer.y <= row.getBoundingClientRect().bottom) ?? rows.at(-1);
         if (!target) return;
         const rect = target.getBoundingClientRect();
         const before = pointer.y < rect.top + rect.height / 2;
-        const targetIdentifier = target.dataset.promptIdentifier!;
-        const order = bridge.getState().order;
-        const sourceIndex = order.findIndex(entry => entry.identifier === pointer.identifier);
-        const insertionIndex = order.findIndex(entry => entry.identifier === targetIdentifier) + (before ? 0 : 1);
+        const targetId = (target.dataset as Record<string, string | undefined>)[idDataKey]!;
+        const ids = entries.map(getId);
+        const sourceIndex = ids.findIndex(id => id === pointer.id);
+        const insertionIndex = ids.findIndex(id => id === targetId) + (before ? 0 : 1);
         const targetIndex = insertionIndex - (sourceIndex < insertionIndex ? 1 : 0);
-        const next = { identifier: pointer.identifier, targetIdentifier, before, targetIndex };
-        setDrag(current => current?.targetIdentifier === targetIdentifier && current.before === before && current.targetIndex === targetIndex ? current : next);
+        const next = { id: pointer.id, targetId, before, targetIndex };
+        setDrag(current => current?.targetId === targetId && current.before === before && current.targetIndex === targetIndex ? current : next);
         return next;
     };
 
@@ -158,18 +165,54 @@ export function PromptManagerList({ bridge }: { bridge: PromptPanelBridge }) {
         updateDragTarget();
     };
 
+    const getDragHandleProps = (id: string, index: number) => ({
+        onPointerDown: (event: ReactPointerEvent<HTMLButtonElement>) => {
+            if (!event.isPrimary || event.button !== 0) return;
+            event.preventDefault();
+            event.currentTarget.focus({ preventScroll: true });
+            event.currentTarget.setPointerCapture(event.pointerId);
+            pointerRef.current = { id, pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, x: event.clientX, y: event.clientY, active: false };
+        },
+        onPointerMove: handlePointerMove,
+        onPointerUp: (event: ReactPointerEvent<HTMLButtonElement>) => {
+            const pointer = pointerRef.current;
+            if (!pointer || pointer.pointerId !== event.pointerId) return;
+            pointer.x = event.clientX;
+            pointer.y = event.clientY;
+            const destination = updateDragTarget();
+            if (destination) onMove(id, destination.targetIndex);
+            cancelDrag();
+        },
+        onPointerCancel: cancelDrag,
+        onLostPointerCapture: cancelDrag,
+        onKeyDown: (event: React.KeyboardEvent<HTMLButtonElement>) => {
+            if (event.key === 'Escape') cancelDrag();
+            if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
+            event.preventDefault();
+            cancelDrag();
+            const targetIndex = index + (event.key === 'ArrowUp' ? -1 : 1);
+            if (targetIndex < 0 || targetIndex >= entries.length) return;
+            keyboardFocusRef.current = event.currentTarget;
+            onMove(id, targetIndex);
+        },
+    });
+
+    // A completed move changes `entries` — release the drag and put focus
+    // back on the handle that initiated a keyboard move.
     useEffect(() => {
         cancelDrag();
         keyboardFocusRef.current?.focus({ preventScroll: true });
         keyboardFocusRef.current = null;
-    }, [state.order]);
+    }, [entries]);
 
+    // Escape cancels a live drag; a rAF loop auto-scrolls the panel while the
+    // pointer hovers near the list edges.
     useEffect(() => {
         if (!drag) return;
         const onKeyDown = (event: KeyboardEvent) => {
             if (event.key === 'Escape') cancelDrag();
         };
-        const scroller = listRef.current?.closest<HTMLElement>('.scrollableInner');
+        const scroller = containerRef.current?.closest<HTMLElement>('.scrollableInner');
         let frame: number;
         const scroll = () => {
             const pointer = pointerRef.current;
@@ -191,7 +234,47 @@ export function PromptManagerList({ bridge }: { bridge: PromptPanelBridge }) {
             cancelAnimationFrame(frame);
             document.removeEventListener('keydown', onKeyDown);
         };
-    }, [drag?.identifier]);
+    }, [drag?.id]);
+
+    return { containerRef, drag, getDragHandleProps };
+}
+
+/**
+ * 左侧"提示词"面板内的 Prompt Manager 列表 —— 渲染进 legacy
+ * #completion_prompt_manager 容器。预设区与高级设置区由 AiConfigPanel
+ * 的 legacy ID 提供,本组件只管 prompt 排序/启停/字段编辑。
+ * 状态全部来自 legacy 桥(__emberDeskPromptPanelBridge),不自己维护副本。
+ */
+export function PromptManagerList({ bridge }: { bridge: PromptPanelBridge }) {
+    const state = useSyncExternalStore(
+        listener => bridge.subscribe(listener),
+        () => bridge.getState(),
+        () => bridge.getState(),
+    );
+    const [expandedId, setExpandedId] = useState<string | null>(null);
+    const [expandedStepId, setExpandedStepId] = useState<string | null>(null);
+    const [contentPopup, setContentPopup] = useState<{ id: string; draft: string } | null>(null);
+    const knownIdsRef = useRef<Set<string> | null>(null);
+    const knownStepIdsRef = useRef<Set<string> | null>(null);
+
+    const promptReorder = useRowReorder({
+        entries: state.order,
+        getId: entry => entry.identifier,
+        onMove: (id, targetIndex) => bridge.movePrompt(id, targetIndex),
+        rowSelector: '.prompt-panel-item',
+        idDataKey: 'promptIdentifier',
+    });
+    const pipelineSteps = state.pipeline?.steps ?? [];
+    const stepReorder = useRowReorder({
+        entries: pipelineSteps,
+        getId: step => step.id,
+        onMove: (id, targetIndex) => {
+            const index = pipelineSteps.findIndex(step => step.id === id);
+            if (index >= 0) bridge.movePipelineStep(index, targetIndex);
+        },
+        rowSelector: '.prompt-panel-item',
+        idDataKey: 'stepId',
+    });
 
     useEffect(() => {
         if (!contentPopup) {
@@ -238,9 +321,22 @@ export function PromptManagerList({ bridge }: { bridge: PromptPanelBridge }) {
         knownIdsRef.current = ids;
     }, [state.order]);
 
+    // Auto-expand a freshly added pipeline step so its fields are ready to edit.
+    useEffect(() => {
+        const ids = new Set(pipelineSteps.map(step => step.id));
+        if (knownStepIdsRef.current) {
+            for (const id of ids) {
+                if (!knownStepIdsRef.current.has(id)) {
+                    setExpandedStepId(id);
+                }
+            }
+        }
+        knownStepIdsRef.current = ids;
+    }, [pipelineSteps]);
+
     return (
         <div className="prompt-panel-root">
-            <div ref={listRef} className="prompt-panel-list" role="list" aria-label="提示词排序">
+            <div ref={promptReorder.containerRef} className="prompt-panel-list" role="list" aria-label="提示词排序">
                 <div className="prompt-panel-list-head">
                     <span className="prompt-panel-head-name">名称</span>
                     <span className="prompt-panel-head-tokens">Tokens</span>
@@ -253,9 +349,9 @@ export function PromptManagerList({ bridge }: { bridge: PromptPanelBridge }) {
                         <div
                             key={entry.identifier}
                             role="listitem"
-                            className={`prompt-panel-item${entry.enabled ? '' : ' prompt-panel-item-disabled'}${expanded ? ' prompt-panel-item-expanded' : ''}${drag?.identifier === entry.identifier ? ' prompt-panel-item-dragging' : ''}`}
+                            className={`prompt-panel-item${entry.enabled ? '' : ' prompt-panel-item-disabled'}${expanded ? ' prompt-panel-item-expanded' : ''}${promptReorder.drag?.id === entry.identifier ? ' prompt-panel-item-dragging' : ''}`}
                             data-prompt-identifier={entry.identifier}
-                            data-drop-position={drag?.targetIdentifier === entry.identifier && drag.targetIndex !== state.order.findIndex(item => item.identifier === drag.identifier) ? (drag.before ? 'before' : 'after') : undefined}
+                            data-drop-position={promptReorder.drag?.targetId === entry.identifier && promptReorder.drag.targetIndex !== index ? (promptReorder.drag.before ? 'before' : 'after') : undefined}
                         >
                             <div className="prompt-panel-item-row">
                                 <button
@@ -263,35 +359,7 @@ export function PromptManagerList({ bridge }: { bridge: PromptPanelBridge }) {
                                     className="prompt-panel-drag-handle drag-handle menu-handle"
                                     aria-label={`拖拽排序 ${prompt?.name ?? entry.identifier}`}
                                     title="拖拽调整顺序，也可使用上下方向键"
-                                    onPointerDown={event => {
-                                        if (!event.isPrimary || event.button !== 0) return;
-                                        event.preventDefault();
-                                        event.currentTarget.focus({ preventScroll: true });
-                                        event.currentTarget.setPointerCapture(event.pointerId);
-                                        pointerRef.current = { identifier: entry.identifier, pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, x: event.clientX, y: event.clientY, active: false };
-                                    }}
-                                    onPointerMove={handlePointerMove}
-                                    onPointerUp={event => {
-                                        const pointer = pointerRef.current;
-                                        if (!pointer || pointer.pointerId !== event.pointerId) return;
-                                        pointer.x = event.clientX;
-                                        pointer.y = event.clientY;
-                                        const destination = updateDragTarget();
-                                        if (destination) bridge.movePrompt(entry.identifier, destination.targetIndex);
-                                        cancelDrag();
-                                    }}
-                                    onPointerCancel={cancelDrag}
-                                    onLostPointerCapture={cancelDrag}
-                                    onKeyDown={event => {
-                                        if (event.key === 'Escape') cancelDrag();
-                                        if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
-                                        event.preventDefault();
-                                        cancelDrag();
-                                        const targetIndex = index + (event.key === 'ArrowUp' ? -1 : 1);
-                                        if (targetIndex < 0 || targetIndex >= state.order.length) return;
-                                        keyboardFocusRef.current = event.currentTarget;
-                                        bridge.movePrompt(entry.identifier, targetIndex);
-                                    }}
+                                    {...promptReorder.getDragHandleProps(entry.identifier, index)}
                                 >
                                     <span aria-hidden="true">&#9776;</span>
                                 </button>
@@ -477,64 +545,82 @@ export function PromptManagerList({ bridge }: { bridge: PromptPanelBridge }) {
                         <i className="fa-solid fa-plus" aria-hidden="true" /> 步骤
                     </button>
                 </div>
-                <div className="prompt-panel-pipeline-rows">
-                    {(state.pipeline?.steps ?? []).map((step, index, steps) => (
-                        <div key={step.id} className="prompt-panel-pipeline-row">
-                            <span className="prompt-panel-pipeline-index">{index + 1}</span>
-                            <input
-                                type="text"
-                                className="text_pole prompt-panel-pipeline-tool"
-                                list="prompt-panel-pipeline-tools"
-                                placeholder="工具名"
-                                title="该轮必须调用的工具绑定名"
-                                aria-label={`第 ${index + 1} 步工具名`}
-                                key={`${step.id}:tool`}
-                                defaultValue={step.tool}
-                                onChange={event => bridge.updatePipelineStep(index, { tool: event.target.value })}
-                            />
-                            <input
-                                type="text"
-                                className="text_pole prompt-panel-pipeline-instruction"
-                                placeholder="本轮指令（追加在请求末尾）"
-                                title="该轮注入到请求末尾的步指令"
-                                aria-label={`第 ${index + 1} 步指令`}
-                                key={`${step.id}:prompt`}
-                                defaultValue={step.prompt}
-                                onChange={event => bridge.updatePipelineStep(index, { prompt: event.target.value })}
-                            />
-                            {index === steps.length - 1 ? <span className="prompt-panel-badge" title="末行产出正文回复">最终</span> : null}
-                            <button
-                                type="button"
-                                className="prompt-panel-step-btn"
-                                title="上移"
-                                aria-label={`上移第 ${index + 1} 步`}
-                                disabled={index === 0}
-                                onClick={() => bridge.movePipelineStep(index, index - 1)}
+                <div ref={stepReorder.containerRef} className="prompt-panel-list" role="list" aria-label="管线步骤排序">
+                    {pipelineSteps.map((step, index, steps) => {
+                        const expanded = expandedStepId === step.id;
+                        return (
+                            <div
+                                key={step.id}
+                                className={`prompt-panel-item${expanded ? ' prompt-panel-item-expanded' : ''}${stepReorder.drag?.id === step.id ? ' prompt-panel-item-dragging' : ''}`}
+                                data-step-id={step.id}
+                                data-drop-position={stepReorder.drag?.targetId === step.id && stepReorder.drag.targetIndex !== index ? (stepReorder.drag.before ? 'before' : 'after') : undefined}
                             >
-                                <i className="fa-solid fa-chevron-up" aria-hidden="true" />
-                            </button>
-                            <button
-                                type="button"
-                                className="prompt-panel-step-btn"
-                                title="下移"
-                                aria-label={`下移第 ${index + 1} 步`}
-                                disabled={index === steps.length - 1}
-                                onClick={() => bridge.movePipelineStep(index, index + 1)}
-                            >
-                                <i className="fa-solid fa-chevron-down" aria-hidden="true" />
-                            </button>
-                            <button
-                                type="button"
-                                className="prompt-panel-step-btn prompt-panel-step-delete"
-                                title="删除该步"
-                                aria-label={`删除第 ${index + 1} 步`}
-                                onClick={() => bridge.deletePipelineStep(index)}
-                            >
-                                <i className="fa-solid fa-xmark" aria-hidden="true" />
-                            </button>
-                        </div>
-                    ))}
-                    {(state.pipeline?.steps ?? []).length === 0 ? (
+                                <div className="prompt-panel-item-row prompt-panel-pipeline-item-row">
+                                    <button
+                                        type="button"
+                                        className="prompt-panel-drag-handle drag-handle menu-handle"
+                                        aria-label={`拖拽排序 ${step.tool || `第 ${index + 1} 步`}`}
+                                        title="拖拽调整顺序，也可使用上下方向键"
+                                        {...stepReorder.getDragHandleProps(step.id, index)}
+                                    >
+                                        <span aria-hidden="true">&#9776;</span>
+                                    </button>
+                                    <span className="prompt-panel-pipeline-index">{index + 1}</span>
+                                    <button
+                                        type="button"
+                                        className="prompt-panel-item-name"
+                                        onClick={() => setExpandedStepId(expanded ? null : step.id)}
+                                        title="展开编辑"
+                                    >
+                                        <span className="prompt-panel-item-name-text">{step.tool || '未命名工具'}</span>
+                                        <span className="prompt-panel-item-meta">
+                                            {index === steps.length - 1 ? <span className="prompt-panel-badge" title="末行产出正文回复">最终</span> : null}
+                                        </span>
+                                    </button>
+                                </div>
+                                {expanded ? (
+                                    <div className="prompt-panel-item-editor">
+                                        <div className="prompt-panel-field">
+                                            <label className="prompt-panel-field-label">工具名</label>
+                                            <input
+                                                type="text"
+                                                className="text_pole prompt-panel-pipeline-tool"
+                                                list="prompt-panel-pipeline-tools"
+                                                placeholder="该轮必须调用的工具绑定名"
+                                                key={`${step.id}:tool`}
+                                                defaultValue={step.tool}
+                                                onChange={event => bridge.updatePipelineStep(index, { tool: event.target.value })}
+                                            />
+                                        </div>
+                                        <div className="prompt-panel-field">
+                                            <label className="prompt-panel-field-label">步指令</label>
+                                            <textarea
+                                                className="text_pole prompt-panel-content prompt-panel-pipeline-instruction"
+                                                rows={4}
+                                                placeholder="该轮注入到请求末尾的指令"
+                                                key={`${step.id}:prompt`}
+                                                defaultValue={step.prompt}
+                                                onChange={event => bridge.updatePipelineStep(index, { prompt: event.target.value })}
+                                            />
+                                        </div>
+                                        <div className="prompt-panel-field">
+                                            <button
+                                                type="button"
+                                                className="menu_button red_button"
+                                                onClick={() => {
+                                                    bridge.deletePipelineStep(index);
+                                                    setExpandedStepId(null);
+                                                }}
+                                            >
+                                                <i className="fa-solid fa-trash-can" aria-hidden="true" /> 删除步骤
+                                            </button>
+                                        </div>
+                                    </div>
+                                ) : null}
+                            </div>
+                        );
+                    })}
+                    {pipelineSteps.length === 0 ? (
                         <div className="prompt-panel-empty">未配置管线步骤——添加一行即多一轮工具调用，顺序即执行顺序</div>
                     ) : null}
                 </div>
