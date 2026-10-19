@@ -424,7 +424,7 @@ test.describe('tool bindings', () => {
             window.__emberdeskToolRequests?.some(request => request.messages?.some(message => message?.role === 'tool')) ?? false,
         ), { timeout: 30_000 }).toBe(true);
         await expect.poll(() => page.evaluate(() =>
-            window.SillyTavern.getContext().chat.some(message => message?.mes === 'RESPOND_TEXT'),
+            window.SillyTavern.getContext().chat.some(message => String(message?.mes ?? '').includes('RESPOND_TEXT')),
         ), { timeout: 30_000 }).toBe(true);
 
         const generationError = await page.evaluate(() => window.__emberdeskToolGenerationError);
@@ -452,54 +452,51 @@ test.describe('tool bindings', () => {
 
         const chatState = await page.evaluate(() => {
             const chat = window.SillyTavern.getContext().chat;
+            const reply = chat.at(-1);
             return {
-                lastMes: chat[chat.length - 1]?.mes,
-                pipelineCards: chat
-                    .filter(message => typeof message?.extra?.reply_pipeline_run === 'string'
-                        && Array.isArray(message?.extra?.tool_invocations))
-                    .slice(-1)
-                    .map(message => ({
-                        display: message.extra.reply_pipeline_display,
-                        run: message.extra.reply_pipeline_run,
-                        steps: message.extra.tool_invocations.map(invocation => ({
-                            step: invocation.pipeline?.stepId,
-                            display: invocation.pipeline?.display,
-                            run: invocation.pipeline?.runId,
-                        })),
-                    })),
+                isSystem: !!reply?.is_system,
+                mes: reply?.mes,
+                run: reply?.extra?.reply_pipeline_run,
+                step: reply?.extra?.reply_pipeline_step,
+                steps: reply?.extra?.tool_invocations?.map(invocation => ({
+                    step: invocation.pipeline?.stepId,
+                    display: invocation.pipeline?.display,
+                })),
+                // The standalone progress card is folded away — nothing else
+                // in the chat may still carry the run marker.
+                orphanCards: chat.filter(message => message !== reply
+                    && typeof message?.extra?.reply_pipeline_run === 'string').length,
             };
         });
-        expect(chatState.lastMes).toBe('RESPOND_TEXT');
-        // One card per turn: all three rounds merged into a single message.
-        expect(chatState.pipelineCards).toHaveLength(1);
-        const [card] = chatState.pipelineCards;
-        expect(card.display).toBe('summary');
-        expect(card.run.startsWith('pipeline-')).toBe(true);
-        expect(card.steps.map(step => step.step)).toEqual(['step-1', 'step-2', 'step-3']);
-        expect(card.steps.map(step => step.display)).toEqual(['summary', 'summary', 'hidden']);
-        expect(card.steps.every(step => step.run === card.run)).toBe(true);
+        // The whole turn is ONE assistant message: reply text + folded card
+        // markup in `mes`, structured invocations in `extra`.
+        expect(chatState.isSystem).toBe(false);
+        expect(chatState.mes).toContain('RESPOND_TEXT');
+        expect(chatState.mes).toContain('data-pipeline-card');
+        expect(chatState.orphanCards).toBe(0);
+        expect(chatState.run.startsWith('pipeline-')).toBe(true);
+        expect(chatState.steps.map(step => step.step)).toEqual(['step-1', 'step-2', 'step-3']);
+        expect(chatState.steps.map(step => step.display)).toEqual(['summary', 'summary', 'hidden']);
 
-        // In the DOM the merged card is one details row whose per-step blocks
-        // carry data-pipeline-step/data-pipeline-display hooks.
-        const runCard = page.locator('#chat [data-pipeline-run]').last();
-        await expect(runCard).toHaveCount(1, { timeout: 15_000 });
-        await expect(runCard.locator('[data-tool-invocation]')).toHaveCount(3);
-        await expect(runCard.locator('[data-pipeline-step="analyze"]')).toHaveCount(1);
-        await expect(runCard.locator('[data-pipeline-step="review"]')).toHaveCount(1);
+        // In the DOM the folded card lives inside the reply row — per-step
+        // blocks carry data-pipeline-step/data-pipeline-display hooks.
+        const replyRow = page.locator('#chat .mes').last();
+        const card = replyRow.locator('[data-pipeline-card]');
+        await expect(card).toHaveCount(1, { timeout: 15_000 });
+        await expect(card.locator('[data-tool-invocation]')).toHaveCount(3);
+        await expect(card.locator('[data-pipeline-step="analyze"]')).toHaveCount(1);
+        await expect(card.locator('[data-pipeline-step="review"]')).toHaveCount(1);
         // The final step's block is hidden inside the still-visible card.
-        const respondBlock = runCard.locator('[data-pipeline-step="respond"]');
+        const respondBlock = card.locator('[data-pipeline-step="respond"]');
         await expect(respondBlock).toHaveAttribute('data-pipeline-display', 'hidden');
         await expect(respondBlock).toBeHidden();
 
         // The AI_OUTPUT regex rewrote the stored card markup at write time.
-        await expect(runCard.locator('summary').first()).toContainText('E2E_TOOL_LABEL');
+        await expect(card.locator('summary').first()).toContainText('E2E_TOOL_LABEL');
 
-        // Option chips live in the card footer OUTSIDE the collapsed details —
-        // visible and clickable without expanding (sibling of data-pipeline-run
-        // inside the data-invocation-card wrapper).
-        const cardShell = page.locator('#chat [data-invocation-card]').last();
-        await expect(cardShell.locator('[data-respond-options] [data-respond-option]')).toHaveCount(2);
-        await page.evaluate(() => document.querySelector('#chat [data-invocation-card] [data-respond-option]').click());
+        // Option chips render inside the same message and stay clickable.
+        await expect(card.locator('[data-respond-options] [data-respond-option]')).toHaveCount(2);
+        await page.evaluate(() => document.querySelector('#chat [data-pipeline-card] [data-respond-option]').click());
         await expect(page.locator('#send_textarea')).toHaveValue('Take the tea');
 
         // A later ordinary generation (pipeline disabled) must not carry stale
@@ -520,6 +517,17 @@ test.describe('tool bindings', () => {
             request.messages?.some(message => String(message?.content ?? '').includes('plain follow-up message'))));
         expect(followUp).toBeTruthy();
         expect(followUp.messages.some(message => String(message?.content ?? '').includes('[Reply pipeline'))).toBe(false);
+
+        // The folded reply replays structurally: assistant tool_calls + tool
+        // results + the reply text — and the card markup NEVER reaches the wire.
+        const replayedToolCalls = followUp.messages.filter(message => Array.isArray(message?.tool_calls));
+        const replayedToolResults = followUp.messages.filter(message => message?.role === 'tool');
+        const replayedReply = followUp.messages.filter(message => message?.role === 'assistant'
+            && typeof message?.content === 'string' && message.content.includes('RESPOND_TEXT'));
+        expect(replayedToolCalls.length).toBeGreaterThanOrEqual(1);
+        expect(replayedToolResults.length).toBeGreaterThanOrEqual(3);
+        expect(replayedReply).toHaveLength(1);
+        expect(replayedReply[0].content).not.toContain('data-pipeline-card');
     });
 
     test('reply pipeline falls back to a closing round without tools when the final result is unusable', async ({ page }) => {

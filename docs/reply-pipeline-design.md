@@ -38,7 +38,7 @@
 | `steps[].reasoning_effort` | 可选：覆盖该轮 `reasoning_effort`（`auto|low|medium|high|min|max`，经 provider 映射同预设级） |
 | `final` | 产出正文的 tool 名；计划在该步截断（其后步骤不可达）；缺省/未知 → 最后一步。步数上限 `MAX_PIPELINE_STEPS`=5 |
 
-持久化：`reply_pipeline` 是 `settingsToUpdate` 字段——随预设保存/应用、随 `settings.json` 重载保留；**应用无此键的预设会清除当前管线**（预设权威语义，同 `extensions`）。
+持久化：`reply_pipeline` 是 `settingsToUpdate` 字段——随预设保存/应用、随 canonical 设置文档（SQLite `settings_documents`）重载保留；**应用无此键的预设会清除当前管线**（预设权威语义，同 `extensions`）。
 
 ## 执行模型
 
@@ -71,14 +71,12 @@ round i: 请求组装后 (CHAT_COMPLETION_SETTINGS_READY) 注入:
 
 ## 卡片与显示
 
-- **一回合一张卡**：首轮创建卡消息（`extra.reply_pipeline_run`），后续轮按 runId 找回同一卡、追加 `extra.tool_invocations`、重建 `mes` 并原地重渲染（`updateMessageBlock` + `saveChatConditional`）——结构化回放不变：每个 invocation 仍回放为 assistant `tool_calls` + `role:tool`
-- 卡内 markup：`<details data-tool-invocations data-pipeline-run>` + `<section data-tool-invocation data-pipeline-step data-pipeline-display>` 每步一块；`hidden` 是**块级**标志——final 步隐藏只藏它的块，卡本体仍在
-- 消息级 `reply_pipeline_display` 由 `#pipelineCardDisplay` 推导：仅当**全部步 hidden 且无芯片**时整行 `replyPipelineHidden`（消息留在 chat，回放不受影响——卡片 HTML 不进 prompt）
-- 数组参数不再按步内联——管线步的数组参数提升到卡尾 `[data-respond-options]` 芯片行（`data-invocation-card` 包裹 details + footer），折叠态下也可点（document 级委托点击填输入框）
-- **正则通道**：卡的 `mes` 在写入/合并更新时过 `getRegexedString(mes, AI_OUTPUT)`——与正文同通道；可用 `data-pipeline-step="review"` 等锚点重写/隐藏/重排卡内块。写入时应用，不追溯旧卡
-- **卡片内层挂钩全部走 `data-*` 属性**（`data-tool-invocation`、`data-respond-option`、`data-pipeline-step` 等）：`MESSAGE_SANITIZE` 会把 `mes` 内 class 重写为 `custom-*`，class 选择器在卡内永不命中
+- **一回合一条消息**：run 期间各轮按 `extra.reply_pipeline_run` 归并进同一张进度卡（实时更新）；`final` 时该卡**折叠进正文消息**——卡消息从 chat 摘除，`mes` = `正文 + <section data-pipeline-card>…</section>` 尾部块，`extra.tool_invocations` 挂到 assistant 消息上
+- 卡内 markup：`<details data-tool-invocations data-pipeline-run>` + 每步一块 `[data-tool-invocation][data-pipeline-step][data-pipeline-display]`；`hidden` 是**块级**标志——final 步隐藏只藏它的块；数组参数提升到卡内 `[data-respond-options]` 芯片行
+- **prompt 侧**：组装时截掉 `mes` 尾部的 `<section data-pipeline-card` 起的内容（openai.js，确定性剥离）；回放 = assistant `tool_calls` + `role:tool` 结果 + **正文 assistant 消息**（顺序与真实时间线一致）。用户 `promptOnly` 正则先于内置剥离执行——可把 markup 改写成文本摘要再发给模型
+- **展示侧**：markup 存在 `mes` 里随消息渲染；写入/合并时过 `getRegexedString(mes, AI_OUTPUT)`，`data-*` 锚点供正则重写/隐藏/重排（`MESSAGE_SANITIZE` 重写 class → `custom-*`，所以钩子全是 `data-*`）
+- 兜底轮（final 不可用）走普通消息尾部：进度卡保留为错误证据 + 收口回复是独立消息
 - `[data-tool-invocation-text]` max-height 6em 滚动
-- final 步块默认 hidden（正文已是 assistant 消息，不重复显示）；**兜底触发时揭开为 `summary`**——失败证据不被吞
 
 ## 代码落点
 
@@ -86,14 +84,15 @@ round i: 请求组装后 (CHAT_COMPLETION_SETTINGS_READY) 注入:
 |---|---|
 | `public/scripts/reply-pipeline-core.js` | 纯逻辑：归一化、步解析、步提示、final 文本抽取 |
 | `public/scripts/reply-pipeline.js` | 运行态：run 状态机、`preparePipelineRound`、请求整形、事件挂钩 |
-| `public/scripts/generation-service.js` | 两个工具分支插 `preparePipelineRound` + `finalizePipelineReply`；`GENERATION_STARTED` 补发 `depth` |
-| `public/scripts/tool-calling.js` | 合并卡格式化（`data-pipeline-run`/`data-pipeline-step` 挂钩）+ runId 归并保存 + AI_OUTPUT regex 通道 |
-| `chat-message-render-descriptor.js` / `main-chat-store-projection.js` / `message-service.js` | `replyPipelineHidden` 类通道 |
+| `public/scripts/generation-service.js` | 两个工具分支插 `preparePipelineRound` + `finalizePipelineReply`（摘卡、折叠进正文）；`GENERATION_STARTED` 补发 `depth` |
+| `public/scripts/tool-calling.js` | 进度卡格式化（`data-pipeline-run`/`data-pipeline-step`/`data-pipeline-card` 挂钩）+ runId 归并保存 + AI_OUTPUT regex 通道 |
+| `public/scripts/openai.js` | 回放：assistant `tool_calls` + `role:tool` + 正文消息；剥掉 `mes` 尾部 `data-pipeline-card` 段 |
+| `chat-message-render-descriptor.js` / `main-chat-store-projection.js` / `message-service.js` | `replyPipelineHidden` 类通道（残留进度卡/兜底卡用） |
 
 ## 验证（已落地）
 
 - 单测 `reply-pipeline-core`：归一化（含 final 截断/缺省回落/步数钳制）、步提示、result_field 抽取（含 JSON 标量解包）、findStepCompletion 前向推进
-- e2e：`reply_pipeline` 跨重载持久（不再重注入——持久化是承重断言）；3 轮步提示 + final-direct 无第 4 请求；**合并卡**断言（一条卡消息、`tool_invocations`×3、`data-pipeline-step` 三块、final 块级 hidden、卡尾芯片点击、AI_OUTPUT regex 生效）；后续生成零残留；兜底路径（ok-object → 无 tools/无编号步提示/失败卡揭开为 summary）
+- e2e：`reply_pipeline` 跨重载持久（不再重注入——持久化是承重断言）；3 轮步提示 + final-direct 无第 4 请求；**融合卡**断言（一条 assistant 消息、`mes` 含 `data-pipeline-card` 尾块、`tool_invocations`×3、`data-pipeline-step` 三块、final 块级 hidden、卡内芯片点击、AI_OUTPUT regex 生效、无遗留 runId 卡）；**回放剥离**断言（下一轮请求里该消息回放为 tool_calls+tool 结果+正文且正文不含卡 markup）；后续生成零残留；兜底路径（ok-object → 无 tools/无编号步提示/失败卡留作独立证据消息）
 - `test:compat`；`pnpm run lint`；docs:check
 
 ## 已知边界

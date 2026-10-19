@@ -987,11 +987,40 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
             displayIncompleteSentences: false,
             stoppingStrings: [],
         });
-        const saved = await saveReply({ type, getMessage: cleaned, reasoning, reasoningSignature, title, imageUrls });
+
+        // Fold the run's progress card into the reply: its invocations move onto
+        // the assistant message and its (already regex-styled) markup is appended
+        // to `mes`, so one turn renders as ONE message. Prompt assembly strips
+        // the trailing <section data-pipeline-card> before sending.
+        const runId = meta?.runId ?? null;
+        let cardMarkup = '';
+        let mergedInvocations = null;
+        if (runId) {
+            const cardIndex = state.chat.findLastIndex(message => Array.isArray(message?.extra?.tool_invocations)
+                && message.extra?.reply_pipeline_run === runId);
+            if (cardIndex >= 0) {
+                const cardMessage = state.chat[cardIndex];
+                cardMarkup = cardMessage.mes ?? '';
+                mergedInvocations = cardMessage.extra.tool_invocations;
+                state.chat.splice(cardIndex, 1);
+                if (isReactMainChatOwner()) {
+                    void mountReactMainChatMessageListPanel();
+                } else {
+                    state.chatElement.find(`.mes[mesid="${cardIndex}"]`).remove();
+                }
+                await eventSource.emit(event_types.MESSAGE_DELETED, state.chat.length);
+            }
+        }
+
+        const finalText = cardMarkup ? `${cleaned}\n${cardMarkup}` : cleaned;
+        const saved = await saveReply({ type, getMessage: finalText, reasoning, reasoningSignature, title, imageUrls });
         const savedMessage = state.chat[state.chat.length - 1];
         if (savedMessage?.extra) {
-            savedMessage.extra.reply_pipeline_run = meta?.runId ?? null;
+            savedMessage.extra.reply_pipeline_run = runId;
             savedMessage.extra.reply_pipeline_step = step?.id ?? null;
+            if (mergedInvocations) {
+                savedMessage.extra.tool_invocations = mergedInvocations;
+            }
         }
         endPipelineRun();
         await saveChatConditional();

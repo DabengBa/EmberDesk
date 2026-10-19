@@ -961,19 +961,41 @@ export class ToolManager {
         detailsElement.append(summaryElement, preElement);
         root.append(detailsElement);
 
+        if (runId) {
+            // Pipeline markup gets a single root so it can be embedded into the
+            // final reply message and stripped from prompt sends by truncating
+            // on this marker (the card always sits at the end of `mes`).
+            const section = document.createElement('section');
+            section.setAttribute('data-pipeline-card', '');
+            section.append(root);
+            if (optionChips.length) {
+                section.append(this.#renderOptionChipRow(optionChips));
+            }
+            return section.outerHTML;
+        }
+
         if (!optionChips.length) {
             return root.outerHTML;
         }
         const wrapper = document.createElement('div');
         wrapper.setAttribute('data-invocation-card', '');
         wrapper.append(root);
+        wrapper.append(this.#renderOptionChipRow(optionChips));
+        return wrapper.outerHTML;
+    }
+
+    /**
+     * Renders the option-chip row element.
+     * @param {Array} items Option values
+     * @returns {HTMLElement} Chip row element
+     */
+    static #renderOptionChipRow(items) {
         const chipRow = document.createElement('div');
         chipRow.setAttribute('data-respond-options', '');
-        for (const item of optionChips) {
+        for (const item of items) {
             chipRow.append(this.#renderOptionChip(item));
         }
-        wrapper.append(chipRow);
-        return wrapper.outerHTML;
+        return chipRow;
     }
 
     /**
