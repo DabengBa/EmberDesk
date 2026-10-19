@@ -9,6 +9,7 @@ import {
 import { getWorldInfoPrompt } from './world-info-service.js';
 import { requireGenerationShellContext } from './generation-shell-context.js';
 import { getComposerValue, clearComposerValue } from './main-chat-composer-service.js';
+import { endPipelineRun, preparePipelineRound } from './reply-pipeline.js';
 import { t } from './i18n.js';
 
 function shell() {
@@ -411,7 +412,7 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
     await unshallowCharacter(state.this_chid);
 
     // Occurs every time, even if the generation is aborted due to slash commands execution
-    await eventSource.emit(event_types.GENERATION_STARTED, type, { automatic_trigger, force_name2, quiet_prompt, quietToLoud, skipWIAN, signal, quietImage }, dryRun);
+    await eventSource.emit(event_types.GENERATION_STARTED, type, { automatic_trigger, force_name2, quiet_prompt, quietToLoud, skipWIAN, signal, quietImage, depth }, dryRun);
 
     // Don't recreate abort controller if signal is passed
     if (!(state.abortController && signal)) {
@@ -972,6 +973,36 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
      */
     let activeRecoveryMessageId = null;
 
+    /**
+     * Final-direct path: the completed pipeline step's result IS the reply.
+     * Writes the assistant message, mirrors the normal generation tail, and
+     * returns the same String shape the API chain expects.
+     */
+    async function finalizePipelineReply({ type, text, step, meta, reasoning = '', fromStream = false }) {
+        // Tool results are already authored content: skip stopping-string
+        // trimming (it silently truncates) but keep the AI_OUTPUT regex pass.
+        const cleaned = cleanUpMessage({
+            getMessage: text,
+            displayIncompleteSentences: false,
+            stoppingStrings: [],
+        });
+        const saved = await saveReply({ type, getMessage: cleaned, reasoning });
+        const savedMessage = state.chat[state.chat.length - 1];
+        if (savedMessage?.extra) {
+            savedMessage.extra.reply_pipeline_run = meta?.runId ?? null;
+            savedMessage.extra.reply_pipeline_step = step?.id ?? null;
+        }
+        endPipelineRun();
+        await saveChatConditional();
+        unblockGeneration(type);
+        state.streamingProcessor = null;
+        scheduleMainChatMessageListPanelRefresh();
+        return Object.defineProperties(new String(saved.getMessage), {
+            'messageChunk': { value: cleaned },
+            ...(fromStream ? { 'fromStream': { value: true } } : {}),
+        });
+    }
+
     async function finishGenerating() {
         console.debug('rungenerate calling API');
 
@@ -1072,9 +1103,21 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
                             return;
                         }
 
+                        const pipelineReasoning = state.streamingProcessor.reasoningHandler.reasoning;
+                        const pipelineDecision = preparePipelineRound(invocationResult.invocations);
                         state.streamingProcessor = null;
-                        depth = depth + 1;
                         await state.ToolManager.saveFunctionToolInvocations(invocationResult.invocations);
+                        if (pipelineDecision?.action === 'final') {
+                            return await finalizePipelineReply({
+                                type,
+                                text: pipelineDecision.text,
+                                step: pipelineDecision.step,
+                                meta: pipelineDecision.meta,
+                                reasoning: pipelineReasoning,
+                                fromStream: true,
+                            });
+                        }
+                        depth = depth + 1;
                         return Generate('normal', { automatic_trigger, force_name2, quiet_prompt, quietToLoud, skipWIAN, signal, quietImage, quietName, depth }, dryRun);
                     }
                 }
@@ -1273,8 +1316,18 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
                     return;
                 }
 
-                depth = depth + 1;
+                const pipelineDecision = preparePipelineRound(invocationResult.invocations);
                 await state.ToolManager.saveFunctionToolInvocations(invocationResult.invocations);
+                if (pipelineDecision?.action === 'final') {
+                    return await finalizePipelineReply({
+                        type,
+                        text: pipelineDecision.text,
+                        step: pipelineDecision.step,
+                        meta: pipelineDecision.meta,
+                        reasoning,
+                    });
+                }
+                depth = depth + 1;
                 return Generate('normal', { automatic_trigger, force_name2, quiet_prompt, quietToLoud, skipWIAN, signal, quietImage, quietName, depth }, dryRun);
             }
         }

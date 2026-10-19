@@ -816,7 +816,9 @@ export class ToolManager {
             container.classList.add('tool-invocation-list');
             for (const item of value) {
                 const line = document.createElement('div');
-                line.classList.add('tool-invocation-item');
+                line.classList.add('tool-invocation-item', 'respond-option');
+                line.setAttribute('role', 'button');
+                line.setAttribute('tabindex', '0');
                 line.textContent = `▸ ${typeof item === 'string' ? item : JSON.stringify(item)}`;
                 container.append(line);
             }
@@ -839,8 +841,15 @@ export class ToolManager {
             i.result = tryParse(i.result);
         });
 
-        const root = document.createElement('div');
+        const root = document.createElement('details');
         root.classList.add('tool-invocations');
+        if (data.some(invocation => invocation?.pipeline?.display === 'full')) {
+            root.setAttribute('open', '');
+        }
+        const outerSummary = document.createElement('summary');
+        const toolNames = data.map(i => i.displayName || i.name);
+        outerSummary.textContent = `Tool calls: ${this.#groupToolNames(toolNames)}`;
+        root.append(outerSummary);
 
         for (const invocation of data) {
             const item = document.createElement('section');
@@ -885,8 +894,7 @@ export class ToolManager {
         const codeElement = document.createElement('code');
         codeElement.classList.add('language-json');
         codeElement.textContent = JSON.stringify(data, null, 2);
-        const toolNames = data.map(i => i.displayName || i.name);
-        summaryElement.textContent = `Tool calls: ${this.#groupToolNames(toolNames)}`;
+        summaryElement.textContent = 'Raw';
         preElement.append(codeElement);
         detailsElement.append(summaryElement, preElement);
         root.append(detailsElement);
@@ -901,6 +909,7 @@ export class ToolManager {
         if (!Array.isArray(invocations) || invocations.length === 0) {
             return;
         }
+        const pipelineMeta = invocations.find(invocation => invocation?.pipeline)?.pipeline ?? null;
         const message = {
             name: systemUserName,
             force_avatar: system_avatar,
@@ -912,6 +921,11 @@ export class ToolManager {
                 tool_invocations: invocations,
                 api: getGeneratingApi(),
                 model: getGeneratingModel(),
+                ...(pipelineMeta ? {
+                    reply_pipeline_run: pipelineMeta.runId ?? null,
+                    reply_pipeline_step: pipelineMeta.stepId ?? null,
+                    reply_pipeline_display: pipelineMeta.display ?? null,
+                } : {}),
             },
         };
         chat.push(message);

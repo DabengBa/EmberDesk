@@ -153,13 +153,31 @@ describe('chat message render descriptor', () => {
         expect(descriptor.classes).toEqual({
             smallSysMes: true,
             toolCall: true,
+            replyPipelineHidden: false,
         });
         expect(descriptor.flags).toEqual(expect.objectContaining({
             hasDisplayText: true,
             hasBias: true,
+            isPipelineHidden: false,
         }));
         expect(JSON.stringify(descriptor)).not.toContain('loading');
         expect(JSON.stringify(descriptor)).not.toContain('retry');
+    });
+
+    test('hides reply-pipeline step cards flagged as hidden', async () => {
+        const { buildChatMessageRenderDescriptor } = await importFreshDescriptorModule();
+
+        const descriptor = buildChatMessageRenderDescriptor(createMessage({
+            extra: {
+                isSmallSys: true,
+                tool_invocations: [{ id: 'tool-1' }],
+                reply_pipeline_run: 'pipeline-1',
+                reply_pipeline_display: 'hidden',
+            },
+        }), { messageId: 7 });
+
+        expect(descriptor.classes.replyPipelineHidden).toBe(true);
+        expect(descriptor.flags.isPipelineHidden).toBe(true);
     });
 
     test('builds deterministic row population decisions without message body HTML', async () => {

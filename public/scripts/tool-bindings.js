@@ -13,6 +13,7 @@ import { saveSettingsDebounced } from '../script.js';
 import { eventSource, event_types } from './events.js';
 import { feature_settings } from './feature-settings.js';
 import { loadWorkspacePanelsModule } from './workspace-panels-react-bridge.js';
+import { setComposerValue } from './main-chat-composer-service.js';
 import { callGenericPopup, Popup, POPUP_RESULT, POPUP_TYPE } from './popup.js';
 import { t } from './i18n.js';
 import { ToolManager } from './tool-calling.js';
@@ -261,6 +262,12 @@ export async function init() {
     });
 
     $(document).on('click', '#open_tool_binding_editor', () => openToolBindingEditor(null));
+    $(document).on('click', '.respond-option', function () {
+        const text = String($(this).text() ?? '').replace(/^▸\s*/, '').trim();
+        if (text) {
+            setComposerValue(text);
+        }
+    });
     $(document).on('input', '#tool_choice_required', async function () {
         feature_settings.tool_choice_required = Boolean($(this).prop('checked'));
         saveSettingsDebounced();

@@ -6131,6 +6131,16 @@ body:has(#character_popup.open) #top-settings-holder:has(.drawer-content.openDra
     text-align: left;
 }
 
+.tool-invocations > summary {
+    cursor: pointer;
+    opacity: 0.8;
+    font-size: 0.9em;
+}
+
+.replyPipelineHidden {
+    display: none !important;
+}
+
 .tool-invocation {
     border: 1px solid var(--SmartThemeBorderColor);
     border-radius: 8px;
@@ -6153,6 +6163,8 @@ body:has(#character_popup.open) #top-settings-holder:has(.drawer-content.openDra
 
 .tool-invocation-text {
     white-space: pre-wrap;
+    max-height: 6em;
+    overflow-y: auto;
 }
 
 .tool-invocation-item {

@@ -845,6 +845,10 @@ export function updateMessageElement(mes, { messageId = state.chat.length - 1, m
         messageElement.addClass('toolCall');
     }
 
+    if (rowPopulation.classes.replyPipelineHidden) {
+        messageElement.addClass('replyPipelineHidden');
+    }
+
     messageElement.find('.avatar img').on('error', function () {
         $(this).hide();
         $(this).parent().html('<div class="missing-avatar fa-solid fa-user-slash"></div>');

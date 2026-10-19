@@ -90,6 +90,69 @@ async function installGenerateStub(page) {
     });
 }
 
+/**
+ * Stubs the generate endpoint for reply-pipeline turns: each round answers with
+ * the next not-yet-called pipeline step as a tool call; requests without a step
+ * prompt (or with every step already called) get a plain-text reply.
+ */
+async function installPipelineStub(page, { steps, closingText = 'PIPELINE_FINAL_REPLY' }) {
+    await page.evaluate(({ steps, closingText }) => {
+        window.__emberdeskToolRequests = [];
+        window.__emberdeskToolGenerationError = null;
+        window.__emberdeskOriginalFetch ??= window.fetch.bind(window);
+
+        const toolCallPayload = (name, args) => ({
+            choices: [{
+                index: 0,
+                message: {
+                    role: 'assistant',
+                    content: null,
+                    tool_calls: [{
+                        id: `call_e2e_${name}`,
+                        type: 'function',
+                        function: { name, arguments: JSON.stringify(args) },
+                    }],
+                },
+                finish_reason: 'tool_calls',
+            }],
+        });
+
+        window.fetch = async (input, init = {}) => {
+            const url = typeof input === 'string' ? input : input.url;
+            if (!String(url).endsWith('/api/backends/chat-completions/generate')) {
+                return window.__emberdeskOriginalFetch(input, init);
+            }
+
+            const body = JSON.parse(String(init.body ?? '{}'));
+            window.__emberdeskToolRequests.push(body);
+            const messages = Array.isArray(body.messages) ? body.messages : [];
+            const hasStepPrompt = messages.some(message => String(message?.content ?? '').includes('[Reply pipeline'));
+            const calledNames = messages
+                .filter(message => Array.isArray(message.tool_calls))
+                .flatMap(message => message.tool_calls.map(toolCall => toolCall?.function?.name));
+            const nextStep = steps.find(step => !calledNames.includes(step));
+
+            let payload;
+            if (!hasStepPrompt || !nextStep) {
+                payload = {
+                    choices: [{
+                        index: 0,
+                        message: { role: 'assistant', content: closingText },
+                        finish_reason: 'stop',
+                    }],
+                };
+            } else {
+                payload = toolCallPayload(nextStep, { content: `${nextStep.toUpperCase()}_TEXT` });
+            }
+
+            return new Response(JSON.stringify(payload), {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' },
+            });
+        };
+    }, { steps, closingText });
+}
+
 // All tests share the seeded user's settings document, so they must not run
 // concurrently — tool_bindings mutations would race each other.
 test.describe.configure({ mode: 'serial' });
@@ -249,5 +312,208 @@ test.describe('tool bindings', () => {
         const callRequest = requests.find(request => request.messages?.some(message => String(message?.content ?? '').includes('no tools expected')));
         expect(callRequest).toBeTruthy();
         expect(callRequest.tools ?? []).toEqual([]);
+    });
+
+    test('reply pipeline drives analyze → review → respond, hides the final card, and stops at the final step', async ({ page }) => {
+        await testSetup.awaitST({ page });
+
+        const pipelineBindings = ['analyze', 'review', 'respond'].map(name => ({
+            id: `tb_e2e_pipeline_${name}`,
+            enabled: true,
+            name,
+            displayName: name,
+            description: `${name} step`,
+            parameters: {
+                type: 'object',
+                properties: { content: { type: 'string' } },
+                required: ['content'],
+            },
+            actionBody: name === 'respond'
+                ? 'return String(args?.content ?? "");'
+                : 'return JSON.stringify({ ok: true });',
+            formatMessageBody: '',
+            stealth: false,
+        }));
+
+        await page.evaluate(async (bindings) => {
+            const script = await import('/script.js');
+            const context = window.SillyTavern.getContext();
+            context.featureSettings.tool_bindings = bindings;
+            context.chatCompletionSettings.reply_pipeline = {
+                enabled: true,
+                steps: [
+                    { tool: 'analyze', prompt: 'PLAN_FIRST' },
+                    { tool: 'review', prompt: 'RATE_PLAN' },
+                    { tool: 'respond', prompt: 'WRITE_REPLY' },
+                ],
+                final: 'respond',
+            };
+            await script.saveSettings();
+        }, pipelineBindings);
+        await page.reload();
+        await testSetup.awaitST({ page });
+        await expect(page.locator('html')).toHaveAttribute('data-reply-pipeline-init', 'true', { timeout: 30_000 });
+
+        await installPipelineStub(page, { steps: ['analyze', 'review', 'respond'] });
+        await prepareOpenAiProvider(page);
+        await page.evaluate(() => {
+            window.SillyTavern.getContext().chatCompletionSettings.reply_pipeline = {
+                enabled: true,
+                steps: [
+                    { tool: 'analyze', prompt: 'PLAN_FIRST' },
+                    { tool: 'review', prompt: 'RATE_PLAN' },
+                    { tool: 'respond', prompt: 'WRITE_REPLY' },
+                ],
+                final: 'respond',
+            };
+        });
+
+        await page.evaluate(() => {
+            const textarea = document.querySelector('#send_textarea');
+            textarea.value = 'reply pipeline e2e message';
+            textarea.dispatchEvent(new Event('input', { bubbles: true }));
+            window.__emberdeskToolGeneration = window.SillyTavern.getContext()
+                .generate('normal', { automatic_trigger: false })
+                .catch(error => {
+                    window.__emberdeskToolGenerationError = String(error?.message ?? error);
+                });
+        });
+
+        await expect.poll(() => page.evaluate(() =>
+            window.__emberdeskToolRequests?.some(request => request.messages?.some(message => message?.role === 'tool')) ?? false,
+        ), { timeout: 30_000 }).toBe(true);
+        await expect.poll(() => page.evaluate(() =>
+            window.SillyTavern.getContext().chat.some(message => message?.mes === 'RESPOND_TEXT'),
+        ), { timeout: 30_000 }).toBe(true);
+
+        const generationError = await page.evaluate(() => window.__emberdeskToolGenerationError);
+        expect(generationError).toBeNull();
+
+        const requests = await page.evaluate(() => window.__emberdeskToolRequests);
+        const turnRequests = requests.filter(request => request.messages?.some(message => String(message?.content ?? '').includes('reply pipeline e2e message')));
+
+        // Exactly three rounds: analyze → review → respond. No closing round.
+        expect(turnRequests).toHaveLength(3);
+        expect(turnRequests[0].messages.some(message => String(message?.content ?? '').includes('[Reply pipeline 1/3]') && String(message?.content ?? '').includes('analyze'))).toBe(true);
+        expect(turnRequests[1].messages.some(message => String(message?.content ?? '').includes('[Reply pipeline 2/3]') && String(message?.content ?? '').includes('review'))).toBe(true);
+        expect(turnRequests[2].messages.some(message => String(message?.content ?? '').includes('[Reply pipeline 3/3]') && String(message?.content ?? '').includes('respond'))).toBe(true);
+        expect(turnRequests[2].tools?.some(tool => tool?.function?.name === 'respond')).toBe(true);
+
+        const chatState = await page.evaluate(() => {
+            const chat = window.SillyTavern.getContext().chat;
+            return {
+                lastMes: chat[chat.length - 1]?.mes,
+                pipelineCards: chat
+                    .filter(message => typeof message?.extra?.reply_pipeline_run === 'string'
+                        && Array.isArray(message?.extra?.tool_invocations))
+                    .slice(-3)
+                    .map(message => ({
+                        step: message.extra.reply_pipeline_step,
+                        display: message.extra.reply_pipeline_display,
+                        run: message.extra.reply_pipeline_run,
+                    })),
+            };
+        });
+        expect(chatState.lastMes).toBe('RESPOND_TEXT');
+        expect(chatState.pipelineCards).toHaveLength(3);
+        expect(chatState.pipelineCards.map(card => card.display)).toEqual(['summary', 'summary', 'hidden']);
+        expect(chatState.pipelineCards.every(card => typeof card.run === 'string' && card.run.startsWith('pipeline-'))).toBe(true);
+
+        // The hidden final card is present in the DOM but visually suppressed.
+        await expect(page.locator('#chat .mes.replyPipelineHidden').last()).toHaveCount(1, { timeout: 15_000 });
+
+        // A later ordinary generation (pipeline disabled) must not carry stale
+        // step prompts from the finished run.
+        await page.evaluate(() => {
+            window.__emberdeskToolRequests = [];
+            window.SillyTavern.getContext().chatCompletionSettings.reply_pipeline.enabled = false;
+            const textarea = document.querySelector('#send_textarea');
+            textarea.value = 'plain follow-up message';
+            textarea.dispatchEvent(new Event('input', { bubbles: true }));
+            window.SillyTavern.getContext()
+                .generate('normal', { automatic_trigger: false })
+                .catch(() => { });
+        });
+        await expect.poll(() => page.evaluate(() => window.__emberdeskToolRequests?.length ?? 0), { timeout: 30_000 })
+            .toBeGreaterThanOrEqual(1);
+        const followUp = await page.evaluate(() => window.__emberdeskToolRequests.find(request =>
+            request.messages?.some(message => String(message?.content ?? '').includes('plain follow-up message'))));
+        expect(followUp).toBeTruthy();
+        expect(followUp.messages.some(message => String(message?.content ?? '').includes('[Reply pipeline'))).toBe(false);
+    });
+
+    test('reply pipeline falls back to a closing round without tools when the final result is unusable', async ({ page }) => {
+        await testSetup.awaitST({ page });
+
+        const pipelineBindings = ['analyze', 'respond'].map(name => ({
+            id: `tb_e2e_fallback_${name}`,
+            enabled: true,
+            name,
+            displayName: name,
+            description: `${name} step`,
+            parameters: {
+                type: 'object',
+                properties: { content: { type: 'string' } },
+                required: ['content'],
+            },
+            // respond returns an ok-object: unusable as a reply → fallback round.
+            actionBody: 'return JSON.stringify({ ok: true });',
+            formatMessageBody: '',
+            stealth: false,
+        }));
+
+        await page.evaluate(async (bindings) => {
+            const script = await import('/script.js');
+            const context = window.SillyTavern.getContext();
+            context.featureSettings.tool_bindings = bindings;
+            context.chatCompletionSettings.reply_pipeline = {
+                enabled: true,
+                steps: [
+                    { tool: 'analyze', prompt: 'PLAN_FIRST' },
+                    { tool: 'respond', prompt: 'WRITE_REPLY' },
+                ],
+                final: 'respond',
+            };
+            await script.saveSettings();
+        }, pipelineBindings);
+        await page.reload();
+        await testSetup.awaitST({ page });
+        await expect(page.locator('html')).toHaveAttribute('data-reply-pipeline-init', 'true', { timeout: 30_000 });
+
+        await installPipelineStub(page, { steps: ['analyze', 'respond'], closingText: 'FALLBACK_REPLY_TEXT' });
+        await prepareOpenAiProvider(page);
+        await page.evaluate(() => {
+            window.SillyTavern.getContext().chatCompletionSettings.reply_pipeline = {
+                enabled: true,
+                steps: [
+                    { tool: 'analyze', prompt: 'PLAN_FIRST' },
+                    { tool: 'respond', prompt: 'WRITE_REPLY' },
+                ],
+                final: 'respond',
+            };
+        });
+
+        await page.evaluate(() => {
+            const textarea = document.querySelector('#send_textarea');
+            textarea.value = 'reply pipeline e2e message';
+            textarea.dispatchEvent(new Event('input', { bubbles: true }));
+            window.__emberdeskToolGeneration = window.SillyTavern.getContext()
+                .generate('normal', { automatic_trigger: false })
+                .catch(error => {
+                    window.__emberdeskToolGenerationError = String(error?.message ?? error);
+                });
+        });
+
+        await expect.poll(() => page.evaluate(() =>
+            window.SillyTavern.getContext().chat.some(message => message?.mes === 'FALLBACK_REPLY_TEXT'),
+        ), { timeout: 30_000 }).toBe(true);
+
+        const requests = await page.evaluate(() => window.__emberdeskToolRequests);
+        const turnRequests = requests.filter(request => request.messages?.some(message => String(message?.content ?? '').includes('reply pipeline e2e message')));
+        expect(turnRequests).toHaveLength(3);
+        const fallbackRequest = turnRequests[2];
+        expect(fallbackRequest.tools).toBeUndefined();
+        expect(fallbackRequest.tool_choice).toBeUndefined();
+        expect(fallbackRequest.messages.some(message => String(message?.content ?? '').includes('Do not call any tools'))).toBe(true);
     });
 });

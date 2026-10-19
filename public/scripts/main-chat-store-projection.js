@@ -118,6 +118,7 @@ export function buildMainChatMessageRecord(message, {
             ...(descriptor.flags.hasReasoning || reasoningEditing ? ['reasoning'] : []),
             ...(message?.extra?.isSmallSys === true ? ['smallSysMes'] : []),
             ...(Array.isArray(message?.extra?.tool_invocations) ? ['toolCall'] : []),
+            ...(descriptor.flags.isPipelineHidden ? ['replyPipelineHidden'] : []),
         ],
         state: messageState,
         timer: normalizeString(timer.timerValue),

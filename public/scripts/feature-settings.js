@@ -299,4 +299,8 @@ export async function initCoreFeatures() {
         const { init } = await import('./tool-bindings.js');
         await init();
     });
+    await initCoreFeatureOnce('reply-pipeline', async () => {
+        const { initReplyPipeline } = await import('./reply-pipeline.js');
+        initReplyPipeline();
+    });
 }

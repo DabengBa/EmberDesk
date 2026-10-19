@@ -35,6 +35,7 @@ export function buildChatMessageRenderDescriptor(message, { messageId, timestamp
         isStopped: Boolean(extra.stopped ?? extra.aborted ?? message?.stopped ?? message?.aborted),
         isSmallSys: extra.isSmallSys === true,
         hasToolInvocations: Array.isArray(extra.tool_invocations),
+        isPipelineHidden: extra.reply_pipeline_display === 'hidden',
     };
 
     return {
@@ -57,6 +58,7 @@ export function buildChatMessageRenderDescriptor(message, { messageId, timestamp
         classes: {
             smallSysMes: flags.isSmallSys,
             toolCall: flags.hasToolInvocations,
+            replyPipelineHidden: flags.isPipelineHidden,
         },
         flags,
     };
