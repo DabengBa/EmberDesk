@@ -379,6 +379,23 @@ test.describe('tool bindings', () => {
                 settings.prompt_order.push(bucket);
             }
             bucket.order.push({ identifier: 'e2e_review_rubric', enabled: true });
+            // AI_OUTPUT regexes also run on the merged pipeline card's mes —
+            // this one rewrites the card summary label.
+            context.featureSettings.regex = [{
+                id: 'e2e_card_label',
+                scriptName: 'E2E pipeline card label',
+                findRegex: 'Tool calls:',
+                replaceString: 'E2E_TOOL_LABEL:',
+                trimStrings: [],
+                placement: [2],
+                disabled: false,
+                markdownOnly: false,
+                promptOnly: false,
+                runOnEdit: false,
+                substituteRegex: 0,
+                minDepth: null,
+                maxDepth: null,
+            }];
             await script.saveSettings();
         }, pipelineBindings);
         await page.reload();
@@ -440,38 +457,49 @@ test.describe('tool bindings', () => {
                 pipelineCards: chat
                     .filter(message => typeof message?.extra?.reply_pipeline_run === 'string'
                         && Array.isArray(message?.extra?.tool_invocations))
-                    .slice(-3)
+                    .slice(-1)
                     .map(message => ({
-                        step: message.extra.reply_pipeline_step,
                         display: message.extra.reply_pipeline_display,
                         run: message.extra.reply_pipeline_run,
+                        steps: message.extra.tool_invocations.map(invocation => ({
+                            step: invocation.pipeline?.stepId,
+                            display: invocation.pipeline?.display,
+                            run: invocation.pipeline?.runId,
+                        })),
                     })),
             };
         });
         expect(chatState.lastMes).toBe('RESPOND_TEXT');
-        expect(chatState.pipelineCards).toHaveLength(3);
-        expect(chatState.pipelineCards.map(card => card.display)).toEqual(['summary', 'summary', 'hidden']);
-        expect(chatState.pipelineCards.every(card => typeof card.run === 'string' && card.run.startsWith('pipeline-'))).toBe(true);
+        // One card per turn: all three rounds merged into a single message.
+        expect(chatState.pipelineCards).toHaveLength(1);
+        const [card] = chatState.pipelineCards;
+        expect(card.display).toBe('summary');
+        expect(card.run.startsWith('pipeline-')).toBe(true);
+        expect(card.steps.map(step => step.step)).toEqual(['step-1', 'step-2', 'step-3']);
+        expect(card.steps.map(step => step.display)).toEqual(['summary', 'summary', 'hidden']);
+        expect(card.steps.every(step => step.run === card.run)).toBe(true);
 
-        // The hidden final card is present in the DOM but visually suppressed.
-        await expect(page.locator('#chat .mes.replyPipelineHidden').last()).toHaveCount(1, { timeout: 15_000 });
+        // In the DOM the merged card is one details row whose per-step blocks
+        // carry data-pipeline-step/data-pipeline-display hooks.
+        const runCard = page.locator('#chat [data-pipeline-run]').last();
+        await expect(runCard).toHaveCount(1, { timeout: 15_000 });
+        await expect(runCard.locator('[data-tool-invocation]')).toHaveCount(3);
+        await expect(runCard.locator('[data-pipeline-step="analyze"]')).toHaveCount(1);
+        await expect(runCard.locator('[data-pipeline-step="review"]')).toHaveCount(1);
+        // The final step's block is hidden inside the still-visible card.
+        const respondBlock = runCard.locator('[data-pipeline-step="respond"]');
+        await expect(respondBlock).toHaveAttribute('data-pipeline-display', 'hidden');
+        await expect(respondBlock).toBeHidden();
 
-        // Card internals are rendered through sanitize-proof data-* hooks
-        // (MESSAGE_SANITIZE rewrites classes to custom-*, so class selectors
-        // would silently miss inside mes content).
-        await expect(page.locator('#chat [data-tool-invocations]')).toHaveCount(3);
-        await expect(page.locator('#chat [data-tool-invocation]')).toHaveCount(3);
-        const cardBorder = await page.evaluate(() => {
-            const card = document.querySelector('#chat [data-tool-invocation]');
-            return card ? getComputedStyle(card).borderTopWidth : null;
-        });
-        expect(Number.parseFloat(cardBorder)).toBeGreaterThan(0);
+        // The AI_OUTPUT regex rewrote the stored card markup at write time.
+        await expect(runCard.locator('summary').first()).toContainText('E2E_TOOL_LABEL');
 
-        // Option chips from the respond step's array param are in the hidden
-        // final card; a programmatic click still reaches the delegation and
-        // fills the composer.
-        await expect(page.locator('#chat [data-respond-option]')).toHaveCount(2);
-        await page.evaluate(() => document.querySelector('#chat [data-respond-option]').click());
+        // Option chips live in the card footer OUTSIDE the collapsed details —
+        // visible and clickable without expanding (sibling of data-pipeline-run
+        // inside the data-invocation-card wrapper).
+        const cardShell = page.locator('#chat [data-invocation-card]').last();
+        await expect(cardShell.locator('[data-respond-options] [data-respond-option]')).toHaveCount(2);
+        await page.evaluate(() => document.querySelector('#chat [data-invocation-card] [data-respond-option]').click());
         await expect(page.locator('#send_textarea')).toHaveValue('Take the tea');
 
         // A later ordinary generation (pipeline disabled) must not carry stale
@@ -563,13 +591,17 @@ test.describe('tool bindings', () => {
 
         // The failed final-step card stays visible as evidence — its hidden
         // display must be lifted when the pipeline falls back, so the error is
-        // not swallowed. Scoped to this run's last two pipeline cards.
-        const lastDisplays = await page.evaluate(() => window.SillyTavern.getContext().chat
+        // not swallowed. The merged card reports summary and keeps both step
+        // blocks visible.
+        const lastRunCard = await page.evaluate(() => window.SillyTavern.getContext().chat
             .filter(message => Array.isArray(message?.extra?.tool_invocations)
                 && typeof message?.extra?.reply_pipeline_run === 'string')
-            .slice(-2)
-            .map(message => message.extra.reply_pipeline_display));
-        expect(lastDisplays).toEqual(['summary', 'summary']);
+            .slice(-1)
+            .map(message => ({
+                display: message.extra.reply_pipeline_display,
+                stepDisplays: message.extra.tool_invocations.map(invocation => invocation.pipeline?.display),
+            })));
+        expect(lastRunCard).toEqual([{ display: 'summary', stepDisplays: ['summary', 'summary'] }]);
         await expect(page.locator('#chat .mes:has([data-tool-invocation])').last()).not.toHaveClass(/replyPipelineHidden/);
     });
 });

@@ -3,6 +3,8 @@ import { DOMPurify } from '../lib.js';
 import { addOneMessage, chat, getGeneratingApi, getGeneratingModel, main_api, saveChatConditional, system_avatar, systemUserName } from '../script.js';
 import { eventSource, event_types } from './events.js';
 import { feature_settings } from './feature-settings.js';
+import { getRegexedString, regex_placement } from './extensions/regex/engine.js';
+import { updateMessageBlock } from './message-service.js';
 import { chat_completion_sources, getChatCompletionModel, model_list, oai_settings } from './openai.js';
 import { Popup } from './popup.js';
 import { SlashCommand } from './slash-commands/SlashCommand.js';
@@ -816,15 +818,7 @@ export class ToolManager {
         if (Array.isArray(value)) {
             container.classList.add('tool-invocation-list');
             for (const item of value) {
-                const line = document.createElement('div');
-                line.classList.add('tool-invocation-item', 'respond-option');
-                // data-* hooks survive the MESSAGE_SANITIZE class rewrite
-                // (custom-*) — CSS and the click delegation target these.
-                line.setAttribute('data-respond-option', '');
-                line.setAttribute('role', 'button');
-                line.setAttribute('tabindex', '0');
-                line.textContent = `▸ ${typeof item === 'string' ? item : JSON.stringify(item)}`;
-                container.append(line);
+                container.append(this.#renderOptionChip(item));
             }
             return container;
         }
@@ -835,7 +829,49 @@ export class ToolManager {
     }
 
     /**
+     * Renders one option-chip element. data-* hooks survive the
+     * MESSAGE_SANITIZE class rewrite (custom-*) — CSS and the click
+     * delegation target these.
+     * @param {*} item Option value
+     * @returns {HTMLElement} Chip element
+     */
+    static #renderOptionChip(item) {
+        const line = document.createElement('div');
+        line.classList.add('tool-invocation-item', 'respond-option');
+        line.setAttribute('data-respond-option', '');
+        line.setAttribute('role', 'button');
+        line.setAttribute('tabindex', '0');
+        line.textContent = `▸ ${typeof item === 'string' ? item : JSON.stringify(item)}`;
+        return line;
+    }
+
+    /**
+     * Run-level card display: the row hides only when every step is hidden
+     * AND no option chips would render outside the fold.
+     * @param {ToolInvocation[]} invocations Merged run invocations
+     * @returns {'hidden'|'summary'}
+     */
+    static #pipelineCardDisplay(invocations) {
+        const allStepsHidden = invocations
+            .filter(invocation => invocation?.pipeline)
+            .every(invocation => invocation.pipeline.display === 'hidden');
+        const hasChips = invocations.some(invocation => {
+            const params = typeof invocation?.parameters === 'string' ? tryParse(invocation.parameters) : invocation?.parameters;
+            return params && typeof params === 'object' && Object.values(params).some(Array.isArray);
+        });
+        return allStepsHidden && !hasChips ? 'hidden' : 'summary';
+    }
+
+    /**
      * Formats a message with tool invocations.
+     *
+     * Pipeline runs render as ONE card: `<details data-pipeline-run>` carries
+     * a summary line and one `<section data-pipeline-step>` block per round,
+     * with `data-pipeline-display` marking each step's visibility. Array
+     * params of pipeline steps lift to a footer chip row outside the fold so
+     * options stay clickable while collapsed. All `data-*` attributes are
+     * regex/sanitizer-stable anchors.
+     *
      * @param {ToolInvocation[]} invocations Tool invocations.
      * @returns {string} Formatted message with tool invocations.
      */
@@ -846,9 +882,14 @@ export class ToolManager {
             i.result = tryParse(i.result);
         });
 
+        const runId = data.find(invocation => invocation?.pipeline?.runId)?.pipeline?.runId ?? null;
+
         const root = document.createElement('details');
         root.classList.add('tool-invocations');
         root.setAttribute('data-tool-invocations', '');
+        if (runId) {
+            root.setAttribute('data-pipeline-run', runId);
+        }
         if (data.some(invocation => invocation?.pipeline?.display === 'full')) {
             root.setAttribute('open', '');
         }
@@ -857,10 +898,15 @@ export class ToolManager {
         outerSummary.textContent = `Tool calls: ${this.#groupToolNames(toolNames)}`;
         root.append(outerSummary);
 
+        const optionChips = [];
         for (const invocation of data) {
             const item = document.createElement('section');
             item.classList.add('tool-invocation');
             item.setAttribute('data-tool-invocation', '');
+            if (invocation.pipeline) {
+                item.setAttribute('data-pipeline-step', invocation.name);
+                item.setAttribute('data-pipeline-display', invocation.pipeline.display ?? 'summary');
+            }
             if (invocation.error) {
                 item.classList.add('tool-invocation-error');
                 item.setAttribute('data-tool-invocation-error', '');
@@ -875,6 +921,10 @@ export class ToolManager {
             if (params && typeof params === 'object' && !Array.isArray(params)) {
                 const entries = Object.entries(params);
                 for (const [key, value] of entries) {
+                    if (invocation.pipeline && Array.isArray(value)) {
+                        optionChips.push(...value);
+                        continue;
+                    }
                     if (entries.length > 1) {
                         const label = document.createElement('div');
                         label.classList.add('tool-invocation-key');
@@ -910,24 +960,61 @@ export class ToolManager {
         preElement.append(codeElement);
         detailsElement.append(summaryElement, preElement);
         root.append(detailsElement);
-        return root.outerHTML;
+
+        if (!optionChips.length) {
+            return root.outerHTML;
+        }
+        const wrapper = document.createElement('div');
+        wrapper.setAttribute('data-invocation-card', '');
+        wrapper.append(root);
+        const chipRow = document.createElement('div');
+        chipRow.setAttribute('data-respond-options', '');
+        for (const item of optionChips) {
+            chipRow.append(this.#renderOptionChip(item));
+        }
+        wrapper.append(chipRow);
+        return wrapper.outerHTML;
     }
 
     /**
-     * Saves function tool invocations to the last user chat message extra metadata.
+     * Saves function tool invocations as one card message per turn.
+     * Pipeline rounds merge into the card created by their first round
+     * (matched by `reply_pipeline_run`) instead of adding a message each —
+     * one user turn = one card. The card `mes` passes through AI_OUTPUT
+     * regexes at write time, so users can restyle/restructure it like a reply.
      * @param {ToolInvocation[]} invocations Successful tool invocations
      */
     static async saveFunctionToolInvocations(invocations) {
         if (!Array.isArray(invocations) || invocations.length === 0) {
             return;
         }
+        const runId = invocations.find(invocation => invocation?.pipeline?.runId)?.pipeline?.runId ?? null;
+        await eventSource.emit(event_types.TOOL_CALLS_PERFORMED, invocations);
+
+        if (runId) {
+            const index = chat.findLastIndex(message => Array.isArray(message?.extra?.tool_invocations)
+                && message.extra.reply_pipeline_run === runId);
+            if (index >= 0) {
+                const message = chat[index];
+                message.extra.tool_invocations.push(...invocations);
+                const merged = message.extra.tool_invocations;
+                message.extra.reply_pipeline_step = merged.at(-1)?.pipeline?.stepId ?? message.extra.reply_pipeline_step;
+                message.extra.reply_pipeline_display = ToolManager.#pipelineCardDisplay(merged);
+                message.mes = getRegexedString(ToolManager.#formatToolInvocationMessage(merged), regex_placement.AI_OUTPUT);
+                updateMessageBlock(index, message);
+                await eventSource.emit(event_types.TOOL_CALLS_RENDERED, invocations);
+                await saveChatConditional();
+                return;
+            }
+        }
+
         const pipelineMeta = invocations.find(invocation => invocation?.pipeline)?.pipeline ?? null;
         const message = {
             name: systemUserName,
             force_avatar: system_avatar,
             is_system: true,
             is_user: false,
-            mes: ToolManager.#formatToolInvocationMessage(invocations),
+            mes: getRegexedString(ToolManager.#formatToolInvocationMessage(invocations), regex_placement.AI_OUTPUT),
             extra: {
                 isSmallSys: true,
                 tool_invocations: invocations,
@@ -936,12 +1023,11 @@ export class ToolManager {
                 ...(pipelineMeta ? {
                     reply_pipeline_run: pipelineMeta.runId ?? null,
                     reply_pipeline_step: pipelineMeta.stepId ?? null,
-                    reply_pipeline_display: pipelineMeta.display ?? null,
+                    reply_pipeline_display: ToolManager.#pipelineCardDisplay(invocations),
                 } : {}),
             },
         };
         chat.push(message);
-        await eventSource.emit(event_types.TOOL_CALLS_PERFORMED, invocations);
         addOneMessage(message);
         await eventSource.emit(event_types.TOOL_CALLS_RENDERED, invocations);
         await saveChatConditional();

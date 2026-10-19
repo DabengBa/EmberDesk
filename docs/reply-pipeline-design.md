@@ -71,12 +71,14 @@ round i: 请求组装后 (CHAT_COMPLETION_SETTINGS_READY) 注入:
 
 ## 卡片与显示
 
-- 每步一轮 → 每步一张 invocation 卡（`saveFunctionToolInvocations` 打 `reply_pipeline_run/step/display`；每个 invocation 按**各自所属步**打标记，批量/乱序调用也正确归属）
-- 卡片根为 `<details>` + 一行 summary；`display: full` 展开，`hidden` 由 `replyPipelineHidden` 类 `display:none`（消息留在 chat，回放不受影响——卡片 HTML 不进 prompt）
-- **卡片内层挂钩全部走 `data-*` 属性**（`data-tool-invocation`、`data-respond-option` 等）：`MESSAGE_SANITIZE` 会把 `mes` 内 class 重写为 `custom-*`，class 选择器在卡内永不命中
-- `[data-tool-invocation-text]` max-height 6em 滚动；数组参数渲染为 `[data-respond-option]` 芯片（document 级委托点击填输入框，键盘可达）
-- final 步卡片默认 hidden（正文已是 assistant 消息，不重复显示）；**兜底触发时揭开为 `summary`**——失败证据不被吞
-- 芯片注意：final 卡默认隐藏意味着其中的选项芯片也不可见——面向用户的选项应来自 respond 正文里的标记（经 AI_OUTPUT regex 呈现），卡片芯片是过程产物的便利入口
+- **一回合一张卡**：首轮创建卡消息（`extra.reply_pipeline_run`），后续轮按 runId 找回同一卡、追加 `extra.tool_invocations`、重建 `mes` 并原地重渲染（`updateMessageBlock` + `saveChatConditional`）——结构化回放不变：每个 invocation 仍回放为 assistant `tool_calls` + `role:tool`
+- 卡内 markup：`<details data-tool-invocations data-pipeline-run>` + `<section data-tool-invocation data-pipeline-step data-pipeline-display>` 每步一块；`hidden` 是**块级**标志——final 步隐藏只藏它的块，卡本体仍在
+- 消息级 `reply_pipeline_display` 由 `#pipelineCardDisplay` 推导：仅当**全部步 hidden 且无芯片**时整行 `replyPipelineHidden`（消息留在 chat，回放不受影响——卡片 HTML 不进 prompt）
+- 数组参数不再按步内联——管线步的数组参数提升到卡尾 `[data-respond-options]` 芯片行（`data-invocation-card` 包裹 details + footer），折叠态下也可点（document 级委托点击填输入框）
+- **正则通道**：卡的 `mes` 在写入/合并更新时过 `getRegexedString(mes, AI_OUTPUT)`——与正文同通道；可用 `data-pipeline-step="review"` 等锚点重写/隐藏/重排卡内块。写入时应用，不追溯旧卡
+- **卡片内层挂钩全部走 `data-*` 属性**（`data-tool-invocation`、`data-respond-option`、`data-pipeline-step` 等）：`MESSAGE_SANITIZE` 会把 `mes` 内 class 重写为 `custom-*`，class 选择器在卡内永不命中
+- `[data-tool-invocation-text]` max-height 6em 滚动
+- final 步块默认 hidden（正文已是 assistant 消息，不重复显示）；**兜底触发时揭开为 `summary`**——失败证据不被吞
 
 ## 代码落点
 
@@ -85,17 +87,17 @@ round i: 请求组装后 (CHAT_COMPLETION_SETTINGS_READY) 注入:
 | `public/scripts/reply-pipeline-core.js` | 纯逻辑：归一化、步解析、步提示、final 文本抽取 |
 | `public/scripts/reply-pipeline.js` | 运行态：run 状态机、`preparePipelineRound`、请求整形、事件挂钩 |
 | `public/scripts/generation-service.js` | 两个工具分支插 `preparePipelineRound` + `finalizePipelineReply`；`GENERATION_STARTED` 补发 `depth` |
-| `public/scripts/tool-calling.js` | 卡片 details 化 + 步标记 + 芯片 |
+| `public/scripts/tool-calling.js` | 合并卡格式化（`data-pipeline-run`/`data-pipeline-step` 挂钩）+ runId 归并保存 + AI_OUTPUT regex 通道 |
 | `chat-message-render-descriptor.js` / `main-chat-store-projection.js` / `message-service.js` | `replyPipelineHidden` 类通道 |
 
 ## 验证（已落地）
 
 - 单测 `reply-pipeline-core`：归一化（含 final 截断/缺省回落/步数钳制）、步提示、result_field 抽取（含 JSON 标量解包）、findStepCompletion 前向推进
-- e2e：`reply_pipeline` 跨重载持久（不再重注入——持久化是承重断言）；3 轮步提示 + final-direct 无第 4 请求；卡片 display [summary, summary, hidden] + data-* 内层 markup + 芯片点击填输入框；后续生成零残留；兜底路径（ok-object → 无 tools/无编号步提示/失败卡揭开）
+- e2e：`reply_pipeline` 跨重载持久（不再重注入——持久化是承重断言）；3 轮步提示 + final-direct 无第 4 请求；**合并卡**断言（一条卡消息、`tool_invocations`×3、`data-pipeline-step` 三块、final 块级 hidden、卡尾芯片点击、AI_OUTPUT regex 生效）；后续生成零残留；兜底路径（ok-object → 无 tools/无编号步提示/失败卡揭开为 summary）
 - `test:compat`；`pnpm run lint`；docs:check
 
 ## 已知边界
 
 - 线性管线；步数受 `RECURSE_LIMIT`(5) 限制（≤4 步 + 兜底）
 - `forced` 模式依赖上游 per-function `tool_choice` 支持（gptl 网关对 `required` 已拒，per-function 待实测）
-- v1 无管线编辑器——`reply_pipeline` 在预设 JSON 手写
+- 管线编辑器已落地：提示词面板底部「回复管线」区块（行 = 步，`final` 锁定末行，行外字段 `display`/`max_tokens`/`reasoning_effort` 编辑后保留）；正则在 `feature_settings.regex` 手写或经正则面板

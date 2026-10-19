@@ -6200,6 +6200,14 @@ body:has(#character_popup.open) #top-settings-holder:has(.drawer-content.openDra
     background: var(--SmartThemeBlurTintColor);
 }
 
+[data-pipeline-display="hidden"] {
+    display: none;
+}
+
+[data-respond-options] {
+    margin-top: 4px;
+}
+
 .wpc-body {
     flex: 1 1 auto;
     min-height: 0;
