@@ -31,11 +31,13 @@
 | `enabled` | 管线开关；关闭则普通生成 |
 | `enforce_mode` | `'auto'`（默认，仅注入步提示）/ `'forced'`（每轮发 per-function `tool_choice`） |
 | `result_field` | 可选点路径：final 步 result 能 JSON.parse 时从中取正文（默认要求 action 直接 return 字符串） |
-| `steps[].tool` | 全局绑定名；未注册/未启用 → 跳过该步 |
+| `steps[].tool` | 全局绑定名；未注册/未启用/stealth → 跳过该步 |
 | `steps[].prompt` | 该轮注入的步指令文本 |
-| `steps[].display` | 卡片显示策略：`summary`（默认折叠）/ `full`（展开）/ `hidden`；final 步默认 `hidden` |
-| `steps[].max_tokens` | 可选：该轮覆盖 `max_tokens` |
-| `final` | 哪个 tool 是 final 步 |
+| `steps[].display` | 卡片显示策略：`summary`（默认折叠）/ `full`（展开）/ `hidden`；final 步默认 `hidden`（显式 display 优先） |
+| `steps[].max_tokens` | 可选：覆盖该轮 `max_tokens`（或 `max_completion_tokens`，按模型路径） |
+| `final` | 产出正文的 tool 名；计划在该步截断（其后步骤不可达）；缺省/未知 → 最后一步。步数上限 `MAX_PIPELINE_STEPS`=5 |
+
+持久化：`reply_pipeline` 是 `settingsToUpdate` 字段——随预设保存/应用、随 `settings.json` 重载保留；**应用无此键的预设会清除当前管线**（预设权威语义，同 `extensions`）。
 
 ## 执行模型
 
@@ -51,6 +53,10 @@ round i: 请求组装后 (CHAT_COMPLETION_SETTINGS_READY) 注入:
            fallback → 标记收口轮（删 tools、注入 "不要调用工具" 收口指令）→ 递归一次
 ```
 
+**步推进语义（前向进展，不回退）**：每轮完成后计划推进到本轮调用中**计划序最靠后**的已匹配步之后——模型并行批量调用、跳步提前产出 final 都被接受；只重调已完成步不会回退计划；本轮无任何步匹配则重发当前步提示。
+
+**runState 卫生**：请求整形只对 `type === 'normal'` 的请求体生效（quiet/generateRaw/连接测试天然免疫残留注入）；步提示对同一 messages 数组只注入一次（重试不重复）；run 在 final-direct、正常收尾（含兜底轮完成/中途放弃）、stealth/空调停、onError 时释放；收口轮若仍收到 tool_calls（不合规上游）则交出管线控制走普通递归。
+
 **final-direct**（正常路径，不跑收口轮）：
 
 - final 步 result 为普通字符串 → 直接用（respond 的 actionBody 应 `return String(args.content)`）
@@ -62,10 +68,12 @@ round i: 请求组装后 (CHAT_COMPLETION_SETTINGS_READY) 注入:
 
 ## 卡片与显示
 
-- 每步一轮 → 每步一张 invocation 卡（`saveFunctionToolInvocations` 打 `reply_pipeline_run/step/display`）
+- 每步一轮 → 每步一张 invocation 卡（`saveFunctionToolInvocations` 打 `reply_pipeline_run/step/display`；每个 invocation 按**各自所属步**打标记，批量/乱序调用也正确归属）
 - 卡片根为 `<details>` + 一行 summary；`display: full` 展开，`hidden` 由 `replyPipelineHidden` 类 `display:none`（消息留在 chat，回放不受影响——卡片 HTML 不进 prompt）
-- `.tool-invocation-text` max-height 6em 滚动；数组参数渲染为 `.respond-option` 芯片（点击填输入框）
-- final 步卡片默认 hidden（正文已是 assistant 消息，不重复显示）
+- **卡片内层挂钩全部走 `data-*` 属性**（`data-tool-invocation`、`data-respond-option` 等）：`MESSAGE_SANITIZE` 会把 `mes` 内 class 重写为 `custom-*`，class 选择器在卡内永不命中
+- `[data-tool-invocation-text]` max-height 6em 滚动；数组参数渲染为 `[data-respond-option]` 芯片（document 级委托点击填输入框，键盘可达）
+- final 步卡片默认 hidden（正文已是 assistant 消息，不重复显示）；**兜底触发时揭开为 `summary`**——失败证据不被吞
+- 芯片注意：final 卡默认隐藏意味着其中的选项芯片也不可见——面向用户的选项应来自 respond 正文里的标记（经 AI_OUTPUT regex 呈现），卡片芯片是过程产物的便利入口
 
 ## 代码落点
 
@@ -79,9 +87,9 @@ round i: 请求组装后 (CHAT_COMPLETION_SETTINGS_READY) 注入:
 
 ## 验证（已落地）
 
-- 单测 `reply-pipeline-core`：16/16（归一化、final 默认 hidden、result_field、findStepCompletion）
-- e2e 新增两条：3 轮步提示 1/3→2/3→3/3 + final-direct（无第 4 请求）+ 卡片 display [summary, summary, hidden] + 隐藏卡 DOM + 后续生成无残留注入；兜底路径（respond 返回 ok-object → 第 3 请求无 tools/tool_choice + 收口指令）
-- `test:compat` 94/94；`pnpm run lint` ✓；docs:check 28 篇
+- 单测 `reply-pipeline-core`：归一化（含 final 截断/缺省回落/步数钳制）、步提示、result_field 抽取（含 JSON 标量解包）、findStepCompletion 前向推进
+- e2e：`reply_pipeline` 跨重载持久（不再重注入——持久化是承重断言）；3 轮步提示 + final-direct 无第 4 请求；卡片 display [summary, summary, hidden] + data-* 内层 markup + 芯片点击填输入框；后续生成零残留；兜底路径（ok-object → 无 tools/无编号步提示/失败卡揭开）
+- `test:compat`；`pnpm run lint`；docs:check
 
 ## 已知边界
 

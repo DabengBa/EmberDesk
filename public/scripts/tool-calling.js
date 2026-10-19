@@ -809,6 +809,7 @@ export class ToolManager {
         const container = document.createElement('div');
         if (typeof value === 'string') {
             container.classList.add('tool-invocation-text');
+            container.setAttribute('data-tool-invocation-text', '');
             container.textContent = value;
             return container;
         }
@@ -817,6 +818,9 @@ export class ToolManager {
             for (const item of value) {
                 const line = document.createElement('div');
                 line.classList.add('tool-invocation-item', 'respond-option');
+                // data-* hooks survive the MESSAGE_SANITIZE class rewrite
+                // (custom-*) — CSS and the click delegation target these.
+                line.setAttribute('data-respond-option', '');
                 line.setAttribute('role', 'button');
                 line.setAttribute('tabindex', '0');
                 line.textContent = `▸ ${typeof item === 'string' ? item : JSON.stringify(item)}`;
@@ -825,6 +829,7 @@ export class ToolManager {
             return container;
         }
         container.classList.add('tool-invocation-text');
+        container.setAttribute('data-tool-invocation-text', '');
         container.textContent = JSON.stringify(value);
         return container;
     }
@@ -843,6 +848,7 @@ export class ToolManager {
 
         const root = document.createElement('details');
         root.classList.add('tool-invocations');
+        root.setAttribute('data-tool-invocations', '');
         if (data.some(invocation => invocation?.pipeline?.display === 'full')) {
             root.setAttribute('open', '');
         }
@@ -854,11 +860,14 @@ export class ToolManager {
         for (const invocation of data) {
             const item = document.createElement('section');
             item.classList.add('tool-invocation');
+            item.setAttribute('data-tool-invocation', '');
             if (invocation.error) {
                 item.classList.add('tool-invocation-error');
+                item.setAttribute('data-tool-invocation-error', '');
             }
             const header = document.createElement('div');
             header.classList.add('tool-invocation-name');
+            header.setAttribute('data-tool-invocation-name', '');
             header.textContent = invocation.displayName || invocation.name;
             item.append(header);
 
@@ -869,6 +878,7 @@ export class ToolManager {
                     if (entries.length > 1) {
                         const label = document.createElement('div');
                         label.classList.add('tool-invocation-key');
+                        label.setAttribute('data-tool-invocation-key', '');
                         label.textContent = key;
                         item.append(label);
                     }
@@ -881,6 +891,7 @@ export class ToolManager {
             if (invocation.error) {
                 const resultLine = document.createElement('div');
                 resultLine.classList.add('tool-invocation-result');
+                resultLine.setAttribute('data-tool-invocation-result', '');
                 resultLine.textContent = typeof invocation.result === 'string' ? invocation.result : JSON.stringify(invocation.result);
                 item.append(resultLine);
             }
@@ -889,6 +900,7 @@ export class ToolManager {
 
         const detailsElement = document.createElement('details');
         detailsElement.classList.add('tool-invocations-raw');
+        detailsElement.setAttribute('data-tool-invocations-raw', '');
         const summaryElement = document.createElement('summary');
         const preElement = document.createElement('pre');
         const codeElement = document.createElement('code');

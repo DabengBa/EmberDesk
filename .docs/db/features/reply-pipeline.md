@@ -21,17 +21,19 @@ Make reply structure deterministic instead of model-discretionary. Parallel tool
 
 ## User-Visible Contract
 
-- `reply_pipeline` is preset-carried: `{ enabled, enforce_mode?: 'auto'|'forced', result_field?, final, steps: [{ tool, prompt?, display?, max_tokens?, id? }] }`.
-- Steps whose tools are missing from the enabled bindings are skipped; a pipeline with no runnable steps is inert.
-- Each round injects one system instruction naming the step's tool and its `prompt`; the instruction never leaks into later non-pipeline generations.
-- `enforce_mode: 'forced'` pins `tool_choice` to the step's function; `auto` (default) relies on the step instruction.
-- When the final step completes, its result IS the reply: a plain string result is used directly; JSON object results require `result_field` (dot path). Errored, empty, or unusable results trigger one closing round with **no `tools`** and an explicit "do not call tools" instruction.
+- `reply_pipeline` is preset-carried: `{ enabled, enforce_mode?: 'auto'|'forced', result_field?, final, steps: [{ tool, prompt?, display?, max_tokens?, id? }] }`. It is a `settingsToUpdate` field, so preset apply/save and `settings.json` persistence all carry it; applying a preset without a `reply_pipeline` key clears the active pipeline.
+- `final` names the reply-producing tool; the plan is truncated at that step (steps after it are unreachable), and an unknown or missing `final` resolves to the last step. Plans are clamped to `MAX_PIPELINE_STEPS` (5 = `ToolManager.RECURSE_LIMIT`).
+- Steps whose tools are missing from the enabled bindings — or whose binding is `stealth` — are skipped; a pipeline with no runnable steps is inert.
+- Each round injects one system instruction naming the step's tool and its `prompt`. Shaping only applies to `type === 'normal'` request bodies and is applied once per messages array (retries re-emit the event on the shared array), so quiet/raw/other generations never inherit stale step prompts, forced `tool_choice`, or step token caps.
+- `enforce_mode: 'forced'` pins `tool_choice` to the step's function; `auto` (default) relies on the step instruction. `steps[].max_tokens` applies to whichever of `max_tokens`/`max_completion_tokens` the model path produced.
+- Step matching is forward-progress: the plan advances to just after the furthest step whose tool was invoked, so batched or out-of-order calls are accepted but already-finished steps never rewind the plan; a round with no matching step re-asks the current one.
+- When the final step completes, its result IS the reply: a plain string result is used directly; JSON object results require `result_field` (dot path), and a JSON scalar string is unwrapped. Errored, empty, or unusable results trigger one closing round with **no `tools`** and an explicit "do not call tools" instruction; the failed final card's `hidden` display is lifted to `summary` so the error stays visible.
 - The final-direct write keeps the AI_OUTPUT regex pass, skips stopping-string trimming, mirrors the normal generation tail (save, unblock, panel refresh), and preserves the streaming return shape.
-- Cards: each step round saves one tool-invocation card message carrying `extra.reply_pipeline_run` / `reply_pipeline_step` / `reply_pipeline_display`. The final step's card defaults to `hidden` (its content became the assistant message); earlier steps default to `summary` (collapsed `<details>`).
-- A pipeline run starts only on a fresh turn (`GENERATION_STARTED` with `depth` 0); recursion rounds keep the active plan.
+- Cards: each step round saves one tool-invocation card message carrying `extra.reply_pipeline_run` / `reply_pipeline_step` / `reply_pipeline_display`. The final step's card defaults to `hidden` (its content became the assistant message); earlier steps default to `summary` (collapsed `<details>`). Card internals style through `data-*` hooks (`data-tool-invocation`, `data-respond-option`, …) because `MESSAGE_SANITIZE` rewrites classes inside `mes` to `custom-*`.
+- A pipeline run starts only on a fresh turn (`GENERATION_STARTED` with `depth` 0); recursion rounds keep the active plan. The run state is released on final-direct, on the normal completion tail (fallback finish or mid-run plain-text abandonment), on stealth/empty stops, and on error.
 
 ## Known Limits
 
-- Linear pipelines only, and step count is bounded by `ToolManager.RECURSE_LIMIT`.
+- Linear pipelines only; runnable steps are clamped to `MAX_PIPELINE_STEPS` (5, aligned with `ToolManager.RECURSE_LIMIT`) so the fallback round always stays inside the recursion budget.
 - `forced` mode depends on upstream support for per-function `tool_choice`; gateways that reject it fall back to `auto` behavior by configuration.
 - The runtime does not validate step result structure beyond the final-step extraction contract.

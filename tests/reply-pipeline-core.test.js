@@ -39,13 +39,50 @@ describe('normalizeReplyPipeline', () => {
 
         const pipeline = normalizeReplyPipeline({
             enabled: true,
-            steps: [{ tool: 'analyze' }, { tool: 'respond' }, { tool: 'respond2', display: 'full' }],
+            steps: [{ tool: 'analyze' }, { tool: 'respond' }],
             final: 'respond',
         });
 
         expect(pipeline.steps[0].display).toBe('summary');
         expect(pipeline.steps[1].display).toBe('hidden');
-        expect(pipeline.steps[2].display).toBe('full');
+    });
+
+    test('truncates the plan at the named final step', async () => {
+        const { normalizeReplyPipeline } = await importFreshCore();
+
+        const pipeline = normalizeReplyPipeline({
+            enabled: true,
+            steps: [{ tool: 'analyze' }, { tool: 'review' }, { tool: 'respond', display: 'full' }],
+            final: 'review',
+        });
+
+        // Steps after `final` are unreachable — the run ends there.
+        expect(pipeline.steps.map(step => step.tool)).toEqual(['analyze', 'review']);
+        expect(pipeline.final).toBe('review');
+        expect(pipeline.steps[1].display).toBe('hidden');
+    });
+
+    test('falls back to the last step when final is missing or unknown', async () => {
+        const { normalizeReplyPipeline } = await importFreshCore();
+
+        const missing = normalizeReplyPipeline({ enabled: true, steps: [{ tool: 'a' }, { tool: 'b' }] });
+        expect(missing.final).toBe('b');
+        expect(missing.steps[1].display).toBe('hidden');
+
+        const unknown = normalizeReplyPipeline({ enabled: true, steps: [{ tool: 'a' }, { tool: 'b' }], final: 'nope' });
+        expect(unknown.final).toBe('b');
+    });
+
+    test('clamps the plan to the recursion-bound step budget', async () => {
+        const { MAX_PIPELINE_STEPS, normalizeReplyPipeline } = await importFreshCore();
+
+        const pipeline = normalizeReplyPipeline({
+            enabled: true,
+            steps: Array.from({ length: MAX_PIPELINE_STEPS + 2 }, (_, index) => ({ tool: `tool_${index}` })),
+        });
+
+        expect(pipeline.steps).toHaveLength(MAX_PIPELINE_STEPS);
+        expect(pipeline.final).toBe(`tool_${MAX_PIPELINE_STEPS - 1}`);
     });
 
     test('drops steps without a usable tool name and clamps display modes', async () => {
@@ -59,13 +96,15 @@ describe('normalizeReplyPipeline', () => {
                 { tool: '' },
                 { prompt: 'no tool' },
                 { tool: 'other', display: 'nonsense' },
+                { tool: 'tail' },
             ],
-            final: 'ok-name',
+            final: 'tail',
         });
 
-        expect(pipeline.steps.map(step => step.tool)).toEqual(['ok-name', 'other']);
+        expect(pipeline.steps.map(step => step.tool)).toEqual(['ok-name', 'other', 'tail']);
         expect(pipeline.steps[0].display).toBe('hidden');
         expect(pipeline.steps[1].display).toBe('summary');
+        expect(pipeline.steps[2].display).toBe('hidden');
     });
 
     test('accepts forced enforce mode and rejects unknown values', async () => {
@@ -159,6 +198,13 @@ describe('extractFinalStepText', () => {
         expect(extractFinalStepText([{ name: 'respond', result: nested, error: false }], finalStep, 'data.text')).toBe('deep');
         expect(extractFinalStepText([{ name: 'respond', result: nested, error: false }], finalStep, 'data.missing')).toBeNull();
     });
+
+    test('unwraps JSON scalar strings without leaking quotes', async () => {
+        const { extractFinalStepText } = await importFreshCore();
+
+        expect(extractFinalStepText([{ name: 'respond', result: '"hello there"', error: false }], finalStep, '')).toBe('hello there');
+        expect(extractFinalStepText([{ name: 'respond', result: '""', error: false }], finalStep, '')).toBeNull();
+    });
 });
 
 describe('findStepCompletion', () => {
@@ -172,6 +218,19 @@ describe('findStepCompletion', () => {
 
         const finalCompletion = findStepCompletion(steps, [{ name: 'respond', error: false }]);
         expect(finalCompletion).toMatchObject({ step: steps[2], index: 2, isFinal: true });
+    });
+
+    test('advances to the furthest matched step when the model batches or jumps ahead', async () => {
+        const { findStepCompletion } = await importFreshCore();
+
+        // Parallel calls in one round: plan advances past both.
+        const batched = findStepCompletion(steps, [{ name: 'analyze' }, { name: 'review' }]);
+        expect(batched).toMatchObject({ step: steps[1], index: 1, isFinal: false });
+
+        // The final tool called early: the reply exists, so the run finalizes
+        // instead of re-requesting skipped steps.
+        const early = findStepCompletion(steps, [{ name: 'respond' }]);
+        expect(early).toMatchObject({ index: 2, isFinal: true });
     });
 
     test('returns null when nothing matches and flags errored matches', async () => {

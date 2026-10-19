@@ -11,7 +11,14 @@
 const DISPLAY_MODES = new Set(['summary', 'full', 'hidden']);
 const TOOL_NAME_PATTERN = /^[a-zA-Z0-9_-]{1,64}$/;
 
-function normalizeStep(raw, index, { defaultDisplay = 'summary' } = {}) {
+/**
+ * Hard cap on runnable steps. Must stay aligned with ToolManager.RECURSE_LIMIT:
+ * pipeline rounds are recursive generations, so a plan longer than the
+ * recursion budget would strand its tail steps.
+ */
+export const MAX_PIPELINE_STEPS = 5;
+
+function normalizeStep(raw, index) {
     if (!raw || typeof raw !== 'object') {
         return null;
     }
@@ -19,13 +26,14 @@ function normalizeStep(raw, index, { defaultDisplay = 'summary' } = {}) {
     if (!TOOL_NAME_PATTERN.test(tool)) {
         return null;
     }
-    const display = DISPLAY_MODES.has(raw.display) ? raw.display : defaultDisplay;
     const maxTokens = Number(raw.max_tokens);
     return {
         id: typeof raw.id === 'string' && raw.id.length > 0 ? raw.id : `step-${index + 1}`,
         tool,
         prompt: typeof raw.prompt === 'string' ? raw.prompt : '',
-        display,
+        // Resolved to a display default after the final step is known.
+        rawDisplay: DISPLAY_MODES.has(raw.display) ? raw.display : null,
+        display: 'summary',
         maxTokens: Number.isFinite(maxTokens) && maxTokens > 0 ? Math.floor(maxTokens) : null,
     };
 }
@@ -40,16 +48,27 @@ export function normalizeReplyPipeline(raw) {
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
         return empty;
     }
-    const final = typeof raw.final === 'string' ? raw.final.trim() : '';
+    const requestedFinal = typeof raw.final === 'string' ? raw.final.trim() : '';
+    let steps = Array.isArray(raw.steps)
+        ? raw.steps.map((step, index) => normalizeStep(step, index)).filter(Boolean)
+        : [];
+    // `final` names the reply-producing tool. The plan is truncated there —
+    // steps after it are unreachable once the run ends at the final step.
+    // Unknown/missing values resolve to the last declared step.
+    const foundIndex = steps.findIndex(step => step.tool === requestedFinal);
+    const finalIndex = foundIndex >= 0 ? foundIndex : steps.length - 1;
+    if (steps.length > 0) {
+        steps = steps.slice(0, Math.min(finalIndex + 1, MAX_PIPELINE_STEPS));
+    }
+    const final = steps.at(-1)?.tool ?? '';
     // The final step's content becomes the assistant message, so its card
     // defaults to hidden; earlier steps stay visible as collapsed rows.
-    const steps = Array.isArray(raw.steps)
-        ? raw.steps
-            .map((step, index) => normalizeStep(step, index, {
-                defaultDisplay: step?.tool === final ? 'hidden' : 'summary',
-            }))
-            .filter(Boolean)
-        : [];
+    for (const step of steps) {
+        step.display = DISPLAY_MODES.has(step.rawDisplay)
+            ? step.rawDisplay
+            : (step.tool === final ? 'hidden' : 'summary');
+        delete step.rawDisplay;
+    }
     return {
         enabled: Boolean(raw.enabled),
         enforceMode: raw.enforce_mode === 'forced' ? 'forced' : 'auto',
@@ -84,7 +103,13 @@ export function buildStepPrompt(step, index, total) {
 }
 
 /**
- * Finds which pipeline step the just-finished invocations complete.
+ * Finds the furthest pipeline step the just-finished invocations complete.
+ *
+ * Forward-progress semantics: a round may complete the current step, several
+ * steps at once (the model batched calls), or a later step early — the plan
+ * advances to just after the furthest matched step. Calls to already-finished
+ * steps are recorded on the card but never rewind the plan.
+ *
  * @param {object[]} steps Runnable steps
  * @param {Array<{name: string, error?: boolean}>} invocations Completed invocations
  * @returns {{step: object, index: number, isFinal: boolean, errored: boolean}|null}
@@ -93,19 +118,23 @@ export function findStepCompletion(steps, invocations) {
     if (!Array.isArray(invocations) || invocations.length === 0) {
         return null;
     }
+    let furthestIndex = -1;
     for (let index = 0; index < steps.length; index++) {
-        const step = steps[index];
-        const match = invocations.find(invocation => invocation?.name === step.tool);
-        if (match) {
-            return {
-                step,
-                index,
-                isFinal: index === steps.length - 1,
-                errored: match.error === true,
-            };
+        if (invocations.some(invocation => invocation?.name === steps[index].tool)) {
+            furthestIndex = index;
         }
     }
-    return null;
+    if (furthestIndex < 0) {
+        return null;
+    }
+    const step = steps[furthestIndex];
+    const match = invocations.find(invocation => invocation?.name === step.tool);
+    return {
+        step,
+        index: furthestIndex,
+        isFinal: furthestIndex === steps.length - 1,
+        errored: match.error === true,
+    };
 }
 
 function readDotPath(value, path) {
@@ -141,6 +170,11 @@ export function extractFinalStepText(invocations, finalStep, resultField) {
         parsed = JSON.parse(result);
     } catch {
         return result;
+    }
+    // A JSON-encoded string ("\"hello\"") unwraps to its value; other scalars
+    // render as the raw result text.
+    if (typeof parsed === 'string') {
+        return parsed.trim().length > 0 ? parsed : null;
     }
     if (parsed === null || typeof parsed !== 'object') {
         return result;

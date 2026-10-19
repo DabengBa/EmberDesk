@@ -25,9 +25,26 @@ const FALLBACK_PROMPT = '[Reply pipeline] All pipeline steps are complete. Write
 let runState = null;
 let initialized = false;
 
-function getEnabledToolNames() {
+/**
+ * Tracks message arrays already shaped this round. Retry attempts rebuild the
+ * request body but share the same messages array — without this, each retry
+ * re-emits CHAT_COMPLETION_SETTINGS_READY and the step prompt is pushed again.
+ */
+const shapedMessageArrays = new WeakSet();
+
+function pushPipelineMessageOnce(data, content) {
+    if (!Array.isArray(data.messages) || shapedMessageArrays.has(data.messages)) {
+        return;
+    }
+    shapedMessageArrays.add(data.messages);
+    data.messages.push({ role: 'system', content });
+}
+
+function getPipelineEligibleToolNames() {
+    // Stealth bindings stay registered for ad-hoc calls but can never be
+    // pipeline steps: their calls stop generation, which would abort the run.
     return normalizeToolBindings(feature_settings.tool_bindings)
-        .filter(binding => binding.enabled)
+        .filter(binding => binding.enabled && !binding.stealth)
         .map(binding => binding.name);
 }
 
@@ -40,7 +57,7 @@ export function getRunnablePipeline() {
     if (!pipeline.enabled) {
         return null;
     }
-    const steps = resolvePipelineSteps(pipeline, getEnabledToolNames());
+    const steps = resolvePipelineSteps(pipeline, getPipelineEligibleToolNames());
     if (steps.length === 0) {
         return null;
     }
@@ -121,9 +138,30 @@ export function preparePipelineRound(invocations) {
     if (!runState) {
         return null;
     }
+    // The closing round sends no tools; a non-compliant upstream answering it
+    // with tool_calls anyway must not restart the pipeline. Release control
+    // and let ordinary tool recursion handle it.
+    if (runState.fallbackRound) {
+        endPipelineRun();
+        return null;
+    }
     const completion = findStepCompletion(runState.steps, invocations);
     if (!completion) {
         return { action: 'continue' };
+    }
+    // Every invocation is stamped with its own step's metadata so batched or
+    // out-of-order calls still render their intended card display.
+    for (const invocation of invocations) {
+        const stepIndex = runState.steps.findIndex(step => step.tool === invocation?.name);
+        if (stepIndex >= 0) {
+            const step = runState.steps[stepIndex];
+            invocation.pipeline = {
+                runId: runState.runId,
+                stepId: step.id,
+                stepIndex,
+                display: step.display,
+            };
+        }
     }
     const meta = {
         runId: runState.runId,
@@ -131,18 +169,20 @@ export function preparePipelineRound(invocations) {
         stepIndex: completion.index,
         display: completion.step.display,
     };
-    for (const invocation of invocations) {
-        if (invocation?.name === completion.step.tool) {
-            invocation.pipeline = meta;
-        }
-    }
     if (!completion.isFinal) {
-        runState.index = completion.index + 1;
+        runState.index = Math.max(runState.index, completion.index + 1);
         return { action: 'continue' };
     }
     const text = extractFinalStepText(invocations, completion.step, runState.pipeline.resultField);
     if (text) {
         return { action: 'final', text, step: completion.step, meta };
+    }
+    // The failing final step must stay visible — hiding it would swallow the
+    // error evidence while the fallback reply shows up unexplained.
+    for (const invocation of invocations) {
+        if (invocation?.pipeline && invocation.name === completion.step.tool) {
+            invocation.pipeline = { ...invocation.pipeline, display: 'summary' };
+        }
     }
     runState.fallbackRound = true;
     return { action: 'fallback', step: completion.step, meta };
@@ -170,29 +210,32 @@ export function isPipelineFallbackRound() {
  * @param {object} data Request body (generate_data)
  */
 export function applyPipelineRequestShaping(data) {
-    if (!runState || !data || typeof data !== 'object') {
+    // Only 'normal' generations belong to a run. Anything else (quiet prompts,
+    // generateRaw/structured output, connection tests) must never inherit a
+    // stale step prompt, a forced tool_choice, or a step token cap.
+    if (!runState || !data || typeof data !== 'object' || data.type !== 'normal') {
         return;
     }
     if (runState.fallbackRound) {
         delete data.tools;
         delete data.tool_choice;
-        if (Array.isArray(data.messages)) {
-            data.messages.push({ role: 'system', content: FALLBACK_PROMPT });
-        }
+        pushPipelineMessageOnce(data, FALLBACK_PROMPT);
         return;
     }
     const step = getCurrentPipelineStep();
     if (!step) {
         return;
     }
-    if (Array.isArray(data.messages)) {
-        data.messages.push({ role: 'system', content: buildStepPrompt(step, runState.index, runState.steps.length) });
-    }
+    pushPipelineMessageOnce(data, buildStepPrompt(step, runState.index, runState.steps.length));
     if (runState.pipeline.enforceMode === 'forced' && Array.isArray(data.tools)) {
         data.tool_choice = { type: 'function', function: { name: step.tool } };
     }
-    if (step.maxTokens && Number.isFinite(Number(data.max_tokens))) {
-        data.max_tokens = step.maxTokens;
+    if (step.maxTokens) {
+        if (Number.isFinite(Number(data.max_tokens))) {
+            data.max_tokens = step.maxTokens;
+        } else if (Number.isFinite(Number(data.max_completion_tokens))) {
+            data.max_completion_tokens = step.maxTokens;
+        }
     }
 }
 

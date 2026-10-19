@@ -978,7 +978,7 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
      * Writes the assistant message, mirrors the normal generation tail, and
      * returns the same String shape the API chain expects.
      */
-    async function finalizePipelineReply({ type, text, step, meta, reasoning = '', fromStream = false }) {
+    async function finalizePipelineReply({ type, text, step, meta, reasoning = '', reasoningSignature = null, title = '', imageUrls = null, fromStream = false }) {
         // Tool results are already authored content: skip stopping-string
         // trimming (it silently truncates) but keep the AI_OUTPUT regex pass.
         const cleaned = cleanUpMessage({
@@ -986,7 +986,7 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
             displayIncompleteSentences: false,
             stoppingStrings: [],
         });
-        const saved = await saveReply({ type, getMessage: cleaned, reasoning });
+        const saved = await saveReply({ type, getMessage: cleaned, reasoning, reasoningSignature, title, imageUrls });
         const savedMessage = state.chat[state.chat.length - 1];
         if (savedMessage?.extra) {
             savedMessage.extra.reply_pipeline_run = meta?.runId ?? null;
@@ -1098,22 +1098,27 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
                             if (Array.isArray(invocationResult.errors) && invocationResult.errors.length) {
                                 state.ToolManager.showToolCallError(invocationResult.errors);
                             }
+                            endPipelineRun();
                             unblockGeneration(type);
                             state.streamingProcessor = null;
                             return;
                         }
 
-                        const pipelineReasoning = state.streamingProcessor.reasoningHandler.reasoning;
+                        const pipelineProcessor = state.streamingProcessor;
+                        const pipelineReasoning = pipelineProcessor.reasoningHandler.reasoning;
+                        const pipelineReasoningSignature = pipelineProcessor.reasoningSignature;
                         const pipelineDecision = preparePipelineRound(invocationResult.invocations);
                         state.streamingProcessor = null;
                         await state.ToolManager.saveFunctionToolInvocations(invocationResult.invocations);
                         if (pipelineDecision?.action === 'final') {
+                            rememberMainChatStreamingTransportProcessorTerminal(pipelineProcessor, 'completed');
                             return await finalizePipelineReply({
                                 type,
                                 text: pipelineDecision.text,
                                 step: pipelineDecision.step,
                                 meta: pipelineDecision.meta,
                                 reasoning: pipelineReasoning,
+                                reasoningSignature: pipelineReasoningSignature,
                                 fromStream: true,
                             });
                         }
@@ -1134,6 +1139,9 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
                     scheduleMainChatMessageListPanelRefresh();
                     state.streamingProcessor = null;
                     clearGenerationAutoRecoveryStatus(finishedMessageId);
+                    // A run reaching this tail ended without tool calls:
+                    // fallback completion or mid-run abandonment.
+                    endPipelineRun();
                     return Object.defineProperties(new String(getMessage), {
                         'messageChunk': { value: messageChunk },
                         'fromStream': { value: true },
@@ -1312,6 +1320,7 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
                     if (Array.isArray(invocationResult.errors) && invocationResult.errors.length) {
                         state.ToolManager.showToolCallError(invocationResult.errors);
                     }
+                    endPipelineRun();
                     unblockGeneration(type);
                     return;
                 }
@@ -1325,6 +1334,9 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
                         step: pipelineDecision.step,
                         meta: pipelineDecision.meta,
                         reasoning,
+                        reasoningSignature,
+                        title,
+                        imageUrls,
                     });
                 }
                 depth = depth + 1;
@@ -1333,6 +1345,9 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
         }
 
         console.debug('/api/chats/save called by /Generate');
+        // Reaching the normal tail means no tool calls were processed: the run
+        // ended via fallback completion or mid-run abandonment.
+        endPipelineRun();
         await saveChatConditional();
         unblockGeneration(type);
         state.streamingProcessor = null;
@@ -1352,6 +1367,7 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
             toastr.error(exception.error.message, t`Text generation error`, { timeOut: 10000, extendedTimeOut: 20000 });
         }
 
+        endPipelineRun();
         unblockGeneration(type);
         console.log(exception);
         state.streamingProcessor = null;

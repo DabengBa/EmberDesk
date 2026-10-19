@@ -262,7 +262,9 @@ export async function init() {
     });
 
     $(document).on('click', '#open_tool_binding_editor', () => openToolBindingEditor(null));
-    $(document).on('click', '.respond-option', function () {
+    // Chips inside mes HTML keep a data-* hook because MESSAGE_SANITIZE
+    // rewrites their classes to custom-* before they reach the DOM.
+    $(document).on('click', '[data-respond-option]', function () {
         const text = String($(this).text() ?? '').replace(/^▸\s*/, '').trim();
         if (text) {
             setComposerValue(text);

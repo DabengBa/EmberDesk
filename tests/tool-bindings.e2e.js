@@ -142,7 +142,10 @@ async function installPipelineStub(page, { steps, closingText = 'PIPELINE_FINAL_
                     }],
                 };
             } else {
-                payload = toolCallPayload(nextStep, { content: `${nextStep.toUpperCase()}_TEXT` });
+                const args = nextStep === 'respond'
+                    ? { content: 'RESPOND_TEXT', options: ['Take the tea', 'Ask about the glade'] }
+                    : { content: `${nextStep.toUpperCase()}_TEXT` };
+                payload = toolCallPayload(nextStep, args);
             }
 
             return new Response(JSON.stringify(payload), {
@@ -354,19 +357,12 @@ test.describe('tool bindings', () => {
         await testSetup.awaitST({ page });
         await expect(page.locator('html')).toHaveAttribute('data-reply-pipeline-init', 'true', { timeout: 30_000 });
 
+        // No re-injection: reply_pipeline must survive the settings reload and
+        // stay in oai_settings via the preset/settings whitelist. If it were
+        // dropped here the pipeline would never start and the run assertions
+        // below would fail.
         await installPipelineStub(page, { steps: ['analyze', 'review', 'respond'] });
         await prepareOpenAiProvider(page);
-        await page.evaluate(() => {
-            window.SillyTavern.getContext().chatCompletionSettings.reply_pipeline = {
-                enabled: true,
-                steps: [
-                    { tool: 'analyze', prompt: 'PLAN_FIRST' },
-                    { tool: 'review', prompt: 'RATE_PLAN' },
-                    { tool: 'respond', prompt: 'WRITE_REPLY' },
-                ],
-                final: 'respond',
-            };
-        });
 
         await page.evaluate(() => {
             const textarea = document.querySelector('#send_textarea');
@@ -421,6 +417,24 @@ test.describe('tool bindings', () => {
 
         // The hidden final card is present in the DOM but visually suppressed.
         await expect(page.locator('#chat .mes.replyPipelineHidden').last()).toHaveCount(1, { timeout: 15_000 });
+
+        // Card internals are rendered through sanitize-proof data-* hooks
+        // (MESSAGE_SANITIZE rewrites classes to custom-*, so class selectors
+        // would silently miss inside mes content).
+        await expect(page.locator('#chat [data-tool-invocations]')).toHaveCount(3);
+        await expect(page.locator('#chat [data-tool-invocation]')).toHaveCount(3);
+        const cardBorder = await page.evaluate(() => {
+            const card = document.querySelector('#chat [data-tool-invocation]');
+            return card ? getComputedStyle(card).borderTopWidth : null;
+        });
+        expect(Number.parseFloat(cardBorder)).toBeGreaterThan(0);
+
+        // Option chips from the respond step's array param are in the hidden
+        // final card; a programmatic click still reaches the delegation and
+        // fills the composer.
+        await expect(page.locator('#chat [data-respond-option]')).toHaveCount(2);
+        await page.evaluate(() => document.querySelector('#chat [data-respond-option]').click());
+        await expect(page.locator('#send_textarea')).toHaveValue('Take the tea');
 
         // A later ordinary generation (pipeline disabled) must not carry stale
         // step prompts from the finished run.
@@ -482,16 +496,6 @@ test.describe('tool bindings', () => {
 
         await installPipelineStub(page, { steps: ['analyze', 'respond'], closingText: 'FALLBACK_REPLY_TEXT' });
         await prepareOpenAiProvider(page);
-        await page.evaluate(() => {
-            window.SillyTavern.getContext().chatCompletionSettings.reply_pipeline = {
-                enabled: true,
-                steps: [
-                    { tool: 'analyze', prompt: 'PLAN_FIRST' },
-                    { tool: 'respond', prompt: 'WRITE_REPLY' },
-                ],
-                final: 'respond',
-            };
-        });
 
         await page.evaluate(() => {
             const textarea = document.querySelector('#send_textarea');
@@ -515,5 +519,19 @@ test.describe('tool bindings', () => {
         expect(fallbackRequest.tools).toBeUndefined();
         expect(fallbackRequest.tool_choice).toBeUndefined();
         expect(fallbackRequest.messages.some(message => String(message?.content ?? '').includes('Do not call any tools'))).toBe(true);
+        // The fallback prompt replaces the step prompt — a numbered
+        // "[Reply pipeline i/N]" instruction must not linger alongside it.
+        expect(fallbackRequest.messages.some(message => /\[Reply pipeline \d+\/\d+\]/.test(String(message?.content ?? '')))).toBe(false);
+
+        // The failed final-step card stays visible as evidence — its hidden
+        // display must be lifted when the pipeline falls back, so the error is
+        // not swallowed. Scoped to this run's last two pipeline cards.
+        const lastDisplays = await page.evaluate(() => window.SillyTavern.getContext().chat
+            .filter(message => Array.isArray(message?.extra?.tool_invocations)
+                && typeof message?.extra?.reply_pipeline_run === 'string')
+            .slice(-2)
+            .map(message => message.extra.reply_pipeline_display));
+        expect(lastDisplays).toEqual(['summary', 'summary']);
+        await expect(page.locator('#chat .mes:has([data-tool-invocation])').last()).not.toHaveClass(/replyPipelineHidden/);
     });
 });

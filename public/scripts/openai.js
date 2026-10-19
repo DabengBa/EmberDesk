@@ -211,6 +211,7 @@ export const settingsToUpdate = {
     verbosity: ['#openai_verbosity', 'verbosity', false, false],
     fallback_provider_model: ['#NULL_SELECTOR', 'fallback_provider_model', false, false],
     extensions: ['#NULL_SELECTOR', 'extensions', false, false],
+    reply_pipeline: ['#NULL_SELECTOR', 'reply_pipeline', false, false],
 };
 
 const default_settings = {
@@ -244,6 +245,7 @@ const default_settings = {
     n: 1,
     fallback_provider_model: '',
     extensions: {},
+    reply_pipeline: null,
 };
 
 const oai_settings = structuredClone(default_settings);
@@ -2704,6 +2706,13 @@ export function applyOpenAIPreset(presetName) {
             // Extensions don't need UI updates and shouldn't fallback to current settings
             if (key === 'extensions') {
                 oai_settings.extensions = preset.extensions || {};
+                continue;
+            }
+
+            // The reply pipeline is preset-authoritative: a preset that does
+            // not declare one clears it rather than inheriting a stale plan.
+            if (key === 'reply_pipeline') {
+                oai_settings.reply_pipeline = preset.reply_pipeline ?? null;
                 continue;
             }
 

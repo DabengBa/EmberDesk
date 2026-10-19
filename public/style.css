@@ -6127,11 +6127,14 @@ body:has(#character_popup.open) #top-settings-holder:has(.drawer-content.openDra
     opacity: 0.55;
 }
 
-.tool-invocations {
+/* Tool-invocation cards live inside `mes` content where MESSAGE_SANITIZE
+   rewrites classes to custom-* — data-* hooks are the sanitization-proof
+   selectors for both CSS and JS delegation. */
+[data-tool-invocations] {
     text-align: left;
 }
 
-.tool-invocations > summary {
+[data-tool-invocations] > summary {
     cursor: pointer;
     opacity: 0.8;
     font-size: 0.9em;
@@ -6141,7 +6144,7 @@ body:has(#character_popup.open) #top-settings-holder:has(.drawer-content.openDra
     display: none !important;
 }
 
-.tool-invocation {
+[data-tool-invocation] {
     border: 1px solid var(--SmartThemeBorderColor);
     border-radius: 8px;
     padding: 6px 10px;
@@ -6149,46 +6152,41 @@ body:has(#character_popup.open) #top-settings-holder:has(.drawer-content.openDra
     font-size: 0.95em;
 }
 
-.tool-invocation-name {
+[data-tool-invocation-name] {
     font-weight: 600;
     opacity: 0.75;
     margin-bottom: 2px;
 }
 
-.tool-invocation-key {
+[data-tool-invocation-key] {
     font-size: 0.85em;
     opacity: 0.6;
     margin-top: 4px;
 }
 
-.tool-invocation-text {
+[data-tool-invocation-text] {
     white-space: pre-wrap;
     max-height: 6em;
     overflow-y: auto;
 }
 
-.tool-invocation-item {
-    padding: 2px 0;
-    opacity: 0.9;
-}
-
-.tool-invocation-error {
+[data-tool-invocation-error] {
     border-color: var(--SmartThemeBorderColor);
 }
 
-.tool-invocation-error .tool-invocation-result {
+[data-tool-invocation-error] [data-tool-invocation-result] {
     color: var(--SmartThemeQuoteColor);
     font-family: var(--monoFontFamily, monospace);
     font-size: 0.85em;
     margin-top: 4px;
 }
 
-.tool-invocations-raw {
+[data-tool-invocations-raw] {
     margin-top: 4px;
     opacity: 0.8;
 }
 
-.respond-option {
+[data-respond-option] {
     border: 1px solid var(--SmartThemeBorderColor);
     border-radius: 8px;
     padding: 4px 10px;
@@ -6197,7 +6195,7 @@ body:has(#character_popup.open) #top-settings-holder:has(.drawer-content.openDra
     opacity: 0.85;
 }
 
-.respond-option:hover {
+[data-respond-option]:hover {
     opacity: 1;
     background: var(--SmartThemeBlurTintColor);
 }
