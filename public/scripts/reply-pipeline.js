@@ -11,11 +11,13 @@
 import { eventSource, event_types } from './events.js';
 import { feature_settings } from './feature-settings.js';
 import { oai_settings } from './openai.js';
+import { resolveReasoningEffort } from './openai-provider-capabilities.js';
 import {
     buildStepPrompt,
     extractFinalStepText,
     findStepCompletion,
     normalizeReplyPipeline,
+    pipelineTriggerTag,
     resolvePipelineSteps,
 } from './reply-pipeline-core.js';
 import { normalizeToolBindings } from './tool-bindings-core.js';
@@ -108,6 +110,23 @@ export function getCurrentPipelineStep() {
         return null;
     }
     return runState.steps[runState.index] ?? null;
+}
+
+/**
+ * The injection-trigger tag for the round being assembled, e.g.
+ * `pipeline:review`. Preset prompts carrying that tag in `injection_trigger`
+ * are injected for this round only; `all`/`normal` prompts always fire.
+ * Null outside an active run and during the closing round (no step is active,
+ * so step-scoped material must not leak into it).
+ * @param {string} type Generation type being assembled
+ * @returns {string|null}
+ */
+export function getPipelineTriggerTag(type) {
+    if (!runState || type !== 'normal' || runState.fallbackRound) {
+        return null;
+    }
+    const step = getCurrentPipelineStep();
+    return step ? pipelineTriggerTag(step.tool) : null;
 }
 
 /**
@@ -236,6 +255,15 @@ export function applyPipelineRequestShaping(data) {
         } else if (Number.isFinite(Number(data.max_completion_tokens))) {
             data.max_completion_tokens = step.maxTokens;
         }
+    }
+    if (step.reasoningEffort) {
+        // Runs through the provider mapping so `auto`/`min`/`max` resolve the
+        // same way a preset-level value would; `auto` resolves to undefined
+        // and drops out of the serialized body.
+        data.reasoning_effort = resolveReasoningEffort(
+            { ...oai_settings, reasoning_effort: step.reasoningEffort },
+            data.model,
+        );
     }
 }
 

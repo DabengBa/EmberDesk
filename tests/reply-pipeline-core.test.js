@@ -240,3 +240,40 @@ describe('findStepCompletion', () => {
         expect(findStepCompletion(steps, [{ name: 'analyze', error: true }])).toMatchObject({ errored: true, isFinal: false });
     });
 });
+
+describe('pipelineTriggerTag', () => {
+    test('builds pipeline:<tool> trigger tags', async () => {
+        const { pipelineTriggerTag } = await importFreshCore();
+
+        expect(pipelineTriggerTag('review')).toBe('pipeline:review');
+        expect(pipelineTriggerTag('  analyze ')).toBe('pipeline:analyze');
+    });
+});
+
+describe('step reasoning_effort', () => {
+    test('normalizes a valid reasoning_effort onto the step', async () => {
+        const { normalizeReplyPipeline } = await importFreshCore();
+
+        const pipeline = normalizeReplyPipeline({
+            enabled: true,
+            steps: [
+                { tool: 'analyze', reasoning_effort: 'low' },
+                { tool: 'respond' },
+            ],
+        });
+
+        expect(pipeline.steps[0].reasoningEffort).toBe('low');
+        expect(pipeline.steps[1].reasoningEffort).toBeNull();
+    });
+
+    test('rejects values outside the reasoning effort vocabulary', async () => {
+        const { normalizeReplyPipeline } = await importFreshCore();
+
+        const pipeline = normalizeReplyPipeline({
+            enabled: true,
+            steps: [{ tool: 'analyze', reasoning_effort: 'extreme' }],
+        });
+
+        expect(pipeline.steps[0].reasoningEffort).toBeNull();
+    });
+});

@@ -605,16 +605,19 @@ class PromptManager {
     /**
      * Returns a full list of prompts whose content markers have been substituted.
      * @param {string} generationType - The type of generation, e.g., 'normal' or 'quiet'.
+     * @param {string[]} extraTriggerTags - Additional trigger tags for this round
+     *   (e.g. 'pipeline:review' while a reply-pipeline step runs). Base triggers
+     *   keep firing — extra tags only add matches, never remove them.
      * @returns {PromptCollection} A PromptCollection object
      */
-    getPromptCollection(generationType) {
+    getPromptCollection(generationType, extraTriggerTags = []) {
         generationType = String(generationType || 'normal').toLowerCase().trim();
         const promptCollection = new PromptCollection();
         const promptOrder = this.getPromptOrderForCharacter(this.activeCharacter);
 
         promptOrder.forEach(entry => {
             const prompt = this.getPromptById(entry.identifier);
-            const allowedTrigger = entry.enabled && this.shouldTrigger(prompt, generationType);
+            const allowedTrigger = entry.enabled && this.shouldTrigger(prompt, generationType, extraTriggerTags);
 
             if (!prompt) {
                 return;
@@ -630,15 +633,20 @@ class PromptManager {
 
     /**
      * Checks if a prompt should be triggered based on its injection triggers.
+     * Matching is additive: 'all' always fires, the generation type and any
+     * extra trigger tags (e.g. 'pipeline:review' on a pipeline round) each
+     * independently qualify the prompt.
      * @param {Prompt} prompt - The prompt to check.
      * @param {string} generationType - The type of generation to check against.
+     * @param {string[]} extraTriggerTags - Additional tags active this round.
      * @returns {boolean} True if the prompt should be triggered, false otherwise.
      */
-    shouldTrigger(prompt, generationType) {
+    shouldTrigger(prompt, generationType, extraTriggerTags = []) {
         if (!Array.isArray(prompt?.injection_trigger)) return true;
         if (!prompt.injection_trigger.length) return true;
         if (prompt.injection_trigger.includes('all')) return true;
-        return prompt.injection_trigger.includes(generationType);
+        if (prompt.injection_trigger.includes(generationType)) return true;
+        return extraTriggerTags.some(tag => prompt.injection_trigger.includes(tag));
     }
 
     /**

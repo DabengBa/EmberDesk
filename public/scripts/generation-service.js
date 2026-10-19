@@ -9,7 +9,7 @@ import {
 import { getWorldInfoPrompt } from './world-info-service.js';
 import { requireGenerationShellContext } from './generation-shell-context.js';
 import { getComposerValue, clearComposerValue } from './main-chat-composer-service.js';
-import { endPipelineRun, preparePipelineRound } from './reply-pipeline.js';
+import { endPipelineRun, getPipelineTriggerTag, preparePipelineRound } from './reply-pipeline.js';
 import { t } from './i18n.js';
 
 function shell() {
@@ -950,6 +950,7 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
                 quietPrompt: quiet_prompt,
                 quietImage: quietImage,
                 messages: oaiMessages,
+                pipelineStepTag: getPipelineTriggerTag(type),
             }, dryRun);
             generate_data = { prompt: prompt };
 

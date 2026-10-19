@@ -35,6 +35,7 @@
 | `steps[].prompt` | 该轮注入的步指令文本 |
 | `steps[].display` | 卡片显示策略：`summary`（默认折叠）/ `full`（展开）/ `hidden`；final 步默认 `hidden`（显式 display 优先） |
 | `steps[].max_tokens` | 可选：覆盖该轮 `max_tokens`（或 `max_completion_tokens`，按模型路径） |
+| `steps[].reasoning_effort` | 可选：覆盖该轮 `reasoning_effort`（`auto|low|medium|high|min|max`，经 provider 映射同预设级） |
 | `final` | 产出正文的 tool 名；计划在该步截断（其后步骤不可达）；缺省/未知 → 最后一步。步数上限 `MAX_PIPELINE_STEPS`=5 |
 
 持久化：`reply_pipeline` 是 `settingsToUpdate` 字段——随预设保存/应用、随 `settings.json` 重载保留；**应用无此键的预设会清除当前管线**（预设权威语义，同 `extensions`）。
@@ -52,6 +53,8 @@ round i: 请求组装后 (CHAT_COMPLETION_SETTINGS_READY) 注入:
            final    → final-direct：结果即正文
            fallback → 标记收口轮（删 tools、注入 "不要调用工具" 收口指令）→ 递归一次
 ```
+
+**按轮门控的预设提示词**：`injection_trigger` 支持 `pipeline:<tool>` 值——该提示词只在对应步驱动的轮次注入（匹配是加法：`all`/`normal` 照常命中，额外步标签只加不减）。步标签经 `getPipelineTriggerTag(type)` 传入提示词组装（非 normal 类型/收口轮返回 null——收口轮没有活动步，步级资料不会泄漏进去）。提示词面板按当前可运行步动态渲染 `管线 <tool>` 复选框。
 
 **步推进语义（前向进展，不回退）**：每轮完成后计划推进到本轮调用中**计划序最靠后**的已匹配步之后——模型并行批量调用、跳步提前产出 final 都被接受；只重调已完成步不会回退计划；本轮无任何步匹配则重发当前步提示。
 

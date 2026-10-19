@@ -340,17 +340,45 @@ test.describe('tool bindings', () => {
 
         await page.evaluate(async (bindings) => {
             const script = await import('/script.js');
+            const { promptManager } = await import('/scripts/openai.js');
             const context = window.SillyTavern.getContext();
             context.featureSettings.tool_bindings = bindings;
             context.chatCompletionSettings.reply_pipeline = {
                 enabled: true,
                 steps: [
-                    { tool: 'analyze', prompt: 'PLAN_FIRST' },
+                    { tool: 'analyze', prompt: 'PLAN_FIRST', reasoning_effort: 'low' },
                     { tool: 'review', prompt: 'RATE_PLAN' },
                     { tool: 'respond', prompt: 'WRITE_REPLY' },
                 ],
                 final: 'respond',
             };
+            // A prompt tagged 'pipeline:review' must inject on the review round
+            // only; base (all/normal) prompts keep firing on every round.
+            const settings = context.chatCompletionSettings;
+            if (!promptManager.activeCharacter && Array.isArray(context.characters) && context.characters.length) {
+                await context.selectCharacterById(0);
+            }
+            const characterId = promptManager.activeCharacter?.id ?? null;
+            settings.prompts = Array.isArray(settings.prompts) ? settings.prompts : [];
+            settings.prompts.push({
+                identifier: 'e2e_review_rubric',
+                name: 'E2E Review Rubric',
+                role: 'system',
+                content: 'E2E_REVIEW_RUBRIC_TEXT',
+                marker: false,
+                system_prompt: false,
+                injection_position: 0,
+                injection_depth: 4,
+                injection_order: 100,
+                injection_trigger: ['pipeline:review'],
+            });
+            settings.prompt_order = Array.isArray(settings.prompt_order) ? settings.prompt_order : [];
+            let bucket = settings.prompt_order.find(item => String(item.character_id) === String(characterId));
+            if (!bucket) {
+                bucket = { character_id: characterId, order: [] };
+                settings.prompt_order.push(bucket);
+            }
+            bucket.order.push({ identifier: 'e2e_review_rubric', enabled: true });
             await script.saveSettings();
         }, pipelineBindings);
         await page.reload();
@@ -394,6 +422,16 @@ test.describe('tool bindings', () => {
         expect(turnRequests[1].messages.some(message => String(message?.content ?? '').includes('[Reply pipeline 2/3]') && String(message?.content ?? '').includes('review'))).toBe(true);
         expect(turnRequests[2].messages.some(message => String(message?.content ?? '').includes('[Reply pipeline 3/3]') && String(message?.content ?? '').includes('respond'))).toBe(true);
         expect(turnRequests[2].tools?.some(tool => tool?.function?.name === 'respond')).toBe(true);
+
+        // A prompt tagged 'pipeline:review' injects only on the review round;
+        // the rubric is absent from the analyze and respond rounds.
+        const hasRubric = request => request.messages.some(message => String(message?.content ?? '').includes('E2E_REVIEW_RUBRIC_TEXT'));
+        expect(turnRequests.map(hasRubric)).toEqual([false, true, false]);
+
+        // The analyze step's reasoning_effort overrides the base value for
+        // its round only; later rounds keep the preset-level value.
+        expect(turnRequests[0].reasoning_effort).toBe('low');
+        expect(turnRequests[1].reasoning_effort).not.toBe('low');
 
         const chatState = await page.evaluate(() => {
             const chat = window.SillyTavern.getContext().chat;

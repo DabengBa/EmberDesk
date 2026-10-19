@@ -175,6 +175,7 @@ import {
 import { markdownUnderscoreExt } from './scripts/showdown-underscore.js';
 
 import { registerPromptManagerMigration } from './scripts/PromptManager.js';
+import { normalizeReplyPipeline, pipelineTriggerTag } from './scripts/reply-pipeline-core.js';
 import { getRegexedString, regex_placement } from './scripts/extensions/regex/engine.js';
 import { FILTER_STATES, FILTER_TYPES, FilterHelper, isFilterState } from './scripts/filters.js';
 import { initLocales, t, translate } from './scripts/i18n.js';
@@ -9468,15 +9469,30 @@ function getPromptPanelBridge() {
 
     /**
      * Normalizes a stored injection_trigger list to the supported vocabulary.
-     * 'all' dominates and represents every generation type; retired trigger
+     * 'all' dominates and represents every generation type; 'pipeline:<tool>'
+     * scopes a prompt to the named reply-pipeline step round. Retired trigger
      * values are dropped. Legacy empty arrays mean 'all'.
      * @param {unknown} triggers Stored trigger list
      * @returns {string[]} Normalized trigger list
      */
     const normalizeInjectionTriggers = (triggers) => {
-        const allowed = ['all', 'normal'];
-        const list = Array.isArray(triggers) ? triggers.filter(value => allowed.includes(value)) : [];
+        const isAllowed = value => ['all', 'normal'].includes(value)
+            || (typeof value === 'string' && value.startsWith('pipeline:') && value.length > 'pipeline:'.length);
+        const list = Array.isArray(triggers) ? triggers.filter(isAllowed) : [];
         return (!list.length || list.includes('all')) ? ['all'] : list;
+    };
+
+    /**
+     * Trigger tags for the runnable pipeline steps of the active preset —
+     * used to offer one checkbox per pipeline round in the trigger row.
+     * @returns {string[]} e.g. ['pipeline:analyze', 'pipeline:review']
+     */
+    const getPipelineTriggerTags = () => {
+        const pipeline = normalizeReplyPipeline(oai_settings?.reply_pipeline);
+        if (!pipeline.enabled) {
+            return [];
+        }
+        return [...new Set(pipeline.steps.map(step => pipelineTriggerTag(step.tool)))];
     };
 
     /**
@@ -9549,6 +9565,7 @@ function getPromptPanelBridge() {
                 order: stabilizeOrder(getOrderList().map(entry => ({ identifier: entry.identifier, enabled: Boolean(entry.enabled) }))),
                 tokenCounts: { ...tokenCountOverrides },
                 presetDirty: isOpenAIPresetDirty(),
+                pipelineTriggerTags: getPipelineTriggerTags(),
             };
             return cachedState;
         },

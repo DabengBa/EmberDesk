@@ -27,6 +27,11 @@ export interface PromptPanelState {
     order: PromptPanelOrderEntry[];
     tokenCounts: Record<string, number>;
     presetDirty: boolean;
+    /**
+     * Trigger tags for the runnable reply-pipeline steps of the active preset
+     * (e.g. 'pipeline:review'). Rendered as extra checkboxes in the trigger row.
+     */
+    pipelineTriggerTags?: string[];
 }
 
 export interface PromptPanelBridge {
@@ -192,6 +197,16 @@ export function PromptManagerList({ bridge }: { bridge: PromptPanelBridge }) {
         }
         bridge.updatePrompt(prompt.identifier, { injection_trigger: next });
     };
+
+    // Pipeline step tags ('pipeline:analyze') become per-round checkboxes
+    // alongside the static all/normal options.
+    const triggerOptions = [
+        ...TRIGGER_OPTIONS,
+        ...(state.pipelineTriggerTags ?? []).map(tag => ({
+            value: tag,
+            label: `管线 ${tag.replace('pipeline:', '')}`,
+        })),
+    ];
 
     // Auto-expand the entry that a header/toolbar "新建" click just appended.
     useEffect(() => {
@@ -393,7 +408,7 @@ export function PromptManagerList({ bridge }: { bridge: PromptPanelBridge }) {
                                             <div className="prompt-panel-field">
                                                 <label className="prompt-panel-field-label" title="选择这条提示词在哪些生成类型下注入">触发时机</label>
                                                 <div className="prompt-panel-trigger-row">
-                                                    {TRIGGER_OPTIONS.map(option => (
+                                                    {triggerOptions.map(option => (
                                                         <label key={option.value} className="checkbox_label">
                                                             <input
                                                                 type="checkbox"

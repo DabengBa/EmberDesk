@@ -10,6 +10,19 @@
 
 const DISPLAY_MODES = new Set(['summary', 'full', 'hidden']);
 const TOOL_NAME_PATTERN = /^[a-zA-Z0-9_-]{1,64}$/;
+// Mirrors reasoning_effort_types in openai.js; kept local to stay import-free.
+const REASONING_EFFORTS = new Set(['auto', 'low', 'medium', 'high', 'min', 'max']);
+
+/**
+ * Prompt-trigger vocabulary for pipeline rounds: a preset prompt tagged
+ * `pipeline:<tool>` is injected only during the round driven by that step's
+ * tool. `all`/`normal` triggers keep firing on every pipeline round.
+ * @param {string} tool Step tool name
+ * @returns {string} Trigger tag stored in `injection_trigger`
+ */
+export function pipelineTriggerTag(tool) {
+    return `pipeline:${String(tool ?? '').trim()}`;
+}
 
 /**
  * Hard cap on runnable steps. Must stay aligned with ToolManager.RECURSE_LIMIT:
@@ -35,6 +48,7 @@ function normalizeStep(raw, index) {
         rawDisplay: DISPLAY_MODES.has(raw.display) ? raw.display : null,
         display: 'summary',
         maxTokens: Number.isFinite(maxTokens) && maxTokens > 0 ? Math.floor(maxTokens) : null,
+        reasoningEffort: REASONING_EFFORTS.has(raw.reasoning_effort) ? raw.reasoning_effort : null,
     };
 }
 

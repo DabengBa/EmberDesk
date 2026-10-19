@@ -821,9 +821,10 @@ async function populateChatCompletion(prompts, chatCompletion, { bias, quietProm
  * @param {string} options.bias - The bias to be added in the conversation.
  * @param {Object} options.extensionPrompts - An object containing additional prompts.
  * @param {string} options.type - The type of generation that triggered the prompt
+ * @param {string} [options.pipelineStepTag] - Active reply-pipeline step trigger tag (e.g. 'pipeline:review')
  * @returns {Promise<Object>} prompts - The prepared and merged system and user-defined prompts.
  */
-async function preparePromptsForChatCompletion({ name2: _name2, worldInfo, charDescription, quietPrompt, bias, extensionPrompts, type }) {
+async function preparePromptsForChatCompletion({ name2: _name2, worldInfo, charDescription, quietPrompt, bias, extensionPrompts, type, pipelineStepTag }) {
     // Create entries for system prompts
     const systemPrompts = [
         // Ordered prompts for which a marker should exist
@@ -855,8 +856,9 @@ async function preparePromptsForChatCompletion({ name2: _name2, worldInfo, charD
         }
     }
 
-    // This is the prompt order defined by the user
-    const prompts = promptManager.getPromptCollection(type);
+    // This is the prompt order defined by the user. A live pipeline step adds
+    // its `pipeline:<tool>` tag so step-scoped prompts inject this round only.
+    const prompts = promptManager.getPromptCollection(type, pipelineStepTag ? [pipelineStepTag] : []);
 
     // Merge system prompts with prompt manager prompts
     systemPrompts.forEach(prompt => {
@@ -911,6 +913,7 @@ export async function prepareOpenAIMessages({
     quietImage,
     extensionPrompts,
     messages,
+    pipelineStepTag,
 }, dryRun) {
     // Without a character selected, there is no way to accurately calculate tokens
     if (!promptManager.activeCharacter && dryRun) return [null, false];
@@ -931,6 +934,7 @@ export async function prepareOpenAIMessages({
             bias,
             extensionPrompts,
             type,
+            pipelineStepTag,
         });
 
         // Fill the chat completion with as much context as the budget allows
