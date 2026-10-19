@@ -989,9 +989,10 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
         });
 
         // Fold the run's progress card into the reply: its invocations move onto
-        // the assistant message and its (already regex-styled) markup is appended
-        // to `mes`, so one turn renders as ONE message. Prompt assembly strips
-        // the trailing <section data-pipeline-card> before sending.
+        // the assistant message and its (already regex-styled) markup is prepended
+        // to `mes`, so one turn renders as ONE message — process first, then the
+        // reply text. Prompt assembly strips the leading <section data-pipeline-card>
+        // before sending.
         const runId = meta?.runId ?? null;
         let cardMarkup = '';
         let mergedInvocations = null;
@@ -1012,7 +1013,7 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
             }
         }
 
-        const finalText = cardMarkup ? `${cleaned}\n${cardMarkup}` : cleaned;
+        const finalText = cardMarkup ? `${cardMarkup}\n${cleaned}` : cleaned;
         const saved = await saveReply({ type, getMessage: finalText, reasoning, reasoningSignature, title, imageUrls });
         const savedMessage = state.chat[state.chat.length - 1];
         if (savedMessage?.extra) {

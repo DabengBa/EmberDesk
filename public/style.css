@@ -6204,10 +6204,10 @@ body:has(#character_popup.open) #top-settings-holder:has(.drawer-content.openDra
     display: none;
 }
 
-/* Folded pipeline card inside the reply message (sits at the end of mes). */
+/* Folded pipeline card inside the reply message (leads mes — process first). */
 [data-pipeline-card] {
     display: block;
-    margin-top: 8px;
+    margin-bottom: 8px;
     text-align: left;
 }
 

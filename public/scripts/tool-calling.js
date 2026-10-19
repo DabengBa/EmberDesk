@@ -900,7 +900,9 @@ export class ToolManager {
 
         const optionChips = [];
         for (const invocation of data) {
-            const item = document.createElement('section');
+            // div, not section: <section data-pipeline-card> must stay the only
+            // section in the markup so prompt-side strip can match it exactly.
+            const item = document.createElement('div');
             item.classList.add('tool-invocation');
             item.setAttribute('data-tool-invocation', '');
             if (invocation.pipeline) {

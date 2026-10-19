@@ -468,11 +468,12 @@ test.describe('tool bindings', () => {
                     && typeof message?.extra?.reply_pipeline_run === 'string').length,
             };
         });
-        // The whole turn is ONE assistant message: reply text + folded card
-        // markup in `mes`, structured invocations in `extra`.
+        // The whole turn is ONE assistant message: folded card markup LEADS
+        // `mes` (process first, reply text after), invocations in `extra`.
         expect(chatState.isSystem).toBe(false);
         expect(chatState.mes).toContain('RESPOND_TEXT');
         expect(chatState.mes).toContain('data-pipeline-card');
+        expect(chatState.mes.indexOf('data-pipeline-card')).toBeLessThan(chatState.mes.indexOf('RESPOND_TEXT'));
         expect(chatState.orphanCards).toBe(0);
         expect(chatState.run.startsWith('pipeline-')).toBe(true);
         expect(chatState.steps.map(step => step.step)).toEqual(['step-1', 'step-2', 'step-3']);

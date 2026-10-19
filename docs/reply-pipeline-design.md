@@ -71,9 +71,10 @@ round i: 请求组装后 (CHAT_COMPLETION_SETTINGS_READY) 注入:
 
 ## 卡片与显示
 
-- **一回合一条消息**：run 期间各轮按 `extra.reply_pipeline_run` 归并进同一张进度卡（实时更新）；`final` 时该卡**折叠进正文消息**——卡消息从 chat 摘除，`mes` = `正文 + <section data-pipeline-card>…</section>` 尾部块，`extra.tool_invocations` 挂到 assistant 消息上
-- 卡内 markup：`<details data-tool-invocations data-pipeline-run>` + 每步一块 `[data-tool-invocation][data-pipeline-step][data-pipeline-display]`；`hidden` 是**块级**标志——final 步隐藏只藏它的块；数组参数提升到卡内 `[data-respond-options]` 芯片行
-- **prompt 侧**：组装时截掉 `mes` 尾部的 `<section data-pipeline-card` 起的内容（openai.js，确定性剥离）；回放 = assistant `tool_calls` + `role:tool` 结果 + **正文 assistant 消息**（顺序与真实时间线一致）。用户 `promptOnly` 正则先于内置剥离执行——可把 markup 改写成文本摘要再发给模型
+- **一回合一条消息**：run 期间各轮按 `extra.reply_pipeline_run` 归并进同一张进度卡（实时更新）；`final` 时该卡**折叠进正文消息**——卡消息从 chat 摘除，`mes` = `<section data-pipeline-card>…</section>` + 正文（过程在前、结果在后），`extra.tool_invocations` 挂到 assistant 消息上
+- 卡内 markup：`<details data-tool-invocations data-pipeline-run>` + 每步一块 `<div data-tool-invocation data-pipeline-step data-pipeline-display>`（**内层只能是 div**——`data-pipeline-card` 必须是唯一的 section，prompt 剥离正则才能精确命中）；`hidden` 是块级标志；数组参数提升到卡内 `[data-respond-options]` 芯片行
+- **prompt 侧**：组装时剥掉 `mes` 开头的 `<section data-pipeline-card>…</section>` 块（openai.js，确定性剥离，兼容旧尾部格式）；回放 = assistant `tool_calls` + `role:tool` 结果 + **正文 assistant 消息**（顺序与真实时序一致）。用户 `promptOnly` 正则先于内置剥离执行——可把 markup 改写成文本摘要再发给模型
+- `<plot-options><option>` 这类正文内标记由 **markdownOnly 正则**在渲染时转成 `data-respond-option` 芯片——存进 `mes` 的仍是语义化标记，prompt 侧看到的是文本
 - **展示侧**：markup 存在 `mes` 里随消息渲染；写入/合并时过 `getRegexedString(mes, AI_OUTPUT)`，`data-*` 锚点供正则重写/隐藏/重排（`MESSAGE_SANITIZE` 重写 class → `custom-*`，所以钩子全是 `data-*`）
 - 兜底轮（final 不可用）走普通消息尾部：进度卡保留为错误证据 + 收口回复是独立消息
 - `[data-tool-invocation-text]` max-height 6em 滚动
