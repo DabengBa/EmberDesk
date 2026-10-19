@@ -573,3 +573,68 @@ test.describe('tool bindings', () => {
         await expect(page.locator('#chat .mes:has([data-tool-invocation])').last()).not.toHaveClass(/replyPipelineHidden/);
     });
 });
+
+test.describe('reply pipeline step editor', () => {
+    test('prompt panel bottom renders one row per step and writes reply_pipeline', async ({ page }) => {
+        await testSetup.awaitST({ page });
+
+        await page.evaluate(() => {
+            const context = window.SillyTavern.getContext();
+            context.chatCompletionSettings.reply_pipeline = {
+                enabled: true,
+                steps: [
+                    { tool: 'analyze', prompt: 'PLAN_FIRST', reasoning_effort: 'low' },
+                    { tool: 'respond', prompt: 'WRITE_REPLY' },
+                ],
+                final: 'respond',
+            };
+            // Any bridge mutation emits a state change so React re-renders the rows.
+            window.__emberDeskPromptPanelBridge.setPipelineEnabled(true);
+        });
+
+        const rows = page.locator('#completion_prompt_manager .prompt-panel-pipeline-row');
+        await expect(rows).toHaveCount(2);
+        await expect(rows.nth(0).locator('.prompt-panel-pipeline-tool')).toHaveValue('analyze');
+        await expect(rows.nth(0).locator('.prompt-panel-pipeline-instruction')).toHaveValue('PLAN_FIRST');
+        await expect(rows.nth(1).locator('.prompt-panel-pipeline-tool')).toHaveValue('respond');
+        await expect(rows.nth(1)).toContainText('最终');
+
+        // Adding a row appends a step; typing writes straight into oai_settings.
+        await page.locator('#completion_prompt_manager .prompt-panel-pipeline-head .menu_button').click();
+        await expect(rows).toHaveCount(3);
+        await rows.nth(2).locator('.prompt-panel-pipeline-tool').fill('temp');
+        await rows.nth(2).locator('.prompt-panel-pipeline-instruction').fill('TEMP_PROMPT');
+
+        let stored = await page.evaluate(() => window.SillyTavern.getContext().chatCompletionSettings.reply_pipeline);
+        expect(stored.steps.map(step => step.tool)).toEqual(['analyze', 'respond', 'temp']);
+        expect(stored.steps[2].prompt).toBe('TEMP_PROMPT');
+        // The last row owns `final` (it produces the reply); advanced step
+        // fields survive row edits.
+        expect(stored.final).toBe('temp');
+        expect(stored.steps[0].reasoning_effort).toBe('low');
+        expect(stored.enabled).toBe(true);
+
+        // Reorder rows → execution order changes; `final` follows the last row.
+        await rows.nth(0).locator('button[aria-label*="下移"]').click();
+        stored = await page.evaluate(() => window.SillyTavern.getContext().chatCompletionSettings.reply_pipeline);
+        expect(stored.steps.map(step => step.tool)).toEqual(['respond', 'analyze', 'temp']);
+
+        // Delete a row → the plan shrinks; last row still owns `final`.
+        await rows.nth(1).locator('button[aria-label*="删除"]').click();
+        stored = await page.evaluate(() => window.SillyTavern.getContext().chatCompletionSettings.reply_pipeline);
+        expect(stored.steps.map(step => step.tool)).toEqual(['respond', 'temp']);
+        expect(stored.final).toBe('temp');
+
+        // Disabling the pipeline hides the per-step trigger checkboxes.
+        await page.locator('#completion_prompt_manager .prompt-panel-pipeline-head input[type="checkbox"]').uncheck();
+        stored = await page.evaluate(() => window.SillyTavern.getContext().chatCompletionSettings.reply_pipeline);
+        expect(stored.enabled).toBe(false);
+        const tags = await page.evaluate(() => window.__emberDeskPromptPanelBridge.getState().pipelineTriggerTags);
+        expect(tags).toEqual([]);
+
+        // Re-enable → trigger tags come back for the authored steps.
+        await page.locator('#completion_prompt_manager .prompt-panel-pipeline-head input[type="checkbox"]').check();
+        const tagsBack = await page.evaluate(() => window.__emberDeskPromptPanelBridge.getState().pipelineTriggerTags);
+        expect(tagsBack).toEqual(['pipeline:respond', 'pipeline:temp']);
+    });
+});

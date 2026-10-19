@@ -22,6 +22,14 @@ export interface PromptPanelOrderEntry {
     enabled: boolean;
 }
 
+export interface PromptPanelPipelineStep {
+    id: string;
+    /** Binding tool name invoked this round ('' = draft row). */
+    tool: string;
+    /** Per-round instruction appended to the request tail. */
+    prompt: string;
+}
+
 export interface PromptPanelState {
     promptsById: Record<string, PromptPanelPrompt>;
     order: PromptPanelOrderEntry[];
@@ -32,6 +40,10 @@ export interface PromptPanelState {
      * (e.g. 'pipeline:review'). Rendered as extra checkboxes in the trigger row.
      */
     pipelineTriggerTags?: string[];
+    /** Reply-pipeline rows: order is execution order, last row is the final step. */
+    pipeline?: { enabled: boolean; steps: PromptPanelPipelineStep[] };
+    /** Enabled non-stealth binding names — suggestions for the tool field. */
+    bindingToolNames?: string[];
 }
 
 export interface PromptPanelBridge {
@@ -42,6 +54,11 @@ export interface PromptPanelBridge {
     updatePrompt(identifier: string, patch: Partial<PromptPanelPrompt>): void;
     addPrompt(): string | null;
     deletePrompt(identifier: string): void;
+    setPipelineEnabled(enabled: boolean): void;
+    addPipelineStep(): void;
+    updatePipelineStep(index: number, patch: Partial<PromptPanelPipelineStep>): void;
+    deletePipelineStep(index: number): void;
+    movePipelineStep(index: number, targetIndex: number): void;
 }
 
 const ROLE_OPTIONS: Array<{ value: string; label: string }> = [
@@ -444,6 +461,86 @@ export function PromptManagerList({ bridge }: { bridge: PromptPanelBridge }) {
                 {state.order.length === 0 ? (
                     <div className="prompt-panel-empty">暂无 prompt 排序数据</div>
                 ) : null}
+            </div>
+            <div className="prompt-panel-pipeline">
+                <div className="prompt-panel-pipeline-head">
+                    <span className="prompt-panel-field-label">回复管线</span>
+                    <label className="checkbox_label" title="启用后,一次用户消息按下方顺序执行多轮工具调用">
+                        <input
+                            type="checkbox"
+                            checked={state.pipeline?.enabled ?? false}
+                            onChange={event => bridge.setPipelineEnabled(event.target.checked)}
+                        />
+                        <span>启用</span>
+                    </label>
+                    <button type="button" className="menu_button" onClick={() => bridge.addPipelineStep()} title="添加一轮工具调用">
+                        <i className="fa-solid fa-plus" aria-hidden="true" /> 步骤
+                    </button>
+                </div>
+                <div className="prompt-panel-pipeline-rows">
+                    {(state.pipeline?.steps ?? []).map((step, index, steps) => (
+                        <div key={step.id} className="prompt-panel-pipeline-row">
+                            <span className="prompt-panel-pipeline-index">{index + 1}</span>
+                            <input
+                                type="text"
+                                className="text_pole prompt-panel-pipeline-tool"
+                                list="prompt-panel-pipeline-tools"
+                                placeholder="工具名"
+                                title="该轮必须调用的工具绑定名"
+                                aria-label={`第 ${index + 1} 步工具名`}
+                                key={`${step.id}:tool`}
+                                defaultValue={step.tool}
+                                onChange={event => bridge.updatePipelineStep(index, { tool: event.target.value })}
+                            />
+                            <input
+                                type="text"
+                                className="text_pole prompt-panel-pipeline-instruction"
+                                placeholder="本轮指令（追加在请求末尾）"
+                                title="该轮注入到请求末尾的步指令"
+                                aria-label={`第 ${index + 1} 步指令`}
+                                key={`${step.id}:prompt`}
+                                defaultValue={step.prompt}
+                                onChange={event => bridge.updatePipelineStep(index, { prompt: event.target.value })}
+                            />
+                            {index === steps.length - 1 ? <span className="prompt-panel-badge" title="末行产出正文回复">最终</span> : null}
+                            <button
+                                type="button"
+                                className="prompt-panel-step-btn"
+                                title="上移"
+                                aria-label={`上移第 ${index + 1} 步`}
+                                disabled={index === 0}
+                                onClick={() => bridge.movePipelineStep(index, index - 1)}
+                            >
+                                <i className="fa-solid fa-chevron-up" aria-hidden="true" />
+                            </button>
+                            <button
+                                type="button"
+                                className="prompt-panel-step-btn"
+                                title="下移"
+                                aria-label={`下移第 ${index + 1} 步`}
+                                disabled={index === steps.length - 1}
+                                onClick={() => bridge.movePipelineStep(index, index + 1)}
+                            >
+                                <i className="fa-solid fa-chevron-down" aria-hidden="true" />
+                            </button>
+                            <button
+                                type="button"
+                                className="prompt-panel-step-btn prompt-panel-step-delete"
+                                title="删除该步"
+                                aria-label={`删除第 ${index + 1} 步`}
+                                onClick={() => bridge.deletePipelineStep(index)}
+                            >
+                                <i className="fa-solid fa-xmark" aria-hidden="true" />
+                            </button>
+                        </div>
+                    ))}
+                    {(state.pipeline?.steps ?? []).length === 0 ? (
+                        <div className="prompt-panel-empty">未配置管线步骤——添加一行即多一轮工具调用，顺序即执行顺序</div>
+                    ) : null}
+                </div>
+                <datalist id="prompt-panel-pipeline-tools">
+                    {(state.bindingToolNames ?? []).map(name => <option key={name} value={name} />)}
+                </datalist>
             </div>
             {contentPopup ? createPortal(
                 <div className="prompt-content-overlay" onClick={() => setContentPopup(null)}>

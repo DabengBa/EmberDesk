@@ -176,6 +176,7 @@ import { markdownUnderscoreExt } from './scripts/showdown-underscore.js';
 
 import { registerPromptManagerMigration } from './scripts/PromptManager.js';
 import { normalizeReplyPipeline, pipelineTriggerTag } from './scripts/reply-pipeline-core.js';
+import { normalizeToolBindings } from './scripts/tool-bindings-core.js';
 import { getRegexedString, regex_placement } from './scripts/extensions/regex/engine.js';
 import { FILTER_STATES, FILTER_TYPES, FilterHelper, isFilterState } from './scripts/filters.js';
 import { initLocales, t, translate } from './scripts/i18n.js';
@@ -9496,6 +9497,54 @@ function getPromptPanelBridge() {
     };
 
     /**
+     * Returns the raw reply_pipeline object for mutation, creating the
+     * default shape first when the preset has none.
+     * @returns {object} Mutable oai_settings.reply_pipeline
+     */
+    const ensurePipeline = () => {
+        if (!oai_settings.reply_pipeline || typeof oai_settings.reply_pipeline !== 'object' || Array.isArray(oai_settings.reply_pipeline)) {
+            oai_settings.reply_pipeline = { enabled: false, steps: [] };
+        }
+        if (!Array.isArray(oai_settings.reply_pipeline.steps)) {
+            oai_settings.reply_pipeline.steps = [];
+        }
+        return oai_settings.reply_pipeline;
+    };
+
+    /**
+     * Row order IS the plan: the last row produces the reply. Keep `final`
+     * pointing at it after every mutation.
+     * @param {object} pipeline Mutable pipeline object
+     */
+    const syncPipelineFinal = (pipeline) => {
+        pipeline.final = String(pipeline.steps.at(-1)?.tool ?? '');
+    };
+
+    /**
+     * Raw (untruncated) pipeline steps for the editor rows.
+     * @returns {{id: string, tool: string, prompt: string}[]}
+     */
+    const getPipelineStepRows = () => {
+        const steps = oai_settings?.reply_pipeline?.steps;
+        if (!Array.isArray(steps)) {
+            return [];
+        }
+        return steps.map((step, index) => ({
+            id: typeof step?.id === 'string' && step.id.length > 0 ? step.id : `step-${index + 1}`,
+            tool: String(step?.tool ?? ''),
+            prompt: typeof step?.prompt === 'string' ? step.prompt : '',
+        }));
+    };
+
+    /**
+     * Enabled, non-stealth binding names — suggestions for the step tool field.
+     * @returns {string[]}
+     */
+    const getEligibleToolNames = () => normalizeToolBindings(feature_settings.tool_bindings)
+        .filter(binding => binding.enabled && !binding.stealth)
+        .map(binding => binding.name);
+
+    /**
      * Returns the live prompt-order array for the active character, creating
      * the per-character bucket first when the preset has none so appended
      * entries actually persist.
@@ -9566,6 +9615,11 @@ function getPromptPanelBridge() {
                 tokenCounts: { ...tokenCountOverrides },
                 presetDirty: isOpenAIPresetDirty(),
                 pipelineTriggerTags: getPipelineTriggerTags(),
+                pipeline: {
+                    enabled: Boolean(oai_settings?.reply_pipeline?.enabled),
+                    steps: getPipelineStepRows(),
+                },
+                bindingToolNames: getEligibleToolNames(),
             };
             return cachedState;
         },
@@ -9630,6 +9684,55 @@ function getPromptPanelBridge() {
             if (index >= 0) {
                 order.splice(index, 1);
             }
+            persist();
+        },
+        setPipelineEnabled(enabled) {
+            ensurePipeline().enabled = Boolean(enabled);
+            persist();
+        },
+        addPipelineStep() {
+            const pipeline = ensurePipeline();
+            pipeline.steps.push({ id: `step-${uuidv4().slice(0, 8)}`, tool: '', prompt: '' });
+            // Adding the first row means the user wants a pipeline — enable it.
+            if (pipeline.steps.length === 1) {
+                pipeline.enabled = true;
+            }
+            syncPipelineFinal(pipeline);
+            persist();
+        },
+        updatePipelineStep(index, patch) {
+            const pipeline = ensurePipeline();
+            const step = pipeline.steps[index];
+            if (!step) {
+                return;
+            }
+            // Only the inline-editable fields are patched; advanced step keys
+            // (display, max_tokens, reasoning_effort) survive UI edits.
+            if (patch && Object.prototype.hasOwnProperty.call(patch, 'tool')) {
+                step.tool = String(patch.tool ?? '');
+                syncPipelineFinal(pipeline);
+            }
+            if (patch && Object.prototype.hasOwnProperty.call(patch, 'prompt')) {
+                step.prompt = String(patch.prompt ?? '');
+            }
+            persist();
+        },
+        deletePipelineStep(index) {
+            const pipeline = ensurePipeline();
+            if (index < 0 || index >= pipeline.steps.length) {
+                return;
+            }
+            pipeline.steps.splice(index, 1);
+            syncPipelineFinal(pipeline);
+            persist();
+        },
+        movePipelineStep(index, targetIndex) {
+            const pipeline = ensurePipeline();
+            if (index < 0 || index >= pipeline.steps.length || !Number.isInteger(targetIndex) || targetIndex < 0 || targetIndex >= pipeline.steps.length || index === targetIndex) {
+                return;
+            }
+            pipeline.steps.splice(targetIndex, 0, ...pipeline.steps.splice(index, 1));
+            syncPipelineFinal(pipeline);
             persist();
         },
     };
