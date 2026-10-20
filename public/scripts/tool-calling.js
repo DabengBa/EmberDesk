@@ -987,6 +987,65 @@ export class ToolManager {
     }
 
     /**
+     * Builds the tag-based pipeline markup that is folded into the reply
+     * message: one `&lt;{tool}&gt;text&lt;/{tool}&gt;` block per step — the
+     * tag DELIMITERS are stored escaped, so the message displays the tag
+     * names literally as text (sanitizers would otherwise eat unknown
+     * elements and merge the sections). Regexes (markdownOnly at display,
+     * promptOnly pre-send) match the `&lt;tag&gt;` entities to restyle or
+     * strip a block. The final step's tag carries the reply text RAW — its
+     * own markup (`<plot-options>`, chip row) stays live.
+     * @param {ToolInvocation[]} invocations Merged run invocations
+     * @param {string} [finalText] Reply text for the last step's tag
+     * @returns {string} Tag markup for `mes`
+     */
+    static formatPipelineTagMarkup(invocations, finalText = '') {
+        const safeTag = name => /^[a-zA-Z][a-zA-Z0-9_-]*$/.test(String(name)) ? String(name) : 'step';
+        const escape = value => String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const primaryText = invocation => {
+            const params = typeof invocation?.parameters === 'string' ? tryParse(invocation.parameters) : invocation?.parameters;
+            if (typeof params?.content === 'string' && params.content.length) {
+                return params.content;
+            }
+            if (typeof invocation?.result === 'string' && invocation.result.length) {
+                return invocation.result;
+            }
+            return params && typeof params === 'object' ? JSON.stringify(params) : String(invocation?.result ?? '');
+        };
+        const blocks = [];
+        invocations.forEach((invocation, index) => {
+            const isLast = index === invocations.length - 1;
+            const tag = safeTag(invocation?.name);
+            // Earlier steps escape their text too (literal inner content); the
+            // last tag carries the reply RAW so <plot-options>-style markup
+            // stays live for display-time regexes and the chip row.
+            const text = isLast && finalText ? finalText : escape(primaryText(invocation));
+            const chips = isLast ? ToolManager.#optionChipsOf(invocation) : [];
+            blocks.push(`&lt;${tag}&gt;${text}${chips}&lt;/${tag}&gt;`);
+        });
+        return blocks.join('\n');
+    }
+
+    /**
+     * Renders lifted option chips inside a step tag (escaped text context —
+     * chips stay raw markup so the click delegation finds them).
+     * @param {ToolInvocation} invocation Invocation to inspect
+     * @returns {string} Chip row markup or ''
+     */
+    static #optionChipsOf(invocation) {
+        const params = typeof invocation?.parameters === 'string' ? tryParse(invocation.parameters) : invocation?.parameters;
+        if (!params || typeof params !== 'object') {
+            return '';
+        }
+        const items = Object.values(params).filter(Array.isArray).flat();
+        if (!items.length) {
+            return '';
+        }
+        const chips = items.map(item => `<div data-respond-option="" role="button" tabindex="0">▸ ${typeof item === 'string' ? item : JSON.stringify(item)}</div>`).join('');
+        return `<div data-respond-options="">${chips}</div>`;
+    }
+
+    /**
      * Renders the option-chip row element.
      * @param {Array} items Option values
      * @returns {HTMLElement} Chip row element

@@ -379,13 +379,13 @@ test.describe('tool bindings', () => {
                 settings.prompt_order.push(bucket);
             }
             bucket.order.push({ identifier: 'e2e_review_rubric', enabled: true });
-            // AI_OUTPUT regexes also run on the merged pipeline card's mes —
-            // this one rewrites the card summary label.
+            // AI_OUTPUT regexes still run on the folded pipeline markup — this
+            // one marks the &lt;review&gt; tag so we can assert write-time regex.
             context.featureSettings.regex = [{
                 id: 'e2e_card_label',
-                scriptName: 'E2E pipeline card label',
-                findRegex: 'Tool calls:',
-                replaceString: 'E2E_TOOL_LABEL:',
+                scriptName: 'E2E pipeline review mark',
+                findRegex: '&lt;review&gt;',
+                replaceString: '&lt;review&gt;[E2E-MARKED] ',
                 trimStrings: [],
                 placement: [2],
                 disabled: false,
@@ -468,36 +468,33 @@ test.describe('tool bindings', () => {
                     && typeof message?.extra?.reply_pipeline_run === 'string').length,
             };
         });
-        // The whole turn is ONE assistant message: folded card markup LEADS
-        // `mes` (process first, reply text after), invocations in `extra`.
+        // The whole turn is ONE assistant message: steps are escaped
+        // &lt;tool&gt;…&lt;/tool&gt; tag text leading `mes` — the tag names
+        // display literally, the last tag carries the reply raw.
         expect(chatState.isSystem).toBe(false);
-        expect(chatState.mes).toContain('RESPOND_TEXT');
-        expect(chatState.mes).toContain('data-pipeline-card');
-        expect(chatState.mes.indexOf('data-pipeline-card')).toBeLessThan(chatState.mes.indexOf('RESPOND_TEXT'));
+        expect(chatState.mes).toContain('&lt;analyze&gt;');
+        expect(chatState.mes).toContain('&lt;review&gt;[E2E-MARKED]');
+        expect(chatState.mes).toContain('&lt;respond&gt;');
+        expect(chatState.mes).not.toContain('data-pipeline-card');
+        expect(chatState.mes.indexOf('&lt;analyze&gt;')).toBeLessThan(chatState.mes.indexOf('&lt;respond&gt;'));
+        expect(chatState.mes.indexOf('RESPOND_TEXT')).toBeGreaterThan(chatState.mes.indexOf('&lt;respond&gt;'));
         expect(chatState.orphanCards).toBe(0);
         expect(chatState.run.startsWith('pipeline-')).toBe(true);
         expect(chatState.steps.map(step => step.step)).toEqual(['step-1', 'step-2', 'step-3']);
         expect(chatState.steps.map(step => step.display)).toEqual(['summary', 'summary', 'hidden']);
 
-        // In the DOM the folded card lives inside the reply row — per-step
-        // blocks carry data-pipeline-step/data-pipeline-display hooks.
+        // In the DOM the tag names show as literal text — the raw content is
+        // directly readable without any regex.
         const replyRow = page.locator('#chat .mes').last();
-        const card = replyRow.locator('[data-pipeline-card]');
-        await expect(card).toHaveCount(1, { timeout: 15_000 });
-        await expect(card.locator('[data-tool-invocation]')).toHaveCount(3);
-        await expect(card.locator('[data-pipeline-step="analyze"]')).toHaveCount(1);
-        await expect(card.locator('[data-pipeline-step="review"]')).toHaveCount(1);
-        // The final step's block is hidden inside the still-visible card.
-        const respondBlock = card.locator('[data-pipeline-step="respond"]');
-        await expect(respondBlock).toHaveAttribute('data-pipeline-display', 'hidden');
-        await expect(respondBlock).toBeHidden();
+        await expect(replyRow).toContainText('<analyze>', { timeout: 15_000 });
+        await expect(replyRow).toContainText('<review>');
+        await expect(replyRow).toContainText('<respond>');
+        await expect(replyRow).toContainText('RESPOND_TEXT');
 
-        // The AI_OUTPUT regex rewrote the stored card markup at write time.
-        await expect(card.locator('summary').first()).toContainText('E2E_TOOL_LABEL');
-
-        // Option chips render inside the same message and stay clickable.
-        await expect(card.locator('[data-respond-options] [data-respond-option]')).toHaveCount(2);
-        await page.evaluate(() => document.querySelector('#chat [data-pipeline-card] [data-respond-option]').click());
+        // Option chips stay live inside the reply and remain clickable.
+        const chips = replyRow.locator('[data-respond-option]');
+        await expect(chips).toHaveCount(2);
+        await page.evaluate(() => document.querySelector('#chat [data-respond-option]').click());
         await expect(page.locator('#send_textarea')).toHaveValue('Take the tea');
 
         // A later ordinary generation (pipeline disabled) must not carry stale
@@ -528,7 +525,10 @@ test.describe('tool bindings', () => {
         expect(replayedToolCalls.length).toBeGreaterThanOrEqual(1);
         expect(replayedToolResults.length).toBeGreaterThanOrEqual(3);
         expect(replayedReply).toHaveLength(1);
-        expect(replayedReply[0].content).not.toContain('data-pipeline-card');
+        expect(replayedReply[0].content).not.toContain('<analyze');
+        expect(replayedReply[0].content).not.toContain('<review');
+        expect(replayedReply[0].content).not.toContain('<respond');
+        expect(replayedReply[0].content).not.toContain('data-respond-option');
     });
 
     test('reply pipeline falls back to a closing round without tools when the final result is unusable', async ({ page }) => {

@@ -71,13 +71,13 @@ round i: 请求组装后 (CHAT_COMPLETION_SETTINGS_READY) 注入:
 
 ## 卡片与显示
 
-- **一回合一条消息**：run 期间各轮按 `extra.reply_pipeline_run` 归并进同一张进度卡（实时更新）；`final` 时该卡**折叠进正文消息**——卡消息从 chat 摘除，`mes` = `<section data-pipeline-card>…</section>` + 正文（过程在前、结果在后），`extra.tool_invocations` 挂到 assistant 消息上
-- 卡内 markup：`<details data-tool-invocations data-pipeline-run>` + 每步一块 `<div data-tool-invocation data-pipeline-step data-pipeline-display>`（**内层只能是 div**——`data-pipeline-card` 必须是唯一的 section，prompt 剥离正则才能精确命中）；`hidden` 是块级标志；数组参数提升到卡内 `[data-respond-options]` 芯片行
-- **prompt 侧**：组装时剥掉 `mes` 开头的 `<section data-pipeline-card>…</section>` 块（openai.js，确定性剥离，兼容旧尾部格式）；回放 = assistant `tool_calls` + `role:tool` 结果 + **正文 assistant 消息**（顺序与真实时序一致）。用户 `promptOnly` 正则先于内置剥离执行——可把 markup 改写成文本摘要再发给模型
-- `<plot-options><option>` 这类正文内标记由 **markdownOnly 正则**在渲染时转成 `data-respond-option` 芯片——存进 `mes` 的仍是语义化标记，prompt 侧看到的是文本
-- **展示侧**：markup 存在 `mes` 里随消息渲染；写入/合并时过 `getRegexedString(mes, AI_OUTPUT)`，`data-*` 锚点供正则重写/隐藏/重排（`MESSAGE_SANITIZE` 重写 class → `custom-*`，所以钩子全是 `data-*`）
+- **一回合一条消息**：run 期间各轮按 `extra.reply_pipeline_run` 归并进同一张进度卡（实时更新，`<details data-pipeline-run>` markup）；`final` 时该卡**折叠进正文消息**——卡消息从 chat 摘除，`mes` = **转义语义标签文本**（每步一段 `&lt;{tool}&gt;内容&lt;/{tool}&gt;`，如 `&lt;analyze&gt;…&lt;/analyze&gt;&lt;review&gt;…&lt;/review&gt;&lt;respond&gt;正文&lt;/respond&gt;`），`extra.tool_invocations` 挂到 assistant 消息上
+- **为什么是转义标签**：标签定界符存成 `&lt;`/`&gt;` 实体 → 消息把标签名**当字面文本显示**（裸未知元素会被 DOMPurify 吃掉、几段正文糊在一起）。没有正则时用户直接看到 `<analyze>xx</analyze>` 原始包裹文本——零 JSON、零卡片 chrome
+- **末标签即正文**：最后一步（通常是 respond/final）的 tag 里放**原生回复文本**——`<plot-options>` 这类正文内标记保持活体，markdownOnly 正则照旧渲染成 `data-respond-option` 芯片；选项芯片行（数组参数提升）也塞在末标签内。前面步的内容整体转义存字面文本
+- **正则锚点**：写入时 `getRegexedString(mes, AI_OUTPUT)` 跑在完整 markup 上；markdownOnly 规则按 `&lt;tag&gt;` 实体匹配做样式/隐藏/折叠（demo：`analyze→折叠块`、`review 加高亮边`、`隐藏 analyze 块`）；promptOnly 规则可把步骤块改写成文本摘要再发给模型
+- **prompt 侧**：组装时前面步的 `&lt;tool&gt;…&lt;/tool&gt;` 块整段剥掉、末标签解包成纯文本、芯片行剥掉（openai.js，逐 invocation 按工具名匹配，裸标签/旧 `data-pipeline-card` 段兼容剥离）；回放 = assistant `tool_calls` + `role:tool` 结果 + **正文 assistant 消息**（顺序与真实时序一致）
 - 兜底轮（final 不可用）走普通消息尾部：进度卡保留为错误证据 + 收口回复是独立消息
-- `[data-tool-invocation-text]` max-height 6em 滚动
+- `[data-tool-invocation-text]` max-height 6em 滚动（运行中进度卡）
 
 ## 代码落点
 
@@ -86,14 +86,14 @@ round i: 请求组装后 (CHAT_COMPLETION_SETTINGS_READY) 注入:
 | `public/scripts/reply-pipeline-core.js` | 纯逻辑：归一化、步解析、步提示、final 文本抽取 |
 | `public/scripts/reply-pipeline.js` | 运行态：run 状态机、`preparePipelineRound`、请求整形、事件挂钩 |
 | `public/scripts/generation-service.js` | 两个工具分支插 `preparePipelineRound` + `finalizePipelineReply`（摘卡、折叠进正文）；`GENERATION_STARTED` 补发 `depth` |
-| `public/scripts/tool-calling.js` | 进度卡格式化（`data-pipeline-run`/`data-pipeline-step`/`data-pipeline-card` 挂钩）+ runId 归并保存 + AI_OUTPUT regex 通道 |
-| `public/scripts/openai.js` | 回放：assistant `tool_calls` + `role:tool` + 正文消息；剥掉 `mes` 尾部 `data-pipeline-card` 段 |
+| `public/scripts/tool-calling.js` | 进度卡格式化（`data-pipeline-run`/`data-pipeline-step` 挂钩）+ `formatPipelineTagMarkup`（终态语义标签）+ runId 归并保存 + AI_OUTPUT regex 通道 |
+| `public/scripts/openai.js` | 回放：assistant `tool_calls` + `role:tool` + 正文消息；逐步剥 `&lt;tool&gt;` 块/解包末标签/剥芯片行（旧 `data-pipeline-card` 段兼容剥离） |
 | `chat-message-render-descriptor.js` / `main-chat-store-projection.js` / `message-service.js` | `replyPipelineHidden` 类通道（残留进度卡/兜底卡用） |
 
 ## 验证（已落地）
 
 - 单测 `reply-pipeline-core`：归一化（含 final 截断/缺省回落/步数钳制）、步提示、result_field 抽取（含 JSON 标量解包）、findStepCompletion 前向推进
-- e2e：`reply_pipeline` 跨重载持久（不再重注入——持久化是承重断言）；3 轮步提示 + final-direct 无第 4 请求；**融合卡**断言（一条 assistant 消息、`mes` 含 `data-pipeline-card` 尾块、`tool_invocations`×3、`data-pipeline-step` 三块、final 块级 hidden、卡内芯片点击、AI_OUTPUT regex 生效、无遗留 runId 卡）；**回放剥离**断言（下一轮请求里该消息回放为 tool_calls+tool 结果+正文且正文不含卡 markup）；后续生成零残留；兜底路径（ok-object → 无 tools/无编号步提示/失败卡留作独立证据消息）
+- e2e：`reply_pipeline` 跨重载持久（不再重注入——持久化是承重断言）；3 轮步提示 + final-direct 无第 4 请求；**融合标签**断言（一条 assistant 消息、`mes` 含 `&lt;analyze&gt;`/`&lt;review&gt;`/`&lt;respond&gt;` 转义标签块且顺序正确、无 `data-pipeline-card`、DOM 显示字面标签文本、`tool_invocations`×3、芯片可点、AI_OUTPUT regex 生效于标签 markup、无遗留 runId 卡）；**回放剥离**断言（下一轮请求里该消息回放为 tool_calls+tool 结果+正文且正文不含任何标签/芯片 markup）；后续生成零残留；兜底路径（ok-object → 无 tools/无编号步提示/失败卡留作独立证据消息）
 - `test:compat`；`pnpm run lint`；docs:check
 
 ## 已知边界

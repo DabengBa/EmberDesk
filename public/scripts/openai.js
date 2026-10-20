@@ -315,12 +315,30 @@ function setOpenAIMessages(chat) {
         const mediaIndex = getMediaIndex(chat[j]);
         const invocations = chat[j]?.extra?.tool_invocations?.slice();
 
-        // A pipeline reply embeds its tool-call card markup as a leading
-        // <section data-pipeline-card> in `mes` — display markup, never send
-        // it as content (the structured replay below carries the invocations).
-        // Strip both leading (current) and trailing (earlier builds) forms.
+        // Folded pipeline markup is display-only — never send it as content
+        // (the structured replay below already carries the invocations).
+        // Tag form: &lt;tool&gt;…&lt;/tool&gt; blocks — earlier steps drop
+        // entirely; the last step's tag carries the reply text, so unwrap it
+        // and drop the chip row. Section form (<section data-pipeline-card>)
+        // and raw <tool> tags (earlier builds) strip whole for compat.
         if (Array.isArray(invocations) && typeof content === 'string') {
+            invocations.forEach((invocation, index) => {
+                const name = String(invocation?.name ?? '');
+                if (!/^[a-zA-Z][a-zA-Z0-9_-]*$/.test(name)) {
+                    return;
+                }
+                const isLast = index === invocations.length - 1;
+                content = isLast
+                    ? content
+                        .replace(new RegExp(`&lt;/?${name}&gt;`, 'g'), '')
+                        .replace(new RegExp(`</?${name}>`, 'g'), '')
+                    : content
+                        .replace(new RegExp(`&lt;${name}&gt;[\\s\\S]*?&lt;/${name}&gt;`, 'g'), '')
+                        .replace(new RegExp(`<${name}>[\\s\\S]*?</${name}>`, 'g'), '');
+            });
+            // Chip row = outer div + nested chip divs — ends on </div></div>.
             content = content
+                .replace(/<div data-respond-options[^>]*>[\s\S]*?<\/div><\/div>/g, '')
                 .replace(/^\s*<section data-pipeline-card\b[\s\S]*?<\/section>\s*/, '')
                 .replace(/\s*<section data-pipeline-card\b[\s\S]*$/, '');
         }

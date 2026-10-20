@@ -988,21 +988,31 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
             stoppingStrings: [],
         });
 
-        // Fold the run's progress card into the reply: its invocations move onto
-        // the assistant message and its (already regex-styled) markup is prepended
-        // to `mes`, so one turn renders as ONE message — process first, then the
-        // reply text. Prompt assembly strips the leading <section data-pipeline-card>
-        // before sending.
+        // Fold the run's progress card into the reply: its invocations move
+        // onto the assistant message and its steps become <tool>text</tool>
+        // tag blocks leading `mes` — semantic XML, no chrome, no raw JSON.
+        // The last tag carries the reply text itself; prompt assembly strips
+        // earlier tags and unwraps the last one, so markup never reaches the
+        // wire while the model still gets invocations + reply via replay.
         const runId = meta?.runId ?? null;
-        let cardMarkup = '';
+        let tagMarkup = '';
         let mergedInvocations = null;
         if (runId) {
             const cardIndex = state.chat.findLastIndex(message => Array.isArray(message?.extra?.tool_invocations)
                 && message.extra?.reply_pipeline_run === runId);
             if (cardIndex >= 0) {
                 const cardMessage = state.chat[cardIndex];
-                cardMarkup = cardMessage.mes ?? '';
                 mergedInvocations = cardMessage.extra.tool_invocations;
+                // Only when the last invocation IS the final step does its tag
+                // carry the reply text; otherwise the reply is appended bare.
+                const replyIsTagged = mergedInvocations.at(-1)?.name === step?.tool;
+                tagMarkup = state.ToolManager.formatPipelineTagMarkup(mergedInvocations, replyIsTagged ? cleaned : '');
+                if (!replyIsTagged) {
+                    tagMarkup = `${tagMarkup}\n${cleaned}`;
+                }
+                // Write-time AI_OUTPUT regexes run on the tag markup too —
+                // the reply text was already regex'd inside cleanUpMessage.
+                tagMarkup = getRegexedString(tagMarkup, state.regex_placement.AI_OUTPUT);
                 state.chat.splice(cardIndex, 1);
                 if (isReactMainChatOwner()) {
                     void mountReactMainChatMessageListPanel();
@@ -1013,7 +1023,7 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
             }
         }
 
-        const finalText = cardMarkup ? `${cardMarkup}\n${cleaned}` : cleaned;
+        const finalText = tagMarkup ? tagMarkup : cleaned;
         const saved = await saveReply({ type, getMessage: finalText, reasoning, reasoningSignature, title, imageUrls });
         const savedMessage = state.chat[state.chat.length - 1];
         if (savedMessage?.extra) {
