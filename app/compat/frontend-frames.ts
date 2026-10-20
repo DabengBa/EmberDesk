@@ -68,7 +68,7 @@ function resolveShellContext(): ShellFrameContext | null {
     return cachedShellContext ?? null;
 }
 
-function buildFrameContext(messageId: string) {
+function buildFrameContext(messageId: string, frameIdSeed?: string) {
     const shell = resolveShellContext();
     const settings = normalizeFrontendFramesSettings(shell?.powerUserSettings?.frontend_frames);
     const snapshot = getMainChatSnapshot();
@@ -95,6 +95,10 @@ function buildFrameContext(messageId: string) {
         isStreamingRow: streaming.activeMessageId === messageId
             && (streaming.phase === 'connecting' || streaming.phase === 'streaming'),
         messageId,
+        // Uid-scoped identity for frame ids and collapse state: survives the
+        // index shifts that splices cause. `messageId` itself stays the chat
+        // index because frame scripts consume it as a positional handle.
+        frameIdSeed: frameIdSeed || messageId,
         userAvatarUrl: shell?.getUserAvatarUrl?.() ?? '',
         charAvatarUrl: shell?.getCharacterAvatarUrl?.() ?? '',
         baseHref: typeof globalThis.location?.origin === 'string' ? globalThis.location.origin : '',
@@ -147,7 +151,7 @@ export function useFrontendFrames(
         if (!rowEl) {
             return;
         }
-        const ctx = buildFrameContext(message.id);
+        const ctx = buildFrameContext(message.id, message.uid);
         const mesTextEl = rowEl.querySelector('.mes_text');
         const streamingRow = ctx.isStreamingRow || message.state === 'streaming';
         if (streamingRow && !message.editing && message.state !== 'error') {

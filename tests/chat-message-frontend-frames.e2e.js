@@ -152,7 +152,8 @@ test.describe('chat message frontend frames', () => {
         await expect(page.locator('.mes[mesid="2"] .ed-frontend-frame')).toHaveCount(0);
 
         const firstFrame = page.locator('.mes[mesid="1"] iframe.ed-frontend-frame__iframe');
-        await expect(firstFrame).toHaveAttribute('title', 'ed-frame--1--0');
+        // Frame ids are derived from the stable message uid, not the array index.
+        await expect(firstFrame).toHaveAttribute('title', /^ed-frame--[\w-]+--0$/);
 
         const frameFacts = await page.evaluate(() => {
             const iframe = document.querySelector('.mes[mesid="1"] iframe');
@@ -169,7 +170,7 @@ test.describe('chat message frontend frames', () => {
         expect(frameFacts).toEqual({
             hasSrcdoc: true,
             marker: 42,
-            frameId: 'ed-frame--1--0',
+            frameId: expect.stringMatching(/^ed-frame--[\w-]+--0$/),
             messageId: '1',
             appExists: true,
             lodashCopied: true,
@@ -261,6 +262,67 @@ test.describe('chat message frontend frames', () => {
         await expect(page.locator('.mes[mesid="1"] .ed-frontend-frame')).toHaveCount(1);
     });
 
+    test('deleting an earlier message keeps surviving frames mounted and sized', async ({ page }) => {
+        await testSetup.awaitST({ page });
+        await selectCharacterByName(page, characterName);
+        await openFrontendChat(page);
+        await expect(page.locator('.ed-frontend-frame iframe')).toHaveCount(2, { timeout: 15_000 });
+
+        // Mark the live iframe + .mes_text elements, then hook srcdoc so any
+        // reassignment is counted. Element identity survives because React keys
+        // are uid-stable and StaticHtml skips same-string innerHTML writes.
+        const before = await page.evaluate(() => {
+            window.__e2eSrcdocSets = 0;
+            const proto = HTMLIFrameElement.prototype;
+            const descriptor = Object.getOwnPropertyDescriptor(proto, 'srcdoc');
+            Object.defineProperty(proto, 'srcdoc', {
+                configurable: true,
+                enumerable: true,
+                get: descriptor.get,
+                set(value) {
+                    window.__e2eSrcdocSets += 1;
+                    return descriptor.set.call(this, value);
+                },
+            });
+            const frames = [...document.querySelectorAll('.mes .ed-frontend-frame iframe')];
+            frames.forEach((frame, index) => { frame.__e2eMark = `f${index}`; });
+            const mesTexts = [...document.querySelectorAll('#chat .mes .mes_text')];
+            mesTexts.forEach((el, index) => { el.__e2eMark = `t${index}`; });
+            return {
+                frameMarks: frames.map(frame => frame.__e2eMark),
+                heights: frames.map(frame => frame.style.height),
+            };
+        });
+        expect(before.frameMarks).toEqual(['f0', 'f1']);
+        before.heights.forEach(height => expect(height).toMatch(/^\d+px$/));
+
+        await page.evaluate(async () => {
+            const context = window.SillyTavern.getContext();
+            context.powerUserSettings.confirm_message_delete = false;
+            await context.deleteMessage(0);
+        });
+
+        await expect(page.locator('#chat .mes[mesid]')).toHaveCount(3, { timeout: 15_000 });
+        await expect(page.locator('.ed-frontend-frame iframe')).toHaveCount(2, { timeout: 15_000 });
+
+        const after = await page.evaluate(() => {
+            const frames = [...document.querySelectorAll('.mes .ed-frontend-frame iframe')];
+            return {
+                srcdocSets: window.__e2eSrcdocSets,
+                frameMarks: frames.map(frame => frame.__e2eMark ?? 'RECREATED'),
+                heights: frames.map(frame => frame.style.height),
+                mesTextMarks: [...document.querySelectorAll('#chat .mes .mes_text')]
+                    .map(el => el.__e2eMark ?? 'REWRITTEN'),
+            };
+        });
+
+        expect(after.srcdocSets).toBe(0);
+        expect(after.frameMarks).toEqual(['f0', 'f1']);
+        expect(after.heights).toEqual(before.heights);
+        // Surviving rows keep their .mes_text nodes; only the deleted row's mark is gone.
+        expect(after.mesTextMarks).toEqual(['t1', 't2', 't3']);
+    });
+
     test('bridges whitelisted events and a frozen getContext snapshot into frames', async ({ page }) => {
         await testSetup.awaitST({ page });
         await selectCharacterByName(page, characterName);
@@ -278,7 +340,7 @@ test.describe('chat message frontend frames', () => {
                 frozen: Object.isFrozen(ctx),
             } : null;
         });
-        expect(snapshot?.frameId).toBe('ed-frame--1--0');
+        expect(snapshot?.frameId).toMatch(/^ed-frame--[\w-]+--0$/);
         expect(snapshot?.messageId).toBe('1');
         expect(typeof snapshot?.userName).toBe('string');
         expect(snapshot?.frozen).toBe(true);
@@ -299,7 +361,7 @@ test.describe('chat message frontend frames', () => {
             await emit({ e2e: 2 });
             const afterOff = window.__bridgeDeliveries.length;
             // Host-side re-subscribe through the same registry the frame uses.
-            window.__ED_FRAME_API__.on('ed-frame--1--0', 'message_received', handler);
+            window.__ED_FRAME_API__.on(frameWindow.EmberDeskFrame.frameId, 'message_received', handler);
             await emit({ e2e: 3 });
             return { accepted, rejected, afterOn, afterOff, afterRe: window.__bridgeDeliveries.length };
         });

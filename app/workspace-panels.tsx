@@ -1436,7 +1436,7 @@ button.menu_button {
             ) : null}
             {messages.map(message => (
                 <MainChatMessageRow
-                    key={message.id}
+                    key={message.uid || message.id}
                     message={message}
                     commands={commands}
                     isLast={message.id === messageIds.at(-1)}

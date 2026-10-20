@@ -381,49 +381,9 @@ const FRAME_PREDEFINE_SCRIPT = `(function () {
             try { window.parent && window.parent.removeEventListener('resize', updateViewportVars); } catch (e) { /* ignore */ }
         });
     } catch (e) { /* ignore */ }
-    var scheduled = false;
-    var lastMeasure = 0;
-    var HEIGHT_INTERVAL = 500;
-    var measure = function () {
-        scheduled = false;
-        lastMeasure = Date.now();
-        try {
-            var body = document.body;
-            var frame = window.frameElement;
-            if (!body || !frame) { return; }
-            var height = body.scrollHeight;
-            if (isFinite(height) && height > 0) {
-                frame.style.height = height + 'px';
-            }
-        } catch (e) { /* ignore */ }
-    };
-    var post = function () {
-        if (scheduled) { return; }
-        scheduled = true;
-        var raf = window.requestAnimationFrame || function (cb) { return setTimeout(cb, 16); };
-        var elapsed = Date.now() - lastMeasure;
-        if (elapsed >= HEIGHT_INTERVAL) {
-            raf(measure);
-        } else {
-            setTimeout(function () { raf(measure); }, HEIGHT_INTERVAL - elapsed);
-        }
-    };
-    var observe = function () {
-        try {
-            if (typeof ResizeObserver === 'function') {
-                var observer = new ResizeObserver(function () { post(); });
-                observer.observe(document.documentElement);
-                if (document.body) { observer.observe(document.body); }
-            }
-        } catch (e) { /* ignore */ }
-    };
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', function () { post(); observe(); });
-    } else {
-        post();
-        observe();
-    }
-    window.addEventListener('load', post);
+    // Auto-height is measured host-side: the parent observes this document via
+    // ResizeObserver (see attachFrameHeightObserver), so frames do not own a
+    // throttled measurement loop anymore.
 })();`;
 
 /**
@@ -530,6 +490,86 @@ function docSignature(text) {
 }
 
 /**
+ * Session cache of measured frame content heights keyed by document signature.
+ * Lets a freshly (re)mounted frame start at its last known height instead of
+ * collapsing to the default iframe size while the first measurement lands.
+ * @type {Map<string, number>}
+ */
+const frameHeightCache = new Map();
+
+export function getCachedFrameHeight(signature) {
+    return frameHeightCache.get(String(signature)) ?? null;
+}
+
+export function setCachedFrameHeight(signature, height) {
+    if (signature == null || !Number.isFinite(height) || height <= 0) {
+        return;
+    }
+    frameHeightCache.set(String(signature), height);
+}
+
+/**
+ * Measures a same-origin frame document from the host side and keeps the
+ * iframe's style height in sync. Replaces the legacy in-frame 500ms-throttled
+ * measurement loop: the first measurement runs immediately once the document
+ * is available, and ResizeObserver reports subsequent changes unthrottled.
+ * @param {HTMLIFrameElement} iframe
+ * @param {string} signature Content signature used for the height cache
+ */
+function attachFrameHeightObserver(iframe, signature) {
+    const update = () => {
+        let doc;
+        try {
+            doc = iframe.contentDocument;
+        } catch {
+            return;
+        }
+        if (!doc) {
+            return;
+        }
+        const height = Math.max(
+            doc.documentElement?.scrollHeight ?? 0,
+            doc.body?.scrollHeight ?? 0,
+        );
+        if (Number.isFinite(height) && height > 0) {
+            iframe.style.height = `${height}px`;
+            setCachedFrameHeight(signature, height);
+        }
+    };
+    const attach = () => {
+        let doc;
+        try {
+            doc = iframe.contentDocument;
+        } catch {
+            return false;
+        }
+        if (!doc || typeof ResizeObserver !== 'function') {
+            return false;
+        }
+        iframe.__edHeightObserver?.disconnect();
+        const observer = new ResizeObserver(update);
+        if (doc.documentElement) {
+            observer.observe(doc.documentElement);
+        }
+        if (doc.body) {
+            observer.observe(doc.body);
+        }
+        iframe.__edHeightObserver = observer;
+        update();
+        return true;
+    };
+    iframe.addEventListener('load', attach);
+    attach();
+}
+
+function detachFrameHeightObserver(iframe) {
+    iframe?.__edHeightObserver?.disconnect?.();
+    if (iframe) {
+        iframe.__edHeightObserver = undefined;
+    }
+}
+
+/**
  * Computes whether a message may mount frames under the render-depth window.
  * `depth` counts floors from the newest rendered message backwards; `0` means
  * all rendered floors. With `depthIgnoreHidden`, `is_system` floors neither
@@ -603,6 +643,7 @@ export function unmountFrontendSlot(slot) {
         return;
     }
     const iframe = slot.querySelector('iframe');
+    detachFrameHeightObserver(iframe);
     const src = iframe?.getAttribute('src') ?? '';
     if (src.startsWith('blob:')) {
         try {
@@ -687,11 +728,18 @@ function decoratePlainCodeBlock(pre, expandKey, translate) {
  * @param {(eventName:string, frameId:string)=>void|null} [emit]
  * @returns {HTMLIFrameElement}
  */
-function createFrameIframe(frameId, frameDocument, useBlobUrl, emit) {
+function createFrameIframe(frameId, frameDocument, useBlobUrl, emit, { signature = null, initialHeight = null } = {}) {
     const iframe = document.createElement('iframe');
     iframe.className = FRONTEND_FRAME_IFRAME_CLASS;
     iframe.title = frameId;
     iframe.setAttribute('loading', 'lazy');
+    const cachedHeight = Number.isFinite(initialHeight) && initialHeight > 0
+        ? initialHeight
+        : (signature !== null ? getCachedFrameHeight(signature) : null);
+    if (cachedHeight !== null) {
+        iframe.style.height = `${cachedHeight}px`;
+    }
+    attachFrameHeightObserver(iframe, signature);
     iframe.addEventListener('load', () => emit?.(FRONTEND_FRAME_EVENTS.ended, frameId));
     if (useBlobUrl) {
         const blob = new Blob([frameDocument], { type: 'text/html' });
@@ -715,7 +763,7 @@ function createFrameIframe(frameId, frameDocument, useBlobUrl, emit) {
  * @param {(eventName:string, frameId:string)=>void|null} [options.emit]
  * @param {FrontendFrameContext} [options.bridgeCtx] Bridge inputs (eventSource/getContextSnapshot)
  */
-function mountFrontendSlot(pre, { frameId, document: frameDocument, useBlobUrl, showToggle, translate, emit, bridgeCtx }) {
+function mountFrontendSlot(pre, { frameId, document: frameDocument, useBlobUrl, showToggle, translate, emit, bridgeCtx, signature = null }) {
     const slot = document.createElement('div');
     slot.className = FRONTEND_FRAME_SLOT_CLASS;
     slot.setAttribute(FRONTEND_FRAME_SLOT_ATTR, frameId);
@@ -745,7 +793,7 @@ function mountFrontendSlot(pre, { frameId, document: frameDocument, useBlobUrl, 
     pre.style.display = showToggle && !expanded ? 'none' : '';
     slot.appendChild(pre);
     registerFrameBridge(frameId, bridgeCtx);
-    slot.appendChild(createFrameIframe(frameId, frameDocument, useBlobUrl, emit));
+    slot.appendChild(createFrameIframe(frameId, frameDocument, useBlobUrl, emit, { signature }));
 }
 
 /**
@@ -796,10 +844,11 @@ export function mountStreamingFrames(rowRootEl, ctx = {}) {
         mesTextEl.insertAdjacentElement('afterend', host);
     }
     const messageId = String(ctx.messageId ?? rowRootEl.getAttribute?.('mesid') ?? '');
+    const frameIdSeed = String(ctx.frameIdSeed ?? messageId);
     const wanted = new Set();
     let mounted = 0;
     docs.forEach((doc, index) => {
-        const frameId = `ed-frame--${messageId}--${index}`;
+        const frameId = `ed-frame--${frameIdSeed}--${index}`;
         wanted.add(frameId);
         const signature = docSignature(doc);
         const existing = host.querySelector(`[${FRONTEND_FRAME_SLOT_ATTR}="${frameId}"]`);
@@ -821,7 +870,7 @@ export function mountStreamingFrames(rowRootEl, ctx = {}) {
             charAvatarUrl: ctx.charAvatarUrl,
             useBlobUrl: settings.use_blob_url,
             baseHref: ctx.baseHref,
-        }), settings.use_blob_url, ctx.emit));
+        }), settings.use_blob_url, ctx.emit, { signature }));
         host.appendChild(slot);
         mounted += 1;
     });
@@ -857,13 +906,14 @@ export function mountFrontendFrames(mesTextEl, ctx = {}) {
     }
 
     const messageId = String(ctx.messageId ?? mesTextEl.closest('.mes')?.getAttribute('mesid') ?? '');
+    const frameIdSeed = String(ctx.frameIdSeed ?? messageId);
 
     if (settings.collapse_code_block === 'all') {
         let codeIndex = 0;
         mesTextEl.querySelectorAll('pre').forEach(pre => {
             if (!pre.closest(`.${FRONTEND_FRAME_SLOT_CLASS}`)) {
                 if (!isFrontendContent(pre.textContent)) {
-                    decoratePlainCodeBlock(pre, expandedKey('code', messageId, codeIndex), translate);
+                    decoratePlainCodeBlock(pre, expandedKey('code', frameIdSeed, codeIndex), translate);
                 }
                 codeIndex += 1;
             }
@@ -872,7 +922,8 @@ export function mountFrontendFrames(mesTextEl, ctx = {}) {
 
     const blocks = findFrontendBlocks(mesTextEl);
     blocks.forEach((pre, index) => {
-        const frameId = `ed-frame--${messageId}--${index}`;
+        const frameId = `ed-frame--${frameIdSeed}--${index}`;
+        const signature = docSignature(pre.textContent ?? '');
         const frameDocument = buildFrontendFrameDocument(pre.textContent ?? '', {
             frameId,
             messageId,
@@ -889,6 +940,7 @@ export function mountFrontendFrames(mesTextEl, ctx = {}) {
             translate,
             emit: ctx.emit,
             bridgeCtx: ctx,
+            signature,
         });
     });
     return blocks.length;

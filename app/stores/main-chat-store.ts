@@ -25,6 +25,7 @@ export interface MainChatMessageRender {
 
 export interface MainChatMessageRecord {
     readonly id: string;
+    readonly uid: string;
     readonly role: MainChatMessageRole;
     readonly name: string;
     readonly content: string;
@@ -270,7 +271,53 @@ function normalizeSlashOptions(value: unknown) {
         .filter(option => option.name !== '');
 }
 
-function normalizeMessages(value: unknown) {
+function messageRecordsShallowEqual(a: MainChatMessageRecord, b: MainChatMessageRecord) {
+    if (a === b) {
+        return true;
+    }
+    const aRender = a.render;
+    const bRender = b.render;
+    return a.uid === b.uid
+        && a.role === b.role
+        && a.name === b.name
+        && a.content === b.content
+        && a.timestamp === b.timestamp
+        && a.timestampTitle === b.timestampTitle
+        && a.avatarUrl === b.avatarUrl
+        && a.title === b.title
+        && a.tokenCount === b.tokenCount
+        && a.reasoningOpen === b.reasoningOpen
+        && a.reasoningEditing === b.reasoningEditing
+        && a.reasoningEditText === b.reasoningEditText
+        && a.rootClassNames.length === b.rootClassNames.length
+        && a.rootClassNames.every((name, index) => name === b.rootClassNames[index])
+        && a.state === b.state
+        && a.recoveryStatus === b.recoveryStatus
+        && a.recoveryStage === b.recoveryStage
+        && a.failureNoticeVisible === b.failureNoticeVisible
+        && a.actionsExpanded === b.actionsExpanded
+        && a.editing === b.editing
+        && a.editText === b.editText
+        && a.lastInContext === b.lastInContext
+        && a.extraType === b.extraType
+        && a.timer === b.timer
+        && a.timerTitle === b.timerTitle
+        && a.promptButtonVisible === b.promptButtonVisible
+        && a.mediaDisplay === b.mediaDisplay
+        && a.inlineMediaText === b.inlineMediaText
+        && a.reasoningState === b.reasoningState
+        && a.reasoningType === b.reasoningType
+        && (aRender === bRender || (
+            Boolean(aRender) && Boolean(bRender)
+            && aRender!.messageHtml === bRender!.messageHtml
+            && aRender!.reasoningHtml === bRender!.reasoningHtml
+            && aRender!.mediaHtml === bRender!.mediaHtml
+            && aRender!.fileHtml === bRender!.fileHtml
+            && aRender!.biasHtml === bRender!.biasHtml
+        ));
+}
+
+function normalizeMessages(value: unknown, previous?: Readonly<Record<string, MainChatMessageRecord>>) {
     const messagesById: Record<string, MainChatMessageRecord> = {};
     if (!value || typeof value !== 'object' || Array.isArray(value)) {
         return messagesById;
@@ -288,8 +335,9 @@ function normalizeMessages(value: unknown) {
         }
 
         const render = normalizeMessageRender(message.render);
-        messagesById[id] = {
+        const candidate: MainChatMessageRecord = {
             id,
+            uid: normalizeString(message.uid) || id,
             role: normalizeMessageRole(message.role),
             name: normalizeString(message.name),
             content: normalizeString(message.content),
@@ -322,13 +370,20 @@ function normalizeMessages(value: unknown) {
             reasoningType: normalizeNullableString(message.reasoningType),
             ...(render && Object.keys(render).length > 0 ? { render } : {}),
         };
+
+        // Reuse the previous normalized record when every field is identical so
+        // memoized rows keep referential identity across snapshot rebuilds.
+        const previousRecord = previous?.[id];
+        messagesById[id] = previousRecord && messageRecordsShallowEqual(previousRecord, candidate)
+            ? previousRecord
+            : candidate;
     }
 
     return messagesById;
 }
 
-function normalizeSnapshot(input: MainChatSnapshotInput = {}) {
-    const messagesById = normalizeMessages(input.messagesById);
+function normalizeSnapshot(input: MainChatSnapshotInput = {}, previousMessages?: Readonly<Record<string, MainChatMessageRecord>>) {
+    const messagesById = normalizeMessages(input.messagesById, previousMessages);
     const orderedMessageIds = normalizeIdList(input.orderedMessageIds);
     const completeOrderedMessageIds = orderedMessageIds.length > 0
         ? orderedMessageIds
@@ -403,7 +458,7 @@ export function createMainChatStore(initialSnapshot: MainChatSnapshotInput = {})
 
     const replaceSnapshot = (snapshot: MainChatSnapshotInput) => {
         store.setState({
-            snapshot: normalizeSnapshot(snapshot),
+            snapshot: normalizeSnapshot(snapshot, store.getState().snapshot.messagesById),
         });
     };
 

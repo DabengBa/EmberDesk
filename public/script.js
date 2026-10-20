@@ -207,6 +207,7 @@ import {
 } from './scripts/chat-message-render-descriptor.js';
 import {
     buildMainChatSnapshotFromLegacyChat,
+    invalidateMainChatRenderProjection,
 } from './scripts/main-chat-store-projection.js';
 import { getStreamingControlState } from './scripts/chat-streaming-control-state.js';
 import { getMainChatComposerState } from './scripts/main-chat-composer-state.js';
@@ -2404,6 +2405,14 @@ function queueReactWorldInfoRemount() {
 eventSource.on(event_types.WORLDINFO_SETTINGS_UPDATED, () => {
     queueReactWorldInfoRemount();
 });
+
+// Display semantics outside the message objects changed (display settings,
+// character name, regex-visible state): the projection's record reuse must
+// not serve pre-change rendered output.
+[
+    event_types.SETTINGS_UPDATED,
+    event_types.CHARACTER_EDITED,
+].forEach(eventName => eventSource.on(eventName, invalidateMainChatRenderProjection));
 
 function getCharacterAuthoringReactCommands() {
     return createWorkspacePanelCommandPort({
@@ -4966,7 +4975,17 @@ export async function getCharacters() {
             }
         }
 
-        await printCharacters(true);
+        // Membership changes (add/import/rename/delete fallback) reprint in
+        // place: keep the current page and scroll offset so a single edit does
+        // not yank the library back to page one. Page stays valid via the
+        // clamp in renderCharacterListPage; navigation resets only happen on
+        // the explicit select_rm_characters re-entry gesture.
+        // Membership changes (add/import/rename/delete fallback) reprint in
+        // place: keep the current page and scroll offset so a single edit does
+        // not yank the library back to page one. Page stays valid via the
+        // clamp in renderCharacterListPage; navigation resets only happen on
+        // the explicit select_rm_characters re-entry gesture.
+        await printCharacters(false);
     } catch (error) {
         console.error('Failed to fetch characters:', error);
         const errorData = getCharacterLibraryFetchErrorData(error);
@@ -8994,7 +9013,10 @@ async function removeCharacterFromUI(deletedAvatars = [], { deleteContext = null
     markPerfInteractionMetric('characterDeleteReconcileMs', performance.now() - reconcileStartedAt);
     if (!reconciled) {
         const printCharactersStartedAt = performance.now();
-        await printCharacters(true, { allowDuringCharacterDelete: true });
+        // Fallback reprint preserves the reading position too: a filtered or
+        // bulk delete must not reset the library to page one. Only the
+        // explicit navigation re-entry resets to the top.
+        await printCharacters(false, { allowDuringCharacterDelete: true });
         markPerfInteractionMetric('characterPrintMs', performance.now() - printCharactersStartedAt);
     }
     await printMessages();

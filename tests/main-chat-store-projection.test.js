@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import {
     buildMainChatMessageRecord,
     buildMainChatSnapshotFromLegacyChat,
+    invalidateMainChatRenderProjection,
 } from '../public/scripts/main-chat-store-projection.js';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -336,5 +337,119 @@ describe('main chat store projection', () => {
         expect(scriptSource).toContain('mainChatSnapshot,');
         expect(scriptSource).toContain('chat,');
         expect(scriptSource).toContain('formatMessage: messageFormatting,');
+    });
+
+    test('assigns stable uids that survive array splices', () => {
+        const chat = [
+            { name: 'User', mes: 'first', is_user: true, is_system: false, extra: {} },
+            { name: 'Assistant', mes: 'second', is_user: false, is_system: false, extra: {} },
+            { name: 'Assistant', mes: 'third', is_user: false, is_system: false, extra: {} },
+        ];
+        const formatMessage = createFormatMessage();
+
+        const before = buildMainChatSnapshotFromLegacyChat({
+            chatId: 'uid-chat',
+            chat,
+            formatMessage,
+            visibleMessageIds: ['0', '1', '2'],
+        });
+        const secondUid = before.messagesById['1'].uid;
+        const thirdUid = before.messagesById['2'].uid;
+        expect(secondUid).toBeTruthy();
+        expect(thirdUid).toBeTruthy();
+        expect(secondUid).not.toBe(thirdUid);
+
+        chat.splice(0, 1);
+        const after = buildMainChatSnapshotFromLegacyChat({
+            chatId: 'uid-chat',
+            chat,
+            formatMessage,
+            visibleMessageIds: ['0', '1'],
+        });
+
+        expect(after.messagesById['0'].uid).toBe(secondUid);
+        expect(after.messagesById['1'].uid).toBe(thirdUid);
+    });
+
+    test('reuses unchanged records across rebuilds without reformatting', () => {
+        const chat = [
+            { name: 'User', mes: 'kept-0', is_user: true, is_system: false, extra: {} },
+            { name: 'Assistant', mes: 'kept-1', is_user: false, is_system: false, extra: {} },
+        ];
+        const formatMessage = jest.fn(createFormatMessage());
+
+        const first = buildMainChatSnapshotFromLegacyChat({
+            chatId: 'reuse-chat',
+            chat,
+            formatMessage,
+            visibleMessageIds: ['0', '1'],
+        });
+        expect(formatMessage).toHaveBeenCalledTimes(2);
+
+        const second = buildMainChatSnapshotFromLegacyChat({
+            chatId: 'reuse-chat',
+            chat,
+            formatMessage,
+            visibleMessageIds: ['0', '1'],
+        });
+
+        expect(formatMessage).toHaveBeenCalledTimes(2);
+        expect(second.messagesById['0']).toBe(first.messagesById['0']);
+        expect(second.messagesById['1']).toBe(first.messagesById['1']);
+    });
+
+    test('rebuilds only when content, ui state, or membership actually changes', () => {
+        const chat = [
+            { name: 'User', mes: 'a', is_user: true, is_system: false, extra: {} },
+            { name: 'Assistant', mes: 'b', is_user: false, is_system: false, extra: {} },
+        ];
+        const formatMessage = jest.fn(createFormatMessage());
+        const build = (overrides = {}) => buildMainChatSnapshotFromLegacyChat({
+            chatId: 'drift-chat',
+            chat,
+            formatMessage,
+            visibleMessageIds: ['0', '1'],
+            ...overrides,
+        });
+
+        const baseline = build();
+        expect(formatMessage).toHaveBeenCalledTimes(2);
+
+        // In-place content mutation must not be served from the reused record.
+        chat[1].mes = 'b-edited';
+        const edited = build();
+        expect(edited.messagesById['1'].content).toBe('b-edited');
+        expect(formatMessage.mock.calls.length).toBeGreaterThan(2);
+
+        // Transient UI changes rebuild the record so the row rerenders.
+        const withUi = build({ messageUiById: { '1': { actionsExpanded: true } } });
+        expect(withUi.messagesById['1'].actionsExpanded).toBe(true);
+        expect(withUi.messagesById['1']).not.toBe(edited.messagesById['1']);
+
+        // Membership changes reset reuse entirely.
+        chat.splice(0, 1);
+        const spliced = build({ visibleMessageIds: ['0'] });
+        expect(spliced.messagesById['0'].content).toBe('b-edited');
+    });
+
+    test('invalidation forces records to rebuild for display-context changes', () => {
+        const chat = [{ name: 'Assistant', mes: 'ctx', is_user: false, is_system: false, extra: {} }];
+        const formatMessage = jest.fn(createFormatMessage());
+        const build = () => buildMainChatSnapshotFromLegacyChat({
+            chatId: 'invalidate-chat',
+            chat,
+            formatMessage,
+            visibleMessageIds: ['0'],
+        });
+
+        const first = build();
+        const callsAfterFirst = formatMessage.mock.calls.length;
+        build();
+        expect(formatMessage.mock.calls.length).toBe(callsAfterFirst);
+
+        invalidateMainChatRenderProjection();
+        const rebuilt = build();
+        expect(formatMessage.mock.calls.length).toBeGreaterThan(callsAfterFirst);
+        expect(rebuilt.messagesById['0']).not.toBe(first.messagesById['0']);
     });
 });

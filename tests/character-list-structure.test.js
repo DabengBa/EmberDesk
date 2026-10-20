@@ -423,7 +423,9 @@ describe('character list structure', () => {
         expect(removeCharacterFromUISource).toContain('cancelDebounce(printCharactersDebounced);');
         expect(removeCharacterFromUISource).toContain('const reconciled = await reconcileCharacterListAfterDelete({');
         expect(removeCharacterFromUISource).toContain('deleteContext,');
-        expect(removeCharacterFromUISource).toMatch(/if \(!reconciled\) \{\s+const printCharactersStartedAt = performance\.now\(\);\s+await printCharacters\(true, \{ allowDuringCharacterDelete: true \}\);/);
+        // Fallback reprint keeps the current page/scroll too; only the
+        // explicit select_rm_characters navigation gesture does a full reset.
+        expect(removeCharacterFromUISource).toMatch(/if \(!reconciled\) \{\s+const printCharactersStartedAt = performance\.now\(\);(?:[^}]*)await printCharacters\(false, \{ allowDuringCharacterDelete: true \}\);/);
         expect(reconcileSource).toContain('createCharacterDeleteReconcilePlan({');
         expect(reconcileSource).toContain('createCharacterBulkDeletePagePlan({');
         expect(reconcileSource).toContain('const isBulkDeleteContext = deleteContext?.source === \'bulk\';');

@@ -18,10 +18,12 @@ import {
     createFrameBridge,
     findClosedFrontendDocuments,
     findFrontendBlocks,
+    getCachedFrameHeight,
     isFrontendContent,
     mountFrontendFrames,
     normalizeFrontendFramesSettings,
     rewriteVhExpressions,
+    setCachedFrameHeight,
 } from '../public/scripts/frontend-frame.js';
 
 describe('frontend-frame detection', () => {
@@ -342,5 +344,29 @@ describe('frame document bridge payload', () => {
         expect(doc).toContain('"message_received"');
         expect(doc).toContain('__ED_FRAME_API__');
         expect(doc).toContain('frameId: typeof meta.frameId');
+    });
+});
+
+describe('host-side frame height measurement', () => {
+    test('frame documents no longer run the throttled in-frame height loop', () => {
+        const doc = buildFrontendFrameDocument('<html><body>x</body></html>', {});
+
+        expect(doc).not.toContain('HEIGHT_INTERVAL');
+        expect(doc).not.toContain('frame.style.height');
+    });
+
+    test('height cache stores positive heights keyed by signature', () => {
+        expect(getCachedFrameHeight('ed-test-height-sig')).toBeNull();
+
+        setCachedFrameHeight('ed-test-height-sig', 420);
+        expect(getCachedFrameHeight('ed-test-height-sig')).toBe(420);
+
+        setCachedFrameHeight('ed-test-height-sig', 0);
+        setCachedFrameHeight('ed-test-height-sig', -5);
+        setCachedFrameHeight('ed-test-height-sig', Number.NaN);
+        expect(getCachedFrameHeight('ed-test-height-sig')).toBe(420);
+
+        setCachedFrameHeight('ed-test-height-sig', 384);
+        expect(getCachedFrameHeight('ed-test-height-sig')).toBe(384);
     });
 });

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import type { MainChatCommands } from '../../compat/workspace-commands';
 import type { MainChatMessageRecord } from '../../stores/main-chat-store';
@@ -12,6 +12,31 @@ const EMPTY_RENDER = {
     fileHtml: '',
     biasHtml: '',
 };
+
+/**
+ * Imperative HTML injection for message-body HTML strings.
+ *
+ * react-dom 19 diffs `dangerouslySetInnerHTML` by object reference, so a fresh
+ * `{__html}` literal rewrites innerHTML on every commit — even for identical
+ * strings — destroying externally-mounted children (frontend frames). This
+ * component owns its subtree imperatively: React never diffs inside it, and
+ * innerHTML is only assigned when the string actually changed.
+ */
+function StaticHtml({ html, className }: { html: string; className?: string }) {
+    const ref = useRef<HTMLDivElement>(null);
+    useLayoutEffect(() => {
+        const element = ref.current;
+        if (!element) {
+            return;
+        }
+        const last = element as HTMLDivElement & { __edHtml?: string };
+        if (last.__edHtml !== html) {
+            element.innerHTML = html;
+            last.__edHtml = html;
+        }
+    }, [html]);
+    return <div ref={ref} className={className} />;
+}
 
 function normalizeClassNames(message: MainChatMessageRecord, isLast: boolean) {
     return [
@@ -223,7 +248,7 @@ function MessageActionShell({
     );
 }
 
-export function MainChatMessageRow({
+export const MainChatMessageRow = memo(function MainChatMessageRow({
     message,
     commands,
     isLast = false,
@@ -545,9 +570,9 @@ export function MainChatMessageRow({
                             }}
                         />
                     ) : (
-                        <div
+                        <StaticHtml
                             className="mes_reasoning"
-                            dangerouslySetInnerHTML={{ __html: render.reasoningHtml }}
+                            html={render.reasoningHtml}
                         />
                     )}
                 </details>
@@ -563,9 +588,9 @@ export function MainChatMessageRow({
                         }}
                     />
                 ) : (
-                    <div
+                    <StaticHtml
                         className={message.inlineMediaText ? 'mes_text inline_media' : 'mes_text'}
-                        dangerouslySetInnerHTML={{ __html: render.messageHtml }}
+                        html={render.messageHtml}
                     />
                 )}
                 {message.recoveryStatus ? (
@@ -587,10 +612,10 @@ export function MainChatMessageRow({
                         Generation failed. You can retry by sending a new message or keep chatting.
                     </output>
                 ) : null}
-                <div className="mes_media_wrapper" dangerouslySetInnerHTML={{ __html: render.mediaHtml }} />
-                <div className="mes_file_wrapper" dangerouslySetInnerHTML={{ __html: render.fileHtml }} />
-                <div className="mes_bias" dangerouslySetInnerHTML={{ __html: render.biasHtml }} />
+                <StaticHtml className="mes_media_wrapper" html={render.mediaHtml} />
+                <StaticHtml className="mes_file_wrapper" html={render.fileHtml} />
+                <StaticHtml className="mes_bias" html={render.biasHtml} />
             </div>
         </div>
     );
-}
+}, (prev, next) => prev.message === next.message && prev.isLast === next.isLast && prev.commands === next.commands);

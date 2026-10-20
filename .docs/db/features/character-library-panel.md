@@ -33,6 +33,7 @@ Let users browse, search, filter, sort, bulk-select, and choose [character cards
 - Character row identity remains stable for browsing, active-card state, bulk selection, and protected row-identity selectors.
 - Bulk-select mode provides visible selection hints, synchronized selected styling and checked state, selected count, select-all controls, and disabled-until-selection destructive actions.
 - After delete flows, the panel keeps safe pagination context, prevents late snapshots from reintroducing deleted cards, and still falls back to full refresh for complex states when that is the clearer recovery path.
+- Membership changes from data refreshes — create, import, duplicate, rename, edit, and delete fallback reprints — keep the current page and scroll offset; only the explicit navigation re-entry gesture resets the library to page one and the top of the list.
 
 ## Ownership Notes
 

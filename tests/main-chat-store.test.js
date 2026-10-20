@@ -295,6 +295,63 @@ describe('main chat store', () => {
         expect(result.window.visibleMessageIds).toEqual(['2']);
     });
 
+    test('reuses normalized record objects for unchanged inputs across snapshots', () => {
+        const result = runStoreProbe(`
+            const store = createMainChatStore();
+            const rawRecord = {
+                id: '0',
+                uid: 'uid-0',
+                role: 'character',
+                name: 'Assistant',
+                content: 'kept',
+                timestamp: '2026-08-14T00:00:00.000Z',
+                state: 'finalized',
+                render: { messageHtml: '<p>kept</p>' },
+            };
+            const baseWindow = {
+                visibleMessageIds: ['0'],
+                anchorMessageId: '0',
+                showMoreVisible: false,
+                scrollTop: 0,
+                scrollHeight: 400,
+                clientHeight: 200,
+            };
+            store.getState().replaceSnapshot({
+                chatId: 'reuse-chat',
+                messagesById: { '0': rawRecord },
+                orderedMessageIds: ['0'],
+                window: baseWindow,
+            });
+            const first = store.getState().getSnapshot();
+            store.getState().replaceSnapshot({
+                chatId: 'reuse-chat',
+                messagesById: { '0': rawRecord },
+                orderedMessageIds: ['0'],
+                window: { ...baseWindow, scrollTop: 99 },
+            });
+            const second = store.getState().getSnapshot();
+            store.getState().replaceSnapshot({
+                chatId: 'reuse-chat',
+                messagesById: { '0': { ...rawRecord, content: 'changed' } },
+                orderedMessageIds: ['0'],
+                window: baseWindow,
+            });
+            const third = store.getState().getSnapshot();
+            console.log(JSON.stringify({
+                sameRecordRef: second.messagesById['0'] === first.messagesById['0'],
+                rebuiltOnChange: third.messagesById['0'] !== first.messagesById['0']
+                    && third.messagesById['0'].content === 'changed',
+                uid: second.messagesById['0'].uid,
+            }));
+        `);
+
+        expect(result).toEqual({
+            sameRecordRef: true,
+            rebuiltOnChange: true,
+            uid: 'uid-0',
+        });
+    });
+
     test('is subscribed by the React main-chat panel instead of remaining an unused store', () => {
         const workspaceSource = fs.readFileSync(
             path.join(repoRoot, 'app', 'workspace-panels.tsx'),

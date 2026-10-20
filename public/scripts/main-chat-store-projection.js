@@ -4,6 +4,7 @@ import {
 import {
     buildChatMessageRichBodyRender,
 } from './chat-message-render-service.js';
+import { getMessageUid } from './message-uid.js';
 
 function normalizeString(value, fallback = '') {
     return typeof value === 'string' ? value : fallback;
@@ -103,6 +104,7 @@ export function buildMainChatMessageRecord(message, {
 
     return {
         id: String(numericMessageId),
+        uid: getMessageUid(message),
         role: descriptor.role,
         name: normalizeString(message?.name),
         content,
@@ -172,6 +174,71 @@ function normalizeMessageIds(value) {
         });
 }
 
+let formatEpoch = 0;
+
+/**
+ * Previous projection keyed by message uid, used to reuse unchanged message
+ * records between snapshot rebuilds. Reuse is only attempted when the chat
+ * array reference, length, and format epoch are all unchanged — membership
+ * changes (insert/delete/load-more) always recompute because message
+ * formatting depends on depth, which shifts with chat membership.
+ * @type {{chatId: string|null, chat: object[], epoch: number, entries: Map<string, object>}|null}
+ */
+let lastProjection = null;
+
+/**
+ * Invalidates the record-reuse cache. Callers bump this when display
+ * semantics outside the message objects change (display settings, regex).
+ */
+export function invalidateMainChatRenderProjection() {
+    formatEpoch += 1;
+    lastProjection = null;
+}
+
+function hashText(value) {
+    let hash = 0x811c9dc5;
+    for (let index = 0; index < value.length; index++) {
+        hash ^= value.charCodeAt(index);
+        hash = Math.imul(hash, 0x01000193);
+    }
+    return (hash >>> 0).toString(36);
+}
+
+/**
+ * Content signature covering every display-relevant field of a stored
+ * message, including in-place `extra`/`mes` mutations that reference
+ * comparison cannot see. Returns null when the message cannot be serialized,
+ * which safely disables reuse for that entry.
+ * @param {object} message Stored chat message
+ * @returns {string|null}
+ */
+function messageContentSignature(message) {
+    try {
+        return hashText(JSON.stringify(message ?? null));
+    } catch {
+        return null;
+    }
+}
+
+function shallowUiEqual(left, right) {
+    if (left === right) {
+        return true;
+    }
+    const a = left && typeof left === 'object' ? left : {};
+    const b = right && typeof right === 'object' ? right : {};
+    const aKeys = Object.keys(a);
+    const bKeys = Object.keys(b);
+    return aKeys.length === bKeys.length && aKeys.every(key => a[key] === b[key]);
+}
+
+function tryReuseProjectedRecord({ entries, uid, index, sig, ui }) {
+    const prev = entries.get(uid);
+    if (!prev || prev.index !== index || prev.sig !== sig || sig === null) {
+        return null;
+    }
+    return shallowUiEqual(prev.ui, ui) ? prev.record : null;
+}
+
 /**
  * Project the in-memory chat array into the main-chat store snapshot shape.
  * The caller supplies UI control snapshots because this module deliberately
@@ -235,11 +302,30 @@ export function buildMainChatSnapshotFromLegacyChat({
     const visibleIds = (requestedVisibleMessageIds ?? orderedMessageIds)
         .filter(id => knownMessageIdSet.has(id));
 
+    const normalizedChatId = normalizeString(chatId).trim() || null;
+    const canReuse = lastProjection !== null
+        && lastProjection.chatId === normalizedChatId
+        && lastProjection.chat === chat
+        && lastProjection.length === chat.length
+        && lastProjection.epoch === formatEpoch;
+    const nextEntries = new Map();
+
     for (const id of visibleIds) {
         const messageId = Number(id);
         const message = chat[messageId];
+        const uid = getMessageUid(message);
+        const sig = canReuse ? messageContentSignature(message) : null;
+        const ui = messageUiById[id];
+        const reused = canReuse
+            ? tryReuseProjectedRecord({ entries: lastProjection.entries, uid, index: messageId, sig, ui })
+            : null;
+        if (reused) {
+            messagesById[id] = reused;
+            nextEntries.set(uid, { index: messageId, sig, ui, record: reused });
+            continue;
+        }
         const timestamp = timestampForMessage(message, messageId);
-        messagesById[id] = buildMainChatMessageRecord(message, {
+        const record = buildMainChatMessageRecord(message, {
             messageId,
             timestamp: normalizeString(timestamp),
             formatMessage,
@@ -250,10 +336,16 @@ export function buildMainChatSnapshotFromLegacyChat({
             mediaDisplayForMessage,
             hasItemizedPromptForMessage,
         });
+        messagesById[id] = record;
+        nextEntries.set(uid, { index: messageId, sig: sig ?? messageContentSignature(message), ui, record });
     }
 
+    lastProjection = normalizedChatId !== null
+        ? { chatId: normalizedChatId, chat, length: chat.length, epoch: formatEpoch, entries: nextEntries }
+        : null;
+
     return {
-        chatId: normalizeString(chatId).trim() || null,
+        chatId: normalizedChatId,
         messagesById,
         orderedMessageIds,
         composer: {

@@ -983,14 +983,22 @@ describe('React workspace panels bridge helpers', () => {
         )?.[0] ?? '';
 
         expect(panelBlock).toContain('mainChatStoreSnapshot.messagesById');
-        expect(panelBlock).toContain('key={message.id}');
+        // Rows key on the stable message uid so array splices cannot remount
+        // unchanged rows; the positional id stays as fallback for records
+        // produced outside the projection.
+        expect(panelBlock).toContain('key={message.uid || message.id}');
         expect(panelBlock).toContain('isLast={message.id === messageIds.at(-1)}');
         expect(panelBlock).not.toMatch(/\bHTMLElement\b|\bquerySelector(?:All)?\b|\bmessageNodes\b|innerHTML/);
         expect(rowSource).toContain('className="mes');
         expect(rowSource).toContain('mesid: message.id');
         expect(rowSource).toContain("'mes_text inline_media' : 'mes_text'");
         expect(rowSource).toContain('data-main-chat-message-row-owner="react"');
-        expect(rowSource).toContain('dangerouslySetInnerHTML={{ __html: render.messageHtml }}');
+        // Rich HTML bodies render through StaticHtml: it writes innerHTML only
+        // when the html string actually changes, keeping DOM-mounted frontend
+        // frames alive across unrelated row rerenders.
+        expect(rowSource).toContain('function StaticHtml(');
+        expect(rowSource).toContain('<StaticHtml className=');
+        expect(rowSource).not.toMatch(/dangerouslySetInnerHTML=\{/);
     });
 
     test('mounts frontend frames only for finalized rows via the compat bridge', () => {
