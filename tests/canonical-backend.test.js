@@ -10,6 +10,7 @@ import {
     ensureCanonicalSliceBackend,
     resetCanonicalBackendsForTests,
 } from '../src/canonical-backend.js';
+import { closeCanonicalDatabase } from '../src/canonical-sqlite.js';
 import {
     getCanonicalSettingsDocument,
     upsertCanonicalSettingsDocument,
@@ -34,6 +35,7 @@ const envKeys = [
     'EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_WRITES',
     'EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_STRICT',
     'EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SLICES_CHATS_READS',
+    'EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SLICES_CHATS_SHADOWIMPORT',
     'EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SLICES_SETTINGS_PROJECTION',
 ];
 
@@ -199,6 +201,38 @@ describe('legacy canonical sqlite config migration', () => {
 });
 
 describe('lazy slice backend initialization', () => {
+    test('re-initializes after the canonical database handle is closed externally', async () => {
+        const root = makeRoot();
+        const directories = createDirectories(root);
+        const first = await ensureCanonicalSliceBackend('settings', directories, 'alice');
+        expect(first.ok).toBe(true);
+
+        // Simulates /reset-step2: the shared handle is closed under the cache.
+        closeCanonicalDatabase(directories);
+
+        const second = await ensureCanonicalSliceBackend('settings', directories, 'alice');
+        expect(second.ok).toBe(true);
+        expect(second.db).not.toBe(first.db);
+
+        const third = await ensureCanonicalSliceBackend('settings', directories, 'alice');
+        expect(third.ok).toBe(true);
+    });
+
+    test('does not cache a rejected initialization promise', async () => {
+        const root = makeRoot();
+        const directories = createDirectories(root);
+        // Sabotage the storage path so the initial open rejects.
+        fs.rmSync(directories.storage, { recursive: true, force: true });
+        fs.writeFileSync(directories.storage, 'blocked');
+        await expect(ensureCanonicalSliceBackend('settings', directories, 'alice'))
+            .rejects.toThrow();
+
+        fs.rmSync(directories.storage, { force: true });
+        fs.mkdirSync(directories.storage, { recursive: true });
+        const retry = await ensureCanonicalSliceBackend('settings', directories, 'alice');
+        expect(retry.ok).toBe(true);
+    });
+
     test('shadow-imports the settings file on first touch when the audit is missing', async () => {
         const root = makeRoot();
         const directories = createDirectories(root);
@@ -262,8 +296,8 @@ describe('lazy slice backend initialization', () => {
     test('re-audits without re-importing when a projection failure marked the DB ahead', async () => {
         const root = makeRoot();
         const directories = createDirectories(root);
-        // DB-ahead drift is only blocking while the file is still a projection.
-        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SLICES_SETTINGS_PROJECTION = 'sync';
+        // Settings projection was removed: file-side drift is always
+        // suppressed and never blocks, so no pinning is needed here.
         writeSettingsFile(directories, { firstRun: true, marker: 'stale-file' });
         const first = await ensureCanonicalSliceBackend('settings', directories, 'alice');
         expect(first.ok).toBe(true);
@@ -288,16 +322,16 @@ describe('lazy slice backend initialization', () => {
         const doc = getCanonicalSettingsDocument(second.db, { userId: 'alice' });
         expect(doc.payload).toEqual({ firstRun: true, marker: 'canonical-v2' });
         expect(doc.revision).toBe(2);
-        // The fresh audit re-verifies the drift and stays blocking for repair.
-        expect(getPersistedCanonicalAuditStatus(second.db, { scope: SETTINGS_AUDIT_SCOPE }).blocking).toBe(true);
+        // File-side drift is suppressed (projection removed), so the fresh
+        // audit is non-blocking even though the file diverges from the DB.
+        expect(getPersistedCanonicalAuditStatus(second.db, { scope: SETTINGS_AUDIT_SCOPE }).blocking).toBe(false);
     });
 
     test('leaves a real drift verdict blocking instead of importing over it', async () => {
         const root = makeRoot();
         const directories = createDirectories(root);
-        // This scenario verifies sync-projection repair blocking; pin it so the
-        // slice default ('off') does not suppress the file-side drift.
-        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SLICES_SETTINGS_PROJECTION = 'sync';
+        // A persisted blocking verdict must be honored as-is: init reports the
+        // drift but must not re-import over it.
         writeSettingsFile(directories, { firstRun: true, marker: 'file' });
         const first = await ensureCanonicalSliceBackend('settings', directories, 'alice');
         expect(first.ok).toBe(true);

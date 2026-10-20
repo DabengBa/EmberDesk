@@ -23,6 +23,7 @@ import {
 } from './external-content-import-service.js';
 
 const contentDirectory = path.join(serverDirectory, 'default/content');
+const templatesDirectory = path.join(serverDirectory, 'default/templates');
 const scaffoldDirectory = path.join(serverDirectory, 'default/scaffold');
 const contentIndexPath = path.join(contentDirectory, 'index.json');
 const scaffoldIndexPath = path.join(scaffoldDirectory, 'index.json');
@@ -56,7 +57,6 @@ async function fetchProviderResource({ url, options = undefined, source, stage, 
  * @enum {string}
  */
 export const CONTENT_TYPES = {
-    SETTINGS: 'settings',
     CHARACTER: 'character',
     WORLD: 'world',
     AVATAR: 'avatar',
@@ -117,8 +117,23 @@ export function getDefaultPresets(directories) {
  * @returns {object | null} JSON object or null if the file doesn't exist
  */
 export function getDefaultPresetFile(filename) {
+    return readDefaultJsonFile(contentDirectory, filename);
+}
+
+/**
+ * Gets a bootstrap JSON template from `default/templates`. Unlike
+ * `default/content`, templates are never content-seeded into user
+ * directories; they exist only as code-side defaults.
+ * @param {string} filename Name of the file to get
+ * @returns {object | null} JSON object or null if the file doesn't exist
+ */
+export function getDefaultTemplateFile(filename) {
+    return readDefaultJsonFile(templatesDirectory, filename);
+}
+
+function readDefaultJsonFile(directory, filename) {
     try {
-        const contentPath = path.join(contentDirectory, filename);
+        const contentPath = path.join(directory, filename);
 
         if (!fs.existsSync(contentPath)) {
             return null;
@@ -340,8 +355,6 @@ export function getContentOfType(type, format, scope = CONTENT_SCOPE.USER) {
  */
 export function getUserTargetByType(type, directories) {
     switch (type) {
-        case CONTENT_TYPES.SETTINGS:
-            return directories.root;
         case CONTENT_TYPES.CHARACTER:
             return directories.characters;
         case CONTENT_TYPES.WORLD:

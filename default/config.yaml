@@ -123,9 +123,11 @@ features:
         # Set projection: sync to restore continuous file projection.
         secrets:
           projection: off
-        # settings.json is likewise export-only: the canonical document is the
-        # authority, autosave backups materialize from the DB, and export-all
-        # regenerates the file. Set projection: sync to keep projecting.
+        # settings.json no longer exists as a runtime artifact: the canonical
+        # document is the authority and the file is only an import/export
+        # surface. This key is deprecated — it is ignored (with a warning) and
+        # the resolved mode is always off. Kept here only to silence configs
+        # that still set it; it will be removed entirely in a later release.
         settings:
           projection: off
         # worlds/*.json files are export-only: the canonical world_books table

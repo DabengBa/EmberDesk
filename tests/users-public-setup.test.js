@@ -10,7 +10,6 @@ const storageMock = {
 };
 
 const ensurePublicDirectoriesExistMock = jest.fn(async () => {});
-const checkForNewContentMock = jest.fn(async () => {});
 
 jest.unstable_mockModule('node-persist', () => ({
     default: storageMock,
@@ -35,9 +34,9 @@ jest.unstable_mockModule('../src/util.js', () => ({
     }),
 }));
 
-jest.unstable_mockModule('../src/endpoints/content-manager.js', () => ({
-    CONTENT_TYPES: { SETTINGS: 'settings' },
-    checkForNewContent: checkForNewContentMock,
+const ensureCanonicalSettingsForUserMock = jest.fn(async () => ({ ok: true }));
+jest.unstable_mockModule('../src/endpoints/settings.js', () => ({
+    ensureCanonicalSettingsForUser: ensureCanonicalSettingsForUserMock,
 }));
 
 jest.unstable_mockModule('../src/users.js', () => ({
@@ -48,7 +47,11 @@ jest.unstable_mockModule('../src/users.js', () => ({
     getPasswordHash: password => `hash:${password}`,
     getPasswordSalt: () => 'salt',
     getUserAvatar: async () => '',
-    getUserDirectories: handle => ({ settings: `settings/${handle}` }),
+    getUserDirectories: handle => ({
+        root: `users/${handle}`,
+        storage: `users/${handle}/storage`,
+        backups: `users/${handle}/backups`,
+    }),
     needsSetup: async () => users.size === 0,
     toKey: handle => `user:${handle}`,
 }));
@@ -105,7 +108,8 @@ describe('users public setup route', () => {
         storageMock.getItem.mockClear();
         storageMock.setItem.mockClear();
         ensurePublicDirectoriesExistMock.mockClear();
-        checkForNewContentMock.mockClear();
+        ensureCanonicalSettingsForUserMock.mockClear();
+        ensureCanonicalSettingsForUserMock.mockResolvedValue({ ok: true });
     });
 
     test('serializes setup completion so concurrent requests cannot create multiple admins', async () => {
@@ -139,6 +143,12 @@ describe('users public setup route', () => {
         expect(storageMock.setItem).toHaveBeenCalledTimes(1);
         expect(users.has('user:first-admin')).toBe(true);
         expect(users.has('user:second-admin')).toBe(false);
+        // The winning setup bootstraps the canonical settings document.
+        expect(ensureCanonicalSettingsForUserMock).toHaveBeenCalledTimes(1);
+        expect(ensureCanonicalSettingsForUserMock).toHaveBeenCalledWith(
+            { root: 'users/first-admin', storage: 'users/first-admin/storage', backups: 'users/first-admin/backups' },
+            'first-admin',
+        );
 
         storageMock.setItem.mockImplementation(async (key, value) => {
             users.set(key, value);

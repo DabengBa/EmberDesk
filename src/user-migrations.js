@@ -1,6 +1,6 @@
 import path from 'node:path';
 import fs from 'node:fs';
-import { DEFAULT_USER, PUBLIC_DIRECTORIES } from './constants.js';
+import { DEFAULT_USER, PUBLIC_DIRECTORIES, SETTINGS_MIGRATION_FILE } from './constants.js';
 import { color, delay, setPermissionsSync } from './util.js';
 import { serverDirectory } from './server-directory.js';
 import { getUserDirectories } from './user-directories.js';
@@ -81,8 +81,11 @@ export async function migrateUserData() {
             file: true,
         },
         {
+            // Lands under a non-contract name: the canonical settings shadow
+            // import consumes it once and deletes it (no settings.json is
+            // (re)created for migrated users).
             old: path.join(publicDirectory, 'settings.json'),
-            new: path.join(userDirectories.root, 'settings.json'),
+            new: path.join(userDirectories.root, SETTINGS_MIGRATION_FILE),
             file: true,
         },
     ];

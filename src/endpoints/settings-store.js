@@ -149,6 +149,39 @@ export function upsertCanonicalSettingsDocument(db, {
     });
 }
 
+/**
+ * Ensure a canonical settings document exists, creating it from the provided
+ * defaults when absent. Independent of shadow-import and audit state — this is
+ * the bootstrap path for deployments where no legacy settings.json exists.
+ * A revision conflict on create means a concurrent caller already created the
+ * document, which is treated as success.
+ * @param {object} db Canonical sqlite handle
+ * @param {object} options { userId, defaults, nowMs }
+ * @returns {{ok: true, document: object, created: boolean} | {ok: false, reason: string}}
+ */
+export function ensureCanonicalSettingsDocument(db, { userId, defaults, nowMs = Date.now() } = {}) {
+    const existing = getCanonicalSettingsDocument(db, { userId });
+    if (existing) {
+        return { ok: true, document: existing, created: false };
+    }
+    const safeDefaults = defaults != null && typeof defaults === 'object' && !Array.isArray(defaults)
+        ? defaults
+        : {};
+    const saved = upsertCanonicalSettingsDocument(db, {
+        userId,
+        payload: safeDefaults,
+        expectedRevision: 0,
+        nowMs,
+    });
+    if (!saved.ok) {
+        const document = getCanonicalSettingsDocument(db, { userId });
+        return document
+            ? { ok: true, document, created: false }
+            : { ok: false, reason: 'settings_document_create_failed' };
+    }
+    return { ok: true, document: getCanonicalSettingsDocument(db, { userId }), created: true };
+}
+
 export function recordSettingsProjectionRepair(db, {
     repairKey,
     userId,

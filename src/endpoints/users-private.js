@@ -7,7 +7,9 @@ import express from 'express';
 
 import { getUserAvatar, toKey, getPasswordHash, getPasswordSalt, createBackupArchive, ensurePublicDirectoriesExist, toAvatarKey, getAccountVersion } from '../users.js';
 import { SETTINGS_FILE } from '../constants.js';
-import { checkForNewContent, CONTENT_TYPES } from './content-manager.js';
+import { checkForNewContent } from './content-manager.js';
+import { closeCanonicalDatabase } from '../canonical-sqlite.js';
+import { ensureCanonicalSettingsForUser, resetCanonicalSettings } from './settings.js';
 import { color, Cache, getConfigValue } from '../util.js';
 
 const RESET_CACHE = new Cache(5 * 60 * 1000);
@@ -180,9 +182,16 @@ router.post('/reset-settings', async (request, response) => {
             return response.status(403).json({ error: 'Incorrect password' });
         }
 
+        const result = await resetCanonicalSettings(request);
+        if (!result.ok) {
+            if (result.reason === 'settings_revision_conflict') {
+                return response.status(409).send({ error: 'settings_revision_conflict', settings_revision: result.currentRevision });
+            }
+            return response.status(503).send({ error: 'canonical_storage_unavailable', reason: result.reason ?? 'canonical_storage_unavailable' });
+        }
+
         const pathToFile = path.join(request.user.directories.root, SETTINGS_FILE);
         await fsPromises.rm(pathToFile, { force: true });
-        await checkForNewContent([request.user.directories], [CONTENT_TYPES.SETTINGS]);
 
         return response.sendStatus(204);
     } catch (error) {
@@ -255,10 +264,21 @@ router.post('/reset-step2', async (request, response) => {
         }
 
         console.info('Resetting account data:', request.user.profile.handle);
+        // Close the cached canonical handle first: the manager would otherwise
+        // keep writing into an unlinked sqlite file after the reset.
+        closeCanonicalDatabase(request.user.directories);
         await fsPromises.rm(request.user.directories.root, { recursive: true, force: true });
 
         await ensurePublicDirectoriesExist();
         await checkForNewContent([request.user.directories]);
+        try {
+            const bootstrap = await ensureCanonicalSettingsForUser(request.user.directories, request.user.profile.handle);
+            if (!bootstrap?.ok) {
+                console.warn('Failed to bootstrap canonical settings after reset for', request.user.profile.handle, bootstrap?.reason ?? bootstrap);
+            }
+        } catch (error) {
+            console.warn('Failed to bootstrap canonical settings after reset for', request.user.profile.handle, error);
+        }
 
         RESET_CACHE.remove(request.user.profile.handle);
         return response.sendStatus(204);

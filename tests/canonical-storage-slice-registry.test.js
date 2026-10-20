@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { afterEach, describe, expect, test } from '@jest/globals';
+import { afterEach, describe, expect, jest, test } from '@jest/globals';
 
 import { createCanonicalSqliteManager } from '../src/canonical-sqlite.js';
 import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
@@ -13,6 +13,7 @@ import {
     getDefaultCanonicalStorageSliceRegistry,
     listCanonicalStorageSliceKeys,
     MANAGED_FILE_MANIFEST_VERSION,
+    resetDeprecatedSettingsProjectionWarningForTests,
 } from '../src/canonical-storage-slice-registry.js';
 import {
     buildCanonicalRollbackBlockers,
@@ -262,6 +263,24 @@ describe('canonical storage slice registry', () => {
                 writes: 'retired',
             }),
         }));
+    });
+
+    test('deprecated settings projection config warns once and resolves to off', () => {
+        resetDeprecatedSettingsProjectionWarningForTests();
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SLICES_SETTINGS_PROJECTION = 'sync';
+        const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+        try {
+            const settingsSlice = getDefaultCanonicalStorageSliceRegistry().get('settings');
+            expect(settingsSlice.getProjectionMode()).toBe('off');
+            expect(settingsSlice.getProjectionMode()).toBe('off');
+            const projectionWarnings = warnSpy.mock.calls.filter(call =>
+                String(call[0]).includes('slices.settings.projection'));
+            expect(projectionWarnings).toHaveLength(1);
+        } finally {
+            warnSpy.mockRestore();
+            delete process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SLICES_SETTINGS_PROJECTION;
+            resetDeprecatedSettingsProjectionWarningForTests();
+        }
     });
 
     test('allows managed-media rollback only after a clean audit and blocks it when a media repair remains open', () => {

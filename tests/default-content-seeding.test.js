@@ -5,8 +5,9 @@
  *
  * Covered:
  * - new users no longer receive the 34 retired default files
- * - active default content still seeds (settings/character/world/avatar/
- *   openai_preset plus global stylesheet and error pages)
+ * - active default content still seeds (character/world/avatar/
+ *   openai_preset plus global stylesheet and error pages; settings no longer
+ *   seeds a file — canonical storage owns defaults)
  * - pre-existing user files in retired-type directories are left byte-identical
  * - repeated seeding is idempotent via content.log
  */
@@ -74,8 +75,9 @@ describe('default content seeding', () => {
         const directories = getUserDirectories('seed-fresh-user');
         await checkForNewContent([directories]);
 
-        // Active user-scoped defaults still land.
-        expect(fs.existsSync(path.join(directories.root, 'settings.json'))).toBe(true);
+        // settings.json no longer seeds: canonical storage is authoritative
+        // and lazily creates the defaults document on first read.
+        expect(fs.existsSync(path.join(directories.root, 'settings.json'))).toBe(false);
         expect(fs.existsSync(path.join(directories.characters, 'default_Seraphina.png'))).toBe(true);
         expect(fs.existsSync(path.join(directories.worlds, 'Eldoria.json'))).toBe(true);
         expect(fs.existsSync(path.join(directories.avatars, 'user-default.png'))).toBe(true);

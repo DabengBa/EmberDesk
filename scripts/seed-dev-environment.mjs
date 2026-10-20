@@ -5,13 +5,17 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
+import { DatabaseSync } from 'node:sqlite';
 import { fileURLToPath } from 'node:url';
 import zlib from 'node:zlib';
 
 import storage from 'node-persist';
 
+import { applyCanonicalPragmas } from '../src/canonical-sqlite.js';
+import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
 import { write as writeCharacterCardPngData } from '../src/character-card-parser.js';
 import { DEFAULT_USER, SETTINGS_FILE, USER_DIRECTORY_TEMPLATE } from '../src/constants.js';
+import { upsertCanonicalSettingsDocument } from '../src/endpoints/settings-store.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -84,7 +88,7 @@ const PNG_CRC_TABLE = (() => {
     }
     return table;
 })();
-const defaultSettingsPath = path.join(repoRoot, 'default', 'content', SETTINGS_FILE);
+const defaultSettingsPath = path.join(repoRoot, 'default', 'templates', SETTINGS_FILE);
 const defaultSettings = JSON.parse(fs.readFileSync(defaultSettingsPath, 'utf8'));
 const USER_KEY_PREFIX = 'user:';
 
@@ -127,11 +131,21 @@ async function seedSettings(activeCharacterAvatar) {
     settings.power_user.auto_load_chat = true;
     settings.world_info = settings.world_info || {};
     settings.world_info.globalSelect = [];
-    await fs.promises.writeFile(
-        path.join(userRoot, SETTINGS_FILE),
-        `${JSON.stringify(settings, null, 4)}\n`,
-        'utf8',
-    );
+
+    const dbPath = path.join(directories.storage, 'emberdesk.sqlite');
+    await fs.promises.mkdir(path.dirname(dbPath), { recursive: true });
+    const db = new DatabaseSync(dbPath);
+    try {
+        applyCanonicalPragmas(db);
+        runCanonicalMigrations(db);
+        upsertCanonicalSettingsDocument(db, {
+            userId: seededUserHandle,
+            payload: settings,
+            expectedRevision: 0,
+        });
+    } finally {
+        db.close();
+    }
 }
 
 async function seedBootstrapContent() {

@@ -115,6 +115,7 @@ async function importCharacterRoutes({ generateThumbnailImpl, thumbnailsEnabled 
         AVATAR_HEIGHT: 600,
         DEFAULT_AVATAR_PATH: path.join(repoRoot, 'public/img/ai4.png'),
         SETTINGS_FILE: 'settings.json',
+        SETTINGS_MIGRATION_FILE: 'settings.migrated.json',
         MEDIA_REQUEST_TYPE: { IMAGE: 0b001, VIDEO: 0b010, AUDIO: 0b100 },
     }));
 

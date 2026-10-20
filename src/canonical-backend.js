@@ -233,7 +233,9 @@ export function ensureCanonicalSliceBackend(sliceKey, directories, handle = null
     const resolvedHandle = handle ?? getHandle(directories);
     const initPromise = Promise.resolve(prior)
         .then(prev => {
-            if (prev?.ok && prev.db) {
+            // A handle closed under the cache (e.g. reset-step2) must not be
+            // reused: re-initialize so the manager opens a fresh connection.
+            if (prev?.ok && prev.db && prev.db.isOpen !== false) {
                 const freshAudit = getPersistedCanonicalAuditStatus(prev.db, { scope: slice.auditScope });
                 if (decideCanonicalBackendInitAction(freshAudit) === 'skip') {
                     return prev;
@@ -241,6 +243,13 @@ export function ensureCanonicalSliceBackend(sliceKey, directories, handle = null
             }
             return initializeSlice(slice, resolvedHandle, directories, featureFlags, options);
         });
+    // A rejected init must not poison the slice for the rest of the process:
+    // evict it so the next call retries instead of replaying the failure.
+    initPromise.catch(() => {
+        if (perSlice.get(sliceKey) === initPromise) {
+            perSlice.delete(sliceKey);
+        }
+    });
     perSlice.set(sliceKey, initPromise);
     return initPromise;
 }

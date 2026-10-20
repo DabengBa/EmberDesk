@@ -414,6 +414,15 @@ export const CANONICAL_SQLITE_MIGRATIONS = Object.freeze([
             DROP TABLE IF EXISTS chat_message_swipes;
         `,
     }),
+    Object.freeze({
+        version: 12,
+        name: 'resolve_stale_settings_projection_repairs',
+        sql: `
+            UPDATE settings_projection_repairs
+            SET resolved_at_ms = CAST(unixepoch('subsec') * 1000 AS INTEGER)
+            WHERE resolved_at_ms IS NULL;
+        `,
+    }),
 ]);
 
 export class CanonicalMigrationBlockedError extends Error {

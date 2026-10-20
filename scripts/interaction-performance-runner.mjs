@@ -7,10 +7,14 @@ import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { performance } from 'node:perf_hooks';
 import { spawn } from 'node:child_process';
+import { DatabaseSync } from 'node:sqlite';
 
 import { chromium } from '../tests/node_modules/playwright/index.mjs';
 
+import { applyCanonicalPragmas } from '../src/canonical-sqlite.js';
+import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
 import { DEFAULT_USER, SETTINGS_FILE } from '../src/constants.js';
+import { upsertCanonicalSettingsDocument } from '../src/endpoints/settings-store.js';
 import {
     buildDerivedCacheObservabilitySummary,
     buildVariantComparison,
@@ -1642,12 +1646,23 @@ async function writeConfig(configPath, dataRoot, port) {
 }
 
 async function seedSettings(dataRoot) {
-    const sourcePath = path.join(repoRoot, 'default', 'content', SETTINGS_FILE);
-    const targetPath = path.join(dataRoot, DEFAULT_USER.handle, SETTINGS_FILE);
+    const sourcePath = path.join(repoRoot, 'default', 'templates', SETTINGS_FILE);
+    const dbPath = path.join(dataRoot, DEFAULT_USER.handle, 'storage', 'emberdesk.sqlite');
     const settings = JSON.parse(await fs.promises.readFile(sourcePath, 'utf8'));
 
-    await fs.promises.mkdir(path.dirname(targetPath), { recursive: true });
-    await fs.promises.writeFile(targetPath, `${JSON.stringify(settings, null, 4)}\n`, 'utf8');
+    await fs.promises.mkdir(path.dirname(dbPath), { recursive: true });
+    const db = new DatabaseSync(dbPath);
+    try {
+        applyCanonicalPragmas(db);
+        runCanonicalMigrations(db);
+        upsertCanonicalSettingsDocument(db, {
+            userId: DEFAULT_USER.handle,
+            payload: settings,
+            expectedRevision: 0,
+        });
+    } finally {
+        db.close();
+    }
 }
 
 function normalizePathForYaml(targetPath) {

@@ -27,6 +27,10 @@ import {
 } from '../src/canonical-sqlite-operator.js';
 import { getDefaultCanonicalStorageSliceRegistry } from '../src/canonical-storage-slice-registry.js';
 import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
+import {
+    listOpenSettingsProjectionRepairs,
+    recordSettingsProjectionRepair,
+} from '../src/endpoints/settings-store.js';
 import { MANAGED_MEDIA_AUDIT_SCOPE } from '../src/canonical-managed-media-shadow-import.js';
 import { CANONICAL_CHAT_AUDIT_SCOPE } from '../src/canonical-chat-shadow-import.js';
 import { writeCanonicalChatPayload } from '../src/endpoints/canonical-chat-write-service.js';
@@ -306,60 +310,60 @@ describe('canonical sqlite operator helpers', () => {
     test('rebuilds canonical chat stats from JSONL chat files', async () => {
         process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SLICES_CHATS_PROJECTION = 'sync';
         try {
-        const root = makeRoot();
-        const directories = createDirectories(root);
-        const manager = createManager();
-        const buildSnapshotRow = createSnapshotBuilder();
+            const root = makeRoot();
+            const directories = createDirectories(root);
+            const manager = createManager();
+            const buildSnapshotRow = createSnapshotBuilder();
 
-        writeCharacterFile(directories, 'alpha.png', {
-            name: 'Alpha',
-            chat: 'Alpha - chat',
-            fav: false,
-            tags: [],
-            data: { name: 'Alpha', extensions: { fav: false, world: '' }, tags: [] },
-        });
-        writeChatFile(directories, 'alpha.png', 'one.jsonl', '{"mes":"one"}\n');
+            writeCharacterFile(directories, 'alpha.png', {
+                name: 'Alpha',
+                chat: 'Alpha - chat',
+                fav: false,
+                tags: [],
+                data: { name: 'Alpha', extensions: { fav: false, world: '' }, tags: [] },
+            });
+            writeChatFile(directories, 'alpha.png', 'one.jsonl', '{"mes":"one"}\n');
 
-        await runCanonicalShadowImport({
-            handle: 'alice',
-            directories,
-            featureFlags: { enabled: true, shadowImport: true, strict: false },
-            manager,
-            buildSnapshotRow,
-            nowMs: 1735689600000,
-        });
+            await runCanonicalShadowImport({
+                handle: 'alice',
+                directories,
+                featureFlags: { enabled: true, shadowImport: true, strict: false },
+                manager,
+                buildSnapshotRow,
+                nowMs: 1735689600000,
+            });
 
-        const db = manager.open({
-            handle: 'alice',
-            directories,
-            featureFlags: { enabled: true, strict: false },
-        });
+            const db = manager.open({
+                handle: 'alice',
+                directories,
+                featureFlags: { enabled: true, strict: false },
+            });
 
-        db.prepare(`
+            db.prepare(`
             UPDATE character_chat_stats
             SET chat_count = 0,
                 chat_size_bytes = 0,
                 date_last_chat_ms = 0
         `).run();
-        writeChatFile(directories, 'alpha.png', 'two.jsonl', '{"mes":"two"}\n');
+            writeChatFile(directories, 'alpha.png', 'two.jsonl', '{"mes":"two"}\n');
 
-        const rebuilt = rebuildCanonicalChatStats({
-            db,
-            directories,
-            avatars: ['alpha.png'],
-            nowMs: 1735689603333,
-        });
+            const rebuilt = rebuildCanonicalChatStats({
+                db,
+                directories,
+                avatars: ['alpha.png'],
+                nowMs: 1735689603333,
+            });
 
-        expect(rebuilt).toEqual({
-            ok: true,
-            rebuilt: [
-                expect.objectContaining({
-                    avatarFilename: 'alpha.png',
-                    chatCount: 2,
-                }),
-            ],
-        });
-        expect(db.prepare(`
+            expect(rebuilt).toEqual({
+                ok: true,
+                rebuilt: [
+                    expect.objectContaining({
+                        avatarFilename: 'alpha.png',
+                        chatCount: 2,
+                    }),
+                ],
+            });
+            expect(db.prepare(`
             SELECT chat_count
             FROM character_chat_stats
             WHERE character_id = (SELECT id FROM characters WHERE avatar_filename = ?)
@@ -372,68 +376,68 @@ describe('canonical sqlite operator helpers', () => {
     test('rebuilds canonical chat stats from canonical chat_sessions when chats projection is off', async () => {
         process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SLICES_CHATS_PROJECTION = 'off';
         try {
-        const root = makeRoot();
-        const directories = createDirectories(root);
-        const manager = createManager();
-        const buildSnapshotRow = createSnapshotBuilder();
+            const root = makeRoot();
+            const directories = createDirectories(root);
+            const manager = createManager();
+            const buildSnapshotRow = createSnapshotBuilder();
 
-        writeCharacterFile(directories, 'alpha.png', {
-            name: 'Alpha',
-            chat: 'Alpha - chat',
-            fav: false,
-            tags: [],
-            data: { name: 'Alpha', extensions: { fav: false, world: '' }, tags: [] },
-        });
-        writeChatFile(directories, 'alpha.png', 'one.jsonl', '{"mes":"one"}\n');
+            writeCharacterFile(directories, 'alpha.png', {
+                name: 'Alpha',
+                chat: 'Alpha - chat',
+                fav: false,
+                tags: [],
+                data: { name: 'Alpha', extensions: { fav: false, world: '' }, tags: [] },
+            });
+            writeChatFile(directories, 'alpha.png', 'one.jsonl', '{"mes":"one"}\n');
 
-        await runCanonicalShadowImport({
-            handle: 'alice',
-            directories,
-            featureFlags: { enabled: true, shadowImport: true, strict: false },
-            manager,
-            buildSnapshotRow,
-            nowMs: 1735689600000,
-        });
-        const db = manager.open({
-            handle: 'alice',
-            directories,
-            featureFlags: { enabled: true, strict: false },
-        });
+            await runCanonicalShadowImport({
+                handle: 'alice',
+                directories,
+                featureFlags: { enabled: true, shadowImport: true, strict: false },
+                manager,
+                buildSnapshotRow,
+                nowMs: 1735689600000,
+            });
+            const db = manager.open({
+                handle: 'alice',
+                directories,
+                featureFlags: { enabled: true, strict: false },
+            });
 
-        await runCanonicalChatShadowImport({
-            handle: 'alice',
-            directories,
-            db,
-            featureFlags: { enabled: true, shadowImport: true, strict: false },
-            nowMs: 1735689600000,
-        });
+            await runCanonicalChatShadowImport({
+                handle: 'alice',
+                directories,
+                db,
+                featureFlags: { enabled: true, shadowImport: true, strict: false },
+                nowMs: 1735689600000,
+            });
 
-        db.prepare(`
+            db.prepare(`
             UPDATE character_chat_stats
             SET chat_count = 0,
                 chat_size_bytes = 0,
                 date_last_chat_ms = 0
         `).run();
-        // A file that never entered canonical storage must not count under 'off'.
-        writeChatFile(directories, 'alpha.png', 'unimported.jsonl', '{"mes":"two"}\n');
+            // A file that never entered canonical storage must not count under 'off'.
+            writeChatFile(directories, 'alpha.png', 'unimported.jsonl', '{"mes":"two"}\n');
 
-        const rebuilt = rebuildCanonicalChatStats({
-            db,
-            directories,
-            avatars: ['alpha.png'],
-            nowMs: 1735689603333,
-        });
+            const rebuilt = rebuildCanonicalChatStats({
+                db,
+                directories,
+                avatars: ['alpha.png'],
+                nowMs: 1735689603333,
+            });
 
-        expect(rebuilt).toEqual({
-            ok: true,
-            rebuilt: [
-                expect.objectContaining({
-                    avatarFilename: 'alpha.png',
-                    chatCount: 1,
-                }),
-            ],
-        });
-        expect(db.prepare(`
+            expect(rebuilt).toEqual({
+                ok: true,
+                rebuilt: [
+                    expect.objectContaining({
+                        avatarFilename: 'alpha.png',
+                        chatCount: 1,
+                    }),
+                ],
+            });
+            expect(db.prepare(`
             SELECT chat_count
             FROM character_chat_stats
             WHERE character_id = (SELECT id FROM characters WHERE avatar_filename = ?)
@@ -962,6 +966,45 @@ describe('canonical sqlite operator helpers', () => {
         } finally {
             delete process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SLICES_MANAGED_MEDIA_PROJECTION;
         }
+    });
+
+    test('settings repair resolves leftover open rows without writing settings.json', async () => {
+        const root = makeRoot();
+        const directories = createDirectories(root);
+        const manager = createManager();
+        const db = manager.open({
+            handle: 'alice',
+            directories,
+            featureFlags: { enabled: true, strict: false },
+        });
+        runCanonicalMigrations(db, { nowMs: 1735689600000 });
+
+        recordSettingsProjectionRepair(db, {
+            repairKey: 'settings:alice:projection',
+            userId: 'alice',
+            reason: 'projection_failed',
+            details: { operation: 'save' },
+            nowMs: 1735689601111,
+        });
+        expect(listOpenSettingsProjectionRepairs(db).length).toBe(1);
+
+        const repair = await runCanonicalSliceRepair({
+            sliceKey: 'settings',
+            db,
+            directories,
+            nowMs: 1735689602222,
+        });
+        expect(repair.ok).toBe(true);
+        expect(repair.results).toEqual([
+            expect.objectContaining({
+                repairKey: 'settings:alice:projection',
+                status: 'repaired',
+                reason: 'projection_removed',
+            }),
+        ]);
+        expect(listOpenSettingsProjectionRepairs(db)).toEqual([]);
+        // The repair path must never recreate the removed runtime artifact.
+        expect(fs.existsSync(path.join(directories.root, 'settings.json'))).toBe(false);
     });
 
     test('routes audit and repair by slice key through the control plane', async () => {

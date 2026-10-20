@@ -25,7 +25,8 @@ import {
     getPersistedCanonicalAuditStatus,
 } from '../src/canonical-sqlite-shadow-import.js';
 import { getDefaultCanonicalStorageSliceRegistry } from '../src/canonical-storage-slice-registry.js';
-import { SETTINGS_FILE } from '../src/constants.js';
+import { getImportLedgerEntry } from '../src/canonical-import-ledger.js';
+import { SETTINGS_FILE, SETTINGS_MIGRATION_FILE } from '../src/constants.js';
 
 const tempRoots = [];
 const managers = [];
@@ -308,6 +309,7 @@ describe('canonical settings store', () => {
             directories,
             db,
             auditedAtMs: 1735689602000,
+            projection: 'sync',
         });
         expect(cleanAudit).toEqual(expect.objectContaining({
             ok: true,
@@ -328,6 +330,7 @@ describe('canonical settings store', () => {
             directories,
             db,
             auditedAtMs: 1735689603000,
+            projection: 'sync',
         });
         expect(driftAudit).toEqual(expect.objectContaining({
             ok: false,
@@ -349,6 +352,7 @@ describe('canonical settings store', () => {
             directories,
             db,
             auditedAtMs: 1735689604000,
+            projection: 'sync',
         });
         expect(missingFileAudit.entries).toEqual(expect.arrayContaining([
             expect.objectContaining({
@@ -356,6 +360,123 @@ describe('canonical settings store', () => {
                 drift_types: expect.arrayContaining(['missing_projection_file']),
             }),
         ]));
+    });
+
+    test('consumes an ephemeral settings.migrated.json and never creates settings.json', async () => {
+        const root = makeRoot();
+        const directories = createDirectories(root);
+        const manager = createManager();
+        const payload = { firstRun: false, feature_settings: { migrated: true } };
+        const migrationPath = path.join(directories.root, SETTINGS_MIGRATION_FILE);
+        fs.writeFileSync(migrationPath, JSON.stringify(payload, null, 4), 'utf8');
+
+        const first = await runCanonicalSettingsShadowImport({
+            handle: 'alice',
+            directories,
+            featureFlags: { enabled: true, shadowImport: true, strict: false },
+            manager,
+            nowMs: 1735689600000,
+        });
+        expect(first).toEqual(expect.objectContaining({
+            ok: true,
+            importedCount: 1,
+            failedCount: 0,
+        }));
+
+        // Ephemeral source burned after import; contract file never created.
+        expect(fs.existsSync(migrationPath)).toBe(false);
+        expect(fs.existsSync(path.join(directories.root, SETTINGS_FILE))).toBe(false);
+
+        const db = manager.open({
+            handle: 'alice',
+            directories,
+            featureFlags: { enabled: true, strict: false },
+        });
+        expect(getCanonicalSettingsDocument(db, { userId: 'alice' }).payload).toEqual(payload);
+        expect(getImportLedgerEntry(db, {
+            sliceKey: 'settings',
+            sourcePath: SETTINGS_MIGRATION_FILE,
+        })).toEqual(expect.objectContaining({ origin: 'import' }));
+
+        // Nothing left to import on the next run.
+        const second = await runCanonicalSettingsShadowImport({
+            handle: 'alice',
+            directories,
+            featureFlags: { enabled: true, shadowImport: true, strict: false },
+            manager,
+            nowMs: 1735689601000,
+        });
+        expect(second.entries).toEqual(expect.arrayContaining([
+            expect.objectContaining({ status: 'unchanged', reason: 'missing_settings_file' }),
+        ]));
+    });
+
+    test('audit surfaces a stranded settings.migrated.json without blocking writes', async () => {
+        const root = makeRoot();
+        const directories = createDirectories(root);
+        const manager = createManager();
+        const migrationPath = path.join(directories.root, SETTINGS_MIGRATION_FILE);
+        fs.writeFileSync(migrationPath, JSON.stringify({ firstRun: false }), 'utf8');
+
+        const db = manager.open({
+            handle: 'alice',
+            directories,
+            featureFlags: { enabled: true, strict: false },
+        });
+        runCanonicalMigrations(db);
+        upsertCanonicalSettingsDocument(db, {
+            userId: 'alice',
+            payload: { firstRun: false, current: true },
+            expectedRevision: 0,
+        });
+
+        const audit = await auditCanonicalSettingsShadowImport({
+            handle: 'alice',
+            directories,
+            db,
+            projection: 'off',
+        });
+        expect(audit.blocking).toBe(false);
+        expect(audit.entries).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                status: 'drift',
+                drift_types: expect.arrayContaining(['pending_migration']),
+                details: expect.objectContaining({ source_path: SETTINGS_MIGRATION_FILE }),
+            }),
+        ]));
+    });
+
+    test('audit reports an invalid settings.migrated.json as a suppressed error and keeps the file', async () => {
+        const root = makeRoot();
+        const directories = createDirectories(root);
+        const manager = createManager();
+        const migrationPath = path.join(directories.root, SETTINGS_MIGRATION_FILE);
+        fs.writeFileSync(migrationPath, '{not-json', 'utf8');
+
+        const db = manager.open({
+            handle: 'alice',
+            directories,
+            featureFlags: { enabled: true, strict: false },
+        });
+        runCanonicalMigrations(db);
+
+        const audit = await auditCanonicalSettingsShadowImport({
+            handle: 'alice',
+            directories,
+            db,
+            projection: 'off',
+        });
+        expect(audit.blocking).toBe(false);
+        expect(audit.entries).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                status: 'error',
+                drift_types: expect.arrayContaining(['invalid_json']),
+                details: expect.objectContaining({ source_path: SETTINGS_MIGRATION_FILE }),
+            }),
+        ]));
+        // A corrupt migration source is never auto-destroyed: the user keeps
+        // the file for manual recovery.
+        expect(fs.existsSync(migrationPath)).toBe(true);
     });
 
     test('audit classifies missing import, invalid JSON, and schema not ready', async () => {
@@ -374,6 +495,7 @@ describe('canonical settings store', () => {
             directories,
             db,
             auditedAtMs: 1000,
+            projection: 'sync',
         });
         expect(schemaAudit).toEqual(expect.objectContaining({
             ok: false,
@@ -388,6 +510,7 @@ describe('canonical settings store', () => {
             directories,
             db,
             auditedAtMs: 3000,
+            projection: 'sync',
         });
         expect(invalidAudit.entries).toEqual(expect.arrayContaining([
             expect.objectContaining({
@@ -402,6 +525,7 @@ describe('canonical settings store', () => {
             directories,
             db,
             auditedAtMs: 4000,
+            projection: 'sync',
         });
         expect(notImported.entries).toEqual(expect.arrayContaining([
             expect.objectContaining({
@@ -418,12 +542,12 @@ describe('canonical settings store', () => {
         expect(slice.auditScope).toBe(SETTINGS_AUDIT_SCOPE);
         expect(typeof slice.listOpenRepairs).toBe('function');
         expect(typeof slice.getRollbackBlockers).toBe('function');
+        // settings.json is no longer a managed runtime artifact; backup and
+        // restore run through canonical snapshots instead.
         expect(slice.getBackupManagedPaths({
             root: '/tmp/user',
             storage: '/tmp/user/storage',
-        })).toEqual(expect.arrayContaining([
-            path.join('/tmp/user', SETTINGS_FILE),
-        ]));
+        })).toEqual([]);
     });
 });
 
@@ -598,6 +722,60 @@ describe('canonical settings route integration', () => {
         expect(JSON.parse(fs.readFileSync(path.join(directories.root, SETTINGS_FILE), 'utf8'))).toEqual(filePayload);
     });
 
+    test('bootstraps a defaults document on first get without any settings.json file', async () => {
+        const root = makeRoot();
+        const directories = createRouteDirectories(root);
+        // No settings.json and no canonical document — a fresh user must not
+        // depend on the legacy file to receive defaults.
+        const defaultsPayload = JSON.parse(fs.readFileSync(new URL('../default/templates/settings.json', import.meta.url), 'utf8'));
+
+        setCanonicalEnv({ enabled: true, shadowImport: true, reads: true, writes: false });
+        const router = await loadSettingsRouter();
+        const response = await invokeRoute(router, '/get', { directories });
+
+        expect(response.statusCode).toBe(200);
+        expect(JSON.parse(response.body.settings)).toEqual(defaultsPayload);
+        expect(response.body.settings_revision).toBe(1);
+        // Still no file on disk: the bootstrap path must not re-create it.
+        expect(fs.existsSync(path.join(directories.root, SETTINGS_FILE))).toBe(false);
+    });
+
+    test('concurrent first /get and /save initialize a single document idempotently', async () => {
+        const root = makeRoot();
+        const directories = createRouteDirectories(root);
+        setCanonicalEnv({ enabled: true, shadowImport: true, reads: true, writes: true });
+        const router = await loadSettingsRouter();
+
+        const [getResponse, saveResponse] = await Promise.all([
+            invokeRoute(router, '/get', { directories }),
+            invokeRoute(router, '/save', {
+                directories,
+                body: { firstRun: false, race: true },
+            }),
+        ]);
+
+        expect(getResponse.statusCode).toBe(200);
+        expect(saveResponse.statusCode).toBe(200);
+
+        const { canonicalSqliteManager } = await import('../src/canonical-sqlite.js');
+        const db = canonicalSqliteManager.open({
+            handle: 'alice',
+            directories,
+            featureFlags: { enabled: true, strict: false },
+        });
+        const rowCount = db.prepare('SELECT COUNT(*) AS count FROM settings_documents').get().count;
+        expect(rowCount).toBe(1);
+        const doc = getCanonicalSettingsDocument(db, { userId: 'alice' });
+        // Whichever caller won the create race committed exactly one document;
+        // the loser observed the revision conflict and adopted the winner.
+        expect(doc.revision).toBeGreaterThanOrEqual(1);
+        const payload = doc.payload;
+        const isDefaults = payload.race === undefined && payload.firstRun !== false;
+        const isSaveBody = payload.firstRun === false && payload.race === true;
+        expect(isDefaults || isSaveBody).toBe(true);
+        expect(fs.existsSync(path.join(directories.root, SETTINGS_FILE))).toBe(false);
+    });
+
     test('ignores the retired reads flag and fails closed when the settings audit blocks', async () => {
         const root = makeRoot();
         const directories = createRouteDirectories(root);
@@ -676,13 +854,12 @@ describe('canonical settings route integration', () => {
         expect(response.body.world_names).toContain('DbOnlyBook');
     });
 
-    test('canonical save enforces revision conflicts and projects settings.json after DB commit', async () => {
-        // Projection assertions require sync mode; the slice default is 'off'.
+    test('canonical save enforces revision conflicts without writing settings.json', async () => {
         const root = makeRoot();
         const directories = createRouteDirectories(root);
         writeSettingsFile(directories, { firstRun: true });
 
-        setCanonicalEnv({ enabled: true, shadowImport: true, reads: true, writes: true, projection: 'sync' });
+        setCanonicalEnv({ enabled: true, shadowImport: true, reads: true, writes: true });
         const router = await loadSettingsRouter();
 
         // First save lazily imports settings.json (rev 1) before the DB write.
@@ -705,9 +882,10 @@ describe('canonical settings route integration', () => {
             result: 'ok',
             settings_revision: 2,
         }));
+        // No file projection exists anymore: the seeded file keeps its stale
+        // content while the canonical document is the only thing updated.
         expect(JSON.parse(fs.readFileSync(path.join(directories.root, SETTINGS_FILE), 'utf8'))).toEqual({
-            firstRun: false,
-            v: 2,
+            firstRun: true,
         });
         expect(getCanonicalSettingsDocument(db, { userId: 'alice' }).payload).toEqual({
             firstRun: false,
@@ -733,19 +911,17 @@ describe('canonical settings route integration', () => {
             v: 2,
         });
         expect(JSON.parse(fs.readFileSync(path.join(directories.root, SETTINGS_FILE), 'utf8'))).toEqual({
-            firstRun: false,
-            v: 2,
+            firstRun: true,
         });
     });
 
-    test('projection failure keeps DB revision and records a settings repair blocker', async () => {
+    test('save ignores a sabotaged settings.json path entirely', async () => {
         const root = makeRoot();
         const directories = createRouteDirectories(root);
         writeSettingsFile(directories, { firstRun: true });
 
-        setCanonicalEnv({ enabled: true, reads: true, writes: true, projection: 'sync' });
+        setCanonicalEnv({ enabled: true, reads: true, writes: true });
         const router = await loadSettingsRouter();
-        // Initialize the slice backend (import + clean audit) before sabotage.
         await invokeRoute(router, '/get', { directories });
         const { canonicalSqliteManager } = await import('../src/canonical-sqlite.js');
         const db = canonicalSqliteManager.open({
@@ -754,7 +930,8 @@ describe('canonical settings route integration', () => {
             featureFlags: { enabled: true, strict: false },
         });
 
-        // Make projection fail: replace settings.json path with a directory.
+        // A settings.json DIRECTORY must not break the save: the
+        // projection write path is gone, the file is inert.
         const settingsPath = path.join(directories.root, SETTINGS_FILE);
         fs.rmSync(settingsPath, { force: true });
         fs.mkdirSync(settingsPath);
@@ -767,17 +944,16 @@ describe('canonical settings route integration', () => {
             },
         });
 
-        expect(response.statusCode).toBe(500);
+        expect(response.statusCode).toBe(200);
         expect(response.body).toEqual(expect.objectContaining({
-            error: expect.stringMatching(/project/i),
-            repairKey: expect.stringContaining('settings:'),
+            result: 'ok',
             settings_revision: 2,
         }));
         expect(getCanonicalSettingsDocument(db, { userId: 'alice' }).payload).toEqual({
             firstRun: false,
             v: 2,
         });
-        expect(listOpenSettingsProjectionRepairs(db).length).toBe(1);
+        expect(listOpenSettingsProjectionRepairs(db).length).toBe(0);
     });
     test('ignores top-level document revision field and only honors settings_revision', async () => {
         const root = makeRoot();
@@ -817,11 +993,11 @@ describe('canonical settings route integration', () => {
         });
     });
 
-    test('leaves settings.json stale while serving DB authority when projection is off', async () => {
+    test('leaves settings.json stale while serving DB authority', async () => {
         const root = makeRoot();
         const directories = createRouteDirectories(root);
         writeSettingsFile(directories, { firstRun: true });
-        setCanonicalEnv({ enabled: true, reads: true, writes: true, projection: 'off' });
+        setCanonicalEnv({ enabled: true, reads: true, writes: true });
         const router = await loadSettingsRouter();
 
         const save = await invokeRoute(router, '/save', {
@@ -841,11 +1017,11 @@ describe('canonical settings route integration', () => {
         expect(filePayload).toEqual({ firstRun: true });
     });
 
-    test('reports stale settings.json as suppressed informational drift when projection is off', async () => {
+    test('reports stale settings.json as suppressed informational drift', async () => {
         const root = makeRoot();
         const directories = createRouteDirectories(root);
         writeSettingsFile(directories, { firstRun: true });
-        setCanonicalEnv({ enabled: true, reads: true, writes: true, projection: 'off' });
+        setCanonicalEnv({ enabled: true, reads: true, writes: true });
         const router = await loadSettingsRouter();
         await invokeRoute(router, '/get', { directories });
 
@@ -887,11 +1063,11 @@ describe('canonical settings route integration', () => {
         }));
     });
 
-    test('file backup materializes canonical settings when projection is off', async () => {
+    test('file backup materializes canonical settings', async () => {
         const root = makeRoot();
         const directories = createRouteDirectories(root);
         writeSettingsFile(directories, { firstRun: true });
-        setCanonicalEnv({ enabled: true, reads: true, writes: true, projection: 'off' });
+        setCanonicalEnv({ enabled: true, reads: true, writes: true });
         const router = await loadSettingsRouter();
         await invokeRoute(router, '/save', {
             directories,
@@ -1031,7 +1207,7 @@ describe('canonical settings snapshots and rollback', () => {
         const root = makeRoot();
         const directories = createRouteDirectories(root);
         writeSettingsFile(directories, { firstRun: true, v: 0 });
-        setCanonicalEnv({ enabled: true, reads: true, writes: true, projection: 'sync' });
+        setCanonicalEnv({ enabled: true, reads: true, writes: true });
         const router = await loadSettingsRouter();
 
         // Lazy init imports the file (rev 1) before we seed divergent state.
@@ -1090,13 +1266,47 @@ describe('canonical settings snapshots and rollback', () => {
         const restored = getCanonicalSettingsDocument(db, { userId: 'alice' });
         expect(restored.payload).toEqual({ firstRun: false, v: 1 });
         expect(restored.revision).toBe(4); // new revision, not rewind
+        // The on-disk file is never projected: it keeps the seeded payload.
         expect(JSON.parse(fs.readFileSync(path.join(directories.root, SETTINGS_FILE), 'utf8'))).toEqual({
-            firstRun: false,
-            v: 1,
+            firstRun: true,
+            v: 0,
         });
     });
 
-    test('open settings projection repairs block write rollback', async () => {
+    test('make-snapshot fails closed when canonical storage is unavailable', async () => {
+        const root = makeRoot();
+        const directories = createRouteDirectories(root);
+        setCanonicalEnv({ enabled: false, reads: true, writes: true });
+        const router = await loadSettingsRouter();
+
+        const response = await invokeRoute(router, '/make-snapshot', { directories });
+
+        expect(response.statusCode).toBe(503);
+        expect(response.body).toEqual(expect.objectContaining({
+            error: 'canonical_storage_unavailable',
+        }));
+        // Nothing may be materialized when canonical is unavailable.
+        expect(fs.readdirSync(directories.backups).filter(n => n.startsWith('settings_alice_'))).toEqual([]);
+    });
+
+    test('restore-snapshot reports a canonical snapshot unavailable as 503', async () => {
+        const root = makeRoot();
+        const directories = createRouteDirectories(root);
+        setCanonicalEnv({ enabled: false, reads: true, writes: true });
+        const router = await loadSettingsRouter();
+
+        const response = await invokeRoute(router, '/restore-snapshot', {
+            directories,
+            body: { name: 'canonical:abc' },
+        });
+
+        expect(response.statusCode).toBe(503);
+        expect(response.body).toEqual(expect.objectContaining({
+            error: 'canonical_storage_unavailable',
+        }));
+    });
+
+    test('stale open settings projection repairs are resolved by migration and no longer block writes', async () => {
         const root = makeRoot();
         const directories = createDirectories(root);
         const manager = createManager();
@@ -1105,7 +1315,12 @@ describe('canonical settings snapshots and rollback', () => {
             directories,
             featureFlags: { enabled: true, strict: false },
         });
-        runCanonicalMigrations(db, { nowMs: 1000 });
+        // Simulate a pre-upgrade database: an open projection repair left over
+        // from the file-projection era.
+        runCanonicalMigrations(db, {
+            nowMs: 1000,
+            migrations: CANONICAL_SQLITE_MIGRATIONS.filter(m => m.name !== 'resolve_stale_settings_projection_repairs'),
+        });
         recordSettingsProjectionRepair(db, {
             repairKey: 'settings:alice:projection',
             userId: 'alice',
@@ -1113,6 +1328,11 @@ describe('canonical settings snapshots and rollback', () => {
             details: { operation: 'save' },
             nowMs: 2000,
         });
+        expect(listOpenSettingsProjectionRepairs(db).length).toBe(1);
+
+        // The upgrade migration resolves the stale row; writes proceed.
+        runCanonicalMigrations(db, { nowMs: 3000 });
+        expect(listOpenSettingsProjectionRepairs(db).length).toBe(0);
 
         const slice = getDefaultCanonicalStorageSliceRegistry().get('settings');
         const blockers = slice.getRollbackBlockers({
@@ -1127,9 +1347,6 @@ describe('canonical settings snapshots and rollback', () => {
             phase: 'writes',
             persistedAuditStatus: { ok: true, blocking: false, reason: null },
         });
-        expect(blockers.ok).toBe(false);
-        expect(blockers.blockers).toEqual(expect.arrayContaining([
-            expect.objectContaining({ code: 'open_settings_projection_repairs' }),
-        ]));
+        expect(blockers.ok).toBe(true);
     });
 });

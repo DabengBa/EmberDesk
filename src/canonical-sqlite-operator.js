@@ -10,7 +10,7 @@ import { serverDirectory } from './server-directory.js';
 import { withCanonicalTransaction } from './canonical-sqlite.js';
 import { getPersistedCanonicalAuditStatus, invalidateCanonicalAuditStatus, auditCanonicalShadowImport } from './canonical-sqlite-shadow-import.js';
 import { auditCanonicalWorldInfoShadowImport, WORLD_INFO_AUDIT_SCOPE } from './canonical-world-info-shadow-import.js';
-import { auditCanonicalSettingsShadowImport, SETTINGS_AUDIT_SCOPE } from './canonical-settings-shadow-import.js';
+import { auditCanonicalSettingsShadowImport } from './canonical-settings-shadow-import.js';
 import { auditCanonicalManagedMediaShadowImport } from './canonical-managed-media-shadow-import.js';
 import {
     auditCanonicalChatShadowImport,
@@ -46,7 +46,6 @@ import {
 import {
     listOpenSettingsProjectionRepairs,
     resolveSettingsProjectionRepair,
-    getCanonicalSettingsDocument,
 } from './endpoints/settings-store.js';
 import {
     listOpenSecretProjectionRepairs,
@@ -873,49 +872,17 @@ async function repairCanonicalSettingsProjection({ db, directories, repairKeys =
     const results = buildMissingRepairResults(requested, openRepairs);
 
     for (const repair of repairs) {
-        const document = getCanonicalSettingsDocument(db, { userId: repair.userId });
-        if (!document) {
-            results.push({
-                repairKey: repair.repairKey,
-                status: 'skipped',
-                reason: 'missing_canonical_settings_document',
-            });
-            continue;
-        }
-        try {
-            const pathToSettings = path.join(directories.root, 'settings.json');
-            const contents = JSON.stringify(document.payload, null, 4);
-            writeFileAtomicSync(pathToSettings, contents, 'utf8');
-            recordImportLedgerEntry(db, {
-                sliceKey: 'settings',
-                sourcePath: 'settings.json',
-                contentHash: crypto.createHash('sha256').update(contents).digest('hex'),
-                origin: 'projection',
-                nowMs,
-            });
-            resolveSettingsProjectionRepair(db, {
-                repairKey: repair.repairKey,
-                resolvedAtMs: nowMs,
-            });
-            results.push({
-                repairKey: repair.repairKey,
-                status: 'repaired',
-            });
-        } catch (error) {
-            results.push({
-                repairKey: repair.repairKey,
-                status: 'failed',
-                error: String(error?.message ?? error ?? ''),
-            });
-        }
-    }
-
-    if (results.some(result => result.status === 'repaired')) {
-        invalidateCanonicalAuditStatus(db, {
-            scope: SETTINGS_AUDIT_SCOPE,
-            handle: null,
-            reason: 'audit_stale_after_settings_projection_repair',
-            source: 'canonical_repair:repair_settings_projection',
+        // The settings projection was removed: there is no file to rewrite.
+        // Any leftover open row is historical noise (migration v12 resolves
+        // them at boot) — close it so the repair queue stays empty.
+        resolveSettingsProjectionRepair(db, {
+            repairKey: repair.repairKey,
+            resolvedAtMs: nowMs,
+        });
+        results.push({
+            repairKey: repair.repairKey,
+            status: 'repaired',
+            reason: 'projection_removed',
         });
     }
 

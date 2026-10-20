@@ -8,6 +8,13 @@ export const PUBLIC_DIRECTORIES = {
 export const SETTINGS_FILE = 'settings.json';
 
 /**
+ * Ephemeral landing name for legacy `public/settings.json` during user-data
+ * migration. Never seeded or projected; the settings shadow import consumes
+ * it once and deletes it.
+ */
+export const SETTINGS_MIGRATION_FILE = 'settings.migrated.json';
+
+/**
  * @type {import('./users.js').UserDirectoryList}
  * @readonly
  * @enum {string}

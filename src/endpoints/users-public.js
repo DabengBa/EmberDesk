@@ -6,7 +6,7 @@ import lodash from 'lodash';
 import { RateLimiterMemory, RateLimiterRes } from 'rate-limiter-flexible';
 import { getIpAddress, retryAfter } from '../express-common.js';
 import { color, Cache, getConfigValue } from '../util.js';
-import { checkForNewContent, CONTENT_TYPES } from './content-manager.js';
+import { ensureCanonicalSettingsForUser } from './settings.js';
 import {
     KEY_PREFIX, getUserAvatar, toKey, getPasswordHash, getPasswordSalt, getAccountVersion,
     needsSetup, ensurePublicDirectoriesExist, getUserDirectories, getAllUserHandles,
@@ -393,7 +393,14 @@ router.post('/setup', async (request, response) => {
             console.info('Creating data directories for', newUser.handle);
             await ensurePublicDirectoriesExist();
             const directories = getUserDirectories(newUser.handle);
-            await checkForNewContent([directories], [CONTENT_TYPES.SETTINGS]);
+            try {
+                const bootstrap = await ensureCanonicalSettingsForUser(directories, newUser.handle);
+                if (!bootstrap?.ok) {
+                    console.warn('Failed to bootstrap canonical settings for', newUser.handle, bootstrap?.reason ?? bootstrap);
+                }
+            } catch (error) {
+                console.warn('Failed to bootstrap canonical settings for', newUser.handle, error);
+            }
 
             if (!request.session) {
                 console.error('Session not available');

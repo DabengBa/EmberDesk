@@ -1,4 +1,4 @@
-import { afterEach, beforeAll, describe, expect, test } from '@jest/globals';
+import { afterAll, afterEach, beforeAll, describe, expect, test } from '@jest/globals';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -8,6 +8,12 @@ const tmpConfigRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-settings-
 const tmpConfigPath = path.join(tmpConfigRoot, 'config.yaml');
 fs.writeFileSync(tmpConfigPath, 'port: 8000\n', 'utf8');
 setConfigFilePath(tmpConfigPath);
+
+// canReadCanonicalFeatureFlags() requires runtime args; without them the
+// router would return 503 instead of serving the canonical document.
+const hadCommandLineArgs = Object.prototype.hasOwnProperty.call(globalThis, 'COMMAND_LINE_ARGS');
+const previousCommandLineArgs = globalThis.COMMAND_LINE_ARGS;
+globalThis.COMMAND_LINE_ARGS = {};
 
 const { router } = await import('../src/endpoints/settings.js');
 
@@ -40,6 +46,8 @@ function makeDirectories() {
 
     const directories = {
         root,
+        storage: path.join(root, 'storage'),
+        backups: path.join(root, 'backups'),
         openAI_Settings: path.join(root, 'OpenAI Settings'),
         worlds: path.join(root, 'worlds'),
     };
@@ -47,13 +55,22 @@ function makeDirectories() {
     for (const dir of Object.values(directories)) {
         fs.mkdirSync(dir, { recursive: true });
     }
-    fs.writeFileSync(path.join(root, 'settings.json'), '{}', 'utf8');
     return directories;
 }
 
 describe('settings get route', () => {
     beforeAll(() => {
-        roots.push(tmpConfigRoot);
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_ENABLED = 'true';
+    });
+
+    afterAll(() => {
+        delete process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_ENABLED;
+        if (hadCommandLineArgs) {
+            globalThis.COMMAND_LINE_ARGS = previousCommandLineArgs;
+        } else {
+            delete globalThis.COMMAND_LINE_ARGS;
+        }
+        fs.rmSync(tmpConfigRoot, { recursive: true, force: true });
     });
 
     afterEach(() => {
@@ -69,6 +86,13 @@ describe('settings get route', () => {
         const response = await invokeSettingsGet(directories);
 
         expect(response.statusCode).toBe(200);
+        // Bootstrapped from the bundled defaults template on first read.
+        const defaultsPayload = JSON.parse(
+            fs.readFileSync(new URL('../default/templates/settings.json', import.meta.url), 'utf8'),
+        );
+        expect(JSON.parse(response.body.settings)).toEqual(defaultsPayload);
+        expect(response.body.settings_revision).toBe(1);
+        expect(fs.existsSync(path.join(directories.root, 'settings.json'))).toBe(false);
         expect(response.body.openai_settings).toEqual([JSON.stringify({ name: 'OpenAI' })]);
         expect(response.body.openai_setting_names).toEqual(['openai']);
         expect(response.body).not.toHaveProperty('textgenerationwebui_presets');

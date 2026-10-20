@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { SETTINGS_FILE } from './constants.js';
+import { SETTINGS_FILE, SETTINGS_MIGRATION_FILE } from './constants.js';
 import {
     classifyImportCandidate,
     recordImportLedgerEntry,
@@ -12,7 +12,6 @@ import { getCanonicalMigrationStatus, runCanonicalMigrations } from './canonical
 import { persistCanonicalAuditStatus } from './canonical-sqlite-shadow-import.js';
 import {
     getCanonicalSettingsDocument,
-    getCanonicalSettingsRevision,
     hashSettingsPayload,
     upsertCanonicalSettingsDocument,
 } from './endpoints/settings-store.js';
@@ -23,8 +22,30 @@ function getSettingsFilePath(directories) {
     return path.join(directories.root, SETTINGS_FILE);
 }
 
-function readSettingsFileRaw(directories) {
-    const filePath = getSettingsFilePath(directories);
+/**
+ * Import candidates in precedence order. The contract path stays the import
+ * surface for legacy deployments; the migration path is the ephemeral
+ * landing spot used by `migrateUserData` and is deleted after a successful
+ * import.
+ * @param {import('./users.js').UserDirectoryList} directories User directories
+ * @returns {{filePath: string, sourcePath: string, ephemeral: boolean}[]}
+ */
+function getSettingsImportCandidates(directories) {
+    return [
+        {
+            filePath: path.join(directories.root, SETTINGS_FILE),
+            sourcePath: SETTINGS_FILE,
+            ephemeral: false,
+        },
+        {
+            filePath: path.join(directories.root, SETTINGS_MIGRATION_FILE),
+            sourcePath: SETTINGS_MIGRATION_FILE,
+            ephemeral: true,
+        },
+    ];
+}
+
+function readSettingsFileRaw(filePath) {
     if (!fs.existsSync(filePath)) {
         return {
             exists: false,
@@ -165,8 +186,10 @@ export async function runCanonicalSettingsShadowImport({
     }
 
     const entries = [];
-    const file = readSettingsFileRaw(directories);
-    if (!file.exists) {
+    const candidates = getSettingsImportCandidates(directories);
+    const candidate = candidates.find(item => fs.existsSync(item.filePath)) ?? null;
+    const file = candidate ? readSettingsFileRaw(candidate.filePath) : null;
+    if (!file || !file.exists) {
         return summarizeImportResult({
             handle,
             entries: [{
@@ -189,18 +212,32 @@ export async function runCanonicalSettingsShadowImport({
         });
     }
 
+    const consumeCandidate = () => {
+        if (!candidate.ephemeral) {
+            return;
+        }
+        try {
+            fs.rmSync(candidate.filePath, { force: true });
+        } catch (error) {
+            // A failed burn must not downgrade a committed import to an
+            // error: the leftover file is re-consumed on the next pass.
+            console.warn('Failed to remove consumed settings migration file', candidate.filePath, error);
+        }
+    };
+
     try {
         const existing = getCanonicalSettingsDocument(db, { userId: handle });
         const fileHash = hashSettingsPayload(file.payload);
         const recordFileImport = () => recordImportLedgerEntry(db, {
             sliceKey: 'settings',
-            sourcePath: SETTINGS_FILE,
+            sourcePath: candidate.sourcePath,
             contentHash: crypto.createHash('sha256').update(file.raw).digest('hex'),
             origin: 'import',
             nowMs,
         });
         if (existing && existing.contentHash === fileHash) {
             recordFileImport();
+            consumeCandidate();
             entries.push({ status: 'unchanged' });
         } else {
             const expectedRevision = existing ? existing.revision : 0;
@@ -215,6 +252,7 @@ export async function runCanonicalSettingsShadowImport({
                 const latest = getCanonicalSettingsDocument(db, { userId: handle });
                 if (latest && latest.contentHash === fileHash) {
                     recordFileImport();
+                    consumeCandidate();
                     entries.push({ status: 'unchanged' });
                 } else {
                     entries.push({
@@ -225,6 +263,7 @@ export async function runCanonicalSettingsShadowImport({
                 }
             } else {
                 recordFileImport();
+                consumeCandidate();
                 entries.push({
                     status: existing ? 'updated' : 'imported',
                     revision: saved.revision,
@@ -297,7 +336,7 @@ export async function auditCanonicalSettingsShadowImport({
     }
 
     const entries = [];
-    const file = readSettingsFileRaw(directories);
+    const file = readSettingsFileRaw(getSettingsFilePath(directories));
     const stored = getCanonicalSettingsDocument(db, { userId: handle });
     const importClassification = file.exists && file.raw != null
         ? classifyImportCandidate(db, {
@@ -361,6 +400,35 @@ export async function auditCanonicalSettingsShadowImport({
         }
     }
 
+    // The ephemeral migration file is not part of the file-side contract, but
+    // a stranded one should stay visible to operator status instead of
+    // disappearing silently after a one-shot import attempt.
+    const migratedFile = readSettingsFileRaw(path.join(directories.root, SETTINGS_MIGRATION_FILE));
+    if (migratedFile.exists && migratedFile.error) {
+        entries.push(buildAuditEntry({
+            handle,
+            status: 'error',
+            driftTypes: ['invalid_json'],
+            details: {
+                errorMessage: String(migratedFile.error?.message ?? migratedFile.error ?? ''),
+                source_path: SETTINGS_MIGRATION_FILE,
+                ...suppressDetails,
+            },
+            auditedAtMs,
+        }));
+    } else if (migratedFile.exists) {
+        entries.push(buildAuditEntry({
+            handle,
+            status: 'drift',
+            driftTypes: ['pending_migration'],
+            details: {
+                source_path: SETTINGS_MIGRATION_FILE,
+                ...suppressDetails,
+            },
+            auditedAtMs,
+        }));
+    }
+
     const result = buildAuditSummary({
         handle,
         migrationStatus,
@@ -374,14 +442,3 @@ export async function auditCanonicalSettingsShadowImport({
     return result;
 }
 
-export function getSettingsFileContentHash(directories) {
-    const file = readSettingsFileRaw(directories);
-    if (!file.exists || file.error || !file.payload) {
-        return null;
-    }
-    return hashSettingsPayload(file.payload);
-}
-
-export function getCurrentSettingsDocumentRevision(db, handle) {
-    return getCanonicalSettingsRevision(db, { userId: handle });
-}

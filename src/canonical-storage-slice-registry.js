@@ -23,7 +23,6 @@ import { listOpenSettingsProjectionRepairs } from './endpoints/settings-store.js
 import { listOpenSecretProjectionRepairs } from './endpoints/canonical-secrets-store.js';
 import { listOpenCanonicalManagedMediaRepairs } from './endpoints/canonical-managed-media-store.js';
 import { listOpenCanonicalChatProjectionRepairs } from './endpoints/canonical-chat-write-service.js';
-import { SETTINGS_FILE } from './constants.js';
 
 const REQUIRED_SLICE_FIELDS = Object.freeze([
     'key',
@@ -173,11 +172,28 @@ function createWorldInfoSlice() {
     };
 }
 
+let warnedDeprecatedSettingsProjection = false;
+
+export function resetDeprecatedSettingsProjectionWarningForTests() {
+    warnedDeprecatedSettingsProjection = false;
+}
+
 function createSettingsSlice() {
     const flags = createSliceFlagCapabilities({ flagKey: 'settings', defaultProjection: 'off' });
     return {
         key: 'settings',
         ...flags,
+        getProjectionMode() {
+            const configured = getCanonicalSliceProjectionMode('settings', 'off');
+            if (configured !== 'off' && !warnedDeprecatedSettingsProjection) {
+                warnedDeprecatedSettingsProjection = true;
+                console.warn(
+                    'Ignoring features.storage.canonicalSqlite.slices.settings.projection:',
+                    'the settings compatibility projection was removed and canonical SQLite is authoritative.',
+                );
+            }
+            return 'off';
+        },
         auditScope: SETTINGS_AUDIT_SCOPE,
         listOpenRepairs(db) {
             return listOpenSettingsProjectionRepairs(db);
@@ -203,11 +219,11 @@ function createSettingsSlice() {
                 includeChatStatsPhase: false,
             });
         },
-        getBackupManagedPaths(directories) {
-            if (!directories?.root) {
-                return [];
-            }
-            return [path.join(directories.root, SETTINGS_FILE)];
+        getBackupManagedPaths() {
+            // settings.json is not a runtime artifact anymore: backups and
+            // restores run through canonical snapshots/exports, so there are
+            // no slice-managed paths to verify.
+            return [];
         },
     };
 }
