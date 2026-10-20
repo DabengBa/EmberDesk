@@ -525,10 +525,12 @@ input[type='checkbox']:focus-visible {
 @font-face {
     font-family: 'EmberKai';
     font-style: italic;
-    src: local('Kaiti SC'), local('STKaiti'), local('KaiTi'), local('楷体'),
-         local('DFKai-SB'), local('AR PL UKai'), local('AR PL KaitiM GB'),
+    src: url('webfonts/LXGWWenKaiMono/LXGWWenKaiMono-Regular.woff2') format('woff2'),
+         local('LXGW WenKai Mono'), local('霞鹜文楷等宽'),
          local('LXGW WenKai'), local('LXGWWenKai'), local('霞鹜文楷'),
-         local('LXGW WenKai Mono'), local('霞鹜文楷等宽');
+         local('Kaiti SC'), local('STKaiti'), local('KaiTi'), local('楷体'),
+         local('DFKai-SB'), local('AR PL UKai'), local('AR PL KaitiM GB');
+    font-display: swap;
     unicode-range: U+2E80-9FFF, U+3000-303F, U+FF00-FFEF, U+20000-2FA1F;
 }
 
