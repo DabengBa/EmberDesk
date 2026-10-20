@@ -6218,7 +6218,7 @@ body:has(#character_popup.open) #top-settings-holder:has(.drawer-content.openDra
 
 [data-respond-option],
 [data-copy-option] {
-    flex: 1 1 46%;
+    flex: 1 1 100%;
     border: 1px solid var(--SmartThemeBorderColor);
     border-radius: 999px;
     padding: 6px 14px;
