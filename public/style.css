@@ -518,14 +518,33 @@ input[type='checkbox']:focus-visible {
     margin-left: 0.5em;
 }
 
+/* CJK-aware emphasis: this face answers `font-style:italic` requests for Han
+   glyphs with upright Kaiti — the descriptor claims italic so the browser
+   does NOT synthesize a slant (faux-oblique CJK reads badly). Latin glyphs
+   fall outside its unicode-range and keep real Georgia italic. */
+@font-face {
+    font-family: 'EmberKai';
+    font-style: italic;
+    src: local('Kaiti SC'), local('STKaiti'), local('KaiTi'), local('楷体'),
+         local('DFKai-SB'), local('AR PL UKai'), local('AR PL KaitiM GB');
+    unicode-range: U+2E80-9FFF, U+3000-303F, U+FF00-FFEF, U+20000-2FA1F;
+}
+
+.mes .mes_text {
+    line-height: 1.75;
+}
+
 .mes_text i,
 .mes_text em {
     color: var(--SmartThemeEmColor);
+    font-family: Georgia, 'Times New Roman', 'EmberKai', 'Kaiti SC', 'KaiTi', 'STKaiti', '楷体', serif;
+    font-size: 1.02em;
 }
 
 .mes_reasoning i,
 .mes_reasoning em {
     color: hsl(from var(--reasoning-em-color) h calc(s * var(--reasoning-saturation)) l);
+    font-family: Georgia, 'Times New Roman', 'EmberKai', 'Kaiti SC', 'KaiTi', 'STKaiti', '楷体', serif;
 }
 
 .mes_text q i,
@@ -6186,19 +6205,28 @@ body:has(#character_popup.open) #top-settings-holder:has(.drawer-content.openDra
     opacity: 0.8;
 }
 
+[data-respond-options] {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 8px;
+}
+
 [data-respond-option],
 [data-copy-option] {
+    flex: 1 1 46%;
     border: 1px solid var(--SmartThemeBorderColor);
-    border-radius: 8px;
-    padding: 4px 10px;
-    margin: 4px 0;
+    border-radius: 999px;
+    padding: 6px 14px;
     cursor: pointer;
     opacity: 0.85;
+    font-size: 0.95em;
 }
 
 [data-respond-option]:hover,
 [data-copy-option]:hover {
     opacity: 1;
+    border-color: var(--SmartThemeEmColor);
     background: var(--SmartThemeBlurTintColor);
 }
 
@@ -6211,10 +6239,6 @@ body:has(#character_popup.open) #top-settings-holder:has(.drawer-content.openDra
     display: block;
     margin-bottom: 8px;
     text-align: left;
-}
-
-[data-respond-options] {
-    margin-top: 4px;
 }
 
 .wpc-body {
