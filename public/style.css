@@ -6186,7 +6186,8 @@ body:has(#character_popup.open) #top-settings-holder:has(.drawer-content.openDra
     opacity: 0.8;
 }
 
-[data-respond-option] {
+[data-respond-option],
+[data-copy-option] {
     border: 1px solid var(--SmartThemeBorderColor);
     border-radius: 8px;
     padding: 4px 10px;
@@ -6195,7 +6196,8 @@ body:has(#character_popup.open) #top-settings-holder:has(.drawer-content.openDra
     opacity: 0.85;
 }
 
-[data-respond-option]:hover {
+[data-respond-option]:hover,
+[data-copy-option]:hover {
     opacity: 1;
     background: var(--SmartThemeBlurTintColor);
 }

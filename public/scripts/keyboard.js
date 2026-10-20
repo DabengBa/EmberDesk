@@ -21,6 +21,7 @@ const interactableSelectors = [
     '.select_chat_block .PastChat_cross', // Delete chat button in the past chats menu
     '.select_chat_block .renameChatButton', // The button to rename a past chat in the past chats menu
     '[data-respond-option]', // Clickable option chips inside tool-invocation cards
+    '[data-copy-option]', // Regex-generated copy-to-clipboard option chips
 ];
 
 export const INTERACTABLE_CONTROL_CLASS = 'interactable';

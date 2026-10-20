@@ -270,6 +270,20 @@ export async function init() {
             setComposerValue(text);
         }
     });
+    // Regex-generated chips may opt into clipboard copy instead of composer
+    // fill via data-copy-option="text" (the attribute carries the clean copy).
+    $(document).on('click', '[data-copy-option]', async function () {
+        const text = String($(this).attr('data-copy-option') ?? '').trim();
+        if (!text) {
+            return;
+        }
+        try {
+            await navigator.clipboard.writeText(text);
+            toastr.success(text, t`已复制`);
+        } catch {
+            toastr.warning(t`剪贴板不可用`);
+        }
+    });
     $(document).on('input', '#tool_choice_required', async function () {
         feature_settings.tool_choice_required = Boolean($(this).prop('checked'));
         saveSettingsDebounced();
