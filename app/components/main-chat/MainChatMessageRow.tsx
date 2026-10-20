@@ -38,6 +38,45 @@ function StaticHtml({ html, className }: { html: string; className?: string }) {
     return <div ref={ref} className={className} />;
 }
 
+/**
+ * Uncontrolled draft editor for message/reasoning editing.
+ *
+ * A controlled `value` prop makes React synchronize `node.defaultValue = value`
+ * on every commit; Blink resets the caret to the end of the text on each
+ * defaultValue assignment, which steals the caret position mid-typing. The
+ * initial text is frozen via useState so the prop never changes — React never
+ * writes the DOM value again, while every keystroke still flows to the ui-state
+ * map through onChange.
+ */
+function DraftTextarea({
+    id,
+    className,
+    ariaLabel,
+    initialText,
+    onEdit,
+}: {
+    id?: string;
+    className: string;
+    ariaLabel: string;
+    initialText: string;
+    onEdit: (text: string) => void;
+}) {
+    const [frozenInitial] = useState(initialText);
+    return (
+        <textarea
+            id={id}
+            className={className}
+            data-i18n={`[aria-label]${ariaLabel}`}
+            aria-label={ariaLabel}
+            defaultValue={frozenInitial}
+            onChange={event => {
+                event.stopPropagation();
+                onEdit(event.target.value);
+            }}
+        />
+    );
+}
+
 function normalizeClassNames(message: MainChatMessageRecord, isLast: boolean) {
     return [
         'mes',
@@ -557,15 +596,13 @@ export const MainChatMessageRow = memo(function MainChatMessageRow({
                         </div>
                     </summary>
                     {message.reasoningEditing ? (
-                        <textarea
+                        <DraftTextarea
                             className="reasoning_edit_textarea"
-                            data-i18n="[aria-label]Edit reasoning"
-                            aria-label="Edit reasoning"
-                            value={message.reasoningEditText}
-                            onChange={event => {
-                                event.stopPropagation();
+                            ariaLabel="Edit reasoning"
+                            initialText={message.reasoningEditText}
+                            onEdit={text => {
                                 if (canAddressMessage) {
-                                    void commands?.updateMessageReasoningEdit(numericMessageId, event.target.value);
+                                    void commands?.updateMessageReasoningEdit(numericMessageId, text);
                                 }
                             }}
                         />
@@ -577,14 +614,13 @@ export const MainChatMessageRow = memo(function MainChatMessageRow({
                     )}
                 </details>
                 {message.editing ? (
-                    <textarea
+                    <DraftTextarea
                         id="curEditTextarea"
                         className="edit_textarea"
-                        data-i18n="[aria-label]Edit message"
-                        aria-label="Edit message"
-                        value={message.editText}
-                        onChange={event => {
-                            void commands?.updateMessageEdit(numericMessageId, event.target.value);
+                        ariaLabel="Edit message"
+                        initialText={message.editText}
+                        onEdit={text => {
+                            void commands?.updateMessageEdit(numericMessageId, text);
                         }}
                     />
                 ) : (

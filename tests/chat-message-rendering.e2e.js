@@ -560,6 +560,58 @@ test.describe('chat message rendering', () => {
         expect(getUnexpectedConsoleErrors(consoleErrors)).toEqual([]);
     });
 
+    test('keeps caret position while editing text in a React-owned message row', async ({ page }) => {
+        test.skip(!reactMainChatMessageListEnabled, 'caret regression only exists on React-owned rows');
+
+        expect(fs.existsSync(seededChatPath)).toBe(true);
+
+        const seededMessages = getChatMessages(seededChatPath);
+        const assistantMessageIndex = seededMessages.findIndex(message => !message.is_user && !message.is_system);
+
+        expect(assistantMessageIndex).toBeGreaterThanOrEqual(0);
+
+        await testSetup.awaitST({ page });
+        await selectCharacterByName(page, characterName);
+        await openChatAndMeasureFirstMessage(page, seededChatName, seededMessages[0].mes);
+
+        const assistantRow = page.locator(`#chat .mes[mesid="${assistantMessageIndex}"]`);
+        await expect(assistantRow).toBeVisible();
+
+        const messageActionsButton = assistantRow.getByRole('button', { name: '消息操作' });
+        await expect(messageActionsButton).toBeVisible();
+        await clickControlAtCenter(page, messageActionsButton);
+        const editButton = assistantRow.getByRole('button', { name: '编辑' });
+        await expect(editButton).toBeVisible();
+        await clickControlAtCenter(page, editButton);
+
+        const editTextarea = assistantRow.locator('.edit_textarea');
+        await expect(editTextarea).toBeVisible();
+
+        const originalValue = await editTextarea.inputValue();
+        const caretPosition = Math.min(5, originalValue.length);
+        await editTextarea.evaluate((element, position) => {
+            element.focus();
+            element.setSelectionRange(position, position);
+        }, caretPosition);
+
+        await page.keyboard.press('Backspace');
+        // Let the scheduled panel refresh (requestAnimationFrame) land.
+        await page.waitForTimeout(250);
+
+        const caretState = await editTextarea.evaluate(element => ({
+            selectionStart: element.selectionStart,
+            selectionEnd: element.selectionEnd,
+            value: element.value,
+            focused: document.activeElement === element,
+        }));
+
+        expect(caretState.focused).toBe(true);
+        expect(caretState.value).toBe(originalValue.slice(0, caretPosition - 1) + originalValue.slice(caretPosition));
+        // Caret must sit where the character was removed, not jump to the end.
+        expect(caretState.selectionStart).toBe(caretPosition - 1);
+        expect(caretState.selectionEnd).toBe(caretPosition - 1);
+    });
+
     test('keeps delete mode working on React-owned message rows', async ({ page }) => {
         test.skip(!reactMainChatMessageListEnabled, 'delete-mode regression only exists on React-owned rows');
 
