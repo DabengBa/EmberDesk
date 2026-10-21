@@ -316,10 +316,11 @@ describe('chat workspace structure', () => {
         const scriptSource = readRepoFile('public/scripts/openai.js');
 
         // The fallback model reuses the primary URL and key; it is a plain
-        // settings field on the React-owned Providers tab.
+        // settings field on the React-owned Providers tab. The user-facing
+        // label is 后台模型 — it also serves background tasks (chat memory).
         expectContainsMarkers(settingsSurface, [
             'name="providers.fallbackProviderModel"',
-            'label="备选模型"',
+            'label="后台模型"',
             'placeholder="gpt-4.1-mini"',
         ], { contractName: 'fallback provider model field' });
         expect(helpersSource).toContain("formPath: 'providers.fallbackProviderModel'");

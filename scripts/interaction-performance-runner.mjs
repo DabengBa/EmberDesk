@@ -13,7 +13,7 @@ import { chromium } from '../tests/node_modules/playwright/index.mjs';
 
 import { applyCanonicalPragmas } from '../src/canonical-sqlite.js';
 import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
-import { DEFAULT_USER, SETTINGS_FILE } from '../src/constants.js';
+import { DEFAULT_USER } from '../src/constants.js';
 import { upsertCanonicalSettingsDocument } from '../src/endpoints/settings-store.js';
 import {
     buildDerivedCacheObservabilitySummary,
@@ -1646,7 +1646,7 @@ async function writeConfig(configPath, dataRoot, port) {
 }
 
 async function seedSettings(dataRoot) {
-    const sourcePath = path.join(repoRoot, 'default', 'templates', SETTINGS_FILE);
+    const sourcePath = path.join(repoRoot, 'default', 'templates', 'settings-defaults.json');
     const dbPath = path.join(dataRoot, DEFAULT_USER.handle, 'storage', 'emberdesk.sqlite');
     const settings = JSON.parse(await fs.promises.readFile(sourcePath, 'utf8'));
 

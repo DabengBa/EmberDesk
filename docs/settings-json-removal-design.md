@@ -1,5 +1,21 @@
 # settings.json 彻底移除方案（设计 v2）
 
+> **最终收尾（R1+R2+R3 全清）**：在 M0–M3 基础上把最后残存面全部拆除——
+> shadow import 不再有任何文件候选（`settings.json` contract 路径与
+> `settings.migrated.json` ephemeral 路径一并移除，审计不再探测文件）；
+> `migrateUserData` 改为把 `public/settings.json` **直写 canonical 文档**
+> （`DatabaseSync` + migrations + `upsertCanonicalSettingsDocument`，
+> `expectedRevision: 0`，备份源文件后删除），ephemeral 文件跳彻底消失；
+> `SETTINGS_FILE`/`SETTINGS_MIGRATION_FILE` 常量删除；
+> `default/templates/settings.json` 改名 `settings-defaults.json`；
+> 导出产物改名 `settings.export.json`；
+> 开机/`/save`/make-snapshot 的 `settings_<handle>_*.json` 备份物化删除，
+> 快照端点收敛为 `canonical:` 前缀唯一入口（list/load/restore 不再认文件名）；
+> `/reset-settings` 不再清理残存文件（文件惰性化已彻底，无物可清）。
+> 现在 `settings.json` 在运行时**无任何语义**：不创建、不回写、不读、不导入、不审计。
+> 唯一合法的同名出现是 `migrateUserData` 读取的**迁移源** `public/settings.json`
+> （多用户时代之前的旧版布局，读完即备份并删除）。
+
 > v2 修订：按代码核对修正盘点与决策点。核心事实变化：① `canonical_flags_unavailable` 在生产不可达（`server.js` 无条件设置 `COMMAND_LINE_ARGS`），兜底分支仅单测可达；② "文件存在→导入"不是通道——导入与否完全由 audit 状态机决定，现状是"无隐式通道 + audit-stale 时有覆盖式 upsert 风险"；③ 兜底写是"静默丢写"（audit 永不置 stale），不是"读到陈旧值"。
 
 ## 实施状态（最终）

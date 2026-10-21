@@ -26,11 +26,25 @@ describe('options menu + character context menu React surfaces', () => {
     test('options component preserves item IDs', () => {
         const ids = [
             'option_back_to_main',
-            'option_start_new_chat', 'option_close_chat', 'option_select_chat', 'option_delete_mes',
+            'option_start_new_chat', 'option_close_chat', 'option_select_chat', 'option_regenerate', 'option_delete_mes',
         ];
         for (const id of ids) {
             expect(options).toContain(`id="${id}"`);
         }
+    });
+
+    test('regenerate availability is a React state projection with a shell sync point', () => {
+        const domHandlers = readRepoFile('public/scripts/dom-handlers.js');
+        expect(options).toContain('canRegenerate');
+        expect(script).toContain('export function setOptionsMenuRegenerateAvailability');
+        expect(script).toContain('export function canRegenerateLastReply');
+        expect(script).toContain('export async function regenerateLastReply');
+        // The delegated click path re-checks eligibility before dispatching —
+        // a stale menu state can never trigger a second generation.
+        expect(domHandlers).toContain('option_regenerate');
+        expect(domHandlers).toContain('canRegenerateLastReply()');
+        // Availability is synced every time the menu opens.
+        expect(domHandlers).toContain('setOptionsMenuRegenerateAvailability(canRegenerateLastReply())');
     });
 
     test('character context menu items are React-owned with shell preserved', () => {

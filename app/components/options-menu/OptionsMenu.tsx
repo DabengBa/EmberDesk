@@ -18,8 +18,13 @@ const optionStyles = stylex.create({ item: { justifyContent: 'flex-start', textA
  * `showBackToMain` projects branch-chat state (was jQuery .show()/.hide() from
  * showBranchChatButtons). The item stays mounted when hidden so delegated
  * trigger('click') paths keep working.
+ *
+ * `canRegenerate` projects whether "Regenerate" may run right now (synced by
+ * the shell every time the menu opens). The item stays mounted when disabled
+ * so delegated trigger('click') paths keep working; the delegated handler
+ * re-checks eligibility before dispatching.
  */
-export function OptionsMenu({ showBackToMain = false }: { showBackToMain?: boolean }) {
+export function OptionsMenu({ showBackToMain = false, canRegenerate = false }: { showBackToMain?: boolean; canRegenerate?: boolean }) {
     return (
         <>
         <div className="options-content">
@@ -30,6 +35,7 @@ export function OptionsMenu({ showBackToMain = false }: { showBackToMain?: boole
             <ContractButton id="option_start_new_chat" variant="ghost" xstyle={optionStyles.item} label="Start new chat" icon={<i className="fa-lg fa-solid fa-comments" aria-hidden="true" />} tabIndex={0} />
             <ContractButton id="option_close_chat" variant="ghost" xstyle={optionStyles.item} label="Close chat" icon={<i className="fa-lg fa-solid fa-times" aria-hidden="true" />} />
             <ContractButton id="option_select_chat" variant="ghost" xstyle={optionStyles.item} label="Manage chat files" icon={<i className="fa-lg fa-solid fa-address-book" aria-hidden="true" />} tabIndex={0} />
+            <ContractButton id="option_regenerate" variant="ghost" xstyle={optionStyles.item} label="Regenerate reply" icon={<i className="fa-lg fa-solid fa-rotate-right" aria-hidden="true" />} tabIndex={0} disabled={!canRegenerate} />
             <hr />
             <ContractButton id="option_delete_mes" variant="ghost" xstyle={optionStyles.item} label="Delete messages" icon={<i className="fa-lg fa-solid fa-trash-can" aria-hidden="true" />} tabIndex={0} className="options-menu-danger" />
         </div>

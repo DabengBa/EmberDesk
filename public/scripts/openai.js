@@ -71,6 +71,7 @@ import {
     resolveReasoningEffort,
     resolveVerbosity,
 } from './openai-provider-capabilities.js';
+import { getActivePipelineRunId } from './reply-pipeline-core.js';
 
 function syncSegmentedFromSelect(selectId) {
     const value = $('#' + selectId).val();
@@ -212,6 +213,12 @@ export const settingsToUpdate = {
     fallback_provider_model: ['#NULL_SELECTOR', 'fallback_provider_model', false, false],
     extensions: ['#NULL_SELECTOR', 'extensions', false, false],
     reply_pipeline: ['#NULL_SELECTOR', 'reply_pipeline', false, false],
+    chat_memory_enabled: ['#NULL_SELECTOR', 'chat_memory_enabled', false, false],
+    chat_memory_keep_turns: ['#NULL_SELECTOR', 'chat_memory_keep_turns', false, false],
+    chat_memory_prompt: ['#NULL_SELECTOR', 'chat_memory_prompt', false, false],
+    chat_memory_wrap: ['#NULL_SELECTOR', 'chat_memory_wrap', false, false],
+    chat_memory_role: ['#NULL_SELECTOR', 'chat_memory_role', false, false],
+    chat_memory_max_tokens: ['#NULL_SELECTOR', 'chat_memory_max_tokens', false, false],
 };
 
 const default_settings = {
@@ -246,6 +253,12 @@ const default_settings = {
     fallback_provider_model: '',
     extensions: {},
     reply_pipeline: null,
+    chat_memory_enabled: false,
+    chat_memory_keep_turns: 5,
+    chat_memory_prompt: '',
+    chat_memory_wrap: '',
+    chat_memory_role: 'system',
+    chat_memory_max_tokens: 400,
 };
 
 const oai_settings = structuredClone(default_settings);
@@ -315,12 +328,14 @@ function setOpenAIMessages(chat) {
         const mediaIndex = getMediaIndex(chat[j]);
         const invocations = chat[j]?.extra?.tool_invocations?.slice();
 
-        // Folded pipeline markup is display-only — never send it as content
-        // (the structured replay below already carries the invocations).
+        // Folded pipeline markup is display-only — never send it as content.
         // Tag form: &lt;tool&gt;…&lt;/tool&gt; blocks — earlier steps drop
         // entirely; the last step's tag carries the reply text, so unwrap it
         // and drop the chip row. Section form (<section data-pipeline-card>)
         // and raw <tool> tags (earlier builds) strip whole for compat.
+        // Pipeline-only cards replay as this plain text (populateChatHistory
+        // skips the tool_call branch for them); mixed cards still replay the
+        // structured invocations below.
         if (Array.isArray(invocations) && typeof content === 'string') {
             invocations.forEach((invocation, index) => {
                 const name = String(invocation?.name ?? '');
@@ -362,7 +377,7 @@ function setOpenAIMessages(chat) {
             });
         }
 
-        messages[i] = { 'role': role, 'content': content, name: name, 'media': media, 'mediaDisplay': mediaDisplay, 'mediaIndex': mediaIndex, 'invocations': invocations, 'signature': signature, 'reasoning': reasoning, 'isSystemRecord': !!chat[j].is_system };
+        messages[i] = { 'role': role, 'content': content, name: name, 'media': media, 'mediaDisplay': mediaDisplay, 'mediaIndex': mediaIndex, 'invocations': invocations, 'signature': signature, 'reasoning': reasoning, 'isSystemRecord': !!chat[j].is_system, 'summaryMeta': chat[j].extra?.chatMemorySummary ?? null };
         j++;
     }
 
@@ -528,15 +543,25 @@ async function populateChatHistory(messages, prompts, chatCompletion) {
         : tool_reasoning_modes.DISABLED;
     const includeToolReasoning = toolReasoningMode !== tool_reasoning_modes.DISABLED;
     const lastUserIdx = messages.findLastIndex(x => x.role === 'user');
+    // Cards belonging to the run currently driving this generation must keep
+    // their structured replay — the next round reads step results back from
+    // it. Cards from finished or abandoned runs flatten into plain messages.
+    const activePipelineRunId = getActivePipelineRunId();
 
     // Insert chat messages as long as there is budget available
     const chatPool = [...messages].reverse();
+    let historyCutOffAt = null;
     for (let index = 0; index < chatPool.length; index++) {
         const chatPrompt = chatPool[index];
 
         // We do not want to mutate the prompt
         const prompt = new Prompt(chatPrompt);
-        prompt.identifier = `chatHistory-${messages.length - index}`;
+        const turnIndices = chatPrompt.summaryMeta?.turnIndices;
+        prompt.identifier = chatPrompt.summaryMeta
+            ? (turnIndices?.length > 1
+                ? `chatSummary-turns-${turnIndices[0]}-${turnIndices.at(-1)}`
+                : `chatSummary-turn-${chatPrompt.summaryMeta.turnIndex}`)
+            : `chatHistory-${messages.length - index}`;
         const chatMessage = await Message.fromPromptAsync(promptManager.preparePrompt(prompt));
 
         if (promptManager.serviceSettings.names_behavior === character_names_behavior.COMPLETION && prompt.name) {
@@ -578,7 +603,27 @@ async function populateChatHistory(messages, prompts, chatCompletion) {
             }
         }
 
-        if (canUseTools && Array.isArray(chatPrompt.invocations)) {
+        // A card whose invocations all carry pipeline meta is intra-turn
+        // scratchpad: once its run is over, replay it as the plain message
+        // its stripped markup already produced (the same wire shape tools-off
+        // mode uses) rather than as tool_call/tool scaffolding. Cards of the
+        // in-flight run — and any card mixing pipeline calls with ordinary
+        // tool calls — keep the structured replay so results stay paired
+        // with their calls.
+        const allPipelineInvocations = Array.isArray(chatPrompt.invocations)
+            && chatPrompt.invocations.length > 0
+            && chatPrompt.invocations.every(invocation => invocation?.pipeline);
+        const belongsToActiveRun = activePipelineRunId != null
+            && allPipelineInvocations
+            && chatPrompt.invocations.some(invocation => invocation?.pipeline?.runId === activePipelineRunId);
+        const flattenPipelineCard = allPipelineInvocations && !belongsToActiveRun;
+        if (flattenPipelineCard && String(chatPrompt.content ?? '').trim().length === 0) {
+            // Abandoned card whose markup stripped to nothing — an empty
+            // assistant message is worse than dropping the record.
+            continue;
+        }
+
+        if (canUseTools && Array.isArray(chatPrompt.invocations) && !flattenPipelineCard) {
             const promptIdx = messages.indexOf(chatPrompt);
             const reasoningIsEligible = toolReasoningMode !== tool_reasoning_modes.DISABLED
                 && promptIdx > lastUserIdx;
@@ -654,6 +699,7 @@ async function populateChatHistory(messages, prompts, chatCompletion) {
                 }
                 chatCompletion.insertAtStart(toolCallMessage, 'chatHistory');
             } else {
+                historyCutOffAt = index;
                 break;
             }
 
@@ -667,8 +713,29 @@ async function populateChatHistory(messages, prompts, chatCompletion) {
         if (chatCompletion.canAfford(chatMessage)) {
             chatCompletion.insertAtStart(chatMessage, 'chatHistory');
         } else {
+            historyCutOffAt = index;
             break;
         }
+    }
+
+    // Everything past the cut-off index never entered the prompt. Record it so
+    // callers (e.g. the prompt inspector) can show which history was trimmed.
+    if (historyCutOffAt !== null) {
+        chatCompletion.setDroppedEntries(chatPool.slice(historyCutOffAt).map((chatPrompt, offset) => {
+            const index = historyCutOffAt + offset;
+            const turnIndices = chatPrompt.summaryMeta?.turnIndices;
+            return {
+                identifier: chatPrompt.summaryMeta
+                    ? (turnIndices?.length > 1
+                        ? `chatSummary-turns-${turnIndices[0]}-${turnIndices.at(-1)}`
+                        : `chatSummary-turn-${chatPrompt.summaryMeta.turnIndex}`)
+                    : `chatHistory-${messages.length - index}`,
+                role: chatPrompt.role ?? null,
+                name: chatPrompt.name ?? null,
+                content: typeof chatPrompt.content === 'string' ? chatPrompt.content : '',
+                hasMedia: Array.isArray(chatPrompt.media) && chatPrompt.media.length > 0,
+            };
+        }));
     }
 
     // Insert and free new chat
@@ -941,7 +1008,10 @@ async function preparePromptsForChatCompletion({ name2: _name2, worldInfo, charD
  * @param {object} content.extensionPrompts - An array of additional prompts.
  * @param {object[]} content.messages - An array of messages to be used as chat history.
  * @param dryRun - Whether this is a live call or not.
- * @returns {Promise<(any[]|boolean)[]>} An array where the first element is the prepared chat and the second element is a boolean flag.
+ * @param {object} [options] Additional assembly options.
+ * @param {boolean} [options.squash] Whether to squash system messages. Defaults to `!dryRun`; the request preview forces it on so the preview matches a real request.
+ * @param {boolean} [options.bookkeep] Write prompt-manager token counts and openai_messages_count. The request preview disables bookkeeping so global state stays untouched.
+ * @returns {Promise<(any[]|boolean)[]>} An array where the first element is the prepared chat, the second is the per-identifier token counts, and the third is the assembled ChatCompletion.
  */
 export async function prepareOpenAIMessages({
     name2,
@@ -954,7 +1024,7 @@ export async function prepareOpenAIMessages({
     extensionPrompts,
     messages,
     pipelineStepTag,
-}, dryRun) {
+}, dryRun, { squash = null, bookkeep = true } = {}) {
     // Without a character selected, there is no way to accurately calculate tokens
     if (!promptManager.activeCharacter && dryRun) return [null, false];
 
@@ -980,6 +1050,7 @@ export async function prepareOpenAIMessages({
         // Fill the chat completion with as much context as the budget allows
         await populateChatCompletion(prompts, chatCompletion, { bias, quietPrompt, quietImage, type, messages });
     } catch (error) {
+        chatCompletion.error = error;
         if (error instanceof TokenBudgetExceededError) {
             toastr.error(t`Mandatory prompts exceed the context size.`);
             chatCompletion.log('Mandatory prompts exceed the context size.');
@@ -995,9 +1066,12 @@ export async function prepareOpenAIMessages({
         }
     } finally {
         // Pass chat completion to prompt manager for token bookkeeping
-        promptManager.setChatCompletion(chatCompletion);
+        if (bookkeep) {
+            promptManager.setChatCompletion(chatCompletion);
+        }
 
-        if (oai_settings.squash_system_messages && dryRun == false) {
+        const shouldSquash = squash ?? (dryRun == false);
+        if (oai_settings.squash_system_messages && shouldSquash) {
             await chatCompletion.squashSystemMessages();
         }
     }
@@ -1007,9 +1081,11 @@ export async function prepareOpenAIMessages({
     const eventData = { chat, dryRun };
     await eventSource.emit(event_types.CHAT_COMPLETION_PROMPT_READY, eventData);
 
-    openai_messages_count = chat.filter(x => !x?.tool_calls && ['user', 'assistant', 'tool'].includes(x?.role)).length || 0;
+    if (bookkeep) {
+        openai_messages_count = chat.filter(x => !x?.tool_calls && ['user', 'assistant', 'tool'].includes(x?.role)).length || 0;
+    }
 
-    return [chat, promptManager.tokenHandler.counts];
+    return [chat, bookkeep ? promptManager.tokenHandler.counts : {}, chatCompletion];
 }
 
 /**
@@ -1180,7 +1256,7 @@ export async function createGenerationParameters(settings, model, type, messages
 
     const isO1 = gptSources.includes(settings.chat_completion_source) && ['o1-2024-12-17', 'o1'].includes(model);
     const isWorkersAIJsonMode = false;
-    const stream = settings.stream_openai && type !== 'quiet' && !isO1 && !isWorkersAIJsonMode;
+    const stream = settings.stream_openai && type !== 'quiet' && type !== 'chat_memory' && !isO1 && !isWorkersAIJsonMode;
 
     const generate_data = {
         'type': type,
@@ -1284,6 +1360,29 @@ export async function createGenerationParameters(settings, model, type, messages
 }
 
 /**
+ * Builds the final chat completion request body without sending it.
+ * Shared by sendOpenAIRequest (which emits CHAT_COMPLETION_SETTINGS_READY and
+ * fetches) and the prompt-inspector preview (which must not emit or fetch).
+ * @param {object} args
+ * @param {string} args.type Request type
+ * @param {ChatCompletionMessage[]} args.messages Array of chat completion messages
+ * @param {object} [args.settings] Cloned settings to build against (defaults to a fresh clone of oai_settings)
+ * @param {string} [args.model] Model name (defaults to the settings' resolved model)
+ * @param {object} [args.jsonSchema] Structured output schema
+ * @param {boolean} [args.emitSettingsReady] Emit CHAT_COMPLETION_SETTINGS_READY so request-shaping listeners (reply pipeline) run
+ * @returns {Promise<{generate_data: object, stream: boolean}>}
+ */
+export async function buildChatCompletionRequest({ type, messages, settings = null, model = null, jsonSchema = null, emitSettingsReady = false } = {}) {
+    const requestSettings = settings ?? structuredClone(oai_settings);
+    const resolvedModel = model ?? getChatCompletionModel(requestSettings);
+    const { generate_data, stream } = await createGenerationParameters(requestSettings, resolvedModel, type, messages, { jsonSchema });
+    if (emitSettingsReady) {
+        await eventSource.emit(event_types.CHAT_COMPLETION_SETTINGS_READY, generate_data);
+    }
+    return { generate_data, stream };
+}
+
+/**
  * Send a chat completion request to backend
  * @param {string} type Request type
  * @param {ChatCompletionMessage[]} messages Array of chat completion messages
@@ -1304,8 +1403,14 @@ async function sendOpenAIRequest(type, messages, signal, { jsonSchema = null, fa
     }
 
     const model = getChatCompletionModel(requestSettings);
-    const { generate_data, stream } = await createGenerationParameters(requestSettings, model, type, messages, { jsonSchema });
-    await eventSource.emit(event_types.CHAT_COMPLETION_SETTINGS_READY, generate_data);
+    const { generate_data, stream } = await buildChatCompletionRequest({
+        type,
+        messages,
+        settings: requestSettings,
+        model,
+        jsonSchema,
+        emitSettingsReady: true,
+    });
 
     const generate_url = '/api/backends/chat-completions/generate';
     const response = await fetch(generate_url, {
@@ -1904,6 +2009,7 @@ export class ChatCompletion {
         this.messages = new MessageCollection('root');
         this.loggingEnabled = false;
         this.overriddenPrompts = [];
+        this.droppedEntries = [];
     }
 
     /**
@@ -2080,6 +2186,61 @@ export class ChatCompletion {
             }
         }
         return chat;
+    }
+
+    /**
+     * Retrieves a structured, inspection-oriented view of the assembled chat.
+     * Mirrors getChat() flattening exactly, but keeps per-entry metadata
+     * (identifier, owning collection, token count) for the prompt inspector.
+     * @returns {Array} Ordered entries: {index, collection, identifier, role, content, name, tokens, ...}
+     */
+    getChatEntries() {
+        const entries = [];
+        const pushMessage = (message, collection) => {
+            if (!(message instanceof Message) || (!message.content && !message.tool_calls)) {
+                return;
+            }
+            entries.push({
+                index: entries.length,
+                collection,
+                identifier: message.identifier ?? null,
+                role: message.role,
+                content: message.content,
+                name: message.name ?? null,
+                tokens: typeof message.tokens === 'number' ? message.tokens : null,
+                ...(message.tool_calls ? { tool_calls: message.tool_calls } : {}),
+                ...(message.role === 'tool' ? { tool_call_id: message.identifier } : {}),
+                ...(message.signature ? { signature: message.signature } : {}),
+                ...(message.reasoning ? { reasoning: message.reasoning } : {}),
+            });
+        };
+        for (const item of this.messages.collection) {
+            if (item instanceof MessageCollection) {
+                for (const message of item.collection) {
+                    pushMessage(message, item.identifier);
+                }
+            } else {
+                pushMessage(item, null);
+            }
+        }
+        return entries;
+    }
+
+    /**
+     * Records chat-history entries that failed the token-budget check during
+     * populateChatHistory so the prompt inspector can show what was trimmed.
+     * @param {Array} entries Dropped entries in prompt order (newest first).
+     */
+    setDroppedEntries(entries) {
+        this.droppedEntries = entries;
+    }
+
+    /**
+     * Retrieves the chat-history entries dropped by the token budget.
+     * @returns {Array}
+     */
+    getDroppedEntries() {
+        return this.droppedEntries;
     }
 
     /**

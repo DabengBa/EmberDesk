@@ -439,6 +439,9 @@ test.describe('tool bindings', () => {
         expect(turnRequests[1].messages.some(message => String(message?.content ?? '').includes('[Reply pipeline 2/3]') && String(message?.content ?? '').includes('review'))).toBe(true);
         expect(turnRequests[2].messages.some(message => String(message?.content ?? '').includes('[Reply pipeline 3/3]') && String(message?.content ?? '').includes('respond'))).toBe(true);
         expect(turnRequests[2].tools?.some(tool => tool?.function?.name === 'respond')).toBe(true);
+        // The plan owns the tool surface: each round offers exactly its step.
+        expect(turnRequests.map(request => (request.tools ?? []).map(tool => tool?.function?.name)))
+            .toEqual([['analyze'], ['review'], ['respond']]);
 
         // A prompt tagged 'pipeline:review' injects only on the review round;
         // the rubric is absent from the analyze and respond rounds.
@@ -516,14 +519,15 @@ test.describe('tool bindings', () => {
         expect(followUp).toBeTruthy();
         expect(followUp.messages.some(message => String(message?.content ?? '').includes('[Reply pipeline'))).toBe(false);
 
-        // The folded reply replays structurally: assistant tool_calls + tool
-        // results + the reply text — and the card markup NEVER reaches the wire.
+        // The folded reply flattens into one plain assistant message on later
+        // turns: no tool_calls, no tool results, the reply text exactly once —
+        // and the card markup NEVER reaches the wire.
         const replayedToolCalls = followUp.messages.filter(message => Array.isArray(message?.tool_calls));
         const replayedToolResults = followUp.messages.filter(message => message?.role === 'tool');
         const replayedReply = followUp.messages.filter(message => message?.role === 'assistant'
             && typeof message?.content === 'string' && message.content.includes('RESPOND_TEXT'));
-        expect(replayedToolCalls.length).toBeGreaterThanOrEqual(1);
-        expect(replayedToolResults.length).toBeGreaterThanOrEqual(3);
+        expect(replayedToolCalls).toHaveLength(0);
+        expect(replayedToolResults).toHaveLength(0);
         expect(replayedReply).toHaveLength(1);
         expect(replayedReply[0].content).not.toContain('<analyze');
         expect(replayedReply[0].content).not.toContain('<review');

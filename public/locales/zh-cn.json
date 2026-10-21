@@ -3908,5 +3908,7 @@
     "Settings": "设置",
     "Templates": "模板",
     "No preset applied": "未应用预设",
-    "Preset \"${0}\" is not installed": "预设 \"${0}\" 未安装"
+    "Preset \"${0}\" is not installed": "预设 \"${0}\" 未安装",
+    "Pin message (never summarized)": "钉住此消息（整轮不参与摘要）",
+    "Unpin message": "取消钉住"
 }

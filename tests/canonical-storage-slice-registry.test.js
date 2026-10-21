@@ -56,8 +56,7 @@ function createDirectories(root) {
             fs.mkdirSync(directory, { recursive: true });
         }
     }
-    // Settings and secrets slices manage compatibility files under the user root.
-    fs.writeFileSync(path.join(root, 'settings.json'), '{}', 'utf8');
+    // The secrets slice still manages a compatibility file under the user root.
     fs.writeFileSync(path.join(root, 'secrets.json'), '{}', 'utf8');
     fs.mkdirSync(path.join(directories.storage, 'managed-media'), { recursive: true });
     return directories;

@@ -20,6 +20,7 @@ describe('chat generation command service', () => {
     test('exposes the complete public command kind matrix', () => {
         expect(GENERATION_COMMAND_KINDS).toEqual([
             'submitComposer',
+            'regenerate',
             'quietPrompt',
             'quietToLoud',
             'backgroundGeneration',
@@ -28,6 +29,7 @@ describe('chat generation command service', () => {
 
     test.each([
         ['submitComposer', 'normal'],
+        ['regenerate', 'normal'],
         ['quietPrompt', 'quiet'],
         ['quietToLoud', 'quiet'],
         ['backgroundGeneration', 'quiet'],
@@ -39,6 +41,18 @@ describe('chat generation command service', () => {
         [
             'visible openai direct submit',
             { kind: 'submitComposer', mainApi: 'openai' },
+            {
+                owner: GENERATION_SERVICE_OWNER,
+                status: GENERATION_COMMAND_STATUSES.SERVICE_OWNED,
+                path: GENERATION_COMMAND_PATHS.STANDARD_OPENAI_VISIBLE_DIRECT_CHAT,
+                reason: GENERATION_COMMAND_REASONS.SUPPORTED_KIND,
+                visibility: GENERATION_COMMAND_VISIBILITY.VISIBLE,
+                executable: true,
+            },
+        ],
+        [
+            'visible regenerate (normal turn re-run)',
+            { kind: 'regenerate', mainApi: 'openai' },
             {
                 owner: GENERATION_SERVICE_OWNER,
                 status: GENERATION_COMMAND_STATUSES.SERVICE_OWNED,
@@ -158,6 +172,22 @@ describe('chat generation command service', () => {
             { label: 'primary_retry', status: 'Retrying', fallbackProvider: false },
             { label: 'fallback', status: 'Using fallback', fallbackProvider: true },
         ]);
+        expect(plan.producesVisibleRow).toBe(true);
+        expect(plan.usesStreamingTransport).toBe(true);
+        expect(plan.baselineStrategy).toBe('lifecycle-baseline');
+    });
+
+    test('plans bounded recovery for regenerate identical to submitComposer', () => {
+        const plan = createGenerationCommandPlan(
+            { kind: 'regenerate', mainApi: 'openai' },
+            {
+                fallbackReady: true,
+                statusLabels: { primaryRetry: 'Retrying', fallback: 'Using fallback' },
+            },
+        );
+
+        expect(plan.owner).toBe(GENERATION_SERVICE_OWNER);
+        expect(plan.shouldAutoRecover).toBe(true);
         expect(plan.producesVisibleRow).toBe(true);
         expect(plan.usesStreamingTransport).toBe(true);
         expect(plan.baselineStrategy).toBe('lifecycle-baseline');

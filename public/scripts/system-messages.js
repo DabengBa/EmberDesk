@@ -6,6 +6,7 @@ import { getSlashCommandsHelp } from './slash-commands.js';
 import { SlashCommandBrowser } from './slash-commands/SlashCommandBrowser.js';
 import { MacroBrowser, getMacrosHelp } from './macros/engine/MacroBrowser.js';
 import { renderTemplateAsync } from './templates.js';
+import { uuidv4 } from './utils.js';
 
 /** @type {Record<string, ChatMessage>} */
 export const system_messages = {};
@@ -126,6 +127,9 @@ export function getSystemMessageByType(type, text, extra = {}) {
 
     newMessage.extra = Object.assign(newMessage.extra, extra);
     newMessage.extra.type = type;
+    if (typeof newMessage.extra.id !== 'string' || !newMessage.extra.id) {
+        newMessage.extra.id = uuidv4();
+    }
     return newMessage;
 }
 

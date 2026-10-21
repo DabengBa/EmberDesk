@@ -2,7 +2,7 @@
 id: term.character_card
 type: term
 name: Character Card
-related: [feature.character_library_panel, feature.character_delete, page.chat_workspace]
+related: [feature.character_library_panel, feature.character_delete, feature.character_text_replace, page.chat_workspace]
 ---
 
 # Term: Character Card
@@ -22,6 +22,7 @@ A character card is the reusable persona package a user browses, selects, edits,
 - **Summary metadata**: visible fields such as favorite state, tags, chat label, creation/added timing where surfaced, and latest chat-related summary data.
 - **Chat context role**: the card becomes the active persona when selected in the workspace.
 - **Authoring fields**: the card exposes editable identity and descriptive fields through the workspace authoring surface while persisting into per-user canonical SQLite underneath, with the PNG card kept as a compatibility projection.
+- **Text maintenance**: the card's editable text fields, its bound or embedded world book, and its current chat can be batch-updated through [Character Text Replace](feature.character_text_replace); the card name and the world-book binding reference are deliberately excluded from that replacement surface.
 
 ## Lifecycle And States
 
@@ -34,3 +35,4 @@ A character card is the reusable persona package a user browses, selects, edits,
 
 - Users browse [character cards](feature.character_library_panel) inside [Chat Workspace](page.chat_workspace).
 - A card can be removed through [Delete Character](feature.character_delete).
+- A card's text fields, bound or embedded world book, and current chat can be rewritten in one previewed pass through [Character Text Replace](feature.character_text_replace).

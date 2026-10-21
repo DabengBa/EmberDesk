@@ -81,7 +81,6 @@ import { REACT_LOGIN_BASE_PATH } from './react-login-feature.js';
 import { router as usersPublicRouter } from './endpoints/users-public.js';
 
 import { checkForNewContent } from './endpoints/content-manager.js';
-import { init as settingsInit } from './endpoints/settings.js';
 import { redirectDeprecatedEndpoints, ServerStartup, setupPrivateEndpoints, setupPublicEndpoints } from './server-startup.js';
 import { diskCache } from './endpoints/characters.js';
 import { migrateFlatSecrets } from './endpoints/secrets.js';
@@ -321,8 +320,6 @@ async function collectCleanupResources() {
     await startupProfiler.measure('migrateFlatSecrets', () => Promise.resolve(migrateFlatSecrets(directories)));
     await startupProfiler.measure('cleanUploads', () => Promise.resolve(cleanUploads()));
     await startupProfiler.measure('migrateAccessLog', () => Promise.resolve(migrateAccessLog()));
-
-    await startupProfiler.measure('settingsInit', () => settingsInit());
 
     const pluginsDirectory = path.join(serverDirectory, 'plugins');
     const cleanupPlugins = await startupProfiler.measure('loadPlugins', () => loadPlugins(app, pluginsDirectory));

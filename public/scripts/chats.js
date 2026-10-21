@@ -25,6 +25,7 @@ import {
     getMediaDisplay,
     chatElement,
 } from '../script.js';
+import { requireGenerationShellContext } from './generation-shell-context.js';
 import { eventSource, event_types } from './events.js';
 import { getRequestHeaders } from './request-context.js';
 import { power_user } from './power-user.js';
@@ -44,6 +45,7 @@ import {
     clamp,
 } from './utils.js';
 import { POPUP_RESULT, POPUP_TYPE, Popup, callGenericPopup } from './popup.js';
+import { reconcileActiveChatMemory, scheduleMemoryMaintenance } from './chat-memory-service.js';
 import { DragAndDropHandler } from './dragdrop.js';
 import { renderTemplateAsync } from './templates.js';
 import { t } from './i18n.js';
@@ -149,6 +151,11 @@ export async function hideChatMessageRange(start, end, unhide, nameFitler = null
     }
 
     await saveChatConditional();
+    // is_system participates in turn hashing / summary source extraction.
+    if (reconcileActiveChatMemory({ persist: true, ensureIds: true })) {
+        scheduleMemoryMaintenance();
+        requireGenerationShellContext().scheduleMainChatMessageListPanelRefresh();
+    }
 }
 
 /**
@@ -1409,6 +1416,24 @@ async function onImageSwiped(messageId, element, direction) {
 }
 
 export function initChatUtilities() {
+    $(document).on('click', '.mes_pin', async function () {
+        // Pinned messages never participate in turn summarization: pinning any
+        // message locks its whole turn verbatim (chat-memory contract).
+        const messageBlock = $(this).closest('.mes');
+        const messageId = Number(messageBlock.attr('mesid'));
+        const message = chat[messageId];
+        if (!message || typeof message !== 'object') {
+            return;
+        }
+        if (!message.extra || typeof message.extra !== 'object') {
+            message.extra = {};
+        }
+        message.extra.pinned = message.extra.pinned !== true;
+        await saveChatConditional();
+        await eventSource.emit(event_types.MESSAGE_UPDATED, messageId);
+        requireGenerationShellContext().scheduleMainChatMessageListPanelRefresh();
+    });
+
     $(document).on('click', '.mes_hide', async function () {
         const messageBlock = $(this).closest('.mes');
         const messageId = Number(messageBlock.attr('mesid'));

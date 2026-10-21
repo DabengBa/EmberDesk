@@ -13,19 +13,27 @@ import { feature_settings } from './feature-settings.js';
 import { oai_settings } from './openai.js';
 import { resolveReasoningEffort } from './openai-provider-capabilities.js';
 import {
+    applyFallbackRequestShape,
+    applyStepRequestOverrides,
     buildStepPrompt,
     extractFinalStepText,
     findStepCompletion,
     normalizeReplyPipeline,
+    PIPELINE_FALLBACK_PROMPT,
     pipelineTriggerTag,
     resolvePipelineSteps,
+    setActivePipelineRunIdProvider,
 } from './reply-pipeline-core.js';
 import { normalizeToolBindings } from './tool-bindings-core.js';
 
-const FALLBACK_PROMPT = '[Reply pipeline] All pipeline steps are complete. Write the final user-facing reply now, based on the step results above. Do not call any tools in this round.';
+const FALLBACK_PROMPT = PIPELINE_FALLBACK_PROMPT;
 
 let runState = null;
 let initialized = false;
+
+// Prompt assembly reads this to keep replaying a mid-run card's invocations;
+// cards whose run ended (or was abandoned) flatten into plain messages.
+setActivePipelineRunIdProvider(() => runState?.runId ?? null);
 
 /**
  * Tracks message arrays already shaped this round. Retry attempts rebuild the
@@ -246,25 +254,88 @@ export function applyPipelineRequestShaping(data) {
         return;
     }
     pushPipelineMessageOnce(data, buildStepPrompt(step, runState.index, runState.steps.length));
-    if (runState.pipeline.enforceMode === 'forced' && Array.isArray(data.tools)) {
-        data.tool_choice = { type: 'function', function: { name: step.tool } };
+    applyStepRequestOverrides(data, step, {
+        enforceMode: runState.pipeline.enforceMode,
+        reasoningEffort: resolveStepReasoningEffort(step, data.model),
+    });
+}
+
+/**
+ * Runs a step's reasoningEffort through the provider mapping so `auto`/`min`/`max`
+ * resolve the same way a preset-level value would; `auto` resolves to undefined
+ * and drops out of the serialized body.
+ * @param {object} step Runnable pipeline step
+ * @param {string} model Request model
+ * @returns {*} Resolved reasoning_effort value (undefined = let the body drop it)
+ */
+function resolveStepReasoningEffort(step, model) {
+    if (!step?.reasoningEffort) {
+        return undefined;
     }
-    if (step.maxTokens) {
-        if (Number.isFinite(Number(data.max_tokens))) {
-            data.max_tokens = step.maxTokens;
-        } else if (Number.isFinite(Number(data.max_completion_tokens))) {
-            data.max_completion_tokens = step.maxTokens;
-        }
+    return resolveReasoningEffort(
+        { ...oai_settings, reasoning_effort: step.reasoningEffort },
+        model,
+    );
+}
+
+/**
+ * The injection-trigger tag a preview round would carry, e.g. 'pipeline:review'.
+ * Null when there is no runnable pipeline, when the round index lands on the
+ * closing fallback round, or when the round is out of range.
+ * @param {number} round Zero-based round index
+ * @returns {string|null}
+ */
+export function getPreviewPipelineTriggerTag(round) {
+    const runnable = getRunnablePipeline();
+    const step = runnable?.steps?.[round];
+    return step ? pipelineTriggerTag(step.tool) : null;
+}
+
+/**
+ * Preview the request shape a given pipeline round would produce, WITHOUT
+ * starting a run or mutating runState. Applies the same overrides the live
+ * CHAT_COMPLETION_SETTINGS_READY shaping applies, onto a fresh request body.
+ * @param {object} data Freshly built request body (generate_data), mutated in place
+ * @param {object} [options] Options
+ * @param {number} [options.round] Zero-based round index; values >= step count select the closing fallback round
+ * @returns {{round: number, total: number, fallback: boolean, step: object|null, rounds: object[]}|null}
+ *          null when no runnable pipeline exists.
+ */
+export function previewPipelineRequestShaping(data, { round = 0 } = {}) {
+    if (!data || typeof data !== 'object' || data.type !== 'normal') {
+        return null;
     }
-    if (step.reasoningEffort) {
-        // Runs through the provider mapping so `auto`/`min`/`max` resolve the
-        // same way a preset-level value would; `auto` resolves to undefined
-        // and drops out of the serialized body.
-        data.reasoning_effort = resolveReasoningEffort(
-            { ...oai_settings, reasoning_effort: step.reasoningEffort },
-            data.model,
-        );
+    const runnable = getRunnablePipeline();
+    if (!runnable) {
+        return null;
     }
+    const total = runnable.steps.length;
+    const rounds = runnable.steps.map((step, index) => ({
+        index,
+        id: step.id,
+        tool: step.tool,
+        display: step.display,
+    }));
+    const index = Math.floor(Number(round));
+    // Out-of-range (or intentionally the closing round) → fallback shape.
+    if (!Number.isFinite(index) || index >= total) {
+        applyFallbackRequestShape(data, FALLBACK_PROMPT);
+        return { round: total, total, fallback: true, step: null, rounds };
+    }
+    const clampedIndex = Math.max(0, index);
+    const step = runnable.steps[clampedIndex];
+    data.messages.push({ role: 'system', content: buildStepPrompt(step, clampedIndex, total) });
+    applyStepRequestOverrides(data, step, {
+        enforceMode: runnable.pipeline.enforceMode,
+        reasoningEffort: resolveStepReasoningEffort(step, data.model),
+    });
+    return {
+        round: clampedIndex,
+        total,
+        fallback: false,
+        step: { id: step.id, tool: step.tool, display: step.display },
+        rounds,
+    };
 }
 
 /**

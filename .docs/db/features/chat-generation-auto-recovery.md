@@ -21,7 +21,7 @@ Recover visible main-chat generation failures through a bounded retry chain befo
 - Recovery is bounded: the original request may be followed by one primary-provider retry and, when a fallback model is configured, one fallback-model retry on the same connection.
 - Recoverable failures keep the user message and assistant row identity stable; partial assistant text from an intermediate failed attempt is cleared before the next attempt continues.
 - If automatic recovery succeeds, the user sees only the final assistant text in the existing row.
-- If all automatic attempts fail, EmberDesk preserves the failed assistant row and exposes the ordinary manual retry action on that same row.
+- If all automatic attempts fail, EmberDesk preserves the failed assistant row and exposes the ordinary manual retry action on that same row. The chat-options 重新生成 command is the exception: its terminal failure removes the failed attempt and restores the snapshotted previous turn instead of leaving a retry row (see [Chat Turn Regenerate](feature.chat_regenerate)).
 - The React main-chat shell can show the current generation/recovery phase as a local shell status near the composer; this is placement/status ownership, not a new retry algorithm.
 - User stop is not automatic recovery; stopping generation leaves the workspace in the existing usable stop state without starting a new retry.
 - Non-visible quiet/background helper requests remain outside this recovery promise: they create no assistant row, return generated text, and do not auto-retry. Visible request families use the same command path, but only eligible top-level visible requests receive bounded automatic recovery.

@@ -101,7 +101,7 @@ describe('canonical import ledger', () => {
 
         recordImportLedgerEntry(db, {
             sliceKey: 'settings',
-            sourcePath: 'settings.json',
+            sourcePath: 'settings.export.json',
             contentHash: hashImportLedgerContents('{"a":1}'),
             origin: 'import',
             nowMs: 1000,
@@ -109,12 +109,12 @@ describe('canonical import ledger', () => {
 
         expect(classifyImportCandidate(db, {
             sliceKey: 'settings',
-            sourcePath: 'settings.json',
+            sourcePath: 'settings.export.json',
             contentHash: hashImportLedgerContents('{"a":1}'),
         })).toBe('known');
         expect(classifyImportCandidate(db, {
             sliceKey: 'settings',
-            sourcePath: 'settings.json',
+            sourcePath: 'settings.export.json',
             contentHash: hashImportLedgerContents('{"a":2}'),
         })).toBe('candidate');
         expect(classifyImportCandidate(db, {
@@ -124,18 +124,18 @@ describe('canonical import ledger', () => {
         })).toBe('candidate');
         expect(classifyImportCandidate(db, {
             sliceKey: 'chats',
-            sourcePath: 'settings.json',
+            sourcePath: 'settings.export.json',
             contentHash: hashImportLedgerContents('{"a":1}'),
         })).toBe('candidate');
 
         recordImportLedgerEntry(db, {
             sliceKey: 'settings',
-            sourcePath: 'settings.json',
+            sourcePath: 'settings.export.json',
             contentHash: hashImportLedgerContents('{"a":2}'),
             origin: 'projection',
             nowMs: 2000,
         });
-        const entry = getImportLedgerEntry(db, { sliceKey: 'settings', sourcePath: 'settings.json' });
+        const entry = getImportLedgerEntry(db, { sliceKey: 'settings', sourcePath: 'settings.export.json' });
         expect(entry).toEqual(expect.objectContaining({
             origin: 'projection',
             importedAtMs: 2000,
@@ -289,7 +289,7 @@ describe('canonical export-all', () => {
         const result = exportCanonicalStorageToFiles({ db, directories, handle: 'alice', nowMs: 1735689700000 });
         expect(result.ok).toBe(true);
 
-        expect(JSON.parse(fs.readFileSync(path.join(directories.root, 'settings.json'), 'utf8'))).toEqual(
+        expect(JSON.parse(fs.readFileSync(path.join(directories.root, 'settings.export.json'), 'utf8'))).toEqual(
             expect.objectContaining({ model: 'test-model' }),
         );
         const secrets = JSON.parse(fs.readFileSync(path.join(directories.root, 'secrets.json'), 'utf8'));
@@ -331,8 +331,8 @@ describe('canonical export-all', () => {
             db, directories, handle: 'alice', sliceKeys: ['settings'], outDir,
         });
         expect(result.ok).toBe(true);
-        expect(fs.existsSync(path.join(outDir, 'settings.json'))).toBe(true);
-        expect(fs.existsSync(path.join(directories.root, 'settings.json'))).toBe(false);
+        expect(fs.existsSync(path.join(outDir, 'settings.export.json'))).toBe(true);
+        expect(fs.existsSync(path.join(directories.root, 'settings.export.json'))).toBe(false);
     });
 
     test('export-all CLI materializes a world book and a chat', async () => {

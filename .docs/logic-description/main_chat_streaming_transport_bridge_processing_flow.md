@@ -157,7 +157,7 @@ Hidden marker attributes include:
 ## Key Rules
 
 - Visible assistant rows stay `#chat > .mes[mesid]`.
-- For supported React-owned `submitComposer`, `continueLast`, `retryGeneration`, `swipeLeft`, and `swipeRight` requests, token text may append through the React-owned visible transport runtime, but it must still stay on the same assistant row and preserve the same final row identity. `retryGeneration` covers both the top-level regenerate button and the failed-row retry entry.
+- For supported React-owned `submitComposer`, `continueLast`, `regenerate`, `retryGeneration`, `swipeLeft`, and `swipeRight` requests, token text may append through the React-owned visible transport runtime, but it must still stay on the same assistant row and preserve the same final row identity. The chat-options 重新生成 menu dispatches command kind `regenerate` (the top-level re-roll entry); `retryGeneration` covers the failed-row retry CTA.
 - Excluded compatibility paths keep token text in the ordinary legacy `.mes_text` path.
 - User stop still records `stopped` and never starts automatic recovery.
 - Fallback attempts can set `fromFallbackAttempt=true`; fallback status text stays outside `.mes_text`.

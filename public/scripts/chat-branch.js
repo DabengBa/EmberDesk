@@ -15,6 +15,7 @@ import { ARGUMENT_TYPE, SlashCommandArgument } from './slash-commands/SlashComma
 import { commonEnumProviders } from './slash-commands/SlashCommandCommonEnumsProvider.js';
 import { SlashCommandParser } from './slash-commands/SlashCommandParser.js';
 import { getUniqueName } from './utils.js';
+import { CHAT_MEMORY_METADATA_KEY, filterMemoryForBranch, getChatMemoryMetadata } from './chat-memory-core.js';
 
 const branchNameToken = 'Checkpoint #';
 
@@ -96,6 +97,12 @@ export async function createBranch(mesId) {
     const lastMes = chat[mesId];
     const mainChatName = (getCurrentChatDetails()).sessionName;
     const newMetadata = { main_chat: mainChatName };
+    // Carry over only the memory entries whose covered messages survive into
+    // the branch snapshot — orphaned summaries must not leak across chats.
+    const branchMemory = filterMemoryForBranch(getChatMemoryMetadata(chat_metadata), chat, Number(mesId));
+    if (branchMemory) {
+        newMetadata[CHAT_MEMORY_METADATA_KEY] = branchMemory;
+    }
 
     function buildBranchName(name, i) {
         // Strip off existing suffixes, then build new name

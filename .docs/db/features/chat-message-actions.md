@@ -2,7 +2,7 @@
 id: feature.chat_message_actions
 type: feature
 name: Chat Message Actions
-related: [page.chat_workspace, feature.chat_message_rendering, feature.chat_generation_auto_recovery]
+related: [page.chat_workspace, feature.chat_message_rendering, feature.chat_generation_auto_recovery, feature.chat_regenerate]
 ---
 
 # Feature: Chat Message Actions
@@ -32,7 +32,7 @@ Let users act on an already rendered chat message through discoverable row contr
 
 ## Generation Action Boundary
 
-Visible message actions dispatch commands only. The shared generation service owns the request lifecycle and result; message rendering ownership remains a separate boundary.
+Visible message actions dispatch commands only. The shared generation service owns the request lifecycle and result; message rendering ownership remains a separate boundary. Turn-level regeneration launched from the chat-options menu is documented by [Chat Turn Regenerate](feature.chat_regenerate).
 
 ## Semantic Interaction IDs
 

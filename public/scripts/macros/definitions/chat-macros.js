@@ -101,7 +101,7 @@ function getFirstIncludedMessageId() {
 }
 
 function getFirstDisplayedMessageId() {
-    const mesElement = document.querySelector('#chat .mes');
+    const mesElement = document.querySelector('#chat .mes[mesid]');
     const mesId = Number(mesElement?.getAttribute('mesid'));
     if (!Number.isNaN(mesId) && mesId >= 0) {
         return mesId;

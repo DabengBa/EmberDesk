@@ -2,7 +2,7 @@
 id: feature.world_info_panel
 type: feature
 name: World Info Panel
-related: [page.chat_workspace, feature.world_book_delete, feature.character_delete]
+related: [page.chat_workspace, feature.world_book_delete, feature.character_delete, feature.character_text_replace]
 ---
 
 # Feature: World Info Panel
@@ -39,6 +39,7 @@ World Info is a React sole-owner surface. The React workbench owns the visible e
 - The React host routes mutations through the World Info workbench service and compatibility barrel (`public/scripts/world-info.js`). Prompt activation, regex placement, converter/import outcomes, delete cascade, and persistence remain available through the public module path; there is no product flag that restores the legacy editor as sole visible owner.
 - When the same-entry React shell is enabled, its World Info entry owns only the transient active-panel/dock state and mount status; prompt activation, regex placement, converter/import outcomes, and world-book deletion semantics remain owned by the World Info service/barrel.
 - Canonical SQLite World Info authority is enabled by default; when audit-clean, the server reads and writes world books through the canonical database while `worlds/*.json` remains an export/import surface rather than a live mirror. The visible selector, editor, entry cards, prompt activation, regex placement, import/export outcome, and fallback controls remain the same user workflow.
+- A book bound to the active character can also be text-replaced through [Character Text Replace](feature.character_text_replace): that flow edits the shared authoritative book (with a bound-character warning when other cards use it), then refills the card's embedded `character_book` snapshot; entry edits made here remain visible and the workbench remounts after such a write.
 - The visible drawer should not expose internal cutover-governance labels. Users see World Info readiness and task results, while maintainer verdicts stay in tech docs.
 - Entry-state controls offer normal and constant states only. Legacy `vectorized` / `extensions.vectorized` values remain lossless import/export and save compatibility fields, but are not presented as a usable World Info capability.
 

@@ -1,136 +1,30 @@
-import crypto from 'node:crypto';
-import fs from 'node:fs';
-import path from 'node:path';
-
-import { SETTINGS_FILE, SETTINGS_MIGRATION_FILE } from './constants.js';
-import {
-    classifyImportCandidate,
-    recordImportLedgerEntry,
-    resolveAuditDriftReason,
-} from './canonical-import-ledger.js';
 import { getCanonicalMigrationStatus, runCanonicalMigrations } from './canonical-sqlite-migrations.js';
 import { persistCanonicalAuditStatus } from './canonical-sqlite-shadow-import.js';
-import {
-    getCanonicalSettingsDocument,
-    hashSettingsPayload,
-    upsertCanonicalSettingsDocument,
-} from './endpoints/settings-store.js';
 
 export const SETTINGS_AUDIT_SCOPE = 'settings';
 
-function getSettingsFilePath(directories) {
-    return path.join(directories.root, SETTINGS_FILE);
-}
-
-/**
- * Import candidates in precedence order. The contract path stays the import
- * surface for legacy deployments; the migration path is the ephemeral
- * landing spot used by `migrateUserData` and is deleted after a successful
- * import.
- * @param {import('./users.js').UserDirectoryList} directories User directories
- * @returns {{filePath: string, sourcePath: string, ephemeral: boolean}[]}
- */
-function getSettingsImportCandidates(directories) {
-    return [
-        {
-            filePath: path.join(directories.root, SETTINGS_FILE),
-            sourcePath: SETTINGS_FILE,
-            ephemeral: false,
-        },
-        {
-            filePath: path.join(directories.root, SETTINGS_MIGRATION_FILE),
-            sourcePath: SETTINGS_MIGRATION_FILE,
-            ephemeral: true,
-        },
-    ];
-}
-
-function readSettingsFileRaw(filePath) {
-    if (!fs.existsSync(filePath)) {
-        return {
-            exists: false,
-            filePath,
-            raw: null,
-            payload: null,
-            error: null,
-        };
-    }
-
-    try {
-        const raw = fs.readFileSync(filePath, 'utf8');
-        const payload = JSON.parse(raw);
-        if (payload === null || typeof payload !== 'object' || Array.isArray(payload)) {
-            return {
-                exists: true,
-                filePath,
-                raw,
-                payload: null,
-                error: new Error('settings.json root must be a JSON object'),
-            };
-        }
-        return {
-            exists: true,
-            filePath,
-            raw,
-            payload,
-            error: null,
-        };
-    } catch (error) {
-        return {
-            exists: true,
-            filePath,
-            raw: null,
-            payload: null,
-            error,
-        };
-    }
-}
-
 function summarizeImportResult({ handle, skipped = false, reason = null, entries, migrationStatus = null }) {
-    const importedCount = entries.filter(entry => entry.status === 'imported').length;
-    const updatedCount = entries.filter(entry => entry.status === 'updated').length;
-    const unchangedCount = entries.filter(entry => entry.status === 'unchanged').length;
-    const failedCount = entries.filter(entry => entry.status === 'error').length;
     return {
-        ok: skipped || (failedCount === 0 && reason === null && !(migrationStatus && migrationStatus.ok === false)),
+        ok: skipped || (reason === null && !(migrationStatus && migrationStatus.ok === false)),
         handle,
         skipped,
         reason,
-        importedCount,
-        updatedCount,
-        unchangedCount,
-        failedCount,
+        importedCount: 0,
+        updatedCount: 0,
+        unchangedCount: entries.filter(entry => entry.status === 'unchanged').length,
+        failedCount: 0,
         migrationStatus,
         entries,
     };
 }
 
-function buildAuditEntry({ handle, status, driftTypes, details, auditedAtMs }) {
-    return {
-        handle,
-        status,
-        drift_types: driftTypes,
-        details,
-        audited_at_ms: auditedAtMs,
-    };
-}
-
-function buildAuditSummary({ handle, migrationStatus, entries, ignoreSuppressed = false }) {
-    const active = entries.filter(entry => !(ignoreSuppressed && entry.details?.suppressed));
-    const driftEntries = active.filter(entry => entry.status === 'drift');
-    const errorEntries = active.filter(entry => entry.status === 'error');
-    const blocking = driftEntries.length > 0 || errorEntries.length > 0;
-    return {
-        ok: !blocking,
-        handle,
-        hasDrift: driftEntries.length > 0,
-        blocking,
-        reason: resolveAuditDriftReason(blocking, entries),
-        migrationStatus,
-        entries,
-    };
-}
-
+/**
+ * Settings have no file-side surface: canonical storage is authoritative, the
+ * legacy `settings.json` contract path was retired, and the legacy
+ * `public/settings.json` migration path writes the document directly. The
+ * import pass only needs to guarantee schema migrations ran; there is nothing
+ * left to ingest.
+ */
 export async function runCanonicalSettingsShadowImport({
     handle,
     directories,
@@ -185,111 +79,25 @@ export async function runCanonicalSettingsShadowImport({
         });
     }
 
-    const entries = [];
-    const candidates = getSettingsImportCandidates(directories);
-    const candidate = candidates.find(item => fs.existsSync(item.filePath)) ?? null;
-    const file = candidate ? readSettingsFileRaw(candidate.filePath) : null;
-    if (!file || !file.exists) {
-        return summarizeImportResult({
-            handle,
-            entries: [{
-                status: 'unchanged',
-                reason: 'missing_settings_file',
-            }],
-            migrationStatus,
-        });
-    }
-
-    if (file.error) {
-        entries.push({
-            status: 'error',
-            errorMessage: String(file.error?.message ?? file.error ?? ''),
-        });
-        return summarizeImportResult({
-            handle,
-            entries,
-            migrationStatus,
-        });
-    }
-
-    const consumeCandidate = () => {
-        if (!candidate.ephemeral) {
-            return;
-        }
-        try {
-            fs.rmSync(candidate.filePath, { force: true });
-        } catch (error) {
-            // A failed burn must not downgrade a committed import to an
-            // error: the leftover file is re-consumed on the next pass.
-            console.warn('Failed to remove consumed settings migration file', candidate.filePath, error);
-        }
-    };
-
-    try {
-        const existing = getCanonicalSettingsDocument(db, { userId: handle });
-        const fileHash = hashSettingsPayload(file.payload);
-        const recordFileImport = () => recordImportLedgerEntry(db, {
-            sliceKey: 'settings',
-            sourcePath: candidate.sourcePath,
-            contentHash: crypto.createHash('sha256').update(file.raw).digest('hex'),
-            origin: 'import',
-            nowMs,
-        });
-        if (existing && existing.contentHash === fileHash) {
-            recordFileImport();
-            consumeCandidate();
-            entries.push({ status: 'unchanged' });
-        } else {
-            const expectedRevision = existing ? existing.revision : 0;
-            const saved = upsertCanonicalSettingsDocument(db, {
-                userId: handle,
-                payload: file.payload,
-                expectedRevision,
-                nowMs,
-            });
-            if (!saved.ok) {
-                // Concurrent import race: re-check hash against winner.
-                const latest = getCanonicalSettingsDocument(db, { userId: handle });
-                if (latest && latest.contentHash === fileHash) {
-                    recordFileImport();
-                    consumeCandidate();
-                    entries.push({ status: 'unchanged' });
-                } else {
-                    entries.push({
-                        status: 'error',
-                        errorMessage: 'revision_conflict_during_import',
-                        currentRevision: saved.currentRevision,
-                    });
-                }
-            } else {
-                recordFileImport();
-                consumeCandidate();
-                entries.push({
-                    status: existing ? 'updated' : 'imported',
-                    revision: saved.revision,
-                });
-            }
-        }
-    } catch (error) {
-        entries.push({
-            status: 'error',
-            errorMessage: String(error?.message ?? error ?? ''),
-        });
-    }
-
     return summarizeImportResult({
         handle,
-        entries,
+        entries: [{
+            status: 'unchanged',
+            reason: 'no_file_surfaces',
+        }],
         migrationStatus,
     });
 }
 
+/**
+ * The audit persists a clean verdict once schema migrations are satisfied so
+ * lazy slice init can trust the 'skip' decision. No file exists that could
+ * drift, so there are no drift entries to record.
+ */
 export async function auditCanonicalSettingsShadowImport({
     handle,
-    directories,
     db,
     auditedAtMs = Date.now(),
-    projection = 'sync',
 }) {
     const migrationStatus = getCanonicalMigrationStatus(db);
     if (!migrationStatus.ok) {
@@ -335,110 +143,18 @@ export async function auditCanonicalSettingsShadowImport({
         throw error;
     }
 
-    const entries = [];
-    const file = readSettingsFileRaw(getSettingsFilePath(directories));
-    const stored = getCanonicalSettingsDocument(db, { userId: handle });
-    const importClassification = file.exists && file.raw != null
-        ? classifyImportCandidate(db, {
-            sliceKey: 'settings',
-            sourcePath: SETTINGS_FILE,
-            contentHash: crypto.createHash('sha256').update(file.raw).digest('hex'),
-        })
-        : null;
-
-    const suppressFileSide = projection === 'off';
-    const suppressDetails = suppressFileSide
-        ? { projection_mode: 'off', suppressed: true }
-        : {};
-
-    if (file.exists && file.error) {
-        entries.push(buildAuditEntry({
-            handle,
-            status: 'error',
-            driftTypes: ['invalid_json'],
-            details: {
-                errorMessage: String(file.error?.message ?? file.error ?? ''),
-                ...suppressDetails,
-            },
-            auditedAtMs,
-        }));
-    } else if (file.exists && !stored) {
-        entries.push(buildAuditEntry({
-            handle,
-            status: 'drift',
-            driftTypes: ['missing_db_settings'],
-            details: { import_classification: importClassification, ...suppressDetails },
-            auditedAtMs,
-        }));
-    } else if (!file.exists && stored) {
-        entries.push(buildAuditEntry({
-            handle,
-            status: 'drift',
-            driftTypes: ['missing_projection_file'],
-            details: {
-                revision: stored.revision,
-                ...suppressDetails,
-            },
-            auditedAtMs,
-        }));
-    } else if (file.exists && stored) {
-        const fileHash = hashSettingsPayload(file.payload);
-        if (fileHash !== stored.contentHash) {
-            entries.push(buildAuditEntry({
-                handle,
-                status: 'drift',
-                driftTypes: ['payload_mismatch'],
-                details: {
-                    expected_content_hash: fileHash,
-                    actual_content_hash: stored.contentHash,
-                    revision: stored.revision,
-                    import_classification: importClassification,
-                    ...suppressDetails,
-                },
-                auditedAtMs,
-            }));
-        }
-    }
-
-    // The ephemeral migration file is not part of the file-side contract, but
-    // a stranded one should stay visible to operator status instead of
-    // disappearing silently after a one-shot import attempt.
-    const migratedFile = readSettingsFileRaw(path.join(directories.root, SETTINGS_MIGRATION_FILE));
-    if (migratedFile.exists && migratedFile.error) {
-        entries.push(buildAuditEntry({
-            handle,
-            status: 'error',
-            driftTypes: ['invalid_json'],
-            details: {
-                errorMessage: String(migratedFile.error?.message ?? migratedFile.error ?? ''),
-                source_path: SETTINGS_MIGRATION_FILE,
-                ...suppressDetails,
-            },
-            auditedAtMs,
-        }));
-    } else if (migratedFile.exists) {
-        entries.push(buildAuditEntry({
-            handle,
-            status: 'drift',
-            driftTypes: ['pending_migration'],
-            details: {
-                source_path: SETTINGS_MIGRATION_FILE,
-                ...suppressDetails,
-            },
-            auditedAtMs,
-        }));
-    }
-
-    const result = buildAuditSummary({
+    const result = {
+        ok: true,
         handle,
+        hasDrift: false,
+        blocking: false,
+        reason: null,
         migrationStatus,
-        entries,
-        ignoreSuppressed: suppressFileSide,
-    });
+        entries: [],
+    };
     persistCanonicalAuditStatus(db, result, {
         scope: SETTINGS_AUDIT_SCOPE,
         auditedAtMs,
     });
     return result;
 }
-

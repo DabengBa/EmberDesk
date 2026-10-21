@@ -59,6 +59,11 @@ export interface PromptPanelBridge {
     updatePipelineStep(index: number, patch: Partial<PromptPanelPipelineStep>): void;
     deletePipelineStep(index: number): void;
     movePipelineStep(index: number, targetIndex: number): void;
+    /**
+     * Opens the prompt-inspector overlay (request-level preview of the next
+     * send). Owned by the legacy shell; React only triggers it.
+     */
+    openPromptInspector?(): void;
 }
 
 const ROLE_OPTIONS: Array<{ value: string; label: string }> = [
@@ -87,6 +92,23 @@ export function PromptManagerAddButton({ bridge }: { bridge: PromptPanelBridge }
             onClick={() => bridge.addPrompt()}
         >
             <i className="fa-solid fa-plus" aria-hidden="true" /> 新建
+        </button>
+    );
+}
+
+/**
+ * "查看 Prompt" header action — opens the prompt-inspector overlay showing
+ * the request body the next send would produce (unsent preview).
+ */
+export function PromptInspectorButton({ bridge }: { bridge: PromptPanelBridge }) {
+    return (
+        <button
+            type="button"
+            className="menu_button prompt-panel-add-btn"
+            title="预览将要发送给 AI 的请求（不会发送）"
+            onClick={() => bridge.openPromptInspector?.()}
+        >
+            <i className="fa-solid fa-eye" aria-hidden="true" /> 查看 Prompt
         </button>
     );
 }

@@ -651,7 +651,7 @@ export class ToolManager {
     static canPerformToolCalls(type, settings = null, model = null) {
         settings = settings ?? oai_settings;
         model = model ?? getChatCompletionModel(settings);
-        const noToolCallTypes = ['quiet'];
+        const noToolCallTypes = ['quiet', 'chat_memory'];
         const isSupported = ToolManager.isToolCallingSupported(settings, model);
         return isSupported && !noToolCallTypes.includes(type);
     }

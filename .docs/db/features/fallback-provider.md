@@ -1,15 +1,15 @@
 ---
 id: feature.fallback_provider
 type: feature
-name: Fallback Provider
-related: [page.settings, feature.custom_base_url, feature.chat_completion_select]
+name: Fallback Provider (后台模型)
+related: [page.settings, feature.custom_base_url, feature.chat_completion_select, feature.chat_memory]
 ---
 
 # Feature: Fallback Provider
 
 ## ID 解释
 
-`feature.fallback_provider` represents the optional fallback model field on the Providers tab of [Settings](page.settings). The fallback attempt reuses the primary connection's base URL and API key; there is no separate fallback endpoint, secret, or enable toggle. It does not cover non-OpenAI-compatible protocols.
+`feature.fallback_provider` represents the optional model field labeled "后台模型" on the Providers tab of [Settings](page.settings). It serves both eligible visible-chat recovery retries and background tasks such as [Chat Memory](feature.chat_memory) turn summarization. The field reuses the primary connection's base URL and API key; there is no separate endpoint, secret, or enable toggle. It does not cover non-OpenAI-compatible protocols.
 
 ## Purpose
 

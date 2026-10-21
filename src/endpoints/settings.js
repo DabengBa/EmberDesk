@@ -1,14 +1,7 @@
-import fs from 'node:fs';
-import path from 'node:path';
-
 import express from 'express';
-import _ from 'lodash';
-import { sync as writeFileAtomicSync } from 'write-file-atomic';
 import bytes from 'bytes';
 
-import { SETTINGS_FILE } from '../constants.js';
-import { getConfigValue, generateTimestamp, removeOldBackups, tryParse } from '../util.js';
-import { getAllUserHandles, getUserDirectories } from '../users.js';
+import { getConfigValue, tryParse } from '../util.js';
 import { getFileNameValidationFunction } from '../middleware/validateFileName.js';
 import { getDefaultTemplateFile } from './content-manager.js';
 import {
@@ -39,154 +32,6 @@ const ENABLE_REQUEST_COMPRESSION = !!getConfigValue('performance.requestCompress
 const REQUEST_COMPRESSION_MIN = bytes.parse(getConfigValue('performance.requestCompression.minPayloadSize', '256kb'));
 const REQUEST_COMPRESSION_MAX = bytes.parse(getConfigValue('performance.requestCompression.maxPayloadSize', '8mb'));
 const REQUEST_COMPRESSION_TIMEOUT = Number(getConfigValue('performance.requestCompression.timeout', 3000, 'number'));
-
-// 10 minutes
-const AUTOSAVE_INTERVAL = 10 * 60 * 1000;
-
-/**
- * Map of functions to trigger settings autosave for a user.
- * @type {Map<string, function>}
- */
-const AUTOSAVE_FUNCTIONS = new Map();
-
-/**
- * Triggers autosave for a user every 10 minutes.
- * @param {string} handle User handle
- * @returns {void}
- */
-function triggerAutoSave(handle) {
-    try {
-        if (!AUTOSAVE_FUNCTIONS.has(handle)) {
-            const throttledAutoSave = _.throttle(() => {
-                try {
-                    backupUserSettings(handle, true);
-                } catch (error) {
-                    console.error('Could not autosave settings backup', error);
-                }
-            }, AUTOSAVE_INTERVAL);
-            AUTOSAVE_FUNCTIONS.set(handle, throttledAutoSave);
-        }
-
-        const functionToCall = AUTOSAVE_FUNCTIONS.get(handle);
-        if (functionToCall && typeof functionToCall === 'function') {
-            functionToCall();
-        }
-    } catch (error) {
-        console.error('Could not schedule settings autosave', error);
-    }
-}
-
-/**
- * Gets backup file prefix for user settings.
- * @param {string} handle User handle
- * @returns {string} File prefix
- */
-export function getSettingsBackupFilePrefix(handle) {
-    return `settings_${handle}_`;
-}
-
-async function backupSettings() {
-    try {
-        const userHandles = await getAllUserHandles();
-
-        for (const handle of userHandles) {
-            backupUserSettings(handle, true);
-        }
-    } catch (err) {
-        console.error('Could not backup settings file', err);
-    }
-}
-
-/**
- * Makes a backup of the user's settings file.
- * @param {string} handle User handle
- * @param {boolean} preventDuplicates Prevent duplicate backups
- * @returns {void}
- */
-function backupUserSettings(handle, preventDuplicates, directoriesOverride = null) {
-    const userDirectories = directoriesOverride ?? getUserDirectories(handle);
-
-    if (!userDirectories?.root || !fs.existsSync(userDirectories.root)) {
-        return;
-    }
-    if (!userDirectories.backups) {
-        return;
-    }
-    if (!fs.existsSync(userDirectories.backups)) {
-        fs.mkdirSync(userDirectories.backups, { recursive: true });
-    }
-
-    const backupFile = path.join(userDirectories.backups, `${getSettingsBackupFilePrefix(handle)}${generateTimestamp()}.json`);
-
-    // Canonical-first: when the settings slice is live, materialize the backup
-    // from the DB instead of copying a (possibly stale) projection file.
-    const canonicalPayload = readCanonicalSettingsBackupPayload(userDirectories, handle);
-    if (canonicalPayload != null) {
-        if (preventDuplicates) {
-            const latestBackupPath = getLatestBackup(handle);
-            if (latestBackupPath && fs.existsSync(latestBackupPath)
-                && fs.readFileSync(latestBackupPath, 'utf8') === canonicalPayload) {
-                return;
-            }
-        }
-        writeFileAtomicSync(backupFile, canonicalPayload, 'utf8');
-        removeOldBackups(userDirectories.backups, `settings_${handle}`);
-        return;
-    }
-
-    // Canonical payload unavailable: there is no live settings.json to fall
-    // back to (the file is an import surface, not a readable copy).
-}
-
-/**
- * Returns the canonical settings payload text for backup materialization, or
- * null when the canonical slice is not authoritative for this user.
- * @param {object} directories User directories
- * @param {string} handle User handle
- * @returns {string|null}
- */
-function readCanonicalSettingsBackupPayload(directories, handle) {
-    try {
-        if (!canReadCanonicalFeatureFlags()) {
-            return null;
-        }
-        const settingsSlice = getCanonicalStorageSlice('settings');
-        const featureFlags = settingsSlice.getFeatureFlags();
-        if (!featureFlags.enabled || !featureFlags.reads) {
-            return null;
-        }
-        const db = canonicalSqliteManager.open({
-            handle,
-            directories,
-            featureFlags: { enabled: true, strict: !!featureFlags.strict },
-        });
-        if (!db) {
-            return null;
-        }
-        const document = getCanonicalSettingsDocument(db, { userId: handle });
-        return document ? document.payloadJson : null;
-    } catch {
-        return null;
-    }
-}
-
-/**
- * Gets the latest backup file for a user.
- * @param {string} handle User handle
- * @returns {string|null} Latest backup file. Null if no backup exists.
- */
-function getLatestBackup(handle) {
-    const userDirectories = getUserDirectories(handle);
-    const backupFiles = fs.readdirSync(userDirectories.backups)
-        .filter(x => x.startsWith(getSettingsBackupFilePrefix(handle)))
-        .map(x => ({ name: x, ctime: fs.statSync(path.join(userDirectories.backups, x)).ctimeMs }));
-    const latestBackup = backupFiles.sort((a, b) => b.ctime - a.ctime)[0]?.name;
-    if (!latestBackup) {
-        return null;
-    }
-    return path.join(userDirectories.backups, latestBackup);
-}
-
 
 function getRequestHandle(request) {
     return request.user?.profile?.handle ?? request.user?.handle ?? 'default-user';
@@ -273,7 +118,7 @@ async function getCanonicalSettingsReadState(request) {
 
     const ensured = ensureCanonicalSettingsDocument(db, {
         userId: handle,
-        defaults: getDefaultTemplateFile(SETTINGS_FILE) ?? {},
+        defaults: getDefaultTemplateFile('settings-defaults.json') ?? {},
     });
     if (!ensured.ok || !ensured.document) {
         return { ok: false, reason: ensured.reason ?? 'settings_document_missing', featureFlags, auditStatus, db, handle };
@@ -357,7 +202,7 @@ async function getCanonicalSettingsWriteState(request) {
 
     const ensured = ensureCanonicalSettingsDocument(db, {
         userId: handle,
-        defaults: getDefaultTemplateFile(SETTINGS_FILE) ?? {},
+        defaults: getDefaultTemplateFile('settings-defaults.json') ?? {},
     });
     if (!ensured.ok || !ensured.document) {
         return { ok: false, reason: ensured.reason ?? 'settings_document_missing', featureFlags, auditStatus, db, handle };
@@ -378,7 +223,7 @@ async function getCanonicalSettingsWriteState(request) {
  * Ensure the canonical settings document exists for a user, seeding it from
  * the bundled defaults template when absent. Flag-gated only on canonical
  * storage itself — independent of shadow import and audit state, so it can
- * run at user-creation time before any settings.json exists.
+ * run at user-creation time before any canonical document exists.
  * @param {object} directories User directories
  * @param {string} handle User handle
  * @returns {Promise<object>} { ok: true, created } or a failure reason
@@ -406,15 +251,14 @@ export async function ensureCanonicalSettingsForUser(directories, handle) {
     }
     return ensureCanonicalSettingsDocument(db, {
         userId: handle,
-        defaults: getDefaultTemplateFile(SETTINGS_FILE) ?? {},
+        defaults: getDefaultTemplateFile('settings-defaults.json') ?? {},
     });
 }
 
 /**
  * Resets the canonical settings document to the bundled defaults template.
  * Creates the document (rev 1) when missing; keeps settings_snapshots intact.
- * No file projection is written — callers may clean up a stale on-disk
- * settings.json themselves.
+ * No file projection is written.
  * @param {import('express').Request} request Express request
  * @returns {Promise<object>} { ok: true, revision } or a write-state failure
  */
@@ -423,7 +267,7 @@ export async function resetCanonicalSettings(request) {
     if (!writeState.ok) {
         return writeState;
     }
-    const defaults = getDefaultTemplateFile(SETTINGS_FILE);
+    const defaults = getDefaultTemplateFile('settings-defaults.json');
     if (!defaults || typeof defaults !== 'object' || Array.isArray(defaults)) {
         return { ok: false, reason: 'settings_defaults_unavailable' };
     }
@@ -509,7 +353,6 @@ router.post('/save', async function (request, response) {
                 });
             }
 
-            triggerAutoSave(handle);
             return response.send({
                 result: 'ok',
                 settings_revision: saved.revision,
@@ -590,17 +433,6 @@ router.post('/get', async (request, response) => {
 router.post('/get-snapshots', async (request, response) => {
     try {
         const handle = getRequestHandle(request);
-        const fileSnapshots = [];
-        try {
-            const snapshots = fs.readdirSync(request.user.directories.backups);
-            const userFilesPattern = getSettingsBackupFilePrefix(handle);
-            for (const name of snapshots.filter(x => x.startsWith(userFilesPattern))) {
-                const stat = fs.statSync(path.join(request.user.directories.backups, name));
-                fileSnapshots.push({ date: stat.ctimeMs, name, size: stat.size, source: 'file' });
-            }
-        } catch {
-            // backups dir may be missing
-        }
 
         // Listing is a read operation: do not require the write gate (open repairs
         // or writes-off must not hide readable canonical snapshots).
@@ -613,10 +445,10 @@ router.post('/get-snapshots', async (request, response) => {
                 source: 'canonical',
                 source_revision: snap.sourceRevision,
             }));
-            return response.json([...dbSnaps, ...fileSnapshots].sort((a, b) => b.date - a.date));
+            return response.json(dbSnaps.sort((a, b) => b.date - a.date));
         }
 
-        response.json(fileSnapshots.sort((a, b) => b.date - a.date));
+        response.json([]);
     } catch (error) {
         console.error(error);
         response.sendStatus(500);
@@ -631,31 +463,20 @@ router.post('/load-snapshot', getFileNameValidationFunction('name'), async (requ
             return response.status(400).send({ error: 'Invalid snapshot name' });
         }
 
-        if (String(name).startsWith('canonical:')) {
-            const snapshotId = String(name).slice('canonical:'.length);
-            const readState = await getCanonicalSettingsReadState(request);
-            if (!readState.ok) {
-                return response.sendStatus(404);
-            }
-            const snap = getSettingsSnapshot(readState.db, { userId: handle, id: snapshotId });
-            if (!snap) {
-                return response.sendStatus(404);
-            }
-            return response.send(snap.payloadJson);
-        }
-
-        const userFilesPattern = getSettingsBackupFilePrefix(handle);
-        if (!String(name).startsWith(userFilesPattern)) {
+        if (!String(name).startsWith('canonical:')) {
             return response.status(400).send({ error: 'Invalid snapshot name' });
         }
 
-        const snapshotPath = path.join(request.user.directories.backups, name);
-        if (!fs.existsSync(snapshotPath)) {
+        const snapshotId = String(name).slice('canonical:'.length);
+        const readState = await getCanonicalSettingsReadState(request);
+        if (!readState.ok) {
             return response.sendStatus(404);
         }
-
-        const content = fs.readFileSync(snapshotPath, 'utf8');
-        response.send(content);
+        const snap = getSettingsSnapshot(readState.db, { userId: handle, id: snapshotId });
+        if (!snap) {
+            return response.sendStatus(404);
+        }
+        return response.send(snap.payloadJson);
     } catch (error) {
         console.error(error);
         response.sendStatus(500);
@@ -670,11 +491,6 @@ router.post('/make-snapshot', async (request, response) => {
                 userId: writeState.handle,
                 name: `manual_${Date.now()}`,
             });
-            try {
-                backupUserSettings(writeState.handle, false, request.user.directories);
-            } catch (error) {
-                console.error('Could not create file settings backup alongside canonical snapshot', error);
-            }
             return response.sendStatus(204);
         }
 
@@ -696,78 +512,34 @@ router.post('/restore-snapshot', getFileNameValidationFunction('name'), async (r
             return response.status(400).send({ error: 'Invalid snapshot name' });
         }
 
-        if (String(name).startsWith('canonical:')) {
-            const writeState = await getCanonicalSettingsWriteState(request);
-            if (!writeState.ok) {
-                return response.status(503).send({
-                    error: 'canonical_storage_unavailable',
-                    reason: writeState.reason ?? 'canonical_storage_unavailable',
-                });
-            }
-            const snapshotId = String(name).slice('canonical:'.length);
-            const restored = restoreSettingsSnapshot(writeState.db, {
-                userId: handle,
-                snapshotId,
-            });
-            if (restored.notFound) {
-                return response.sendStatus(404);
-            }
-            if (!restored.ok) {
-                return response.status(409).send({
-                    error: 'settings_revision_conflict',
-                    settings_revision: restored.currentRevision,
-                });
-            }
-            return response.sendStatus(204);
-        }
-
-        const userFilesPattern = getSettingsBackupFilePrefix(handle);
-        if (!String(name).startsWith(userFilesPattern)) {
+        if (!String(name).startsWith('canonical:')) {
             return response.status(400).send({ error: 'Invalid snapshot name' });
         }
 
-        const snapshotPath = path.join(request.user.directories.backups, name);
-        if (!fs.existsSync(snapshotPath)) {
+        const writeState = await getCanonicalSettingsWriteState(request);
+        if (!writeState.ok) {
+            return response.status(503).send({
+                error: 'canonical_storage_unavailable',
+                reason: writeState.reason ?? 'canonical_storage_unavailable',
+            });
+        }
+        const snapshotId = String(name).slice('canonical:'.length);
+        const restored = restoreSettingsSnapshot(writeState.db, {
+            userId: handle,
+            snapshotId,
+        });
+        if (restored.notFound) {
             return response.sendStatus(404);
         }
-
-        const writeState = await getCanonicalSettingsWriteState(request);
-        if (writeState.ok) {
-            const content = fs.readFileSync(snapshotPath, 'utf8');
-            let payload;
-            try {
-                payload = JSON.parse(content);
-            } catch {
-                return response.status(400).send({ error: 'Invalid snapshot JSON' });
-            }
-            const current = getCanonicalSettingsRevision(writeState.db, { userId: handle });
-            const restored = upsertCanonicalSettingsDocument(writeState.db, {
-                userId: handle,
-                payload,
-                expectedRevision: current,
+        if (!restored.ok) {
+            return response.status(409).send({
+                error: 'settings_revision_conflict',
+                settings_revision: restored.currentRevision,
             });
-            if (!restored.ok) {
-                return response.status(409).send({
-                    error: 'settings_revision_conflict',
-                    settings_revision: restored.currentRevision,
-                });
-            }
-            return response.sendStatus(204);
         }
-
-        return response.status(503).send({
-            error: 'canonical_storage_unavailable',
-            reason: writeState.reason ?? 'canonical_storage_unavailable',
-        });
+        return response.sendStatus(204);
     } catch (error) {
         console.error(error);
         response.sendStatus(500);
     }
 });
-
-/**
- * Initializes the settings endpoint
- */
-export async function init() {
-    await backupSettings();
-}

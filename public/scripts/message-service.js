@@ -4,6 +4,7 @@ import { MEDIA_DISPLAY, MEDIA_TYPE, REASONING_PREFIX, REASONING_SUFFIX, SCROLL_B
 import { eventSource, event_types } from './events.js';
 import { isFrontendContent } from './frontend-frame.js';
 import { requireMessageShellContext } from './message-shell-context.js';
+import { uuidv4 } from './utils.js';
 
 function shell() {
     return requireMessageShellContext();
@@ -1102,7 +1103,7 @@ export async function saveReply({ type, getMessage, fromStreaming = false, title
     console.debug('entering chat update routine');
     const newMessage = {};
     state.chat.push(newMessage);
-    newMessage.extra = {};
+    newMessage.extra = { id: uuidv4() };
     newMessage.name = state.name2;
     newMessage.is_user = false;
     newMessage.send_date = getMessageTimeStamp();

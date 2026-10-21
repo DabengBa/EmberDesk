@@ -29,7 +29,7 @@ export interface WorkspaceShellCommands {
     setWorkspaceShellSlotPinned(slotKey: WorkspaceShellSlotKey, pinned: boolean): CommandResult;
 }
 
-export type MainChatGenerationKind = 'submitComposer';
+export type MainChatGenerationKind = 'submitComposer' | 'regenerate';
 
 export interface MainChatGenerationCommand {
     kind: MainChatGenerationKind;
@@ -103,6 +103,9 @@ export interface AuthoringCommands {
     openWorldInfo?(payload?: Record<string, unknown>): CommandResult;
     openAlternateGreetings?(payload?: Record<string, unknown>): CommandResult;
     runManagementAction?(payload: Record<string, unknown>): CommandResult;
+    previewTextReplace?(payload: Record<string, unknown>): CommandResult;
+    applyTextReplace?(payload: Record<string, unknown>): CommandResult;
+    closeTextReplace?(payload?: Record<string, unknown>): CommandResult;
 }
 
 export type WorkspacePanelCommands =

@@ -286,7 +286,7 @@ function getFirstIncludedMessageId() {
  * @returns {number|null} The ID of the first displayed message
  */
 function getFirstDisplayedMessageId() {
-    const mesId = Number(document.querySelector('#chat .mes')?.getAttribute('mesid'));
+    const mesId = Number(document.querySelector('#chat .mes[mesid]')?.getAttribute('mesid'));
 
     if (!isNaN(mesId) && mesId >= 0) {
         return mesId;

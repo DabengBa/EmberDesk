@@ -1,7 +1,7 @@
 /**
  * First-party feature runtime support.
  *
- * `feature_settings` is the settings.json data bag shared by built-in
+ * `feature_settings` is the settings data bag shared by built-in
  * features (note/regex/variables). The template helpers
  * render built-in feature templates from public/scripts/extensions/, and
  * `writeExtensionField*` maintains `data.extensions.*` character-card
@@ -72,7 +72,7 @@ export async function renderFeatureTemplateAsync(featureName, templateId, templa
 }
 
 /**
- * Feature data bag persisted inside settings.json under `feature_settings`.
+ * Feature data bag persisted in the settings document under `feature_settings`.
  * Only keys owned by surviving first-party features are kept here.
  */
 export const feature_settings = {

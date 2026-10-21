@@ -94,6 +94,7 @@ import { addGlobalVariable, addLocalVariable, decrementGlobalVariable, decrement
 import { convertCharacterBook, getWorldInfoPrompt, loadWorldInfo, reloadEditor, saveWorldInfo, updateWorldInfoList, world_names } from './world-info.js';
 import { ChatCompletionService } from './custom-request.js';
 import { updateReasoningUI, parseReasoningFromString } from './reasoning.js';
+import { getChatMemoryView, runImmediateMemoryConsolidation } from './chat-memory-service.js';
 import { IGNORE_SYMBOL } from './constants.js';
 import { macros } from './macros/macro-system.js';
 
@@ -260,6 +261,10 @@ export function getContext() {
         updateReasoningUI,
         parseReasoningFromString,
         unshallowCharacter,
+        chatMemory: {
+            getView: getChatMemoryView,
+            runImmediateConsolidation: runImmediateMemoryConsolidation,
+        },
         symbols: {
             ignore: IGNORE_SYMBOL,
         },

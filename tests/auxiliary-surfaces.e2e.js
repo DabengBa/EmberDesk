@@ -140,7 +140,7 @@ test('prompt drag order persists in the real workspace after reload', async ({ p
     // Waiting for any /api/settings/save response is racy: the character-select
     // save can still be in flight and satisfy it while the reorder POST has
     // not landed. Poll the persisted document instead — and re-nudge a save
-    // each cycle, because parallel workers share this user's settings.json and
+    // each cycle, because parallel workers share this user's settings document and
     // a revision conflict can drop the drag's own write entirely.
     const persistedOrder = async () => {
         const csrfToken = await page.evaluate(async () => {

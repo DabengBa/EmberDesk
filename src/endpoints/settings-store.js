@@ -16,8 +16,8 @@ function parseRequiredJson(value, fieldName) {
 
 export function stableSettingsPayloadJson(payload) {
     // Preserve object key order as provided by JSON.parse/JSON.stringify of the
-    // source document. Do not re-sort keys; settings.json identity is full text
-    // shape for projection, while content_hash uses the same serialization path.
+    // source document. Do not re-sort keys; the document's identity is its
+    // full text shape, while content_hash uses the same serialization path.
     return JSON.stringify(payload);
 }
 
@@ -152,7 +152,7 @@ export function upsertCanonicalSettingsDocument(db, {
 /**
  * Ensure a canonical settings document exists, creating it from the provided
  * defaults when absent. Independent of shadow-import and audit state — this is
- * the bootstrap path for deployments where no legacy settings.json exists.
+ * the bootstrap path for deployments where no canonical document exists yet.
  * A revision conflict on create means a concurrent caller already created the
  * document, which is treated as success.
  * @param {object} db Canonical sqlite handle

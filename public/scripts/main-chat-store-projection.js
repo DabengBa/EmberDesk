@@ -145,6 +145,7 @@ export function buildMainChatMessageRecord(message, {
         editText: normalizeString(messageUi.editText, content),
         lastInContext: messageUi.lastInContext === true,
         extraType: normalizeString(message?.extra?.type),
+        pinned: message?.extra?.pinned === true,
         ...(render ? {
             render: {
                 messageHtml: render.messageHtml,
@@ -262,6 +263,7 @@ function tryReuseProjectedRecord({ entries, uid, index, sig, ui }) {
  * @param {object} [options.window]
  * @param {object} [options.window.scrollRestore] One-shot anchor restore owned by the React output lifecycle
  * @param {Record<string, object>} [options.messageUiById]
+ * @param {object[]} [options.turnSummaries] Active turn-summary display cards (chat-memory projection)
  * @returns {object} Main-chat store snapshot input
  */
 export function buildMainChatSnapshotFromLegacyChat({
@@ -281,6 +283,7 @@ export function buildMainChatSnapshotFromLegacyChat({
     slash = {},
     window = {},
     messageUiById = {},
+    turnSummaries = [],
 } = {}) {
     if (!Array.isArray(chat)) {
         throw new TypeError('Main chat snapshot projection requires a chat array');
@@ -393,5 +396,6 @@ export function buildMainChatSnapshotFromLegacyChat({
             clientHeight: window.clientHeight ?? 0,
             scrollRestore: window.scrollRestore ?? null,
         },
+        turnSummaries: Array.isArray(turnSummaries) ? turnSummaries : [],
     };
 }

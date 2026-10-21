@@ -15,6 +15,14 @@ export const defaultSettingsFormValues = {
         customUrl: '',
         fallbackProviderModel: '',
     },
+    memory: {
+        enabled: false,
+        keepTurns: 5,
+        role: 'system',
+        prompt: '',
+        wrap: '',
+        maxTokens: 400,
+    },
     // Mirrors DEFAULT_FRONTEND_FRAME_SETTINGS in public/scripts/frontend-frame.js —
     // the message-rendering fields merged in from the retired user-settings drawer.
     rendering: {
@@ -45,6 +53,50 @@ const fieldBindings = [
         // Under the retired contract an unchecked fallback meant "off"; a stale model
         // value must not silently re-enable it under "non-empty model = enabled".
         toForm: (value, settings) => (getValueAtPath(settings, 'oai_settings.fallback_provider_enabled') === false ? '' : value),
+    },
+    // Chat memory (round summarization) — oai_settings-owned, edited here so the
+    // background model + memory parameters live in one place.
+    {
+        tab: 'providers',
+        formPath: 'memory.enabled',
+        settingsPath: 'oai_settings.chat_memory_enabled',
+        toForm: value => boolOr(value, false),
+    },
+    {
+        tab: 'providers',
+        formPath: 'memory.keepTurns',
+        settingsPath: 'oai_settings.chat_memory_keep_turns',
+        toForm: value => {
+            const numeric = Number(value);
+            return Number.isInteger(numeric) && numeric >= 1 ? numeric : 5;
+        },
+    },
+    {
+        tab: 'providers',
+        formPath: 'memory.role',
+        settingsPath: 'oai_settings.chat_memory_role',
+        toForm: value => ['system', 'user', 'assistant'].includes(value) ? value : 'system',
+    },
+    {
+        tab: 'providers',
+        formPath: 'memory.prompt',
+        settingsPath: 'oai_settings.chat_memory_prompt',
+        toForm: value => (typeof value === 'string' ? value : ''),
+    },
+    {
+        tab: 'providers',
+        formPath: 'memory.wrap',
+        settingsPath: 'oai_settings.chat_memory_wrap',
+        toForm: value => (typeof value === 'string' ? value : ''),
+    },
+    {
+        tab: 'providers',
+        formPath: 'memory.maxTokens',
+        settingsPath: 'oai_settings.chat_memory_max_tokens',
+        toForm: value => {
+            const numeric = Number(value);
+            return Number.isInteger(numeric) && numeric > 0 ? numeric : 400;
+        },
     },
     // Frontend Frames rendering settings — previously legacy-bound checkboxes in
     // the retired #user-settings-block drawer. toForm mirrors

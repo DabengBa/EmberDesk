@@ -40,6 +40,14 @@ const settingsSchema = z.object({
         customUrl: z.string(),
         fallbackProviderModel: z.string(),
     }),
+    memory: z.object({
+        enabled: z.boolean(),
+        keepTurns: z.number().int().min(1),
+        role: z.enum(['system', 'user', 'assistant']),
+        prompt: z.string(),
+        wrap: z.string(),
+        maxTokens: z.number().int().min(1),
+    }),
     rendering: z.object({
         frontendFramesEnabled: z.boolean(),
         frontendFramesDepth: z.number().int().min(0),
@@ -822,7 +830,8 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="providers.fallbackProviderModel"
-                                        label="备选模型"
+                                        label="后台模型"
+                                        description="生成失败重试与后台任务（如会话摘要整理）共用的模型；留空则使用主模型。"
                                         placeholder="gpt-4.1-mini"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
@@ -861,6 +870,73 @@ export function SettingsSurface({
                             </div>
                             ) : null}
 
+
+                            {activeTab === 'providers' ? (
+                                <SettingsSection
+                                    title="对话记忆"
+                                >
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="memory.enabled"
+                                        label="历史会话轮次总结"
+                                        description="开启后，最近轮数之外的旧轮在后台被摘要成文字，原始消息保留可在摘要卡展开。"
+                                        variant="toggle"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="memory.keepTurns"
+                                        label="保留完整显示的最近轮数"
+                                        variant="number"
+                                        min={1}
+                                        step={1}
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="memory.role"
+                                        label="摘要注入角色"
+                                        variant="select"
+                                        options={[
+                                            { value: 'system', label: '系统（旁白回顾）' },
+                                            { value: 'assistant', label: '助手（角色自己记得）' },
+                                            { value: 'user', label: '用户' },
+                                        ]}
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="memory.maxTokens"
+                                        label="单条摘要最大输出 tokens"
+                                        variant="number"
+                                        min={1}
+                                        step={50}
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="memory.prompt"
+                                        label="摘要 Prompt（留空使用默认）"
+                                        variant="textarea"
+                                        placeholder="你是聊天记录整理助手……"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="memory.wrap"
+                                        variant="textarea"
+                                        label="摘要包裹模板（{{summary}} 为占位符，留空使用默认）"
+                                        placeholder="【早前剧情回顾】&#10;{{summary}}"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                </SettingsSection>
+                            ) : null}
 
                             {activeTab === 'providers' ? (
                                 <SettingsSection

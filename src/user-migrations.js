@@ -1,9 +1,13 @@
 import path from 'node:path';
 import fs from 'node:fs';
-import { DEFAULT_USER, PUBLIC_DIRECTORIES, SETTINGS_MIGRATION_FILE } from './constants.js';
+import { DatabaseSync } from 'node:sqlite';
+import { DEFAULT_USER, PUBLIC_DIRECTORIES } from './constants.js';
 import { color, delay, setPermissionsSync } from './util.js';
 import { serverDirectory } from './server-directory.js';
 import { getUserDirectories } from './user-directories.js';
+import { applyCanonicalPragmas, resolveCanonicalDatabasePath } from './canonical-sqlite.js';
+import { runCanonicalMigrations } from './canonical-sqlite-migrations.js';
+import { upsertCanonicalSettingsDocument } from './endpoints/settings-store.js';
 
 /**
  * Perform migration from the old user data format to the new one.
@@ -80,14 +84,6 @@ export async function migrateUserData() {
             new: path.join(userDirectories.root, 'secrets.json'),
             file: true,
         },
-        {
-            // Lands under a non-contract name: the canonical settings shadow
-            // import consumes it once and deletes it (no settings.json is
-            // (re)created for migrated users).
-            old: path.join(publicDirectory, 'settings.json'),
-            new: path.join(userDirectories.root, SETTINGS_MIGRATION_FILE),
-            file: true,
-        },
     ];
 
     const currentDate = new Date().toISOString().split('T')[0];
@@ -132,6 +128,45 @@ export async function migrateUserData() {
         } catch (error) {
             console.error(color.red(`Error migrating ${migration.old} to ${migration.new}:`), error.message);
             errors.push(migration.old);
+        }
+    }
+
+    // Legacy `public/settings.json` goes straight into canonical storage: the
+    // payload is parsed and upserted into the settings document, so no
+    // settings-named file ever lands in the user directory.
+    const legacySettingsPath = path.join(publicDirectory, 'settings.json');
+    if (fs.existsSync(legacySettingsPath)) {
+        console.log(`Migrating ${legacySettingsPath} to canonical settings storage...`);
+        try {
+            const payload = JSON.parse(fs.readFileSync(legacySettingsPath, 'utf8'));
+            if (payload === null || typeof payload !== 'object' || Array.isArray(payload)) {
+                throw new Error('settings root must be a JSON object');
+            }
+            const { storageRoot, dbPath } = resolveCanonicalDatabasePath(userDirectories);
+            fs.mkdirSync(storageRoot, { recursive: true });
+            const db = new DatabaseSync(dbPath);
+            try {
+                applyCanonicalPragmas(db);
+                const migrationStatus = runCanonicalMigrations(db);
+                if (!migrationStatus.ok) {
+                    throw new Error(`canonical migrations failed: ${migrationStatus.reason ?? 'unknown'}`);
+                }
+                const saved = upsertCanonicalSettingsDocument(db, {
+                    userId: DEFAULT_USER.handle,
+                    payload,
+                    expectedRevision: 0,
+                });
+                if (!saved.ok) {
+                    console.log(color.yellow('Canonical settings document already exists; keeping it.'));
+                }
+            } finally {
+                db.close();
+            }
+            fs.cpSync(legacySettingsPath, path.join(backupDirectory, path.basename(legacySettingsPath)), { force: true });
+            fs.rmSync(legacySettingsPath, { force: true });
+        } catch (error) {
+            console.error(color.red(`Error migrating ${legacySettingsPath}:`), error.message);
+            errors.push(legacySettingsPath);
         }
     }
 

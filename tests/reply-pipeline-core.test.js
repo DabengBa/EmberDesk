@@ -277,3 +277,50 @@ describe('step reasoning_effort', () => {
         expect(pipeline.steps[0].reasoningEffort).toBeNull();
     });
 });
+
+describe('applyStepRequestOverrides tool narrowing', () => {
+    const makeBody = () => ({
+        tools: [
+            { type: 'function', function: { name: 'analyze' } },
+            { type: 'function', function: { name: 'review' } },
+            { type: 'function', function: { name: 'respond' } },
+            { type: 'function', function: { name: 'options' } },
+        ],
+        tool_choice: 'auto',
+    });
+
+    test('forced mode pins tool_choice and narrows tools to the step function', async () => {
+        const { applyStepRequestOverrides } = await importFreshCore();
+
+        const data = applyStepRequestOverrides(makeBody(), { tool: 'analyze' }, { enforceMode: 'forced' });
+
+        expect(data.tool_choice).toEqual({ type: 'function', function: { name: 'analyze' } });
+        expect(data.tools.map(tool => tool.function.name)).toEqual(['analyze']);
+    });
+
+    test('auto mode narrows tools to the step function too — the plan owns the tool surface', async () => {
+        const { applyStepRequestOverrides } = await importFreshCore();
+
+        const data = applyStepRequestOverrides(makeBody(), { tool: 'review' }, { enforceMode: 'auto' });
+
+        expect(data.tool_choice).toBe('auto');
+        expect(data.tools.map(tool => tool.function.name)).toEqual(['review']);
+    });
+
+    test('keeps the list untouched when the step tool is not registered', async () => {
+        const { applyStepRequestOverrides } = await importFreshCore();
+
+        const data = applyStepRequestOverrides(makeBody(), { tool: 'absent' }, { enforceMode: 'auto' });
+
+        expect(data.tools).toHaveLength(4);
+    });
+
+    test('leaves bodies without tools alone', async () => {
+        const { applyStepRequestOverrides } = await importFreshCore();
+
+        const data = applyStepRequestOverrides({ messages: [] }, { tool: 'analyze' }, { enforceMode: 'forced' });
+
+        expect(data.tools).toBeUndefined();
+        expect(data.tool_choice).toBeUndefined();
+    });
+});

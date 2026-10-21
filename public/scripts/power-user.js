@@ -190,7 +190,7 @@ export function applyStylePins() {
 
 //MARK: loadPowerUser
 export async function loadPowerUserSettings(settings) {
-    // Load from settings.json
+    // Load from the settings payload
     if (settings.power_user !== undefined) {
         if (Object.hasOwn(settings.power_user, 'auto_sort_tags') && !Object.hasOwn(settings.power_user, 'tag_sort_mode')) {
             settings.power_user.tag_sort_mode = settings.power_user.auto_sort_tags ? tag_sort_mode.ALPHABETICAL : tag_sort_mode.MANUAL;
@@ -735,7 +735,7 @@ jQuery(() => {
         setHotswapsDebounced();
     });
 
-    // Settings that go to settings.json
+    // Settings that go into the settings document
     $('#character_sort_order').on('change', function () {
         const field = String($(this).find(':selected').data('field'));
         // Save sort order, but do not save search sorting, as this is a temporary sorting option

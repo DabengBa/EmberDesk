@@ -76,6 +76,7 @@ import {
 } from './canonical-chat-write-service.js';
 import { writeCanonicalManagedMedia } from './canonical-managed-media-write-service.js';
 import { createCharacterImportCoordinator } from './character-import-service.js';
+import { runCharacterTextReplace } from './character-text-replace-service.js';
 
 import { areThumbnailsEnabled, generateThumbnail, invalidateThumbnail } from './thumbnails.js';
 import { getUserDirectories } from '../users.js';
@@ -1887,6 +1888,46 @@ router.post('/merge-attributes', getFileNameValidationFunction('avatar'), async 
         }
     } catch (exception) {
         response.status(500).send({ message: 'Unexpected error while saving character.', error: exception.toString() });
+    }
+});
+
+router.post('/text-replace/preview', validateAvatarUrlMiddleware, async function (request, response) {
+    try {
+        const result = await runCharacterTextReplace({
+            request,
+            apply: false,
+            dependencies: {
+                getCanonicalCharacterCardJson: getCanonicalCharacterCardJsonSafe,
+                getCharacterWriteDependencies: () => createCharacterWriteDependencies({ bustCache: cacheBuster.bust.bind(cacheBuster) }),
+            },
+        });
+        if (!result.ok) {
+            return response.status(result.status ?? 500).json(result);
+        }
+        return response.json(result);
+    } catch (exception) {
+        console.error('Text replace preview error:', exception);
+        return response.status(500).send({ error: 'Text replace preview failed.' });
+    }
+});
+
+router.post('/text-replace/apply', validateAvatarUrlMiddleware, async function (request, response) {
+    try {
+        const result = await runCharacterTextReplace({
+            request,
+            apply: true,
+            dependencies: {
+                getCanonicalCharacterCardJson: getCanonicalCharacterCardJsonSafe,
+                getCharacterWriteDependencies: () => createCharacterWriteDependencies({ bustCache: cacheBuster.bust.bind(cacheBuster) }),
+            },
+        });
+        if (!result.ok) {
+            return response.status(result.status ?? 500).json(result);
+        }
+        return response.json(result);
+    } catch (exception) {
+        console.error('Text replace apply error:', exception);
+        return response.status(500).send({ error: 'Text replace apply failed.' });
     }
 });
 

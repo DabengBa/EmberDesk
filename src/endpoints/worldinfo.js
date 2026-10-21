@@ -86,7 +86,7 @@ export async function getCanonicalWorldInfoReadState(request) {
     };
 }
 
-async function getCanonicalWorldInfoWriteState(request) {
+export async function getCanonicalWorldInfoWriteState(request) {
     const readState = await getCanonicalWorldInfoReadState(request);
     if (!readState.ok) {
         return readState;
@@ -120,7 +120,7 @@ async function getCanonicalWorldInfoWriteState(request) {
     return readState;
 }
 
-function writeWorldInfoProjectionFile(directories, worldName, payload, db = null) {
+export function writeWorldInfoProjectionFile(directories, worldName, payload, db = null) {
     if (getCanonicalStorageSlice('world_info').getProjectionMode() === 'off') {
         return;
     }

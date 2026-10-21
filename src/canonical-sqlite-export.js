@@ -153,7 +153,10 @@ function exportSettingsSlice(db, directories, handle, nowMs) {
     if (!document) {
         return [{ status: 'skipped', reason: 'no_canonical_settings_document' }];
     }
-    const target = path.join(directories.root, 'settings.json');
+    // `settings.export.json`: the `.export` marker keeps the dump visibly
+    // distinct from the retired `settings.json` contract path, so a leftover
+    // file can never be mistaken for a live settings source.
+    const target = path.join(directories.root, 'settings.export.json');
     try {
         writeExportFile(target, document.payloadJson);
         recordExport(db, { sliceKey: 'settings', root: directories.root, absolutePath: target, contents: document.payloadJson, nowMs });

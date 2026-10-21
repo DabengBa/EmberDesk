@@ -1,4 +1,3 @@
-import path from 'node:path';
 import { promises as fsPromises } from 'node:fs';
 import crypto from 'node:crypto';
 
@@ -6,7 +5,6 @@ import storage from 'node-persist';
 import express from 'express';
 
 import { getUserAvatar, toKey, getPasswordHash, getPasswordSalt, createBackupArchive, ensurePublicDirectoriesExist, toAvatarKey, getAccountVersion } from '../users.js';
-import { SETTINGS_FILE } from '../constants.js';
 import { checkForNewContent } from './content-manager.js';
 import { closeCanonicalDatabase } from '../canonical-sqlite.js';
 import { ensureCanonicalSettingsForUser, resetCanonicalSettings } from './settings.js';
@@ -189,9 +187,6 @@ router.post('/reset-settings', async (request, response) => {
             }
             return response.status(503).send({ error: 'canonical_storage_unavailable', reason: result.reason ?? 'canonical_storage_unavailable' });
         }
-
-        const pathToFile = path.join(request.user.directories.root, SETTINGS_FILE);
-        await fsPromises.rm(pathToFile, { force: true });
 
         return response.sendStatus(204);
     } catch (error) {

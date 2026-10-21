@@ -39,6 +39,7 @@ import type {
     MainChatSnapshot,
 } from './stores/main-chat-store';
 import { MainChatMessageRow } from './components/main-chat/MainChatMessageRow';
+import { TurnSummaryCard } from './components/main-chat/TurnSummaryCard';
 import {
     createCharacterAuthoringSession,
     shouldApplyCharacterAuthoringSaveResult,
@@ -67,7 +68,8 @@ import { CharacterPopup } from './components/character-popup/CharacterPopup';
 import { RightNavPanel } from './components/right-nav/RightNavPanel';
 import { AiConfigPanel } from './components/ai-config/AiConfigPanel';
 import { PresetSaveButton } from './components/ai-config/PresetActionsMenu';
-import { PromptManagerAddButton, PromptManagerList, type PromptPanelBridge } from './components/prompt-panel/PromptPanel';
+import { PromptInspectorButton, PromptManagerAddButton, PromptManagerList, type PromptPanelBridge } from './components/prompt-panel/PromptPanel';
+import { PromptInspector, type PromptInspectorBridge } from './components/prompt-panel/PromptInspector';
 import { SelectChatPopup } from './components/select-chat/SelectChatPopup';
 import {
     SelectChatList,
@@ -588,7 +590,544 @@ function AuthoringTextarea({
     );
 }
 
+const TEXT_REPLACE_CARD_FIELDS = [
+    { id: 'description', label: '描述' },
+    { id: 'scenario', label: '场景' },
+    { id: 'firstMes', label: '开场白' },
+    { id: 'exampleMessages', label: '示例对话' },
+    { id: 'alternateGreetings', label: '备选开场白' },
+    { id: 'systemPrompt', label: '系统提示' },
+    { id: 'postHistoryInstructions', label: '历史后指令' },
+    { id: 'depthPrompt', label: '深度提示' },
+    { id: 'creatorNotes', label: '作者备注' },
+    { id: 'creator', label: '创作者' },
+    { id: 'characterVersion', label: '版本号' },
+    { id: 'tags', label: '标签' },
+] as const;
 
+const TEXT_REPLACE_WORLD_FIELDS = [
+    { id: 'content', label: '正文' },
+    { id: 'comment', label: '备注' },
+    { id: 'keys', label: '关键词' },
+] as const;
+
+const TEXT_REPLACE_CHAT_FIELDS = [
+    { id: 'mes', label: '消息正文' },
+    { id: 'reasoning', label: '思维链' },
+] as const;
+
+interface TextReplaceSample {
+    before: string;
+    after: string;
+}
+
+interface TextReplaceMatch {
+    field?: string;
+    label?: string;
+    path?: string;
+    occurrences?: number;
+    samples?: TextReplaceSample[];
+    entryUid?: string;
+    entryTitle?: string;
+    index?: number;
+    role?: string;
+    name?: string;
+}
+
+interface TextReplaceArea {
+    status?: string;
+    name?: string | null;
+    embedded?: boolean;
+    boundCharacterCount?: number;
+    occurrences?: number;
+    matches?: TextReplaceMatch[];
+    reason?: string;
+    fileName?: string | null;
+}
+
+interface TextReplaceResult {
+    ok?: boolean;
+    reason?: string;
+    status?: number;
+    applied?: { card?: boolean; worldBook?: boolean; chat?: boolean };
+    areas?: { card?: TextReplaceArea; worldBook?: TextReplaceArea; chats?: TextReplaceArea };
+    totals?: { occurrences?: number; changedTargets?: number };
+    warnings?: { code?: string; name?: string; characters?: number; reason?: string }[];
+}
+
+const TEXT_REPLACE_REASON_LABELS: Record<string, string> = {
+    generation_in_flight: '正在生成回复，请等待完成或停止后再应用',
+    canonical_world_info_unavailable: '世界书存储不可用',
+    canonical_chat_unavailable: '聊天存储不可用',
+    canonical_storage_disabled: '角色存储不可用',
+    character_not_found: '找不到当前角色卡',
+    missing_avatar_url: '缺少角色标识',
+    missing_chat_file_name: '当前没有打开的聊天',
+    invalid_regex: '正则表达式无效',
+    empty_query: '查找内容不能为空',
+    no_areas_selected: '请至少勾选一个替换范围',
+    network_error: '请求失败，请稍后重试',
+    empty_response: '服务器没有返回结果',
+};
+
+function describeTextReplaceFailure(result: TextReplaceResult | null | undefined): string {
+    const reason = String(result?.reason ?? '');
+    if (!reason) {
+        return '操作失败';
+    }
+    if (reason.startsWith('invalid_regex:')) {
+        return `${TEXT_REPLACE_REASON_LABELS.invalid_regex}：${reason.slice('invalid_regex:'.length).trim()}`;
+    }
+    return TEXT_REPLACE_REASON_LABELS[reason] ?? `操作失败（${reason}）`;
+}
+
+function TextReplaceCheckRow({
+    checked,
+    label,
+    disabled,
+    onChange,
+}: {
+    checked: boolean;
+    label: ReactNode;
+    disabled?: boolean;
+    onChange: (checked: boolean) => void;
+}) {
+    return (
+        <label {...stylex.props(authoringStyles.replaceCheck)}>
+            <input
+                type="checkbox"
+                checked={checked}
+                disabled={disabled}
+                onChange={event => onChange(event.target.checked)}
+            />
+            <span>{label}</span>
+        </label>
+    );
+}
+
+function TextReplaceMatchRow({
+    match,
+    excluded,
+    onToggle,
+}: {
+    match: TextReplaceMatch;
+    excluded: boolean;
+    onToggle: (path: string, excluded: boolean) => void;
+}) {
+    const path = String(match.path ?? '');
+    const context = match.entryTitle
+        ? `条目「${match.entryTitle}」`
+        : match.index != null
+            ? `第 ${match.index + 1} 条${match.role === 'user' ? '用户' : match.role === 'system' ? '系统' : '角色'}消息${match.name ? ` · ${match.name}` : ''}`
+            : '';
+    const samples = Array.isArray(match.samples) ? match.samples.slice(0, 2) : [];
+
+    return (
+        <div {...stylex.props(authoringStyles.replaceMatchRow, excluded ? authoringStyles.replaceMatchRowExcluded : null)}>
+            <label {...stylex.props(authoringStyles.replaceCheck)}>
+                <input
+                    type="checkbox"
+                    checked={!excluded}
+                    onChange={event => onToggle(path, !event.target.checked)}
+                />
+                <span {...stylex.props(authoringStyles.replaceMatchPath)}>
+                    {match.label ?? match.field ?? ''} <code>{path}</code>
+                    {context ? ` — ${context}` : ''}
+                    {`（${match.occurrences ?? 0} 处）`}
+                </span>
+            </label>
+            {samples.map((sample, sampleIndex) => (
+                <div key={sampleIndex} {...stylex.props(authoringStyles.replaceMatchSample)}>
+                    <div><del>{sample.before}</del></div>
+                    <div><ins>{sample.after}</ins></div>
+                </div>
+            ))}
+        </div>
+    );
+}
+
+function CharacterAuthoringTextReplaceDialog({
+    commands,
+    payload,
+    onClose,
+}: {
+    commands?: AuthoringCommands;
+    payload?: Record<string, unknown>;
+    onClose: (applied: false | { card?: boolean; worldBook?: boolean; chat?: boolean }) => void;
+}) {
+    const [query, setQuery] = useState('');
+    const [replacement, setReplacement] = useState('');
+    const [caseSensitive, setCaseSensitive] = useState(false);
+    const [wholeWord, setWholeWord] = useState(false);
+    const [regex, setRegex] = useState(false);
+    const [cardArea, setCardArea] = useState(true);
+    const [worldArea, setWorldArea] = useState(true);
+    const [chatArea, setChatArea] = useState(false);
+    const [cardFields, setCardFields] = useState<Set<string>>(() => new Set(TEXT_REPLACE_CARD_FIELDS.map(field => field.id)));
+    const [worldFields, setWorldFields] = useState<Set<string>>(() => new Set(TEXT_REPLACE_WORLD_FIELDS.map(field => field.id)));
+    const [chatFields, setChatFields] = useState<Set<string>>(() => new Set(TEXT_REPLACE_CHAT_FIELDS.map(field => field.id)));
+    const [busy, setBusy] = useState<'' | 'preview' | 'apply'>('');
+    const [error, setError] = useState('');
+    const [preview, setPreview] = useState<TextReplaceResult | null>(null);
+    const [applyResult, setApplyResult] = useState<TextReplaceResult | null>(null);
+    const [excluded, setExcluded] = useState<Set<string>>(() => new Set());
+    const appliedRef = useRef<{ card?: boolean; worldBook?: boolean; chat?: boolean } | null>(null);
+
+    const toggleField = useCallback((set: Set<string>, setter: (next: Set<string>) => void, id: string, checked: boolean) => {
+        const next = new Set(set);
+        if (checked) {
+            next.add(id);
+        } else {
+            next.delete(id);
+        }
+        setter(next);
+    }, []);
+
+    const requestSignature = useMemo(() => JSON.stringify({
+        areas: { card: cardArea, worldBook: worldArea, chats: chatArea ? 'current' : 'off' },
+        cardFields: [...cardFields].sort(),
+        worldFields: [...worldFields].sort(),
+        chatFields: [...chatFields].sort(),
+        query,
+        replacement,
+        options: { caseSensitive, wholeWord, regex },
+    }), [cardArea, worldArea, chatArea, cardFields, worldFields, chatFields, query, replacement, caseSensitive, wholeWord, regex]);
+    const [previewSignature, setPreviewSignature] = useState<string | null>(null);
+
+    const buildRequest = useCallback(() => ({
+        ...payload,
+        areas: { card: cardArea, worldBook: worldArea, chats: chatArea ? 'current' : 'off' },
+        cardFields: [...cardFields],
+        worldFields: [...worldFields],
+        chatFields: [...chatFields],
+        query,
+        replacement,
+        options: { caseSensitive, wholeWord, regex },
+        excluded: [...excluded],
+    }), [payload, cardArea, worldArea, chatArea, cardFields, worldFields, chatFields, query, replacement, caseSensitive, wholeWord, regex, excluded]);
+
+    const previewAreas = preview?.areas;
+    const matchGroups: { key: string; title: string; matches: TextReplaceMatch[] }[] = preview ? [
+        { key: 'card', title: '角色字段', matches: previewAreas?.card?.matches ?? [] },
+        { key: 'worldBook', title: previewAreas?.worldBook?.embedded ? '内嵌世界书' : '世界书', matches: previewAreas?.worldBook?.matches ?? [] },
+        { key: 'chats', title: '当前聊天', matches: previewAreas?.chats?.matches ?? [] },
+    ].filter(group => group.matches.length > 0) : [];
+
+    const effectiveOccurrences = preview && previewSignature === requestSignature
+        ? matchGroups.reduce((sum, group) => sum + group.matches
+            .filter(match => !excluded.has(String(match.path ?? '')))
+            .reduce((inner, match) => inner + (match.occurrences ?? 0), 0), 0)
+        : null;
+    const previewStale = preview != null && previewSignature !== requestSignature;
+
+    const requestPreview = useCallback(async () => {
+        setBusy('preview');
+        setError('');
+        setPreview(null);
+        try {
+            const result = await commands?.previewTextReplace?.(buildRequest()) as TextReplaceResult | undefined;
+            if (result?.ok) {
+                setPreview(result);
+                setPreviewSignature(requestSignature);
+            } else {
+                setError(describeTextReplaceFailure(result));
+            }
+        } catch {
+            setError('预览请求失败');
+        } finally {
+            setBusy('');
+        }
+    }, [commands, buildRequest, requestSignature]);
+
+    const requestApply = useCallback(async () => {
+        const remaining = effectiveOccurrences ?? 0;
+        if (remaining <= 0) {
+            return;
+        }
+        if (!window.confirm(`将替换 ${remaining} 处命中，且不可撤销。继续吗？`)) {
+            return;
+        }
+        setBusy('apply');
+        setError('');
+        try {
+            const result = await commands?.applyTextReplace?.(buildRequest()) as TextReplaceResult | undefined;
+            if (result?.ok) {
+                appliedRef.current = result.applied?.card || result.applied?.worldBook || result.applied?.chat
+                    ? (result.applied ?? {})
+                    : null;
+                setApplyResult(result);
+            } else {
+                setError(describeTextReplaceFailure(result));
+            }
+        } catch {
+            setError('应用请求失败');
+        } finally {
+            setBusy('');
+        }
+    }, [commands, buildRequest, effectiveOccurrences]);
+
+    const toggleExclude = useCallback((path: string, exclude: boolean) => {
+        setExcluded(current => {
+            const next = new Set(current);
+            if (exclude) {
+                next.add(path);
+            } else {
+                next.delete(path);
+            }
+            return next;
+        });
+    }, []);
+
+    const areaStatusNotes: string[] = [];
+    if (preview) {
+        if (previewAreas?.card?.status === 'unchanged') {
+            areaStatusNotes.push('角色字段：无命中');
+        }
+        if (previewAreas?.worldBook?.status === 'unchanged') {
+            areaStatusNotes.push('世界书：无命中');
+        }
+        if (previewAreas?.worldBook?.status === 'unbound') {
+            areaStatusNotes.push('未绑定世界书，且卡内没有内嵌世界书');
+        }
+        if (previewAreas?.worldBook?.status === 'missing') {
+            areaStatusNotes.push(`找不到绑定的世界书「${previewAreas.worldBook.name ?? ''}」`);
+        }
+        if (previewAreas?.chats?.status === 'unchanged') {
+            areaStatusNotes.push('当前聊天：无命中');
+        }
+        if (previewAreas?.chats?.status === 'missing') {
+            areaStatusNotes.push('找不到当前聊天的存储内容');
+        }
+    }
+
+    const handleClose = useCallback(() => {
+        onClose(appliedRef.current ?? false);
+    }, [onClose]);
+
+    return createPortal(
+        <div
+            {...stylex.props(authoringStyles.modalOverlay)}
+            role="presentation"
+            onMouseDown={(event) => {
+                event.stopPropagation();
+                if (event.target === event.currentTarget) {
+                    handleClose();
+                }
+            }}
+            onMouseUp={event => event.stopPropagation()}
+            onClick={event => event.stopPropagation()}
+            onKeyDown={(event) => {
+                if (event.key === 'Escape') {
+                    event.stopPropagation();
+                    handleClose();
+                }
+            }}
+        >
+            <dialog open aria-modal="true" aria-label="查找替换" {...stylex.props(authoringStyles.modalCard, authoringStyles.replaceModalCard)}>
+                <div {...stylex.props(authoringStyles.modalHead)}>
+                    <span {...stylex.props(authoringStyles.modalTitle)}>查找替换</span>
+                    <span {...stylex.props(authoringStyles.fieldMeta)}>作用于当前角色卡</span>
+                    <button
+                        type="button"
+                        {...stylex.props(authoringStyles.iconAction)}
+                        title="关闭"
+                        aria-label="关闭"
+                        onClick={handleClose}
+                    >
+                        <i className="fa-solid fa-xmark" aria-hidden="true" />
+                    </button>
+                </div>
+                {applyResult ? (
+                    <div {...stylex.props(authoringStyles.replaceBody)}>
+                        <div {...stylex.props(authoringStyles.replaceResultBox)}>
+                            {applyResult.applied?.card ? <div>✓ 角色卡已更新</div> : null}
+                            {applyResult.applied?.worldBook ? <div>✓ 世界书已更新{applyResult.areas?.worldBook?.boundCharacterCount && applyResult.areas.worldBook.boundCharacterCount > 1 ? `（同时影响 ${applyResult.areas.worldBook.boundCharacterCount} 张卡）` : ''}</div> : null}
+                            {applyResult.applied?.chat ? <div>✓ 当前聊天已更新（{applyResult.areas?.chats?.occurrences ?? 0} 处）</div> : null}
+                            {applyResult.areas?.card?.status === 'failed' ? <div {...stylex.props(authoringStyles.replaceErrorText)}>✗ 角色卡写入失败：{applyResult.areas.card.reason ?? ''}</div> : null}
+                            {applyResult.areas?.worldBook?.status === 'failed' ? <div {...stylex.props(authoringStyles.replaceErrorText)}>✗ 世界书写入失败：{applyResult.areas.worldBook.reason ?? ''}</div> : null}
+                            {applyResult.areas?.chats?.status === 'failed' ? <div {...stylex.props(authoringStyles.replaceErrorText)}>✗ 聊天写入失败：{applyResult.areas.chats.reason ?? ''}</div> : null}
+                            {!applyResult.applied?.card && !applyResult.applied?.worldBook && !applyResult.applied?.chat
+                                && applyResult.areas?.card?.status !== 'failed'
+                                && applyResult.areas?.worldBook?.status !== 'failed'
+                                && applyResult.areas?.chats?.status !== 'failed' ? (
+                                    <div>没有需要写入的命中。</div>
+                                ) : null}
+                            {(applyResult.warnings ?? []).map((warning, index) => (
+                                <div key={index} {...stylex.props(authoringStyles.replaceWarningText)}>
+                                    {warning.code === 'shared_world_book'
+                                        ? `世界书「${warning.name}」同时被 ${warning.characters} 张角色卡使用`
+                                        : warning.code === 'world_book_projection_failed'
+                                            ? `世界书「${warning.name}」的兼容文件写入失败，已记录待修复`
+                                            : `警告：${warning.code}`}
+                                </div>
+                            ))}
+                        </div>
+                        <div {...stylex.props(authoringStyles.replaceFooter)}>
+                            <button type="button" className={`menu_button ${stylex.props(authoringStyles.saveButton).className ?? ''}`} onClick={handleClose}>
+                                完成
+                            </button>
+                        </div>
+                    </div>
+                ) : (
+                    <div {...stylex.props(authoringStyles.replaceBody)}>
+                        <div {...stylex.props(authoringStyles.replaceFieldRow)}>
+                            <label {...stylex.props(authoringStyles.replaceField)}>
+                                <span {...stylex.props(authoringStyles.fieldLabel)}>查找</span>
+                                <textarea
+                                    className="text_pole"
+                                    rows={2}
+                                    value={query}
+                                    autoFocus
+                                    placeholder={regex ? '正则表达式（支持 $1 等捕获引用）' : '要查找的文本'}
+                                    {...stylex.props(authoringStyles.control, authoringStyles.replaceQueryInput)}
+                                    onChange={event => setQuery(event.target.value)}
+                                />
+                            </label>
+                            <label {...stylex.props(authoringStyles.replaceField)}>
+                                <span {...stylex.props(authoringStyles.fieldLabel)}>替换为</span>
+                                <textarea
+                                    className="text_pole"
+                                    rows={2}
+                                    value={replacement}
+                                    placeholder="替换文本（可为空）"
+                                    {...stylex.props(authoringStyles.control, authoringStyles.replaceQueryInput)}
+                                    onChange={event => setReplacement(event.target.value)}
+                                />
+                            </label>
+                        </div>
+                        <div {...stylex.props(authoringStyles.replaceChecksRow)}>
+                            <TextReplaceCheckRow checked={caseSensitive} label="区分大小写" disabled={busy !== ''} onChange={setCaseSensitive} />
+                            <TextReplaceCheckRow checked={wholeWord} label="全词匹配" disabled={busy !== ''} onChange={setWholeWord} />
+                            <TextReplaceCheckRow checked={regex} label="正则" disabled={busy !== ''} onChange={setRegex} />
+                        </div>
+                        <div {...stylex.props(authoringStyles.replaceScopeBlock)}>
+                            <TextReplaceCheckRow
+                                checked={cardArea}
+                                label={<strong>角色字段</strong>}
+                                disabled={busy !== ''}
+                                onChange={setCardArea}
+                            />
+                            {cardArea ? (
+                                <div {...stylex.props(authoringStyles.replaceChecksRow, authoringStyles.replaceChecksNested)}>
+                                    {TEXT_REPLACE_CARD_FIELDS.map(field => (
+                                        <TextReplaceCheckRow
+                                            key={field.id}
+                                            checked={cardFields.has(field.id)}
+                                            label={field.id === 'tags' ? '标签（替换后去重）' : field.label}
+                                            disabled={busy !== ''}
+                                            onChange={checked => toggleField(cardFields, setCardFields, field.id, checked)}
+                                        />
+                                    ))}
+                                </div>
+                            ) : null}
+                            <TextReplaceCheckRow
+                                checked={worldArea}
+                                label={<strong>世界书</strong>}
+                                disabled={busy !== ''}
+                                onChange={setWorldArea}
+                            />
+                            {worldArea ? (
+                                <div {...stylex.props(authoringStyles.replaceChecksRow, authoringStyles.replaceChecksNested)}>
+                                    {TEXT_REPLACE_WORLD_FIELDS.map(field => (
+                                        <TextReplaceCheckRow
+                                            key={field.id}
+                                            checked={worldFields.has(field.id)}
+                                            label={field.label}
+                                            disabled={busy !== ''}
+                                            onChange={checked => toggleField(worldFields, setWorldFields, field.id, checked)}
+                                        />
+                                    ))}
+                                </div>
+                            ) : null}
+                            <TextReplaceCheckRow
+                                checked={chatArea}
+                                label={<strong>当前聊天</strong>}
+                                disabled={busy !== ''}
+                                onChange={setChatArea}
+                            />
+                            {chatArea ? (
+                                <div {...stylex.props(authoringStyles.replaceChecksRow, authoringStyles.replaceChecksNested)}>
+                                    {TEXT_REPLACE_CHAT_FIELDS.map(field => (
+                                        <TextReplaceCheckRow
+                                            key={field.id}
+                                            checked={chatFields.has(field.id)}
+                                            label={field.label}
+                                            disabled={busy !== ''}
+                                            onChange={checked => toggleField(chatFields, setChatFields, field.id, checked)}
+                                        />
+                                    ))}
+                                </div>
+                            ) : null}
+                        </div>
+                        {error ? <div {...stylex.props(authoringStyles.replaceErrorText)}>{error}</div> : null}
+                        {preview ? (
+                            <div {...stylex.props(authoringStyles.replacePreviewBlock)}>
+                                {previewStale ? (
+                                    <div {...stylex.props(authoringStyles.replaceWarningText)}>参数已修改，请重新预览后再应用</div>
+                                ) : null}
+                                <div {...stylex.props(authoringStyles.fieldLabel)}>
+                                    命中 {(effectiveOccurrences ?? 0).toString()} 处
+                                </div>
+                                {previewAreas?.worldBook?.boundCharacterCount && previewAreas.worldBook.boundCharacterCount > 1 ? (
+                                    <div {...stylex.props(authoringStyles.replaceWarningText)}>
+                                        世界书「{previewAreas.worldBook.name}」同时被 {previewAreas.worldBook.boundCharacterCount} 张角色卡使用
+                                    </div>
+                                ) : null}
+                                {areaStatusNotes.map((note, index) => (
+                                    <div key={index} {...stylex.props(authoringStyles.replaceMutedText)}>{note}</div>
+                                ))}
+                                {(preview.warnings ?? []).filter(warning => warning.code !== 'shared_world_book').map((warning, index) => (
+                                    <div key={index} {...stylex.props(authoringStyles.replaceWarningText)}>警告：{warning.code}</div>
+                                ))}
+                                {matchGroups.length ? (
+                                    <div {...stylex.props(authoringStyles.replaceMatchList)}>
+                                        {matchGroups.map(group => (
+                                            <div key={group.key}>
+                                                <div {...stylex.props(authoringStyles.replaceGroupTitle)}>{group.title}</div>
+                                                {group.matches.map((match, matchIndex) => (
+                                                    <TextReplaceMatchRow
+                                                        key={match.path ?? matchIndex}
+                                                        match={match}
+                                                        excluded={excluded.has(String(match.path ?? ''))}
+                                                        onToggle={toggleExclude}
+                                                    />
+                                                ))}
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : null}
+                            </div>
+                        ) : null}
+                        <div {...stylex.props(authoringStyles.replaceFooter)}>
+                            <button
+                                type="button"
+                                className={`menu_button ${stylex.props(authoringStyles.toolAction).className ?? ''}`}
+                                disabled={busy !== '' || !query.length}
+                                onClick={() => void requestPreview()}
+                            >
+                                {busy === 'preview' ? '预览中…' : '预览'}
+                            </button>
+                            {preview && !previewStale ? (
+                                <button
+                                    type="button"
+                                    className={`menu_button ${stylex.props(authoringStyles.saveButton).className ?? ''}`}
+                                    disabled={busy !== '' || !(effectiveOccurrences && effectiveOccurrences > 0)}
+                                    onClick={() => void requestApply()}
+                                >
+                                    {busy === 'apply' ? '应用中…' : `应用 ${effectiveOccurrences ?? 0} 处替换`}
+                                </button>
+                            ) : null}
+                        </div>
+                        <p {...stylex.props(authoringStyles.modalHint)}>
+                            应用前请先预览确认命中；替换直接写入正式数据，没有内置回滚。
+                        </p>
+                    </div>
+                )}
+            </dialog>
+        </div>,
+        document.body,
+    );
+}
 
 function AuthoringWorkspacePanel({
     kind,
@@ -613,6 +1152,7 @@ function AuthoringWorkspacePanel({
     const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
     const [advancedOpen, setAdvancedOpen] = useState(false);
     const [expandedField, setExpandedField] = useState<{ key: string; label: string } | null>(null);
+    const [textReplaceOpen, setTextReplaceOpen] = useState(false);
     const [avatarPreviewOverride, setAvatarPreviewOverride] = useState<string | null>(null);
     const [liveManagementActions, setLiveManagementActions] = useState<AuthoringManagementAction[] | null>(null);
     const saveGenerationRef = useRef(0);
@@ -632,6 +1172,7 @@ function AuthoringWorkspacePanel({
         setFieldErrors({});
         setAdvancedOpen(false);
         setExpandedField(null);
+        setTextReplaceOpen(false);
         setAvatarPreviewOverride(null);
     }
 
@@ -1250,6 +1791,17 @@ function AuthoringWorkspacePanel({
                                 Export
                             </button>
                         ) : null}
+                        {!isCreateMode ? (
+                            <button
+                                type="button"
+                                className={`menu_button ${stylex.props(authoringStyles.toolAction).className ?? ''}`}
+                                disabled={isActionPending}
+                                title="在角色卡、绑定世界书和当前聊天中查找替换文本"
+                                onClick={() => setTextReplaceOpen(true)}
+                            >
+                                查找替换
+                            </button>
+                        ) : null}
                         <AuthoringActionsMenu
                             actions={liveManagementActions ?? managementActions}
                             disabled={isActionPending}
@@ -1258,6 +1810,18 @@ function AuthoringWorkspacePanel({
                         />
                     </div>
                 </div>
+                {textReplaceOpen ? (
+                    <CharacterAuthoringTextReplaceDialog
+                        commands={commands}
+                        payload={characterToolActionPayload}
+                        onClose={(applied) => {
+                            setTextReplaceOpen(false);
+                            if (applied) {
+                                void commands?.closeTextReplace?.({ applied });
+                            }
+                        }}
+                    />
+                ) : null}
                 {expandedField ? createPortal(
                     <div
                         {...stylex.props(authoringStyles.modalOverlay)}
@@ -1333,6 +1897,58 @@ function MainChatMessageListWorkspacePanel({
     const messages = messageIds
         .map(messageId => mainChatStoreSnapshot.messagesById[messageId])
         .filter((message): message is NonNullable<typeof message> => Boolean(message));
+    // Turn-summary display projection: covered ids collapse into a card at the
+    // anchor position; expanded cards keep the card header and render the
+    // covered rows underneath. Auto-refill is authoritative in the legacy
+    // reconcile (status flip reintroduces raw rows on the next snapshot).
+    const [expandedTurnKeys, setExpandedTurnKeys] = useState<ReadonlySet<string>>(() => new Set());
+    const turnSummaries = mainChatStoreSnapshot.turnSummaries ?? [];
+    const turnSummaryByAnchor = useMemo(() => {
+        const map = new Map<string, (typeof turnSummaries)[number]>();
+        const visibleIds = new Set(messages.map(message => message.id));
+        for (const entry of turnSummaries) {
+            // Anchor at the first covered message that is actually rendered —
+            // the record's coveredMessageIds[0] can sit outside the current
+            // window slice, which would hide the card entirely.
+            const anchor = entry.coveredMessageIds.find(id => visibleIds.has(id));
+            if (anchor !== undefined) {
+                map.set(anchor, entry);
+            }
+        }
+        return map;
+    }, [turnSummaries, messages]);
+    const coveredMessageIds = useMemo(() => {
+        const ids = new Set<string>();
+        for (const entry of turnSummaries) {
+            for (const coveredId of entry.coveredMessageIds) {
+                ids.add(coveredId);
+            }
+        }
+        return ids;
+    }, [turnSummaries]);
+    // Drop expansion state for turn keys that no longer resolve (chat switch,
+    // summary removal) so stale keys cannot leak into another chat's cards.
+    const expandedActiveTurnKeys = useMemo(() => {
+        const validKeys = new Set(turnSummaries.map(entry => entry.turnKey));
+        const pruned = new Set<string>();
+        for (const key of expandedTurnKeys) {
+            if (validKeys.has(key)) {
+                pruned.add(key);
+            }
+        }
+        return pruned;
+    }, [expandedTurnKeys, turnSummaries]);
+    const handleTurnSummaryToggle = useCallback((turnKey: string, expanded: boolean) => {
+        setExpandedTurnKeys(current => {
+            const next = new Set(current);
+            if (expanded) {
+                next.add(turnKey);
+            } else {
+                next.delete(turnKey);
+            }
+            return next;
+        });
+    }, []);
     const slash = mainChatStoreSnapshot.slash;
     const shouldShowSlashAutocomplete = slash.autocompleteVisible && slash.options.length > 0;
     const shouldShowSlashDetails = slash.detailsVisible && slash.detailsHtml !== '';
@@ -1434,14 +2050,45 @@ button.menu_button {
                     </div>
                 </div>
             ) : null}
-            {messages.map(message => (
-                <MainChatMessageRow
-                    key={message.uid || message.id}
-                    message={message}
-                    commands={commands}
-                    isLast={message.id === messageIds.at(-1)}
-                />
-            ))}
+            {messages.map(message => {
+                const turnSummary = turnSummaryByAnchor.get(message.id);
+                const covered = coveredMessageIds.has(message.id);
+                if (covered && !turnSummary) {
+                    // Covered by a summary whose anchor is elsewhere in the list —
+                    // collapsed turns only render their card.
+                    const owner = turnSummaries.find(entry => entry.coveredMessageIds.includes(message.id));
+                    if (owner && !expandedActiveTurnKeys.has(owner.turnKey)) {
+                        return null;
+                    }
+                }
+                const expanded = turnSummary ? expandedActiveTurnKeys.has(turnSummary.turnKey) : false;
+                if (covered && turnSummary && !expanded) {
+                    return (
+                        <TurnSummaryCard
+                            key={`summary:${turnSummary.turnKey}`}
+                            summary={turnSummary}
+                            expanded={false}
+                            onToggle={handleTurnSummaryToggle}
+                        />
+                    );
+                }
+                return (
+                    <Fragment key={message.uid || message.id}>
+                        {turnSummary ? (
+                            <TurnSummaryCard
+                                summary={turnSummary}
+                                expanded={true}
+                                onToggle={handleTurnSummaryToggle}
+                            />
+                        ) : null}
+                        <MainChatMessageRow
+                            message={message}
+                            commands={commands}
+                            isLast={message.id === messageIds.at(-1)}
+                        />
+                    </Fragment>
+                );
+            })}
         </>
     );
 }
@@ -2202,7 +2849,30 @@ export function mountRightNavPanel(container: HTMLElement) {
  * (oai_settings.prompts / prompt_order).
  */
 export function mountPromptPanel(container: HTMLElement, bridge: PromptPanelBridge) {
-    mountSmallPanel(container, <AiConfigPanel promptList={<PromptManagerList bridge={bridge} />} presetSaveButton={<PresetSaveButton bridge={bridge} />} promptHeaderActions={<PromptManagerAddButton bridge={bridge} />} />);
+    mountSmallPanel(container, <AiConfigPanel promptList={<PromptManagerList bridge={bridge} />} presetSaveButton={<PresetSaveButton bridge={bridge} />} promptHeaderActions={<><PromptInspectorButton bridge={bridge} /><PromptManagerAddButton bridge={bridge} /></>} />);
+}
+
+let promptInspectorContainer: HTMLElement | null = null;
+
+/**
+ * Mounts the prompt-inspector overlay into a host div appended to <body> by
+ * the legacy shell. The bridge produces preview snapshots; the component is
+ * presentation-only.
+ */
+export function mountPromptInspector(container: HTMLElement, bridge: PromptInspectorBridge) {
+    promptInspectorContainer = container;
+    mountSmallPanel(container, <PromptInspector bridge={bridge} />);
+}
+
+export function unmountPromptInspector() {
+    const container = promptInspectorContainer;
+    promptInspectorContainer = null;
+    if (!container) {
+        return;
+    }
+    const root = mountedSmallPanels.get(container);
+    mountedSmallPanels.delete(container);
+    root?.unmount();
 }
 
 /**
@@ -2277,7 +2947,7 @@ export function mountCharacterContextMenu(container: HTMLElement) {
 
 let optionsMenuRoot: Root | null = null;
 let optionsMenuContainer: HTMLElement | null = null;
-let optionsMenuState: { showBackToMain: boolean } = { showBackToMain: false };
+let optionsMenuState: { showBackToMain: boolean; canRegenerate: boolean } = { showBackToMain: false, canRegenerate: false };
 
 function renderOptionsMenu() {
     if (!optionsMenuContainer?.isConnected) {
@@ -2287,7 +2957,7 @@ function renderOptionsMenu() {
     flushSync(() => optionsMenuRoot?.render(
         <StrictMode>
             <Theme theme={emberDeskTheme} mode="dark">
-                <OptionsMenu showBackToMain={optionsMenuState.showBackToMain} />
+                <OptionsMenu showBackToMain={optionsMenuState.showBackToMain} canRegenerate={optionsMenuState.canRegenerate} />
             </Theme>
         </StrictMode>,
     ));
@@ -2296,10 +2966,11 @@ function renderOptionsMenu() {
 /**
  * Mounts the options popup items into #options. The shell keeps its
  * display:none + Popper positioning; item click bindings land after mount.
- * Item visibility (e.g. branch "Back to parent") is state-driven via
- * updateOptionsMenuState so legacy jQuery .show()/.hide() calls are retired.
+ * Item visibility/enabled state (branch "Back to parent", "Regenerate") is
+ * state-driven via updateOptionsMenuState so legacy jQuery .show()/.hide()
+ * calls are retired.
  */
-export function mountOptionsMenu(container: HTMLElement, state?: { showBackToMain?: boolean }) {
+export function mountOptionsMenu(container: HTMLElement, state?: { showBackToMain?: boolean; canRegenerate?: boolean }) {
     attachGlobalCompatibilityBridge();
     optionsMenuContainer = container;
     optionsMenuState = { ...optionsMenuState, ...state };

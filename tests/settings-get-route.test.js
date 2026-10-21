@@ -88,7 +88,7 @@ describe('settings get route', () => {
         expect(response.statusCode).toBe(200);
         // Bootstrapped from the bundled defaults template on first read.
         const defaultsPayload = JSON.parse(
-            fs.readFileSync(new URL('../default/templates/settings.json', import.meta.url), 'utf8'),
+            fs.readFileSync(new URL('../default/templates/settings-defaults.json', import.meta.url), 'utf8'),
         );
         expect(JSON.parse(response.body.settings)).toEqual(defaultsPayload);
         expect(response.body.settings_revision).toBe(1);

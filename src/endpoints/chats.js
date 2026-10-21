@@ -1114,3 +1114,70 @@ router.post('/recent', async function (request, response) {
         return response.sendStatus(500);
     }
 });
+
+/**
+ * Opens the canonical chat session the text-replace feature targets, running
+ * the same write-state gate and file→canonical reconciliation the /save route
+ * uses. Returns { ok:false, reason } when chat writes are blocked.
+ *
+ * @param {import('express').Request} request Express request
+ * @param {{ ownerId: string, chatFileName: string }} options Character internal name + chat file name (without .jsonl)
+ * @returns {Promise<{ ok: boolean, reason?: string, db?: object, locator?: object, filePath?: string, cardName?: string }>}
+ */
+export async function openCanonicalChatForTextReplace(request, { ownerId, chatFileName }) {
+    const writeState = await getCanonicalChatWriteState(request);
+    if (!writeState.ok) {
+        return { ok: false, reason: writeState.reason ?? 'canonical_chat_write_blocked' };
+    }
+    const cardName = String(ownerId);
+    const filePath = path.join(request.user.directories.chats, cardName, sanitize(`${String(chatFileName)}.jsonl`));
+    if (!isPathUnderParent(request.user.directories.chats, filePath)) {
+        return { ok: false, reason: 'invalid_chat_path' };
+    }
+    const locator = getCanonicalChatLocator(request.user.directories, {
+        ownerType: 'character',
+        ownerId: cardName,
+        filePath,
+    });
+    reconcileCanonicalChatLocator(writeState.db, request.user.directories, locator);
+    return { ok: true, db: writeState.db, locator, filePath, cardName };
+}
+
+/**
+ * Writes a transformed chat payload through the canonical write path —
+ * same transaction, projection, backup, and audit-invalidation semantics as
+ * /save — then refreshes the character chat-stats cache.
+ *
+ * @param {import('express').Request} request Express request
+ * @param {{ db: object, locator: object, filePath: string, cardName: string, avatarUrl: string, payload: Array<object> }} options
+ * @returns {{ ok: boolean, authorityCommitted?: boolean, reason?: string, repairKey?: string }}
+ */
+export function writeCanonicalChatForTextReplace(request, { db, locator, filePath, cardName, avatarUrl, payload }) {
+    const handle = getRequestHandle(request);
+    const result = writeCanonicalChatPayload({
+        db,
+        locator,
+        payload,
+        operation: 'text-replace',
+        projection: getChatsProjectionMode(),
+        projectJsonl(jsonlData) {
+            writeChatProjection(jsonlData, filePath, handle, cardName, request.user.directories.backups);
+        },
+        onAuthorityCommitted(jsonlData) {
+            getBackupFunction(handle)(request.user.directories.backups, cardName, jsonlData);
+        },
+        onProjectionFailure() {
+            invalidateCanonicalAuditStatus(db, {
+                scope: getCanonicalStorageSlice('chats').auditScope,
+                handle,
+                reason: 'audit_stale_after_chat_projection_failure',
+                source: 'chat:text-replace',
+            });
+        },
+    });
+    if (result.ok) {
+        applyInteractionPerfChatTimestamp(filePath);
+        syncCanonicalChatStatsAfterCharacterChatMutation(handle, request.user.directories, avatarUrl, 'text replace');
+    }
+    return result;
+}

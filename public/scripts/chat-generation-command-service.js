@@ -18,6 +18,7 @@ export const GENERATION_SERVICE_OWNER = 'generation-service';
 /** Visible React composer / message-action command kinds. */
 export const GENERATION_VISIBLE_COMMAND_KINDS = Object.freeze([
     'submitComposer',
+    'regenerate',
 ]);
 
 /** Non-visible automation / helper command kinds. */
@@ -104,6 +105,7 @@ export function mapGenerationCommandKindToLifecycleType(kind) {
         case 'backgroundGeneration':
             return 'quiet';
         case 'submitComposer':
+        case 'regenerate':
         default:
             return 'normal';
     }

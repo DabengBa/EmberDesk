@@ -74,10 +74,38 @@ describe('active background settings', () => {
 
         expect(normalizeBackgroundSettings({ name: 'old.jpg' })).toEqual({
             name: '__transparent.png',
-            url: 'url("backgrounds/__transparent.png")',
+            url: 'url("img/__transparent.png")',
             fitting: 'classic',
             animation: false,
         });
+    });
+
+    test('remaps the reserved transparent name to the bundled asset', () => {
+        const normalizeBackgroundSettings = loadPureFunction('normalizeBackgroundSettings');
+        // Settings persisted before the pixel was bundled still carry the
+        // per-user backgrounds path — fresh installs would 404 on it.
+        const stored = normalizeBackgroundSettings({
+            name: '__transparent.png',
+            url: 'url("backgrounds/__transparent.png")',
+            fitting: 'cover',
+            animation: true,
+        });
+        expect(stored.url).toBe('url("img/__transparent.png")');
+        expect(stored.fitting).toBe('cover');
+        expect(stored.animation).toBe(true);
+        // Custom backgrounds keep their own URL untouched.
+        expect(normalizeBackgroundSettings({
+            name: 'forest.jpg',
+            url: 'url("backgrounds/forest.jpg")',
+        }).url).toBe('url("backgrounds/forest.jpg")');
+    });
+
+    test('remaps a legacy per-chat transparent background', () => {
+        const resolveActiveBackgroundUrl = loadPureFunction('resolveActiveBackgroundUrl');
+        const legacy = 'url("backgrounds/__transparent.png")';
+        expect(resolveActiveBackgroundUrl({ custom_background: legacy }, 'url("backgrounds/global.jpg")'))
+            .toBe('url("img/__transparent.png")');
+        expect(resolveActiveBackgroundUrl({}, legacy)).toBe('url("img/__transparent.png")');
     });
 
     test('prefers chat metadata and falls back to the global background after a lock is removed', () => {

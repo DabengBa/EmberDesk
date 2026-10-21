@@ -1,4 +1,4 @@
-import { throttle } from './utils.js';
+import { throttle, uuidv4 } from './utils.js';
 import { debounce_timeout } from './constants.js';
 import { eventSource, event_types } from './events.js';
 import { updateMessageElement } from './message-service.js';
@@ -24,6 +24,7 @@ const bootstrapWorkspace = (...args) => shell().bootstrapWorkspace(...args);
 const buildCascadeSectionHtml = (...args) => shell().buildCascadeSectionHtml(...args);
 const buildTemporaryChatDeleteWarningHtml = (...args) => shell().buildTemporaryChatDeleteWarningHtml(...args);
 const callGenericPopup = (...args) => shell().callGenericPopup(...args);
+const canRegenerateLastReply = (...args) => shell().canRegenerateLastReply(...args);
 const cancelTtsPlay = (...args) => shell().cancelTtsPlay(...args);
 const chooseBogusFolder = (...args) => shell().chooseBogusFolder(...args);
 const closeCharacterExportPopup = (...args) => shell().closeCharacterExportPopup(...args);
@@ -85,6 +86,7 @@ const pauseScriptExecution = (...args) => shell().pauseScriptExecution(...args);
 const processDroppedFiles = (...args) => shell().processDroppedFiles(...args);
 const queueReactCharacterAuthoringRemount = (...args) => shell().queueReactCharacterAuthoringRemount(...args);
 const read_avatar_load = (...args) => shell().read_avatar_load(...args);
+const regenerateLastReply = (...args) => shell().regenerateLastReply(...args);
 const renameCharacter = (...args) => shell().renameCharacter(...args);
 const renameChat = (...args) => shell().renameChat(...args);
 const renderTemplateAsync = (...args) => shell().renderTemplateAsync(...args);
@@ -101,6 +103,7 @@ const select_rm_create = (...args) => shell().select_rm_create(...args);
 const select_selected_character = (...args) => shell().select_selected_character(...args);
 const sendTextareaMessage = (...args) => shell().sendTextareaMessage(...args);
 const setCharacterSettingsOverrides = (...args) => shell().setCharacterSettingsOverrides(...args);
+const setOptionsMenuRegenerateAvailability = (...args) => shell().setOptionsMenuRegenerateAvailability(...args);
 const showBranchChatButtons = (...args) => shell().showBranchChatButtons(...args);
 const showDeleteConfirmWithCascade = (...args) => shell().showDeleteConfirmWithCascade(...args);
 const stopGeneration = (...args) => shell().stopGeneration(...args);
@@ -662,6 +665,7 @@ export async function bindLegacyShellHandlers() {
     function showMenu() {
         button.attr('aria-expanded', 'true');
         showBranchChatButtons();
+        setOptionsMenuRegenerateAvailability(canRegenerateLastReply());
         menu.fadeIn(state.animation_duration);
         getOptionsPopper()?.update();
         isOptionsMenuVisible = true;
@@ -735,6 +739,10 @@ export async function bindLegacyShellHandlers() {
             }
         } else if (id == 'option_delete_mes') {
             setTimeout(() => openMessageDelete(fromSlashCommand), state.animation_duration);
+        } else if (id == 'option_regenerate') {
+            if (canRegenerateLastReply()) {
+                void regenerateLastReply();
+            }
         } else if (id == 'option_close_chat') {
             await closeCurrentChat();
         }
@@ -959,6 +967,9 @@ export async function bindLegacyShellHandlers() {
         const oldScroll = state.chatElement[0].scrollTop;
         const clone = structuredClone(state.chat[state.this_edit_mes_id]);
         clone.send_date = Date.now();
+        // A copied message is a new message — give it a fresh persistent id
+        // so chat-memory turn identity stays unique.
+        clone.extra = { ...(clone.extra ?? {}), id: uuidv4() };
         const this_edit_mes_element = $(this).closest('.mes');
         clone.mes = this_edit_mes_element.find('.edit_textarea').val().toString();
 
@@ -971,6 +982,7 @@ export async function bindLegacyShellHandlers() {
         updateViewMessageIds();
         await saveChatConditional();
         state.chatElement[0].scrollTop = oldScroll;
+        await eventSource.emit(event_types.MESSAGE_UPDATED, Number(state.this_edit_mes_id) + 1);
     });
 
     $(document).on('click', '.mes_edit_delete', async function (event, customData) {

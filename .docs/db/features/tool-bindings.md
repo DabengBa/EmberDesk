@@ -28,7 +28,7 @@ Let users register real OpenAI-style function tools without writing an extension
 - The action body executes as `async (args) => result` and receives exactly one parameter — the parsed tool-call arguments. Runtime and syntax errors are returned to the model as an `{ok:false,error}` payload rather than breaking the generation loop.
 - A non-streaming reply that contains only tool calls (no text content) is valid and must not be treated as an empty reply.
 - Stealth bindings hide the invocation from chat and skip the follow-up generation.
-- Tool invocations are stored on a system chat message (`extra.tool_invocations`) and serialized back into later prompts as `role:"tool"` messages plus the preceding assistant `tool_calls` turn.
+- Tool invocations are stored on a system chat message (`extra.tool_invocations`) and serialized back into later prompts as `role:"tool"` messages plus the preceding assistant `tool_calls` turn. Exception: cards whose invocations all carry [Reply Pipeline](feature.reply_pipeline) metadata flatten into a single plain message once their run is over — mid-run cards keep the structured replay so later steps see earlier results.
 - One response may carry several tool calls (parallel tool calls on the wire). They are executed sequentially in array order and aggregated into a single invocations message; calls in the same batch cannot see each other's results — dependent steps must use recursion rounds.
 - Recursion follows the existing `ToolManager.RECURSE_LIMIT` of 5.
 - Bindings referenced by a [Reply Pipeline](feature.reply_pipeline) step drive the step's tool call; the pipeline's final step action should return the reply string (`invokeFunctionTool` stringifies non-string returns).

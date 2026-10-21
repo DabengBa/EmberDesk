@@ -74,6 +74,7 @@ import {
     setupChatCompletionPromptManager,
     prepareOpenAIMessages,
     sendOpenAIRequest,
+    buildChatCompletionRequest,
     loadOpenAISettings,
     oai_settings,
     openai_messages_count,
@@ -172,10 +173,12 @@ import {
     createGenerationCommand,
     createGenerationRequestEnvelope,
 } from './scripts/chat-generation-command-service.js';
+import { collectRegenerateTurn } from './scripts/chat-regenerate.js';
 import { markdownUnderscoreExt } from './scripts/showdown-underscore.js';
 
 import { registerPromptManagerMigration } from './scripts/PromptManager.js';
 import { normalizeReplyPipeline, pipelineTriggerTag } from './scripts/reply-pipeline-core.js';
+import { endPipelineRun } from './scripts/reply-pipeline.js';
 import { normalizeToolBindings } from './scripts/tool-bindings-core.js';
 import { getRegexedString, regex_placement } from './scripts/extensions/regex/engine.js';
 import { FILTER_STATES, FILTER_TYPES, FilterHelper, isFilterState } from './scripts/filters.js';
@@ -242,6 +245,8 @@ import { mountWorkspacePanelHost, createWorkspacePanelCommandPort } from './scri
 import { registerWorldInfoShellContext } from './scripts/world-info-shell-context.js';
 import {
     executeGenerationRequestInShell,
+    isUserStoppedGeneration,
+    previewNextGenerationRequest,
     updateEditArrowClasses,
 } from './scripts/generation-service.js';
 import {
@@ -352,6 +357,7 @@ import {
     projectCharacterLibraryQueryAgainstDeletedAvatars,
 } from './scripts/character-library-query-helpers.js';
 import { ensureReactPanelStylesheet, mountReactWorkspaceShellChrome, mountReactSettingsPanel, loadWorkspacePanelsModule } from './scripts/workspace-panels-react-bridge.js';
+import { initChatMemory, getChatMemoryDisplayItems } from './scripts/chat-memory-service.js';
 import { getRequestHeaders, installAjaxCsrfPrefilter, loadCsrfToken } from './scripts/request-context.js';
 import { installPublicBrowserApi } from './scripts/public-api.js';
 import { createReactRuntimeProvider } from './scripts/react-runtime-provider.js';
@@ -552,12 +558,16 @@ registerGenerationShellContext({
     removeDepthPrompts: (...args) => removeDepthPrompts(...args),
     removeLastMessage: (...args) => removeLastMessage(...args),
     removeMacros: (...args) => removeMacros(...args),
+    removeRegenerateTurnTail: (...args) => removeRegenerateTurnTail(...args),
+    restoreRegenerateTurnTail: (...args) => restoreRegenerateTurnTail(...args),
     replaceAssistantRecoveryMessage: (...args) => replaceAssistantRecoveryMessage(...args),
     saveChatConditional: (...args) => saveChatConditional(...args),
     saveReply: (...args) => saveReply(...args),
     scheduleMainChatMessageListPanelRefresh: (...args) => scheduleMainChatMessageListPanelRefresh(...args),
     sendGenerationRequest: (...args) => sendGenerationRequest(...args),
     sendMessageAsUser: (...args) => sendMessageAsUser(...args),
+    buildUserMessage: (...args) => buildUserMessage(...args),
+    buildChatCompletionRequest: (...args) => buildChatCompletionRequest(...args),
     sendStreamingRequest: (...args) => sendStreamingRequest(...args),
     setExtensionPrompt: (...args) => setExtensionPrompt(...args),
     setGenerationProgress: (...args) => setGenerationProgress(...args),
@@ -897,6 +907,7 @@ registerDomHandlersShellContext({
     callGenericPopup: (...args) => callGenericPopup(...args),
     cancelStatusCheck: (...args) => cancelStatusCheck(...args),
     cancelTtsPlay: (...args) => cancelTtsPlay(...args),
+    canRegenerateLastReply: (...args) => canRegenerateLastReply(...args),
     chooseBogusFolder: (...args) => chooseBogusFolder(...args),
     closeCharacterExportPopup: (...args) => closeCharacterExportPopup(...args),
     closeCurrentChat: (...args) => closeCurrentChat(...args),
@@ -963,6 +974,7 @@ registerDomHandlersShellContext({
     processDroppedFiles: (...args) => processDroppedFiles(...args),
     queueReactCharacterAuthoringRemount: (...args) => queueReactCharacterAuthoringRemount(...args),
     read_avatar_load: (...args) => read_avatar_load(...args),
+    regenerateLastReply: (...args) => regenerateLastReply(...args),
     renameCharacter: (...args) => renameCharacter(...args),
     renameChat: (...args) => renameChat(...args),
     renderTemplateAsync: (...args) => renderTemplateAsync(...args),
@@ -981,6 +993,7 @@ registerDomHandlersShellContext({
     sendTextareaMessage: (...args) => sendTextareaMessage(...args),
     setCharacterSettingsOverrides: (...args) => setCharacterSettingsOverrides(...args),
     setMainChatMessageUiState: (...args) => setMainChatMessageUiState(...args),
+    setOptionsMenuRegenerateAvailability: (...args) => setOptionsMenuRegenerateAvailability(...args),
     showBranchChatButtons: (...args) => showBranchChatButtons(...args),
     showDeleteConfirmWithCascade: (...args) => showDeleteConfirmWithCascade(...args),
     stopGeneration: (...args) => stopGeneration(...args),
@@ -2367,6 +2380,47 @@ async function persistAuthoringDraftBeforeLegacyAction(payload) {
     }
 }
 
+/**
+ * Posts a find & replace request against the current character card. The
+ * avatar comes from the authoring save model; the chat target is always the
+ * currently open session (characters[this_chid].chat).
+ */
+async function requestCharacterTextReplace(endpoint, payload) {
+    const body = {
+        avatar_url: String(payload?.fields?.avatar ?? payload?.draft?.avatar ?? ''),
+        areas: payload?.areas ?? {},
+        cardFields: Array.isArray(payload?.cardFields) ? payload.cardFields : undefined,
+        worldFields: Array.isArray(payload?.worldFields) ? payload.worldFields : undefined,
+        chatFields: Array.isArray(payload?.chatFields) ? payload.chatFields : undefined,
+        chatFileName: String(getCurrentChatId() ?? ''),
+        query: String(payload?.query ?? ''),
+        replacement: String(payload?.replacement ?? ''),
+        options: payload?.options ?? {},
+        excluded: Array.isArray(payload?.excluded) ? payload.excluded : undefined,
+    };
+    try {
+        const response = await fetch(endpoint, {
+            method: 'POST',
+            headers: getRequestHeaders(),
+            body: JSON.stringify(body),
+            cache: 'no-cache',
+        });
+        let data = null;
+        try {
+            data = await response.json();
+        } catch {
+            data = null;
+        }
+        if (!response.ok) {
+            return { ok: false, status: response.status, reason: data?.reason ?? data?.error ?? `http_${response.status}`, ...(data ?? {}) };
+        }
+        return data ?? { ok: false, reason: 'empty_response' };
+    } catch (error) {
+        console.error('Text replace request failed:', error);
+        return { ok: false, reason: 'network_error' };
+    }
+}
+
 function syncAuthoringDraftFromPopups(draft) {
     if (!draft || typeof draft !== 'object') {
         return draft;
@@ -2486,6 +2540,51 @@ function getCharacterAuthoringReactCommands() {
                 await reopenCharacterAuthoringAfterLegacyPopup(draftPersisted ? undefined : payload?.draft);
                 return false;
             },
+            previewTextReplace: async payload => {
+                // Preview reads the saved card — persist pending edits first so the
+                // match list reflects what the user sees in the draft.
+                await persistAuthoringDraftBeforeLegacyAction(payload);
+                return await requestCharacterTextReplace('/api/characters/text-replace/preview', payload);
+            },
+            applyTextReplace: async payload => {
+                // A generation in flight would race the chat rewrite — the in-memory
+                // chat array is stale the moment apply commits, and the next autosave
+                // would clobber the replacement.
+                if (is_send_press) {
+                    toastr.warning('Generation is in progress — wait for it to finish (or stop it) before applying replacements.');
+                    return { ok: false, reason: 'generation_in_flight' };
+                }
+                await persistAuthoringDraftBeforeLegacyAction(payload);
+                return await requestCharacterTextReplace('/api/characters/text-replace/apply', payload);
+            },
+            closeTextReplace: async payload => {
+                // Only remount when apply actually wrote — a remount rebuilds the
+                // draft from the canonical card and would discard unsaved edits.
+                // The chat reload is deferred to close so the modal survives it:
+                // reloading mid-apply remounts this panel and kills the dialog.
+                const applied = payload?.applied && typeof payload.applied === 'object' ? payload.applied : null;
+                if (!applied) {
+                    return false;
+                }
+                if (applied.chat) {
+                    // The in-memory chat is stale now; reload before the next
+                    // autosave writes it back over the replaced content.
+                    await reloadCurrentChat();
+                }
+                if (applied.card || applied.worldBook) {
+                    // characters[this_chid] still holds the pre-apply card; the
+                    // authoring remount builds its draft from it. Refetch so the
+                    // panel shows (and later re-saves) the replaced card.
+                    const avatarUrl = characters[this_chid]?.avatar;
+                    if (avatarUrl) {
+                        await getOneCharacter(avatarUrl);
+                    }
+                }
+                if (applied.worldBook) {
+                    queueReactWorldInfoRemount();
+                }
+                return { applied: true };
+            },
         },
         shouldRemount(commandResult, commandName) {
             // Edit-mode saves rebase the React session client-side; remounting on
@@ -2494,6 +2593,11 @@ function getCharacterAuthoringReactCommands() {
             // still remount so the panel flips into edit mode on the new card.
             if (commandName === 'saveCharacterAuthoring') {
                 return commandResult?.mode !== 'edit';
+            }
+            // Preview/apply keep the find & replace dialog open; the dialog itself
+            // triggers a remount on close via closeTextReplace when it wrote.
+            if (commandName === 'previewTextReplace' || commandName === 'applyTextReplace') {
+                return false;
             }
             return commandResult !== false;
         },
@@ -2885,6 +2989,8 @@ async function executeMainChatVisibleGenerationAction({ kind, messageId } = {}) 
     switch (kind) {
         case 'submitComposer':
             return await sendTextareaMessage();
+        case 'regenerate':
+            return await regenerateLastReply();
         default:
             return await runMainChatVisibleGenerationAction({ kind, messageId });
     }
@@ -3061,6 +3167,7 @@ function getMainChatMessageListReactBridgeState() {
             clientHeight: chatContainer?.clientHeight ?? 0,
             scrollRestore: getMainChatMessageListScrollRestoreSnapshot(),
         },
+        turnSummaries: getChatMemoryDisplayItems(),
     });
     return {
         chatId: getCurrentChatId(),
@@ -4179,7 +4286,7 @@ let settingsDocumentRevision = null;
 
 const DEFAULT_BACKGROUND_SETTINGS = Object.freeze({
     name: '__transparent.png',
-    url: 'url("backgrounds/__transparent.png")',
+    url: 'url("img/__transparent.png")',
     fitting: 'classic',
     animation: false,
 });
@@ -4197,7 +4304,10 @@ export function normalizeBackgroundSettings(backgroundSettings) {
 
     return {
         name: source.name,
-        url: source.url,
+        // '__transparent.png' is a reserved pseudo-entry: the pixel shipped inside
+        // migrated legacy backgrounds folders, so stored URLs point at a path that
+        // fresh installs never have. Remap it to the bundled asset.
+        url: source.name === '__transparent.png' ? DEFAULT_BACKGROUND_SETTINGS.url : source.url,
         fitting: typeof source.fitting === 'string' && source.fitting ? source.fitting : 'classic',
         animation: typeof source.animation === 'boolean' ? source.animation : false,
     };
@@ -4206,7 +4316,10 @@ export function normalizeBackgroundSettings(backgroundSettings) {
 export let background_settings = { ...DEFAULT_BACKGROUND_SETTINGS };
 
 export function resolveActiveBackgroundUrl(metadata, globalUrl) {
-    return metadata?.custom_background || globalUrl || DEFAULT_BACKGROUND_SETTINGS.url;
+    const url = metadata?.custom_background || globalUrl || DEFAULT_BACKGROUND_SETTINGS.url;
+    // Per-chat backgrounds saved before the pixel was bundled can still point at
+    // the legacy per-user path; remap it to the bundled asset.
+    return url === 'url("backgrounds/__transparent.png")' ? DEFAULT_BACKGROUND_SETTINGS.url : url;
 }
 
 function setFittingClass(fitting) {
@@ -4367,6 +4480,7 @@ async function bootstrapWorkspace() {
         });
         initBulkEdit();
         initReasoning();
+        initChatMemory();
     });
     await measureStartupStage('lateFeatureInit', () => Promise.resolve().then(() => {
         initCustomSelectedSamplers();
@@ -5395,6 +5509,7 @@ export async function reloadCurrentChatUnsafe() {
 export async function sendTextareaMessage() {
     if (is_send_press) return;
     if (isExecutingCommandsFromChatInput) return;
+    if (regenerateRequestInFlight || generationEntryPending) return;
 
     const textareaText = getComposerValue();
 
@@ -6226,16 +6341,219 @@ function removeLastMessage() {
  * @returns {Promise<any>} Returns a promise that resolves when the text is done generating.
  */
 export async function Generate(type, options = {}, dryRun = false) {
+    // The regenerate flag only means something for a real, top-level visible
+    // turn — quiet/nested/preview calls must never delete the tail.
+    const isRegenerateEnvelope = options?.regenerate === true && type === 'normal' && !options?.depth && !dryRun && !options?.preview;
     const generationEnvelope = createGenerationRequestEnvelope({
         type,
         options,
         dryRun,
         mainApi: main_api,
+        kind: isRegenerateEnvelope ? 'regenerate' : '',
     });
-    return executeGenerationRequestInShell(generationEnvelope);
+    // Closes the TOCTOU between "Generate() entered" and "is_send_press set"
+    // deep inside the service — both the send and the regenerate guards check
+    // this flag so the two can never overlap in the pre-flag awaits.
+    const tracksEntry = type === 'normal' && !dryRun && !options?.depth && !options?.preview;
+    if (tracksEntry) {
+        generationEntryPending = true;
+    }
+    if (isRegenerateEnvelope) {
+        pendingRegenerateRestore = null;
+    }
+    try {
+        return await executeGenerationRequestInShell(generationEnvelope);
+    } catch (error) {
+        // Failures inside the service's dispatch boundary are recovered by
+        // its onError (which consumes the pending snapshot). Anything escaping
+        // earlier — prompt assembly, World Info, token counting — reaches
+        // this catch with the turn tail already removed: restore it, free
+        // the UI, then re-throw.
+        if (isRegenerateEnvelope && pendingRegenerateRestore) {
+            const snapshot = pendingRegenerateRestore;
+            pendingRegenerateRestore = null;
+            if (!isUserStoppedGeneration(error)) {
+                const restored = await restoreRegenerateTurnTail(snapshot);
+                if (restored) {
+                    toastr.warning(t`Regeneration failed — the previous reply was restored.`, t`Regenerate`);
+                } else {
+                    toastr.error(t`Regeneration failed — the previous reply could not be restored.`, t`Regenerate`);
+                }
+            }
+            endPipelineRun();
+            unblockGeneration(type);
+        }
+        throw error;
+    } finally {
+        if (tracksEntry) {
+            generationEntryPending = false;
+        }
+    }
 }
 
 //MARK: Generate() ends
+
+/**
+ * Removes the generated tail of the current turn for a regenerate, returning a
+ * snapshot that can restore it when the new generation fails. The generated
+ * tail is the trailing run of generated artifacts — assistant replies,
+ * tool/pipeline cards, recovery rows — ending at the last user message;
+ * user-authored rows (narrator notes, slash-command messages, plain system
+ * notices) stop the scan and are never removed.
+ * @returns {{chatId: string|null, insertIndex: number, messages: object[]}|null}
+ *          null when there is no generated tail (e.g. the last message is a
+ *          user message — regenerate then fills in the missing reply).
+ */
+export function removeRegenerateTurnTail() {
+    const snapshot = collectRegenerateTurn(chat, {
+        chatId: getCurrentChatId() ?? null,
+        narratorType: system_message_types.NARRATOR,
+    });
+    if (snapshot.messages.length === 0) {
+        pendingRegenerateRestore = null;
+        return null;
+    }
+
+    if (isReactMainChatOwner()) {
+        for (let index = chat.length - 1; index >= snapshot.insertIndex; index--) {
+            clearMainChatMessageUiState(index);
+        }
+        mainChatVisibleStartIndices.delete(getCurrentChatId());
+    }
+    if (this_edit_mes_id !== undefined && this_edit_mes_id >= snapshot.insertIndex) {
+        this_edit_mes_id = undefined;
+    }
+    chat.length = snapshot.insertIndex;
+    chat_metadata.tainted = true;
+    saveChatDebounced();
+    void eventSource.emit(event_types.MESSAGE_DELETED, chat.length);
+    // React owner remounts; the legacy owner drops the trailing .mes rows —
+    // redisplayChat(startIndex) with an empty tail slice removes without adding.
+    void redisplayChat({ startIndex: snapshot.insertIndex });
+    // Register as the pending undo for this regenerate envelope — consumed by
+    // restoreRegenerateTurnTail or by Generate()'s escape hatch when a failure
+    // bypasses the service-level dispatch boundary.
+    pendingRegenerateRestore = snapshot;
+    return snapshot;
+}
+
+/**
+ * Restores a regenerate snapshot after a failed regeneration: removes whatever
+ * the failed attempt produced, puts the original turn tail back, and saves.
+ * @param {object} snapshot Snapshot returned by removeRegenerateTurnTail
+ * @returns {Promise<boolean>} Whether the snapshot was restored
+ */
+export async function restoreRegenerateTurnTail(snapshot) {
+    pendingRegenerateRestore = null;
+    if (!snapshot || !Array.isArray(snapshot.messages) || snapshot.messages.length === 0) {
+        return false;
+    }
+    // Never write into a different chat than the one the snapshot came from —
+    // the user may have switched chats while generation was in flight. Both
+    // sides normalize to null: the Assistant scratch chat and any chat
+    // without a file id report undefined here.
+    if ((getCurrentChatId() ?? null) !== snapshot.chatId) {
+        console.warn('Regenerate restore skipped: chat changed during generation');
+        return false;
+    }
+
+    // The failed attempt's removable tail must end exactly where the removed
+    // turn did — anything else means rows arrived mid-flight in an unexpected
+    // shape and restoring would scramble the order. Check BEFORE truncating
+    // so a skipped restore keeps the attempt's rows instead of losing both.
+    const attemptTail = collectRegenerateTurn(chat, {
+        chatId: getCurrentChatId() ?? null,
+        narratorType: system_message_types.NARRATOR,
+    });
+    if (attemptTail.insertIndex !== snapshot.insertIndex) {
+        console.warn('Regenerate restore skipped: chat tail changed shape');
+        return false;
+    }
+
+    // Remove what the failed attempt produced (same removable-tail rule).
+    if (isReactMainChatOwner()) {
+        for (let index = chat.length - 1; index >= attemptTail.insertIndex; index--) {
+            clearMainChatMessageUiState(index);
+        }
+    }
+    if (this_edit_mes_id !== undefined && this_edit_mes_id >= attemptTail.insertIndex) {
+        this_edit_mes_id = undefined;
+    }
+    const removedAttemptRows = chat.length - attemptTail.insertIndex;
+    chat.length = attemptTail.insertIndex;
+    if (removedAttemptRows > 0) {
+        void eventSource.emit(event_types.MESSAGE_DELETED, chat.length);
+    }
+
+    chat.splice(snapshot.insertIndex, 0, ...snapshot.messages);
+    chat_metadata.tainted = true;
+    mainChatVisibleStartIndices.delete(getCurrentChatId());
+    await saveChatConditional();
+    await redisplayChat({ startIndex: snapshot.insertIndex });
+    scrollChatToBottom({ waitForFrame: true });
+    return true;
+}
+
+let regenerateRequestInFlight = false;
+// Snapshot of the tail removed by the in-flight regenerate, kept here so a
+// failure that bypasses the service dispatch boundary can still undo the
+// removal. Only a regenerate envelope ever writes it.
+let pendingRegenerateRestore = null;
+// Set while a visible normal generation runs — including the early awaits
+// before the service flips is_send_press — so send and regenerate guards
+// cannot overlap.
+let generationEntryPending = false;
+
+/**
+ * Whether the options-menu "Regenerate" action can run right now.
+ * @returns {boolean}
+ */
+export function canRegenerateLastReply() {
+    if (is_send_press || regenerateRequestInFlight || generationEntryPending || isExecutingCommandsFromChatInput || this_edit_mes_id !== undefined) {
+        return false;
+    }
+    if (online_status === 'no_connection') {
+        return false;
+    }
+    if (this_chid === undefined && !String(name2 ?? '').trim()) {
+        return false;
+    }
+    return Array.isArray(chat) && chat.length > 0;
+}
+
+/**
+ * Regenerates the current turn: removes the generated tail (assistant reply,
+ * same-turn tool/pipeline cards, recovery rows) and re-runs generation with
+ * the same context. The composer draft is untouched, no user message is
+ * re-sent, and a total failure restores the previous turn.
+ * @returns {Promise<boolean>}
+ */
+export async function regenerateLastReply() {
+    if (!canRegenerateLastReply()) {
+        return false;
+    }
+    regenerateRequestInFlight = true;
+    try {
+        await Generate('normal', { regenerate: true });
+        return true;
+    } catch (error) {
+        // The failure already surfaced to the user (restore toast / error
+        // row); resolving false keeps the fire-and-forget callers quiet.
+        console.warn('Regenerate failed:', error?.message ?? error);
+        return false;
+    } finally {
+        regenerateRequestInFlight = false;
+    }
+}
+
+/**
+ * Projects the "Regenerate" entry's availability into the React options menu.
+ * @param {boolean} canRegenerate Whether the action is currently allowed
+ * @returns {boolean} Whether the React menu handled the update
+ */
+export function setOptionsMenuRegenerateAvailability(canRegenerate) {
+    return Boolean(optionsMenuModuleRef?.updateOptionsMenuState?.({ canRegenerate: Boolean(canRegenerate) }));
+}
 
 /**
  * Stops the generation and any streaming if it is currently running.
@@ -6419,7 +6737,18 @@ export function removeMacros(str) {
  * @param {string} [avatar] Avatar of the user sending the message. Defaults to user_avatar.
  * @returns {Promise<any>} A promise that resolves to the message when it is inserted.
  */
-export async function sendMessageAsUser(messageText, messageBias, insertAt = null, compact = false, name = name1) {
+/**
+ * Builds the user message object that sendMessageAsUser would insert, without
+ * touching chat state, storage, attachments, or events. Shared by the real
+ * send path and the prompt-inspector preview so both produce identical text.
+ * @param {string} messageText Raw composer text.
+ * @param {string} messageBias Message bias string.
+ * @param {object} [options] Options.
+ * @param {boolean} [options.compact] Render the message as a compact system-style entry.
+ * @param {string} [options.name] Sender name.
+ * @returns {Promise<object>} The normalized (but not attached/saved) message.
+ */
+export async function buildUserMessage(messageText, messageBias, { compact = false, name = name1 } = {}) {
     messageText = getRegexedString(messageText, regex_placement.USER_INPUT);
 
     const message = {
@@ -6429,15 +6758,21 @@ export async function sendMessageAsUser(messageText, messageBias, insertAt = nul
         send_date: getMessageTimeStamp(),
         mes: substituteParams(messageText),
         extra: {
+            id: uuidv4(),
             isSmallSys: compact,
         },
     };
-
 
     if (messageBias) {
         message.extra.bias = messageBias;
         message.mes = removeMacros(message.mes);
     }
+
+    return message;
+}
+
+export async function sendMessageAsUser(messageText, messageBias, insertAt = null, compact = false, name = name1) {
+    const message = await buildUserMessage(messageText, messageBias, { compact, name });
 
     await populateFileAttachment(message);
 
@@ -7485,6 +7820,9 @@ async function duplicateMainChatMessage(messageId) {
     const editState = mainChatMessageUiState.get(String(normalizedMessageId));
     const clone = structuredClone(sourceMessage);
     clone.send_date = Date.now();
+    // A duplicated message is a new message — it must not share the source's
+    // persistent identity or chat-memory turns see the same id twice.
+    clone.extra = { ...(clone.extra ?? {}), id: uuidv4() };
     if (editState?.editing && typeof editState.editText === 'string') {
         clone.mes = editState.editText;
     }
@@ -7494,6 +7832,7 @@ async function duplicateMainChatMessage(messageId) {
     shiftMainChatMessageUiStateAfterSplice(normalizedMessageId + 1, 1);
     await saveChatConditional();
     void mountReactMainChatMessageListPanel();
+    await eventSource.emit(event_types.MESSAGE_UPDATED, normalizedMessageId + 1);
     return true;
 }
 
@@ -7864,6 +8203,7 @@ async function messageEditMove(sourceId, targetId) {
 
         await saveChatConditional();
         void mountReactMainChatMessageListPanel();
+        await eventSource.emit(event_types.MESSAGE_UPDATED, sourceId);
         return true;
     }
 
@@ -7895,6 +8235,7 @@ async function messageEditMove(sourceId, targetId) {
 
     updateViewMessageIds();
     await saveChatConditional();
+    await eventSource.emit(event_types.MESSAGE_UPDATED, sourceId);
     return true;
 }
 
@@ -8438,19 +8779,21 @@ export async function importCharacterChat(formData, { refresh = true } = {}) {
 export function updateViewMessageIds(startIndex = null) {
     const minId = startIndex ?? getFirstDisplayedMessageId();
 
-    chatElement.find('.mes').each(function (index, element) {
+    // Only real message rows carry mesid — summary cards share the .mes
+    // styling class but must not be renumbered or misidentified as message 0.
+    chatElement.find('.mes[mesid]').each(function (index, element) {
         $(element).attr('mesid', minId + index);
         $(element).find('.mesIDDisplay').text(`#${minId + index}`);
     });
 
     chatElement.find('.mes').removeClass('last_mes');
-    chatElement.find('.mes').last().addClass('last_mes');
+    chatElement.find('.mes[mesid]').last().addClass('last_mes');
 
     updateEditArrowClasses();
 }
 
 export function getFirstDisplayedMessageId() {
-    const allIds = Array.from(document.querySelectorAll('#chat .mes')).map(el => Number(el.getAttribute('mesid'))).filter(x => !isNaN(x));
+    const allIds = Array.from(document.querySelectorAll('#chat .mes[mesid]')).map(el => Number(el.getAttribute('mesid'))).filter(x => !isNaN(x));
     const minId = Math.min(...allIds);
     return minId;
 }
@@ -9757,9 +10100,73 @@ function getPromptPanelBridge() {
             syncPipelineFinal(pipeline);
             persist();
         },
+        openPromptInspector() {
+            void openPromptInspectorOverlay();
+        },
     };
 
     return globalThis.__emberDeskPromptPanelBridge;
+}
+
+/**
+ * Runtime bridge consumed by the React prompt inspector overlay. Presentation
+ * stays React-owned; preview data is produced by the generation service's
+ * shared assembly path and stays in memory only.
+ * @returns {object} Bridge object for the inspector overlay
+ */
+function getPromptInspectorBridge() {
+    if (globalThis.__emberDeskPromptInspectorBridge) {
+        return globalThis.__emberDeskPromptInspectorBridge;
+    }
+
+    globalThis.__emberDeskPromptInspectorBridge = {
+        preview: (round = 0) => previewNextGenerationRequest({ round }),
+        close: () => closePromptInspectorOverlay(),
+    };
+    return globalThis.__emberDeskPromptInspectorBridge;
+}
+
+let promptInspectorHost = null;
+let promptInspectorOpenId = 0;
+
+/**
+ * Opens the prompt inspector overlay: mounts the React surface into a host
+ * div appended to <body>. A second call while open is a no-op — the existing
+ * overlay can refresh itself.
+ */
+async function openPromptInspectorOverlay() {
+    if (promptInspectorHost?.isConnected) {
+        return;
+    }
+    const openId = ++promptInspectorOpenId;
+    try {
+        const module = await loadWorkspacePanelsModule();
+        // A close racing the async module load must not mount a stale overlay.
+        if (openId !== promptInspectorOpenId) {
+            return;
+        }
+        promptInspectorHost = document.createElement('div');
+        promptInspectorHost.id = 'emberdesk-prompt-inspector-host';
+        document.body.appendChild(promptInspectorHost);
+        module.mountPromptInspector(promptInspectorHost, getPromptInspectorBridge());
+    } catch (error) {
+        console.error('Failed to mount prompt inspector:', error);
+        promptInspectorHost?.remove();
+        promptInspectorHost = null;
+    }
+}
+
+function closePromptInspectorOverlay() {
+    promptInspectorOpenId++;
+    if (!promptInspectorHost) {
+        return;
+    }
+    const host = promptInspectorHost;
+    promptInspectorHost = null;
+    loadWorkspacePanelsModule()
+        .then(module => module.unmountPromptInspector?.())
+        .catch(() => {})
+        .finally(() => host.remove());
 }
 
 /**

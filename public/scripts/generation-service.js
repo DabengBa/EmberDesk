@@ -1,6 +1,6 @@
 import { eventSource, event_types } from './events.js';
 import { TOKEN_PADDING, inject_ids } from './constants.js';
-import { executeGenerationAttempts, createGenerationCommandPlan } from './chat-generation-command-service.js';
+import { executeGenerationAttempts, createGenerationCommandPlan, createGenerationRequestEnvelope } from './chat-generation-command-service.js';
 import {
     getGenerationFailureDecision,
     getGenerationSuccessFinalization,
@@ -9,11 +9,32 @@ import {
 import { getWorldInfoPrompt } from './world-info-service.js';
 import { requireGenerationShellContext } from './generation-shell-context.js';
 import { getComposerValue, clearComposerValue } from './main-chat-composer-service.js';
-import { endPipelineRun, getPipelineTriggerTag, preparePipelineRound } from './reply-pipeline.js';
+import { applyChatMemoryToCoreChat } from './chat-memory-service.js';
+import {
+    endPipelineRun,
+    getPipelineTriggerTag,
+    getPreviewPipelineTriggerTag,
+    preparePipelineRound,
+    previewPipelineRequestShaping,
+} from './reply-pipeline.js';
 import { t } from './i18n.js';
 
 function shell() {
     return requireGenerationShellContext();
+}
+
+/**
+ * Whether a generation exception is a deliberate user stop rather than a
+ * failure worth rolling a regenerate snapshot back for.
+ * @param {Error|object} exception Error or response JSON
+ * @returns {boolean}
+ */
+export function isUserStoppedGeneration(exception) {
+    if (state.abortController?.signal?.aborted) {
+        return true;
+    }
+    const message = String(exception?.message ?? '').toLowerCase();
+    return message.includes('generation was aborted') || message.includes('clicked stop button');
 }
 
 const state = new Proxy({}, {
@@ -53,6 +74,8 @@ const processCommands = (...args) => shell().processCommands(...args);
 const rememberMainChatStreamingTransportProcessorTerminal = (...args) => shell().rememberMainChatStreamingTransportProcessorTerminal(...args);
 const removeDepthPrompts = (...args) => shell().removeDepthPrompts(...args);
 const removeMacros = (...args) => shell().removeMacros(...args);
+const removeRegenerateTurnTail = (...args) => shell().removeRegenerateTurnTail(...args);
+const restoreRegenerateTurnTail = (...args) => shell().restoreRegenerateTurnTail(...args);
 const replaceAssistantRecoveryMessage = (...args) => shell().replaceAssistantRecoveryMessage(...args);
 const saveChatConditional = (...args) => shell().saveChatConditional(...args);
 const saveReply = (...args) => shell().saveReply(...args);
@@ -88,6 +111,8 @@ const hasPendingFileAttachment = (...args) => shell().hasPendingFileAttachment(.
 const STREAMING_FPS = 30;
 
 const sendSystemMessage = (...args) => shell().sendSystemMessage(...args);
+const buildUserMessage = (...args) => shell().buildUserMessage(...args);
+const buildChatCompletionRequest = (...args) => shell().buildChatCompletionRequest(...args);
 const prepareOpenAIMessages = (...args) => shell().prepareOpenAIMessages(...args);
 const renderStoryString = (...args) => shell().renderStoryString(...args);
 const setOpenAIMessages = (...args) => shell().setOpenAIMessages(...args);
@@ -403,23 +428,41 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
         quietName,
         jsonSchema = null,
         depth = 0,
+        preview = null,
     } = options;
+    // Preview mode: assemble exactly what a send would assemble — tools,
+    // squash, pipeline shaping included — but never commits chat state,
+    // attachments, or the fetch. Shares the whole assembly path with 'send'.
+    const isPreview = Boolean(preview && typeof preview === 'object');
+    const previewWarnings = [];
+    if (isPreview) {
+        dryRun = true;
+    }
+    // Regenerate mode: re-run the current turn with the same context. It is a
+    // normal generation in every lifecycle respect — the difference is the
+    // input: no composer read, no user message, no slash-command handling; the
+    // old generated tail is snapshotted and removed before prompt assembly.
+    // Quiet/nested/dry-run calls must never take the destructive branch — a
+    // misused flag there would delete the tail and write nothing back.
+    const isRegenerate = options?.regenerate === true && type === 'normal' && !depth && !dryRun;
     console.log('Generate entered');
-    setGenerationProgress(0);
-    state.generation_started = new Date();
+    if (!isPreview) {
+        setGenerationProgress(0);
+        state.generation_started = new Date();
+    }
 
     // Prevent generation from shallow characters
     await unshallowCharacter(state.this_chid);
 
     // Occurs every time, even if the generation is aborted due to slash commands execution
-    await eventSource.emit(event_types.GENERATION_STARTED, type, { automatic_trigger, force_name2, quiet_prompt, quietToLoud, skipWIAN, signal, quietImage, depth }, dryRun);
+    await eventSource.emit(event_types.GENERATION_STARTED, type, { automatic_trigger, force_name2, quiet_prompt, quietToLoud, skipWIAN, signal, quietImage, depth, regenerate: isRegenerate }, dryRun);
 
     // Don't recreate abort controller if signal is passed
-    if (!(state.abortController && signal)) {
+    if (!isPreview && !(state.abortController && signal)) {
         state.abortController = new AbortController();
     }
 
-    if (!(dryRun || depth || type == 'quiet')) {
+    if (!(dryRun || depth || type == 'quiet' || isRegenerate)) {
         const interruptedByCommand = await processCommands(getComposerValue());
 
         if (interruptedByCommand) {
@@ -429,7 +472,7 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
     }
 
     // Occurs only if the generation is not aborted due to slash commands execution
-    await eventSource.emit(event_types.GENERATION_AFTER_COMMANDS, type, { automatic_trigger, force_name2, quiet_prompt, quietToLoud, skipWIAN, signal, quietImage }, dryRun);
+    await eventSource.emit(event_types.GENERATION_AFTER_COMMANDS, type, { automatic_trigger, force_name2, quiet_prompt, quietToLoud, skipWIAN, signal, quietImage, regenerate: isRegenerate }, dryRun);
 
     if (!dryRun) {
         // Ping server to make sure it is still alive
@@ -461,16 +504,44 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
     }
 
     let textareaText;
-    if (type !== 'quiet' && !dryRun && !depth) {
+    if (isRegenerate) {
+        // Direct Generate() callers bypass the menu-layer canRegenerate
+        // check — a second regenerate must never start while a generation is
+        // already running, or it would delete the tail out from under it.
+        if (state.is_send_press) {
+            console.warn('Regenerate skipped: a generation is already in flight');
+            return Promise.resolve();
+        }
+        // Not a composer send: the draft stays untouched (never read, never
+        // cleared), no user message is re-sent, and send_if_empty must not
+        // fire — the previous user message is already in the history.
         state.is_send_press = true;
+        textareaText = '';
+    } else if (type !== 'quiet' && !depth && (!dryRun || isPreview)) {
+        if (!isPreview) {
+            state.is_send_press = true;
+        }
         textareaText = getComposerValue();
-        clearComposerValue();
+        if (!isPreview) {
+            clearComposerValue();
+        }
     } else {
         textareaText = '';
     }
 
     if (!dryRun) {
         deactivateSendButtons();
+    }
+
+    let regenerateSnapshot = null;
+    if (isRegenerate && !dryRun) {
+        // Discard the current turn's generated tail (assistant reply, same-turn
+        // tool/pipeline cards, recovery rows) before the prompt is assembled —
+        // the old reply must not feed the new request. All early bail-outs
+        // above already ran, so the removal is only ever followed by a real
+        // generation. The snapshot restores the tail when the turn fails
+        // outright (not when the user clicks stop).
+        regenerateSnapshot = removeRegenerateTurnTail();
     }
 
     let { messageBias, promptBias } = getBiasStrings(textareaText, type);
@@ -484,16 +555,51 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
         'quiet',
     ];
     //for normal messages sent from user..
-    if ((textareaText != '' || (hasPendingFileAttachment() && !noAttachTypes.includes(type))) && !automatic_trigger && type !== 'quiet' && !dryRun && !depth) {
+    if ((textareaText != '' || (hasPendingFileAttachment() && !noAttachTypes.includes(type))) && !automatic_trigger && type !== 'quiet' && !dryRun && !depth && !isRegenerate) {
         // If user message contains no text other than bias - send as a system message
         if (messageBias && !removeMacros(textareaText)) {
             sendSystemMessage(state.system_message_types.GENERIC, ' ', { bias: messageBias });
         } else {
             await sendMessageAsUser(textareaText, messageBias);
         }
-    } else if (textareaText == '' && !automatic_trigger && !dryRun && [undefined, 'normal'].includes(type) && state.main_api == 'openai' && state.oai_settings.send_if_empty.trim().length > 0 && !depth) {
+    } else if (textareaText == '' && !automatic_trigger && !dryRun && !isRegenerate && [undefined, 'normal'].includes(type) && state.main_api == 'openai' && state.oai_settings.send_if_empty.trim().length > 0 && !depth) {
         // Use send_if_empty if set and the user message is empty. Only when sending messages normally
         await sendMessageAsUser(state.oai_settings.send_if_empty.trim(), messageBias);
+    }
+
+    // Preview-only mirror of the two send paths above: build the pending user
+    // message without writing chat state. Attachments are reported, never
+    // materialized (populateFileAttachment writes files to disk).
+    let previewPendingMessage = null;
+    if (isPreview) {
+        const wantsUserMessage = (textareaText != '' || hasPendingFileAttachment()) && !automatic_trigger && type !== 'quiet';
+        const wantsEmptyReplacement = !wantsUserMessage && textareaText == '' && !automatic_trigger && type === 'normal' && state.main_api == 'openai' && state.oai_settings.send_if_empty.trim().length > 0;
+        if (textareaText.trim().startsWith('/')) {
+            previewWarnings.push('slash-command');
+        }
+        if (hasPendingFileAttachment()) {
+            previewWarnings.push('pending-attachment');
+        }
+        if (wantsUserMessage) {
+            if (messageBias && !removeMacros(textareaText)) {
+                // Real send emits a bias-only system message; it never enters the prompt.
+                previewWarnings.push('bias-only-system');
+            } else {
+                previewPendingMessage = await buildUserMessage(textareaText, messageBias);
+            }
+        } else if (wantsEmptyReplacement) {
+            previewPendingMessage = await buildUserMessage(state.oai_settings.send_if_empty.trim(), messageBias);
+        }
+    }
+
+    // Preview is a chat-completion (openai) feature — bail before the legacy
+    // text-completion machinery (in-context markers, prompt combining) runs.
+    if (isPreview && state.main_api !== 'openai') {
+        return {
+            kind: 'prompt-preview-empty',
+            reason: 'unsupported-api',
+            warnings: previewWarnings,
+        };
     }
 
     let {
@@ -511,15 +617,32 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
     const depthPromptRole = getExtensionPromptRoleByName(state.characters[state.this_chid]?.data?.extensions?.depth_prompt?.role ?? state.depth_prompt_role_default);
     setExtensionPrompt(inject_ids.DEPTH_PROMPT, depthPromptText, state.extension_prompt_types.IN_CHAT, depthPromptDepth, false, depthPromptRole);
 
-    // First message in fresh 1-on-1 chat reacts to user/character settings changes
-    if (state.chat.length) {
-        state.chat[0].mes = substituteParams(state.chat[0].mes);
+    // First message in fresh 1-on-1 chat reacts to user/character settings changes.
+    // Preview works on a copy of the chat — the pending user message is appended
+    // exactly where sendMessageAsUser would have pushed it (end of history).
+    const chatForAssembly = isPreview
+        ? (previewPendingMessage ? [...state.chat, previewPendingMessage] : state.chat.slice())
+        : state.chat;
+    if (chatForAssembly.length) {
+        if (isPreview) {
+            chatForAssembly[0] = { ...chatForAssembly[0], mes: substituteParams(chatForAssembly[0].mes) };
+        } else {
+            state.chat[0].mes = substituteParams(state.chat[0].mes);
+        }
     }
 
     // Collect messages with usable content
     const canUseTools = state.ToolManager.isToolCallingSupported();
     const canPerformToolCalls = !dryRun && state.ToolManager.canPerformToolCalls(type) && depth < state.ToolManager.RECURSE_LIMIT;
-    let coreChat = state.chat.filter(x => !x.is_system || (canUseTools && Array.isArray(x.extra?.tool_invocations)));
+    let coreChat = chatForAssembly.filter(x => !x.is_system || (canUseTools && Array.isArray(x.extra?.tool_invocations)));
+
+    // Chat memory projection: turns covered by an active summary collapse
+    // into a single pseudo message in place — the canonical chat array stays
+    // untouched, World Info scanning sees the replaced text, and the pseudo
+    // items flow through the same regex/reasoning pipeline as real messages.
+    const chatMemoryProjection = applyChatMemoryToCoreChat(coreChat, { chat: chatForAssembly, dryRun });
+    coreChat = chatMemoryProjection.items;
+    const summarizedEntries = chatMemoryProjection.summarized;
 
     coreChat = await Promise.all(coreChat.map(async (/** @type {ChatMessage} */ chatItem, index) => {
         let message = chatItem.mes;
@@ -938,9 +1061,10 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
     finalPrompt = eventData.prompt;
 
     let generate_data;
+    let previewChatCompletion = null;
     switch (state.main_api) {
         case 'openai': {
-            let [prompt] = await prepareOpenAIMessages({
+            let [prompt, , chatCompletion] = await prepareOpenAIMessages({
                 name2: state.name2,
                 charDescription: description,
                 worldInfo: worldInfo,
@@ -950,9 +1074,10 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
                 quietPrompt: quiet_prompt,
                 quietImage: quietImage,
                 messages: oaiMessages,
-                pipelineStepTag: getPipelineTriggerTag(type),
-            }, dryRun);
+                pipelineStepTag: isPreview ? getPreviewPipelineTriggerTag(Number(preview?.round ?? 0)) : getPipelineTriggerTag(type),
+            }, dryRun, { squash: isPreview ? true : null, bookkeep: !isPreview });
             generate_data = { prompt: prompt };
+            previewChatCompletion = chatCompletion ?? null;
 
             if (!dryRun) {
                 setInContextMessages(state.openai_messages_count, type);
@@ -962,6 +1087,22 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
     }
 
     await eventSource.emit(event_types.GENERATE_AFTER_DATA, generate_data, dryRun);
+
+    if (isPreview) {
+        return await buildPreviewRequestResult({
+            type,
+            generateData: generate_data,
+            chatCompletion: previewChatCompletion,
+            round: Number(preview?.round ?? 0),
+            warnings: previewWarnings,
+            pendingMessage: previewPendingMessage,
+            summarized: summarizedEntries,
+            // The pending user message is the newest chatHistory entry;
+            // buildPreviewRequestResult resolves its identifier from the final
+            // assembled pool (depth injections can shift the numbering).
+            pendingEntryIdentifier: null,
+        });
+    }
 
     if (dryRun) {
         return Promise.resolve();
@@ -1402,13 +1543,26 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
      * @param {Error|object} exception Error or response JSON
      * @throws {Error|object} Re-throws the exception
      */
-    function onError(exception) {
+    async function onError(exception) {
         // if the response JSON was thrown, show the error message
         if (typeof exception?.error?.message === 'string') {
             toastr.error(exception.error.message, t`Text generation error`, { timeOut: 10000, extendedTimeOut: 20000 });
         }
 
         endPipelineRun();
+
+        // A failed regenerate restores the removed turn tail — losing a good
+        // reply to a provider hiccup is worse than keeping the old one. A user
+        // stop keeps the (possibly partial) new reply instead.
+        if (regenerateSnapshot && !isUserStoppedGeneration(exception)) {
+            const restored = await restoreRegenerateTurnTail(regenerateSnapshot);
+            if (restored) {
+                toastr.warning(t`Regeneration failed — the previous reply was restored.`, t`Regenerate`);
+            } else {
+                toastr.error(t`Regeneration failed — the previous reply could not be restored.`, t`Regenerate`);
+            }
+        }
+
         unblockGeneration(type);
         console.log(exception);
         state.streamingProcessor = null;
@@ -1416,6 +1570,118 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
     }
 }
 //MARK: Generate() ends
+
+/**
+ * Turns the assembled preview state into the final request body the send path
+ * would POST — minus the fetch. Pipeline shaping is applied explicitly (the
+ * CHAT_COMPLETION_SETTINGS_READY event is intentionally not emitted so
+ * settings-mutating listeners stay inert).
+ * @param {object} args
+ * @param {string} args.type Generation type
+ * @param {object} args.generateData {prompt: messages[]} assembled by prepareOpenAIMessages
+ * @param {object} args.chatCompletion Assembled ChatCompletion instance
+ * @param {number} args.round Pipeline round index to preview
+ * @param {string[]} args.warnings Collected preview warnings
+ * @param {object} args.pendingMessage Synthetic user message appended for the preview
+ * @param {string|null} args.pendingEntryIdentifier chatHistory identifier of the pending entry
+ * @param {object[]} [args.summarized] Turn-summary projection entries applied to this assembly
+ * @returns {Promise<object>} Serializable preview result for the inspector UI
+ */
+async function buildPreviewRequestResult({ type, generateData, chatCompletion, round, warnings, pendingMessage, pendingEntryIdentifier = null, summarized = [] }) {
+    const messages = generateData?.prompt;
+    if (!Array.isArray(messages)) {
+        return {
+            kind: 'prompt-preview-empty',
+            reason: state.main_api !== 'openai' ? 'unsupported-api' : 'no-active-character',
+            warnings,
+        };
+    }
+
+    const { generate_data: requestBody, stream } = await buildChatCompletionRequest({
+        type,
+        messages,
+        emitSettingsReady: false,
+    });
+    const pipeline = previewPipelineRequestShaping(requestBody, { round });
+    const responseTokens = Number(state.oai_settings?.openai_max_tokens) || 0;
+    const contextTokens = getMaxPromptTokens() + responseTokens;
+    if (chatCompletion?.error) {
+        warnings = [...warnings, chatCompletion.error?.name === 'TokenBudgetExceeded' ? 'budget-exceeded' : 'assembly-error'];
+    }
+
+    // The pending user message carries the highest chatHistory-N identifier —
+    // derived from the final assembled pool, which may be longer than the raw
+    // oaiMessages array once depth injections are merged in.
+    let maxHistoryIndex = 0;
+    for (const entry of chatCompletion?.getChatEntries?.() ?? []) {
+        const match = /^chatHistory-(\d+)$/.exec(String(entry?.identifier ?? ''));
+        if (match) {
+            maxHistoryIndex = Math.max(maxHistoryIndex, Number(match[1]));
+        }
+    }
+    const resolvedPendingIdentifier = pendingMessage && maxHistoryIndex > 0
+        ? `chatHistory-${maxHistoryIndex}`
+        : pendingEntryIdentifier;
+
+    return {
+        kind: 'prompt-preview',
+        type,
+        model: requestBody?.model ?? null,
+        stream,
+        request: requestBody,
+        entries: chatCompletion?.getChatEntries?.() ?? [],
+        dropped: chatCompletion?.getDroppedEntries?.() ?? [],
+        summarized: Array.isArray(summarized) ? summarized : [],
+        budget: chatCompletion ? {
+            context: contextTokens,
+            response: responseTokens,
+            remaining: chatCompletion.tokenBudget,
+            used: contextTokens - responseTokens - chatCompletion.tokenBudget,
+            totalTokens: chatCompletion.getTotalTokenCount(),
+        } : null,
+        pipeline,
+        warnings,
+        pendingMessage: pendingMessage ? {
+            name: pendingMessage.name ?? null,
+            mes: pendingMessage.mes ?? '',
+        } : null,
+        pendingEntryIdentifier: resolvedPendingIdentifier,
+        messagesInContext: messages.filter(x => !x?.tool_calls && ['user', 'assistant', 'tool'].includes(x?.role)).length,
+    };
+}
+
+/**
+ * Preview the request a normal generation would produce right now, without
+ * sending it and without mutating chat state. Runs the full assembly path of
+ * executeGenerationRequestInShell and stops before the fetch.
+ * @param {object} [options] Options
+ * @param {number} [options.round] Pipeline round index to preview (0 = first step)
+ * @returns {Promise<object>} Serializable preview result
+ */
+export async function previewNextGenerationRequest({ round = 0 } = {}) {
+    // extension_prompts is module state mutated during assembly (depth prompt,
+    // WI depth injections, quiet-prompt staging). Snapshot and restore so a
+    // preview cannot leak injection keys into the next real generation.
+    const extensionPromptSnapshot = { ...(state.extension_prompts ?? {}) };
+    try {
+        const envelope = createGenerationRequestEnvelope({
+            type: 'normal',
+            options: { preview: { round: Number(round) || 0 } },
+            dryRun: true,
+            mainApi: state.main_api,
+        });
+        return await executeGenerationRequestInShell(envelope);
+    } finally {
+        for (const key of Object.keys(state.extension_prompts ?? {})) {
+            if (!(key in extensionPromptSnapshot)) {
+                delete state.extension_prompts[key];
+            }
+        }
+        for (const [key, value] of Object.entries(extensionPromptSnapshot)) {
+            state.extension_prompts[key] = value;
+        }
+    }
+}
 
 export function updateEditArrowClasses() {
     if (!(state.this_edit_mes_id >= 0)) {

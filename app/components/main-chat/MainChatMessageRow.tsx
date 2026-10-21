@@ -235,6 +235,9 @@ function MessageActionShell({
                     <button type="button" title="Include message in prompts" className="mes_button mes_unhide fa-solid fa-eye-slash" data-i18n="[title]Include message in prompts;[aria-label]Include message in prompts" aria-label="Include message in prompts" tabIndex={0} onKeyDown={stopActivationKeyPropagation}>
                         <span className="mes_menu_label">{translate('Include message in prompts')}</span>
                     </button>
+                    <button type="button" title={message.pinned ? 'Unpin message' : 'Pin message (never summarized)'} className={`mes_button mes_pin fa-solid fa-thumbtack${message.pinned ? ' mes_pin_active' : ''}`} data-i18n="[title]Pin message (never summarized);[aria-label]Pin message (never summarized)" aria-label="Pin message (never summarized)" tabIndex={0} onKeyDown={stopActivationKeyPropagation}>
+                        <span className="mes_menu_label">{message.pinned ? translate('Unpin message') : translate('Pin message')}</span>
+                    </button>
                 </span>
                 <span className="mes_menu_group">
                     <button

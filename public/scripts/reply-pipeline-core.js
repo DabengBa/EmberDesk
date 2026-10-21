@@ -117,6 +117,98 @@ export function buildStepPrompt(step, index, total) {
 }
 
 /**
+ * Closing-round instruction: no tools, write the final reply from step results.
+ */
+export const PIPELINE_FALLBACK_PROMPT = '[Reply pipeline] All pipeline steps are complete. Write the final user-facing reply now, based on the step results above. Do not call any tools in this round.';
+
+/**
+ * Applies a pipeline step's request overrides (forced tool_choice, token cap,
+ * reasoning effort) onto a request body. Shared by the live CHAT_COMPLETION_SETTINGS_READY
+ * shaping and the prompt-inspector preview so both stay in lockstep.
+ *
+ * Does NOT push the step instruction message — callers control message
+ * mutation (the live path dedups via shapedMessageArrays).
+ *
+ * @param {object} data Request body (generate_data), mutated in place
+ * @param {object} step Runnable pipeline step
+ * @param {object} [options] Options
+ * @param {string} [options.enforceMode] Pipeline enforce mode ('forced' pins tool_choice)
+ * @param {*} [options.reasoningEffort] Pre-resolved reasoning effort; assigned
+ *        verbatim when the step declares one, so 'auto' resolves to undefined
+ *        and drops out of the serialized body exactly like the live path.
+ * @returns {object} The mutated request body
+ */
+export function applyStepRequestOverrides(data, step, { enforceMode = 'soft', reasoningEffort = undefined } = {}) {
+    if (!data || typeof data !== 'object' || !step) {
+        return data;
+    }
+    if (enforceMode === 'forced' && Array.isArray(data.tools)) {
+        data.tool_choice = { type: 'function', function: { name: step.tool } };
+    }
+    if (Array.isArray(data.tools)) {
+        // The round's tool surface follows the plan: only the step being
+        // driven is offered. Later steps are re-added when their round comes,
+        // and bindings outside the plan stay out of pipeline rounds entirely.
+        const narrowed = data.tools.filter(tool => tool?.function?.name === step.tool);
+        if (narrowed.length > 0) {
+            data.tools = narrowed;
+        }
+    }
+    if (step.maxTokens) {
+        if (Number.isFinite(Number(data.max_tokens))) {
+            data.max_tokens = step.maxTokens;
+        } else if (Number.isFinite(Number(data.max_completion_tokens))) {
+            data.max_completion_tokens = step.maxTokens;
+        }
+    }
+    if (step.reasoningEffort) {
+        data.reasoning_effort = reasoningEffort;
+    }
+    return data;
+}
+
+/**
+ * Applies the closing-round shape: strip tool wiring and append the fallback
+ * instruction. Caller controls message dedup.
+ * @param {object} data Request body, mutated in place
+ * @param {string} [fallbackPrompt] Instruction text
+ * @returns {object} The mutated request body
+ */
+export function applyFallbackRequestShape(data, fallbackPrompt = PIPELINE_FALLBACK_PROMPT) {
+    if (!data || typeof data !== 'object') {
+        return data;
+    }
+    delete data.tools;
+    delete data.tool_choice;
+    data.messages.push({ role: 'system', content: fallbackPrompt });
+    return data;
+}
+
+/**
+ * Active-run lookup injection. Prompt assembly (openai.js) must replay a
+ * card's tool invocations while its run is still in flight — the next round
+ * reads them back as step results — but flattens cards from finished or
+ * abandoned runs into plain messages. The runtime layer registers its
+ * runState reader here so this module stays import-free and openai.js never
+ * imports the runtime (which already imports openai.js — a cycle).
+ */
+let activePipelineRunIdProvider = null;
+
+/**
+ * @param {() => string|null} provider Returns the in-flight run id, or null
+ */
+export function setActivePipelineRunIdProvider(provider) {
+    activePipelineRunIdProvider = typeof provider === 'function' ? provider : null;
+}
+
+/**
+ * @returns {string|null} In-flight pipeline run id, or null when no run is active
+ */
+export function getActivePipelineRunId() {
+    return activePipelineRunIdProvider?.() ?? null;
+}
+
+/**
  * Finds the furthest pipeline step the just-finished invocations complete.
  *
  * Forward-progress semantics: a round may complete the current step, several

@@ -47,6 +47,7 @@ export interface MainChatMessageRecord {
     readonly editText: string;
     readonly lastInContext: boolean;
     readonly extraType: string;
+    readonly pinned: boolean;
     readonly timer: string;
     readonly timerTitle: string;
     readonly promptButtonVisible: boolean;
@@ -96,6 +97,17 @@ export interface MainChatScrollRestoreSnapshot {
     readonly wasNearBottom: boolean;
 }
 
+export interface MainChatTurnSummaryRecord {
+    readonly summaryId: string;
+    readonly turnKey: string;
+    readonly turnIndex: number;
+    readonly anchorMessageId: string;
+    readonly coveredMessageIds: readonly string[];
+    readonly text: string;
+    readonly stale: boolean;
+    readonly manual: boolean;
+}
+
 export interface MainChatWindowSnapshot {
     readonly visibleMessageIds: readonly string[];
     readonly anchorMessageId: string | null;
@@ -119,6 +131,7 @@ export interface MainChatSnapshot {
     readonly streaming: MainChatStreamingSnapshot;
     readonly slash: MainChatSlashSnapshot;
     readonly window: MainChatWindowSnapshot;
+    readonly turnSummaries: readonly MainChatTurnSummaryRecord[];
 }
 
 export type MainChatSnapshotInput = Partial<{
@@ -130,6 +143,7 @@ export type MainChatSnapshotInput = Partial<{
     streaming: Partial<MainChatStreamingSnapshot>;
     slash: Partial<MainChatSlashSnapshot>;
     window: MainChatWindowSnapshotInput;
+    turnSummaries: readonly unknown[];
 }>;
 
 export interface MainChatStoreState {
@@ -251,6 +265,35 @@ function normalizeStringList(value: unknown) {
     return value.filter((item): item is string => typeof item === 'string');
 }
 
+function normalizeTurnSummaries(value: unknown): MainChatTurnSummaryRecord[] {
+    if (!Array.isArray(value)) {
+        return [];
+    }
+
+    return value
+        .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object' && !Array.isArray(item))
+        .map((item): MainChatTurnSummaryRecord | null => {
+            const anchorMessageId = normalizeNullableString(item.anchorMessageId);
+            const summaryId = normalizeNullableString(item.summaryId);
+            const turnKey = normalizeNullableString(item.turnKey);
+            const coveredMessageIds = normalizeStringList(item.coveredMessageIds);
+            if (!anchorMessageId || !summaryId || !turnKey || coveredMessageIds.length === 0) {
+                return null;
+            }
+            return {
+                summaryId,
+                turnKey,
+                turnIndex: normalizeNonNegativeNumber(item.turnIndex),
+                anchorMessageId,
+                coveredMessageIds,
+                text: normalizeString(item.text),
+                stale: item.stale === true,
+                manual: item.manual === true,
+            };
+        })
+        .filter((item): item is MainChatTurnSummaryRecord => item !== null);
+}
+
 function normalizeSlashOptions(value: unknown) {
     if (!Array.isArray(value)) {
         return [];
@@ -300,6 +343,7 @@ function messageRecordsShallowEqual(a: MainChatMessageRecord, b: MainChatMessage
         && a.editText === b.editText
         && a.lastInContext === b.lastInContext
         && a.extraType === b.extraType
+        && a.pinned === b.pinned
         && a.timer === b.timer
         && a.timerTitle === b.timerTitle
         && a.promptButtonVisible === b.promptButtonVisible
@@ -361,6 +405,7 @@ function normalizeMessages(value: unknown, previous?: Readonly<Record<string, Ma
             editText: normalizeString(message.editText),
             lastInContext: message.lastInContext === true,
             extraType: normalizeString(message.extraType),
+            pinned: message.pinned === true,
             timer: normalizeString(message.timer),
             timerTitle: normalizeString(message.timerTitle),
             promptButtonVisible: message.promptButtonVisible === true,
@@ -396,6 +441,7 @@ function normalizeSnapshot(input: MainChatSnapshotInput = {}, previousMessages?:
     const slash = input.slash ?? {};
     const window = input.window ?? {};
     const scrollRestore = window.scrollRestore;
+    const turnSummaries = normalizeTurnSummaries(input.turnSummaries);
 
     return deepFreeze({
         chatId: normalizeNullableString(input.chatId),
@@ -450,6 +496,7 @@ function normalizeSnapshot(input: MainChatSnapshotInput = {}, previousMessages?:
                 })()
                 : null,
         },
+        turnSummaries,
     }) as MainChatSnapshot;
 }
 

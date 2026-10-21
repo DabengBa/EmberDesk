@@ -14,7 +14,7 @@ import storage from 'node-persist';
 import { applyCanonicalPragmas } from '../src/canonical-sqlite.js';
 import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
 import { write as writeCharacterCardPngData } from '../src/character-card-parser.js';
-import { DEFAULT_USER, SETTINGS_FILE, USER_DIRECTORY_TEMPLATE } from '../src/constants.js';
+import { DEFAULT_USER, USER_DIRECTORY_TEMPLATE } from '../src/constants.js';
 import { upsertCanonicalSettingsDocument } from '../src/endpoints/settings-store.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -88,7 +88,7 @@ const PNG_CRC_TABLE = (() => {
     }
     return table;
 })();
-const defaultSettingsPath = path.join(repoRoot, 'default', 'templates', SETTINGS_FILE);
+const defaultSettingsPath = path.join(repoRoot, 'default', 'templates', 'settings-defaults.json');
 const defaultSettings = JSON.parse(fs.readFileSync(defaultSettingsPath, 'utf8'));
 const USER_KEY_PREFIX = 'user:';
 
