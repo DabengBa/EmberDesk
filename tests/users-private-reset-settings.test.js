@@ -6,7 +6,7 @@ import { afterAll, afterEach, beforeEach, describe, expect, jest, test } from '@
 
 const checkForNewContentMock = jest.fn(async () => {});
 const defaultsPayload = JSON.parse(
-    fs.readFileSync(new URL('../default/templates/settings.json', import.meta.url), 'utf8'),
+    fs.readFileSync(new URL('../default/templates/settings-defaults.json', import.meta.url), 'utf8'),
 );
 
 jest.unstable_mockModule('node-persist', () => ({
@@ -22,7 +22,9 @@ jest.unstable_mockModule('node:crypto', async () => {
 
 jest.unstable_mockModule('../src/endpoints/content-manager.js', () => ({
     checkForNewContent: checkForNewContentMock,
-    getDefaultTemplateFile: (name) => (name === 'settings.json' ? structuredClone(defaultsPayload) : null),
+    getDefaultTemplateFile: (name) => (name === 'settings-defaults.json' ? structuredClone(defaultsPayload) : null),
+    getDefaultPresets: () => [],
+    getDefaultPresetFile: () => null,
 }));
 
 jest.unstable_mockModule('../src/users.js', () => ({
@@ -181,8 +183,10 @@ describe('reset-settings under canonical authority', () => {
         const doc = readDocument(directories);
         expect(doc.payload).toEqual(defaultsPayload);
         expect(doc.revision).toBe(2);
-        // The legacy file is gone and must NOT be re-seeded.
-        expect(fs.existsSync(path.join(directories.root, 'settings.json'))).toBe(false);
+        // The stray legacy file is fully inert: reset neither deletes nor
+        // re-seeds it — canonical reset touches only the document.
+        expect(fs.readFileSync(path.join(directories.root, 'settings.json'), 'utf8'))
+            .toBe(JSON.stringify({ custom: 'stale-file' }));
         expect(checkForNewContentMock).not.toHaveBeenCalled();
     });
 

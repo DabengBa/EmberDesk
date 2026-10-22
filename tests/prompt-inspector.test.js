@@ -87,8 +87,11 @@ describe('prompt inspector wiring (structure)', () => {
         expect(openai).toContain('getChatEntries()');
         expect(openai).toContain('setDroppedEntries(entries)');
         expect(openai).toContain('getDroppedEntries()');
-        // Wire format unchanged: getChat still returns plain messages.
-        expect(openai).toContain('prompt.identifier = `chatHistory-${messages.length - index}`');
+        // Wire format unchanged: getChat still returns plain messages. Turn
+        // summaries keep their own identifiers (single + grouped variants).
+        expect(openai).toContain('`chatHistory-${messages.length - index}`');
+        expect(openai).toContain('`chatSummary-turn-');
+        expect(openai).toContain('`chatSummary-turns-');
     });
 
     test('preview mode assembles the pending message without writing chat state', () => {

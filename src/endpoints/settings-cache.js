@@ -44,46 +44,6 @@ export async function readAndParseFromDirectoryAsync(directoryPath, fileExtensio
 }
 
 /**
- * Read preset files from a directory (async).
- * @param {string} directoryPath
- * @param {object} [options={}]
- * @returns {Promise<{ fileContents: string[], fileNames: string[] }>}
- */
-export async function readPresetsFromDirectoryAsync(directoryPath, options = {}) {
-    const {
-        sortFunction,
-        removeFileExtension = false,
-        fileExtension = '.json',
-    } = options;
-
-    const entries = await fs.promises.readdir(directoryPath);
-    const files = entries.sort(sortFunction).filter(x => path.parse(x).ext === fileExtension);
-
-    const fileContents = [];
-    const fileNames = [];
-
-    const results = await Promise.allSettled(
-        files.map(async item => {
-            const content = await fs.promises.readFile(path.join(directoryPath, item), 'utf8');
-            JSON.parse(content); // validate
-            return { content, name: removeFileExtension ? item.replace(/\.[^/.]+$/, '') : item };
-        }),
-    );
-
-    for (let i = 0; i < results.length; i++) {
-        const r = results[i];
-        if (r.status === 'fulfilled') {
-            fileContents.push(r.value.content);
-            fileNames.push(r.value.name);
-        } else {
-            console.warn(`${files[i]} is not a valid JSON`);
-        }
-    }
-
-    return { fileContents, fileNames };
-}
-
-/**
  * Read world names from the worlds directory (async).
  * @param {string} directoryPath
  * @returns {Promise<string[]>}

@@ -423,6 +423,29 @@ export const CANONICAL_SQLITE_MIGRATIONS = Object.freeze([
             WHERE resolved_at_ms IS NULL;
         `,
     }),
+    Object.freeze({
+        version: 13,
+        name: 'presets_authority',
+        sql: `
+            CREATE TABLE IF NOT EXISTS preset_documents (
+                api_id TEXT NOT NULL,
+                name TEXT NOT NULL,
+                payload_json TEXT NOT NULL,
+                revision INTEGER NOT NULL,
+                content_hash TEXT NOT NULL,
+                source TEXT NOT NULL DEFAULT 'user',
+                created_at_ms INTEGER NOT NULL,
+                updated_at_ms INTEGER NOT NULL,
+                PRIMARY KEY (api_id, name)
+            );
+
+            CREATE TABLE IF NOT EXISTS preset_migration_markers (
+                marker_key TEXT PRIMARY KEY,
+                source_hash TEXT NOT NULL DEFAULT '',
+                imported_at_ms INTEGER NOT NULL
+            );
+        `,
+    }),
 ]);
 
 export class CanonicalMigrationBlockedError extends Error {

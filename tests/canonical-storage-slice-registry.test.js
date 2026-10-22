@@ -95,9 +95,9 @@ afterEach(() => {
 describe('canonical storage slice registry', () => {
     test('registers all delivered canonical slices with required capabilities', () => {
         const registry = getDefaultCanonicalStorageSliceRegistry();
-        expect(listCanonicalStorageSliceKeys(registry)).toEqual(['characters', 'world_info', 'settings', 'secrets', 'managed_media', 'chats']);
+        expect(listCanonicalStorageSliceKeys(registry)).toEqual(['characters', 'world_info', 'settings', 'secrets', 'managed_media', 'chats', 'presets']);
 
-        for (const key of ['characters', 'world_info', 'settings', 'secrets', 'managed_media', 'chats']) {
+        for (const key of ['characters', 'world_info', 'settings', 'secrets', 'managed_media', 'chats', 'presets']) {
             const slice = registry.get(key);
             expect(slice.key).toBe(key);
             expect(typeof slice.flagKey).toBe('string');

@@ -4,10 +4,7 @@ import bytes from 'bytes';
 import { getConfigValue, tryParse } from '../util.js';
 import { getFileNameValidationFunction } from '../middleware/validateFileName.js';
 import { getDefaultTemplateFile } from './content-manager.js';
-import {
-    readPresetsFromDirectoryAsync,
-    getCachedPayload,
-} from './settings-cache.js';
+import { getCanonicalPresetsReadState } from './presets.js';
 import { getCanonicalWorldInfoReadState } from './worldinfo.js';
 import { listCanonicalWorldInfoBooks } from './world-info-store.js';
 import { canonicalSqliteManager } from '../canonical-sqlite.js';
@@ -401,18 +398,21 @@ router.post('/get', async (request, response) => {
         settings = JSON.stringify(parsedSettings);
     }
 
-    const dirs = request.user.directories;
-    const sortFn = () => (a, b) => a.localeCompare(b);
-
-    const presetOpts = (_dir) => ({ sortFunction: sortFn(), removeFileExtension: true });
-
     const [
-        { fileContents: openai_settings, fileNames: openai_setting_names },
+        presetsReadState,
         world_names,
     ] = await Promise.all([
-        getCachedPayload(dirs.openAI_Settings, () => readPresetsFromDirectoryAsync(dirs.openAI_Settings, presetOpts(dirs.openAI_Settings))),
+        getCanonicalPresetsReadState(request),
         listCanonicalWorldNamesOrEmpty(request),
     ]);
+    if (!presetsReadState.ok) {
+        return response.status(503).send({
+            error: 'canonical_storage_unavailable',
+            reason: presetsReadState.reason ?? 'canonical_storage_unavailable',
+        });
+    }
+    const openai_settings = presetsReadState.rows.map(row => row.payloadJson);
+    const openai_setting_names = presetsReadState.rows.map(row => row.name);
 
     response.send({
         settings,

@@ -12,6 +12,7 @@ import { SETTINGS_AUDIT_SCOPE } from './canonical-settings-shadow-import.js';
 import { CANONICAL_SECRETS_AUDIT_SCOPE } from './canonical-secrets-shadow-import.js';
 import { MANAGED_MEDIA_AUDIT_SCOPE } from './canonical-managed-media-shadow-import.js';
 import { CANONICAL_CHAT_AUDIT_SCOPE } from './canonical-chat-shadow-import.js';
+import { PRESETS_AUDIT_SCOPE } from './canonical-presets-shadow-import.js';
 import {
     buildCanonicalSliceRollbackBlockers,
     getCanonicalSliceFlagContractStatus,
@@ -228,6 +229,62 @@ function createSettingsSlice() {
     };
 }
 
+let warnedDeprecatedPresetsProjection = false;
+
+export function resetDeprecatedPresetsProjectionWarningForTests() {
+    warnedDeprecatedPresetsProjection = false;
+}
+
+function createPresetsSlice() {
+    const flags = createSliceFlagCapabilities({ flagKey: 'presets', defaultProjection: 'off' });
+    return {
+        key: 'presets',
+        ...flags,
+        getProjectionMode() {
+            const configured = getCanonicalSliceProjectionMode('presets', 'off');
+            if (configured !== 'off' && !warnedDeprecatedPresetsProjection) {
+                warnedDeprecatedPresetsProjection = true;
+                console.warn(
+                    'Ignoring features.storage.canonicalSqlite.slices.presets.projection:',
+                    'presets never had a file projection; canonical SQLite is authoritative.',
+                );
+            }
+            return 'off';
+        },
+        auditScope: PRESETS_AUDIT_SCOPE,
+        // Presets never had a projection era: no repair table, nothing open.
+        listOpenRepairs() {
+            return [];
+        },
+        getMigrationReadiness(db) {
+            return createSharedMigrationReadiness(db);
+        },
+        getRollbackBlockers({
+            db,
+            featureFlags = null,
+            phase = 'writes',
+            persistedAuditStatus = null,
+        } = {}) {
+            return buildCanonicalSliceRollbackBlockers({
+                db,
+                sliceKey: 'presets',
+                featureFlags: flags.getFeatureFlags(featureFlags),
+                phase,
+                persistedAuditStatus: persistedAuditStatus
+                    ?? getPersistedCanonicalAuditStatus(db, { scope: PRESETS_AUDIT_SCOPE }),
+                listOpenRepairs: () => [],
+                openRepairCode: 'open_preset_repairs',
+                includeChatStatsPhase: false,
+            });
+        },
+        getBackupManagedPaths() {
+            // Preset files are a one-shot migration input only; backups run
+            // through canonical payloads, so there are no managed paths.
+            return [];
+        },
+    };
+}
+
 function createSecretsSlice() {
     const flags = createSliceFlagCapabilities({ flagKey: 'secrets', defaultProjection: 'off' });
     return {
@@ -423,6 +480,7 @@ export function createCanonicalStorageSliceRegistry({ registerDefaults = false }
         register(createSecretsSlice());
         register(createManagedMediaSlice());
         register(createChatsSlice());
+        register(createPresetsSlice());
     }
 
     return registry;

@@ -714,7 +714,7 @@ describe('canonical sqlite operator helpers', () => {
         });
 
         expect(status.handle).toBe('alice');
-        expect(status.slices.map(slice => slice.key)).toEqual(['characters', 'world_info', 'settings', 'secrets', 'managed_media', 'chats']);
+        expect(status.slices.map(slice => slice.key)).toEqual(['characters', 'world_info', 'settings', 'secrets', 'managed_media', 'chats', 'presets']);
 
         const characters = status.slices.find(slice => slice.key === 'characters');
         const worldInfo = status.slices.find(slice => slice.key === 'world_info');

@@ -831,7 +831,6 @@ export function SettingsSurface({
                                         form={settingsForm}
                                         name="providers.fallbackProviderModel"
                                         label="后台模型"
-                                        description="生成失败重试与后台任务（如会话摘要整理）共用的模型；留空则使用主模型。"
                                         placeholder="gpt-4.1-mini"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}

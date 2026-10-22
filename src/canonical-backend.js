@@ -27,6 +27,10 @@ import {
     auditCanonicalChatShadowImport,
     runCanonicalChatShadowImport,
 } from './canonical-chat-shadow-import.js';
+import {
+    auditCanonicalPresetsShadowImport,
+    runCanonicalPresetsShadowImport,
+} from './canonical-presets-shadow-import.js';
 import { getCanonicalStorageSlice } from './canonical-storage-slice-registry.js';
 import { buildCharacterFileSnapshotRow } from './endpoints/character-file-snapshot.js';
 import { parse as parseCharacterCard } from './character-card-parser.js';
@@ -87,6 +91,10 @@ const SLICE_RUNNERS = {
     chats: {
         runImport: runCanonicalChatShadowImport,
         runAudit: auditCanonicalChatShadowImport,
+    },
+    presets: {
+        runImport: runCanonicalPresetsShadowImport,
+        runAudit: auditCanonicalPresetsShadowImport,
     },
 };
 

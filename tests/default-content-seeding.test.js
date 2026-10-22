@@ -14,6 +14,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 
 const ORIGINAL_DATA_ROOT = globalThis.DATA_ROOT;
 
@@ -81,7 +82,21 @@ describe('default content seeding', () => {
         expect(fs.existsSync(path.join(directories.characters, 'default_Seraphina.png'))).toBe(true);
         expect(fs.existsSync(path.join(directories.worlds, 'Eldoria.json'))).toBe(true);
         expect(fs.existsSync(path.join(directories.avatars, 'user-default.png'))).toBe(true);
-        expect(fs.existsSync(path.join(directories.openAI_Settings, 'Default.json'))).toBe(true);
+        // openai_preset seeds into canonical preset_documents, never as a file.
+        expect(fs.existsSync(path.join(directories.openAI_Settings, 'Default.json'))).toBe(false);
+        const seededDb = new DatabaseSync(path.join(directories.storage, 'emberdesk.sqlite'));
+        try {
+            const row = seededDb.prepare(
+                'SELECT payload_json, source FROM preset_documents WHERE api_id = ? AND name = ?',
+            ).get('openai', 'Default');
+            expect(row).toBeTruthy();
+            expect(row.source).toBe('seed');
+            expect(JSON.parse(String(row.payload_json))).toEqual(
+                JSON.parse(fs.readFileSync(new URL('../default/content/presets/openai/Default.json', import.meta.url), 'utf8')),
+            );
+        } finally {
+            seededDb.close();
+        }
 
         // Retired-type target directories are not part of the template and receive nothing.
         for (const key of ['koboldAI_Settings', 'novelAI_Settings', 'movingUI', 'quickreplies', 'comfyWorkflows']) {

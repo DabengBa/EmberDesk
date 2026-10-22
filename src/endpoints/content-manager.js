@@ -13,6 +13,10 @@ import { serverDirectory } from '../server-directory.js';
 import { Jimp, JimpMime } from '../jimp.js';
 import { DEFAULT_AVATAR_PATH } from '../constants.js';
 import { invalidateDirectory } from './settings-cache.js';
+import { canonicalSqliteManager } from '../canonical-sqlite.js';
+import { runCanonicalMigrations } from '../canonical-sqlite-migrations.js';
+import { getCanonicalStorageSlice } from '../canonical-storage-slice-registry.js';
+import { ensureCanonicalPreset, PRESETS_OPENAI_API_ID } from './presets-store.js';
 import {
     classifyExternalContentId,
     classifyExternalContentUrl,
@@ -212,17 +216,89 @@ function seedContent(contentIndex, contentLogPath, resolveTarget, forceCategorie
  * @param {string[]} forceCategories List of categories to force check (even if content check is skipped)
  * @returns {Promise<boolean>} Whether any content was added
  */
+/**
+ * Seeds `openai_preset` content items into canonical `preset_documents`.
+ * Preserves the file-seeding contract: content.log marks the item consumed so
+ * a preset the user deleted is not resurrected on the next content check, and
+ * `ensureCanonicalPreset` only inserts when the name is absent.
+ * @returns {boolean} Whether any preset was seeded
+ */
+function seedCanonicalPresetsForUser(contentIndex, contentLogPath, directories, forceCategories) {
+    const presetItems = contentIndex.filter(item => item.type === CONTENT_TYPES.OPENAI_PRESET);
+    if (presetItems.length === 0) {
+        return false;
+    }
+
+    const slice = getCanonicalStorageSlice('presets');
+    const featureFlags = slice.getFeatureFlags();
+    if (!featureFlags.enabled) {
+        console.warn('Skipping preset content seeding: canonical storage is disabled');
+        return false;
+    }
+
+    const handle = path.basename(path.resolve(directories.root));
+    const db = canonicalSqliteManager.open({
+        handle,
+        directories,
+        featureFlags: { enabled: true, strict: !!featureFlags.strict },
+    });
+    if (!db) {
+        console.warn('Skipping preset content seeding: canonical storage is unavailable');
+        return false;
+    }
+    if (!runCanonicalMigrations(db, { strict: !!featureFlags.strict }).ok) {
+        console.warn('Skipping preset content seeding: canonical migrations are blocked');
+        return false;
+    }
+
+    const contentLog = getContentLog(contentLogPath);
+    let anyAdded = false;
+    for (const contentItem of presetItems) {
+        if (contentLog.includes(contentItem.filename) && !forceCategories?.includes(contentItem.type)) {
+            continue;
+        }
+        const contentPath = path.join(contentItem.folder, contentItem.filename);
+        if (!fs.existsSync(contentPath)) {
+            console.warn(`Content file ${contentItem.filename} is missing`);
+            continue;
+        }
+        let payload;
+        try {
+            payload = JSON.parse(fs.readFileSync(contentPath, 'utf8'));
+        } catch {
+            console.warn(`Content file ${contentItem.filename} is not valid JSON`);
+            continue;
+        }
+        const name = path.parse(contentItem.filename).name;
+        const result = ensureCanonicalPreset(db, {
+            apiId: PRESETS_OPENAI_API_ID,
+            name,
+            payload,
+            source: 'seed',
+        });
+        contentLog.push(contentItem.filename);
+        if (result.inserted) {
+            console.info(`Content file ${contentItem.filename} seeded into canonical presets`);
+            anyAdded = true;
+        }
+    }
+    writeFileAtomicSync(contentLogPath, contentLog.join('\n'));
+    return anyAdded;
+}
+
 async function seedContentForUser(contentIndex, directories, forceCategories) {
     if (!fs.existsSync(directories.root)) {
         fs.mkdirSync(directories.root, { recursive: true });
     }
 
     const contentLogPath = path.join(directories.root, 'content.log');
-    const { anyContentAdded, affectedTargets } = seedContent(contentIndex, contentLogPath, (type) => getUserTargetByType(type, directories), forceCategories);
+    const fileItems = contentIndex.filter(item => item.type !== CONTENT_TYPES.OPENAI_PRESET);
+    const { anyContentAdded, affectedTargets } = seedContent(fileItems, contentLogPath, (type) => getUserTargetByType(type, directories), forceCategories);
+    const anyPresetsAdded = seedCanonicalPresetsForUser(contentIndex, contentLogPath, directories, forceCategories);
     for (const dir of affectedTargets) {
         invalidateDirectory(dir);
     }
-    return anyContentAdded;
+    return anyContentAdded || anyPresetsAdded;
 }
 
 /**
@@ -361,8 +437,8 @@ export function getUserTargetByType(type, directories) {
             return directories.worlds;
         case CONTENT_TYPES.AVATAR:
             return directories.avatars;
-        case CONTENT_TYPES.OPENAI_PRESET:
-            return directories.openAI_Settings;
+        // openai_preset has no file target: presets seed into canonical
+        // preset_documents (see seedCanonicalPresetsForUser).
         default:
             return null;
     }

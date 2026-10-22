@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { sync as writeFileAtomicSync } from 'write-file-atomic';
+import sanitize from 'sanitize-filename';
 
 import { write as writeCharacterCard } from './character-card-parser.js';
 import { listImportLedgerEntries, recordImportLedgerEntry } from './canonical-import-ledger.js';
@@ -12,6 +13,7 @@ import { listCanonicalChatSessions } from './endpoints/canonical-chat-store.js';
 import { getCanonicalManagedMediaReference, listCanonicalManagedMediaReferences } from './endpoints/canonical-managed-media-store.js';
 import { getCanonicalSecretsProjection } from './canonical-secrets-shadow-import.js';
 import { getCanonicalSettingsDocument } from './endpoints/settings-store.js';
+import { listCanonicalPresets } from './endpoints/presets-store.js';
 import { listCanonicalWorldInfoBookRows } from './endpoints/world-info-store.js';
 
 const DEFAULT_AVATAR_FILE = fileURLToPath(new URL('../public/img/ai4.png', import.meta.url));
@@ -166,6 +168,23 @@ function exportSettingsSlice(db, directories, handle, nowMs) {
     }
 }
 
+function exportPresetsSlice(db, directories, nowMs) {
+    // Materialize under the historical `Open AI Settings/` layout so exports
+    // round-trip into file-era builds; at runtime nothing reads that directory.
+    const results = [];
+    for (const preset of listCanonicalPresets(db)) {
+        const target = path.join(directories.openAI_Settings, `${sanitize(preset.name)}.json`);
+        try {
+            writeExportFile(target, preset.payloadJson);
+            recordExport(db, { sliceKey: 'presets', root: directories.root, absolutePath: target, contents: preset.payloadJson, nowMs });
+            results.push({ status: 'exported', path: target, name: preset.name, revision: preset.revision });
+        } catch (error) {
+            results.push({ status: 'error', name: preset.name, error: String(error?.message ?? error) });
+        }
+    }
+    return results;
+}
+
 function exportSecretsSlice(db, directories, nowMs) {
     const projection = getCanonicalSecretsProjection(db);
     const target = path.join(directories.root, 'secrets.json');
@@ -239,6 +258,7 @@ const SLICE_EXPORTERS = {
     secrets: exportSecretsSlice,
     chats: exportChatsSlice,
     managed_media: exportManagedMediaSlice,
+    presets: exportPresetsSlice,
 };
 
 /**

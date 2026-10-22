@@ -20,7 +20,7 @@ import {
     invalidateCanonicalAuditStatus,
 } from '../src/canonical-sqlite-shadow-import.js';
 import { SETTINGS_AUDIT_SCOPE } from '../src/canonical-settings-shadow-import.js';
-import { SETTINGS_FILE } from '../src/constants.js';
+
 
 const roots = [];
 const configRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-canonical-backend-config-'));
@@ -63,7 +63,7 @@ function createDirectories(root) {
 }
 
 function writeSettingsFile(directories, payload) {
-    fs.writeFileSync(path.join(directories.root, SETTINGS_FILE), JSON.stringify(payload), 'utf8');
+    fs.writeFileSync(path.join(directories.root, 'settings.json'), JSON.stringify(payload), 'utf8');
 }
 
 beforeEach(() => {
@@ -233,43 +233,41 @@ describe('lazy slice backend initialization', () => {
         expect(retry.ok).toBe(true);
     });
 
-    test('shadow-imports the settings file on first touch when the audit is missing', async () => {
+    test('leaves a stray settings file inert on first touch when the audit is missing', async () => {
         const root = makeRoot();
         const directories = createDirectories(root);
         writeSettingsFile(directories, { firstRun: true, marker: 'file' });
 
         const init = await ensureCanonicalSliceBackend('settings', directories, 'alice');
 
+        // settings.json has no import surface: init runs schema-only, the file
+        // is never consumed, and no document materializes from it.
         expect(init.ok).toBe(true);
         expect(init.auditResult.blocking).toBe(false);
-        expect(getCanonicalSettingsDocument(init.db, { userId: 'alice' }).payload).toEqual({
-            firstRun: true,
-            marker: 'file',
-        });
+        expect(getCanonicalSettingsDocument(init.db, { userId: 'alice' })).toBeNull();
         expect(getPersistedCanonicalAuditStatus(init.db, { scope: SETTINGS_AUDIT_SCOPE }).blocking).toBe(false);
     });
 
-    test('does not re-import when a completed audit already exists', async () => {
+    test('never imports a settings file even when a completed audit exists', async () => {
         const root = makeRoot();
         const directories = createDirectories(root);
         writeSettingsFile(directories, { firstRun: true, marker: 'canonical' });
         const first = await ensureCanonicalSliceBackend('settings', directories, 'alice');
         expect(first.ok).toBe(true);
+        expect(getCanonicalSettingsDocument(first.db, { userId: 'alice' })).toBeNull();
 
-        // Out-of-band file change after a clean audit must not win over the DB.
+        // Out-of-band file change after a clean audit is inert — and so is the
+        // pre-existing file the audit already ignored.
         writeSettingsFile(directories, { firstRun: true, marker: 'external' });
         resetCanonicalBackendsForTests();
         const second = await ensureCanonicalSliceBackend('settings', directories, 'alice');
 
         expect(second.ok).toBe(true);
         expect(second.importResult).toBeUndefined();
-        expect(getCanonicalSettingsDocument(second.db, { userId: 'alice' }).payload).toEqual({
-            firstRun: true,
-            marker: 'canonical',
-        });
+        expect(getCanonicalSettingsDocument(second.db, { userId: 'alice' })).toBeNull();
     });
 
-    test('re-imports when a file-side write marked the audit stale', async () => {
+    test('keeps a settings file inert even when the audit is marked stale', async () => {
         const root = makeRoot();
         const directories = createDirectories(root);
         writeSettingsFile(directories, { firstRun: true, marker: 'v1' });
@@ -286,11 +284,10 @@ describe('lazy slice backend initialization', () => {
         resetCanonicalBackendsForTests();
         const second = await ensureCanonicalSliceBackend('settings', directories, 'alice');
 
+        // The stale marker re-runs the import pass, but there is no file
+        // surface to consume — the stray file still cannot overwrite canonical.
         expect(second.ok).toBe(true);
-        expect(getCanonicalSettingsDocument(second.db, { userId: 'alice' }).payload).toEqual({
-            firstRun: true,
-            marker: 'v2',
-        });
+        expect(getCanonicalSettingsDocument(second.db, { userId: 'alice' })).toBeNull();
     });
 
     test('re-audits without re-importing when a projection failure marked the DB ahead', async () => {
@@ -302,11 +299,11 @@ describe('lazy slice backend initialization', () => {
         const first = await ensureCanonicalSliceBackend('settings', directories, 'alice');
         expect(first.ok).toBe(true);
 
-        // DB moved ahead of the (stale) file projection.
+        // DB moved ahead of the (stale, never-imported) file.
         upsertCanonicalSettingsDocument(first.db, {
             userId: 'alice',
             payload: { firstRun: true, marker: 'canonical-v2' },
-            expectedRevision: 1,
+            expectedRevision: 0,
         });
         invalidateCanonicalAuditStatus(first.db, {
             scope: SETTINGS_AUDIT_SCOPE,
@@ -321,7 +318,7 @@ describe('lazy slice backend initialization', () => {
         // The committed DB revision survives; the stale file is not re-imported.
         const doc = getCanonicalSettingsDocument(second.db, { userId: 'alice' });
         expect(doc.payload).toEqual({ firstRun: true, marker: 'canonical-v2' });
-        expect(doc.revision).toBe(2);
+        expect(doc.revision).toBe(1);
         // File-side drift is suppressed (projection removed), so the fresh
         // audit is non-blocking even though the file diverges from the DB.
         expect(getPersistedCanonicalAuditStatus(second.db, { scope: SETTINGS_AUDIT_SCOPE }).blocking).toBe(false);

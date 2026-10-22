@@ -1089,10 +1089,11 @@ describe('canonical settings snapshots and rollback', () => {
             featureFlags: { enabled: true, strict: false },
         });
         // Simulate a pre-upgrade database: an open projection repair left over
-        // from the file-projection era.
+        // from the file-projection era. Later migrations (v12+) are held back so
+        // the upgrade pass below is what resolves the stale row.
         runCanonicalMigrations(db, {
             nowMs: 1000,
-            migrations: CANONICAL_SQLITE_MIGRATIONS.filter(m => m.name !== 'resolve_stale_settings_projection_repairs'),
+            migrations: CANONICAL_SQLITE_MIGRATIONS.filter(m => m.version <= 11),
         });
         recordSettingsProjectionRepair(db, {
             repairKey: 'settings:alice:projection',

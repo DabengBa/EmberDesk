@@ -219,6 +219,13 @@ describe('settings React route flag', () => {
             'oai_settings.openai_model',
             'oai_settings.custom_url',
             'oai_settings.fallback_provider_model',
+            // Chat-memory (conversation summarization) settings section.
+            'oai_settings.chat_memory_enabled',
+            'oai_settings.chat_memory_keep_turns',
+            'oai_settings.chat_memory_role',
+            'oai_settings.chat_memory_prompt',
+            'oai_settings.chat_memory_wrap',
+            'oai_settings.chat_memory_max_tokens',
             // Frontend Frames fields merged in from the retired user-settings drawer.
             'power_user.frontend_frames.enabled',
             'power_user.frontend_frames.depth',
@@ -228,7 +235,7 @@ describe('settings React route flag', () => {
             'power_user.frontend_frames.use_blob_url',
             'power_user.frontend_frames.allow_streaming',
         ]));
-        expect(helperModule.settingsCoverage.reactOwned.providers).toHaveLength(10);
+        expect(helperModule.settingsCoverage.reactOwned.providers).toHaveLength(16);
         // The interface tab is retired; UI keys are stripped from saved payloads.
         expect(helperModule.settingsCoverage.reactOwned.userInterface).toBeUndefined();
         // The advanced tab is retired entirely; no react-owned advanced paths.
