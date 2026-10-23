@@ -180,6 +180,7 @@ import { registerPromptManagerMigration } from './scripts/PromptManager.js';
 import { normalizeReplyPipeline, pipelineTriggerTag } from './scripts/reply-pipeline-core.js';
 import { endPipelineRun } from './scripts/reply-pipeline.js';
 import { normalizeToolBindings } from './scripts/tool-bindings-core.js';
+import { syncPipelineToolBindings } from './scripts/tool-bindings.js';
 import { getRegexedString, regex_placement } from './scripts/extensions/regex/engine.js';
 import { FILTER_STATES, FILTER_TYPES, FilterHelper, isFilterState } from './scripts/filters.js';
 import { initLocales, t, translate } from './scripts/i18n.js';
@@ -9979,6 +9980,7 @@ function getPromptPanelBridge() {
                 order: stabilizeOrder(getOrderList().map(entry => ({ identifier: entry.identifier, enabled: Boolean(entry.enabled) }))),
                 tokenCounts: { ...tokenCountOverrides },
                 presetDirty: isOpenAIPresetDirty(),
+                presetName: oai_settings.preset_settings_openai,
                 pipelineTriggerTags: getPipelineTriggerTags(),
                 pipeline: {
                     enabled: Boolean(oai_settings?.reply_pipeline?.enabled),
@@ -10053,6 +10055,7 @@ function getPromptPanelBridge() {
         },
         setPipelineEnabled(enabled) {
             ensurePipeline().enabled = Boolean(enabled);
+            if (enabled) syncPipelineToolBindings(ensurePipeline().steps.map(step => step.tool), { activate: true });
             persist();
         },
         addPipelineStep() {
@@ -10080,6 +10083,17 @@ function getPromptPanelBridge() {
             if (patch && Object.prototype.hasOwnProperty.call(patch, 'prompt')) {
                 step.prompt = String(patch.prompt ?? '');
             }
+            persist();
+        },
+        commitPipelineStepTool(index, name, expected) {
+            const current = getPipelineStepRows()[index];
+            if (!expected || expected.presetName !== oai_settings.preset_settings_openai
+                || current?.id !== expected.id || current?.tool !== expected.tool) return;
+            const pipeline = ensurePipeline();
+            if (!pipeline.steps[index]) return;
+            pipeline.steps[index].tool = String(name ?? '').trim();
+            syncPipelineFinal(pipeline);
+            syncPipelineToolBindings([pipeline.steps[index].tool], { activate: true });
             persist();
         },
         deletePipelineStep(index) {

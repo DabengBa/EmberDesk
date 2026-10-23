@@ -35,6 +35,7 @@ export interface PromptPanelState {
     order: PromptPanelOrderEntry[];
     tokenCounts: Record<string, number>;
     presetDirty: boolean;
+    presetName?: string;
     /**
      * Trigger tags for the runnable reply-pipeline steps of the active preset
      * (e.g. 'pipeline:review'). Rendered as extra checkboxes in the trigger row.
@@ -57,6 +58,7 @@ export interface PromptPanelBridge {
     setPipelineEnabled(enabled: boolean): void;
     addPipelineStep(): void;
     updatePipelineStep(index: number, patch: Partial<PromptPanelPipelineStep>): void;
+    commitPipelineStepTool(index: number, name: string, expected: { presetName?: string; id: string; tool: string }): void;
     deletePipelineStep(index: number): void;
     movePipelineStep(index: number, targetIndex: number): void;
     /**
@@ -609,9 +611,17 @@ export function PromptManagerList({ bridge }: { bridge: PromptPanelBridge }) {
                                                 className="text_pole prompt-panel-pipeline-tool"
                                                 list="prompt-panel-pipeline-tools"
                                                 placeholder="该轮必须调用的工具绑定名"
-                                                key={`${step.id}:tool`}
+                                                key={JSON.stringify([state.presetName, index, step.id, step.tool])}
                                                 defaultValue={step.tool}
-                                                onChange={event => bridge.updatePipelineStep(index, { tool: event.target.value })}
+                                                onBlur={event => bridge.commitPipelineStepTool(index, event.currentTarget.value, {
+                                                    presetName: state.presetName, id: step.id, tool: step.tool,
+                                                })}
+                                                onKeyDown={event => {
+                                                    if (event.key === 'Enter' && !event.nativeEvent.isComposing) {
+                                                        event.preventDefault();
+                                                        event.currentTarget.blur();
+                                                    }
+                                                }}
                                             />
                                         </div>
                                         <div className="prompt-panel-field">
