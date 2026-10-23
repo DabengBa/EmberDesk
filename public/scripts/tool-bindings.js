@@ -20,6 +20,7 @@ import { ToolManager } from './tool-calling.js';
 import {
     createToolAction,
     createToolFormatMessage,
+    ensurePipelineToolBindings,
     isValidToolName,
     normalizeToolBindings,
     sanitizeToolParameters,
@@ -56,6 +57,9 @@ export function reloadUserToolBindings() {
         if (!binding.enabled) {
             continue;
         }
+        if (ToolManager.tools.some(tool => tool.toFunctionOpenAI().function.name === binding.name)) {
+            continue;
+        }
         ToolManager.registerFunctionTool({
             name: binding.name,
             displayName: binding.displayName || binding.name,
@@ -76,9 +80,20 @@ function getBindingsStore() {
     if (!Array.isArray(feature_settings.tool_bindings)) {
         feature_settings.tool_bindings = [];
     }
+
     return feature_settings.tool_bindings;
 }
 
+/** Synchronize committed step names with persistent bindings and the live registry. */
+export function syncPipelineToolBindings(names, { activate = false } = {}) {
+    const changed = ensurePipelineToolBindings(getBindingsStore(), names, {
+        activate,
+        registeredNames: ToolManager.tools.map(tool => tool.toFunctionOpenAI().function.name).filter(name => !ownedToolNames.has(name)),
+    });
+    if (changed) saveSettingsDebounced();
+    reloadUserToolBindings();
+    renderToolBindingsList();
+}
 async function saveBinding(binding) {
     const store = getBindingsStore();
     const index = store.findIndex(entry => entry?.id === binding.id);

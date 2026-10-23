@@ -25,6 +25,7 @@ import {
     setActivePipelineRunIdProvider,
 } from './reply-pipeline-core.js';
 import { normalizeToolBindings } from './tool-bindings-core.js';
+import { syncPipelineToolBindings } from './tool-bindings.js';
 
 const FALLBACK_PROMPT = PIPELINE_FALLBACK_PROMPT;
 
@@ -346,6 +347,14 @@ export function initReplyPipeline() {
         return;
     }
     initialized = true;
+
+    const repairBindings = () => {
+        const pipeline = normalizeReplyPipeline(oai_settings?.reply_pipeline);
+        if (pipeline.enabled) syncPipelineToolBindings(pipeline.steps.map(step => step.tool));
+    };
+    eventSource.on(event_types.SETTINGS_LOADED, repairBindings);
+    eventSource.on(event_types.OAI_PRESET_CHANGED_AFTER, repairBindings);
+    repairBindings();
 
     eventSource.on(event_types.GENERATION_STARTED, (type, options, dryRun) => {
         if (dryRun || type !== 'normal') {

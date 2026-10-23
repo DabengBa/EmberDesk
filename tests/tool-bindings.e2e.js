@@ -620,6 +620,104 @@ test.describe('tool bindings', () => {
 });
 
 test.describe('reply pipeline step editor', () => {
+    test('actual preset chooser refreshes same-id tool drafts without stale blur writes', async ({ page }) => {
+        await testSetup.awaitST({ page });
+        await expect(page.locator('html')).toHaveAttribute('data-reply-pipeline-init', 'true', { timeout: 15_000 });
+        await page.evaluate(async () => {
+            const { saveOpenAIPreset, applyOpenAIPreset, oai_settings } = await import('/scripts/openai.js');
+            for (const [name, tool] of [['AutoBind A', 'preset_alpha'], ['AutoBind B', 'preset_beta']]) {
+                await saveOpenAIPreset(name, { ...oai_settings, reply_pipeline: {
+                    enabled: true, steps: [{ tool, prompt: 'Reply' }], final: tool,
+                } }, false);
+            }
+            applyOpenAIPreset('AutoBind A');
+        });
+        const chooser = page.locator('#settings_preset_openai');
+        const row = page.locator('.prompt-panel-pipeline .prompt-panel-item').first();
+        await expect(row.locator('.prompt-panel-item-name-text')).toHaveText('preset_alpha');
+        const input = row.locator('.prompt-panel-pipeline-tool');
+        if (!await input.isVisible()) await row.locator('.prompt-panel-item-name').click();
+        await input.fill('uncommitted_alpha');
+        const previous = await page.evaluate(() => window.__emberDeskPromptPanelBridge.getState());
+        // A programmatic chooser action dispatches the real change handler
+        // without blurring the focused draft first.
+        await chooser.selectOption({ label: 'AutoBind B' }, { force: true });
+        await expect.poll(async () => (await row.locator('.prompt-panel-item-name-text').textContent()) === 'preset_beta' || await page.locator('.popup-button-cancel').isVisible()).toBe(true);
+        if (await page.locator('.popup-button-cancel').isVisible()) await page.locator('.popup-button-cancel').click();
+        await expect(row.locator('.prompt-panel-item-name-text')).toHaveText('preset_beta');
+        await expect(input).toHaveValue('preset_beta');
+        await page.evaluate(previous => {
+            const bridge = window.__emberDeskPromptPanelBridge;
+            const current = bridge.getState();
+            // Late commits must not write across preset, row identity, or name changes.
+            for (const expected of [
+                { presetName: previous.presetName, ...previous.pipeline.steps[0] },
+                { presetName: current.presetName, ...current.pipeline.steps[0], id: 'removed-step' },
+                { presetName: current.presetName, ...current.pipeline.steps[0], tool: 'previous-name' },
+            ]) bridge.commitPipelineStepTool(0, 'stale_write', expected);
+        }, previous);
+        await expect(input).toHaveValue('preset_beta');
+        await input.focus();
+        await input.press('Tab');
+        expect(await page.evaluate(() => window.SillyTavern.getContext().chatCompletionSettings.reply_pipeline.steps[0].tool)).toBe('preset_beta');
+        await input.fill('');
+        await input.pressSequentially('beta_edited');
+        expect(await page.evaluate(() => window.SillyTavern.getContext().featureSettings.tool_bindings.some(binding => binding.name.startsWith('beta_')))).toBe(false);
+        await input.press('Enter');
+        await expect(row.locator('.prompt-panel-item-name-text')).toHaveText('beta_edited');
+    });
+
+    test('auto binding commits once and repairs preset apply and cold reload', async ({ page }) => {
+        page.on('pageerror', error => console.error('Pipeline browser error:', error.message));
+        await testSetup.awaitST({ page });
+        await expect(page.locator('html')).toHaveAttribute('data-reply-pipeline-init', 'true', { timeout: 15_000 });
+        await page.evaluate(() => {
+            const context = window.SillyTavern.getContext();
+            context.featureSettings.tool_bindings = [];
+            context.chatCompletionSettings.reply_pipeline = { enabled: true, steps: [] };
+            window.__emberDeskPromptPanelBridge.addPipelineStep();
+        });
+        const input = page.locator('.prompt-panel-pipeline-tool');
+        await input.pressSequentially('auto_reply');
+        expect(await page.evaluate(() => window.SillyTavern.getContext().featureSettings.tool_bindings)).toEqual([]);
+        await input.press('Enter');
+        const inspect = () => page.evaluate(() => {
+            const context = window.SillyTavern.getContext();
+            return { names: context.featureSettings.tool_bindings.map(binding => binding.name),
+                registry: context.ToolManager.tools.map(tool => tool.toFunctionOpenAI().function.name) };
+        });
+        expect(await inspect()).toMatchObject({ names: ['auto_reply'], registry: expect.arrayContaining(['auto_reply']) });
+        const collision = await page.evaluate(async () => {
+            const context = window.SillyTavern.getContext();
+            context.ToolManager.registerFunctionTool({ name: 'code_only', description: 'original code tool',
+                parameters: { type: 'object', properties: {} }, action: async () => 'original' });
+            const original = context.ToolManager.tools.find(tool => tool.toFunctionOpenAI().function.name === 'code_only');
+            const { syncPipelineToolBindings } = await import('/scripts/tool-bindings.js');
+            syncPipelineToolBindings(['code_only'], { activate: true });
+            return { preserved: context.ToolManager.tools.includes(original),
+                placeholder: context.featureSettings.tool_bindings.some(binding => binding.name === 'code_only') };
+        });
+        expect(collision).toEqual({ preserved: true, placeholder: false });
+        await page.evaluate(async () => {
+            const context = window.SillyTavern.getContext();
+            context.featureSettings.tool_bindings = [];
+            const { eventSource, event_types } = await import('/scripts/events.js');
+            await eventSource.emit(event_types.OAI_PRESET_CHANGED_AFTER);
+            const { saveSettings } = await import('/script.js');
+            await saveSettings();
+        });
+        expect((await inspect()).names).toEqual(['auto_reply']);
+        await page.evaluate(async () => {
+            window.SillyTavern.getContext().featureSettings.tool_bindings = [];
+            const { saveSettings } = await import('/script.js');
+            await saveSettings();
+        });
+        await page.reload();
+        await testSetup.awaitST({ page });
+        await expect(page.locator('html')).toHaveAttribute('data-reply-pipeline-init', 'true', { timeout: 15_000 });
+        expect(await inspect()).toMatchObject({ names: ['auto_reply'], registry: expect.arrayContaining(['auto_reply']) });
+    });
+
     test('prompt panel bottom renders one row per step and writes reply_pipeline', async ({ page }) => {
         await testSetup.awaitST({ page });
 

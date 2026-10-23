@@ -88,9 +88,36 @@ export function normalizeToolBindings(list) {
     if (!Array.isArray(list)) {
         return [];
     }
+
     return list.map(normalizeToolBinding).filter(Boolean);
 }
 
+/** Add missing pipeline carriers; only explicit authoring activates existing bindings. */
+export function ensurePipelineToolBindings(store, names, { activate = false, registeredNames = [] } = {}) {
+    let changed = false;
+    for (const rawName of names) {
+        const name = typeof rawName === 'string' ? rawName.trim() : '';
+        if (!isValidToolName(name)) continue;
+        const existing = store.find(binding => typeof binding?.name === 'string' && binding.name.trim() === name);
+        if (existing) {
+            if (activate && (existing.enabled !== true || existing.stealth !== false)) {
+                existing.enabled = true;
+                existing.stealth = false;
+                changed = true;
+            }
+            continue;
+        }
+        if (registeredNames.includes(name)) continue;
+        store.push(normalizeToolBinding({
+            name,
+            description: 'Return the model-authored text for this reply pipeline step in content.',
+            parameters: { type: 'object', properties: { content: { type: 'string' } }, required: ['content'] },
+            actionBody: 'if (typeof args.content !== "string" || !args.content.trim()) return ""; return JSON.stringify(args.content);',
+        }));
+        changed = true;
+    }
+    return changed;
+}
 /**
  * Capability gate: tool calling is on when at least one binding is enabled.
  * @param {unknown} list Raw or normalized binding list
