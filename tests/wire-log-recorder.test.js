@@ -28,7 +28,7 @@ describe('normalizeWireLogOptions', () => {
             captureBody: true,
             maxFileBytes: 2097152,
             retentionDays: 2,
-            redact: ['authorization', 'x-api-key', 'cookie', 'proxy-authorization'],
+            redact: ['authorization', 'x-api-key', 'cookie', 'set-cookie', 'proxy-authorization'],
         });
     });
 
@@ -93,14 +93,31 @@ describe('createWireLogRecorder — non-streaming', () => {
     test('body-off keeps real response bytes and usage metadata', async () => {
         const { createWireLogRecorder } = await importRecorder();
         const recorder = createWireLogRecorder({ storeRoot, captureBody: false });
-        const body = { choices: [{ message: { content: '中文 response' } }], usage: { prompt_tokens: 3, completion_tokens: 2, total_tokens: 5 } };
+        const body = {
+            choices: [{ message: { content: '中文 response' } }],
+            usage: {
+                prompt_tokens: 3,
+                completion_tokens: 2,
+                total_tokens: 5,
+                input_tokens: 'not a count',
+                prompt_tokens_details: { cached_tokens: 1, provider_payload: 'private usage data' },
+                provider_payload: 'x'.repeat(100_000),
+            },
+        };
         const session = recorder.begin({ url: 'u', headers: {}, body: { messages: [{ role: 'user' }], tools: [{ type: 'function' }] } });
         session.complete({ status: 200, body });
         await recorder.flush();
         const records = await collectRecords(storeRoot);
         expect(records[0].response.bytes).toBe(Buffer.byteLength(JSON.stringify(body), 'utf8'));
         expect(records[0].response.body).toBeNull();
-        expect(records[0].response.usage).toEqual(body.usage);
+        expect(records[0].response.usage).toEqual({
+            prompt_tokens: 3,
+            completion_tokens: 2,
+            total_tokens: 5,
+            prompt_tokens_details: { cached_tokens: 1 },
+        });
+        expect(JSON.stringify(records[0])).not.toContain('private usage data');
+        expect(JSON.stringify(records[0])).not.toContain('x'.repeat(100));
     });
     test('persists request and response on completion', async () => {
         const { createWireLogRecorder } = await importRecorder();
@@ -115,7 +132,10 @@ describe('createWireLogRecorder — non-streaming', () => {
         session.complete({
             status: 200,
             statusText: 'OK',
-            headers: { 'content-type': 'application/json' },
+            headers: {
+                'content-type': 'application/json',
+                'Set-Cookie': ['session=provider-secret; HttpOnly; Secure'],
+            },
             body: { choices: [{ message: { content: 'hello' } }] },
             durationMs: 120,
         });
@@ -129,6 +149,7 @@ describe('createWireLogRecorder — non-streaming', () => {
         expect(record.request.headers.Authorization).toBe('***redacted***');
         expect(record.request.body.messages).toHaveLength(1);
         expect(record.response.body.choices[0].message.content).toBe('hello');
+        expect(record.response.headers['Set-Cookie']).toBe('***redacted***');
         expect(record.response.streamed).toBe(false);
         // No usage in the response means "unknown", never a guessed number.
         expect(record.response.usage).toBeNull();
@@ -298,7 +319,11 @@ describe('createWireLogRecorder — streaming', () => {
         const recorder = createWireLogRecorder({ storeRoot, enabled: true });
         const session = recorder.begin({ url: 'u', headers: {}, body: { stream: true } });
 
-        const tap = session.stream({ status: 200, statusText: 'OK', headers: {} });
+        const tap = session.stream({
+            status: 200,
+            statusText: 'OK',
+            headers: { 'set-cookie': ['session=stream-secret; HttpOnly; Secure'] },
+        });
         tap.onChunk(Buffer.from('data: {"choices":[{"delta":{"content":"He"}}]}\n\n', 'utf8'));
         tap.onChunk(Buffer.from('data: {"choices":[{"delta":{"content":"llo"},"finish_reason":"stop"}]}\n\n', 'utf8'));
         tap.onChunk(Buffer.from('data: [DONE]\n\n', 'utf8'));
@@ -308,6 +333,7 @@ describe('createWireLogRecorder — streaming', () => {
         const records = await collectRecords(storeRoot);
         expect(records[0].status).toBe('completed');
         expect(records[0].response.streamed).toBe(true);
+        expect(records[0].response.headers['set-cookie']).toBe('***redacted***');
         expect(records[0].response.body.assembled.content).toBe('Hello');
         expect(records[0].response.body.assembled.finishReason).toBe('stop');
         expect(records[0].response.chunks).toBe(3);
@@ -416,7 +442,16 @@ describe('createWireLogRecorder — token usage', () => {
         const tap = session.stream({ status: 200, headers: {} });
         tap.onChunk(Buffer.from('data: {"choices":[{"delta":{"content":"Hi"}}]}\n\n', 'utf8'));
         tap.onChunk(Buffer.from(
-            'data: {"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":2,"total_tokens":12}}\n\n',
+            `data: ${JSON.stringify({
+                choices: [{ delta: {}, finish_reason: 'stop' }],
+                usage: {
+                    prompt_tokens: 10,
+                    completion_tokens: 2,
+                    total_tokens: 12,
+                    prompt_tokens_details: { cached_tokens: 4, provider_payload: 'private usage data' },
+                    provider_payload: 'x'.repeat(100_000),
+                },
+            })}\n\n`,
             'utf8',
         ));
         tap.onChunk(Buffer.from('data: [DONE]\n\n', 'utf8'));
@@ -426,8 +461,14 @@ describe('createWireLogRecorder — token usage', () => {
         const records = await collectRecords(storeRoot);
         // Providers that stream usage send it on a final event; it must reach
         // both the flat response projection and the assembled view.
-        expect(records[0].response.usage).toEqual({ prompt_tokens: 10, completion_tokens: 2, total_tokens: 12 });
-        expect(records[0].response.body.assembled.usage).toEqual({ prompt_tokens: 10, completion_tokens: 2, total_tokens: 12 });
+        const expectedUsage = {
+            prompt_tokens: 10,
+            completion_tokens: 2,
+            total_tokens: 12,
+            prompt_tokens_details: { cached_tokens: 4 },
+        };
+        expect(records[0].response.usage).toEqual(expectedUsage);
+        expect(records[0].response.body.assembled.usage).toEqual(expectedUsage);
     });
 
     test('records usage as null when the provider sends none', async () => {

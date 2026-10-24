@@ -10,7 +10,7 @@
  */
 
 import { createWireRecord, purgeExpired, purgeExpiredRecords, truncateBody, writeRecord } from './wire-log-store.js';
-import { createRecordTrace, createSseAssembler } from './wire-log-tap.js';
+import { createRecordTrace, createSseAssembler, sanitizeUsage } from './wire-log-tap.js';
 
 /**
  * Reads the provider's token accounting out of a response body. Only an
@@ -22,13 +22,13 @@ import { createRecordTrace, createSseAssembler } from './wire-log-tap.js';
  */
 export function extractUsage(body) {
     const usage = body && typeof body === 'object' && !Array.isArray(body) ? body.usage : null;
-    return usage && typeof usage === 'object' && !Array.isArray(usage) ? usage : null;
+    return sanitizeUsage(usage);
 }
 
 const DEFAULT_MAX_FILE_BYTES = 2 * 1024 * 1024;
 // The default retention is an exact 48-hour record window plus day partitions.
 const DEFAULT_RETENTION_DAYS = 2;
-const DEFAULT_REDACT = ['authorization', 'x-api-key', 'cookie', 'proxy-authorization'];
+const DEFAULT_REDACT = ['authorization', 'x-api-key', 'cookie', 'set-cookie', 'proxy-authorization'];
 
 /**
  * Normalizes user-facing wire log settings into a usable option object.

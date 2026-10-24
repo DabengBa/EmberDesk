@@ -18,6 +18,43 @@ const SSE_DONE = '[DONE]';
 // request (the client's `_trace` or the endpoint's own knowledge), not from the
 // response bytes, so they are resolved once when the session begins.
 const TRACE_STRING_FIELDS = ['chatId', 'charName', 'type', 'model', 'source', 'pipelineRun', 'pipelineStep'];
+const USAGE_FIELDS = [
+    'prompt_tokens',
+    'completion_tokens',
+    'total_tokens',
+    'input_tokens',
+    'output_tokens',
+    'cache_creation_input_tokens',
+    'cache_read_input_tokens',
+];
+
+/**
+ * Keeps only recognized, non-negative integer token counts from provider usage.
+ * This bounds metadata and prevents response-body fields from bypassing body capture.
+ * @param {unknown} usage Provider-supplied usage value
+ * @returns {object|null} Sanitized token counts, or null when none are valid
+ */
+export function sanitizeUsage(usage) {
+    if (!usage || typeof usage !== 'object' || Array.isArray(usage)) {
+        return null;
+    }
+
+    /** @type {Record<string, unknown>} */
+    const result = {};
+    for (const field of USAGE_FIELDS) {
+        const value = usage[field];
+        if (Number.isSafeInteger(value) && value >= 0) {
+            result[field] = value;
+        }
+    }
+
+    const cachedTokens = usage.prompt_tokens_details?.cached_tokens;
+    if (Number.isSafeInteger(cachedTokens) && cachedTokens >= 0) {
+        result.prompt_tokens_details = { cached_tokens: cachedTokens };
+    }
+
+    return Object.keys(result).length ? result : null;
+}
 
 /**
  * Builds the trace context stamped onto every entry of one record session.
@@ -112,7 +149,7 @@ function applyPayload(payload, state) {
     // Token counts travel on their own trailing event when the caller asked for
     // `stream_options.include_usage`, so the last one wins.
     if (payload?.usage && typeof payload.usage === 'object' && !Array.isArray(payload.usage)) {
-        state.usage = payload.usage;
+        state.usage = sanitizeUsage(payload.usage);
     }
     const choices = Array.isArray(payload?.choices) ? payload.choices : [];
     for (const choice of choices) {
