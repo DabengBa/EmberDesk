@@ -49,11 +49,16 @@ The page has no alternative cards or navigation links.
 - **Mode-loading state**: while the setup-mode request is in flight the card shows a loading message instead of a guessed form.
 - **Mode-error state**: a failed setup-mode request shows an alert with an explicit retry action; the page never falls back to `fresh` silently.
 - **Loading state**: the submit button is disabled and shows "创建中..." while the request is in flight.
-- **Error state**: a validation or server error appears on the card with a shake animation; the first invalid field is marked `aria-invalid`, linked to the error block via `aria-describedby`, and receives focus.
+- **Error state**: a validation or server error appears in the card's alert block. Client-side validation marks the first invalid field with `aria-invalid`, links it to the error block via `aria-describedby`, and focuses it; server-side failures set the alert without marking or focusing a field.
 - **Success state**: the browser redirects to `/` after the admin account is created and session established.
-- **Bypass state**: if `needsSetup()` returns false, visiting `/setup` redirects to `/login`.
+- **Bypass state**: `GET /setup` redirects to `/login` server-side when `needsSetup()` returns false. If the page is already open, the client also redirects to `/login` as soon as `GET /api/users/setup-mode` reports `mode: 'complete'`, and a submit against an already-completed deployment (HTTP 403 `Setup already completed`) redirects to `/login` instead of showing an error.
+- **Rate-limit state**: the setup endpoint consumes `rateLimiting.accountsSetupMaxAttempts` per client IP; exhaustion returns HTTP 429 and the card shows the generic error.
 
 The page does not allow passwordless accounts. In `fresh` mode, both handle and password are required. In `set-password` mode, password is required and the handle belongs to the existing single passwordless user.
+
+Password strength is validated server-side only: the password must be at least 8 characters (`Password must be at least 8 characters long`). The form itself only enforces non-empty and matching confirmation.
+
+In `fresh` mode the submitted handle is slugified server-side (lowercased, diacritics removed, non-alphanumerics collapsed to `-`); an empty result returns `Invalid handle`, and a collision with an existing handle returns HTTP 409 `User already exists`.
 
 ## Navigation
 
@@ -71,9 +76,15 @@ The page does not allow passwordless accounts. In `fresh` mode, both handle and 
 
 ### Optional
 
+| Key | Default | Effect |
+|---|---|---|
+| `rateLimiting.accountsSetupMaxAttempts` | `5` | Setup attempts per client IP within a 300-second window before HTTP 429. `0` disables the limit. |
+| `rateLimiting.preferRealIpHeader` | `false` | Use forwarded IP headers for rate-limit tracking behind a reverse proxy. |
+
 ## Behavioral Notes
 
 - The setup page is shown until the user store has a password-protected account. After setup is complete, `/setup` redirects to `/login`.
 - The display name field is optional; if left empty, the handle is used as the display name.
 - The created account is always admin and enabled.
 - `app/routes/setup.tsx` owns the setup page. `/setup.html` is served by `createLegacySetupHtmlRedirectMiddleware()` and only redirects to `/setup`.
+- Setup completion is serialized by a server-side lock, so concurrent submits cannot create multiple admins.
