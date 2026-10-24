@@ -1391,7 +1391,7 @@ export async function buildChatCompletionRequest({ type, messages, settings = nu
  * @returns {Promise<unknown>}
  * @throws {Error}
  */
-async function sendOpenAIRequest(type, messages, signal, { jsonSchema = null, fallbackProvider = false } = {}) {
+async function sendOpenAIRequest(type, messages, signal, { jsonSchema = null, fallbackProvider = false, trace = null } = {}) {
     // Provide default abort signal
     if (!signal) {
         signal = new AbortController().signal;
@@ -1415,7 +1415,7 @@ async function sendOpenAIRequest(type, messages, signal, { jsonSchema = null, fa
     const generate_url = '/api/backends/chat-completions/generate';
     const response = await fetch(generate_url, {
         method: 'POST',
-        body: JSON.stringify(generate_data),
+        body: JSON.stringify(trace ? { ...generate_data, _trace: trace } : generate_data),
         headers: getRequestHeaders(),
         signal: signal,
     });

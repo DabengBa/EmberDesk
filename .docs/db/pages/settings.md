@@ -3,7 +3,7 @@ id: page.settings
 type: page
 name: Settings
 route: /settings
-related: [page.chat_workspace, feature.chat_completion_select, feature.custom_base_url, feature.fallback_provider]
+related: [page.chat_workspace, feature.chat_completion_select, feature.custom_base_url, feature.fallback_provider, feature.wire_log]
 ---
 
 # Page: Settings
@@ -50,6 +50,7 @@ Authenticated users complete supported settings work on `/settings`. The workspa
 - **Auth state**: unauthenticated users are redirected to login.
 - **Dirty / busy / error states**: save is disabled until dirty; save/secret actions expose busy and error feedback without fake success.
 - **Save state**: save posts a document-compatible payload and rewrites only changed bound fields; unknown document fields round-trip without materializing unrelated defaults.
+- **Wire-log setting preservation**: recording is controlled in the workspace chat-options `链路日志` viewer, not a duplicate settings tab. Saving other settings must preserve its last successfully saved on/off choice after refresh.
 - **Conflict state**: stale `settings_revision` yields HTTP 409; the page keeps the local draft visible, disables further save, and provides an explicit reload action. Reload intentionally discards that draft so the user can merge against current settings before saving again.
 - **Secret state**: the single provider value uses SecretManager endpoints only and never enters settings JSON; there is no dedicated fallback secret.
 - **Legacy provider normalization state**: legacy `vertexai`/`makersuite`/`palm`/`claude` sources load as OpenAI and save back as `openai`; legacy provider model keys remain stored but inert.

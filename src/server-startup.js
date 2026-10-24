@@ -22,6 +22,7 @@ import { router as contentManagerRouter } from './endpoints/content-manager.js';
 import { router as settingsRouter } from './endpoints/settings.js';
 import { router as chatCompletionsRouter } from './endpoints/backends/chat-completions.js';
 import { router as backupsRouter } from './endpoints/backups.js';
+import { router as wireLogRouter } from './endpoints/wire-log.js';
 import { setupHealthEndpoint } from './endpoints/health.js';
 
 /**
@@ -111,6 +112,7 @@ export function setupPrivateEndpoints(app) {
     app.use('/api/settings', settingsRouter);
     app.use('/api/backends/chat-completions', chatCompletionsRouter);
     app.use('/api/backups', backupsRouter);
+    app.use('/api/wire-logs', wireLogRouter);
 }
 
 /**

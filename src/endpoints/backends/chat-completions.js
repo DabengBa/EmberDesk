@@ -2,6 +2,7 @@
 import express from 'express';
 import fetch from 'node-fetch';
 import urlJoin from 'url-join';
+import path from 'node:path';
 
 import {
     CHAT_COMPLETION_SOURCES,
@@ -24,9 +25,55 @@ import {
 } from '../../prompt-converters.js';
 
 import { readSecret, SECRET_KEYS } from '../secrets.js';
+import { normalizeWireLogOptions, createWireLogRecorder } from '../../wire-log-recorder.js';
+import { readWireLogSettings } from '../wire-log.js';
+
 const API_OPENAI = 'https://api.openai.com/v1';
 
+
 export const router = express.Router();
+
+
+/**
+ * Reads `feature_settings.wire_log` from the canonical settings document.
+ * Uses the same persisted settings read as the config route. Unavailable
+ * settings retain the opt-out defaults instead of silently muting evidence.
+ * @param {import('express').Request} request Express request
+ * @returns {Promise<object>} Raw stored fragment, empty when unavailable
+ */
+async function readWireLogSettingsFragment(request) {
+    try {
+        const state = await readWireLogSettings(request);
+        return state.ok ? state.raw : {};
+    } catch (error) {
+        console.warn('[wire-log] settings read failed', error instanceof Error ? error.message : error);
+        return {};
+    }
+}
+
+/**
+ * Builds a recorder for this request. Returns a disabled recorder whenever the
+ * switch is off or the user root is unknown, so callers can stay uniform.
+ * @param {import('express').Request} request Express request
+ * @returns {Promise<{recorder: object, raw: object}>} Recorder plus raw options
+ */
+async function createRequestWireLog(request) {
+    const raw = await readWireLogSettingsFragment(request);
+    const options = normalizeWireLogOptions(raw);
+    const root = request.user?.directories?.root;
+    if (!options.enabled || !root) {
+        return { recorder: createWireLogRecorder({ enabled: false }), raw };
+    }
+    const recorder = createWireLogRecorder({
+        storeRoot: path.join(root, 'wire-logs'),
+        enabled: true,
+        captureBody: options.captureBody,
+        maxFileBytes: options.maxFileBytes,
+        retentionDays: options.retentionDays,
+        redact: options.redact,
+    });
+    return { recorder, raw };
+}
 
 router.post('/status', async function (request, statusResponse) {
     try {
@@ -94,6 +141,18 @@ router.post('/status', async function (request, statusResponse) {
 router.post('/generate', async function (request, response) {
     try {
         if (!request.body) return response.status(400).send({ error: true });
+
+        // Pull the trace context out before anything can copy it into the
+        // upstream payload, then drop it so it can never be forwarded.
+        /** @type {{traceContext: object, wireLogSession: object|null, wireLogRecorder: object|null}} */
+        const wireLog = { traceContext: {}, wireLogSession: null, wireLogRecorder: null };
+        const trace = request.body._trace;
+        if (trace && typeof trace === 'object' && !Array.isArray(trace)) {
+            wireLog.traceContext = trace;
+        }
+        if (Object.prototype.hasOwnProperty.call(request.body, '_trace')) {
+            delete request.body._trace;
+        }
 
         if (Array.isArray(request.body.messages)) {
             request.body.messages = postProcessPrompt(request.body.messages, getPromptNames(request));
@@ -216,16 +275,84 @@ router.post('/generate', async function (request, response) {
 
         console.debug('Chat Completion request:', requestBody);
 
+        // Wire log session: `begin` returns null when the switch is off, so
+        // every branch below stays a no-op in that case.
+        try {
+            const { recorder } = await createRequestWireLog(request);
+            const context = {
+                ...wireLog.traceContext,
+                model: request.body.model,
+                source: request.body.chat_completion_source,
+            };
+            wireLog.wireLogSession = recorder.begin({
+                url: endpointUrl,
+                headers: config.headers,
+                body: requestBody,
+                context,
+                // The endpoint owns the fallback when the client sent no
+                // `_trace.chatId`; the tap folds it into the record's trace.
+                chatId: wireLog.traceContext.chatId,
+            });
+            wireLog.wireLogRecorder = wireLog.wireLogSession ? recorder : null;
+            if (wireLog.wireLogRecorder) {
+                // The out-of-scope catch block below still needs the session to
+                // record a transport failure, so pin it on the request.
+                request.wireLogSession = wireLog.wireLogSession;
+                request.wireLogRecorder = wireLog.wireLogRecorder;
+            }
+        } catch (error) {
+            console.warn('[wire-log] session setup failed', error instanceof Error ? error.message : error);
+        }
+
         const fetchResponse = await fetch(endpointUrl, config);
 
         if (request.body.stream) {
             console.info('Streaming request in progress');
-            return await forwardFetchResponse(fetchResponse, response);
+            /** @type {{onChunk?: (chunk: Buffer|string) => void, onComplete?: () => void, onError?: (error: unknown) => void}} */
+            const pipeOptions = {};
+            if (wireLog.wireLogSession) {
+                const session = wireLog.wireLogSession;
+                const tap = session.stream({
+                    status: fetchResponse.status,
+                    statusText: fetchResponse.statusText,
+                    headers: fetchResponse.headers.raw(),
+                });
+                pipeOptions.onChunk = tap.onChunk;
+                pipeOptions.onComplete = () => session.completeStream();
+                pipeOptions.onError = error => session.fail(error);
+            }
+            return await forwardFetchResponse(fetchResponse, response, pipeOptions);
         }
 
         if (fetchResponse.ok) {
-            /** @type {any} */
-            const json = await fetchResponse.json();
+            // Read the text once: a Response body can only be consumed a single
+            // time, and both the client response and the wire log need it.
+            const responseText = await fetchResponse.text();
+            let json;
+            try {
+                json = JSON.parse(responseText);
+            } catch (error) {
+                // Preserve the original JSON-only generation contract.
+                wireLog.wireLogSession?.fail(error, {
+                    status: fetchResponse.status,
+                    statusText: fetchResponse.statusText,
+                    headers: fetchResponse.headers.raw(),
+                    body: responseText,
+                });
+                throw error;
+            }
+            if (wireLog.wireLogSession) {
+                try {
+                    wireLog.wireLogSession.complete({
+                        status: fetchResponse.status,
+                        statusText: fetchResponse.statusText,
+                        headers: fetchResponse.headers.raw(),
+                        body: json,
+                    });
+                } catch (error) {
+                    console.warn('[wire-log] completion failed', error instanceof Error ? error.message : error);
+                }
+            }
             console.debug('Chat Completion response:', json);
             return response.send(json);
         } else {
@@ -234,6 +361,18 @@ router.post('/generate', async function (request, response) {
 
             const message = fetchResponse.statusText || 'Unknown error occurred';
             const quota_error = fetchResponse.status === 429 && errorData?.error?.type === 'insufficient_quota';
+            if (wireLog.wireLogSession) {
+                try {
+                    wireLog.wireLogSession.complete({
+                        status: fetchResponse.status,
+                        statusText: fetchResponse.statusText,
+                        headers: fetchResponse.headers.raw(),
+                        body: errorData ?? responseText,
+                    });
+                } catch (error) {
+                    console.warn('[wire-log] completion failed', error instanceof Error ? error.message : error);
+                }
+            }
             console.error('Chat completion request error: ', message, responseText);
 
             if (!response.headersSent) {
@@ -246,6 +385,13 @@ router.post('/generate', async function (request, response) {
         }
     } catch (error) {
         console.error('Generation failed', error);
+        try {
+            // Recording schedules its own write; never wait for diagnostic I/O
+            // before returning a generation failure to the client.
+            request.wireLogSession?.fail(error);
+        } catch {
+            // Logging must never mask the generation failure.
+        }
         const message = error.code === 'ECONNREFUSED'
             ? `Connection refused: ${error.message}`
             : error.message || 'Unknown error occurred';
@@ -259,6 +405,4 @@ router.post('/generate', async function (request, response) {
 });
 
 const multimodalModels = express.Router();
-
-
 router.use('/multimodal-models', multimodalModels);

@@ -1007,6 +1007,7 @@ export function SettingsSurface({
                                     />
                                 </SettingsSection>
                             ) : null}
+
                             </div>
 
                             <div {...stylex.props(settingsStyles.saveBar, isCompact && settingsStyles.saveBarOverlay)}>

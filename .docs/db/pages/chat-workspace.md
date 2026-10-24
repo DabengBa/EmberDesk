@@ -40,6 +40,7 @@ This page exists so a user can run their daily LLM workflow from one browser sur
 - `feature.world_info_panel`: activating global World Info and editing world-book entries from the workspace drawer.
 - `feature.prompt_panel`: choosing/saving prompt presets and ordering, toggling, and editing prompt entries from the left workspace drawer.
 - `feature.prompt_inspector`: previewing the assembled, unsent request body for the next send from the prompt drawer.
+- `feature.wire_log`: inspecting actual upstream requests and responses from the chat-options `链路日志` entry, initially filtered to the open conversation.
 - `term.character_card`: the core object users browse and operate on in the character library.
 - `term.shared_browser_library`: the stable browser utility surface used by first-party modules.
 - `page.settings`: the standalone React settings route and sole product owner for provider, UI, and advanced settings; the shell `设置` entry navigates there.
@@ -51,6 +52,7 @@ This page exists so a user can run their daily LLM workflow from one browser sur
 !include feature.character_library_panel
 !include feature.prompt_panel
 !include feature.prompt_inspector
+!include feature.wire_log
 !include feature.chat_message_rendering
 !include feature.chat_message_actions
 !include feature.chat_regenerate

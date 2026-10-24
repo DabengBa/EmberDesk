@@ -70,6 +70,7 @@ import { AiConfigPanel } from './components/ai-config/AiConfigPanel';
 import { PresetSaveButton } from './components/ai-config/PresetActionsMenu';
 import { PromptInspectorButton, PromptManagerAddButton, PromptManagerList, type PromptPanelBridge } from './components/prompt-panel/PromptPanel';
 import { PromptInspector, type PromptInspectorBridge } from './components/prompt-panel/PromptInspector';
+import { WireLogPanel, type WireLogPanelBridge } from './components/wire-log/WireLogPanel';
 import { SelectChatPopup } from './components/select-chat/SelectChatPopup';
 import {
     SelectChatList,
@@ -2867,6 +2868,29 @@ export function mountPromptInspector(container: HTMLElement, bridge: PromptInspe
 export function unmountPromptInspector() {
     const container = promptInspectorContainer;
     promptInspectorContainer = null;
+    if (!container) {
+        return;
+    }
+    const root = mountedSmallPanels.get(container);
+    mountedSmallPanels.delete(container);
+    root?.unmount();
+}
+
+let wireLogPanelContainer: HTMLElement | null = null;
+
+/**
+ * Mounts the wire log overlay into a host div appended to <body>. Same shape
+ * as the prompt inspector: the panel owns only dialog chrome, the browser
+ * inside keeps the data access.
+ */
+export function mountWireLogPanel(container: HTMLElement, bridge: WireLogPanelBridge) {
+    wireLogPanelContainer = container;
+    mountSmallPanel(container, <WireLogPanel bridge={bridge} />);
+}
+
+export function unmountWireLogPanel() {
+    const container = wireLogPanelContainer;
+    wireLogPanelContainer = null;
     if (!container) {
         return;
     }

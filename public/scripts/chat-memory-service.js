@@ -133,6 +133,7 @@ export function applyChatMemoryToCoreChat(coreChat, { chat = null, dryRun = fals
  * @returns {Promise<string>}
  */
 async function requestTurnSummary(job, signal) {
+    const trace = { type: MEMORY_REQUEST_TYPE, chatId: getCurrentChatId(), charName: state.name2 };
     const settings = structuredClone(state.oai_settings);
     settings.stream_openai = false;
     const memorySettings = getSettings();
@@ -154,7 +155,7 @@ async function requestTurnSummary(job, signal) {
     const response = await fetch('/api/backends/chat-completions/generate', {
         method: 'POST',
         headers: getRequestHeaders(),
-        body: JSON.stringify(generate_data),
+        body: JSON.stringify({ ...generate_data, _trace: trace }),
         signal,
     });
     if (!response.ok) {

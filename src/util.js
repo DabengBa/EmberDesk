@@ -468,9 +468,15 @@ export function getImages(directoryPath, sortBy = 'name', type = MEDIA_REQUEST_T
  * Pipe a fetch() response to an Express.js Response, including status code.
  * @param {import('node-fetch').Response} from The Fetch API response to pipe from.
  * @param {import('express').Response} to The Express response to pipe to.
+ * @param {{onChunk?: (chunk: Buffer|string) => void, onComplete?: () => void, onError?: (error: unknown) => void}} [options] Optional observers.
+ *   `onChunk` sees every byte batch the pipe forwards; it never alters the
+ *   stream. Omit it to keep the plain pipe behavior.
  * @returns {Promise<void>}
  */
-export async function forwardFetchResponse(from, to) {
+export async function forwardFetchResponse(from, to, options = {}) {
+    const observe = (name, value) => {
+        try { options[name]?.(value); } catch { /* Diagnostics must not affect transport. */ }
+    };
     let statusCode = from.status;
     let statusText = from.statusText;
 
@@ -489,11 +495,14 @@ export async function forwardFetchResponse(from, to) {
     if (!from.ok) {
         try {
             const rawErrorText = await from.text();
+            observe('onChunk', rawErrorText);
+            observe('onComplete');
             const detail = rawErrorText || 'Unknown error occurred';
 
             console.warn(`Streaming request failed with status ${from.status} ${statusText}: ${detail}`);
             to.end(rawErrorText, 'utf-8');
         } catch (error) {
+            observe('onError', error);
             console.warn(`Streaming request failed with status ${from.status} ${statusText}: Unknown error occurred`, error);
             to.end();
         }
@@ -502,19 +511,51 @@ export async function forwardFetchResponse(from, to) {
     }
 
     if (from.body && to.socket) {
-        from.body.pipe(to);
-
-        to.socket.on('close', function () {
-            if (from.body instanceof Readable) from.body.destroy(); // Close the remote stream
-
-            to.end(); // End the Express response
-        });
-
-        from.body.on('end', function () {
-            console.info('Streaming request finished');
-            to.end();
-        });
+        const body = from.body;
+        let settled = false;
+        const onData = chunk => observe('onChunk', chunk);
+        const cleanup = () => {
+            body.off('data', onData);
+            body.off('end', onEnd);
+            body.off('error', onError);
+            body.off('close', onBodyClose);
+            to.off('close', onClientClose);
+        };
+        const finish = error => {
+            if (settled) {
+                return;
+            }
+            settled = true;
+            // A terminal event owns cleanup, even when diagnostics throw.
+            cleanup();
+            observe(error ? 'onError' : 'onComplete', error);
+            if (error) {
+                if (body instanceof Readable) {
+                    body.destroy();
+                }
+                // Do not disguise a truncated upstream reply as a normal EOF.
+                to.destroy(error);
+            } else {
+                to.end();
+            }
+        };
+        const onEnd = () => finish();
+        const onError = error => finish(error);
+        const onBodyClose = () => {
+            if (!body.readableEnded) {
+                finish(new Error('Upstream closed prematurely'));
+            }
+        };
+        const onClientClose = () => finish(new Error('aborted'));
+        // Observe passively: pipe still owns flow control and backpressure.
+        body.on('data', onData);
+        body.once('end', onEnd);
+        body.once('error', onError);
+        body.once('close', onBodyClose);
+        to.once('close', onClientClose);
+        body.pipe(to);
     } else {
+        observe('onComplete');
         to.end();
     }
 }
