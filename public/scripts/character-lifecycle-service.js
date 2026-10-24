@@ -50,7 +50,6 @@ const getFirstMessage = (...args) => shell().getFirstMessage(...args);
 const getOneCharacter = (...args) => shell().getOneCharacter(...args);
 const getPastCharacterChats = (...args) => shell().getPastCharacterChats(...args);
 const getThumbnailUrl = (...args) => shell().getThumbnailUrl(...args);
-const isExternalMediaAllowed = (...args) => shell().isExternalMediaAllowed(...args);
 const isMobile = (...args) => shell().isMobile(...args);
 const markPerfInteractionMetric = (...args) => shell().markPerfInteractionMetric(...args);
 const printMessages = (...args) => shell().printMessages(...args);
@@ -383,12 +382,6 @@ export function select_selected_character(chid, { switchMenu = true } = {}) {
 
     $('#form_create').attr('actiontype', 'editcharacter');
     $('.form_create_bottom_buttons_block .chat_lorebook_button').show();
-
-    const externalMediaState = isExternalMediaAllowed();
-    $('#character_open_media_overrides').show();
-    $('#character_media_allowed_icon').toggle(externalMediaState);
-    $('#character_media_forbidden_icon').toggle(!externalMediaState);
-
     // Update some stuff about the char management dropdown
     $('#character_source').attr('disabled', !getCharacterSource(chid) ? '' : null);
 

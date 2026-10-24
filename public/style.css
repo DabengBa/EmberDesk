@@ -3723,13 +3723,11 @@ textarea:focus-visible {
 }
 
 #rm_ch_create_block.character-detail-panel .character-detail-section-header .menu_button_icon span,
-#character_open_media_overrides.menu_button_icon span,
 #rm_ch_create_block.character-detail-panel .open_alternate_greetings.menu_button_icon span {
     display: none;
 }
 
 #rm_ch_create_block.character-detail-panel .character-detail-section-header .menu_button_icon,
-#character_open_media_overrides.menu_button_icon,
 #rm_ch_create_block.character-detail-panel .open_alternate_greetings.menu_button_icon {
     min-width: 2rem;
     justify-content: center;

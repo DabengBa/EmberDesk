@@ -8,8 +8,7 @@ import {
     chat,
     getCurrentChatId,
     name2,
-    reloadCurrentChat,
-    saveSettingsDebounced,
+
     this_chid,
     saveChatConditional,
     chat_metadata,
@@ -28,7 +27,7 @@ import {
 import { requireGenerationShellContext } from './generation-shell-context.js';
 import { eventSource, event_types } from './events.js';
 import { getRequestHeaders } from './request-context.js';
-import { power_user } from './power-user.js';
+
 import {
     extractTextFromHTML,
     extractTextFromMarkdown,
@@ -51,6 +50,7 @@ import { renderTemplateAsync } from './templates.js';
 import { t } from './i18n.js';
 import { humanizedDateTime } from './RossAscends-mods.js';
 import { accountStorage } from './util/AccountStorage.js';
+
 import { MEDIA_DISPLAY, MEDIA_SOURCE, MEDIA_TYPE, SCROLL_BEHAVIOR, SWIPE_DIRECTION } from './constants.js';
 
 /**
@@ -540,7 +540,7 @@ export function encodeStyleTags(text) {
  */
 export function decodeStyleTags(text, { prefix } = { prefix: '.mes_text ' }) {
     const styleDecodeRegex = /<custom-style>(.+?)<\/custom-style>/gms;
-    const mediaAllowed = isExternalMediaAllowed();
+
 
     function sanitizeRule(rule) {
         if (Array.isArray(rule.selectors)) {
@@ -550,9 +550,6 @@ export function decodeStyleTags(text, { prefix } = { prefix: '.mes_text ' }) {
                     rule.selectors[i] = prefix + sanitizeSelector(selector);
                 }
             }
-        }
-        if (!mediaAllowed && Array.isArray(rule.declarations) && rule.declarations.length > 0) {
-            rule.declarations = rule.declarations.filter(declaration => !declaration.value.includes('://'));
         }
     }
 
@@ -802,46 +799,8 @@ function getStyleContentsFromMarkdown(text) {
         .join('\n\n');
 }
 
-async function openExternalMediaOverridesDialog() {
-    const entityId = getCurrentEntityId();
-
-    if (!entityId) {
-        toastr.info(t`No character selected`);
-        return;
-    }
-
-    const template = $(await renderTemplateAsync('forbidMedia'));
-    if (power_user.external_media_allowed_overrides.includes(entityId)) {
-        template.find('#forbid_media_override_allowed').prop('checked', true);
-    } else if (power_user.external_media_forbidden_overrides.includes(entityId)) {
-        template.find('#forbid_media_override_forbidden').prop('checked', true);
-    } else {
-        template.find('#forbid_media_override_global').prop('checked', true);
-    }
-
-    callGenericPopup(template, POPUP_TYPE.TEXT, '', { wide: false, large: false, okButton: t`Done` });
-}
-
 export function getCurrentEntityId() {
     return characters[this_chid]?.avatar ?? null;
-}
-
-export function isExternalMediaAllowed() {
-    const entityId = getCurrentEntityId();
-    if (!entityId) {
-        return false;
-    }
-
-    if (power_user.external_media_allowed_overrides.includes(entityId)) {
-        return true;
-    }
-
-    if (power_user.external_media_forbidden_overrides.includes(entityId)) {
-        return false;
-    }
-
-    // External media is forbidden by default; per-entity overrides above win.
-    return false;
 }
 
 /**
@@ -1280,82 +1239,8 @@ export function addDOMPurifyHooks() {
             }
         }
 
-        const isMediaAllowed = isExternalMediaAllowed();
-        if (isMediaAllowed) {
-            return;
-        }
-
         if (!(node instanceof Element)) {
             return;
-        }
-
-        let mediaBlocked = false;
-
-        switch (node.tagName) {
-            case 'AUDIO':
-            case 'VIDEO':
-            case 'SOURCE':
-            case 'TRACK':
-            case 'EMBED':
-            case 'OBJECT':
-            case 'IMG': {
-                const isExternalUrl = (url) => (url.indexOf('://') > 0 || url.indexOf('//') === 0) && !url.startsWith(window.location.origin);
-                const src = node.getAttribute('src');
-                const data = node.getAttribute('data');
-                const srcset = node.getAttribute('srcset');
-
-                if (srcset) {
-                    const srcsetUrls = srcset.split(',');
-
-                    for (const srcsetUrl of srcsetUrls) {
-                        const [url] = srcsetUrl.trim().split(' ');
-
-                        if (isExternalUrl(url)) {
-                            console.warn('External media blocked', url);
-                            node.remove();
-                            mediaBlocked = true;
-                            break;
-                        }
-                    }
-                }
-
-                if (src && isExternalUrl(src)) {
-                    console.warn('External media blocked', src);
-                    mediaBlocked = true;
-                    node.remove();
-                }
-
-                if (data && isExternalUrl(data)) {
-                    console.warn('External media blocked', data);
-                    mediaBlocked = true;
-                    node.remove();
-                }
-
-                if (mediaBlocked && (node instanceof HTMLMediaElement)) {
-                    node.autoplay = false;
-                    node.pause();
-                }
-            }
-                break;
-        }
-
-        if (mediaBlocked) {
-            const entityId = getCurrentEntityId();
-            const warningShownKey = `mediaWarningShown:${entityId}`;
-
-            if (accountStorage.getItem(warningShownKey) === null) {
-                const warningToast = toastr.warning(
-                    t`Use the 'Ext. Media' button to allow it. Click on this message to dismiss.`,
-                    t`External media has been blocked`,
-                    {
-                        timeOut: 0,
-                        preventDuplicates: true,
-                        onclick: () => toastr.clear(warningToast),
-                    },
-                );
-
-                accountStorage.setItem(warningShownKey, 'true');
-            }
         }
     });
 }
@@ -1630,31 +1515,6 @@ export function initChatUtilities() {
         });
     });
 
-    $(document).on('click', '.open_media_overrides', openExternalMediaOverridesDialog);
-    $(document).on('input', '#forbid_media_override_allowed', function () {
-        const entityId = getCurrentEntityId();
-        if (!entityId) return;
-        power_user.external_media_allowed_overrides.push(entityId);
-        power_user.external_media_forbidden_overrides = power_user.external_media_forbidden_overrides.filter((v) => v !== entityId);
-        saveSettingsDebounced();
-        reloadCurrentChat();
-    });
-    $(document).on('input', '#forbid_media_override_forbidden', function () {
-        const entityId = getCurrentEntityId();
-        if (!entityId) return;
-        power_user.external_media_forbidden_overrides.push(entityId);
-        power_user.external_media_allowed_overrides = power_user.external_media_allowed_overrides.filter((v) => v !== entityId);
-        saveSettingsDebounced();
-        reloadCurrentChat();
-    });
-    $(document).on('input', '#forbid_media_override_global', function () {
-        const entityId = getCurrentEntityId();
-        if (!entityId) return;
-        power_user.external_media_allowed_overrides = power_user.external_media_allowed_overrides.filter((v) => v !== entityId);
-        power_user.external_media_forbidden_overrides = power_user.external_media_forbidden_overrides.filter((v) => v !== entityId);
-        saveSettingsDebounced();
-        reloadCurrentChat();
-    });
 
     $('#creators_note_styles_button').on('click', function (e) {
         e.stopPropagation();

@@ -172,13 +172,7 @@ export function RightNavPanel() {
                                             <span className="fa-solid fa-circle-question note-link-span" aria-hidden="true"></span>
                                         </a>
                                     </div>
-                                    <div id="character_open_media_overrides" className="menu_button menu_button_icon open_media_overrides" title="Click to allow/forbid the use of external media for this character." aria-label="External media" data-i18n="[title]Click to allow/forbid the use of external media for this character.">
-                                        <i id="character_media_allowed_icon" className="fa-solid fa-fw fa-link" />
-                                        <i id="character_media_forbidden_icon" className="fa-solid fa-fw fa-link-slash" />
-                                        <span data-i18n="Ext. Media">
-                                            Ext. Media
-                                        </span>
-                                    </div>
+
                                 </div>
                                 <textarea id="description_textarea" data-macros data-i18n="[placeholder]Description" placeholder="Description" name="description"></textarea>
                                 <div className="extension_token_counter">

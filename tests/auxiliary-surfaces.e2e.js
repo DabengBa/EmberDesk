@@ -386,12 +386,7 @@ test.describe('auxiliary workspace surfaces', () => {
         await expect(dialog).toHaveCount(0);
     });
 
-    test('instant media and style preferences explain their save behavior', async ({ page }) => {
-        await page.locator('#character_open_media_overrides').evaluate(element => element.click());
-        await expect(page.locator('dialog[open]')).toContainText('更改会立即生效。');
-        await expect(page.getByRole('button', { name: '完成', exact: true })).toBeVisible();
-        await page.keyboard.press('Escape');
-        await expect(page.locator('dialog[open]')).toHaveCount(0);
+    test('instant style preferences explain their save behavior', async ({ page }) => {
         await page.locator('#creators_note_styles_button').evaluate(element => element.click());
         await expect(page.locator('dialog[open]')).toContainText('更改会立即生效。');
         await expect(page.getByRole('button', { name: '完成', exact: true })).toBeVisible();

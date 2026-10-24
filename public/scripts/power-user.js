@@ -76,8 +76,6 @@ export const power_user = {
     servers: [],
     show_tag_filters: false,
     auto_connect: true,
-    external_media_allowed_overrides: [],
-    external_media_forbidden_overrides: [],
 };
 
 const storage_keys = {

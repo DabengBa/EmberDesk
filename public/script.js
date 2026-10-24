@@ -190,7 +190,7 @@ import { createSingleFlightTask, resolvePersistedCurrentVersion, resolveStartupS
 import { ensurePanel, registerPanelHook } from './scripts/deferred-panels.js';
 import { getCharacterCardTagId } from './scripts/deferred-panel-replays.js';
 import { BulkEditOverlay } from './scripts/BulkEditOverlay.js';
-import { appendFileContent, hasPendingFileAttachment, populateFileAttachment, decodeStyleTags, encodeStyleTags, isExternalMediaAllowed, preserveNeutralChat, restoreNeutralChat, formatCreatorNotes, initChatUtilities, addDOMPurifyHooks } from './scripts/chats.js';
+import { appendFileContent, hasPendingFileAttachment, populateFileAttachment, decodeStyleTags, encodeStyleTags, preserveNeutralChat, restoreNeutralChat, formatCreatorNotes, initChatUtilities, addDOMPurifyHooks } from './scripts/chats.js';
 import {
     getPresetManager,
     initPresetManager,
@@ -750,7 +750,6 @@ registerCharacterLifecycleShellContext({
     getOneCharacter: (...args) => getOneCharacter(...args),
     getPastCharacterChats: (...args) => getPastCharacterChats(...args),
     getThumbnailUrl: (...args) => getThumbnailUrl(...args),
-    isExternalMediaAllowed: (...args) => isExternalMediaAllowed(...args),
     isMobile: (...args) => isMobile(...args),
     markPerfInteractionMetric: (...args) => markPerfInteractionMetric(...args),
     printMessages: (...args) => printMessages(...args),
@@ -8530,7 +8529,6 @@ function select_rm_create({ switchMenu = true } = {}) {
 
     $('#form_create').attr('actiontype', 'createcharacter');
     $('.form_create_bottom_buttons_block .chat_lorebook_button').hide();
-    $('#character_open_media_overrides').hide();
 }
 
 function select_rm_characters() {

@@ -1121,8 +1121,7 @@
     "No Creator's Notes provided.": "无创作者注释",
     "Character details are hidden.": "角色详情已隐藏。",
     "Character Description": "角色描述",
-    "Click to allow/forbid the use of external media for this character.": "单击以允许/禁止此角色使用外部媒体。",
-    "Ext. Media": "外部媒体",
+
     "Describe your character's physical and mental traits here.": "在这里描述您角色的身体和精神特征。",
     "First message": "开场白",
     "Click to set additional greeting messages": "单击以设置其他开场白",
@@ -1548,8 +1547,7 @@
     "Scraped ${0} files from ${1} to ${2}.": "${1} 从 ${2} 抓取了 ${0} 个文件。",
     "Check browser console for details.": "详见浏览器控制台。",
     "Scraping failed": "抓取失败",
-    "Use the 'Ext. Media' button to allow it. Click on this message to dismiss.": "使用下方的“外部媒体”按钮以允许外部媒体。点击此消息以忽略。",
-    "External media has been blocked": "外部媒体被禁用",
+
     "It's either corrupted or not a valid JSONL file.": "文件被损坏或不是有效 JSONL 文件。",
     "Failed to import chat": "导入聊天失败",
     "Files": "文件",
