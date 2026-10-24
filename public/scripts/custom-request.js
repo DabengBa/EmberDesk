@@ -4,6 +4,7 @@ import { getRequestHeaders } from './request-context.js';
 import { extractReasoningFromData } from './reasoning.js';
 import { getStreamingReply, tryParseStreamingError, createGenerationParameters, settingsToUpdate, oai_settings } from './openai.js';
 import EventSourceStream from './sse-stream.js';
+import { getContext } from './st-context.js';
 
 // #region Type Definitions
 /**
@@ -84,11 +85,13 @@ export class ChatCompletionService {
      * @throws {Error}
      */
     static async sendRequest(data, extractData = true, signal = null) {
+        const context = getContext();
+        const trace = { type: data.type, chatId: context.chatId ?? null, charName: context.name2 };
         const response = await fetch('/api/backends/chat-completions/generate', {
             method: 'POST',
             headers: getRequestHeaders(),
             cache: 'no-cache',
-            body: JSON.stringify(data),
+            body: JSON.stringify({ ...data, _trace: trace }),
             signal: signal ?? new AbortController().signal,
         });
 

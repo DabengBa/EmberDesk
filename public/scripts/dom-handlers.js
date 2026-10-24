@@ -82,6 +82,7 @@ const openAlternateGreetings = (...args) => shell().openAlternateGreetings(...ar
 const openCharacterChat = (...args) => shell().openCharacterChat(...args);
 const openCharacterWorldPopup = (...args) => shell().openCharacterWorldPopup(...args);
 const openMessageDelete = (...args) => shell().openMessageDelete(...args);
+const openWireLogPanel = (...args) => shell().openWireLogPanel(...args);
 const pauseScriptExecution = (...args) => shell().pauseScriptExecution(...args);
 const processDroppedFiles = (...args) => shell().processDroppedFiles(...args);
 const queueReactCharacterAuthoringRemount = (...args) => shell().queueReactCharacterAuthoringRemount(...args);
@@ -745,6 +746,10 @@ export async function bindLegacyShellHandlers() {
             }
         } else if (id == 'option_close_chat') {
             await closeCurrentChat();
+        } else if (id == 'option_wire_log') {
+            // Diagnostics overlay: independent of chat state, so it opens on a
+            // closed chat too (the panel then shows every session).
+            await openWireLogPanel();
         }
         hideMenu();
     });

@@ -117,7 +117,9 @@ test.describe('prompt inspector (request preview)', () => {
 
         const [realRequest] = await page.evaluate(() => window.__promptInspectorRequests);
         // Identical assembly path ⇒ identical wire body.
-        expect(preview.request).toEqual(realRequest);
+        const { _trace, ...providerRequest } = realRequest;
+        expect(_trace.chatId).toBe(seededChatName);
+        expect(preview.request).toEqual(providerRequest);
     });
 
     test('opens from the prompt drawer and lists assembled messages', async ({ page }) => {

@@ -971,6 +971,7 @@ registerDomHandlersShellContext({
     openCharacterChat: (...args) => openCharacterChat(...args),
     openCharacterWorldPopup: (...args) => openCharacterWorldPopup(...args),
     openMessageDelete: (...args) => openMessageDelete(...args),
+    openWireLogPanel: (...args) => openWireLogPanel(...args),
     pauseScriptExecution: (...args) => pauseScriptExecution(...args),
     processDroppedFiles: (...args) => processDroppedFiles(...args),
     queueReactCharacterAuthoringRemount: (...args) => queueReactCharacterAuthoringRemount(...args),
@@ -6098,6 +6099,7 @@ export function createRawPrompt(prompt, api, instructOverride, quietToLoud, syst
  * @returns {Promise<object | string>} Raw API response data, or a JSON string extracted from the response when `jsonSchema` is provided.
  */
 export async function generateRawData({ prompt = '', api = null, instructOverride = false, quietToLoud = false, systemPrompt = '', responseLength = null, prefill = '', jsonSchema = null } = {}) {
+    const trace = { type: 'quiet', chatId: getCurrentChatId() ?? null, charName: name2 };
     if (!api) {
         api = main_api;
     }
@@ -6148,7 +6150,7 @@ export async function generateRawData({ prompt = '', api = null, instructOverrid
             } break;
         }
 
-        const data = await sendOpenAIRequest('quiet', generateData, abortController.signal, { jsonSchema });
+        const data = await sendOpenAIRequest('quiet', generateData, abortController.signal, { jsonSchema, trace });
 
         // should only happen for text completions
         // other frontend paths do not return data if calling the backend fails,
@@ -6921,6 +6923,7 @@ function setInContextMessages(msgInContextCount, type) {
 /**
  * @typedef {object} AdditionalRequestOptions
  * @property {JsonSchema} [jsonSchema]
+ * @property {object} [trace] Request-local diagnostic context
  */
 
 /**
@@ -10181,6 +10184,72 @@ function closePromptInspectorOverlay() {
         .then(module => module.unmountPromptInspector?.())
         .catch(() => {})
         .finally(() => host.remove());
+}
+
+let wireLogPanelHost = null;
+let wireLogPanelOpenId = 0;
+let wireLogReturnFocus = null;
+
+/**
+ * Runtime bridge for the wire log overlay. The panel only needs the chat the
+ * workspace is currently showing (so the viewer defaults to that session's
+ * records) and a way to close itself.
+ * @returns {object} Bridge object for the wire log panel
+ */
+function getWireLogPanelBridge() {
+    return {
+        getChatId: () => getCurrentChatId() ?? null,
+        onConfigChange: ({ enabled, captureBody, maxFileBytes, retentionDays, redact }) => {
+            feature_settings.wire_log = { enabled, captureBody, maxFileBytes, retentionDays, redact };
+        },
+        close: () => closeWireLogPanel(),
+    };
+}
+
+/**
+ * Opens the wire log overlay: mounts the React surface into a host div
+ * appended to <body>. A second call while open is a no-op.
+ */
+async function openWireLogPanel() {
+    if (wireLogPanelHost?.isConnected) {
+        return;
+    }
+    const openId = ++wireLogPanelOpenId;
+    wireLogReturnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    try {
+        const module = await loadWorkspacePanelsModule();
+        // A close racing the async module load must not mount a stale overlay.
+        if (openId !== wireLogPanelOpenId) {
+            return;
+        }
+        wireLogPanelHost = document.createElement('div');
+        wireLogPanelHost.id = 'emberdesk-wire-log-panel-host';
+        document.body.appendChild(wireLogPanelHost);
+        module.mountWireLogPanel(wireLogPanelHost, getWireLogPanelBridge());
+    } catch (error) {
+        console.error('Failed to mount wire log panel:', error);
+        wireLogPanelHost?.remove();
+        wireLogPanelHost = null;
+    }
+}
+
+function closeWireLogPanel() {
+    wireLogPanelOpenId++;
+    if (!wireLogPanelHost) {
+        return;
+    }
+    const host = wireLogPanelHost;
+    wireLogPanelHost = null;
+    loadWorkspacePanelsModule()
+        .then(module => module.unmountWireLogPanel?.())
+        .catch(() => {})
+        .finally(() => {
+            host.remove();
+            const target = wireLogReturnFocus?.isConnected && wireLogReturnFocus.getClientRects().length
+                ? wireLogReturnFocus : document.getElementById('options_button');
+            target?.focus();
+            wireLogReturnFocus = null;
+        });
 }
 
 /**

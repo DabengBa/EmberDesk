@@ -14,10 +14,14 @@ import {
     endPipelineRun,
     getPipelineTriggerTag,
     getPreviewPipelineTriggerTag,
+    getPipelineStepMeta,
+    getCurrentPipelineStep,
+    isPipelineFallbackRound,
     preparePipelineRound,
     previewPipelineRequestShaping,
 } from './reply-pipeline.js';
 import { t } from './i18n.js';
+import { getActivePipelineRunId } from './reply-pipeline-core.js';
 
 function shell() {
     return requireGenerationShellContext();
@@ -445,6 +449,13 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
     // Quiet/nested/dry-run calls must never take the destructive branch — a
     // misused flag there would delete the tail and write nothing back.
     const isRegenerate = options?.regenerate === true && type === 'normal' && !depth && !dryRun;
+    // Capture conversation identity before any asynchronous assembly or retries.
+    const requestTrace = {
+        type,
+        chatId: state.characters?.[state.this_chid]?.chat ?? null,
+        charName: state.name2,
+        regenerate: isRegenerate,
+    };
     console.log('Generate entered');
     if (!isPreview) {
         setGenerationProgress(0);
@@ -1235,11 +1246,23 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
             return activeRecoveryMessageId;
         };
 
+        const pipelineMeta = type === 'normal' ? getPipelineStepMeta() : null;
+        const pipelineStep = pipelineMeta ? getCurrentPipelineStep() : null;
+        if (type === 'normal' && getActivePipelineRunId()) {
+            requestTrace.pipelineRun = getActivePipelineRunId();
+        }
+        if (pipelineMeta && pipelineStep) {
+            requestTrace.pipelineRun = pipelineMeta.runId;
+            if (!isPipelineFallbackRound()) {
+                requestTrace.pipelineStep = pipelineStep.tool;
+            }
+        }
         const runGenerationAttempt = async (attempt, attemptIndex) => {
             const isIntermediateAttempt = attemptIndex < attempts.length - 1;
             const requestOptions = {
                 jsonSchema,
                 fallbackProvider: attempt.fallbackProvider,
+                trace: requestTrace,
             };
 
             if (isStreamingEnabled() && type !== 'quiet') {
