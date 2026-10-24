@@ -9,7 +9,9 @@ related: [page.login, feature.login_submit]
 
 ## ID 解释
 
-`feature.account_lockout` represents the per-account rate limiting and temporary lockout that activates after repeated failed login attempts for the same handle. It covers the lockout countdown displayed on the login page, the error message, and the automatic unlock after the lockout window expires. It does not cover the separate per-IP rate limit or password recovery.
+`feature.account_lockout` represents the rate limiting and temporary lockout that activates after repeated failed login attempts. It covers the lockout countdown displayed on the login page, the error message, and the automatic unlock after the lockout window expires. It does not cover password recovery.
+
+Implementation has two independent limiters, and the login card cannot tell them apart: a per-IP limiter with a fixed 60-second window and a per-account limiter whose window is `rateLimiting.accountsLoginLockoutDuration`. Both surface through the same HTTP 429 path.
 
 ## Purpose
 
@@ -17,10 +19,10 @@ Protect an individual account from repeated failed login attempts by turning the
 
 ## User-Visible Contract
 
-- EmberDesk counts failed sign-in attempts per handle and shows a lockout only after the account threshold is exceeded; the message must not confirm whether the handle is real.
+- EmberDesk counts failed sign-in attempts against both limiters and surfaces a lockout once either threshold is exceeded. The lockout copy is identical for both, so a user throttled by IP sees the same `账号已锁定` message as a user with an account lockout.
 - While lockout is active, the login card shows a countdown and disables normal submit so the user sees that retry is temporarily unavailable.
 - When the lockout window expires, the countdown disappears and the same login card becomes usable again without requiring a separate recovery route.
-- A successful login before lockout clears the account failure state, so the user does not carry stale lockout risk into the authenticated workspace.
+- A successful login before the threshold is reached clears the account failure state. Once the threshold is consumed no login can succeed, so this only applies to the pre-threshold case.
 - Operators may configure the account threshold, duration, or disable account lockout, but the user-facing behavior remains either a temporary countdown or normal login availability.
 
 ## Semantic Interaction IDs
@@ -38,8 +40,8 @@ Protect an individual account from repeated failed login attempts by turning the
 
 ## Feature-Specific Evidence
 
-- The visible countdown is derived from the server-provided retry window; DOM timers are supporting evidence, not the contract.
-- Account lockout is distinct from per-IP rate limiting and should be proven through the login card state rather than raw status codes alone.
+- The server sends the authoritative remaining window in `Retry-After`; the on-screen countdown then decrements client-side from receipt time and is never re-synced, so treat visible second-by-second values as presentation, not a server clock reading.
+- The login card does not distinguish account lockout from per-IP rate limiting; any 429 enters the same countdown state.
 - Config evidence may include `rateLimiting.accountsLoginMaxAttempts` and `rateLimiting.accountsLoginLockoutDuration`, but the user-visible proof is the countdown, disabled submit state, expiry, and successful post-expiry login.
 
 ## Failure Signals

@@ -22,13 +22,15 @@ This page exists so an unauthenticated user can identify themselves and reach [C
 - `/login.html` redirects to `/login` and preserves the query string; it is not a legacy runtime fallback.
 - Missing React build returns a clear server error instead of `public/login.html`.
 - Rollback is a previous application version deploy, not an in-process jQuery controller.
+- Before serving the login app, `createLoginPageMiddleware()` runs `tryAutoLogin()`. When exactly one passwordless user exists, or when Authelia/Authentik/per-user Basic Auth identifies the visitor, the request redirects to `/` without rendering the login form. `?noauto` suppresses this so the form always renders.
+- `/login` does not check setup state. A deployment that still requires setup serves the login form normally; only `/` redirects to `/setup`.
 
 ## Page Structure (UI Layout)
 
 1. **Header row**: logo and page title shared by both cards, visually separated from the form controls so the page reads as a focused entry surface rather than a generic form.
 2. **Credential field stack**: handle input and password input with inline toggle, kept as the only default decision path.
 3. **Action region**: submit button, error block, and "Forgot password?" link with consistent spacing and focus treatment.
-4. **Recovery card**: a secondary form, hidden by default, with the same header, field stack, recovery code input, new-password input, and action region.
+4. **Recovery card**: a secondary form, hidden by default, with the same header, field stack, recovery code input, new-password input, and action region. The handle input is disabled once step 2 is reached, and the new-password input has no visibility toggle (unlike the login and setup password fields).
 
 The two cards are mutually exclusive; only one is visible at a time.
 
@@ -49,9 +51,9 @@ The two cards are mutually exclusive; only one is visible at a time.
 ## Page States And Constraints
 
 - **Default state**: the login card is visible, the recovery card is hidden.
-- **Recovery state**: the recovery card is visible, the login card is hidden. A persistent hint above the step-1 action states that recovery codes are printed to the server console and must be relayed by an admin; focus moves to the card's first field on entry and back to the forgot-password link on cancel.
-- **Error state**: an error message appears on the active card without navigating away; the first invalid field is marked `aria-invalid`, linked to the error block via `aria-describedby`, and receives focus.
-- **Lockout state**: the login button is disabled and a countdown timer is displayed after too many failed attempts.
+- **Recovery state**: the recovery card is visible, the login card is hidden. A persistent hint above the step-1 action states that recovery codes are printed to the server console and must be relayed by an admin; focus moves to the card's first field on entry and back to the forgot-password link on cancel. In step 2 the handle input stays visible but disabled.
+- **Error state**: an error message appears on the active card without navigating away. For client-side validation failures the first invalid field is marked `aria-invalid`, linked to the error block via `aria-describedby`, and receives focus; server-side failures set only the error text and never mark or focus a field.
+- **Lockout state**: any HTTP 429 from `/api/users/login` disables the login button and shows a countdown derived from the `Retry-After` header. The copy always reads as an account lockout even when the trigger was the per-IP limiter rather than the per-account lockout. The countdown ticks client-side from receipt time and is never re-synced with the server.
 - **Loading state**: the submit button is disabled while a request is in flight.
 
 The login page does not expose a user list. The user must know their handle to log in.
@@ -76,10 +78,10 @@ The login page does not expose a user list. The user must know their handle to l
 |---|---|---|
 | `enableDiscreetLogin` | `false` | `true` hides the user list; the user must type their handle manually. |
 | `sessionTimeout` | `-1` | Session lifetime in seconds. `-1` = never expires, `0` = expires on browser close. |
-| `rateLimiting.accountsLoginMaxAttempts` | `5` | Failed login attempts before per-account lockout. `0` disables. |
+| `rateLimiting.accountsLoginMaxAttempts` | `5` | Drives two limiters: a per-IP limiter with a fixed 60-second window, and a per-account limiter whose window is `accountsLoginLockoutDuration`. `0` lifts both to effectively unlimited instead of disabling the code path. |
 | `rateLimiting.accountsLoginLockoutDuration` | `300` | Lockout window in seconds (5 minutes). |
 | `rateLimiting.accountsSetupMaxAttempts` | `5` | First-time setup attempts before IP rate limiting. `0` disables. |
-| `rateLimiting.accountsRecoverMaxAttempts` | `5` | Failed recovery attempts before rate limiting. `0` disables. |
+| `rateLimiting.accountsRecoverMaxAttempts` | `5` | Recovery requests per IP within a 300-second window. `recover-step1` consumes on every request, not only on failure; `recover-step2` consumes only on a wrong code. `0` disables. |
 | `rateLimiting.preferRealIpHeader` | `false` | Use forwarded IP headers for rate-limit tracking behind a reverse proxy. |
 | `disableCsrfProtection` | `false` | Disables CSRF token enforcement on login API. Not recommended. |
 

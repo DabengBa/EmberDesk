@@ -22,6 +22,7 @@ Let users briefly reveal or re-mask password text on authentication surfaces so 
 - Pressing the same control again re-masks the same field and returns the icon to the hidden state.
 - The toggle changes presentation only; it must not modify, submit, store, clear, or validate the password value.
 - The reveal state is temporary and does not persist across refreshes or reopened authentication pages.
+- Coverage is the login password field and both setup password fields. The recovery card's new-password input has no toggle.
 
 ## Semantic Interaction IDs
 
