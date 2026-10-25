@@ -42,6 +42,7 @@ export interface MainChatMessageActionsCommand {
 }
 
 export interface MainChatCommands {
+    selectGreeting(index: number, characterId: string, chatId: string): Promise<boolean> | boolean;
     openCharacterLibrary(): CommandResult;
     loadMoreMessages(messagesToLoad?: number | null): CommandResult;
     loadMoreUntilMessage(anchorMessageId: string): CommandResult;

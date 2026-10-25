@@ -118,6 +118,19 @@ export interface MainChatWindowSnapshot {
     readonly scrollRestore: MainChatScrollRestoreSnapshot | null;
 }
 
+export interface MainChatGreetingOption {
+    readonly index: number;
+    readonly text: string;
+}
+
+export interface MainChatGreetingsSnapshot {
+    readonly options: readonly MainChatGreetingOption[];
+    readonly selectedIndex: number | null;
+    readonly canSelect: boolean;
+    readonly characterId: string | null;
+    readonly chatId: string | null;
+}
+
 export type MainChatWindowSnapshotInput = Partial<Omit<MainChatWindowSnapshot, 'scrollRestore'>> & {
     scrollRestore?: Partial<MainChatScrollRestoreSnapshot> | null;
 };
@@ -132,6 +145,7 @@ export interface MainChatSnapshot {
     readonly slash: MainChatSlashSnapshot;
     readonly window: MainChatWindowSnapshot;
     readonly turnSummaries: readonly MainChatTurnSummaryRecord[];
+    readonly greetings: MainChatGreetingsSnapshot;
 }
 
 export type MainChatSnapshotInput = Partial<{
@@ -144,6 +158,13 @@ export type MainChatSnapshotInput = Partial<{
     slash: Partial<MainChatSlashSnapshot>;
     window: MainChatWindowSnapshotInput;
     turnSummaries: readonly unknown[];
+    greetings: {
+        options: readonly unknown[];
+        selectedIndex?: unknown;
+        canSelect?: unknown;
+        characterId?: unknown;
+        chatId?: unknown;
+    };
 }>;
 
 export interface MainChatStoreState {
@@ -497,6 +518,21 @@ function normalizeSnapshot(input: MainChatSnapshotInput = {}, previousMessages?:
                 : null,
         },
         turnSummaries,
+        greetings: {
+            options: Array.isArray(input.greetings?.options)
+                ? input.greetings.options.flatMap(option => {
+                    if (!option || typeof option !== 'object') return [];
+                    const value = option as { index?: unknown; text?: unknown };
+                    return Number.isInteger(value.index) && typeof value.text === 'string'
+                        ? [{ index: Number(value.index), text: value.text }]
+                        : [];
+                })
+                : [],
+            selectedIndex: Number.isInteger(input.greetings?.selectedIndex) ? Number(input.greetings?.selectedIndex) : null,
+            canSelect: input.greetings?.canSelect === true,
+            characterId: normalizeNullableString(input.greetings?.characterId),
+            chatId: normalizeNullableString(input.greetings?.chatId),
+        },
     }) as MainChatSnapshot;
 }
 

@@ -634,6 +634,7 @@ export async function createOrEditCharacter(e) {
                 !isNewChat &&
                 message.mes &&
                 !state.chat_metadata.tainted &&
+                !state.chat_metadata.greeting &&
                 (state.chat.length === 0 || (state.chat.length === 1 && !state.chat[0].is_user && !state.chat[0].is_system));
 
             if (shouldRegenerateMessage) {

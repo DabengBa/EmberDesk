@@ -93,6 +93,12 @@ export function mapLegacyGenerationTypeToCommandKind(type, options = {}) {
     }
 }
 
+export function isForegroundGenerationEntry(type, options = {}, dryRun = false) {
+    if (dryRun || options.depth || options.preview) return false;
+    const kind = mapLegacyGenerationTypeToCommandKind(type, options);
+    return kind === 'submitComposer' || kind === 'quietToLoud';
+}
+
 /**
  * Map public command kind to the Generate()/lifecycle `type` used for recovery baselines.
  * @param {string} kind
