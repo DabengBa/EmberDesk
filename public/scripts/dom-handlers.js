@@ -60,7 +60,7 @@ const importTags = (...args) => shell().importTags(...args);
 const initCharacterSearch = (...args) => shell().initCharacterSearch(...args);
 const isDataURL = (...args) => shell().isDataURL(...args);
 const isReactMainChatOwner = (...args) => shell().isReactMainChatOwner(...args);
-const isValidUrl = (...args) => shell().isValidUrl(...args);
+
 const loadEarlierChatMessages = (...args) => shell().loadEarlierChatMessages(...args);
 const messageEdit = (...args) => shell().messageEdit(...args);
 const messageEditCancel = (...args) => shell().messageEditCancel(...args);
@@ -334,20 +334,6 @@ export async function bindLegacyShellHandlers() {
         }
     });
 
-    $('#advanced_div').on('click', function () {
-        if (!state.is_advanced_char_open) {
-            state.is_advanced_char_open = true;
-            $('#character_popup').css({ 'display': 'flex', 'opacity': 0.0 }).addClass('open');
-            $('#character_popup').transition({
-                opacity: 1.0,
-                duration: state.animation_duration,
-                easing: state.animation_easing,
-            });
-        } else {
-            state.is_advanced_char_open = false;
-            $('#character_popup').css('display', 'none').removeClass('open');
-        }
-    });
 
     $('#character_cross').on('click', function () {
         state.is_advanced_char_open = false;
@@ -1332,9 +1318,7 @@ export async function bindLegacyShellHandlers() {
             case 'set_character_world':
                 await openCharacterWorldPopup();
                 break;
-            case 'character_action_advanced':
-                $('#advanced_div').trigger('click');
-                break;
+
             case 'character_action_chat_lorebook':
                 $('.chat_lorebook_button').first().trigger('click');
                 break;
@@ -1348,18 +1332,7 @@ export async function bindLegacyShellHandlers() {
                 await importEmbeddedWorldInfo();
                 saveCharacterDebounced();
                 break;
-            case 'character_source': {
-                const source = getCharacterSource(state.this_chid);
-                if (source && isValidUrl(source)) {
-                    const url = new URL(source);
-                    const confirm = await state.Popup.show.confirm('Open Source', `<span>Do you want to open the link to ${url.hostname} in a new tab?</span><var>${url}</var>`);
-                    if (confirm) {
-                        window.open(source, '_blank', 'noopener');
-                    }
-                } else {
-                    toastr.info('This character doesn\'t seem to have a source.');
-                }
-            } break;
+
             case 'replace_update': {
                 let onlineUrl = getCharacterSource(state.this_chid);
 

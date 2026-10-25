@@ -2313,7 +2313,7 @@ function getCharacterManagementDropdownActions() {
     return Array.from(dropdown.options)
         // React owns the advanced fields; projecting the legacy advanced
         // editor would expose a second visible editing surface for them.
-        .filter(option => option instanceof HTMLOptionElement && option.id && option.id !== 'character_action_advanced')
+        .filter(option => option instanceof HTMLOptionElement && option.id)
         .map(option => ({
             id: option.id,
             label: option.textContent?.trim() || option.id,

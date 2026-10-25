@@ -69,6 +69,15 @@ export function readFromV2(char) {
     // because foreign `personality` payloads are simply dropped below.
     _.unset(char, 'personality');
     _.unset(char, 'data.personality');
+    for (const path of [
+        'mes_example',
+        'data.mes_example',
+        'data.system_prompt',
+        'data.post_history_instructions',
+        'data.extensions.depth_prompt',
+    ]) {
+        _.unset(char, path);
+    }
 
     const fieldMappings = {
         name: 'name',
@@ -151,7 +160,7 @@ export function charaFormatData(data, directories) {
     _.set(char, 'description', data.description || '');
     _.set(char, 'scenario', data.scenario || '');
     _.set(char, 'first_mes', data.first_mes || '');
-    _.set(char, 'mes_example', data.mes_example || '');
+
 
     // Old ST extension fields (for backward compatibility, will be deprecated)
     const talkativeness = normalizeTalkativeness(data.talkativeness);
@@ -169,12 +178,11 @@ export function charaFormatData(data, directories) {
     _.set(char, 'data.description', data.description || '');
     _.set(char, 'data.scenario', data.scenario || '');
     _.set(char, 'data.first_mes', data.first_mes || '');
-    _.set(char, 'data.mes_example', data.mes_example || '');
+
 
     // New V2 fields
     _.set(char, 'data.creator_notes', data.creator_notes || '');
-    _.set(char, 'data.system_prompt', data.system_prompt || '');
-    _.set(char, 'data.post_history_instructions', data.post_history_instructions || '');
+
     _.set(char, 'data.tags', typeof data.tags == 'string' ? (data.tags.split(',').map(x => x.trim()).filter(x => x)) : data.tags || []);
     _.set(char, 'data.creator', data.creator || '');
     _.set(char, 'data.character_version', data.character_version || '');
@@ -185,14 +193,6 @@ export function charaFormatData(data, directories) {
     _.set(char, 'data.extensions.fav', data.fav == 'true');
     _.set(char, 'data.extensions.world', data.world || '');
 
-    // Spec extension: depth prompt
-    const depth_default = 4;
-    const role_default = 'system';
-    const depth_value = !isNaN(Number(data.depth_prompt_depth)) ? Number(data.depth_prompt_depth) : depth_default;
-    const role_value = data.depth_prompt_role ?? role_default;
-    _.set(char, 'data.extensions.depth_prompt.prompt', data.depth_prompt_prompt ?? '');
-    _.set(char, 'data.extensions.depth_prompt.depth', depth_value);
-    _.set(char, 'data.extensions.depth_prompt.role', role_value);
 
     if (data.world) {
         try {

@@ -88,9 +88,7 @@ export function RightNavPanel() {
                                                     <span className="sr-only">Character actions</span>
                                                     <select id="char-management-dropdown" className="text_pole" defaultValue="default">
                                                         <option value="default" disabled data-i18n="More...">More...</option>
-                                                        <option id="character_action_advanced" data-i18n="Advanced Definition">
-                                                            Advanced Definition
-                                                        </option>
+
                                                         <option id="set_character_world" data-i18n="Link to World Info">
                                                             Link to World Info
                                                         </option>
@@ -106,9 +104,7 @@ export function RightNavPanel() {
                                                         <option id="renameCharButton" data-i18n="Rename">
                                                             Rename
                                                         </option>
-                                                        <option id="character_source" data-i18n="Link to Source">
-                                                            Link to Source
-                                                        </option>
+
                                                         <option id="replace_update" data-i18n="Replace / Update">
                                                             Replace / Update
                                                         </option>
@@ -128,7 +124,7 @@ export function RightNavPanel() {
                                                 </label>
                                             </div>
                                             <div className="character-detail-hidden-actions" aria-hidden="true">
-                                                <ContractIconButton id="advanced_div" className="menu_button" label="Advanced Definitions" nativeTitle title="Advanced Definitions" titleKey="Advanced Definition" icon={<i className="fa-solid fa-book" aria-hidden="true" />} />
+
                                                 <ContractIconButton className="chat_lorebook_button menu_button" label="Chat Lore" nativeTitle title={"Chat Lore\n\nClick to load\nShift/Alt-click or long-press to open 'Link to Chat Lorebook' popup"} titleKey="chat_lorebook_button_title" icon={<i className="fa-solid fa-passport" aria-hidden="true" />} />
                                                 <ContractIconButton id="export_button" className="menu_button" label="Export and Download" nativeTitle title="Export and Download" icon={<i className="fa-solid fa-file-export" aria-hidden="true" />} />
                                                 <ContractIconButton id="dupe_button" className="menu_button" label="Duplicate Character" nativeTitle title="Duplicate Character" icon={<i className="fa-solid fa-clone" aria-hidden="true" />} />
