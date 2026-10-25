@@ -172,6 +172,7 @@ import {
 import {
     createGenerationCommand,
     createGenerationRequestEnvelope,
+    isForegroundGenerationEntry,
 } from './scripts/chat-generation-command-service.js';
 import { collectRegenerateTurn } from './scripts/chat-regenerate.js';
 import { markdownUnderscoreExt } from './scripts/showdown-underscore.js';
@@ -218,6 +219,7 @@ import { getMainChatComposerState } from './scripts/main-chat-composer-state.js'
 import { getComposerValue, setComposerValue } from './scripts/main-chat-composer-service.js';
 import { getMainChatSlashCommandState } from './scripts/main-chat-slash-command-state.js';
 import { getMainChatStreamingTransportState } from './scripts/main-chat-streaming-transport-state.js';
+import { buildGreetingOptions, canSwitchGreeting } from './scripts/main-chat-greetings.js';
 import { createChatMessageActionsController } from './scripts/chat-message-actions-controller.js';
 import { ToolManager } from './scripts/tool-calling.js';
 import { addShowdownPatch } from './scripts/util/showdown-patch.js';
@@ -338,6 +340,7 @@ import {
     saveChat,
     saveChatConditional,
     saveChatDebounced,
+    selectChatGreeting,
 } from './scripts/chat-ops-service.js';
 import { registerChatOpsShellContext } from './scripts/chat-ops-shell-context.js';
 import { removeCharactersFromState } from './scripts/character-list-state.js';
@@ -653,6 +656,7 @@ registerChatOpsShellContext({
         set chatSaveTimeout(value) { chatSaveTimeout = value; },
         get isChatSaving() { return isChatSaving; },
         set isChatSaving(value) { isChatSaving = value; },
+        get generationPending() { return generationEntryPending || regenerateRequestInFlight; },
         get mainChatMessageRenderGeneration() { return mainChatMessageRenderGeneration; },
         set mainChatMessageRenderGeneration(value) { mainChatMessageRenderGeneration = value; },
         get reactMainChatProjectionCleared() { return reactMainChatProjectionCleared; },
@@ -671,6 +675,7 @@ registerChatOpsShellContext({
     equalsIgnoreCaseAndAccents: (...args) => equalsIgnoreCaseAndAccents(...args),
     flashHighlight: (...args) => flashHighlight(...args),
     getChatResult: (...args) => getChatResult(...args),
+    getFirstMessage: (...args) => getFirstMessage(...args),
     getCurrentChatId: (...args) => getCurrentChatId(...args),
     getLastMessageId: (...args) => getLastMessageId(...args),
     getMainChatReactVisibleWindow: (...args) => getMainChatReactVisibleWindow(...args),
@@ -3169,6 +3174,33 @@ function getMainChatMessageListReactBridgeState() {
             scrollRestore: getMainChatMessageListScrollRestoreSnapshot(),
         },
         turnSummaries: getChatMemoryDisplayItems(),
+        greetings: (() => {
+            const options = buildGreetingOptions(characters[this_chid]);
+            const current = chat_metadata.greeting;
+            const selectedIndex = typeof current?.text === 'string'
+                ? (options.find(option => option.index === current.index && option.text === current.text)
+                    ?? options.find(option => option.text === current.text))?.index ?? null
+                : chat.length === 1
+                    ? options.find(option => option.text === chat[0]?.mes)?.index ?? null
+                    : null;
+            const editable = chat.length === 0
+                ? chat_metadata.tainted !== true
+                : canSwitchGreeting({
+                    characterId: this_chid,
+                    chat,
+                    metadata: chat_metadata,
+                    isGenerating: is_send_press,
+                    isChatSaving,
+                    isEditing: this_edit_mes_id !== undefined,
+                });
+            return {
+                options,
+                selectedIndex,
+                canSelect: this_chid !== undefined && options.length > 1 && editable && !chat_metadata.tainted,
+                characterId: this_chid === undefined ? null : String(this_chid),
+                chatId: getCurrentChatId(),
+            };
+        })(),
     });
     return {
         chatId: getCurrentChatId(),
@@ -3213,6 +3245,15 @@ function getMainChatMessageListReactCommands() {
             loadMoreMessages: messagesToLoad => loadEarlierChatMessages(
                 Number.isInteger(Number(messagesToLoad)) ? Number(messagesToLoad) : null,
             ),
+            selectGreeting: async (index, characterId, chatId) => {
+                if (greetingSelectionPending || generationEntryPending || regenerateRequestInFlight) return false;
+                greetingSelectionPending = true;
+                try {
+                    return await selectChatGreeting({ index, characterId, chatId });
+                } finally {
+                    greetingSelectionPending = false;
+                }
+            },
             loadMoreUntilMessage: async anchorMessageId => {
                 if (!anchorMessageId) {
                     return true;
@@ -4580,6 +4621,12 @@ export async function selectCharacterById(id, { switchMenu = true } = {}) {
             setCharacterId(id);
             chat_metadata = {};
             await getChat();
+            // On narrow screens the authoring drawer covers the chat surface
+            // after selecting a character. Leave the chat entry points usable;
+            // desktop keeps the existing authoring-panel behavior.
+            if (window.matchMedia('(max-width: 640px)').matches) {
+                closeWorkspaceChildSlotHost('right-nav-panel');
+            }
         }
     } else {
         //if clicked on character that was already selected
@@ -5411,6 +5458,7 @@ export function cancelDebouncedChatSave() {
 
 
 export async function deleteLastMessage() {
+    if (greetingSelectionPending) return false;
     const deletedMessageId = chat.length - 1;
     chat.length = chat.length - 1;
     if (isReactMainChatOwner()) {
@@ -5434,6 +5482,7 @@ export async function deleteLastMessage() {
  * @param {boolean} [askConfirmation=false] Whether to ask for confirmation before deleting.
  */
 export async function deleteMessage(id, askConfirmation = false) {
+    if (greetingSelectionPending) return false;
     if (askConfirmation) {
         const result = await callGenericPopup(t`Are you sure you want to delete this message?`, POPUP_TYPE.CONFIRM, null, {
             okButton: t`Delete Message`,
@@ -5508,6 +5557,7 @@ export async function reloadCurrentChatUnsafe() {
  * Send the message currently typed into the chat box.
  */
 export async function sendTextareaMessage() {
+    if (greetingSelectionPending) return;
     if (is_send_press) return;
     if (isExecutingCommandsFromChatInput) return;
     if (regenerateRequestInFlight || generationEntryPending) return;
@@ -6343,6 +6393,7 @@ function removeLastMessage() {
  * @returns {Promise<any>} Returns a promise that resolves when the text is done generating.
  */
 export async function Generate(type, options = {}, dryRun = false) {
+    if (greetingSelectionPending) return;
     // The regenerate flag only means something for a real, top-level visible
     // turn — quiet/nested/preview calls must never delete the tail.
     const isRegenerateEnvelope = options?.regenerate === true && type === 'normal' && !options?.depth && !dryRun && !options?.preview;
@@ -6356,7 +6407,7 @@ export async function Generate(type, options = {}, dryRun = false) {
     // Closes the TOCTOU between "Generate() entered" and "is_send_press set"
     // deep inside the service — both the send and the regenerate guards check
     // this flag so the two can never overlap in the pre-flag awaits.
-    const tracksEntry = type === 'normal' && !dryRun && !options?.depth && !options?.preview;
+    const tracksEntry = isForegroundGenerationEntry(type, options, dryRun);
     if (tracksEntry) {
         generationEntryPending = true;
     }
@@ -6505,13 +6556,14 @@ let pendingRegenerateRestore = null;
 // before the service flips is_send_press — so send and regenerate guards
 // cannot overlap.
 let generationEntryPending = false;
+let greetingSelectionPending = false;
 
 /**
  * Whether the options-menu "Regenerate" action can run right now.
  * @returns {boolean}
  */
 export function canRegenerateLastReply() {
-    if (is_send_press || regenerateRequestInFlight || generationEntryPending || isExecutingCommandsFromChatInput || this_edit_mes_id !== undefined) {
+    if (greetingSelectionPending || is_send_press || regenerateRequestInFlight || generationEntryPending || isExecutingCommandsFromChatInput || this_edit_mes_id !== undefined) {
         return false;
     }
     if (online_status === 'no_connection') {
@@ -7397,8 +7449,8 @@ async function getChatResult() {
     }
 }
 
-function getFirstMessage() {
-    const firstMes = characters[this_chid]?.first_mes || '';
+function getFirstMessage(selectedText) {
+    const firstMes = selectedText ?? characters[this_chid]?.first_mes ?? '';
     const alternateGreetings = characters[this_chid]?.data?.alternate_greetings;
 
     const message = {
@@ -7785,6 +7837,7 @@ function openMessageDelete(fromSlashCommand) {
 }
 
 function startMainChatMessageEdit(messageId) {
+    if (greetingSelectionPending) return false;
     const normalizedMessageId = Number(messageId);
     const message = chat[normalizedMessageId];
     if (!Number.isInteger(normalizedMessageId) || normalizedMessageId < 0 || !message) {
@@ -7814,6 +7867,7 @@ function updateMainChatMessageEdit(messageId, text) {
 }
 
 async function duplicateMainChatMessage(messageId) {
+    if (greetingSelectionPending) return false;
     const normalizedMessageId = Number(messageId);
     const sourceMessage = chat[normalizedMessageId];
     if (!Number.isInteger(normalizedMessageId) || normalizedMessageId < 0 || !sourceMessage) {
@@ -7925,6 +7979,7 @@ async function copyMainChatMessageReasoning(messageId) {
 }
 
 function startMainChatMessageReasoningEdit(messageId) {
+    if (greetingSelectionPending) return false;
     const normalizedMessageId = Number(messageId);
     const message = chat[normalizedMessageId];
     if (!Number.isInteger(normalizedMessageId) || normalizedMessageId < 0 || !message) {
@@ -8060,6 +8115,7 @@ function collapseAllMainChatMessageReasoning() {
  * @param {number} editMessageId The ID of the message to edit
  */
 export async function messageEdit(editMessageId) {
+    if (greetingSelectionPending) return false;
     const editMessage = chat[editMessageId];
     if (!editMessage) {
         console.warn(`Message with id ${editMessageId} not found in chat array.`);
@@ -8182,6 +8238,7 @@ async function messageEditCancel(messageId = this_edit_mes_id) {
  * @returns {Promise<boolean>} True if the messages were moved, false otherwise
  */
 async function messageEditMove(sourceId, targetId) {
+    if (greetingSelectionPending) return false;
     if (is_send_press) {
         console.warn(`The message #${sourceId} was not moved to #${targetId} because a generation is in progress.`);
         return false;
@@ -9212,6 +9269,11 @@ export async function doNewChat({ deleteCurrentChat = false } = {}) {
     await getChat();
     await createOrEditCharacter(new CustomEvent('newChat'));
     if (deleteCurrentChat) await delChat(chat_file_for_del + '.jsonl');
+
+    // A new chat has multiple authored greetings: expose the choice immediately
+    // instead of requiring the user to discover the small header selector.
+    await new Promise(resolve => requestAnimationFrame(resolve));
+    document.querySelector('[aria-label="选择开场白"]')?.click();
 }
 
 

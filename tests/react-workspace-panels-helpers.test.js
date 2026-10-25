@@ -457,9 +457,9 @@ describe('React workspace panels bridge helpers', () => {
         // into the draft, and persist before actions that read the saved card.
         expect(scriptSource).toContain('syncAuthoringDraftFromPopups(payload?.draft)');
         expect(scriptSource).toContain('persistAuthoringDraftBeforeLegacyAction');
-        // The legacy advanced-definition popup is a second visible editor for
-        // React-owned fields; keep it out of the projected action menu.
-        expect(scriptSource).toContain("option.id !== 'character_action_advanced'");
+        // The legacy advanced-definition popup is no longer projected from
+        // the character action menu while React owns the authoring panel.
+        expect(scriptSource).not.toContain("option.id !== 'character_action_advanced'");
         expect(scriptSource).toContain('data-react-authoring-build-error');
         expect(scriptSource).not.toContain('hideLegacyCharacterAuthoringEditor(Boolean(result?.mounted));');
         expect(scriptSource.match(/openWorkspaceShellCharacterAuthoring\(\) \{[\s\S]*?\n\}/)?.[0] ?? '').toContain("select_selected_character(this_chid, { switchMenu: false });");

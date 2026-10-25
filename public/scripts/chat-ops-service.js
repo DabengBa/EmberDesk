@@ -5,6 +5,7 @@ import { createOrEditCharacter } from './character-lifecycle-service.js';
 import { ensureMessageMediaIsArray, scrollChatToBottom, updateMessageElement } from './message-service.js';
 import { runDeleteCharacterClosePreflight } from './delete-character-preflight.js';
 import { requireChatOpsShellContext } from './chat-ops-shell-context.js';
+import { buildGreetingOptions, canSwitchGreeting, replaceGreeting } from './main-chat-greetings.js';
 
 
 function shell() {
@@ -336,7 +337,7 @@ export function saveChatDebounced() {
  * @param {boolean} [options.force] Force the saving despite the integrity check result
  * @param {ChatMessage[]} [options.chatData] Chat snapshot to save instead of the current in-memory chat
  *
- * @returns {Promise<void>}
+ * @returns {Promise<boolean|undefined>}
  */
 export async function saveChat({ chatName, withMetadata, mesId, force = false, chatData = undefined } = {}) {
     if (arguments.length > 0 && typeof arguments[0] !== 'object') {
@@ -388,7 +389,7 @@ export async function saveChat({ chatName, withMetadata, mesId, force = false, c
         const result = await fetch('/api/chats/save', saveChatRequest);
 
         if (result.ok) {
-            return;
+            return true;
         }
 
         const errorData = await result.json();
@@ -410,13 +411,76 @@ export async function saveChat({ chatName, withMetadata, mesId, force = false, c
         if (!forceSaveConfirmed) {
             console.warn('Chat integrity check failed, and user did not confirm the overwrite. Reloading the page.');
             window.location.reload();
-            return;
+            return false;
         }
 
-        await saveChat({ chatName, withMetadata, mesId, force: true });
+        return await saveChat({ chatName, withMetadata, mesId, force: true, chatData });
     } catch (error) {
         console.error(error);
         toastr.error(t`Check the server connection and reload the page to prevent data loss.`, t`Chat could not be saved`);
+        return false;
+    }
+}
+
+export async function selectChatGreeting({ index, characterId, chatId }) {
+    if (
+        String(state.this_chid) !== String(characterId)
+        || getCurrentChatId() !== chatId
+        || state.is_send_press
+        || state.generationPending
+        || state.this_edit_mes_id !== undefined
+        || state.chat_metadata.tainted === true
+    ) {
+        return false;
+    }
+    const eligible = state.chat.length === 0
+        ? state.chat_metadata.tainted !== true
+        : canSwitchGreeting({
+            characterId,
+            chat: state.chat,
+            metadata: state.chat_metadata,
+            isGenerating: state.is_send_press,
+            isChatSaving: state.isChatSaving,
+            isEditing: state.this_edit_mes_id !== undefined,
+        });
+    if (!eligible || state.isChatSaving) return false;
+
+    const character = state.characters[state.this_chid];
+    const selected = buildGreetingOptions(character).find(option => option.index === index);
+    if (!character || !selected) {
+        return false;
+    }
+
+    const metadata = state.chat_metadata;
+    const original = state.chat[0];
+    const message = shell().getFirstMessage(selected.text);
+    const nextChat = original
+        ? replaceGreeting({ characterId, chat: state.chat, metadata, message }).chat
+        : [message];
+    const nextMetadata = { ...metadata, greeting: { index, text: selected.text } };
+
+    cancelDebouncedChatSave();
+    state.isChatSaving = true;
+    try {
+        const saved = await saveChat({ chatData: nextChat, withMetadata: nextMetadata });
+        if (saved !== true || getCurrentChatId() !== chatId || String(state.this_chid) !== String(characterId)
+            || state.chat_metadata !== metadata || state.chat[0] !== original || state.chat.length > 1
+            || metadata.tainted || state.is_send_press) {
+            return false;
+        }
+
+        state.chat.splice(0, state.chat.length, ...nextChat);
+        state.chat_metadata = nextMetadata;
+        state.reactMainChatProjectionCleared = false;
+        state.isChatSaving = false;
+        await eventSource.emit(event_types.CHARACTER_FIRST_MESSAGE_SELECTED, index);
+        await eventSource.emit(event_types.MESSAGE_RECEIVED, 0, 'first_message');
+        await mountReactMainChatMessageListPanel();
+        await eventSource.emit(event_types.CHARACTER_MESSAGE_RENDERED, 0, 'first_message');
+        return true;
+    } finally {
+        state.isChatSaving = false;
+        await mountReactMainChatMessageListPanel();
     }
 }
 

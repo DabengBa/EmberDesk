@@ -11,6 +11,7 @@ import {
     createGenerationCommandPlan,
     createGenerationRequestEnvelope,
     executeGenerationAttempts,
+    isForegroundGenerationEntry,
     mapLegacyGenerationTypeToCommandKind,
     mapGenerationCommandKindToLifecycleType,
     simulateGenerationCommandOutcome,
@@ -35,6 +36,20 @@ describe('chat generation command service', () => {
         ['backgroundGeneration', 'quiet'],
     ])('maps command kind %s to lifecycle type %s', (kind, lifecycleType) => {
         expect(mapGenerationCommandKindToLifecycleType(kind)).toBe(lifecycleType);
+    });
+
+    test.each([
+        ['normal submit', 'normal', {}, false, true],
+        ['omitted legacy type', undefined, {}, false, true],
+        ['continue alias', 'continue', {}, false, true],
+        ['quiet prompt', 'quiet', {}, false, false],
+        ['quiet to loud', 'quiet', { quietToLoud: true }, false, true],
+        ['background generation', 'quiet', { backgroundGeneration: true }, false, false],
+        ['nested generation', 'normal', { depth: 1 }, false, false],
+        ['preview', 'normal', { preview: true }, false, false],
+        ['dry run', 'normal', {}, true, false],
+    ])('tracks %s as foreground entry: %s', (_label, type, options, dryRun, expected) => {
+        expect(isForegroundGenerationEntry(type, options, dryRun)).toBe(expected);
     });
 
     test.each([

@@ -284,6 +284,7 @@ export function buildMainChatSnapshotFromLegacyChat({
     window = {},
     messageUiById = {},
     turnSummaries = [],
+    greetings = {},
 } = {}) {
     if (!Array.isArray(chat)) {
         throw new TypeError('Main chat snapshot projection requires a chat array');
@@ -397,5 +398,6 @@ export function buildMainChatSnapshotFromLegacyChat({
             scrollRestore: window.scrollRestore ?? null,
         },
         turnSummaries: Array.isArray(turnSummaries) ? turnSummaries : [],
+        greetings,
     };
 }

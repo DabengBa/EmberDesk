@@ -39,6 +39,7 @@ import type {
     MainChatSnapshot,
 } from './stores/main-chat-store';
 import { MainChatMessageRow } from './components/main-chat/MainChatMessageRow';
+import { MainChatGreetingPicker } from './components/main-chat/MainChatGreetingPicker';
 import { TurnSummaryCard } from './components/main-chat/TurnSummaryCard';
 import {
     createCharacterAuthoringSession,
@@ -1995,6 +1996,7 @@ button.menu_button {
                     Show more messages
                 </button>
             ) : null}
+            <MainChatGreetingPicker greetings={mainChatStoreSnapshot.greetings} commands={commands} />
             {shouldShowSlashAutocomplete ? (
                 <div
                     className="autoComplete-wrap"
