@@ -20,7 +20,8 @@ describe('pipeline binding synchronization', () => {
         const action = core.createToolAction(store[0].actionBody);
         for (const content of ['hello', '{"hello":"world"}', '[1,2]', '42', 'null', '"quoted"']) {
             const result = await action({ content });
-            expect(extractFinalStepText([{ name: 'reply', result }], { tool: 'reply' })).toBe(content);
+            expect(result).toBe(content);
+            expect(extractFinalStepText([{ name: 'reply', result, parameters: JSON.stringify({ content }) }], { tool: 'reply' })).toBe(content);
         }
         expect(core.ensurePipelineToolBindings(store, ['reply'])).toBe(false);
         expect(store).toHaveLength(1);

@@ -552,15 +552,61 @@ describe('postProcessPrompt', () => {
         expect(result[1].role).toBe('assistant');
     });
 
-    test('strips tool call fields and converts tool messages to user', () => {
-        const messages = [
-            { role: 'user', content: 'hi' },
-            { role: 'assistant', content: 'calling', tool_calls: [{ id: 'x' }] },
-            { role: 'tool', content: 'result', tool_call_id: 'x' },
+    test('preserves native tool calls and distinct adjacent paired results', () => {
+        const toolCalls = [
+            { id: 'call_weather', type: 'function', function: { name: 'weather', arguments: '{"city":"Paris"}' } },
+            { id: 'call_time', type: 'function', function: { name: 'time', arguments: '{"zone":"Europe/Paris"}' } },
         ];
+        const messages = [
+            { role: 'system', content: 'Use native tools.' },
+            { role: 'user', content: 'hi' },
+            { role: 'assistant', content: 'calling', tool_calls: toolCalls },
+            { role: 'tool', content: 'sunny', tool_call_id: 'call_weather' },
+            { role: 'tool', content: '12:00', tool_call_id: 'call_time' },
+            { role: 'assistant', content: 'Here are both results.' },
+        ];
+        const expected = structuredClone(messages);
         const result = mod.postProcessPrompt(messages, names);
-        expect(result.every(m => m.role !== 'tool')).toBe(true);
-        expect(result.every(m => !('tool_calls' in m) && !('tool_call_id' in m))).toBe(true);
+        expect(result).toEqual(expected);
+    });
+
+    test('does not merge a native call into preceding assistant text', () => {
+        const messages = [
+            { role: 'user', content: 'Check the weather.' },
+            { role: 'assistant', content: 'Let me check.' },
+            { role: 'assistant', content: 'Calling weather.', tool_calls: [
+                { id: 'call_weather', type: 'function', function: { name: 'weather', arguments: '{}' } },
+            ] },
+            { role: 'tool', content: 'sunny', tool_call_id: 'call_weather' },
+        ];
+        expect(mod.postProcessPrompt(structuredClone(messages), names)).toEqual(messages);
+    });
+
+    test('keeps the processed prefix stable across native tool rounds with null assistant content', () => {
+        const p1 = [
+            { role: 'system', content: 'base' },
+            { role: 'user', content: 'question' },
+            { role: 'system', content: 'step1' },
+        ];
+        const toolCalls = [{ id: 'call_step', type: 'function', function: { name: 'step', arguments: '{}' } }];
+        const p2 = [
+            ...p1,
+            { role: 'assistant', content: null, tool_calls: toolCalls },
+            { role: 'tool', content: 'result', tool_call_id: 'call_step' },
+            { role: 'system', content: 'step2' },
+        ];
+        const first = mod.postProcessPrompt(structuredClone(p1), names);
+        const second = mod.postProcessPrompt(structuredClone(p2), names);
+        expect(first).toEqual([
+            { role: 'system', content: 'base' },
+            { role: 'user', content: 'question\n\nstep1' },
+        ]);
+        expect(second.slice(0, first.length)).toEqual(first);
+        expect(second.slice(first.length)).toEqual([
+            { role: 'assistant', content: '', tool_calls: toolCalls },
+            { role: 'tool', content: 'result', tool_call_id: 'call_step' },
+            { role: 'user', content: 'step2' },
+        ]);
     });
 });
 

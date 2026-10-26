@@ -112,7 +112,7 @@ export function ensurePipelineToolBindings(store, names, { activate = false, reg
             name,
             description: 'Return the model-authored text for this reply pipeline step in content.',
             parameters: { type: 'object', properties: { content: { type: 'string' } }, required: ['content'] },
-            actionBody: 'if (typeof args.content !== "string" || !args.content.trim()) return ""; return JSON.stringify(args.content);',
+            actionBody: 'if (typeof args.content !== "string" || !args.content.trim()) return ""; return args.content;',
         }));
         changed = true;
     }

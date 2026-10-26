@@ -57,8 +57,8 @@ describe('pipeline request shaping shared by live send and preview', () => {
             tool_choice: { type: 'function', function: { name: 'analyze' } },
         };
         applyFallbackRequestShape(data, 'close it out');
-        expect(data.tools).toBeUndefined();
-        expect(data.tool_choice).toBeUndefined();
+        expect(data.tools).toEqual([{ type: 'function' }]);
+        expect(data.tool_choice).toBe('none');
         expect(data.messages).toEqual([{ role: 'system', content: 'close it out' }]);
     });
 });

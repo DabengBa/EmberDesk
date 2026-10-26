@@ -295,7 +295,7 @@ describe('applyStepRequestOverrides tool narrowing', () => {
         const data = applyStepRequestOverrides(makeBody(), { tool: 'analyze' }, { enforceMode: 'forced' });
 
         expect(data.tool_choice).toEqual({ type: 'function', function: { name: 'analyze' } });
-        expect(data.tools.map(tool => tool.function.name)).toEqual(['analyze']);
+        expect(data.tools.map(tool => tool.function.name)).toEqual(['analyze', 'review', 'respond', 'options']);
     });
 
     test('auto mode narrows tools to the step function too — the plan owns the tool surface', async () => {
@@ -304,7 +304,7 @@ describe('applyStepRequestOverrides tool narrowing', () => {
         const data = applyStepRequestOverrides(makeBody(), { tool: 'review' }, { enforceMode: 'auto' });
 
         expect(data.tool_choice).toBe('auto');
-        expect(data.tools.map(tool => tool.function.name)).toEqual(['review']);
+        expect(data.tools.map(tool => tool.function.name)).toEqual(['analyze', 'review', 'respond', 'options']);
     });
 
     test('keeps the list untouched when the step tool is not registered', async () => {

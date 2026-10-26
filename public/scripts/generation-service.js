@@ -21,7 +21,7 @@ import {
     previewPipelineRequestShaping,
 } from './reply-pipeline.js';
 import { t } from './i18n.js';
-import { getActivePipelineRunId } from './reply-pipeline-core.js';
+import { assertPipelineResponseAllowed, getActivePipelineRunId, getPipelineRunState } from './reply-pipeline-core.js';
 
 function shell() {
     return requireGenerationShellContext();
@@ -613,487 +613,496 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
         };
     }
 
-    let {
-        description,
-        system,
-        charDepthPrompt,
-        creatorNotes,
-        scenario,
-    } = getCharacterCardFields();
-
-    // Depth prompt (character-specific A/N)
-    removeDepthPrompts();
-    const depthPromptText = charDepthPrompt || '';
-    const depthPromptDepth = state.characters[state.this_chid]?.data?.extensions?.depth_prompt?.depth ?? state.depth_prompt_depth_default;
-    const depthPromptRole = getExtensionPromptRoleByName(state.characters[state.this_chid]?.data?.extensions?.depth_prompt?.role ?? state.depth_prompt_role_default);
-    setExtensionPrompt(inject_ids.DEPTH_PROMPT, depthPromptText, state.extension_prompt_types.IN_CHAT, depthPromptDepth, false, depthPromptRole);
-
-    // First message in fresh 1-on-1 chat reacts to user/character settings changes.
-    // Preview works on a copy of the chat — the pending user message is appended
-    // exactly where sendMessageAsUser would have pushed it (end of history).
-    const chatForAssembly = isPreview
-        ? (previewPendingMessage ? [...state.chat, previewPendingMessage] : state.chat.slice())
-        : state.chat;
-    if (chatForAssembly.length) {
-        if (isPreview) {
-            chatForAssembly[0] = { ...chatForAssembly[0], mes: substituteParams(chatForAssembly[0].mes) };
-        } else {
-            state.chat[0].mes = substituteParams(state.chat[0].mes);
-        }
-    }
-
-    // Collect messages with usable content
-    const canUseTools = state.ToolManager.isToolCallingSupported();
     const canPerformToolCalls = !dryRun && state.ToolManager.canPerformToolCalls(type) && depth < state.ToolManager.RECURSE_LIMIT;
-    let coreChat = chatForAssembly.filter(x => !x.is_system || (canUseTools && Array.isArray(x.extra?.tool_invocations)));
+    let generate_data;
+    let previewChatCompletion = null;
+    let summarizedEntries = [];
+    const promptReasoning = new state.PromptReasoning();
+    if (!dryRun && type === 'normal' && state.main_api === 'openai' && getPipelineRunState()?.messages) {
+        // Keep the existing generation owner, but never rescan WI, re-expand
+        // macros or replay folded UI cards for an in-flight continuation.
+        const [prompt] = await prepareOpenAIMessages({ type, pipelineStepTag: getPipelineTriggerTag(type) }, false);
+        generate_data = { prompt };
+    } else {
+        let {
+            description,
+            system,
+            charDepthPrompt,
+            creatorNotes,
+            scenario,
+        } = getCharacterCardFields();
 
-    // Chat memory projection: turns covered by an active summary collapse
-    // into a single pseudo message in place — the canonical chat array stays
-    // untouched, World Info scanning sees the replaced text, and the pseudo
-    // items flow through the same regex/reasoning pipeline as real messages.
-    const chatMemoryProjection = applyChatMemoryToCoreChat(coreChat, { chat: chatForAssembly, dryRun });
-    coreChat = chatMemoryProjection.items;
-    const summarizedEntries = chatMemoryProjection.summarized;
+        // Depth prompt (character-specific A/N)
+        removeDepthPrompts();
+        const depthPromptText = charDepthPrompt || '';
+        const depthPromptDepth = state.characters[state.this_chid]?.data?.extensions?.depth_prompt?.depth ?? state.depth_prompt_depth_default;
+        const depthPromptRole = getExtensionPromptRoleByName(state.characters[state.this_chid]?.data?.extensions?.depth_prompt?.role ?? state.depth_prompt_role_default);
+        setExtensionPrompt(inject_ids.DEPTH_PROMPT, depthPromptText, state.extension_prompt_types.IN_CHAT, depthPromptDepth, false, depthPromptRole);
 
-    coreChat = await Promise.all(coreChat.map(async (/** @type {ChatMessage} */ chatItem, index) => {
-        let message = chatItem.mes;
-        let regexType = chatItem.is_user ? state.regex_placement.USER_INPUT : state.regex_placement.AI_OUTPUT;
-        let options = { isPrompt: true, depth: (coreChat.length - index - 1) };
-
-        let regexedMessage = getRegexedString(message, regexType, options);
-        regexedMessage = await appendFileContent(chatItem, regexedMessage);
-
-        const titles = [];
-        if (chatItem?.extra?.append_title && chatItem?.extra?.title) {
-            titles.push(chatItem.extra.title);
+        // First message in fresh 1-on-1 chat reacts to user/character settings changes.
+        // Preview works on a copy of the chat — the pending user message is appended
+        // exactly where sendMessageAsUser would have pushed it (end of history).
+        const chatForAssembly = isPreview
+            ? (previewPendingMessage ? [...state.chat, previewPendingMessage] : state.chat.slice())
+            : state.chat;
+        if (chatForAssembly.length) {
+            if (isPreview) {
+                chatForAssembly[0] = { ...chatForAssembly[0], mes: substituteParams(chatForAssembly[0].mes) };
+            } else {
+                state.chat[0].mes = substituteParams(state.chat[0].mes);
+            }
         }
-        if (Array.isArray(chatItem?.extra?.media)) {
-            for (const mediaItem of chatItem.extra.media) {
-                if (mediaItem?.title && mediaItem?.append_title) {
-                    titles.push(mediaItem.title);
+
+        // Collect messages with usable content
+        const canUseTools = state.ToolManager.isToolCallingSupported();
+        let coreChat = chatForAssembly.filter(x => !x.is_system || (canUseTools && Array.isArray(x.extra?.tool_invocations)));
+
+        // Chat memory projection: turns covered by an active summary collapse
+        // into a single pseudo message in place — the canonical chat array stays
+        // untouched, World Info scanning sees the replaced text, and the pseudo
+        // items flow through the same regex/reasoning pipeline as real messages.
+        const chatMemoryProjection = applyChatMemoryToCoreChat(coreChat, { chat: chatForAssembly, dryRun });
+        coreChat = chatMemoryProjection.items;
+        summarizedEntries = chatMemoryProjection.summarized;
+
+        coreChat = await Promise.all(coreChat.map(async (/** @type {ChatMessage} */ chatItem, index) => {
+            let message = chatItem.mes;
+            let regexType = chatItem.is_user ? state.regex_placement.USER_INPUT : state.regex_placement.AI_OUTPUT;
+            let options = { isPrompt: true, depth: (coreChat.length - index - 1) };
+
+            let regexedMessage = getRegexedString(message, regexType, options);
+            regexedMessage = await appendFileContent(chatItem, regexedMessage);
+
+            const titles = [];
+            if (chatItem?.extra?.append_title && chatItem?.extra?.title) {
+                titles.push(chatItem.extra.title);
+            }
+            if (Array.isArray(chatItem?.extra?.media)) {
+                for (const mediaItem of chatItem.extra.media) {
+                    if (mediaItem?.title && mediaItem?.append_title) {
+                        titles.push(mediaItem.title);
+                    }
+                }
+            }
+            if (titles.length > 0) {
+                regexedMessage = `${regexedMessage}\n\n${titles.join('\n\n')}`;
+            }
+
+            return {
+                ...chatItem,
+                mes: regexedMessage,
+                index,
+            };
+        }));
+
+
+        for (let i = coreChat.length - 1; i >= 0; i--) {
+            const depth = coreChat.length - i - 1;
+
+            coreChat[i] = {
+                ...coreChat[i],
+                mes: promptReasoning.addToMessage(
+                    coreChat[i].mes,
+                    getRegexedString(
+                        String(coreChat[i].extra?.reasoning ?? ''),
+                        state.regex_placement.REASONING,
+                        { isPrompt: true, depth: depth },
+                    ),
+                    false,
+                    coreChat[i].extra?.reasoning_duration,
+                ),
+            };
+            if (promptReasoning.isLimitReached()) {
+                break;
+            }
+        }
+
+        // Determine token limit
+        let this_max_context = getMaxPromptTokens();
+
+
+        console.log(`Core/all messages: ${coreChat.length}/${state.chat.length}`);
+
+        force_name2 = true;
+
+        // Add WI to prompt (and also inject WI to AN value via hijack)
+        // Make quiet prompt available for WIAN
+        setExtensionPrompt(inject_ids.QUIET_PROMPT, quiet_prompt || '', state.extension_prompt_types.IN_PROMPT, 0, true);
+        const chatForWI = coreChat.map(x => x.mes).reverse();
+        /** @type {import('./world-info.js').WIGlobalScanData} */
+        const globalScanData = {
+            characterDescription: description,
+            characterDepthPrompt: charDepthPrompt,
+            creatorNotes: creatorNotes,
+            scenario: scenario,
+            trigger: 'normal',
+        };
+        const { worldInfo, worldInfoBefore, worldInfoAfter, worldInfoDepth } = await getWorldInfoPrompt(chatForWI, this_max_context, dryRun, globalScanData);
+        setExtensionPrompt(inject_ids.QUIET_PROMPT, '', state.extension_prompt_types.IN_PROMPT, 0, true);
+
+        if (skipWIAN !== true) {
+            console.log('skipWIAN not active, adding WIAN');
+            // Add all depth WI entries to prompt
+            flushWIInjections();
+            if (Array.isArray(worldInfoDepth)) {
+                worldInfoDepth.forEach((e) => {
+                    const joinedEntries = e.entries.join('\n');
+                    setExtensionPrompt(inject_ids.CUSTOM_WI_DEPTH_ROLE(e.depth, e.role), joinedEntries, state.extension_prompt_types.IN_CHAT, e.depth, false, e.role);
+                });
+            }
+        } else {
+            console.log('skipping WIAN');
+        }
+
+        // Collect before / after story string injections
+        const beforeScenarioAnchor = await getExtensionPrompt(state.extension_prompt_types.BEFORE_PROMPT);
+        const afterScenarioAnchor = await getExtensionPrompt(state.extension_prompt_types.IN_PROMPT);
+
+        const storyStringParams = {
+            description: description,
+            system: system,
+            char: state.name2,
+            user: state.name1,
+            wiBefore: worldInfoBefore,
+            wiAfter: worldInfoAfter,
+            loreBefore: worldInfoBefore,
+            loreAfter: worldInfoAfter,
+            anchorBefore: beforeScenarioAnchor.trim(),
+            anchorAfter: afterScenarioAnchor.trim(),
+            scenario: scenario,
+            mesExamples: '',
+            mesExamplesRaw: '',
+        };
+
+        // Render the story string and combine with injections
+        const storyString = renderStoryString(storyStringParams);
+        let combinedStoryString = storyString;
+
+        setExtensionPrompt(inject_ids.STORY_STRING, '', state.extension_prompt_types.IN_CHAT, 0);
+
+
+        // Inject all Depth prompts. Chat Completion does it separately
+        let injectedIndices = [];
+        if (state.main_api !== 'openai') {
+            injectedIndices = await doChatInject(coreChat);
+        }
+
+        let chat2 = [];
+        let userMessageIndices = [];
+        for (let i = coreChat.length - 1, j = 0; i >= 0; i--, j++) {
+            if (state.main_api == 'openai') {
+                chat2[i] = coreChat[j].mes;
+                continue;
+            }
+
+            chat2[i] = formatMessageHistoryItem(coreChat[j]);
+
+            if (coreChat[j].is_user) {
+                userMessageIndices.push(i);
+            }
+        }
+
+        const userAlignmentMessage = '';
+
+        let oaiMessages = [];
+
+        if (state.main_api === 'openai') {
+            oaiMessages = setOpenAIMessages(coreChat);
+        }
+
+        // hack for regeneration of the first message
+        if (chat2.length == 0) {
+            chat2.push('');
+        }
+
+        let chatString = addChatsSeparator('');
+
+        async function getMessagesTokenCount() {
+            const encodeString = [
+                combinedStoryString,
+                userAlignmentMessage,
+                chatString,
+                modifyLastPromptLine(''),
+            ].join('').replace(/\r/gm, '');
+            return getTokenCountAsync(encodeString, TOKEN_PADDING);
+        }
+
+        // Collect enough messages to fill the context
+        let arrMes = Array.from({ length: chat2.length });
+        let tokenCount = await getMessagesTokenCount();
+        let lastAddedIndex = 0;
+
+        // Pre-allocate all injections first.
+        // If it doesn't fit - user shot himself in the foot
+        for (const index of injectedIndices) {
+            // not needed for OAI prompting
+            if (state.main_api == 'openai') {
+                break;
+            }
+
+            const item = chat2[index];
+
+            if (typeof item !== 'string') {
+                continue;
+            }
+
+            tokenCount += await getTokenCountAsync(item.replace(/\r/gm, ''));
+            if (tokenCount < this_max_context) {
+                chatString = chatString + item;
+                arrMes[index] = item;
+                lastAddedIndex = Math.max(lastAddedIndex, index);
+            } else {
+                break;
+            }
+        }
+
+        for (let i = 0; i < chat2.length; i++) {
+            // not needed for OAI prompting
+            if (state.main_api == 'openai') {
+                break;
+            }
+
+            // Skip already injected messages
+            if (arrMes[i] !== undefined) {
+                continue;
+            }
+
+            const item = chat2[i];
+
+            if (typeof item !== 'string') {
+                continue;
+            }
+
+            tokenCount += await getTokenCountAsync(item.replace(/\r/gm, ''));
+            if (tokenCount < this_max_context) {
+                chatString = chatString + item;
+                arrMes[i] = item;
+                lastAddedIndex = Math.max(lastAddedIndex, i);
+            } else {
+                break;
+            }
+        }
+
+        // Unsparse the array. Adjust injected indices
+        const newArrMes = [];
+        const newInjectedIndices = [];
+        for (let i = 0; i < arrMes.length; i++) {
+            if (arrMes[i] !== undefined) {
+                newArrMes.push(arrMes[i]);
+                if (injectedIndices.includes(i)) {
+                    newInjectedIndices.push(newArrMes.length - 1);
                 }
             }
         }
-        if (titles.length > 0) {
-            regexedMessage = `${regexedMessage}\n\n${titles.join('\n\n')}`;
+
+        arrMes = newArrMes;
+        injectedIndices = newInjectedIndices;
+
+        if (state.main_api !== 'openai') {
+            setInContextMessages(arrMes.length - injectedIndices.length, type);
         }
 
-        return {
-            ...chatItem,
-            mes: regexedMessage,
-            index,
-        };
-    }));
+        let mesSend = [];
+        console.debug('calling runGenerate');
 
-    const promptReasoning = new state.PromptReasoning();
-    for (let i = coreChat.length - 1; i >= 0; i--) {
-        const depth = coreChat.length - i - 1;
-
-        coreChat[i] = {
-            ...coreChat[i],
-            mes: promptReasoning.addToMessage(
-                coreChat[i].mes,
-                getRegexedString(
-                    String(coreChat[i].extra?.reasoning ?? ''),
-                    state.regex_placement.REASONING,
-                    { isPrompt: true, depth: depth },
-                ),
-                false,
-                coreChat[i].extra?.reasoning_duration,
-            ),
-        };
-        if (promptReasoning.isLimitReached()) {
-            break;
+        if (!dryRun) {
+            state.is_send_press = true;
         }
-    }
 
-    // Determine token limit
-    let this_max_context = getMaxPromptTokens();
+        let generatedPromptCache = '';
+        if (generatedPromptCache.length == 0) {
+            console.debug('generating prompt');
+            chatString = '';
+            arrMes = arrMes.reverse();
+            arrMes.forEach(function (item, i, _arr) {
+                // OAI doesn't need all of this
+                if (state.main_api === 'openai') {
+                    return;
+                }
 
+                // Cohee: This removes a newline from the end of the last message in the context
+                // Last prompt line will add a newline if it's not a continuation
+                if (i === arrMes.length - 1) {
+                    item = item.replace(/\n?$/, '');
+                }
 
-    console.log(`Core/all messages: ${coreChat.length}/${state.chat.length}`);
-
-    force_name2 = true;
-
-    // Add WI to prompt (and also inject WI to AN value via hijack)
-    // Make quiet prompt available for WIAN
-    setExtensionPrompt(inject_ids.QUIET_PROMPT, quiet_prompt || '', state.extension_prompt_types.IN_PROMPT, 0, true);
-    const chatForWI = coreChat.map(x => x.mes).reverse();
-    /** @type {import('./world-info.js').WIGlobalScanData} */
-    const globalScanData = {
-        characterDescription: description,
-        characterDepthPrompt: charDepthPrompt,
-        creatorNotes: creatorNotes,
-        scenario: scenario,
-        trigger: 'normal',
-    };
-    const { worldInfo, worldInfoBefore, worldInfoAfter, worldInfoDepth } = await getWorldInfoPrompt(chatForWI, this_max_context, dryRun, globalScanData);
-    setExtensionPrompt(inject_ids.QUIET_PROMPT, '', state.extension_prompt_types.IN_PROMPT, 0, true);
-
-    if (skipWIAN !== true) {
-        console.log('skipWIAN not active, adding WIAN');
-        // Add all depth WI entries to prompt
-        flushWIInjections();
-        if (Array.isArray(worldInfoDepth)) {
-            worldInfoDepth.forEach((e) => {
-                const joinedEntries = e.entries.join('\n');
-                setExtensionPrompt(inject_ids.CUSTOM_WI_DEPTH_ROLE(e.depth, e.role), joinedEntries, state.extension_prompt_types.IN_CHAT, e.depth, false, e.role);
+                mesSend[mesSend.length] = { message: item, extensionPrompts: [] };
             });
         }
-    } else {
-        console.log('skipping WIAN');
-    }
 
-    // Collect before / after story string injections
-    const beforeScenarioAnchor = await getExtensionPrompt(state.extension_prompt_types.BEFORE_PROMPT);
-    const afterScenarioAnchor = await getExtensionPrompt(state.extension_prompt_types.IN_PROMPT);
+        let mesExmString = '';
 
-    const storyStringParams = {
-        description: description,
-        system: system,
-        char: state.name2,
-        user: state.name1,
-        wiBefore: worldInfoBefore,
-        wiAfter: worldInfoAfter,
-        loreBefore: worldInfoBefore,
-        loreAfter: worldInfoAfter,
-        anchorBefore: beforeScenarioAnchor.trim(),
-        anchorAfter: afterScenarioAnchor.trim(),
-        scenario: scenario,
-        mesExamples: '',
-        mesExamplesRaw: '',
-    };
-
-    // Render the story string and combine with injections
-    const storyString = renderStoryString(storyStringParams);
-    let combinedStoryString = storyString;
-
-    setExtensionPrompt(inject_ids.STORY_STRING, '', state.extension_prompt_types.IN_CHAT, 0);
-
-
-    // Inject all Depth prompts. Chat Completion does it separately
-    let injectedIndices = [];
-    if (state.main_api !== 'openai') {
-        injectedIndices = await doChatInject(coreChat);
-    }
-
-    let chat2 = [];
-    let userMessageIndices = [];
-    for (let i = coreChat.length - 1, j = 0; i >= 0; i--, j++) {
-        if (state.main_api == 'openai') {
-            chat2[i] = coreChat[j].mes;
-            continue;
-        }
-
-        chat2[i] = formatMessageHistoryItem(coreChat[j]);
-
-        if (coreChat[j].is_user) {
-            userMessageIndices.push(i);
-        }
-    }
-
-    const userAlignmentMessage = '';
-
-    let oaiMessages = [];
-
-    if (state.main_api === 'openai') {
-        oaiMessages = setOpenAIMessages(coreChat);
-    }
-
-    // hack for regeneration of the first message
-    if (chat2.length == 0) {
-        chat2.push('');
-    }
-
-    let chatString = addChatsSeparator('');
-
-    async function getMessagesTokenCount() {
-        const encodeString = [
-            combinedStoryString,
-            userAlignmentMessage,
-            chatString,
-            modifyLastPromptLine(''),
-        ].join('').replace(/\r/gm, '');
-        return getTokenCountAsync(encodeString, TOKEN_PADDING);
-    }
-
-    // Collect enough messages to fill the context
-    let arrMes = Array.from({ length: chat2.length });
-    let tokenCount = await getMessagesTokenCount();
-    let lastAddedIndex = 0;
-
-    // Pre-allocate all injections first.
-    // If it doesn't fit - user shot himself in the foot
-    for (const index of injectedIndices) {
-        // not needed for OAI prompting
-        if (state.main_api == 'openai') {
-            break;
-        }
-
-        const item = chat2[index];
-
-        if (typeof item !== 'string') {
-            continue;
-        }
-
-        tokenCount += await getTokenCountAsync(item.replace(/\r/gm, ''));
-        if (tokenCount < this_max_context) {
-            chatString = chatString + item;
-            arrMes[index] = item;
-            lastAddedIndex = Math.max(lastAddedIndex, index);
-        } else {
-            break;
-        }
-    }
-
-    for (let i = 0; i < chat2.length; i++) {
-        // not needed for OAI prompting
-        if (state.main_api == 'openai') {
-            break;
-        }
-
-        // Skip already injected messages
-        if (arrMes[i] !== undefined) {
-            continue;
-        }
-
-        const item = chat2[i];
-
-        if (typeof item !== 'string') {
-            continue;
-        }
-
-        tokenCount += await getTokenCountAsync(item.replace(/\r/gm, ''));
-        if (tokenCount < this_max_context) {
-            chatString = chatString + item;
-            arrMes[i] = item;
-            lastAddedIndex = Math.max(lastAddedIndex, i);
-        } else {
-            break;
-        }
-    }
-
-    // Unsparse the array. Adjust injected indices
-    const newArrMes = [];
-    const newInjectedIndices = [];
-    for (let i = 0; i < arrMes.length; i++) {
-        if (arrMes[i] !== undefined) {
-            newArrMes.push(arrMes[i]);
-            if (injectedIndices.includes(i)) {
-                newInjectedIndices.push(newArrMes.length - 1);
-            }
-        }
-    }
-
-    arrMes = newArrMes;
-    injectedIndices = newInjectedIndices;
-
-    if (state.main_api !== 'openai') {
-        setInContextMessages(arrMes.length - injectedIndices.length, type);
-    }
-
-    let mesSend = [];
-    console.debug('calling runGenerate');
-
-    if (!dryRun) {
-        state.is_send_press = true;
-    }
-
-    let generatedPromptCache = '';
-    if (generatedPromptCache.length == 0) {
-        console.debug('generating prompt');
-        chatString = '';
-        arrMes = arrMes.reverse();
-        arrMes.forEach(function (item, i, _arr) {
-            // OAI doesn't need all of this
-            if (state.main_api === 'openai') {
+        function setPromptString() {
+            if (state.main_api == 'openai') {
                 return;
             }
 
-            // Cohee: This removes a newline from the end of the last message in the context
-            // Last prompt line will add a newline if it's not a continuation
-            if (i === arrMes.length - 1) {
-                item = item.replace(/\n?$/, '');
-            }
+            console.debug('--setting Prompt string');
 
-            mesSend[mesSend.length] = { message: item, extensionPrompts: [] };
-        });
-    }
-
-    let mesExmString = '';
-
-    function setPromptString() {
-        if (state.main_api == 'openai') {
-            return;
-        }
-
-        console.debug('--setting Prompt string');
-
-        if (mesSend.length) {
-            mesSend[mesSend.length - 1].message = modifyLastPromptLine(mesSend[mesSend.length - 1].message);
-        }
-    }
-
-    function modifyLastPromptLine(lastMesString) {
-        //#########QUIET PROMPT STUFF PT2##############
-
-        // Add quiet generation prompt at depth 0
-        if (quiet_prompt && quiet_prompt.length) {
-            const quietAppend = `\n${quiet_prompt}`;
-            lastMesString += quietAppend;
-
-
-            // Ross: bailing out early prevents quiet prompts from respecting other instruct prompt toggles
-            // for sysgen, SD, and summary this is desireable as it prevents the AI from responding as char..
-            // but for idle prompting, we want the flexibility of the other prompt toggles, and to respect them as per settings in the extension
-            // need a detection for what the quiet prompt is being asked for...
-
-            // Bail out early?
-            if (!quietToLoud) {
-                return lastMesString;
+            if (mesSend.length) {
+                mesSend[mesSend.length - 1].message = modifyLastPromptLine(mesSend[mesSend.length - 1].message);
             }
         }
 
+        function modifyLastPromptLine(lastMesString) {
+            //#########QUIET PROMPT STUFF PT2##############
 
-        // Add character's name
-        if (force_name2) {
-            if (!lastMesString.endsWith('\n')) {
-                lastMesString += '\n';
+            // Add quiet generation prompt at depth 0
+            if (quiet_prompt && quiet_prompt.length) {
+                const quietAppend = `\n${quiet_prompt}`;
+                lastMesString += quietAppend;
+
+
+                // Ross: bailing out early prevents quiet prompts from respecting other instruct prompt toggles
+                // for sysgen, SD, and summary this is desireable as it prevents the AI from responding as char..
+                // but for idle prompting, we want the flexibility of the other prompt toggles, and to respect them as per settings in the extension
+                // need a detection for what the quiet prompt is being asked for...
+
+                // Bail out early?
+                if (!quietToLoud) {
+                    return lastMesString;
+                }
             }
-            lastMesString += `${state.name2}:`;
-        }
 
-        return lastMesString;
-    }
 
-    async function checkPromptSize() {
-        console.debug('---checking Prompt size');
-        setPromptString();
-        const jointMessages = mesSend.map((e) => `${e.extensionPrompts.join('')}${e.message}`).join('');
-        const prompt = [
-            combinedStoryString,
-            mesExmString,
-            addChatsSeparator(jointMessages),
-            '\n',
-            modifyLastPromptLine(''),
-            generatedPromptCache,
-        ].join('').replace(/\r/gm, '');
-        let thisPromptContextSize = await getTokenCountAsync(prompt, TOKEN_PADDING);
-
-        if (thisPromptContextSize > this_max_context) {        //if the prepared prompt is larger than the max context size...
-            if (mesSend.length > 0) {                    // if the chat history is longer than 0
-                mesSend.shift();                            // remove the first (oldest) chat entry..
-                await checkPromptSize();                            // and check size again..
-            } else {
-                //end
-                console.debug(`---mesSend.length = ${mesSend.length}`);
+            // Add character's name
+            if (force_name2) {
+                if (!lastMesString.endsWith('\n')) {
+                    lastMesString += '\n';
+                }
+                lastMesString += `${state.name2}:`;
             }
-        }
-    }
 
-    if (generatedPromptCache.length > 0 && state.main_api !== 'openai') {
-        console.debug('---Generated Prompt Cache length: ' + generatedPromptCache.length);
-        await checkPromptSize();
-    } else {
-        console.debug('---calling setPromptString ' + generatedPromptCache.length);
-        setPromptString();
-    }
-
-    let mesSendString = '';
-
-    async function getCombinedPrompt() {
-        // OAI has its own prompt manager. No need to do anything here
-        if (state.main_api === 'openai') {
-            return '';
+            return lastMesString;
         }
 
-        // Deep clone
-        let finalMesSend = structuredClone(mesSend);
-
-        // Add prompt bias after everything else
-        if (promptBias.trim().length !== 0) {
-            finalMesSend[finalMesSend.length - 1].message +=
-                /\s/.test(finalMesSend[finalMesSend.length - 1].message.slice(-1))
-                    ? promptBias.trimStart()
-                    : ` ${promptBias.trimStart()}`;
-        }
-
-        // Flattens the multiple prompt objects to a string.
-        const combine = () => {
-            // Right now, everything is suffixed with a newline
-            mesSendString = finalMesSend.map((e) => `${e.extensionPrompts.join('')}${e.message}`).join('');
-
-            // add a custom dingus (if defined)
-            mesSendString = addChatsSeparator(mesSendString);
-
-
-            let combinedPrompt = [
+        async function checkPromptSize() {
+            console.debug('---checking Prompt size');
+            setPromptString();
+            const jointMessages = mesSend.map((e) => `${e.extensionPrompts.join('')}${e.message}`).join('');
+            const prompt = [
                 combinedStoryString,
                 mesExmString,
-                mesSendString,
+                addChatsSeparator(jointMessages),
+                '\n',
+                modifyLastPromptLine(''),
                 generatedPromptCache,
             ].join('').replace(/\r/gm, '');
+            let thisPromptContextSize = await getTokenCountAsync(prompt, TOKEN_PADDING);
 
-            return combinedPrompt;
-        };
-
-        finalMesSend.forEach((item, i) => {
-            item.injected = injectedIndices.includes(finalMesSend.length - i - 1);
-        });
-
-        let data = {
-            api: state.main_api,
-            combinedPrompt: null,
-            description,
-            char: state.name2,
-            user: state.name1,
-            worldInfo,
-            beforeScenarioAnchor,
-            afterScenarioAnchor,
-            storyString,
-            mesExmString,
-            mesSendString,
-            finalMesSend,
-            generatedPromptCache,
-            main: system,
-        };
-
-        // Before returning the combined prompt, give available context related information to all subscribers.
-        await eventSource.emit(event_types.GENERATE_BEFORE_COMBINE_PROMPTS, data);
-
-        // If one or multiple subscribers return a value, forfeit the responsibillity of flattening the context.
-        return !data.combinedPrompt ? combine() : data.combinedPrompt;
-    }
-
-    let finalPrompt = await getCombinedPrompt();
-
-    const eventData = { prompt: finalPrompt, dryRun: dryRun };
-    await eventSource.emit(event_types.GENERATE_AFTER_COMBINE_PROMPTS, eventData);
-    finalPrompt = eventData.prompt;
-
-    let generate_data;
-    let previewChatCompletion = null;
-    switch (state.main_api) {
-        case 'openai': {
-            let [prompt, , chatCompletion] = await prepareOpenAIMessages({
-                name2: state.name2,
-                charDescription: description,
-                worldInfo: worldInfo,
-                extensionPrompts: state.extension_prompts,
-                bias: promptBias,
-                type: type,
-                quietPrompt: quiet_prompt,
-                quietImage: quietImage,
-                messages: oaiMessages,
-                pipelineStepTag: isPreview ? getPreviewPipelineTriggerTag(Number(preview?.round ?? 0)) : getPipelineTriggerTag(type),
-            }, dryRun, { squash: isPreview ? true : null, bookkeep: !isPreview });
-            generate_data = { prompt: prompt };
-            previewChatCompletion = chatCompletion ?? null;
-
-            if (!dryRun) {
-                setInContextMessages(state.openai_messages_count, type);
+            if (thisPromptContextSize > this_max_context) {        //if the prepared prompt is larger than the max context size...
+                if (mesSend.length > 0) {                    // if the chat history is longer than 0
+                    mesSend.shift();                            // remove the first (oldest) chat entry..
+                    await checkPromptSize();                            // and check size again..
+                } else {
+                    //end
+                    console.debug(`---mesSend.length = ${mesSend.length}`);
+                }
             }
-            break;
+        }
+
+        if (generatedPromptCache.length > 0 && state.main_api !== 'openai') {
+            console.debug('---Generated Prompt Cache length: ' + generatedPromptCache.length);
+            await checkPromptSize();
+        } else {
+            console.debug('---calling setPromptString ' + generatedPromptCache.length);
+            setPromptString();
+        }
+
+        let mesSendString = '';
+
+        async function getCombinedPrompt() {
+            // OAI has its own prompt manager. No need to do anything here
+            if (state.main_api === 'openai') {
+                return '';
+            }
+
+            // Deep clone
+            let finalMesSend = structuredClone(mesSend);
+
+            // Add prompt bias after everything else
+            if (promptBias.trim().length !== 0) {
+                finalMesSend[finalMesSend.length - 1].message +=
+                    /\s/.test(finalMesSend[finalMesSend.length - 1].message.slice(-1))
+                        ? promptBias.trimStart()
+                        : ` ${promptBias.trimStart()}`;
+            }
+
+            // Flattens the multiple prompt objects to a string.
+            const combine = () => {
+                // Right now, everything is suffixed with a newline
+                mesSendString = finalMesSend.map((e) => `${e.extensionPrompts.join('')}${e.message}`).join('');
+
+                // add a custom dingus (if defined)
+                mesSendString = addChatsSeparator(mesSendString);
+
+
+                let combinedPrompt = [
+                    combinedStoryString,
+                    mesExmString,
+                    mesSendString,
+                    generatedPromptCache,
+                ].join('').replace(/\r/gm, '');
+
+                return combinedPrompt;
+            };
+
+            finalMesSend.forEach((item, i) => {
+                item.injected = injectedIndices.includes(finalMesSend.length - i - 1);
+            });
+
+            let data = {
+                api: state.main_api,
+                combinedPrompt: null,
+                description,
+                char: state.name2,
+                user: state.name1,
+                worldInfo,
+                beforeScenarioAnchor,
+                afterScenarioAnchor,
+                storyString,
+                mesExmString,
+                mesSendString,
+                finalMesSend,
+                generatedPromptCache,
+                main: system,
+            };
+
+            // Before returning the combined prompt, give available context related information to all subscribers.
+            await eventSource.emit(event_types.GENERATE_BEFORE_COMBINE_PROMPTS, data);
+
+            // If one or multiple subscribers return a value, forfeit the responsibillity of flattening the context.
+            return !data.combinedPrompt ? combine() : data.combinedPrompt;
+        }
+
+        let finalPrompt = await getCombinedPrompt();
+
+        const eventData = { prompt: finalPrompt, dryRun: dryRun };
+        await eventSource.emit(event_types.GENERATE_AFTER_COMBINE_PROMPTS, eventData);
+        finalPrompt = eventData.prompt;
+
+        switch (state.main_api) {
+            case 'openai': {
+                let [prompt, , chatCompletion] = await prepareOpenAIMessages({
+                    name2: state.name2,
+                    charDescription: description,
+                    worldInfo: worldInfo,
+                    extensionPrompts: state.extension_prompts,
+                    bias: promptBias,
+                    type: type,
+                    quietPrompt: quiet_prompt,
+                    quietImage: quietImage,
+                    messages: oaiMessages,
+                    pipelineStepTag: isPreview ? getPreviewPipelineTriggerTag(Number(preview?.round ?? 0)) : getPipelineTriggerTag(type),
+                }, dryRun, { squash: isPreview ? true : null, bookkeep: !isPreview });
+                generate_data = { prompt: prompt };
+                previewChatCompletion = chatCompletion ?? null;
+
+                if (!dryRun) {
+                    setInContextMessages(state.openai_messages_count, type);
+                }
+                break;
+            }
         }
     }
 
@@ -1286,6 +1295,10 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
 
                 const isStreamFinished = state.streamingProcessor && !state.streamingProcessor.isStopped && state.streamingProcessor.isFinished;
                 const isStreamWithToolCalls = state.streamingProcessor && Array.isArray(state.streamingProcessor.toolCalls) && state.streamingProcessor.toolCalls.length;
+                if (!canPerformToolCalls && isStreamFinished) {
+                    assertPipelineResponseAllowed(state.streamingProcessor?.toolCalls
+                        ?.reduce((count, calls) => count + (Array.isArray(calls) ? calls.length : 0), 0) ?? 0, { canPerformToolCalls });
+                }
                 if (canPerformToolCalls && isStreamFinished && isStreamWithToolCalls) {
                     const lastMessage = state.chat[state.chat.length - 1];
                     const hasToolCalls = state.ToolManager.hasToolCalls(state.streamingProcessor.toolCalls);
@@ -1296,6 +1309,11 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
                     }
                     const invocationResult = await state.ToolManager.invokeFunctionTools(state.streamingProcessor.toolCalls, {
                         reasoningText: state.streamingProcessor.reasoningHandler.reasoning,
+                        assistantMessage: {
+                            role: 'assistant', content: getMessage || null,
+                            ...(state.streamingProcessor.reasoningHandler.reasoning ? { reasoning: state.streamingProcessor.reasoningHandler.reasoning } : {}),
+                            ...(state.streamingProcessor.reasoningSignature ? { signature: state.streamingProcessor.reasoningSignature } : {}),
+                        },
                     });
                     const shouldStopGeneration = (!invocationResult.invocations.length && shouldDeleteMessage) || invocationResult.stealthCalls.length;
                     if (hasToolCalls) {
@@ -1361,6 +1379,9 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
             }
 
             const result = await sendGenerationRequest(type, generate_data, requestOptions);
+            if (!canPerformToolCalls && state.ToolManager.hasToolCalls(result)) {
+                assertPipelineResponseAllowed(1, { canPerformToolCalls });
+            }
             const carriesToolCalls = canPerformToolCalls && state.ToolManager.hasToolCalls(result);
             if (!carriesToolCalls && isEmptyGenerationResult(result)) {
                 throw createEmptyReplyFailure(activeRecoveryMessageId);
@@ -1570,6 +1591,8 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
         // if the response JSON was thrown, show the error message
         if (typeof exception?.error?.message === 'string') {
             toastr.error(exception.error.message, t`Text generation error`, { timeOut: 10000, extendedTimeOut: 20000 });
+        } else if (String(exception?.message ?? '').startsWith('Reply pipeline:')) {
+            toastr.error(exception.message, t`Text generation error`, { timeOut: 10000, extendedTimeOut: 20000 });
         }
 
         endPipelineRun();
@@ -1593,6 +1616,35 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
     }
 }
 //MARK: Generate() ends
+
+/**
+ * Derives the inspector budget block and its overflow warning from the
+ * assembled ChatCompletion. Step materials are paid for after the base
+ * assembly, so an exhausted budget survives only as a negative remainder —
+ * that must surface as the same overflow warning an assembly failure gets.
+ * @param {object} args
+ * @param {object|null} args.chatCompletion Assembled ChatCompletion instance
+ * @param {number} args.contextTokens Context + reserved reply
+ * @param {number} args.responseTokens Reserved reply tokens
+ * @returns {{budget: object|null, warning: string|null}}
+ */
+export function derivePreviewBudget({ chatCompletion, contextTokens, responseTokens }) {
+    if (!chatCompletion) {
+        return { budget: null, warning: null };
+    }
+    const budget = {
+        context: contextTokens,
+        response: responseTokens,
+        remaining: chatCompletion.tokenBudget,
+        used: contextTokens - responseTokens - chatCompletion.tokenBudget,
+        totalTokens: chatCompletion.getTotalTokenCount(),
+    };
+    const errorName = chatCompletion.error?.name;
+    const warning = errorName === 'TokenBudgetExceeded' || budget.remaining < 0
+        ? 'budget-exceeded'
+        : (errorName ? 'assembly-error' : null);
+    return { budget, warning };
+}
 
 /**
  * Turns the assembled preview state into the final request body the send path
@@ -1628,8 +1680,10 @@ async function buildPreviewRequestResult({ type, generateData, chatCompletion, r
     const pipeline = previewPipelineRequestShaping(requestBody, { round });
     const responseTokens = Number(state.oai_settings?.openai_max_tokens) || 0;
     const contextTokens = getMaxPromptTokens() + responseTokens;
-    if (chatCompletion?.error) {
-        warnings = [...warnings, chatCompletion.error?.name === 'TokenBudgetExceeded' ? 'budget-exceeded' : 'assembly-error'];
+    const previewBudget = derivePreviewBudget({ chatCompletion, contextTokens, responseTokens });
+    const { budget } = previewBudget;
+    if (previewBudget.warning) {
+        warnings = [...warnings, previewBudget.warning];
     }
 
     // The pending user message carries the highest chatHistory-N identifier —
@@ -1655,13 +1709,7 @@ async function buildPreviewRequestResult({ type, generateData, chatCompletion, r
         entries: chatCompletion?.getChatEntries?.() ?? [],
         dropped: chatCompletion?.getDroppedEntries?.() ?? [],
         summarized: Array.isArray(summarized) ? summarized : [],
-        budget: chatCompletion ? {
-            context: contextTokens,
-            response: responseTokens,
-            remaining: chatCompletion.tokenBudget,
-            used: contextTokens - responseTokens - chatCompletion.tokenBudget,
-            totalTokens: chatCompletion.getTotalTokenCount(),
-        } : null,
+        budget,
         pipeline,
         warnings,
         pendingMessage: pendingMessage ? {

@@ -16,6 +16,7 @@ import { SlashCommandParser } from './slash-commands/SlashCommandParser.js';
 import { slashCommandReturnHelper } from './slash-commands/SlashCommandReturnHelper.js';
 import { hasEnabledToolBindings } from './tool-bindings-core.js';
 import { isTrueBoolean } from './utils.js';
+import { getPipelineRunState, validatePipelineToolCalls } from './reply-pipeline-core.js';
 
 /**
  * @typedef {object} ToolInvocation
@@ -712,7 +713,7 @@ export class ToolManager {
      * @param {any} data Reply data
      * @returns {Promise<ToolInvocationResult>} Successful tool invocations
      */
-    static async invokeFunctionTools(data, { reasoningText = null } = {}) {
+    static async invokeFunctionTools(data, { reasoningText = null, assistantMessage = null } = {}) {
         /** @type {ToolInvocationResult} */
         const result = {
             invocations: [],
@@ -724,6 +725,10 @@ export class ToolManager {
         if (!Array.isArray(toolCalls)) {
             return result;
         }
+        const assistant = assistantMessage ?? data?.choices?.find(choice => choice.index === 0)?.message ?? data?.message
+            ?? { role: 'assistant', content: null, ...(reasoningText ? { reasoning: reasoningText } : {}), tool_calls: toolCalls };
+        validatePipelineToolCalls(toolCalls, assistant);
+
 
         for (const toolCall of toolCalls) {
             if (!toolCall || !toolCall.function || typeof toolCall.function !== 'object') {
@@ -735,7 +740,7 @@ export class ToolManager {
             const parameters = toolCall.function.arguments;
             const name = toolCall.function.name;
             const displayName = ToolManager.getDisplayName(name);
-            const isStealth = ToolManager.isStealthTool(name);
+            const isStealth = !getPipelineRunState() && ToolManager.isStealthTool(name);
             const message = await ToolManager.formatToolCallMessage(name, parameters);
             const toast = message && toastr.info(message, 'Tool Calling', { timeOut: 0 });
             const toolResult = await ToolManager.invokeFunctionTool(name, parameters);

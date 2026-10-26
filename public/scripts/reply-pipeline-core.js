@@ -127,7 +127,7 @@ export const PIPELINE_FALLBACK_PROMPT = '[Reply pipeline] All pipeline steps are
  * shaping and the prompt-inspector preview so both stay in lockstep.
  *
  * Does NOT push the step instruction message — callers control message
- * mutation (the live path dedups via shapedMessageArrays).
+ * mutation (the live path owns the append-only run transcript).
  *
  * @param {object} data Request body (generate_data), mutated in place
  * @param {object} step Runnable pipeline step
@@ -145,15 +145,7 @@ export function applyStepRequestOverrides(data, step, { enforceMode = 'soft', re
     if (enforceMode === 'forced' && Array.isArray(data.tools)) {
         data.tool_choice = { type: 'function', function: { name: step.tool } };
     }
-    if (Array.isArray(data.tools)) {
-        // The round's tool surface follows the plan: only the step being
-        // driven is offered. Later steps are re-added when their round comes,
-        // and bindings outside the plan stay out of pipeline rounds entirely.
-        const narrowed = data.tools.filter(tool => tool?.function?.name === step.tool);
-        if (narrowed.length > 0) {
-            data.tools = narrowed;
-        }
-    }
+
     if (step.maxTokens) {
         if (Number.isFinite(Number(data.max_tokens))) {
             data.max_tokens = step.maxTokens;
@@ -178,8 +170,7 @@ export function applyFallbackRequestShape(data, fallbackPrompt = PIPELINE_FALLBA
     if (!data || typeof data !== 'object') {
         return data;
     }
-    delete data.tools;
-    delete data.tool_choice;
+    data.tool_choice = 'none';
     data.messages.push({ role: 'system', content: fallbackPrompt });
     return data;
 }
@@ -193,6 +184,45 @@ export function applyFallbackRequestShape(data, fallbackPrompt = PIPELINE_FALLBA
  * imports the runtime (which already imports openai.js — a cycle).
  */
 let activePipelineRunIdProvider = null;
+let pipelineRunStateProvider = null;
+
+export function setPipelineRunStateProvider(provider) {
+    pipelineRunStateProvider = provider;
+}
+
+export function getPipelineRunState() {
+    return pipelineRunStateProvider?.() ?? null;
+}
+
+/** Validate the entire batch before formatters or actions can have side effects. */
+export function validatePipelineToolCalls(calls, assistantMessage = null) {
+    const run = getPipelineRunState();
+    if (!run || !Array.isArray(calls) || calls.length === 0) return;
+    const step = run.steps[run.index];
+    if (run.fallbackRound || run.pendingAssistant || calls.length !== 1
+        || calls[0]?.function?.name !== step?.tool || !calls[0]?.id
+        || run.callIds?.has(calls[0].id)) {
+        throw new Error(`Reply pipeline: expected exactly one current-step call (${run.fallbackRound ? 'none' : step?.tool}).`);
+    }
+    run.callIds ??= new Set();
+    run.callIds.add(calls[0].id);
+    run.pendingAssistant = structuredClone(assistantMessage ?? { role: 'assistant', content: null, tool_calls: calls });
+    // Provider normalizers may attach metadata to calls; preserve those exact calls.
+    run.pendingAssistant.tool_calls = structuredClone(calls);
+}
+
+/**
+ * Rejects a response that carries tool calls for an active run when dispatch is
+ * disabled (recursion exhausted). The legality check must not depend on whether
+ * the calls would be executed, otherwise the closing round silently accepts them.
+ * @param {number} callCount Number of tool calls in the response
+ * @param {{canPerformToolCalls?: boolean}} [options]
+ */
+export function assertPipelineResponseAllowed(callCount, { canPerformToolCalls = true } = {}) {
+    const run = getPipelineRunState();
+    if (!run || canPerformToolCalls || !callCount) return;
+    throw new Error(`Reply pipeline: expected exactly one current-step call (${run.fallbackRound ? 'none' : run.steps[run.index]?.tool}).`);
+}
 
 /**
  * @param {() => string|null} provider Returns the in-flight run id, or null
@@ -271,6 +301,12 @@ export function extractFinalStepText(invocations, finalStep, resultField) {
     if (typeof result !== 'string' || result.trim().length === 0) {
         return null;
     }
+    // Text carriers return their content verbatim, even when that prose is
+    // JSON-looking text. Other actions retain explicit result_field semantics.
+    try {
+        const parameters = typeof invocation.parameters === 'string' ? JSON.parse(invocation.parameters) : invocation.parameters;
+        if (parameters?.content === result) return result;
+    } catch { /* Non-JSON parameters are not a text-carrier result. */ }
     let parsed = null;
     try {
         parsed = JSON.parse(result);
