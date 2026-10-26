@@ -1,37 +1,58 @@
-export const setupMessages = {
-    handleRequired: '请输入用户名',
-    passwordRequired: '请输入密码',
-    passwordMismatch: '两次密码不一致',
-    genericError: '发生错误，请稍后重试',
-    userExists: '该用户名已被占用',
-    setupComplete: '设置完成，正在进入...',
-    missingFields: '请填写必填项',
-    passwordTooShort: '密码至少需要 8 个字符',
-    creating: '创建中...',
-    setting: '设置中...',
-    showPassword: '显示密码',
-    hidePassword: '隐藏密码',
-};
-
-const serverErrorMessages = new Map([
-    ['Setup already completed', '设置已完成，请直接登录。'],
-    ['Missing required fields', setupMessages.missingFields],
-    ['Password must be at least 8 characters long', setupMessages.passwordTooShort],
-    ['Invalid handle', '用户名格式不正确'],
-    ['User already exists', setupMessages.userExists],
-]);
+import { translate } from './i18n.js';
 
 /**
- * Returns user-facing Chinese copy for known setup API errors.
+ * User-facing copy for the first-run setup screen.
+ *
+ * Resolved lazily so the strings follow the locale that is active when they are
+ * read, never the locale that happened to be active while this module loaded.
+ */
+
+export function getSetupMessages() {
+    return {
+        handleRequired: translate('Enter your username'),
+        passwordRequired: translate('Enter your password'),
+        passwordMismatch: translate('The passwords do not match'),
+        genericError: translate('Something went wrong. Try again later.'),
+        userExists: translate('That username is already taken'),
+        setupComplete: translate('Setup complete. Signing you in…'),
+        missingFields: translate('Fill in the required fields'),
+        passwordTooShort: translate('The password must be at least 8 characters long'),
+        creating: translate('Creating…'),
+        setting: translate('Applying…'),
+        showPassword: translate('Show password'),
+        hidePassword: translate('Hide password'),
+    };
+}
+
+const serverErrorKeys = new Map([
+    ['Setup already completed', 'setupAlreadyCompleted'],
+    ['Missing required fields', 'missingFields'],
+    ['Password must be at least 8 characters long', 'passwordTooShort'],
+    ['Invalid handle', 'invalidHandle'],
+    ['User already exists', 'userExists'],
+]);
+
+const serverErrorFallbacks = {
+    setupAlreadyCompleted: () => translate('Setup is already complete. Sign in instead.'),
+    invalidHandle: () => translate('The username format is invalid'),
+};
+
+/**
+ * Returns user-facing copy for known setup API errors.
  * @param {unknown} message Server error message
- * @returns {string}
+ * @returns {string} Localized error message
  */
 export function getSetupErrorMessage(message) {
+    const messages = getSetupMessages();
     if (typeof message !== 'string') {
-        return setupMessages.genericError;
+        return messages.genericError;
     }
 
-    return serverErrorMessages.get(message) || message || setupMessages.genericError;
+    const key = serverErrorKeys.get(message);
+    if (key) {
+        return messages[key] ?? serverErrorFallbacks[key]();
+    }
+    return message || messages.genericError;
 }
 
 /**
@@ -40,12 +61,13 @@ export function getSetupErrorMessage(message) {
  * @returns {{type: string, iconClassName: string, ariaPressed: string, ariaLabel: string}}
  */
 export function getSetupPasswordVisibilityState(currentType) {
+    const messages = getSetupMessages();
     if (currentType === 'password') {
         return {
             type: 'text',
             iconClassName: 'fa-solid fa-eye-slash',
             ariaPressed: 'true',
-            ariaLabel: setupMessages.hidePassword,
+            ariaLabel: messages.hidePassword,
         };
     }
 
@@ -53,7 +75,7 @@ export function getSetupPasswordVisibilityState(currentType) {
         type: 'password',
         iconClassName: 'fa-solid fa-eye',
         ariaPressed: 'false',
-        ariaLabel: setupMessages.showPassword,
+        ariaLabel: messages.showPassword,
     };
 }
 

@@ -9,7 +9,7 @@ import { useForm } from '@tanstack/react-form';
 type SettingsFormValidator = (props: { value: typeof defaultSettingsFormValues }) => any;
 const toSettingsFormValidator = (schema: unknown): SettingsFormValidator => schema as SettingsFormValidator;
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { startTransition, useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { startTransition, useCallback, useEffect, useMemo, useReducer, useState, useSyncExternalStore } from 'react';
 import { z } from 'zod';
 import {
     clearProviderSecretField,
@@ -20,6 +20,8 @@ import { SettingField } from '@/components/settings/SettingField';
 import { SettingsSection } from '@/components/settings/SettingsSection';
 import { settingsStyles } from '@/styles/settings-surface.styles';
 import { SettingsTabs } from '@/components/settings/SettingsTabs';
+import { translate, useTranslated } from '@/compat/i18n.js';
+import { readStoredUiLocale, setUiLocale, uiLocaleOptions } from '../../../public/scripts/ui-locale.js';
 import type { RuntimePort } from '@/compat/runtime-port';
 import {
     buildSettingsFormDefaults,
@@ -33,6 +35,9 @@ import {
 } from '@/lib/settings-helpers.js';
 
 const SAVE_STATUS_TIMEOUT_MS = 4000;
+
+/** Translates a UI string; the key doubles as the English source text. */
+const t = (key: string) => translate(key, null);
 
 const settingsSchema = z.object({
     providers: z.object({
@@ -69,14 +74,14 @@ class MessageError extends Error {
 function getSchemaErrorMessage(schema: z.ZodTypeAny, values: unknown) {
     const parsed = schema.safeParse(values);
     if (parsed.success) {
-        return '设置保存失败。';
+        return t('Settings could not be saved.');
     }
 
     const flattenedErrors = Object.values(parsed.error.flatten().fieldErrors)
         .flat()
         .filter((message): message is string => typeof message === 'string' && message.length > 0);
 
-    return flattenedErrors[0] ?? parsed.error.issues[0]?.message ?? '设置保存失败。';
+    return flattenedErrors[0] ?? parsed.error.issues[0]?.message ?? t('Settings could not be saved.');
 }
 
 async function readJsonObject(response: Response) {
@@ -126,6 +131,7 @@ export function SettingsSurface({
     onDirtyStateChange,
     runtime,
 }: SettingsSurfaceProps) {
+    useTranslated('');
     // Drawer variant uses the compact layout but leaves the title/close
     // chrome to WorkspacePanelChrome — no internal header row.
     const isCompact = variant === 'drawer';
@@ -137,6 +143,17 @@ export function SettingsSurface({
     const [showDiagnostics, setShowDiagnostics] = useState(false);
     const [providerSecretInput, setProviderSecretInput] = useState('');
     const [providerActionBusy, setProviderActionBusy] = useState<'connect' | 'test' | null>(null);
+    const [uiLocale] = useState(() => readStoredUiLocale());
+
+    // Subscribe once for every string in this tree: the standalone bundle and
+    // the workspace drawer can both render before locale data lands, so the
+    // surface re-renders when it arrives instead of freezing the first locale.
+    const [, bumpLocale] = useReducer(value => value + 1, 0);
+    useEffect(() => {
+        const handler = () => bumpLocale();
+        document.addEventListener('i18n:applied', handler);
+        return () => document.removeEventListener('i18n:applied', handler);
+    }, []);
 
     const subscribeRuntime = useCallback(
         (listener: () => void) => (runtime ? runtime.subscribe(listener) : () => {}),
@@ -149,7 +166,7 @@ export function SettingsSurface({
     );
     const [pageProviderStatus, setPageProviderStatus] = useState('no_connection');
     const providerStatus = runtime ? runtimeProviderStatus : pageProviderStatus;
-    const providerStatusLabel = providerStatus === 'no_connection' ? '未连接' : providerStatus;
+    const providerStatusLabel = providerStatus === 'no_connection' ? t('Not connected') : providerStatus;
     const canRunProviderActions = Boolean(runtime)
         ? Boolean(
             runtime?.commands
@@ -164,7 +181,7 @@ export function SettingsSurface({
         const model = values.providers.openaiModel.trim();
         const hasSavedSecret = Boolean(currentSecretKey && secretsData?.[currentSecretKey]);
         if (!hasSavedSecret && !customUrl) {
-            throw new MessageError('请先保存 API key，或配置自定义接口地址。');
+            throw new MessageError(t('Save an API key or configure a custom endpoint URL first.'));
         }
 
         const csrfToken = await ensureCsrfToken();
@@ -184,20 +201,23 @@ export function SettingsSurface({
             const data = await readJsonObject(response);
             if (!response.ok || data.error) {
                 setPageProviderStatus('no_connection');
-                throw new MessageError('连接失败：无法从接口拉取模型列表，请检查接口地址与 API key。');
+                throw new MessageError(t('Connection failed: the endpoint did not return a model list. Check the endpoint URL and API key.'));
             }
 
             setPageProviderStatus('online');
             const modelCount = Array.isArray(data.data) ? data.data.length : null;
             setSaveStatus({
                 kind: 'info',
-                message: modelCount === null ? '连接成功。' : `连接成功，接口返回 ${modelCount} 个模型。`,
+                message: modelCount === null
+                    ? t('Connected.')
+                    : translate('Connected. The endpoint returned ${0} models.', null)
+                        .replace('${0}', String(modelCount)),
             });
             return;
         }
 
         if (!model) {
-            throw new MessageError('请先填写主模型后再测试。');
+            throw new MessageError(t('Fill in the primary model before testing.'));
         }
 
         const response = await fetch('/api/backends/chat-completions/generate', {
@@ -218,11 +238,11 @@ export function SettingsSurface({
         const data = await readJsonObject(response);
         if (!response.ok || data.error) {
             setPageProviderStatus('no_connection');
-            throw new MessageError('测试请求失败：接口未返回有效回复，请检查连接设置与 API key。');
+            throw new MessageError(t('Test request failed: the endpoint returned no usable reply. Check the connection settings and API key.'));
         }
 
         setPageProviderStatus('online');
-        setSaveStatus({ kind: 'info', message: '已收到 API 回复。' });
+        setSaveStatus({ kind: 'info', message: t('Received a reply from the API.') });
     }
 
     async function handleProviderAction(kind: 'connect' | 'test') {
@@ -245,7 +265,7 @@ export function SettingsSurface({
                 await runPageProviderAction(kind);
             }
         } catch (error) {
-            setPageError(error instanceof Error ? error.message : 'Provider 操作失败。');
+            setPageError(error instanceof Error ? error.message : t('Provider action failed.'));
         } finally {
             setProviderActionBusy(null);
         }
@@ -277,12 +297,12 @@ export function SettingsSurface({
         queryFn: async () => {
             const response = await fetch('/csrf-token');
             if (!response.ok) {
-                throw new MessageError('无法获取 CSRF token。');
+                throw new MessageError(t('Could not obtain a CSRF token.'));
             }
 
             const data = await readJsonObject(response);
             if (typeof data.token !== 'string' || data.token.length === 0) {
-                throw new MessageError('无法获取 CSRF token。');
+                throw new MessageError(t('Could not obtain a CSRF token.'));
             }
 
             return data.token;
@@ -306,7 +326,7 @@ export function SettingsSurface({
             return result.data;
         }
 
-        throw result.error ?? csrfTokenError ?? new MessageError('无法获取 CSRF token。');
+        throw result.error ?? csrfTokenError ?? new MessageError(t('Could not obtain a CSRF token.'));
     }
 
     const settingsQuery = useQuery({
@@ -323,7 +343,7 @@ export function SettingsSurface({
             });
 
             if (!response.ok) {
-                throw new MessageError('无法加载设置。');
+                throw new MessageError(t('Could not load settings.'));
             }
 
             return readJsonObject(response);
@@ -348,7 +368,7 @@ export function SettingsSurface({
             });
 
             if (!response.ok) {
-                throw new MessageError('无法读取 provider secret 状态。');
+                throw new MessageError(t('Could not read the provider secret status.'));
             }
 
             return readJsonObject(response);
@@ -379,12 +399,12 @@ export function SettingsSurface({
         },
         onSubmit: async ({ value }) => {
             if (!parsedPayload) {
-                setPageError('设置尚未加载完成。');
+                setPageError(t('Settings have not finished loading.'));
                 return;
             }
 
             if (hasRevisionConflict) {
-                setPageError('设置已在其他会话中更新。请先重新加载当前设置，再合并并保存草稿。');
+                setPageError(t('Settings were updated in another session. Reload the current settings, then merge and save the draft.'));
                 return;
             }
 
@@ -408,7 +428,7 @@ export function SettingsSurface({
     const saveMutation = useMutation({
         mutationFn: async (values: typeof defaultSettingsFormValues) => {
             if (!parsedPayload) {
-                throw new MessageError('设置尚未加载完成。');
+                throw new MessageError(t('Settings have not finished loading.'));
             }
 
             const csrfToken = await ensureCsrfToken();
@@ -429,15 +449,15 @@ export function SettingsSurface({
             if (!response.ok) {
                 if (response.status === 409) {
                     setHasRevisionConflict(true);
-                    throw new MessageError('设置已被其他会话更新；本地草稿仍保留。请重新加载当前设置后合并并再次保存。');
+                    throw new MessageError(t('Settings were updated in another session; the local draft is still kept. Reload the current settings, merge, and save again.'));
                 }
-                throw new MessageError('设置保存失败。');
+                throw new MessageError(t('Settings could not be saved.'));
             }
 
             await saveSettingsToRuntime(payload, runtime);
             await refetchSettings();
             setHasRevisionConflict(false);
-            setSaveStatus({ kind: 'success', message: '已保存' });
+            setSaveStatus({ kind: 'success', message: t('Saved') });
             try {
                 window.sessionStorage.setItem('emberdesk-settings-saved-at', String(Date.now()));
                 window.sessionStorage.setItem('emberdesk-settings-revision', String(parsedPayload.settingsRevision ?? ''));
@@ -492,11 +512,11 @@ export function SettingsSurface({
                 });
 
                 if (result.status === 'failed') {
-                    throw new MessageError('Provider API key 保存失败。');
+                    throw new MessageError(t('Provider API key could not be saved.'));
                 }
 
                 if (result.status === 'empty') {
-                    throw new MessageError('请输入 API key 后再保存。');
+                    throw new MessageError(t('Enter an API key before saving.'));
                 }
 
                 return result;
@@ -516,7 +536,7 @@ export function SettingsSurface({
                     });
 
                     if (!response.ok) {
-                        throw new MessageError('Provider API key 清除失败。');
+                        throw new MessageError(t('Provider API key could not be cleared.'));
                     }
                 },
             });
@@ -562,7 +582,7 @@ export function SettingsSurface({
         }
 
         return [
-            { label: 'OpenAI 预设', value: Array.isArray(settingsData.openai_setting_names) ? settingsData.openai_setting_names.length : 0 },
+            { label: t('OpenAI presets'), value: Array.isArray(settingsData.openai_setting_names) ? settingsData.openai_setting_names.length : 0 },
         ];
     }, [settingsData]);
 
@@ -588,7 +608,7 @@ export function SettingsSurface({
 
         const result = await refetchSettings();
         if (result.error || !result.data) {
-            setPageError(result.error instanceof Error ? result.error.message : '无法重新加载当前设置。');
+            setPageError(result.error instanceof Error ? result.error.message : t('Could not reload the current settings.'));
             return;
         }
 
@@ -636,7 +656,7 @@ export function SettingsSurface({
                     <header {...stylex.props(settingsStyles.pageHeader)}>
                         <div {...stylex.props(settingsStyles.pageHeaderRow)}>
                             <div>
-                                <h1 {...stylex.props(settingsStyles.pageTitle)}>设置</h1>
+                                <h1 {...stylex.props(settingsStyles.pageTitle)}>{t('Settings')}</h1>
                             </div>
                             <div {...stylex.props(settingsStyles.headerActions)}>
                                 <button
@@ -646,7 +666,7 @@ export function SettingsSurface({
                                     aria-controls="settings-diagnostics"
                                     onClick={() => setShowDiagnostics(value => !value)}
                                 >
-                                    诊断
+                                    {t('Diagnostics')}
                                 </button>
                                 <a
                                     {...stylex.props(settingsStyles.button, settingsStyles.buttonSecondary, settingsStyles.workspaceLink)}
@@ -654,7 +674,7 @@ export function SettingsSurface({
                                     href="/"
                                     data-doc-id="page.chat_workspace"
                                 >
-                                    返回工作区
+                                    {t('Back to workspace')}
                                 </a>
                             </div>
                         </div>
@@ -671,36 +691,36 @@ export function SettingsSurface({
                     <div {...stylex.props(settingsStyles.stack, isCompact && settingsStyles.stackOverlay)}>
                         {settingsQuery.isPending && (
                             <div {...stylex.props(settingsStyles.status, settingsStyles.statusInfo)} role="status">
-                                正在加载当前设置...
+                                {t('Loading current settings...')}
                             </div>
                         )}
 
                         {settingsQuery.isError && !settingsQuery.isPending ? (
                             <div {...stylex.props(settingsStyles.status, settingsStyles.statusError)} role="alert">
-                                <p>设置加载失败。</p>
-                                <p>{settingsQueryError instanceof Error ? settingsQueryError.message : '请检查服务后重试。'}</p>
+                                <p>{t('Settings failed to load.')}</p>
+                                <p>{settingsQueryError instanceof Error ? settingsQueryError.message : t('Check the service and try again.')}</p>
                                 <button
                                     type="button"
                                     {...stylex.props(settingsStyles.button, settingsStyles.buttonSecondary)}
                                     onClick={() => void refetchSettings()}
                                     disabled={settingsQuery.isFetching}
                                 >
-                                    重新加载设置
+                                    {t('Reload settings')}
                                 </button>
                             </div>
                         ) : null}
 
                         {secretsQuery.isError && !secretsQuery.isPending ? (
                             <div {...stylex.props(settingsStyles.status, settingsStyles.statusError)} role="alert">
-                                <p>无法读取密钥状态，普通设置字段仍可编辑。</p>
-                                <p>{secretsQueryError instanceof Error ? secretsQueryError.message : '请稍后重试。'}</p>
+                                <p>{t('Secret status could not be read. Regular settings fields are still editable.')}</p>
+                                <p>{secretsQueryError instanceof Error ? secretsQueryError.message : t('Try again later.')}</p>
                                 <button
                                     type="button"
                                     {...stylex.props(settingsStyles.button, settingsStyles.buttonSecondary)}
                                     onClick={() => void refetchSecrets()}
                                     disabled={secretsQuery.isFetching}
                                 >
-                                    重试密钥状态
+                                    {t('Retry secret status')}
                                 </button>
                             </div>
                         ) : null}
@@ -713,14 +733,14 @@ export function SettingsSurface({
 
                         {hasRevisionConflict && (
                             <div {...stylex.props(settingsStyles.status, settingsStyles.statusError)} role="alert">
-                                <p>当前草稿基于过期版本，尚未丢失。重新加载会放弃本地草稿，并显示当前保存的设置。</p>
+                                <p>{t('This draft is based on an outdated revision and has not been lost. Reloading discards the local draft and shows the currently saved settings.')}</p>
                                 <button
                                     type="button"
                                     {...stylex.props(settingsStyles.button, settingsStyles.buttonSecondary)}
                                     onClick={() => void reloadCurrentSettings()}
                                     disabled={isBusy}
                                 >
-                                    重新加载当前设置
+                                    {t('Reload current settings')}
                                 </button>
                             </div>
                         )}
@@ -745,15 +765,38 @@ export function SettingsSurface({
                         >
                             <div className={`settings-tab-panel ${stylex.props(isCompact && settingsStyles.tabPanelOverlay).className ?? ''}`}>
 
+                            <div>
+                                <SettingsSection title={t('Interface')}>
+                                    <div {...stylex.props(settingsStyles.field)}>
+                                        <label htmlFor="settings-ui-language" {...stylex.props(settingsStyles.fieldLabel)}>
+                                            {t('Language')}
+                                        </label>
+                                        <select
+                                            id="settings-ui-language"
+                                            className="text_pole"
+                                            value={uiLocale}
+                                            onChange={event => setUiLocale(event.target.value)}
+                                        >
+                                            {uiLocaleOptions.map(option => (
+                                                <option key={option.id} value={option.id}>{option.label}</option>
+                                            ))}
+                                        </select>
+                                        <p {...stylex.props(settingsStyles.fieldDescription)}>
+                                            {t('Switching the language reloads the page.')}
+                                        </p>
+                                    </div>
+                                </SettingsSection>
+                            </div>
+
                             {activeTab === 'providers' ? (
                             <div>
                                 <SettingsSection
-                                    title="服务"
+                                    title={t('Service')}
                                 >
                                     <SettingField
                                         form={settingsForm}
                                         name="providers.customUrl"
-                                        label="接口地址"
+                                        label={t('Endpoint URL')}
                                         placeholder="https://api.openai.com/v1"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
@@ -793,12 +836,12 @@ export function SettingsSurface({
                                                         key: currentSecretKey,
                                                         mode: 'save',
                                                         value: providerSecretInput,
-                                                        successMessage: 'Provider API key 已保存。',
+                                                        successMessage: t('Provider API key saved.'),
                                                         clearInput: () => setProviderSecretInput(''),
                                                     });
                                                 }}
                                             >
-                                                保存 Key
+                                                {t('Save key')}
                                             </button>
                                             <button
                                                 type="button"
@@ -809,12 +852,12 @@ export function SettingsSurface({
                                                         key: currentSecretKey,
                                                         mode: 'clear',
                                                         value: '',
-                                                        successMessage: 'Provider API key 已清除。',
+                                                        successMessage: t('Provider API key cleared.'),
                                                         clearInput: () => setProviderSecretInput(''),
                                                     });
                                                 }}
                                             >
-                                                清除 Key
+                                                {t('Clear key')}
                                             </button>
                                         </div>
                                     </div>
@@ -822,7 +865,7 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="providers.openaiModel"
-                                        label="模型"
+                                        label={t('Model')}
                                         placeholder="gpt-5.2"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
@@ -830,7 +873,7 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="providers.fallbackProviderModel"
-                                        label="后台模型"
+                                        label={t('Background model')}
                                         placeholder="gpt-4.1-mini"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
@@ -839,7 +882,7 @@ export function SettingsSurface({
                                         <div {...stylex.props(settingsStyles.inlinePanel)}>
                                             <div {...stylex.props(settingsStyles.inlineHeader)}>
                                                 <div>
-                                                    <h3 {...stylex.props(settingsStyles.sectionTitle)}>连接</h3>
+                                                    <h3 {...stylex.props(settingsStyles.sectionTitle)}>{t('Connection')}</h3>
                                                 </div>
                                                 <span {...stylex.props(settingsStyles.pill)}>{providerStatusLabel}</span>
                                             </div>
@@ -851,7 +894,7 @@ export function SettingsSurface({
                                                     disabled={providerActionBusy !== null}
                                                     onClick={() => { void handleProviderAction('connect'); }}
                                                 >
-                                                    {providerActionBusy === 'connect' ? '连接中…' : '连接'}
+                                                    {t(providerActionBusy === 'connect' ? 'Connecting…' : 'Connect')}
                                                 </button>
                                                 <button
                                                     type="button"
@@ -860,7 +903,7 @@ export function SettingsSurface({
                                                     disabled={providerActionBusy !== null}
                                                     onClick={() => { void handleProviderAction('test'); }}
                                                 >
-                                                    {providerActionBusy === 'test' ? '测试中…' : '测试'}
+                                                    {t(providerActionBusy === 'test' ? 'Testing…' : 'Test')}
                                                 </button>
                                             </div>
                                         </div>
@@ -872,13 +915,13 @@ export function SettingsSurface({
 
                             {activeTab === 'providers' ? (
                                 <SettingsSection
-                                    title="对话记忆"
+                                    title={t('Chat memory')}
                                 >
                                     <SettingField
                                         form={settingsForm}
                                         name="memory.enabled"
-                                        label="历史会话轮次总结"
-                                        description="开启后，最近轮数之外的旧轮在后台被摘要成文字，原始消息保留可在摘要卡展开。"
+                                        label={t('Summarize earlier conversation turns')}
+                                        description={t('When enabled, turns older than the recent window are summarized into text in the background. Original messages are kept and can be expanded from the summary card.')}
                                         variant="toggle"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
@@ -886,7 +929,7 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="memory.keepTurns"
-                                        label="保留完整显示的最近轮数"
+                                        label={t('Recent turns kept in full')}
                                         variant="number"
                                         min={1}
                                         step={1}
@@ -896,12 +939,12 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="memory.role"
-                                        label="摘要注入角色"
+                                        label={t('Summary injection role')}
                                         variant="select"
                                         options={[
-                                            { value: 'system', label: '系统（旁白回顾）' },
-                                            { value: 'assistant', label: '助手（角色自己记得）' },
-                                            { value: 'user', label: '用户' },
+                                            { value: 'system', label: t('System (narration recap)') },
+                                            { value: 'assistant', label: t('Assistant (the character remembers)') },
+                                            { value: 'user', label: t('User') },
                                         ]}
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
@@ -909,7 +952,7 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="memory.maxTokens"
-                                        label="单条摘要最大输出 tokens"
+                                        label={t('Max output tokens per summary')}
                                         variant="number"
                                         min={1}
                                         step={50}
@@ -919,9 +962,9 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="memory.prompt"
-                                        label="摘要 Prompt（留空使用默认）"
+                                        label={t('Summary prompt (leave empty to use the default)')}
                                         variant="textarea"
-                                        placeholder="你是聊天记录整理助手……"
+                                        placeholder={t('You are a chat log summarizer…')}
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
                                     />
@@ -929,8 +972,8 @@ export function SettingsSurface({
                                         form={settingsForm}
                                         name="memory.wrap"
                                         variant="textarea"
-                                        label="摘要包裹模板（{{summary}} 为占位符，留空使用默认）"
-                                        placeholder="【早前剧情回顾】&#10;{{summary}}"
+                                        label={t('Summary wrapper template ({{summary}} is the placeholder; leave empty to use the default)')}
+                                        placeholder={t('[Earlier recap]&#10;{{summary}}')}
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
                                     />
@@ -939,13 +982,13 @@ export function SettingsSurface({
 
                             {activeTab === 'providers' ? (
                                 <SettingsSection
-                                    title="消息渲染设置"
+                                    title={t('Message rendering')}
                                 >
                                     <SettingField
                                         form={settingsForm}
                                         name="rendering.frontendFramesEnabled"
-                                        label="启用 Frontend Frames"
-                                        description="会执行卡片内脚本。"
+                                        label={t('Enable Frontend Frames')}
+                                        description={t('Runs scripts embedded in cards.')}
                                         variant="toggle"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
@@ -953,7 +996,7 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="rendering.frontendFramesDepth"
-                                        label="渲染深度（0 = 全部）"
+                                        label={t('Render depth (0 = all)')}
                                         variant="number"
                                         min={0}
                                         step={1}
@@ -963,7 +1006,7 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="rendering.frontendFramesDepthIgnoreHidden"
-                                        label="深度计数忽略隐藏楼层"
+                                        label={t('Depth counting ignores hidden messages')}
                                         variant="toggle"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
@@ -971,12 +1014,12 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="rendering.frontendFramesCollapseCodeBlock"
-                                        label="折叠代码块"
+                                        label={t('Collapse code blocks')}
                                         variant="select"
                                         options={[
-                                            { value: 'frontend_only', label: '仅前端块' },
-                                            { value: 'all', label: '所有代码块' },
-                                            { value: 'none', label: '从不' },
+                                            { value: 'frontend_only', label: t('Frontend blocks only') },
+                                            { value: 'all', label: t('All code blocks') },
+                                            { value: 'none', label: t('Never') },
                                         ]}
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
@@ -984,7 +1027,7 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="rendering.frontendFramesSkipHighlight"
-                                        label="跳过框架块的语法高亮"
+                                        label={t('Skip syntax highlighting for frame blocks')}
                                         variant="toggle"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
@@ -992,7 +1035,7 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="rendering.frontendFramesUseBlobUrl"
-                                        label="使用 blob URL（调试）"
+                                        label={t('Use blob URL (debug)')}
                                         variant="toggle"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
@@ -1000,7 +1043,7 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="rendering.frontendFramesAllowStreaming"
-                                        label="流式期间渲染"
+                                        label={t('Render while streaming')}
                                         variant="toggle"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
@@ -1020,7 +1063,7 @@ export function SettingsSurface({
                                         aria-controls="settings-diagnostics"
                                         onClick={() => setShowDiagnostics(value => !value)}
                                     >
-                                        诊断
+                                        {t('Diagnostics')}
                                     </button>
                                     ) : null}
                                 </div>
@@ -1031,7 +1074,7 @@ export function SettingsSurface({
                                             {...stylex.props(settingsStyles.button, settingsStyles.buttonPrimary)}
                                             disabled={isBusy || settingsQuery.isPending || settingsQuery.isFetching || isPristine || hasRevisionConflict}
                                         >
-                                            {saveMutation.isPending ? '保存中...' : isPristine ? '修改后可保存' : '保存设置'}
+                                            {t(saveMutation.isPending ? 'Saving...' : isPristine ? 'Save after changes' : 'Save settings')}
                                         </button>
                                     )}
                                 </settingsForm.Subscribe>
@@ -1044,7 +1087,7 @@ export function SettingsSurface({
                 {showDiagnostics && (
                 <aside {...stylex.props(settingsStyles.side)} id="settings-diagnostics">
                     <section {...stylex.props(settingsStyles.sidePanel)}>
-                        <h2 {...stylex.props(settingsStyles.sectionTitle)}>负载摘要</h2>
+                        <h2 {...stylex.props(settingsStyles.sectionTitle)}>{t('Payload summary')}</h2>
                         <div {...stylex.props(settingsStyles.metrics)}>
                             {payloadSummary.map(item => (
                                 <div key={item.label} {...stylex.props(settingsStyles.metric)}>
@@ -1056,12 +1099,12 @@ export function SettingsSurface({
                     </section>
 
                     <section {...stylex.props(settingsStyles.sidePanel)}>
-                        <h2 {...stylex.props(settingsStyles.sectionTitle)}>字段归属</h2>
+                        <h2 {...stylex.props(settingsStyles.sectionTitle)}>{t('Field ownership')}</h2>
                         <div {...stylex.props(settingsStyles.diagnosticsBody)}>
                             <div>
                                 {Object.entries(settingsCoverage.reactOwned as Record<string, string[]>).map(([tabId, paths]) => (
                                     <div key={tabId} {...stylex.props(settingsStyles.diagnosticsGroup)}>
-                                        <h3 {...stylex.props(settingsStyles.diagnosticsTitle)}>{settingsTabDefinitions.find(tab => tab.id === tabId)?.label}</h3>
+                                        <h3 {...stylex.props(settingsStyles.diagnosticsTitle)}>{translate(settingsTabDefinitions.find(tab => tab.id === tabId)?.labelKey ?? '')}</h3>
                                         <ul {...stylex.props(settingsStyles.diagnosticsList)}>
                                             {paths.map((coveragePath: string) => (
                                                 <li key={coveragePath}>{coveragePath}</li>
@@ -1072,7 +1115,7 @@ export function SettingsSurface({
                             </div>
 
                             <div {...stylex.props(settingsStyles.diagnosticsGroup)}>
-                                <h3 {...stylex.props(settingsStyles.diagnosticsTitle)}>遗留字段</h3>
+                                <h3 {...stylex.props(settingsStyles.diagnosticsTitle)}>{t('Legacy fields')}</h3>
                                 <ul {...stylex.props(settingsStyles.diagnosticsList)}>
                                         {settingsCoverage.legacyOwned.map(path => (
                                         <li key={path}>{path}</li>

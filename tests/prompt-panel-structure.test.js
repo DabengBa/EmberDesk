@@ -219,10 +219,11 @@ describe('prompt panel + side-nav defaults', () => {
     });
 });
 
-describe('simplified-chinese-only locale', () => {
-    test('i18n is pinned to zh-cn with no language selection', () => {
+describe('ui locale contract', () => {
+    test('the saved language selection drives the shell locale engine', () => {
         const i18n = read('public/scripts/i18n.js');
-        expect(i18n).toContain('const localeFile = \'zh-cn\';');
+        expect(i18n).toContain('let localeFile = readStoredUiLocale();');
+        expect(i18n).toContain('resolveUiLocale(language)');
         expect(i18n).not.toContain('navigator.language');
         expect(i18n).not.toContain('ui_language_select');
         expect(i18n).not.toContain('lang.json');
@@ -237,6 +238,7 @@ describe('simplified-chinese-only locale', () => {
 
     test('app i18n bridge fallback matches the pinned locale', () => {
         const bridge = read('app/compat/i18n.js');
-        expect(bridge).toContain('getCurrentLocale() : \'zh-cn\'');
+        expect(bridge).toContain('standaloneLocale = DEFAULT_UI_LOCALE;');
+        expect(bridge).toContain('standaloneLocale = readStoredUiLocale();');
     });
 });

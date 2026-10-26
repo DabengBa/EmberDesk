@@ -46,6 +46,7 @@ function categoryConfigOf(config: MacroBrowserProps['categoryConfig'], category:
 }
 
 function SourceIndicator({ macro }: { macro: MacroBrowserMacro }) {
+    useTranslated('');
     const { isExtension, isThirdParty, name } = macro.source ?? {};
     const classes = ['macro-source', 'fa-solid'];
     if (isExtension) {
@@ -69,6 +70,7 @@ function MacroItem({ macro, selected, filtered, onSelect, formatSignature, detai
     formatSignature: (macro: MacroBrowserMacro) => string;
     detailsId: string;
 }) {
+    useTranslated('');
     const classes = ['macro-item'];
     if (macro.aliasOf) classes.push('isAlias');
     if (selected) classes.push('selected');
@@ -97,6 +99,7 @@ function LegacyNodeSlot({ node }: { node: HTMLElement | null }) {
 }
 
 export function MacroBrowserPanel({ macros, searchCorpus, helpers, categoryConfig }: MacroBrowserProps) {
+    useTranslated('');
     const [query, setQuery] = useState('');
     const [sorted, setSorted] = useState(false);
     const [selectedName, setSelectedName] = useState<string | null>(null);

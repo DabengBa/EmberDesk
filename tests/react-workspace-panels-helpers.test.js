@@ -134,7 +134,7 @@ describe('React workspace panels bridge helpers', () => {
         expect(bridgeSource).toContain('panelModule.mountWorkspaceShellChrome');
         expect(workspacePanelSource).toContain('export function mountWorkspaceShellChrome');
         expect(workspacePanelSource).toContain('ReactWorkspaceShellChrome');
-        expect(workspacePanelSource).toContain('角色库');
+        expect(workspacePanelSource).toContain("label: 'Character library'");
         expect(workspacePanelSource).not.toContain("{ action: 'openCharacterAuthoring'");
         expect(workspacePanelSource).not.toContain('Workspace ready');
         expect(workspacePanelSource).not.toContain('react-workspace-shell-status-dot');
@@ -143,10 +143,10 @@ describe('React workspace panels bridge helpers', () => {
         expect(workspacePanelSource).not.toContain('react-workspace-shell-status');
         expect(workspacePanelSource).not.toContain('react-workspace-panel-dock-status');
         expect(workspacePanelSource).not.toContain('No chat selected');
-        expect(workspacePanelSource).toContain('世界书');
+        expect(workspacePanelSource).toContain("label: 'World book'");
         expect(workspacePanelSource).not.toContain('Backgrounds');
         expect(workspacePanelSource).not.toContain('openExtensions');
-        expect(workspacePanelSource).toContain('设置');
+        expect(workspacePanelSource).toContain("label: 'Settings'");
         expect(scriptSource).toContain("openWorkspaceShellSettings");
         expect(scriptSource).toContain("openSettings: openWorkspaceShellSettings");
         expect(scriptSource).not.toContain("window.location.assign('/settings");
@@ -170,7 +170,7 @@ describe('React workspace panels bridge helpers', () => {
         expect(workspacePanelStoreSource).not.toContain("'aiConfig'");
         expect(workspacePanelStoreSource).not.toContain("'advancedFormatting'");
         expect(workspacePanelSource).toContain("{ command: 'openSettings'");
-        expect(workspacePanelSource).toContain("label: '设置'");
+        expect(workspacePanelSource).toContain("label: 'Settings'");
         expect(workspacePanelSource).toContain("panelKind: 'settings'");
 
         expect(workspacePanelSource).toContain('recordWorkspacePanelDockIntent,');
@@ -1080,8 +1080,8 @@ describe('React workspace panels bridge helpers', () => {
         expect(workbenchSource).toContain('data-world-info-react-workflow="workbench"');
         expect(workbenchSource).toContain('data-world-info-react-layout="split"');
         expect(workbenchSource).toContain('data-world-info-react-mobile-view');
-        expect(workbenchSource).toContain('返回条目列表');
-        expect(workbenchSource).toContain('扫描深度');
+        expect(workbenchSource).toContain("translate('Back to entry list')");
+        expect(workbenchSource).toContain("translate('Scan depth')");
         expect(workbenchSource).toContain('data-world-info-react-field="scan-depth"');
         expect(workbenchSource).not.toContain('扫描规则');
         expect(workbenchSource).not.toContain('toggleActivationRules');

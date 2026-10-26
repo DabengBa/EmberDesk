@@ -62,7 +62,10 @@ describe('character library React panel scaffold', () => {
         expect(toolbarSource).toContain('character-library-toolbar-filters');
         expect(helperSource).toContain('export const characterLibraryToolbarSchema = z.object(');
         expect(helperSource).toContain('export function getCharacterLibraryBulkSelectionShortText(');
-        expect(helperSource).toContain('locale.toLowerCase().startsWith(\'zh\')');
+        // The counter follows the UI locale through the i18n bridge, not the
+        // browser locale, so a Chinese UI never shows an English counter.
+        expect(helperSource).toContain("translate('${0} sel')");
+        expect(helperSource).not.toContain('navigator?.language');
     });
 
     test('keeps bogus-folder back block additive to virtualized character rows', () => {

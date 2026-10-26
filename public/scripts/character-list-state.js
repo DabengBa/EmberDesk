@@ -1,3 +1,5 @@
+import { translate } from './i18n.js';
+
 /**
  * Resolves current character ids to stable avatar keys.
  *
@@ -127,8 +129,7 @@ export function updateBulkSelectionCountState({ selectedCount, deleteButton, fal
  * @returns {string}
  */
 export function getBulkSelectionShortCountText(count) {
-    const locale = globalThis.document?.documentElement?.lang || globalThis.navigator?.language || 'en';
-    return String(locale).toLowerCase().startsWith('zh') ? `${count}个` : `${count} sel`;
+    return translate('${0} sel', null).replace('${0}', String(count));
 }
 
 /**

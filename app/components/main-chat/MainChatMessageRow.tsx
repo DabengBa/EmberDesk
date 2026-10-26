@@ -2,7 +2,7 @@ import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import type { MainChatCommands } from '../../compat/workspace-commands';
 import type { MainChatMessageRecord } from '../../stores/main-chat-store';
-import { translate } from '../../compat/i18n.js';
+import { translate, useTranslated } from '../../compat/i18n.js';
 import { useFrontendFrames } from '../../compat/frontend-frames';
 
 const EMPTY_RENDER = {
@@ -112,6 +112,7 @@ function MessageActionShell({
     message: MainChatMessageRecord;
     commands?: MainChatCommands;
 }) {
+    useTranslated('');
     const messageId = message.id;
     const numericMessageId = Number(messageId);
     const canAddressMessage = Number.isInteger(numericMessageId) && numericMessageId >= 0;
@@ -509,7 +510,7 @@ export const MainChatMessageRow = memo(function MainChatMessageRow({
                     >
                         <div className="mes_reasoning_header_block flex-container">
                             <div className="mes_reasoning_header flex-container">
-                                <span className="mes_reasoning_header_title" data-i18n="Thought for some time">Thought for some time</span>
+                                <span className="mes_reasoning_header_title" >{translate('Thought for some time')}</span>
                                 <div className="mes_reasoning_arrow fa-solid fa-chevron-up" />
                             </div>
                         </div>
@@ -646,10 +647,8 @@ export const MainChatMessageRow = memo(function MainChatMessageRow({
                     <output
                         className="generation_failure_notice"
                         style={{ display: 'block' }}
-                        data-i18n="Generation failed. You can retry by sending a new message or keep chatting."
-                    >
-                        Generation failed. You can retry by sending a new message or keep chatting.
-                    </output>
+
+>{translate('Generation failed. You can retry by sending a new message or keep chatting.')}</output>
                 ) : null}
                 <StaticHtml className="mes_media_wrapper" html={render.mediaHtml} />
                 <StaticHtml className="mes_file_wrapper" html={render.fileHtml} />

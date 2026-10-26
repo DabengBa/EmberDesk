@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { translate, useTranslated } from '@/compat/i18n.js';
 
 /**
  * Prompt Inspector — request-level preview of the body EmberDesk is about to
@@ -96,23 +97,23 @@ export interface PromptInspectorBridge {
 }
 
 const ROLE_BADGE_LABELS: Record<string, string> = {
-    system: '系统',
-    user: '用户',
-    assistant: '助手',
-    tool: '工具',
+    system: translate('System'),
+    user: translate('User'),
+    assistant: translate('Assistant'),
+    tool: translate('Tool'),
 };
 
 const WARNING_LABELS: Record<string, string> = {
-    'slash-command': '输入以 / 开头：发送时会先执行斜杠命令，预览展示的是命令原文。',
-    'pending-attachment': '存在待发送附件：附件文件内容未纳入预览。',
-    'bias-only-system': '输入仅含 bias：实际发送时会作为系统消息写入，不进入 prompt。',
-    'budget-exceeded': '强制提示词已超出上下文预算，消息列表可能不完整。',
-    'assembly-error': '组装过程中发生错误，预览可能不完整。',
+    'slash-command': translate('Input starts with /: the slash command runs first on send, and this preview shows its literal text.'),
+    'pending-attachment': translate('A file attachment is pending: its contents are not part of this preview.'),
+    'bias-only-system': translate('Input contains only bias: it is sent as a system message and is not part of the prompt.'),
+    'budget-exceeded': translate('Forced prompts exceed the context budget; the message list may be incomplete.'),
+    'assembly-error': translate('An error occurred while assembling; this preview may be incomplete.'),
 };
 
 const EMPTY_REASON_LABELS: Record<string, string> = {
-    'no-active-character': '未选择角色，无法组装 prompt。',
-    'unsupported-api': '当前 API 不是 Chat Completion，暂不支持预览。',
+    'no-active-character': translate('No character selected, so the prompt cannot be assembled.'),
+    'unsupported-api': translate('The current API is not Chat Completion, so preview is unavailable.'),
 };
 
 /** Request body keys rendered in the params grid; messages render in the list. */
@@ -174,6 +175,7 @@ function contentToText(content: unknown): string {
 
 /** One request `tools[]` entry: function name, description, parameters schema. */
 function ToolRow({ tool }: { tool: Record<string, unknown> }) {
+    useTranslated('');
     const [open, setOpen] = useState(false);
     const fn = (tool.function && typeof tool.function === 'object' ? tool.function : {}) as Record<string, unknown>;
     const name = String(fn.name ?? '?');
@@ -185,10 +187,10 @@ function ToolRow({ tool }: { tool: Record<string, unknown> }) {
                 type="button"
                 className="prompt-inspector-tool-head"
                 onClick={() => setOpen(value => !value)}
-                title={open ? '收起定义' : '展开定义'}
+                title={open ? translate('Collapse definition') : translate('Expand definition')}
             >
                 <span className="prompt-inspector-tool-name">{name}</span>
-                <span className="prompt-inspector-tool-desc">{description || '（无描述）'}</span>
+                <span className="prompt-inspector-tool-desc">{description || translate('(no description)')}</span>
             </button>
             {open ? (
                 <pre className="prompt-inspector-tool-content">{description}{description && parameters ? '\n\n' : ''}{parameters}</pre>
@@ -205,6 +207,7 @@ function MessageRow({ index, message, entry, pending, tailLabel }: {
     /** Label for request-tail messages appended after assembly (e.g. pipeline step prompts). */
     tailLabel: string;
 }) {
+    useTranslated('');
     const [open, setOpen] = useState(false);
     const role = String(message.role ?? entry?.role ?? '?');
     const text = useMemo(() => contentToText(message.content ?? entry?.content), [message.content, entry?.content]);
@@ -217,12 +220,12 @@ function MessageRow({ index, message, entry, pending, tailLabel }: {
                 type="button"
                 className="prompt-inspector-item-head"
                 onClick={() => setOpen(value => !value)}
-                title={open ? '收起' : '展开内容'}
+                title={open ? translate('Collapse') : translate('Expand content')}
             >
                 <span className="prompt-inspector-item-index">#{index}</span>
                 <span className="prompt-inspector-badge">{ROLE_BADGE_LABELS[role] ?? role}</span>
                 <span className="prompt-inspector-item-id">{entry?.identifier ?? entry?.collection ?? (entry ? '—' : tailLabel)}</span>
-                {pending ? <span className="prompt-inspector-badge prompt-inspector-badge-pending">预览合成</span> : null}
+                {pending ? <span className="prompt-inspector-badge prompt-inspector-badge-pending">{translate('Preview assembled')}</span> : null}
                 <span className="prompt-inspector-item-tokens">{formatTokens(entry?.tokens)}</span>
             </button>
             <div className="prompt-inspector-item-preview">{open ? '' : previewText}</div>
@@ -237,7 +240,26 @@ function MessageRow({ index, message, entry, pending, tailLabel }: {
  * The inspector body. Fetch happens on mount and on each round change; the
  * component keeps only transient UI state (open rows, copy feedback).
  */
+/**
+ * Builds the round note shown above the message list. Kept out of the JSX so the
+ * interpolated copy stays a single translated template.
+ * @param pipeline Pipeline round info
+ * @param result Assembly result carrying the request payload
+ * @returns Localized round note
+ */
+function pipelineMessage(pipeline: PromptInspectorPipeline, result: { request: Record<string, any> }) {
+    const forced = result.request.tool_choice && typeof result.request.tool_choice === 'object'
+        ? translate(', forced tool_choice')
+        : '';
+    return translate('Pipeline round ${0}/${1}: ${2} (step instruction appended${3})')
+        .replace('${0}', String(pipeline.round + 1))
+        .replace('${1}', String(pipeline.total))
+        .replace('${2}', pipeline.step?.tool ?? '')
+        .replace('${3}', forced);
+}
+
 export function PromptInspector({ bridge }: { bridge: PromptInspectorBridge }) {
+    useTranslated('');
     const [snapshot, setSnapshot] = useState<PromptInspectorSnapshot | null>(null);
     const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
     const [errorText, setErrorText] = useState<string | null>(null);
@@ -312,9 +334,9 @@ export function PromptInspector({ bridge }: { bridge: PromptInspectorBridge }) {
         }
         const options = pipeline.rounds.map(entry => ({
             value: entry.index,
-            label: `轮次 ${entry.index + 1} · ${entry.tool}`,
+            label: translate('Round ${0} · ${1}').replace('${0}', String(entry.index + 1)).replace('${1}', entry.tool),
         }));
-        options.push({ value: pipeline.total, label: `收尾轮（无工具）` });
+        options.push({ value: pipeline.total, label: translate('Final round (no tools)') });
         return options;
     }, [pipeline]);
 
@@ -324,15 +346,15 @@ export function PromptInspector({ bridge }: { bridge: PromptInspectorBridge }) {
                 bridge.close();
             }
         }}>
-            <div className="prompt-inspector-panel" role="dialog" aria-modal="true" aria-label="Prompt 预览">
+            <div className="prompt-inspector-panel" role="dialog" aria-modal="true" aria-label={translate('Prompt preview')}>
                 <div className="prompt-inspector-header">
-                    <span className="prompt-inspector-badge prompt-inspector-badge-preview">预览（未发送）</span>
-                    {result?.model ? <span className="prompt-inspector-model" title="目标模型">{result.model}</span> : null}
+                    <span className="prompt-inspector-badge prompt-inspector-badge-preview">{translate('Preview (not sent)')}</span>
+                    {result?.model ? <span className="prompt-inspector-model" title={translate('Target model')}>{result.model}</span> : null}
                     {pipeline && roundOptions.length > 1 ? (
                         <select
                             className="text_pole prompt-inspector-round"
                             value={round}
-                            aria-label="管线轮次"
+                            aria-label={translate('Pipeline rounds')}
                             onChange={event => setRound(Number(event.target.value))}
                         >
                             {roundOptions.map(option => (
@@ -344,24 +366,24 @@ export function PromptInspector({ bridge }: { bridge: PromptInspectorBridge }) {
                     <button
                         type="button"
                         className="menu_button"
-                        title="按当前状态重新组装"
+                        title={translate('Reassemble from the current state')}
                         onClick={() => void load(round)}
                     >
-                        <i className="fa-solid fa-rotate-right" aria-hidden="true" /> 刷新
+                        <i className="fa-solid fa-rotate-right" aria-hidden="true" /> {translate('Refresh')}
                     </button>
                     <button
                         type="button"
                         className="menu_button"
                         disabled={!result}
-                        title="复制完整请求体 JSON"
+                        title={translate('Copy the full request body JSON')}
                         onClick={() => result && void copyText('json', JSON.stringify(result.request, null, 2))}
                     >
-                        <i className="fa-solid fa-copy" aria-hidden="true" /> {copied === 'json' ? '已复制' : '复制 JSON'}
+                        <i className="fa-solid fa-copy" aria-hidden="true" /> {copied === 'json' ? translate('Copied') : translate('Copy JSON')}
                     </button>
                     <button
                         type="button"
                         className="menu_button"
-                        title="关闭"
+                        title={translate('Close')}
                         onClick={() => bridge.close()}
                     >
                         <i className="fa-solid fa-xmark" aria-hidden="true" />
@@ -369,12 +391,12 @@ export function PromptInspector({ bridge }: { bridge: PromptInspectorBridge }) {
                 </div>
 
                 {status === 'loading' ? (
-                    <div className="prompt-inspector-status">正在组装预览…</div>
+                    <div className="prompt-inspector-status">{translate('Assembling the preview…')}</div>
                 ) : null}
                 {status === 'error' ? (
                     <div className="prompt-inspector-status prompt-inspector-status-error">
-                        预览失败：{errorText ?? '未知错误'}
-                        <button type="button" className="menu_button" onClick={() => void load(round)}>重试</button>
+                        {translate('Preview failed:')}{errorText ?? translate('Unknown error')}
+                        <button type="button" className="menu_button" onClick={() => void load(round)}>{translate('Retry')}</button>
                     </div>
                 ) : null}
                 {empty ? (
@@ -394,21 +416,21 @@ export function PromptInspector({ bridge }: { bridge: PromptInspectorBridge }) {
                         ) : null}
 
                         {result.budget ? (
-                            <div className="prompt-inspector-budget" title="上下文 / 预留回复 / 可用预算 / 已用 / 剩余">
-                                上下文 {result.budget.context.toLocaleString()} · 预留回复 {result.budget.response.toLocaleString()} ·
-                                已用 {result.budget.used.toLocaleString()} · 剩余 {result.budget.remaining.toLocaleString()}
+                            <div className="prompt-inspector-budget" title={translate('Context / reserved reply / available budget / used / remaining')}>
+                                {translate('Context')} {result.budget.context.toLocaleString()} · {translate('Reserved reply')} {result.budget.response.toLocaleString()} ·
+                                {translate('Used')} {result.budget.used.toLocaleString()} · {translate('Remaining')} {result.budget.remaining.toLocaleString()}
                             </div>
                         ) : null}
 
                         {pipeline ? (
                             <div className="prompt-inspector-pipeline-note">
                                 {pipeline.fallback
-                                    ? `收尾轮：pipeline 步骤已完成，本轮不发送 tools。`
-                                    : `管线第 ${pipeline.round + 1}/${pipeline.total} 步：${pipeline.step?.tool ?? ''}（追加步骤指令${result.request.tool_choice && typeof result.request.tool_choice === 'object' ? '，强制 tool_choice' : ''}）`}
+                                    ? translate('Final round: pipeline steps are complete, so no tools are sent this round.')
+                                    : translate(pipelineMessage(pipeline, result))}
                             </div>
                         ) : null}
 
-                        <div className="prompt-inspector-messages" role="list" aria-label="消息列表">
+                        <div className="prompt-inspector-messages" role="list" aria-label={translate('Message list')}>
                             {(Array.isArray(result.request.messages) ? result.request.messages : []).map((message, index) => {
                                 const entry = result.entries[index] ?? null;
                                 return (
@@ -418,7 +440,7 @@ export function PromptInspector({ bridge }: { bridge: PromptInspectorBridge }) {
                                         message={(message ?? {}) as Record<string, unknown>}
                                         entry={entry}
                                         pending={entry?.identifier != null && entry.identifier === result.pendingEntryIdentifier}
-                                        tailLabel={pipeline ? '管线注入' : 'request'}
+                                        tailLabel={pipeline ? translate('Pipeline injection') : 'request'}
                                     />
                                 );
                             })}
@@ -427,15 +449,15 @@ export function PromptInspector({ bridge }: { bridge: PromptInspectorBridge }) {
                         {(result.summarized ?? []).length > 0 ? (
                             <div className="prompt-inspector-dropped">
                                 <div className="prompt-inspector-dropped-title">
-                                    已摘要轮次（{result.summarized.length} 轮，原文未进入 prompt）
+                                    {translate('Summarized turns (${0} turns; original text is not in the prompt)').replace('${0}', String(result.summarized.length))}
                                 </div>
                                 {result.summarized.map(entry => (
                                     <div key={entry.summaryId} className="prompt-inspector-dropped-item">
-                                        <span className="prompt-inspector-badge">摘要</span>
+                                        <span className="prompt-inspector-badge">{translate('Summary')}</span>
                                         <span className="prompt-inspector-item-id">{entry.identifier}</span>
-                                        <span className="prompt-inspector-badge">覆盖 {entry.coveredCount} 条</span>
-                                        {entry.manual ? <span className="prompt-inspector-badge">手写</span> : null}
-                                        {entry.stale ? <span className="prompt-inspector-badge prompt-inspector-badge-pending">已失效</span> : null}
+                                        <span className="prompt-inspector-badge">{translate('Covers ${0} messages').replace('${0}', String(entry.coveredCount))}</span>
+                                        {entry.manual ? <span className="prompt-inspector-badge">{translate('Handwritten')}</span> : null}
+                                        {entry.stale ? <span className="prompt-inspector-badge prompt-inspector-badge-pending">{translate('Stale')}</span> : null}
                                         <span className="prompt-inspector-dropped-preview">{entry.text.slice(0, 80)}{entry.text.length > 80 ? '…' : ''}</span>
                                     </div>
                                 ))}
@@ -445,13 +467,13 @@ export function PromptInspector({ bridge }: { bridge: PromptInspectorBridge }) {
                         {result.dropped.length > 0 ? (
                             <div className="prompt-inspector-dropped">
                                 <div className="prompt-inspector-dropped-title">
-                                    ⚠ 因预算被裁掉的消息（{result.dropped.length} 条，未进入 prompt）
+                                    {translate('⚠ Messages dropped by the budget (${0} dropped; not in the prompt)').replace('${0}', String(result.dropped.length))}
                                 </div>
                                 {result.dropped.map(entry => (
                                     <div key={entry.identifier} className="prompt-inspector-dropped-item">
                                         <span className="prompt-inspector-badge">{ROLE_BADGE_LABELS[entry.role ?? ''] ?? entry.role ?? '?'}</span>
                                         <span className="prompt-inspector-item-id">{entry.identifier}</span>
-                                        {entry.hasMedia ? <span className="prompt-inspector-badge">含附件</span> : null}
+                                        {entry.hasMedia ? <span className="prompt-inspector-badge">{translate('Has attachment')}</span> : null}
                                         <span className="prompt-inspector-dropped-preview">{entry.content.slice(0, 80)}{entry.content.length > 80 ? '…' : ''}</span>
                                     </div>
                                 ))}
@@ -459,7 +481,7 @@ export function PromptInspector({ bridge }: { bridge: PromptInspectorBridge }) {
                         ) : null}
 
                         <div className="prompt-inspector-params">
-                            <div className="prompt-inspector-params-title">请求参数</div>
+                            <div className="prompt-inspector-params-title">{translate('Request parameters')}</div>
                             <div className="prompt-inspector-params-grid">
                                 {PARAM_KEYS.filter(({ key }) => result.request[key] !== undefined).map(({ key, label }) => (
                                     <div key={key} className="prompt-inspector-param">
@@ -470,13 +492,13 @@ export function PromptInspector({ bridge }: { bridge: PromptInspectorBridge }) {
                                 {Array.isArray(result.request.tools) ? (
                                     <div className="prompt-inspector-param">
                                         <span className="prompt-inspector-param-key">tools</span>
-                                        <span className="prompt-inspector-param-value">{result.request.tools.length} 个工具</span>
+                                        <span className="prompt-inspector-param-value">{translate('${0} tools').replace('${0}', String(result.request.tools.length))}</span>
                                     </div>
                                 ) : null}
                             </div>
                             {Array.isArray(result.request.tools) && result.request.tools.length > 0 ? (
                                 <div className="prompt-inspector-tools">
-                                    <div className="prompt-inspector-params-title">工具定义（{result.request.tools.length}）</div>
+                                    <div className="prompt-inspector-params-title">{translate('Tool definitions (${0})').replace('${0}', String(result.request.tools.length))}</div>
                                     {(result.request.tools as Array<Record<string, unknown>>).map((tool, index) => (
                                         <ToolRow key={index} tool={tool ?? {}} />
                                     ))}

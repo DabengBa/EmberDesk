@@ -10,7 +10,7 @@ const markerBefore = 'AlphaMarker';
 const markerAfter = 'BetaMarker';
 
 async function openCharacterLibrary(page) {
-    const panelButton = page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: '角色库' });
+    const panelButton = page.locator('[data-react-workspace-shell-chrome] nav button[data-workspace-shell-panel-entry="characterLibrary"]');
     await panelButton.click({ timeout: 10_000 });
     await expect(panelButton).toHaveAttribute('aria-pressed', 'true', { timeout: 10_000 });
     await expect(page.locator('#right-nav-panel.openDrawer #rm_characters_block')).toBeVisible({ timeout: 10_000 });
@@ -103,6 +103,7 @@ test.describe('character text replace', () => {
         // canonical card stay in sync — an out-of-band edit would be clobbered
         // by the panel's persist-before-action save.
         const descriptionField = authoring.locator('[data-react-authoring-field="description"] textarea');
+
         const savedCard = page.waitForResponse(response =>
             response.url().includes('/api/characters/edit') && response.ok(),
         );

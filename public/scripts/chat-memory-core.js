@@ -1,4 +1,5 @@
 import { IGNORE_SYMBOL } from './constants.js';
+import { translate } from './i18n.js';
 
 /**
  * Chat memory core — pure logic for conversation-round summarization.
@@ -26,13 +27,17 @@ export const TURN_SUMMARY_STATUS = Object.freeze({
 /** Maximum automatic attempts per summary content version. */
 export const CHAT_MEMORY_MAX_AUTO_ATTEMPTS = 2;
 
-export const DEFAULT_CHAT_MEMORY_PROMPT = [
-    '你是聊天记录整理助手。下面是一段角色扮演对话的一整个会话轮次。',
-    '请用简洁的语言总结这一轮发生了什么：主要动作、关键决定、情感变化与悬而未决的伏笔。',
-    '只输出摘要正文，不要复述原文，不要加标题或前缀，保持与会话相同的语言。',
-].join('\n');
+export function getDefaultChatMemoryPrompt() {
+    return [
+        translate('You are a chat-log summarizer. Below is one full session turn of a role-playing conversation.'),
+        translate('Summarize what happened in this turn concisely: main actions, key decisions, emotional shifts, and unresolved threads.'),
+        translate('Output only the summary body. Do not restate the original text, do not add a title or prefix, and keep the same language as the conversation.'),
+    ].join('\n');
+}
 
-export const DEFAULT_CHAT_MEMORY_WRAP = '【早前剧情回顾】\n{{summary}}';
+export function getDefaultChatMemoryWrap() {
+    return translate('[Earlier story recap]\n{{summary}}');
+}
 
 export const CHAT_MEMORY_ROLES = Object.freeze(['system', 'user', 'assistant']);
 
@@ -273,8 +278,8 @@ export function resolveChatMemorySettings(oaiSettings, chatMetadata) {
     return {
         enabled: !!oaiSettings?.chat_memory_enabled && overrides.disabled !== true,
         keepTurns,
-        prompt: String(oaiSettings?.chat_memory_prompt ?? '') || DEFAULT_CHAT_MEMORY_PROMPT,
-        wrap: String(oaiSettings?.chat_memory_wrap ?? '') || DEFAULT_CHAT_MEMORY_WRAP,
+        prompt: String(oaiSettings?.chat_memory_prompt ?? '') || getDefaultChatMemoryPrompt(),
+        wrap: String(oaiSettings?.chat_memory_wrap ?? '') || getDefaultChatMemoryWrap(),
         role,
         maxTokens: Number.isInteger(Number(oaiSettings?.chat_memory_max_tokens)) && Number(oaiSettings.chat_memory_max_tokens) > 0
             ? Number(oaiSettings.chat_memory_max_tokens)
@@ -479,7 +484,7 @@ export function reconcileChatMemory(chat, memory, keepTurns) {
  * @returns {string}
  */
 export function renderSummaryWrap(template, { summary, turnIndex, name1 = '', name2 = '' }) {
-    const source = String(template ?? '') || DEFAULT_CHAT_MEMORY_WRAP;
+    const source = String(template ?? '') || getDefaultChatMemoryWrap();
     const replaced = source.includes('{{summary}}')
         ? source.split('{{summary}}').join(String(summary ?? ''))
         : `${source}\n${String(summary ?? '')}`;
@@ -574,7 +579,9 @@ export function applySummariesToCoreChat(coreChat, activeSummaries, { role = 'sy
             : `chatSummary-turns-${turnIndices[0]}-${turnIndices.at(-1)}`;
         const body = single
             ? String(members[0].summary.text ?? '')
-            : members.map(m => `第${(m.summary.turnIndex ?? 0) + 1}轮：${String(m.summary.text ?? '')}`).join('\n');
+            : members.map(m => translate('Turn ${0}: ${1}')
+                .replace('${0}', String((m.summary.turnIndex ?? 0) + 1))
+                .replace('${1}', String(m.summary.text ?? ''))).join('\n');
         const coveredIds = members.flatMap(m => m.matchedIds);
         const meta = {
             summaryId: single ? members[0].summary.id : null,

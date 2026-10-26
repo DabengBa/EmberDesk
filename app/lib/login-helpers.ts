@@ -5,4 +5,4 @@ export {
     getPasswordVisibilityState,
     getRecoveryStep,
     formatLockoutMessage,
-} from '../../public/scripts/login-shared.js';
+} from './auth-messages.js';

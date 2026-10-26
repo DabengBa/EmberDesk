@@ -1137,7 +1137,7 @@ setWorkspaceDrawerCloseGuard('SettingsPanel', () => {
     if (!globalThis.__emberDeskSettingsDirty) {
         return true;
     }
-    return window.confirm('当前设置有未保存的修改。离开将丢弃这些修改，确定关闭吗？');
+    return window.confirm(translate('The settings have unsaved changes. Leaving discards them. Close anyway?'));
 });
 
 export async function openWorkspaceChildSlotHost(hostId, { preserveOpenDrawers = false } = {}) {
@@ -4478,8 +4478,12 @@ async function bootstrapWorkspace() {
         applyBrowserFixes();
     }));
 
+    // Every React surface below renders user-visible copy on first paint and
+    // does not subscribe to `i18n:applied`, so the locale data has to exist
+    // before the first mount — otherwise the first render freezes the source
+    // language and the data-i18n observer cannot rewrite React-owned children.
+    await measureStartupStage('initLocales', () => initLocales());
     await measureStartupStage('mountCharacterPopup', () => mountCharacterPopup());
-    await measureStartupStage('mountRightNavPanel', () => mountRightNavPanel());
     await measureStartupStage('mountPromptPanel', () => mountPromptPanel());
     await measureStartupStage('mountSelectChatPopup', () => mountSelectChatPopup());
     await measureStartupStage('mountCharacterContextMenu', () => mountCharacterContextMenu());
@@ -4489,7 +4493,7 @@ async function bootstrapWorkspace() {
     await measureStartupStage('mountDialogueDelMesControls', () => mountDialogueDelMesControls());
     await measureStartupStage('initSecrets', () => initSecrets());
     await measureStartupStage('readSecretState', () => readSecretState());
-    await measureStartupStage('initLocales', () => initLocales());
+    await measureStartupStage('mountRightNavPanel', () => mountRightNavPanel());
     await measureStartupStage('registerCoreModules', () => Promise.resolve().then(() => {
         initChatUtilities();
         initDefaultSlashCommands();
@@ -9273,7 +9277,7 @@ export async function doNewChat({ deleteCurrentChat = false } = {}) {
     // A new chat has multiple authored greetings: expose the choice immediately
     // instead of requiring the user to discover the small header selector.
     await new Promise(resolve => requestAnimationFrame(resolve));
-    document.querySelector('[aria-label="选择开场白"]')?.click();
+    document.querySelector('[data-greeting-picker-trigger]')?.click();
 }
 
 

@@ -1,6 +1,6 @@
 import { ContractButton } from '../contract/ContractButton';
 import { ContractIconButton } from '../contract/ContractIconButton';
-import { useTranslated } from '../../compat/i18n.js';
+import { translate, useTranslated } from '../../compat/i18n.js';
 
 /**
  * Past-chats popup inner markup (React-owned inside #select_chat_popup).
@@ -10,6 +10,7 @@ import { useTranslated } from '../../compat/i18n.js';
  * plain input because legacy code drives it via jQuery .val()/input events.
  */
 export function SelectChatPopup() {
+    useTranslated('');
     const searchLabel = useTranslated('Search chats');
     return (
         <>
@@ -23,7 +24,7 @@ export function SelectChatPopup() {
                     </form>
                 </div>
                 <div id="selectChatPopupHeaderText" className="TxtLrgBoldCenter">
-                    <span id="ChatHistoryCharName"></span><span data-i18n="Chat History">Chat History</span>
+                    <span id="ChatHistoryCharName"></span><span >{translate('Chat History')}</span>
                     <a href="usage/core-concepts/chatfilemanagement/" className="notes-link" target="_blank" rel="noreferrer" aria-label="Chat file management documentation"><span className="fa-solid fa-circle-question note-link-span" aria-hidden="true"></span></a>
                 </div>
                 <ContractButton id="newChatFromManageScreenButton" className="menu_button menu_button_icon" variant="ghost" label="New Chat" icon={<i className="fa-solid fa-plus" aria-hidden="true" />} />

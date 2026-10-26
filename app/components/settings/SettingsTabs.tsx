@@ -1,9 +1,10 @@
 import * as stylex from '@stylexjs/stylex';
 import { settingsStyles } from '@/styles/settings-surface.styles';
+import { translate, useTranslated } from '@/compat/i18n.js';
 
 type SettingsTab = {
     id: string;
-    label: string;
+    labelKey: string;
     description?: string;
 };
 
@@ -15,12 +16,13 @@ type SettingsTabsProps = {
 };
 
 export function SettingsTabs({ tabs, activeTab, onChange, showDescription = true }: SettingsTabsProps) {
+    useTranslated('');
     const currentTab = tabs.find(tab => tab.id === activeTab) ?? tabs[0];
 
     return (
         <div {...stylex.props(settingsStyles.tabs)}>
             {tabs.length > 1 ? (
-            <div {...stylex.props(settingsStyles.tabsList)} aria-label="设置分区">
+            <div {...stylex.props(settingsStyles.tabsList)} aria-label={translate('Settings sections')}>
                 {tabs.map(tab => {
                     const isActive = tab.id === activeTab;
                     return (
@@ -32,7 +34,7 @@ export function SettingsTabs({ tabs, activeTab, onChange, showDescription = true
                             data-active={isActive}
                             onClick={() => onChange(tab.id)}
                         >
-                            {tab.label}
+                            {translate(tab.labelKey)}
                         </button>
                     );
                 })}

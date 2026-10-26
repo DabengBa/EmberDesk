@@ -3,6 +3,7 @@ import * as stylex from '@stylexjs/stylex';
 import { setupMessages } from '@/lib/setup-helpers';
 import { loginStyles } from '@/styles/login.styles';
 import { SetupPasswordInput } from './SetupPasswordInput';
+import { translate, useTranslated } from '@/compat/i18n.js';
 
 type SetupMode = 'fresh' | 'set-password';
 
@@ -41,8 +42,9 @@ export function SetupForm({
     onToggleConfirmPassword,
     onSubmit,
 }: SetupFormProps) {
+    useTranslated('');
     const isSetPasswordMode = mode === 'set-password';
-    let buttonText = isSetPasswordMode ? '设置密码并登录' : '创建管理员账户';
+    let buttonText = isSetPasswordMode ? translate('Set password and sign in') : translate('Create administrator account');
 
     if (isSubmitting) {
         buttonText = isSetPasswordMode ? setupMessages.setting : setupMessages.creating;
@@ -56,7 +58,7 @@ export function SetupForm({
         <section {...stylex.props(loginStyles.card)} id="setupCard" aria-labelledby="setup-title">
             <header {...stylex.props(loginStyles.header)}>
                 <img src="/img/logo.png" alt="" {...stylex.props(loginStyles.logo)} />
-                <h1 id="setup-title" {...stylex.props(loginStyles.headerTitle)}>{isSetPasswordMode ? '设置密码' : '初始设置'}</h1>
+                <h1 id="setup-title" {...stylex.props(loginStyles.headerTitle)}>{isSetPasswordMode ? translate('Set password') : translate('Initial setup')}</h1>
             </header>
 
             <form id="setupForm" {...stylex.props(loginStyles.form)} noValidate onSubmit={onSubmit}>
@@ -64,14 +66,14 @@ export function SetupForm({
                     <form.Field name="handle">
                         {(field: any) => (
                             <div id="handleField" {...stylex.props(loginStyles.field)} style={{ display: isSetPasswordMode ? 'none' : undefined }}>
-                                <label htmlFor="handle" {...stylex.props(loginStyles.fieldLabel)}>用户名</label>
+                                <label htmlFor="handle" {...stylex.props(loginStyles.fieldLabel)}>{translate('Username')}</label>
                                 <input
                                     {...stylex.props(loginStyles.input)}
                                     id="handle"
                                     name="handle"
                                     type="text"
                                     autoComplete="username"
-                                    placeholder="请输入用户名"
+                                    placeholder={translate('Please enter a username')}
                                     required
                                     aria-required="true"
                                     aria-invalid={invalidField === 'handle' || undefined}
@@ -91,14 +93,14 @@ export function SetupForm({
                     <form.Field name="displayName">
                         {(field: any) => (
                             <div id="nameField" {...stylex.props(loginStyles.field)} style={{ display: isSetPasswordMode ? 'none' : undefined }}>
-                                <label htmlFor="name" {...stylex.props(loginStyles.fieldLabel)}>显示名称 <span {...stylex.props(loginStyles.labelNote)}>（可选）</span></label>
+                                <label htmlFor="name" {...stylex.props(loginStyles.fieldLabel)}>{translate('Display name')} <span {...stylex.props(loginStyles.labelNote)}>{translate('(optional)')}</span></label>
                                 <input
                                     {...stylex.props(loginStyles.input)}
                                     id="name"
                                     name="name"
                                     type="text"
                                     autoComplete="name"
-                                    placeholder="留空则使用用户名"
+                                    placeholder={translate('Leave empty to use the username')}
                                     aria-invalid={invalidField === 'displayName' || undefined}
                                     aria-describedby={invalidField === 'displayName' ? 'errorMessage' : undefined}
                                     value={field.state.value}
@@ -120,8 +122,8 @@ export function SetupForm({
                             <SetupPasswordInput
                                 id="password"
                                 toggleId="passwordToggle"
-                                label="密码"
-                                placeholder="请输入密码"
+                                label={translate('Password')}
+                                placeholder={translate('Please enter a password')}
                                 value={field.state.value}
                                 visible={passwordVisible}
                                 disabled={isSubmitting}
@@ -141,8 +143,8 @@ export function SetupForm({
                             <SetupPasswordInput
                                 id="confirmPassword"
                                 toggleId="confirmPasswordToggle"
-                                label="确认密码"
-                                placeholder="请再次输入密码"
+                                label={translate('Confirm password')}
+                                placeholder={translate('Please enter the password again')}
                                 value={field.state.value}
                                 visible={confirmPasswordVisible}
                                 disabled={isSubmitting}

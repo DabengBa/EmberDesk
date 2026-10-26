@@ -7,6 +7,7 @@ import {
     attachGlobalCompatibilityBridge,
     detachGlobalCompatibilityBridge,
 } from './compat/global-compatibility-bridge.js';
+import { translate, useTranslated } from './compat/i18n.js';
 import type { RuntimePort } from './compat/runtime-port';
 import type {
     AuthoringCommands,
@@ -412,6 +413,7 @@ function asWorldInfoState(state: unknown): WorldInfoWorkspacePanelState {
 }
 
 function WorldInfoWorkspacePanel({ state, commands }: { state?: unknown; commands: WorldInfoCommands }) {
+    useTranslated('');
     const bridgeState = asWorldInfoState(state);
     return (
         <WorldInfoWorkbenchPanel
@@ -420,7 +422,7 @@ function WorldInfoWorkspacePanel({ state, commands }: { state?: unknown; command
             shell={({ status, recoveryActions, children }) => (
                 <WorkspacePanelShell
                     kind="worldInfo"
-                    title="世界书"
+                    title={translate('World book')}
                     status={status}
                     actions={recoveryActions}
                     legacyBoundary="activation-import-regex-prompt-delete"
@@ -545,17 +547,18 @@ function AuthoringActionsMenu({
 }
 
 function AuthoringFieldLabel({ text, dirty, meta, onExpand }: { text: string; dirty?: boolean; meta?: string; onExpand?: () => void }) {
+    useTranslated('');
     return (
         <span {...stylex.props(authoringStyles.fieldLabel)}>
-            {text}
-            {dirty ? <span {...stylex.props(authoringStyles.dirtyDot)} title="Unsaved change" aria-label="Unsaved change" /> : null}
+            {translate(text)}
+            {dirty ? <span {...stylex.props(authoringStyles.dirtyDot)} title={translate('Unsaved change')} aria-label={translate('Unsaved change')} /> : null}
             {meta ? <span {...stylex.props(authoringStyles.fieldMeta)}>{meta}</span> : null}
             {onExpand ? (
                 <button
                     type="button"
                     {...stylex.props(authoringStyles.iconAction)}
-                    title="放大编辑"
-                    aria-label={`放大编辑 ${text}`}
+                    title={translate('Maximize editing')}
+                    aria-label={translate('Maximize editing ${0}').replace('${0}', translate(text))}
                     onClick={onExpand}
                 >
                     <i className="fa-solid fa-expand" aria-hidden="true" />
@@ -593,30 +596,44 @@ function AuthoringTextarea({
 }
 
 const TEXT_REPLACE_CARD_FIELDS = [
-    { id: 'description', label: '描述' },
-    { id: 'scenario', label: '场景' },
-    { id: 'firstMes', label: '开场白' },
-    { id: 'exampleMessages', label: '示例对话' },
-    { id: 'alternateGreetings', label: '备选开场白' },
-    { id: 'systemPrompt', label: '系统提示' },
-    { id: 'postHistoryInstructions', label: '历史后指令' },
-    { id: 'depthPrompt', label: '深度提示' },
-    { id: 'creatorNotes', label: '作者备注' },
-    { id: 'creator', label: '创作者' },
-    { id: 'characterVersion', label: '版本号' },
-    { id: 'tags', label: '标签' },
+    { id: 'description', labelKey: 'Description' },
+    { id: 'scenario', labelKey: 'Scenario' },
+    { id: 'firstMes', labelKey: 'First message' },
+    { id: 'exampleMessages', labelKey: 'Example messages' },
+    { id: 'alternateGreetings', labelKey: 'Alternate greetings' },
+    { id: 'systemPrompt', labelKey: 'System prompt' },
+    { id: 'postHistoryInstructions', labelKey: 'Post-history instructions' },
+    { id: 'depthPrompt', labelKey: 'Depth prompt' },
+    { id: 'creatorNotes', labelKey: 'Creator notes' },
+    { id: 'creator', labelKey: 'Creator' },
+    { id: 'characterVersion', labelKey: 'Character version' },
+    { id: 'tags', labelKey: 'Tags' },
 ] as const;
 
 const TEXT_REPLACE_WORLD_FIELDS = [
-    { id: 'content', label: '正文' },
-    { id: 'comment', label: '备注' },
-    { id: 'keys', label: '关键词' },
+    { id: 'content', labelKey: 'Body' },
+    { id: 'comment', labelKey: 'Comment' },
+    { id: 'keys', labelKey: 'Keywords' },
 ] as const;
 
 const TEXT_REPLACE_CHAT_FIELDS = [
-    { id: 'mes', label: '消息正文' },
-    { id: 'reasoning', label: '思维链' },
+    { id: 'mes', labelKey: 'Message body' },
+    { id: 'reasoning', labelKey: 'Reasoning' },
 ] as const;
+
+/**
+ * Server matches carry a locale-independent field id in `label`; resolve the
+ * display copy here so previews follow the live locale.
+ */
+const TEXT_REPLACE_FIELD_LABEL_KEYS: Record<string, string> = Object.fromEntries(
+    [...TEXT_REPLACE_CARD_FIELDS, ...TEXT_REPLACE_WORLD_FIELDS, ...TEXT_REPLACE_CHAT_FIELDS].map(field => [field.id, field.labelKey]),
+);
+
+function textReplaceFieldLabel(label: unknown, field: string | undefined): string {
+    const key = typeof label === 'string' && label in TEXT_REPLACE_FIELD_LABEL_KEYS ? label : field;
+    return key && key in TEXT_REPLACE_FIELD_LABEL_KEYS ? translate(TEXT_REPLACE_FIELD_LABEL_KEYS[key]) : String(label ?? field ?? '');
+}
+
 
 interface TextReplaceSample {
     before: string;
@@ -658,29 +675,29 @@ interface TextReplaceResult {
 }
 
 const TEXT_REPLACE_REASON_LABELS: Record<string, string> = {
-    generation_in_flight: '正在生成回复，请等待完成或停止后再应用',
-    canonical_world_info_unavailable: '世界书存储不可用',
-    canonical_chat_unavailable: '聊天存储不可用',
-    canonical_storage_disabled: '角色存储不可用',
-    character_not_found: '找不到当前角色卡',
-    missing_avatar_url: '缺少角色标识',
-    missing_chat_file_name: '当前没有打开的聊天',
-    invalid_regex: '正则表达式无效',
-    empty_query: '查找内容不能为空',
-    no_areas_selected: '请至少勾选一个替换范围',
-    network_error: '请求失败，请稍后重试',
-    empty_response: '服务器没有返回结果',
+    generation_in_flight: translate('A reply is being generated. Wait for it to finish or stop it, then apply again.'),
+    canonical_world_info_unavailable: translate('World book storage is unavailable'),
+    canonical_chat_unavailable: translate('Chat storage is unavailable'),
+    canonical_storage_disabled: translate('Character storage is unavailable'),
+    character_not_found: translate('The current character card was not found'),
+    missing_avatar_url: translate('The character identifier is missing'),
+    missing_chat_file_name: translate('No chat is open'),
+    invalid_regex: translate('Invalid regular expression'),
+    empty_query: translate('The search text cannot be empty'),
+    no_areas_selected: translate('Select at least one replacement area'),
+    network_error: translate('The request failed. Try again later.'),
+    empty_response: translate('The server returned no result'),
 };
 
 function describeTextReplaceFailure(result: TextReplaceResult | null | undefined): string {
     const reason = String(result?.reason ?? '');
     if (!reason) {
-        return '操作失败';
+        return translate('The operation failed');
     }
     if (reason.startsWith('invalid_regex:')) {
         return `${TEXT_REPLACE_REASON_LABELS.invalid_regex}：${reason.slice('invalid_regex:'.length).trim()}`;
     }
-    return TEXT_REPLACE_REASON_LABELS[reason] ?? `操作失败（${reason}）`;
+    return TEXT_REPLACE_REASON_LABELS[reason] ?? translate('The operation failed (${0})').replace('${0}', reason);
 }
 
 function TextReplaceCheckRow({
@@ -716,11 +733,14 @@ function TextReplaceMatchRow({
     excluded: boolean;
     onToggle: (path: string, excluded: boolean) => void;
 }) {
+    useTranslated('');
     const path = String(match.path ?? '');
     const context = match.entryTitle
-        ? `条目「${match.entryTitle}」`
+        ? translate('Entry “${0}”').replace('${0}', match.entryTitle)
         : match.index != null
-            ? `第 ${match.index + 1} 条${match.role === 'user' ? '用户' : match.role === 'system' ? '系统' : '角色'}消息${match.name ? ` · ${match.name}` : ''}`
+            ? `${translate('Message ${0} (${1})')
+                    .replace('${0}', String(match.index + 1))
+                    .replace('${1}', match.role === 'user' ? translate('User') : match.role === 'system' ? translate('System') : translate('Character'))}${match.name ? ` · ${match.name}` : ''}`
             : '';
     const samples = Array.isArray(match.samples) ? match.samples.slice(0, 2) : [];
 
@@ -733,9 +753,9 @@ function TextReplaceMatchRow({
                     onChange={event => onToggle(path, !event.target.checked)}
                 />
                 <span {...stylex.props(authoringStyles.replaceMatchPath)}>
-                    {match.label ?? match.field ?? ''} <code>{path}</code>
+                    {textReplaceFieldLabel(match.label, match.field)} <code>{path}</code>
                     {context ? ` — ${context}` : ''}
-                    {`（${match.occurrences ?? 0} 处）`}
+                    {translate('(${0} matches)').replace('${0}', String(match.occurrences ?? 0))}
                 </span>
             </label>
             {samples.map((sample, sampleIndex) => (
@@ -757,6 +777,7 @@ function CharacterAuthoringTextReplaceDialog({
     payload?: Record<string, unknown>;
     onClose: (applied: false | { card?: boolean; worldBook?: boolean; chat?: boolean }) => void;
 }) {
+    useTranslated('');
     const [query, setQuery] = useState('');
     const [replacement, setReplacement] = useState('');
     const [caseSensitive, setCaseSensitive] = useState(false);
@@ -810,9 +831,9 @@ function CharacterAuthoringTextReplaceDialog({
 
     const previewAreas = preview?.areas;
     const matchGroups: { key: string; title: string; matches: TextReplaceMatch[] }[] = preview ? [
-        { key: 'card', title: '角色字段', matches: previewAreas?.card?.matches ?? [] },
-        { key: 'worldBook', title: previewAreas?.worldBook?.embedded ? '内嵌世界书' : '世界书', matches: previewAreas?.worldBook?.matches ?? [] },
-        { key: 'chats', title: '当前聊天', matches: previewAreas?.chats?.matches ?? [] },
+        { key: 'card', title: translate('Character fields'), matches: previewAreas?.card?.matches ?? [] },
+        { key: 'worldBook', title: previewAreas?.worldBook?.embedded ? translate('Embedded world book') : translate('World book'), matches: previewAreas?.worldBook?.matches ?? [] },
+        { key: 'chats', title: translate('Current chat'), matches: previewAreas?.chats?.matches ?? [] },
     ].filter(group => group.matches.length > 0) : [];
 
     const effectiveOccurrences = preview && previewSignature === requestSignature
@@ -835,7 +856,7 @@ function CharacterAuthoringTextReplaceDialog({
                 setError(describeTextReplaceFailure(result));
             }
         } catch {
-            setError('预览请求失败');
+            setError(translate('Preview request failed'));
         } finally {
             setBusy('');
         }
@@ -846,7 +867,7 @@ function CharacterAuthoringTextReplaceDialog({
         if (remaining <= 0) {
             return;
         }
-        if (!window.confirm(`将替换 ${remaining} 处命中，且不可撤销。继续吗？`)) {
+        if (!window.confirm(translate('${0} matches will be replaced and cannot be undone. Continue?').replace('${0}', String(remaining)))) {
             return;
         }
         setBusy('apply');
@@ -862,7 +883,7 @@ function CharacterAuthoringTextReplaceDialog({
                 setError(describeTextReplaceFailure(result));
             }
         } catch {
-            setError('应用请求失败');
+            setError(translate('Apply request failed'));
         } finally {
             setBusy('');
         }
@@ -883,22 +904,22 @@ function CharacterAuthoringTextReplaceDialog({
     const areaStatusNotes: string[] = [];
     if (preview) {
         if (previewAreas?.card?.status === 'unchanged') {
-            areaStatusNotes.push('角色字段：无命中');
+            areaStatusNotes.push(translate('Character fields: no matches'));
         }
         if (previewAreas?.worldBook?.status === 'unchanged') {
-            areaStatusNotes.push('世界书：无命中');
+            areaStatusNotes.push(translate('World book: no matches'));
         }
         if (previewAreas?.worldBook?.status === 'unbound') {
-            areaStatusNotes.push('未绑定世界书，且卡内没有内嵌世界书');
+            areaStatusNotes.push(translate('No world book is bound and the card has no embedded world book'));
         }
         if (previewAreas?.worldBook?.status === 'missing') {
-            areaStatusNotes.push(`找不到绑定的世界书「${previewAreas.worldBook.name ?? ''}」`);
+            areaStatusNotes.push(translate('Bound world book “${0}” was not found').replace('${0}', previewAreas.worldBook.name ?? ''));
         }
         if (previewAreas?.chats?.status === 'unchanged') {
-            areaStatusNotes.push('当前聊天：无命中');
+            areaStatusNotes.push(translate('Current chat: no matches'));
         }
         if (previewAreas?.chats?.status === 'missing') {
-            areaStatusNotes.push('找不到当前聊天的存储内容');
+            areaStatusNotes.push(translate('The current chat storage could not be found'));
         }
     }
 
@@ -925,15 +946,15 @@ function CharacterAuthoringTextReplaceDialog({
                 }
             }}
         >
-            <dialog open aria-modal="true" aria-label="查找替换" {...stylex.props(authoringStyles.modalCard, authoringStyles.replaceModalCard)}>
+            <dialog open aria-modal="true" aria-label={translate('Find and replace')} {...stylex.props(authoringStyles.modalCard, authoringStyles.replaceModalCard)}>
                 <div {...stylex.props(authoringStyles.modalHead)}>
-                    <span {...stylex.props(authoringStyles.modalTitle)}>查找替换</span>
-                    <span {...stylex.props(authoringStyles.fieldMeta)}>作用于当前角色卡</span>
+                    <span {...stylex.props(authoringStyles.modalTitle)}>{translate('Find and replace')}</span>
+                    <span {...stylex.props(authoringStyles.fieldMeta)}>{translate('Applies to the current character card')}</span>
                     <button
                         type="button"
                         {...stylex.props(authoringStyles.iconAction)}
-                        title="关闭"
-                        aria-label="关闭"
+                        title={translate('Close')}
+                        aria-label={translate('Close')}
                         onClick={handleClose}
                     >
                         <i className="fa-solid fa-xmark" aria-hidden="true" />
@@ -942,31 +963,31 @@ function CharacterAuthoringTextReplaceDialog({
                 {applyResult ? (
                     <div {...stylex.props(authoringStyles.replaceBody)}>
                         <div {...stylex.props(authoringStyles.replaceResultBox)}>
-                            {applyResult.applied?.card ? <div>✓ 角色卡已更新</div> : null}
-                            {applyResult.applied?.worldBook ? <div>✓ 世界书已更新{applyResult.areas?.worldBook?.boundCharacterCount && applyResult.areas.worldBook.boundCharacterCount > 1 ? `（同时影响 ${applyResult.areas.worldBook.boundCharacterCount} 张卡）` : ''}</div> : null}
-                            {applyResult.applied?.chat ? <div>✓ 当前聊天已更新（{applyResult.areas?.chats?.occurrences ?? 0} 处）</div> : null}
-                            {applyResult.areas?.card?.status === 'failed' ? <div {...stylex.props(authoringStyles.replaceErrorText)}>✗ 角色卡写入失败：{applyResult.areas.card.reason ?? ''}</div> : null}
-                            {applyResult.areas?.worldBook?.status === 'failed' ? <div {...stylex.props(authoringStyles.replaceErrorText)}>✗ 世界书写入失败：{applyResult.areas.worldBook.reason ?? ''}</div> : null}
-                            {applyResult.areas?.chats?.status === 'failed' ? <div {...stylex.props(authoringStyles.replaceErrorText)}>✗ 聊天写入失败：{applyResult.areas.chats.reason ?? ''}</div> : null}
+                            {applyResult.applied?.card ? <div>✓ {translate('Character card updated')}</div> : null}
+                            {applyResult.applied?.worldBook ? <div>✓ {translate('World book updated')}{applyResult.areas?.worldBook?.boundCharacterCount && applyResult.areas.worldBook.boundCharacterCount > 1 ? translate('(also affects ${0} cards)').replace('${0}', String(applyResult.areas.worldBook.boundCharacterCount)) : ''}</div> : null}
+                            {applyResult.applied?.chat ? <div>✓ {translate('Current chat updated (${0} matches)').replace('${0}', String(applyResult.areas?.chats?.occurrences ?? 0))}</div> : null}
+                            {applyResult.areas?.card?.status === 'failed' ? <div {...stylex.props(authoringStyles.replaceErrorText)}>✗ {translate('Character card write failed:')}{applyResult.areas.card.reason ?? ''}</div> : null}
+                            {applyResult.areas?.worldBook?.status === 'failed' ? <div {...stylex.props(authoringStyles.replaceErrorText)}>✗ {translate('World book write failed:')}{applyResult.areas.worldBook.reason ?? ''}</div> : null}
+                            {applyResult.areas?.chats?.status === 'failed' ? <div {...stylex.props(authoringStyles.replaceErrorText)}>✗ {translate('Chat write failed:')}{applyResult.areas.chats.reason ?? ''}</div> : null}
                             {!applyResult.applied?.card && !applyResult.applied?.worldBook && !applyResult.applied?.chat
                                 && applyResult.areas?.card?.status !== 'failed'
                                 && applyResult.areas?.worldBook?.status !== 'failed'
                                 && applyResult.areas?.chats?.status !== 'failed' ? (
-                                    <div>没有需要写入的命中。</div>
+                                    <div>{translate('No matches needed writing.')}</div>
                                 ) : null}
                             {(applyResult.warnings ?? []).map((warning, index) => (
                                 <div key={index} {...stylex.props(authoringStyles.replaceWarningText)}>
                                     {warning.code === 'shared_world_book'
-                                        ? `世界书「${warning.name}」同时被 ${warning.characters} 张角色卡使用`
+                                        ? translate('World book “${0}” is shared by ${1} character cards').replace('${0}', String(warning.name ?? '')).replace('${1}', String(warning.characters ?? 0))
                                         : warning.code === 'world_book_projection_failed'
-                                            ? `世界书「${warning.name}」的兼容文件写入失败，已记录待修复`
-                                            : `警告：${warning.code}`}
+                                            ? translate('Writing the compatibility file for world book “${0}” failed and is queued for repair').replace('${0}', String(warning.name ?? ''))
+                                            : translate('Warning: ${0}').replace('${0}', String(warning.code ?? ''))}
                                 </div>
                             ))}
                         </div>
                         <div {...stylex.props(authoringStyles.replaceFooter)}>
                             <button type="button" className={`menu_button ${stylex.props(authoringStyles.saveButton).className ?? ''}`} onClick={handleClose}>
-                                完成
+                                {translate('Done')}
                             </button>
                         </div>
                     </div>
@@ -974,38 +995,38 @@ function CharacterAuthoringTextReplaceDialog({
                     <div {...stylex.props(authoringStyles.replaceBody)}>
                         <div {...stylex.props(authoringStyles.replaceFieldRow)}>
                             <label {...stylex.props(authoringStyles.replaceField)}>
-                                <span {...stylex.props(authoringStyles.fieldLabel)}>查找</span>
+                                <span {...stylex.props(authoringStyles.fieldLabel)}>{translate('Find')}</span>
                                 <textarea
                                     className="text_pole"
                                     rows={2}
                                     value={query}
                                     autoFocus
-                                    placeholder={regex ? '正则表达式（支持 $1 等捕获引用）' : '要查找的文本'}
+                                    placeholder={regex ? translate('Regular expression (supports capture references like $1)') : translate('Text to find')}
                                     {...stylex.props(authoringStyles.control, authoringStyles.replaceQueryInput)}
                                     onChange={event => setQuery(event.target.value)}
                                 />
                             </label>
                             <label {...stylex.props(authoringStyles.replaceField)}>
-                                <span {...stylex.props(authoringStyles.fieldLabel)}>替换为</span>
+                                <span {...stylex.props(authoringStyles.fieldLabel)}>{translate('Replace with')}</span>
                                 <textarea
                                     className="text_pole"
                                     rows={2}
                                     value={replacement}
-                                    placeholder="替换文本（可为空）"
+                                    placeholder={translate('Replacement text (may be empty)')}
                                     {...stylex.props(authoringStyles.control, authoringStyles.replaceQueryInput)}
                                     onChange={event => setReplacement(event.target.value)}
                                 />
                             </label>
                         </div>
                         <div {...stylex.props(authoringStyles.replaceChecksRow)}>
-                            <TextReplaceCheckRow checked={caseSensitive} label="区分大小写" disabled={busy !== ''} onChange={setCaseSensitive} />
-                            <TextReplaceCheckRow checked={wholeWord} label="全词匹配" disabled={busy !== ''} onChange={setWholeWord} />
-                            <TextReplaceCheckRow checked={regex} label="正则" disabled={busy !== ''} onChange={setRegex} />
+                            <TextReplaceCheckRow checked={caseSensitive} label={translate('Case sensitive')} disabled={busy !== ''} onChange={setCaseSensitive} />
+                            <TextReplaceCheckRow checked={wholeWord} label={translate('Whole word')} disabled={busy !== ''} onChange={setWholeWord} />
+                            <TextReplaceCheckRow checked={regex} label={translate('Regex')} disabled={busy !== ''} onChange={setRegex} />
                         </div>
                         <div {...stylex.props(authoringStyles.replaceScopeBlock)}>
                             <TextReplaceCheckRow
                                 checked={cardArea}
-                                label={<strong>角色字段</strong>}
+                                label={<strong>{translate('Character fields')}</strong>}
                                 disabled={busy !== ''}
                                 onChange={setCardArea}
                             />
@@ -1015,7 +1036,7 @@ function CharacterAuthoringTextReplaceDialog({
                                         <TextReplaceCheckRow
                                             key={field.id}
                                             checked={cardFields.has(field.id)}
-                                            label={field.id === 'tags' ? '标签（替换后去重）' : field.label}
+                                            label={field.id === 'tags' ? translate('Tags (deduplicated after replacement)') : translate(field.labelKey)}
                                             disabled={busy !== ''}
                                             onChange={checked => toggleField(cardFields, setCardFields, field.id, checked)}
                                         />
@@ -1024,7 +1045,7 @@ function CharacterAuthoringTextReplaceDialog({
                             ) : null}
                             <TextReplaceCheckRow
                                 checked={worldArea}
-                                label={<strong>世界书</strong>}
+                                label={<strong>{translate('World book')}</strong>}
                                 disabled={busy !== ''}
                                 onChange={setWorldArea}
                             />
@@ -1034,7 +1055,7 @@ function CharacterAuthoringTextReplaceDialog({
                                         <TextReplaceCheckRow
                                             key={field.id}
                                             checked={worldFields.has(field.id)}
-                                            label={field.label}
+                                            label={translate(field.labelKey)}
                                             disabled={busy !== ''}
                                             onChange={checked => toggleField(worldFields, setWorldFields, field.id, checked)}
                                         />
@@ -1043,7 +1064,7 @@ function CharacterAuthoringTextReplaceDialog({
                             ) : null}
                             <TextReplaceCheckRow
                                 checked={chatArea}
-                                label={<strong>当前聊天</strong>}
+                                label={<strong>{translate('Current chat')}</strong>}
                                 disabled={busy !== ''}
                                 onChange={setChatArea}
                             />
@@ -1053,7 +1074,7 @@ function CharacterAuthoringTextReplaceDialog({
                                         <TextReplaceCheckRow
                                             key={field.id}
                                             checked={chatFields.has(field.id)}
-                                            label={field.label}
+                                            label={translate(field.labelKey)}
                                             disabled={busy !== ''}
                                             onChange={checked => toggleField(chatFields, setChatFields, field.id, checked)}
                                         />
@@ -1065,21 +1086,23 @@ function CharacterAuthoringTextReplaceDialog({
                         {preview ? (
                             <div {...stylex.props(authoringStyles.replacePreviewBlock)}>
                                 {previewStale ? (
-                                    <div {...stylex.props(authoringStyles.replaceWarningText)}>参数已修改，请重新预览后再应用</div>
+                                    <div {...stylex.props(authoringStyles.replaceWarningText)}>{translate('Parameters changed. Preview again before applying.')}</div>
                                 ) : null}
                                 <div {...stylex.props(authoringStyles.fieldLabel)}>
-                                    命中 {(effectiveOccurrences ?? 0).toString()} 处
+                                    {translate('${0} matches').replace('${0}', String(effectiveOccurrences ?? 0))}
                                 </div>
                                 {previewAreas?.worldBook?.boundCharacterCount && previewAreas.worldBook.boundCharacterCount > 1 ? (
                                     <div {...stylex.props(authoringStyles.replaceWarningText)}>
-                                        世界书「{previewAreas.worldBook.name}」同时被 {previewAreas.worldBook.boundCharacterCount} 张角色卡使用
+                                        {translate('World book “${0}” is shared by ${1} character cards')
+                                            .replace('${0}', String(previewAreas.worldBook.name ?? ''))
+                                            .replace('${1}', String(previewAreas.worldBook.boundCharacterCount))}
                                     </div>
                                 ) : null}
                                 {areaStatusNotes.map((note, index) => (
                                     <div key={index} {...stylex.props(authoringStyles.replaceMutedText)}>{note}</div>
                                 ))}
                                 {(preview.warnings ?? []).filter(warning => warning.code !== 'shared_world_book').map((warning, index) => (
-                                    <div key={index} {...stylex.props(authoringStyles.replaceWarningText)}>警告：{warning.code}</div>
+                                    <div key={index} {...stylex.props(authoringStyles.replaceWarningText)}>{translate('Warning: ${0}').replace('${0}', String(warning.code ?? ''))}</div>
                                 ))}
                                 {matchGroups.length ? (
                                     <div {...stylex.props(authoringStyles.replaceMatchList)}>
@@ -1107,7 +1130,7 @@ function CharacterAuthoringTextReplaceDialog({
                                 disabled={busy !== '' || !query.length}
                                 onClick={() => void requestPreview()}
                             >
-                                {busy === 'preview' ? '预览中…' : '预览'}
+                                {busy === 'preview' ? translate('Previewing…') : translate('Preview')}
                             </button>
                             {preview && !previewStale ? (
                                 <button
@@ -1116,12 +1139,14 @@ function CharacterAuthoringTextReplaceDialog({
                                     disabled={busy !== '' || !(effectiveOccurrences && effectiveOccurrences > 0)}
                                     onClick={() => void requestApply()}
                                 >
-                                    {busy === 'apply' ? '应用中…' : `应用 ${effectiveOccurrences ?? 0} 处替换`}
+                                    {busy === 'apply'
+                        ? translate('Applying…')
+                        : translate('Apply ${0} replacements').replace('${0}', String(effectiveOccurrences ?? 0))}
                                 </button>
                             ) : null}
                         </div>
                         <p {...stylex.props(authoringStyles.modalHint)}>
-                            应用前请先预览确认命中；替换直接写入正式数据，没有内置回滚。
+                            {translate('Preview the matches first; replacements write to live data and cannot be rolled back.')}
                         </p>
                     </div>
                 )}
@@ -1140,6 +1165,7 @@ function AuthoringWorkspacePanel({
     state?: unknown;
     commands?: AuthoringCommands;
 }) {
+    useTranslated('');
     const bridgeState = asAuthoringState(state);
     const title = bridgeState.title ?? 'Character Authoring';
     const unsupportedFields = Array.isArray(bridgeState.unsupportedFields) ? bridgeState.unsupportedFields : [];
@@ -1268,13 +1294,13 @@ function AuthoringWorkspacePanel({
     const dirtyFieldSet = new Set(authoringSession.dirtyFields);
     const isFieldDirty = (key: string) => dirtyFieldSet.has(key);
     const advancedChips = [
-        stringDraft('systemPrompt').trim() ? { label: 'System prompt', field: 'systemPrompt' } : null,
-        stringDraft('postHistoryInstructions').trim() ? { label: 'Post-history', field: 'postHistoryInstructions' } : null,
-        stringDraft('scenario').trim() ? { label: 'Scenario', field: 'scenario' } : null,
-        (depthPrompt.prompt?.trim() || depthPrompt.depth != null) ? { label: `Depth note @${depthPrompt.depth ?? 4}`, field: 'depthPrompt.prompt' } : null,
-        stringDraft('creator').trim() ? { label: 'Creator', field: 'creator' } : null,
-        stringDraft('characterVersion').trim() ? { label: `Version ${stringDraft('characterVersion').trim()}`, field: 'characterVersion' } : null,
-        stringDraft('creatorNotes').trim() ? { label: 'Notes', field: 'creatorNotes' } : null,
+        stringDraft('systemPrompt').trim() ? { label: translate('System prompt'), field: 'systemPrompt' } : null,
+        stringDraft('postHistoryInstructions').trim() ? { label: translate('Post-history'), field: 'postHistoryInstructions' } : null,
+        stringDraft('scenario').trim() ? { label: translate('Scenario'), field: 'scenario' } : null,
+        (depthPrompt.prompt?.trim() || depthPrompt.depth != null) ? { label: `${translate('Depth prompt')} @${depthPrompt.depth ?? 4}`, field: 'depthPrompt.prompt' } : null,
+        stringDraft('creator').trim() ? { label: translate('Creator'), field: 'creator' } : null,
+        stringDraft('characterVersion').trim() ? { label: `${translate('Version')} ${stringDraft('characterVersion').trim()}`, field: 'characterVersion' } : null,
+        stringDraft('creatorNotes').trim() ? { label: translate('Notes'), field: 'creatorNotes' } : null,
     ].filter((chip): chip is { label: string; field: string } => chip !== null);
     const greetings = Array.isArray(draft.alternateGreetings)
         ? draft.alternateGreetings.filter((greeting): greeting is string => typeof greeting === 'string')
@@ -1368,18 +1394,18 @@ function AuthoringWorkspacePanel({
                                 aria-hidden="true"
                             />
                             {authoringCommandMutation.isPending
-                                ? 'Saving…'
+                                ? translate('Saving…')
                                 : authoringCommandMutation.isError
-                                    ? 'Save failed — next change retries'
+                                    ? translate('Save failed — next change retries')
                                     : authoringSession.dirty
-                                        ? `${dirtyFieldSet.size} unsaved`
-                                        : 'Saved'}
+                                        ? translate('${0} unsaved').replace('${0}', String(dirtyFieldSet.size))
+                                        : translate('Saved')}
                         </span>
                     ) : null}
                 </header>
                 {unsupportedFields.length > 0 ? (
                     <output {...stylex.props(authoringStyles.panelWarning)}>
-                        Extension data preserved on save but not editable here: {unsupportedFields.join(', ')}
+                        {translate('Extension data preserved on save but not editable here:')} {unsupportedFields.join(', ')}
                     </output>
                 ) : null}
                 <fieldset
@@ -1389,11 +1415,11 @@ function AuthoringWorkspacePanel({
                 >
                     <div {...stylex.props(authoringStyles.section, authoringStyles.sectionFirst)} data-react-authoring-section="basics">
                         <div {...stylex.props(authoringStyles.heroRow)}>
-                            <label {...stylex.props(authoringStyles.heroAvatar)} title="Change avatar" data-react-authoring-field="avatar">
+                            <label {...stylex.props(authoringStyles.heroAvatar)} title={translate("Change avatar")} data-react-authoring-field="avatar">
                                 <input
                                     type="button"
                                     className="avatar-upload-trigger"
-                                    aria-label="Change character avatar"
+                                    aria-label={translate("Change character avatar")}
                                     onClick={event => {
                                         event.preventDefault();
                                         document.getElementById('authoring-avatar-file')?.click();
@@ -1402,7 +1428,7 @@ function AuthoringWorkspacePanel({
                                 <img
                                     {...stylex.props(authoringStyles.heroAvatarImg)}
                                     src={avatarPreviewSrc}
-                                    alt="Character avatar"
+                                    alt={translate("Character avatar")}
                                     onError={(event) => {
                                         const img = event.currentTarget;
                                         if (!img.dataset.fallbackApplied) {
@@ -1419,7 +1445,7 @@ function AuthoringWorkspacePanel({
                                     hidden
                                     type="file"
                                     accept="image/*"
-                                    aria-label="Upload character avatar"
+                                    aria-label={translate("Upload character avatar")}
                                     onChange={(event) => {
                                         const file = event.target.files?.[0];
                                         const legacyInput = document.getElementById('add_avatar_button');
@@ -1437,12 +1463,12 @@ function AuthoringWorkspacePanel({
                             </label>
                             <div {...stylex.props(authoringStyles.heroMain)}>
                                 <label {...stylex.props(authoringStyles.field)} data-react-authoring-field="name">
-                                    <span className="sr-only">Name</span>
+                                    <span className="sr-only">{translate("Name")}</span>
                                     <input
                                         className="text_pole"
                                         {...stylex.props(authoringStyles.heroNameInput, authoringStyles.control)}
                                         value={nameValue}
-                                        placeholder="Character name"
+                                        placeholder={translate("Character name")}
                                         aria-invalid={fieldErrors.name ? 'true' : 'false'}
                                         onChange={(event) => updateDraft({ name: event.target.value })}
                                     />
@@ -1453,23 +1479,23 @@ function AuthoringWorkspacePanel({
                                         type="button"
                                         {...stylex.props(authoringStyles.favToggle, draft.favorite ? authoringStyles.favToggleActive : null)}
                                         aria-pressed={Boolean(draft.favorite)}
-                                        aria-label="Favorite"
-                                        title="Toggle favorite"
+                                        aria-label={translate("Favorite")}
+                                        title={translate("Toggle favorite")}
                                         data-react-authoring-field="favorite"
                                         onClick={() => updateDraft({ favorite: !draft.favorite })}
                                     >
                                         <i className={`fa-${draft.favorite ? 'solid' : 'regular'} fa-star`} aria-hidden="true" />
-                                        Favorite
+                                        {translate('Favorite')}
                                     </button>
                                     {tokenTotal ? (
                                         <span
                                             {...stylex.props(authoringStyles.metaChip, authoringSession.dirty ? authoringStyles.metaChipStale : null)}
                                             title={authoringSession.dirty
-                                                ? `${tokenTotal} tokens as of last save — recounts on next save`
-                                                : `${tokenTotal} tokens${tokenPermanent ? ` (${tokenPermanent} permanent)` : ''} — last counted on save`}
+                                                ? `${tokenTotal} ${translate('Tokens at last save; recount on next save')}`
+                                                : `${tokenTotal} ${translate('Tokens at last save')} (${tokenPermanent} ${translate('Permanent tokens')})`}
                                         >
                                             <i className="fa-solid fa-coins" aria-hidden="true" />
-                                            {authoringSession.dirty ? `~${tokenTotal}` : tokenTotal} tokens
+                                            {authoringSession.dirty ? `~${tokenTotal}` : tokenTotal} {translate("Tokens")}
                                         </span>
                                     ) : null}
                                 </div>
@@ -1481,7 +1507,7 @@ function AuthoringWorkspacePanel({
                                     <AuthoringFieldLabel text="Tags" dirty={isFieldDirty('tags')} />
                                     <TagChipInput
                                         values={tagsList}
-                                        placeholder="Type a tag, press Enter"
+                                        placeholder={translate("Type a tag, press Enter")}
                                         onCommit={next => updateDraft({ tags: next })}
                                     />
                                 </div>
@@ -1494,7 +1520,7 @@ function AuthoringWorkspacePanel({
                                         {...stylex.props(authoringStyles.control)}
                                         value={stringDraft('characterWorld')}
                                         onChange={(event) => updateDraft({ characterWorld: event.target.value })}
-                                        placeholder="Linked world file name"
+                                        placeholder={translate("Linked world file name")}
                                         list="authoring-character-world-names"
                                         aria-invalid={Boolean(stringDraft('characterWorld').trim()) && worldNames.length > 0 && !worldNames.includes(stringDraft('characterWorld').trim()) ? 'true' : undefined}
                                     />
@@ -1504,19 +1530,19 @@ function AuthoringWorkspacePanel({
                                         ))}
                                     </datalist>
                                     {stringDraft('characterWorld').trim() && worldNames.length > 0 && !worldNames.includes(stringDraft('characterWorld').trim()) ? (
-                                        <small {...stylex.props(authoringStyles.fieldWarning)}>No world file with this name — the link will be ignored.</small>
+                                        <small {...stylex.props(authoringStyles.fieldWarning)}>{translate("No world file with this name — the link will be ignored.")}</small>
                                     ) : null}
                                 </label>
                             </div>
                         </div>
                     </div>
                     <div {...stylex.props(authoringStyles.section)} data-react-authoring-section="content">
-                        <h4 {...stylex.props(authoringStyles.subsectionLabel)}>Card content</h4>
+                        <h4 {...stylex.props(authoringStyles.subsectionLabel)}>{translate("Card content")}</h4>
                         <label {...stylex.props(authoringStyles.field)} htmlFor="authoring-description" data-react-authoring-field="description">
                             <AuthoringFieldLabel
                                 text="Description"
                                 dirty={isFieldDirty('description')}
-                                meta={descriptionValue.trim() ? `${descriptionValue.length} chars` : undefined}
+                                meta={descriptionValue.trim() ? `${descriptionValue.length} ${translate("characters")}` : undefined}
                                 onExpand={() => setExpandedField({ key: 'description', label: 'Description' })}
                             />
                             <AuthoringTextarea
@@ -1524,7 +1550,7 @@ function AuthoringWorkspacePanel({
                                 rows={4}
                                 value={descriptionValue}
                                 xstyle={authoringStyles.textareaPreview}
-                                placeholder="Describe the character. Supports {{char}} and {{user}} macros."
+                                placeholder={translate("Describe the character. Supports {{char}} and {{user}} macros.")}
                                 onChange={(event) => updateDraft({ description: event.target.value })}
                             />
                         </label>
@@ -1532,7 +1558,7 @@ function AuthoringWorkspacePanel({
                             <AuthoringFieldLabel
                                 text="First message"
                                 dirty={isFieldDirty('firstMessage')}
-                                meta={firstMessageValue.trim() ? `${firstMessageValue.length} chars` : undefined}
+                                meta={firstMessageValue.trim() ? `${firstMessageValue.length} ${translate("characters")}` : undefined}
                                 onExpand={() => setExpandedField({ key: 'firstMessage', label: 'First message' })}
                             />
                             <AuthoringTextarea
@@ -1540,7 +1566,7 @@ function AuthoringWorkspacePanel({
                                 rows={3}
                                 value={firstMessageValue}
                                 xstyle={authoringStyles.textareaPreview}
-                                placeholder="The opening message. Supports {{char}} and {{user}} macros."
+                                placeholder={translate("The opening message. Supports {{char}} and {{user}} macros.")}
                                 onChange={(event) => updateDraft({ firstMessage: event.target.value })}
                             />
                         </label>
@@ -1548,7 +1574,7 @@ function AuthoringWorkspacePanel({
                             <AuthoringFieldLabel
                                 text="Alternate greetings"
                                 dirty={isFieldDirty('alternateGreetings')}
-                                meta={`${greetings.length} greeting${greetings.length === 1 ? '' : 's'}`}
+                                meta={translate('${0} greetings').replace('${0}', String(greetings.length))}
                             />
                             <button
                                 type="button"
@@ -1556,7 +1582,7 @@ function AuthoringWorkspacePanel({
                                 onClick={() => void commands?.openAlternateGreetings?.(characterToolActionPayload)}
                             >
                                 <i className="fa-solid fa-pen-to-square" aria-hidden="true" />
-                                {greetings.length > 0 ? 'Manage greetings' : 'Add alternate greetings'}
+                                {translate(greetings.length > 0 ? 'Manage greetings' : 'Add alternate greetings')}
                             </button>
                             {greetings.length > 0 ? (
                                 <p {...stylex.props(authoringStyles.greetingPreview)} title={greetings[0]}>
@@ -1578,7 +1604,7 @@ function AuthoringWorkspacePanel({
                                     className={`fa-solid fa-chevron-down ${stylex.props(authoringStyles.advancedToggleIcon, advancedOpen ? authoringStyles.advancedToggleIconOpen : null).className ?? ''}`}
                                     aria-hidden="true"
                                 />
-                                <span>Advanced</span>
+                                <span>{translate("Advanced")}</span>
                             </button>
                             {advancedChips.length > 0 ? (
                                 <span
@@ -1590,7 +1616,7 @@ function AuthoringWorkspacePanel({
                                             key={chip.field}
                                             type="button"
                                             {...stylex.props(authoringStyles.advancedChipButton)}
-                                            title={`Jump to ${chip.label}`}
+                                            title={translate('Jump to ${0}').replace('${0}', chip.label)}
                                             onClick={() => jumpToAdvancedField(chip.field)}
                                         >
                                             {chip.label}
@@ -1600,7 +1626,7 @@ function AuthoringWorkspacePanel({
                                         <button
                                             type="button"
                                             {...stylex.props(authoringStyles.advancedChipButton)}
-                                            title={`Show ${advancedChips.length - 3} more — jump to ${advancedChips[3].label}`}
+                                            title={translate('Show ${0} more — jump to ${1}').replace('${0}', String(advancedChips.length - 3)).replace('${1}', advancedChips[3].label)}
                                             onClick={() => jumpToAdvancedField(advancedChips[3].field)}
                                         >
                                             +{advancedChips.length - 3}
@@ -1611,7 +1637,7 @@ function AuthoringWorkspacePanel({
                         </div>
                         {!advancedOpen && advancedChips.length === 0 ? (
                             <p {...stylex.props(authoringStyles.advancedHint)}>
-                                Prompt overrides, extra definition fields, character note and creator metadata.
+                                {translate('Prompt overrides, extra definition fields, character note and creator metadata.')}
                             </p>
                         ) : null}
                         <div {...stylex.props(authoringStyles.advancedClip, advancedOpen ? authoringStyles.advancedClipOpen : null)}>
@@ -1622,32 +1648,32 @@ function AuthoringWorkspacePanel({
                                 {...stylex.props(authoringStyles.advancedBody)}
                             >
                                 <div {...stylex.props(authoringStyles.advancedSubgroup)}>
-                                    <h4 {...stylex.props(authoringStyles.subsectionLabel)}>Prompt overrides</h4>
+                                    <h4 {...stylex.props(authoringStyles.subsectionLabel)}>{translate("Prompt overrides")}</h4>
                                     <label {...stylex.props(authoringStyles.field)} htmlFor="authoring-system-prompt" data-react-authoring-field="systemPrompt">
-                                        <AuthoringFieldLabel text="System prompt" dirty={isFieldDirty('systemPrompt')} meta={stringDraft('systemPrompt').trim() ? `${stringDraft('systemPrompt').length} chars` : undefined} onExpand={() => setExpandedField({ key: 'systemPrompt', label: 'System prompt' })} />
+                                        <AuthoringFieldLabel text="System prompt" dirty={isFieldDirty('systemPrompt')} meta={stringDraft('systemPrompt').trim() ? `${stringDraft('systemPrompt').length} ${translate("characters")}` : undefined} onExpand={() => setExpandedField({ key: 'systemPrompt', label: translate('System prompt') })} />
                                         <AuthoringTextarea
                                             id="authoring-system-prompt"
                                             rows={2}
                                             value={stringDraft('systemPrompt')}
-                                            placeholder="Replaces the default main prompt. Use {{original}} to include it."
+                                            placeholder={translate("Replaces the default main prompt. Use {{original}} to include it.")}
                                             onChange={(event) => updateDraft({ systemPrompt: event.target.value })}
                                         />
                                     </label>
                                     <label {...stylex.props(authoringStyles.field)} htmlFor="authoring-post-history-instructions" data-react-authoring-field="postHistoryInstructions">
-                                        <AuthoringFieldLabel text="Post-history instructions" dirty={isFieldDirty('postHistoryInstructions')} meta={stringDraft('postHistoryInstructions').trim() ? `${stringDraft('postHistoryInstructions').length} chars` : undefined} onExpand={() => setExpandedField({ key: 'postHistoryInstructions', label: 'Post-history instructions' })} />
+                                        <AuthoringFieldLabel text="Post-history instructions" dirty={isFieldDirty('postHistoryInstructions')} meta={stringDraft('postHistoryInstructions').trim() ? `${stringDraft('postHistoryInstructions').length} ${translate("characters")}` : undefined} onExpand={() => setExpandedField({ key: 'postHistoryInstructions', label: 'Post-history instructions' })} />
                                         <AuthoringTextarea
                                             id="authoring-post-history-instructions"
                                             rows={2}
                                             value={stringDraft('postHistoryInstructions')}
-                                            placeholder="Replaces the default post-history instructions. Use {{original}} to include it."
+                                            placeholder={translate("Replaces the default post-history instructions. Use {{original}} to include it.")}
                                             onChange={(event) => updateDraft({ postHistoryInstructions: event.target.value })}
                                         />
                                     </label>
                                 </div>
                                 <div {...stylex.props(authoringStyles.advancedSubgroup)}>
-                                    <h4 {...stylex.props(authoringStyles.subsectionLabel)}>Definition</h4>
+                                    <h4 {...stylex.props(authoringStyles.subsectionLabel)}>{translate("Definition")}</h4>
                                     <label {...stylex.props(authoringStyles.field)} htmlFor="authoring-scenario" data-react-authoring-field="scenario">
-                                        <AuthoringFieldLabel text="Scenario" dirty={isFieldDirty('scenario')} meta={stringDraft('scenario').trim() ? `${stringDraft('scenario').length} chars` : undefined} onExpand={() => setExpandedField({ key: 'scenario', label: 'Scenario' })} />
+                                        <AuthoringFieldLabel text="Scenario" dirty={isFieldDirty('scenario')} meta={stringDraft('scenario').trim() ? `${stringDraft('scenario').length} ${translate("characters")}` : undefined} onExpand={() => setExpandedField({ key: 'scenario', label: translate('Scenario') })} />
                                         <AuthoringTextarea
                                             id="authoring-scenario"
                                             rows={2}
@@ -1657,14 +1683,14 @@ function AuthoringWorkspacePanel({
                                     </label>
                                 </div>
                                 <div {...stylex.props(authoringStyles.advancedSubgroup)}>
-                                    <h4 {...stylex.props(authoringStyles.subsectionLabel)}>Character&apos;s note</h4>
+                                    <h4 {...stylex.props(authoringStyles.subsectionLabel)}>{translate("Character's note")}</h4>
                                     <label {...stylex.props(authoringStyles.field)} htmlFor="authoring-depth-prompt" data-react-authoring-field="depthPrompt.prompt">
-                                        <AuthoringFieldLabel text="Depth prompt" dirty={isFieldDirty('depthPrompt')} meta={depthPrompt.prompt?.trim() ? `${depthPrompt.prompt.length} chars` : undefined} onExpand={() => setExpandedField({ key: 'depthPrompt.prompt', label: 'Depth prompt' })} />
+                                        <AuthoringFieldLabel text="Depth prompt" dirty={isFieldDirty('depthPrompt')} meta={depthPrompt.prompt?.trim() ? `${depthPrompt.prompt.length} ${translate("characters")}` : undefined} onExpand={() => setExpandedField({ key: 'depthPrompt.prompt', label: 'Depth prompt' })} />
                                         <AuthoringTextarea
                                             id="authoring-depth-prompt"
                                             rows={2}
                                             value={depthPrompt.prompt ?? ''}
-                                            placeholder="Inserted in-chat at the chosen depth and role."
+                                            placeholder={translate("Inserted in-chat at the chosen depth and role.")}
                                             onChange={(event) => updateDraft({
                                                 depthPrompt: { ...depthPrompt, prompt: event.target.value },
                                             })}
@@ -1700,16 +1726,16 @@ function AuthoringWorkspacePanel({
                                                         depthPrompt: { ...depthPrompt, role: event.target.value },
                                                     })}
                                                 >
-                                                    <option value="system">System</option>
-                                                    <option value="user">User</option>
-                                                    <option value="assistant">Assistant</option>
+                                                    <option value="system">{translate("System")}</option>
+                                                    <option value="user">{translate("User")}</option>
+                                                    <option value="assistant">{translate("Assistant")}</option>
                                                 </select>
                                             </label>
                                         </div>
                                     </div>
                                 </div>
                                 <div {...stylex.props(authoringStyles.advancedSubgroup)}>
-                                    <h4 {...stylex.props(authoringStyles.subsectionLabel)}>Creator metadata</h4>
+                                    <h4 {...stylex.props(authoringStyles.subsectionLabel)}>{translate("Creator metadata")}</h4>
                                     <div {...stylex.props(authoringStyles.fieldRow)}>
                                         <div {...stylex.props(authoringStyles.fieldRowItem)}>
                                             <label {...stylex.props(authoringStyles.field)} data-react-authoring-field="creator">
@@ -1735,12 +1761,12 @@ function AuthoringWorkspacePanel({
                                         </div>
                                     </div>
                                     <label {...stylex.props(authoringStyles.field)} htmlFor="authoring-creator-notes" data-react-authoring-field="creatorNotes">
-                                        <AuthoringFieldLabel text="Creator notes" dirty={isFieldDirty('creatorNotes')} meta={stringDraft('creatorNotes').trim() ? `${stringDraft('creatorNotes').length} chars` : undefined} onExpand={() => setExpandedField({ key: 'creatorNotes', label: 'Creator notes' })} />
+                                        <AuthoringFieldLabel text="Creator notes" dirty={isFieldDirty('creatorNotes')} meta={stringDraft('creatorNotes').trim() ? `${stringDraft('creatorNotes').length} ${translate("characters")}` : undefined} onExpand={() => setExpandedField({ key: 'creatorNotes', label: 'Creator notes' })} />
                                         <AuthoringTextarea
                                             id="authoring-creator-notes"
                                             rows={2}
                                             value={stringDraft('creatorNotes')}
-                                            placeholder="Shown in the character list. Not sent to the model."
+                                            placeholder={translate("Shown in the character list. Not sent to the model.")}
                                             onChange={(event) => updateDraft({ creatorNotes: event.target.value })}
                                         />
                                     </label>
@@ -1749,17 +1775,17 @@ function AuthoringWorkspacePanel({
                         </div>
                     </section>
                 </fieldset>
-                <div {...stylex.props(authoringStyles.panelActions)} aria-label={`${title} actions`}>
+                <div {...stylex.props(authoringStyles.panelActions)} aria-label={translate('${0} actions').replace('${0}', title)}>
                     {!isCreateMode ? (
                         <button
                             type="button"
                             className={`menu_button ${stylex.props(authoringStyles.dangerButton).className ?? ''}`}
                             disabled={isActionPending}
-                            title="Permanently delete this card — the confirmation can also remove its chats"
+                            title={translate("Permanently delete this card — the confirmation can also remove its chats")}
                             onClick={() => void commands?.deleteAuthoring?.(kind)}
                         >
                             <i className="fa-solid fa-triangle-exclamation" aria-hidden="true" />
-                            Delete
+                            {translate('Delete')}
                         </button>
                     ) : null}
                     {isCreateMode ? (
@@ -1767,10 +1793,10 @@ function AuthoringWorkspacePanel({
                             type="button"
                             className={`menu_button ${stylex.props(authoringStyles.saveButton).className ?? ''}`}
                             disabled={isActionPending}
-                            title="Create character (Ctrl+S)"
+                            title={translate("Create character (Ctrl+S)")}
                             onClick={submitDraft}
                         >
-                            Create
+                            {translate('Create')}
                         </button>
                     ) : null}
                     <div {...stylex.props(authoringStyles.footerTools)}>
@@ -1780,7 +1806,7 @@ function AuthoringWorkspacePanel({
                             disabled={isActionPending}
                             onClick={() => void commands?.openWorldInfo?.(characterToolActionPayload)}
                         >
-                            World Info
+                            {translate('World Info')}
                         </button>
                         {!isCreateMode ? (
                             <button
@@ -1790,7 +1816,7 @@ function AuthoringWorkspacePanel({
                                 data-character-export-trigger=""
                                 onClick={() => void commands?.exportAuthoring?.(characterToolActionPayload)}
                             >
-                                Export
+                                {translate('Export')}
                             </button>
                         ) : null}
                         {!isCreateMode ? (
@@ -1798,10 +1824,10 @@ function AuthoringWorkspacePanel({
                                 type="button"
                                 className={`menu_button ${stylex.props(authoringStyles.toolAction).className ?? ''}`}
                                 disabled={isActionPending}
-                                title="在角色卡、绑定世界书和当前聊天中查找替换文本"
+                                title={translate('Find and replace text in the character card, bound world book, and current chat')}
                                 onClick={() => setTextReplaceOpen(true)}
                             >
-                                查找替换
+                                {translate('Find and replace')}
                             </button>
                         ) : null}
                         <AuthoringActionsMenu
@@ -1847,17 +1873,17 @@ function AuthoringWorkspacePanel({
                             }
                         }}
                     >
-                        <dialog open aria-modal="true" aria-label={expandedField.label} {...stylex.props(authoringStyles.modalCard)}>
+                        <dialog open aria-modal="true" aria-label={translate(expandedField.label)} {...stylex.props(authoringStyles.modalCard)}>
                             <div {...stylex.props(authoringStyles.modalHead)}>
-                                <span {...stylex.props(authoringStyles.modalTitle)}>{expandedField.label}</span>
+                                <span {...stylex.props(authoringStyles.modalTitle)}>{translate(expandedField.label)}</span>
                                 <span {...stylex.props(authoringStyles.fieldMeta)}>
-                                    {getExpandedFieldValue(expandedField.key).length} chars
+                                    {getExpandedFieldValue(expandedField.key).length} {translate("characters")}
                                 </span>
                                 <button
                                     type="button"
                                     {...stylex.props(authoringStyles.iconAction)}
-                                    title="Close editor"
-                                    aria-label="Close editor"
+                                    title={translate("Close editor")}
+                                    aria-label={translate("Close editor")}
                                     onClick={() => setExpandedField(null)}
                                 >
                                     <i className="fa-solid fa-xmark" aria-hidden="true" />
@@ -1870,7 +1896,7 @@ function AuthoringWorkspacePanel({
                                 onChange={(event) => setExpandedFieldValue(expandedField.key, event.target.value)}
                             />
                             <p {...stylex.props(authoringStyles.modalHint)}>
-                                Esc to close{bridgeState.mode === 'edit' ? ' — changes autosave' : ''}. Ctrl+S saves now.
+                                {translate('Esc to close. Ctrl+S saves now.')} {bridgeState.mode === 'edit' ? translate('Changes autosave.') : ''}
                             </p>
                         </dialog>
                     </div>,
@@ -2131,11 +2157,11 @@ function WorkspacePanelRoot({
 }
 
 const workspaceShellNavigationEntries: WorkspaceShellNavigationEntry[] = [
-    { command: 'openPromptManager', icon: 'fa-sliders', label: '提示词', panelKind: 'promptManager', slotKey: 'promptManager' },
-    { command: 'openCharacterLibrary', icon: 'fa-address-book', label: '角色库', panelKind: 'characterLibrary', slotKey: 'characterLibrary' },
-    { command: 'openWorldInfo', icon: 'fa-book-atlas', label: '世界书', panelKind: 'worldInfo', slotKey: 'worldInfo' },
-    { command: 'openRegex', icon: 'fa-code', label: '正则', panelKind: 'regex', slotKey: 'regex' },
-    { command: 'openSettings', icon: 'fa-gear', label: '设置', panelKind: 'settings', slotKey: 'settings' },
+    { command: 'openPromptManager', icon: 'fa-sliders', label: 'Prompt', panelKind: 'promptManager', slotKey: 'promptManager' },
+    { command: 'openCharacterLibrary', icon: 'fa-address-book', label: 'Character library', panelKind: 'characterLibrary', slotKey: 'characterLibrary' },
+    { command: 'openWorldInfo', icon: 'fa-book-atlas', label: 'World book', panelKind: 'worldInfo', slotKey: 'worldInfo' },
+    { command: 'openRegex', icon: 'fa-code', label: 'Regex', panelKind: 'regex', slotKey: 'regex' },
+    { command: 'openSettings', icon: 'fa-gear', label: 'Settings', panelKind: 'settings', slotKey: 'settings' },
 ];
 
 function asWorkspacePanelDockDispatchResult(result: unknown): WorkspacePanelDockDispatchResult {
@@ -2245,6 +2271,7 @@ function ReactWorkspaceShellChrome({
     commands?: WorkspaceShellCommands;
     runtime: RuntimePort;
 }) {
+    useTranslated('');
     const contextTitle = state.contextTitle?.trim() || 'Choose a character';
     const status = state.status ?? (state.activeContext === 'none' ? 'empty' : 'success');
     const dockSnapshot = useWorkspacePanelDockSnapshot();
@@ -2364,8 +2391,9 @@ function ReactWorkspaceShellChrome({
             <section {...stylex.props(workspaceShellStyles.context)} aria-label="Current workspace context">
                 <div {...stylex.props(workspaceShellStyles.title)}>{contextTitle}</div>
             </section>
-            <nav {...stylex.props(workspaceShellStyles.nav)} aria-label="工作区导航">
-                {workspaceShellNavigationEntries.map(entry => {
+            <nav {...stylex.props(workspaceShellStyles.nav)} aria-label={translate('Workspace navigation')}>
+                {workspaceShellNavigationEntries.map(sourceEntry => {
+                    const entry = { ...sourceEntry, label: translate(sourceEntry.label) };
                     const isPanelEntryActive = Boolean(entry.panelKind && dockSnapshot.activePanelKind === entry.panelKind);
                     const childSlot = entry.slotKey ? getWorkspaceShellChildSlot(entry.slotKey) : null;
                     // Drawer lock state is the .pinnedOpen class on the drawer
@@ -2484,13 +2512,14 @@ function SettingsDrawerHost({
     initialTab?: string | null;
     runtime: RuntimePort;
 }) {
+    useTranslated('');
     const handleSettingsDirtyChange = useCallback((dirty: boolean) => {
         (globalThis as Record<string, unknown>).__emberDeskSettingsDirty = dirty;
     }, []);
 
     return (
         <WorkspacePanelChrome
-            title="设置"
+            title={translate('Settings')}
             icon="fa-solid fa-gear"
             grabberId="SettingsPanelheader"
         >
@@ -2730,6 +2759,7 @@ export function unmountChatBackupsBrowser() {
 }
 
 const mountedSmallPanels = new Map<HTMLElement, Root>();
+
 
 function mountSmallPanel(container: HTMLElement, element: ReactElement) {
     attachGlobalCompatibilityBridge();

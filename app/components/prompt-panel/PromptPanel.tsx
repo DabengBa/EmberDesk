@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { ContractIconButton } from '../contract/ContractIconButton';
+import { translate, useTranslated } from '@/compat/i18n.js';
 
 export interface PromptPanelPrompt {
     identifier: string;
@@ -68,49 +69,41 @@ export interface PromptPanelBridge {
     openPromptInspector?(): void;
 }
 
-const ROLE_OPTIONS: Array<{ value: string; label: string }> = [
-    { value: 'system', label: '系统' },
-    { value: 'user', label: '用户' },
-    { value: 'assistant', label: '助手' },
-];
-
-const ROLE_BADGE_LABELS: Record<string, string> = {
-    system: '系统',
-    user: '用户',
-    assistant: '助手',
-};
+const ROLE_VALUES = ['system', 'user', 'assistant'] as const;
 
 /**
- * Compact "+ 新建提示词" button rendered next to the 提示词管理 section
+ * Compact "+ New prompt" button rendered next to the prompt manager section
  * header. New entries land at the end of the order list; PromptManagerList
  * auto-expands whichever identifier appears for the first time.
  */
 export function PromptManagerAddButton({ bridge }: { bridge: PromptPanelBridge }) {
+    useTranslated('');
     return (
         <button
             type="button"
             className="menu_button prompt-panel-add-btn"
-            title="新建提示词"
+            title={translate('New prompt')}
             onClick={() => bridge.addPrompt()}
         >
-            <i className="fa-solid fa-plus" aria-hidden="true" /> 新建
+            <i className="fa-solid fa-plus" aria-hidden="true" /> {translate('New')}
         </button>
     );
 }
 
 /**
- * "查看 Prompt" header action — opens the prompt-inspector overlay showing
+ * "View Prompt" header action — opens the prompt-inspector overlay showing
  * the request body the next send would produce (unsent preview).
  */
 export function PromptInspectorButton({ bridge }: { bridge: PromptPanelBridge }) {
+    useTranslated('');
     return (
         <button
             type="button"
             className="menu_button prompt-panel-add-btn"
-            title="预览将要发送给 AI 的请求（不会发送）"
+            title={translate('Preview the request that would be sent to the AI (nothing is sent)')}
             onClick={() => bridge.openPromptInspector?.()}
         >
-            <i className="fa-solid fa-eye" aria-hidden="true" /> 查看 Prompt
+            <i className="fa-solid fa-eye" aria-hidden="true" /> {translate('View Prompt')}
         </button>
     );
 }
@@ -118,10 +111,7 @@ export function PromptInspectorButton({ bridge }: { bridge: PromptPanelBridge })
 const INJECTION_POSITION_RELATIVE = 0;
 const INJECTION_POSITION_ABSOLUTE = 1;
 
-const TRIGGER_OPTIONS: Array<{ value: string; label: string }> = [
-    { value: 'all', label: '全部' },
-    { value: 'normal', label: '常规' },
-];
+const TRIGGER_VALUES = ['all', 'normal'] as const;
 
 interface RowReorderDrag {
     id: string;
@@ -264,12 +254,14 @@ function useRowReorder<T>({ entries, getId, onMove, rowSelector, idDataKey }: {
 }
 
 /**
- * 左侧"提示词"面板内的 Prompt Manager 列表 —— 渲染进 legacy
- * #completion_prompt_manager 容器。预设区与高级设置区由 AiConfigPanel
- * 的 legacy ID 提供,本组件只管 prompt 排序/启停/字段编辑。
- * 状态全部来自 legacy 桥(__emberDeskPromptPanelBridge),不自己维护副本。
+ * Prompt Manager list inside the left prompt panel — rendered into the legacy
+ * #completion_prompt_manager container. Preset and advanced sections come from AiConfigPanel
+ * legacy IDs; this component only owns prompt ordering, enablement, and field editing.
+ * All state comes from the legacy bridge (__emberDeskPromptPanelBridge); no local copy.
  */
 export function PromptManagerList({ bridge }: { bridge: PromptPanelBridge }) {
+    useTranslated('');
+    const roleLabels: Record<string, string> = { system: translate('System'), user: translate('User'), assistant: translate('Assistant') };
     const state = useSyncExternalStore(
         listener => bridge.subscribe(listener),
         () => bridge.getState(),
@@ -325,14 +317,14 @@ export function PromptManagerList({ bridge }: { bridge: PromptPanelBridge }) {
     // Pipeline step tags ('pipeline:analyze') become per-round checkboxes
     // alongside the static all/normal options.
     const triggerOptions = [
-        ...TRIGGER_OPTIONS,
+        ...TRIGGER_VALUES.map(value => ({ value, label: translate(value === 'all' ? 'All' : 'Regular') })),
         ...(state.pipelineTriggerTags ?? []).map(tag => ({
             value: tag,
-            label: `管线 ${tag.replace('pipeline:', '')}`,
+            label: translate('Pipeline ${0}').replace('${0}', tag.replace('pipeline:', '')),
         })),
     ];
 
-    // Auto-expand the entry that a header/toolbar "新建" click just appended.
+    // Auto-expand the entry that a header/toolbar "New" click just appended.
     useEffect(() => {
         const ids = new Set(state.order.map(entry => entry.identifier));
         if (knownIdsRef.current) {
@@ -360,9 +352,9 @@ export function PromptManagerList({ bridge }: { bridge: PromptPanelBridge }) {
 
     return (
         <div className="prompt-panel-root">
-            <div ref={promptReorder.containerRef} className="prompt-panel-list" role="list" aria-label="提示词排序">
+            <div ref={promptReorder.containerRef} className="prompt-panel-list" role="list" aria-label={translate('Prompt order')}>
                 <div className="prompt-panel-list-head">
-                    <span className="prompt-panel-head-name">名称</span>
+                    <span className="prompt-panel-head-name">{translate('Name')}</span>
                     <span className="prompt-panel-head-tokens">Tokens</span>
                 </div>
                 {state.order.map((entry, index) => {
@@ -381,8 +373,8 @@ export function PromptManagerList({ bridge }: { bridge: PromptPanelBridge }) {
                                 <button
                                     type="button"
                                     className="prompt-panel-drag-handle drag-handle menu-handle"
-                                    aria-label={`拖拽排序 ${prompt?.name ?? entry.identifier}`}
-                                    title="拖拽调整顺序，也可使用上下方向键"
+                                    aria-label={translate('Drag to reorder ${0}').replace('${0}', prompt?.name ?? entry.identifier)}
+                                    title={translate('Drag to reorder, or use the up and down arrow keys')}
                                     {...promptReorder.getDragHandleProps(entry.identifier, index)}
                                 >
                                     <span aria-hidden="true">&#9776;</span>
@@ -391,34 +383,34 @@ export function PromptManagerList({ bridge }: { bridge: PromptPanelBridge }) {
                                     type="checkbox"
                                     className="prompt-panel-enabled"
                                     checked={entry.enabled}
-                                    aria-label={`启用 ${prompt?.name ?? entry.identifier}`}
+                                    aria-label={translate('Enable ${0}').replace('${0}', prompt?.name ?? entry.identifier)}
                                     onChange={event => bridge.setPromptEnabled(entry.identifier, event.target.checked)}
                                 />
                                 <button
                                     type="button"
                                     className="prompt-panel-item-name"
                                     onClick={() => setExpandedId(expanded ? null : entry.identifier)}
-                                    title={prompt?.marker ? '占位符,内容由运行时注入' : '展开编辑'}
+                                    title={prompt?.marker ? translate('Placeholder; content is injected at runtime') : translate('Expand to edit')}
                                 >
                                     <span className="prompt-panel-item-name-text">{prompt?.name ?? entry.identifier}</span>
                                     <span className="prompt-panel-item-meta">
-                                        {prompt?.role ? <span className="prompt-panel-badge">{ROLE_BADGE_LABELS[prompt.role] ?? prompt.role}</span> : null}
-                                        {prompt?.marker ? <span className="prompt-panel-badge prompt-panel-badge-marker">占位符</span> : null}
-                                        {isAbsolute ? <span className="prompt-panel-badge">@深度</span> : null}
+                                        {prompt?.role ? <span className="prompt-panel-badge">{roleLabels[prompt.role] ?? prompt.role}</span> : null}
+                                        {prompt?.marker ? <span className="prompt-panel-badge prompt-panel-badge-marker">{translate('Placeholder')}</span> : null}
+                                        {isAbsolute ? <span className="prompt-panel-badge">@{translate('Depth')}</span> : null}
                                     </span>
                                 </button>
-                                <span className="prompt-panel-tokens" title={prompt?.marker ? '上次生成请求中实际注入的 token 数' : '这条提示词内容的 token 数'}>
+                                <span className="prompt-panel-tokens" title={prompt?.marker ? translate('Tokens actually injected in the last request') : translate('Tokens in this prompt content')}>
                                     {typeof state.tokenCounts[entry.identifier] === 'number' ? state.tokenCounts[entry.identifier] : '—'}
                                 </span>
                             </div>
                             {expanded ? (
                                 <div className="prompt-panel-item-editor">
                                     {prompt?.marker ? (
-                                        <div className="prompt-panel-marker-note">占位符 prompt,内容在生成时由运行时注入,不可编辑。</div>
+                                        <div className="prompt-panel-marker-note">{translate('Placeholder prompt; content is injected at runtime and cannot be edited.')}</div>
                                     ) : prompt ? (
                                         <>
                                             <div className="prompt-panel-field">
-                                                <label className="prompt-panel-field-label">名称</label>
+                                                <label className="prompt-panel-field-label">{translate('Name')}</label>
                                                 <input
                                                     type="text"
                                                     className="text_pole"
@@ -428,25 +420,25 @@ export function PromptManagerList({ bridge }: { bridge: PromptPanelBridge }) {
                                                 />
                                             </div>
                                             <div className="prompt-panel-field">
-                                                <label className="prompt-panel-field-label">角色</label>
+                                                <label className="prompt-panel-field-label">{translate('Role')}</label>
                                                 <select
                                                     className="text_pole"
                                                     value={prompt.role ?? 'system'}
                                                     onChange={event => bridge.updatePrompt(entry.identifier, { role: event.target.value })}
                                                 >
-                                                    {ROLE_OPTIONS.map(option => (
-                                                        <option key={option.value} value={option.value}>{option.label}</option>
+                                                    {ROLE_VALUES.map(value => (
+                                                        <option key={value} value={value}>{roleLabels[value]}</option>
                                                     ))}
                                                 </select>
                                             </div>
                                             <div className="prompt-panel-field">
                                                 <div className="prompt-panel-field-head">
-                                                    <label className="prompt-panel-field-label">内容</label>
+                                                    <label className="prompt-panel-field-label">{translate('Content')}</label>
                                                     <ContractIconButton
                                                         className="prompt-panel-expand"
-                                                        label={`放大编辑 ${prompt.name ?? entry.identifier} 内容`}
+                                                        label={translate('Maximize editing ${0} content').replace('${0}', prompt.name ?? entry.identifier)}
                                                         nativeTitle
-                                                        title="放大编辑"
+                                                        title={translate('Maximize editing')}
                                                         icon={<i className="fa-solid fa-expand" aria-hidden="true" />}
                                                         onClick={() => setContentPopup({ id: entry.identifier, draft: prompt.content ?? '' })}
                                                     />
@@ -456,25 +448,25 @@ export function PromptManagerList({ bridge }: { bridge: PromptPanelBridge }) {
                                                     className="text_pole prompt-panel-content"
                                                     defaultValue={prompt.content ?? ''}
                                                     rows={6}
-                                                    aria-label={`${prompt.name ?? entry.identifier} 内容`}
+                                                    aria-label={translate('${0} content').replace('${0}', prompt.name ?? entry.identifier)}
                                                     onChange={event => bridge.updatePrompt(entry.identifier, { content: event.target.value })}
                                                 />
                                             </div>
                                             <div className="prompt-panel-field">
-                                                <label className="prompt-panel-field-label">注入位置</label>
+                                                <label className="prompt-panel-field-label">{translate('Injection position')}</label>
                                                 <select
                                                     className="text_pole"
                                                     value={prompt.injection_position ?? INJECTION_POSITION_RELATIVE}
                                                     onChange={event => bridge.updatePrompt(entry.identifier, { injection_position: Number(event.target.value) })}
                                                 >
-                                                    <option value={INJECTION_POSITION_RELATIVE}>相对位置</option>
-                                                    <option value={INJECTION_POSITION_ABSOLUTE}>@ 深度注入</option>
+                                                    <option value={INJECTION_POSITION_RELATIVE}>{translate('Relative position')}</option>
+                                                    <option value={INJECTION_POSITION_ABSOLUTE}>@{translate('Depth injection')}</option>
                                                 </select>
                                             </div>
                                             {isAbsolute ? (
                                                 <div className="prompt-panel-field-pair">
                                                     <div className="prompt-panel-field">
-                                                        <label className="prompt-panel-field-label">注入深度</label>
+                                                        <label className="prompt-panel-field-label">{translate('Injection depth')}</label>
                                                         <input
                                                             type="number"
                                                             className="text_pole"
@@ -485,7 +477,7 @@ export function PromptManagerList({ bridge }: { bridge: PromptPanelBridge }) {
                                                         />
                                                     </div>
                                                     <div className="prompt-panel-field">
-                                                        <label className="prompt-panel-field-label">注入顺序</label>
+                                                        <label className="prompt-panel-field-label">{translate('Injection order')}</label>
                                                         <input
                                                             type="number"
                                                             className="text_pole"
@@ -503,7 +495,7 @@ export function PromptManagerList({ bridge }: { bridge: PromptPanelBridge }) {
                                                         checked={Boolean(prompt.system_prompt)}
                                                         onChange={event => bridge.updatePrompt(entry.identifier, { system_prompt: event.target.checked })}
                                                     />
-                                                    <span>系统提示</span>
+                                                    <span>{translate('System prompt')}</span>
                                                 </label>
                                                 <label className="checkbox_label">
                                                     <input
@@ -511,11 +503,11 @@ export function PromptManagerList({ bridge }: { bridge: PromptPanelBridge }) {
                                                         checked={Boolean(prompt.forbid_overrides)}
                                                         onChange={event => bridge.updatePrompt(entry.identifier, { forbid_overrides: event.target.checked })}
                                                     />
-                                                    <span>禁止角色覆盖</span>
+                                                    <span>{translate('Forbid character overrides')}</span>
                                                 </label>
                                             </div>
                                             <div className="prompt-panel-field">
-                                                <label className="prompt-panel-field-label" title="选择这条提示词在哪些生成类型下注入">触发时机</label>
+                                                <label className="prompt-panel-field-label" title={translate('Choose which generation types inject this prompt')}>{translate('Trigger types')}</label>
                                                 <div className="prompt-panel-trigger-row">
                                                     {triggerOptions.map(option => (
                                                         <label key={option.value} className="checkbox_label">
@@ -538,12 +530,12 @@ export function PromptManagerList({ bridge }: { bridge: PromptPanelBridge }) {
                                                         setExpandedId(null);
                                                     }}
                                                 >
-                                                    <i className="fa-solid fa-trash-can" aria-hidden="true" /> 删除提示词
+                                                    <i className="fa-solid fa-trash-can" aria-hidden="true" /> {translate('Delete prompt')}
                                                 </button>
                                             </div>
                                         </>
                                     ) : (
-                                        <div className="prompt-panel-marker-note">该排序项引用的 prompt 不存在。</div>
+                                        <div className="prompt-panel-marker-note">{translate('The prompt referenced by this order entry no longer exists.')}</div>
                                     )}
                                 </div>
                             ) : null}
@@ -551,25 +543,25 @@ export function PromptManagerList({ bridge }: { bridge: PromptPanelBridge }) {
                     );
                 })}
                 {state.order.length === 0 ? (
-                    <div className="prompt-panel-empty">暂无 prompt 排序数据</div>
+                    <div className="prompt-panel-empty">{translate('No prompt order data yet')}</div>
                 ) : null}
             </div>
             <div className="prompt-panel-pipeline">
                 <div className="prompt-panel-pipeline-head">
-                    <span className="prompt-panel-field-label">回复管线</span>
-                    <label className="checkbox_label" title="启用后,一次用户消息按下方顺序执行多轮工具调用">
+                    <span className="prompt-panel-field-label">{translate('Reply pipeline')}</span>
+                    <label className="checkbox_label" title={translate('When enabled, one user message runs multiple tool rounds in the order below')}>
                         <input
                             type="checkbox"
                             checked={state.pipeline?.enabled ?? false}
                             onChange={event => bridge.setPipelineEnabled(event.target.checked)}
                         />
-                        <span>启用</span>
+                        <span>{translate('Enabled')}</span>
                     </label>
-                    <button type="button" className="menu_button" onClick={() => bridge.addPipelineStep()} title="添加一轮工具调用">
-                        <i className="fa-solid fa-plus" aria-hidden="true" /> 步骤
+                    <button type="button" className="menu_button" onClick={() => bridge.addPipelineStep()} title={translate('Add a tool round')}>
+                        <i className="fa-solid fa-plus" aria-hidden="true" /> {translate('Step')}
                     </button>
                 </div>
-                <div ref={stepReorder.containerRef} className="prompt-panel-list" role="list" aria-label="管线步骤排序">
+                <div ref={stepReorder.containerRef} className="prompt-panel-list" role="list" aria-label={translate('Pipeline step order')}>
                     {pipelineSteps.map((step, index, steps) => {
                         const expanded = expandedStepId === step.id;
                         return (
@@ -583,8 +575,8 @@ export function PromptManagerList({ bridge }: { bridge: PromptPanelBridge }) {
                                     <button
                                         type="button"
                                         className="prompt-panel-drag-handle drag-handle menu-handle"
-                                        aria-label={`拖拽排序 ${step.tool || `第 ${index + 1} 步`}`}
-                                        title="拖拽调整顺序，也可使用上下方向键"
+                                        aria-label={translate('Drag to reorder ${0}').replace('${0}', step.tool || translate('Step ${0}').replace('${0}', String(index + 1)))}
+                                        title={translate('Drag to reorder, or use the up and down arrow keys')}
                                         {...stepReorder.getDragHandleProps(step.id, index)}
                                     >
                                         <span aria-hidden="true">&#9776;</span>
@@ -594,23 +586,23 @@ export function PromptManagerList({ bridge }: { bridge: PromptPanelBridge }) {
                                         type="button"
                                         className="prompt-panel-item-name"
                                         onClick={() => setExpandedStepId(expanded ? null : step.id)}
-                                        title="展开编辑"
+                                        title={translate('Expand to edit')}
                                     >
-                                        <span className="prompt-panel-item-name-text">{step.tool || '未命名工具'}</span>
+                                        <span className="prompt-panel-item-name-text">{step.tool || translate('Unnamed tool')}</span>
                                         <span className="prompt-panel-item-meta">
-                                            {index === steps.length - 1 ? <span className="prompt-panel-badge" title="末行产出正文回复">最终</span> : null}
+                                            {index === steps.length - 1 ? <span className="prompt-panel-badge" title={translate('The last step produces the final reply')}>{translate('Final')}</span> : null}
                                         </span>
                                     </button>
                                 </div>
                                 {expanded ? (
                                     <div className="prompt-panel-item-editor">
                                         <div className="prompt-panel-field">
-                                            <label className="prompt-panel-field-label">工具名</label>
+                                            <label className="prompt-panel-field-label">{translate('Tool name')}</label>
                                             <input
                                                 type="text"
                                                 className="text_pole prompt-panel-pipeline-tool"
                                                 list="prompt-panel-pipeline-tools"
-                                                placeholder="该轮必须调用的工具绑定名"
+                                                placeholder={translate('Name of the tool binding this round must call')}
                                                 key={JSON.stringify([state.presetName, index, step.id, step.tool])}
                                                 defaultValue={step.tool}
                                                 onBlur={event => bridge.commitPipelineStepTool(index, event.currentTarget.value, {
@@ -625,11 +617,11 @@ export function PromptManagerList({ bridge }: { bridge: PromptPanelBridge }) {
                                             />
                                         </div>
                                         <div className="prompt-panel-field">
-                                            <label className="prompt-panel-field-label">步指令</label>
+                                            <label className="prompt-panel-field-label">{translate('Step instruction')}</label>
                                             <textarea
                                                 className="text_pole prompt-panel-content prompt-panel-pipeline-instruction"
                                                 rows={4}
-                                                placeholder="该轮注入到请求末尾的指令"
+                                                placeholder={translate('Instruction appended to the request for this round')}
                                                 key={`${step.id}:prompt`}
                                                 defaultValue={step.prompt}
                                                 onChange={event => bridge.updatePipelineStep(index, { prompt: event.target.value })}
@@ -644,7 +636,7 @@ export function PromptManagerList({ bridge }: { bridge: PromptPanelBridge }) {
                                                     setExpandedStepId(null);
                                                 }}
                                             >
-                                                <i className="fa-solid fa-trash-can" aria-hidden="true" /> 删除步骤
+                                                <i className="fa-solid fa-trash-can" aria-hidden="true" /> {translate('Delete step')}
                                             </button>
                                         </div>
                                     </div>
@@ -653,7 +645,7 @@ export function PromptManagerList({ bridge }: { bridge: PromptPanelBridge }) {
                         );
                     })}
                     {pipelineSteps.length === 0 ? (
-                        <div className="prompt-panel-empty">未配置管线步骤——添加一行即多一轮工具调用，顺序即执行顺序</div>
+                        <div className="prompt-panel-empty">{translate('No pipeline steps configured. Add a row for another tool round; rows run in order.')}</div>
                     ) : null}
                 </div>
                 <datalist id="prompt-panel-pipeline-tools">
@@ -666,16 +658,16 @@ export function PromptManagerList({ bridge }: { bridge: PromptPanelBridge }) {
                         className="prompt-content-modal"
                         role="dialog"
                         aria-modal="true"
-                        aria-label={`编辑 ${state.promptsById[contentPopup.id]?.name ?? contentPopup.id} 内容`}
+                        aria-label={translate('Edit ${0} content').replace('${0}', state.promptsById[contentPopup.id]?.name ?? contentPopup.id)}
                         onClick={event => event.stopPropagation()}
                     >
                         <div className="prompt-content-modal-head">
-                            <span className="prompt-content-modal-title">{state.promptsById[contentPopup.id]?.name ?? contentPopup.id} — 内容</span>
+                            <span className="prompt-content-modal-title">{state.promptsById[contentPopup.id]?.name ?? contentPopup.id} — {translate('Content')}</span>
                             <ContractIconButton
                                 className="right_menu_button"
-                                label="关闭"
+                                label={translate('Close')}
                                 nativeTitle
-                                title="关闭"
+                                title={translate('Close')}
                                 icon={<i className="fa-solid fa-xmark" aria-hidden="true" />}
                                 onClick={() => setContentPopup(null)}
                             />
@@ -695,10 +687,10 @@ export function PromptManagerList({ bridge }: { bridge: PromptPanelBridge }) {
                                     setContentPopup(null);
                                 }}
                             >
-                                保存
+                                {translate('Save')}
                             </button>
                             <button type="button" className="menu_button" onClick={() => setContentPopup(null)}>
-                                取消
+                                {translate('Cancel')}
                             </button>
                         </div>
                     </div>

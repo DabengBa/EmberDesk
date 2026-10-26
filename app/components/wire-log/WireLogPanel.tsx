@@ -4,6 +4,7 @@ import * as stylex from '@stylexjs/stylex';
 import { WireLogBrowser } from './WireLogBrowser';
 import { panelStyles as styles } from './wire-log-panel.styles';
 import type { WireLogConfig } from './types';
+import { translate, useTranslated } from '@/compat/i18n.js';
 
 /**
  * Wire Log overlay.
@@ -22,6 +23,7 @@ export interface WireLogPanelBridge {
 }
 
 export function WireLogPanel({ bridge }: { bridge: WireLogPanelBridge }) {
+    useTranslated('');
     const [chatId] = useState(() => bridge.getChatId());
     const [scoped, setScoped] = useState(Boolean(chatId));
     const close = useCallback(() => bridge.close(), [bridge]);
@@ -36,7 +38,7 @@ export function WireLogPanel({ bridge }: { bridge: WireLogPanelBridge }) {
     return (
         <dialog
             ref={dialogRef}
-            aria-label="链路日志"
+            aria-label={translate('Wire log')}
             onCancel={event => { event.preventDefault(); close(); }}
             onKeyDown={event => {
                 if (event.key !== 'Tab') return;
@@ -62,11 +64,11 @@ export function WireLogPanel({ bridge }: { bridge: WireLogPanelBridge }) {
         >
             <div {...stylex.props(styles.panel)}>
                 <div {...stylex.props(styles.header)}>
-                    <span {...stylex.props(styles.title)}>链路日志</span>
+                    <span {...stylex.props(styles.title)}>{translate('Wire log')}</span>
                     {scoped && chatId ? (
-                        <span {...stylex.props(styles.scope)} title={chatId}>{`会话：${chatId}`}</span>
+                        <span {...stylex.props(styles.scope)} title={chatId}>{translate('Chat: ${0}').replace('${0}', String(chatId))}</span>
                     ) : (
-                        <span {...stylex.props(styles.scope)}>全部会话</span>
+                        <span {...stylex.props(styles.scope)}>{translate('All chats')}</span>
                     )}
                     <span {...stylex.props(styles.spacer)} />
                     <button
@@ -74,15 +76,15 @@ export function WireLogPanel({ bridge }: { bridge: WireLogPanelBridge }) {
                         {...stylex.props(styles.button, scoped ? styles.buttonActive : null)}
                         disabled={!chatId}
                         aria-pressed={scoped}
-                        title={chatId ? '只看当前会话 / 查看全部' : '当前没有打开的会话'}
+                        title={chatId ? translate('Show only this chat / show all') : translate('No chat is open right now')}
                         onClick={() => setScoped(value => !value)}
                     >
-                        {scoped ? '只看当前会话' : '查看全部'}
+                        {scoped ? translate('Only this chat') : translate('Show all')}
                     </button>
                     <button
                         type="button"
                         {...stylex.props(styles.button)}
-                        title="关闭"
+                        title={translate('Close')}
                         onClick={close}
                     >
                         <i className="fa-solid fa-xmark" aria-hidden="true" />

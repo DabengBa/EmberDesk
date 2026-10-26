@@ -3,4 +3,4 @@ export {
     getSetupErrorMessage,
     getSetupPasswordVisibilityState,
     setupMessages,
-} from '../../public/scripts/setup-shared.js';
+} from './auth-messages.js';

@@ -1,42 +1,55 @@
-export const loginMessages = {
-    handleRequired: '请输入用户名',
-    codeRequired: '请输入恢复码',
-    genericError: '发生错误，请稍后重试',
-    incorrectCredentials: '账号或密码不正确',
-    userDisabled: '此账号已被禁用',
-    userNotFound: '未找到该用户',
-    incorrectCode: '恢复码不正确',
-    missingFields: '请填写必填项',
-    tooManyLoginAttempts: '尝试次数过多，请稍后重试或重置密码。',
-    tooManyRecoveryAttempts: '尝试次数过多，请稍后重试或联系管理员。',
-    passwordTooShort: '密码至少需要 8 个字符',
-    signingIn: '登录中...',
-    showPassword: '显示密码',
-    hidePassword: '隐藏密码',
-};
+import { translate } from './i18n.js';
 
-const serverErrorMessages = new Map([
-    ['Incorrect credentials', loginMessages.incorrectCredentials],
-    ['User is disabled', loginMessages.userDisabled],
-    ['User not found', loginMessages.userNotFound],
-    ['Incorrect code', loginMessages.incorrectCode],
-    ['Missing required fields', loginMessages.missingFields],
-    ['Password must be at least 8 characters long', loginMessages.passwordTooShort],
-    ['Too many attempts. Try again later or recover your password.', loginMessages.tooManyLoginAttempts],
-    ['Too many attempts. Try again later or contact your admin.', loginMessages.tooManyRecoveryAttempts],
+/**
+ * User-facing copy for the login screen.
+ *
+ * Resolved lazily so the strings follow the locale that is active when they are
+ * read, never the locale that happened to be active while this module loaded.
+ */
+
+export function getLoginMessages() {
+    return {
+        handleRequired: translate('Enter your username'),
+        codeRequired: translate('Enter your recovery code'),
+        genericError: translate('Something went wrong. Try again later.'),
+        incorrectCredentials: translate('Incorrect username or password'),
+        userDisabled: translate('This account is disabled'),
+        userNotFound: translate('No such user'),
+        incorrectCode: translate('Incorrect recovery code'),
+        missingFields: translate('Fill in the required fields'),
+        tooManyLoginAttempts: translate('Too many attempts. Try again later or reset your password.'),
+        tooManyRecoveryAttempts: translate('Too many attempts. Try again later or contact your admin.'),
+        passwordTooShort: translate('The password must be at least 8 characters long'),
+        signingIn: translate('Signing in…'),
+        showPassword: translate('Show password'),
+        hidePassword: translate('Hide password'),
+    };
+}
+
+const serverErrorKeys = new Map([
+    ['Incorrect credentials', 'incorrectCredentials'],
+    ['User is disabled', 'userDisabled'],
+    ['User not found', 'userNotFound'],
+    ['Incorrect code', 'incorrectCode'],
+    ['Missing required fields', 'missingFields'],
+    ['Password must be at least 8 characters long', 'passwordTooShort'],
+    ['Too many attempts. Try again later or recover your password.', 'tooManyLoginAttempts'],
+    ['Too many attempts. Try again later or contact your admin.', 'tooManyRecoveryAttempts'],
 ]);
 
 /**
- * Returns user-facing Chinese copy for known auth API errors.
+ * Returns user-facing copy for known auth API errors.
  * @param {unknown} message Server error message
  * @returns {string} Localized error message
  */
 export function getLoginErrorMessage(message) {
+    const messages = getLoginMessages();
     if (typeof message !== 'string') {
-        return loginMessages.genericError;
+        return messages.genericError;
     }
 
-    return serverErrorMessages.get(message) || message || loginMessages.genericError;
+    const key = serverErrorKeys.get(message);
+    return (key ? messages[key] : message) || messages.genericError;
 }
 
 /**
@@ -57,12 +70,13 @@ export function buildHomeRedirectUrl(href) {
  * @returns {{type: string, iconClassName: string, ariaPressed: string, ariaLabel: string}}
  */
 export function getPasswordVisibilityState(currentType) {
+    const messages = getLoginMessages();
     if (currentType === 'password') {
         return {
             type: 'text',
             iconClassName: 'fa-solid fa-eye-slash',
             ariaPressed: 'true',
-            ariaLabel: loginMessages.hidePassword,
+            ariaLabel: messages.hidePassword,
         };
     }
 
@@ -70,7 +84,7 @@ export function getPasswordVisibilityState(currentType) {
         type: 'password',
         iconClassName: 'fa-solid fa-eye',
         ariaPressed: 'false',
-        ariaLabel: loginMessages.showPassword,
+        ariaLabel: messages.showPassword,
     };
 }
 
@@ -89,5 +103,5 @@ export function getRecoveryStep(state) {
  * @returns {string}
  */
 export function formatLockoutMessage(remaining) {
-    return `账号已锁定，请在 ${remaining} 秒后重试。`;
+    return translate('Account locked. Try again in ${0} seconds.').replace('${0}', String(remaining));
 }

@@ -44,36 +44,38 @@ export const WORLD_FIELD_IDS = Object.freeze(['content', 'comment', 'keys']);
 export const CHAT_FIELD_IDS = Object.freeze(['mes', 'reasoning']);
 export const CHAT_SCOPES = Object.freeze(['off', 'current']);
 
+// `label` carries the locale-independent field id; the client resolves the
+// user-facing copy from it, so this server never ships localized text.
 const CARD_FIELD_DEFS = Object.freeze({
-    description: { label: '描述', paths: [['data', 'description'], ['description']] },
-    scenario: { label: '场景', paths: [['data', 'scenario'], ['scenario']] },
-    firstMes: { label: '开场白', paths: [['data', 'first_mes'], ['first_mes']] },
-    exampleMessages: { label: '示例对话', paths: [['data', 'mes_example'], ['mes_example']] },
-    alternateGreetings: { label: '备选开场白', paths: [['data', 'alternate_greetings']], array: true },
-    systemPrompt: { label: '系统提示', paths: [['data', 'system_prompt']] },
-    postHistoryInstructions: { label: '历史后指令', paths: [['data', 'post_history_instructions']] },
-    depthPrompt: { label: '深度提示', paths: [['data', 'extensions', 'depth_prompt', 'prompt']] },
-    creatorNotes: { label: '作者备注', paths: [['data', 'creator_notes'], ['creatorcomment']] },
-    creator: { label: '创作者', paths: [['data', 'creator']] },
-    characterVersion: { label: '版本号', paths: [['data', 'character_version']] },
-    tags: { label: '标签', paths: [['data', 'tags'], ['tags']], array: true, dedupe: true },
+    description: { label: 'description', paths: [['data', 'description'], ['description']] },
+    scenario: { label: 'scenario', paths: [['data', 'scenario'], ['scenario']] },
+    firstMes: { label: 'firstMes', paths: [['data', 'first_mes'], ['first_mes']] },
+    exampleMessages: { label: 'exampleMessages', paths: [['data', 'mes_example'], ['mes_example']] },
+    alternateGreetings: { label: 'alternateGreetings', paths: [['data', 'alternate_greetings']], array: true },
+    systemPrompt: { label: 'systemPrompt', paths: [['data', 'system_prompt']] },
+    postHistoryInstructions: { label: 'postHistoryInstructions', paths: [['data', 'post_history_instructions']] },
+    depthPrompt: { label: 'depthPrompt', paths: [['data', 'extensions', 'depth_prompt', 'prompt']] },
+    creatorNotes: { label: 'creatorNotes', paths: [['data', 'creator_notes'], ['creatorcomment']] },
+    creator: { label: 'creator', paths: [['data', 'creator']] },
+    characterVersion: { label: 'characterVersion', paths: [['data', 'character_version']] },
+    tags: { label: 'tags', paths: [['data', 'tags'], ['tags']], array: true, dedupe: true },
 });
 
 const WORLD_BOOK_FIELD_MAP = Object.freeze({
-    content: { label: '正文', fields: ['content'], array: false },
-    comment: { label: '备注', fields: ['comment'], array: false },
-    keys: { label: '关键词', fields: ['key', 'keysecondary'], array: true },
+    content: { label: 'content', fields: ['content'], array: false },
+    comment: { label: 'comment', fields: ['comment'], array: false },
+    keys: { label: 'keys', fields: ['key', 'keysecondary'], array: true },
 });
 
 const EMBEDDED_BOOK_FIELD_MAP = Object.freeze({
-    content: { label: '正文', fields: ['content'], array: false },
-    comment: { label: '备注', fields: ['comment'], array: false },
-    keys: { label: '关键词', fields: ['keys', 'secondary_keys'], array: true },
+    content: { label: 'content', fields: ['content'], array: false },
+    comment: { label: 'comment', fields: ['comment'], array: false },
+    keys: { label: 'keys', fields: ['keys', 'secondary_keys'], array: true },
 });
 
 const CHAT_FIELD_DEFS = Object.freeze({
-    mes: { label: '消息正文' },
-    reasoning: { label: '思维链' },
+    mes: { label: 'mes' },
+    reasoning: { label: 'reasoning' },
 });
 
 function escapeRegExp(text) {

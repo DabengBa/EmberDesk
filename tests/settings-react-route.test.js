@@ -179,10 +179,10 @@ describe('settings React route flag', () => {
         expect(routeSource).toContain('const [showDiagnostics, setShowDiagnostics] = useState(false);');
         expect(routeSource).toContain('window.setTimeout(() => {');
         expect(routeSource).toContain('setSaveStatus(null);');
-        expect(routeSource).toContain("setSaveStatus({ kind: 'success', message: '已保存' });");
+        expect(routeSource).toContain("setSaveStatus({ kind: 'success', message: t('Saved') });");
         expect(routeSource).toContain("window.sessionStorage.setItem('emberdesk-settings-saved-at'");
         expect(routeSource).toContain('setSaveStatus({ kind:');
-        expect(routeSource).toContain('诊断');
+        expect(routeSource).toContain("t('Diagnostics')");
         expect(routeSource).toContain('{showDiagnostics && (');
         expect(routeSource).toContain('onClick={() => setShowDiagnostics(value => !value)}');
         expect(routeSource).not.toContain('<h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-zinc-300">Coverage</h2>');
@@ -803,7 +803,7 @@ describe('settings React route flag', () => {
         const scriptSource = fs.readFileSync(path.join(repoRoot, 'public', 'script.js'), 'utf8');
 
         expect(routeSource).toContain('setHasRevisionConflict(true)');
-        expect(routeSource).toContain('重新加载当前设置');
+        expect(routeSource).toContain("t('Reload current settings')");
         expect(routeSource).toContain('disabled={isBusy || settingsQuery.isPending || settingsQuery.isFetching || isPristine || hasRevisionConflict}');
         // Legacy settings drawer toggles are deleted; no route-redirect listener remains.
         expect(scriptSource).not.toContain('LEGACY_SETTINGS_DRAWER_ROUTE_TARGETS');

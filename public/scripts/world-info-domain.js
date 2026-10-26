@@ -6,6 +6,7 @@
  */
 
 import { getOptionId, setValueByPath } from './util/primitives.js';
+import { translate } from './i18n.js';
 
 export const WORLD_INFO_LOGIC = {
     AND_ANY: 0,
@@ -136,12 +137,14 @@ export function getWorldInfoWorkbenchPositionLabel(entry) {
 
     switch (normalizeWorldInfoEntryPosition(entry.position)) {
         case WORLD_INFO_POSITION.before:
-            return '世界书';
-        case WORLD_INFO_POSITION.EMTop: return '示例消息顶部';
-        case WORLD_INFO_POSITION.EMBottom: return '示例消息底部';
-        case WORLD_INFO_POSITION.atDepth: return `按深度 ${entry.depth ?? DEFAULT_DEPTH}`;
-        case WORLD_INFO_POSITION.outlet: return entry.outletName ? `出口: ${entry.outletName}` : '出口';
-        default: return '未知位置';
+            return translate('World book');
+        case WORLD_INFO_POSITION.EMTop: return translate('Example messages top');
+        case WORLD_INFO_POSITION.EMBottom: return translate('Example messages bottom');
+        case WORLD_INFO_POSITION.atDepth: return translate('At depth ${0}').replace('${0}', String(entry.depth ?? DEFAULT_DEPTH));
+        case WORLD_INFO_POSITION.outlet: return entry.outletName
+            ? translate('Outlet: ${0}').replace('${0}', String(entry.outletName))
+            : translate('Outlet');
+        default: return translate('Unknown position');
     }
 }
 

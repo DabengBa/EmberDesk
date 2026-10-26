@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { translate } from '../compat/i18n.js';
 
 export interface CharacterLibraryToolbarSortOption {
     value: string;
@@ -67,6 +68,14 @@ export function buildCharacterLibraryToolbarDefaults(state: CharacterLibraryTool
     };
 }
 
-export function getCharacterLibraryBulkSelectionShortText(count: number, locale = globalThis.navigator?.language ?? 'en') {
-    return locale.toLowerCase().startsWith('zh') ? `${count}个` : `${count} sel`;
+/**
+ * Compact bulk-selection counter for the character toolbar.
+ *
+ * Follows the UI locale (not the browser locale) so a Chinese interface never
+ * shows an English counter and vice versa.
+ * @param count Selected characters
+ * @returns Compact counter text
+ */
+export function getCharacterLibraryBulkSelectionShortText(count: number) {
+    return translate('${0} sel').replace('${0}', String(count));
 }

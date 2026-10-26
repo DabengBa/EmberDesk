@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { SetupForm } from '@/components/setup/SetupForm';
 import { buildSetupRequestBody, getSetupErrorMessage, setupMessages } from '@/lib/setup-helpers';
 import { loginStyles } from '@/styles/login.styles';
+import { translate, useTranslated } from '@/compat/i18n.js';
 
 export const Route = createFileRoute('/setup')({
     component: SetupPage,
@@ -91,6 +92,7 @@ async function readJsonObject(response: Response) {
 }
 
 function SetupPage() {
+    useTranslated('');
     const [passwordVisible, setPasswordVisible] = useState(false);
     const [confirmPasswordVisible, setConfirmPasswordVisible] = useState(false);
     const [setupError, setSetupError] = useState('');
@@ -101,10 +103,10 @@ function SetupPage() {
         queryKey: ['setup', 'mode'],
         queryFn: async () => {
             const response = await fetch('/api/users/setup-mode').catch(() => {
-                throw new MessageError('无法读取安装状态。');
+                throw new MessageError(translate('Could not read the installation status.'));
             });
             if (!response.ok) {
-                throw new MessageError('无法读取安装状态。');
+                throw new MessageError(translate('Could not read the installation status.'));
             }
 
             const data = await readJsonObject(response);
@@ -237,12 +239,12 @@ function SetupPage() {
         <main {...stylex.props(loginStyles.page)}>
             {setupModeQuery.isPending ? (
                 <section {...stylex.props(loginStyles.card)} aria-busy="true">
-                    <p {...stylex.props(loginStyles.fieldLabel)}>正在读取安装状态...</p>
+                    <p {...stylex.props(loginStyles.fieldLabel)}>{translate('Reading the installation status...')}</p>
                 </section>
             ) : setupModeQuery.isError ? (
                 <section {...stylex.props(loginStyles.card)}>
                     <div {...stylex.props(loginStyles.error, loginStyles.errorVisible)} role="alert">
-                        {setupModeQuery.error instanceof Error ? setupModeQuery.error.message : '无法读取安装状态。'}
+                        {setupModeQuery.error instanceof Error ? setupModeQuery.error.message : translate('Could not read the installation status.')}
                     </div>
                     <div {...stylex.props(loginStyles.actions)}>
                         <button
@@ -251,7 +253,7 @@ function SetupPage() {
                             disabled={setupModeQuery.isFetching}
                             onClick={() => void setupModeQuery.refetch()}
                         >
-                            重试
+                            {translate('Retry')}
                         </button>
                     </div>
                 </section>

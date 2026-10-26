@@ -1,11 +1,11 @@
 /**
  * Wire log view-model helpers.
  *
- * Deliberately import-free: the record shapes it reads are documented in
- * `./types.ts`, and having no import statement at all keeps this module
- * loadable as plain ESM by the unit suite (jest does not transform
- * TypeScript, and a type-only import is still parsed as syntax).
+ * Reads record shapes documented in `./types.ts`. The only runtime import is the
+ * i18n bridge, so the module stays loadable as plain ESM by the unit suite.
  */
+
+import { translate } from '../../compat/i18n.js';
 
 /** Message previews are capped so one huge turn cannot dominate the list. */
 const PREVIEW_LIMIT = 140;
@@ -265,12 +265,12 @@ export function formatUsage(usage: unknown): string {
     const completion = count(source.completion_tokens) ?? count(source.output_tokens);
     const total = count(source.total_tokens);
     const breakdown = [
-        prompt !== null ? `提示 ${prompt}` : '',
-        completion !== null ? `完成 ${completion}` : '',
+        prompt !== null ? `${translate('prompt')} ${prompt}` : '',
+        completion !== null ? `${translate('completion')} ${completion}` : '',
     ].filter(Boolean).join(' / ');
 
     if (total !== null) {
-        return breakdown ? `${total} (${breakdown})` : `总计 ${total}`;
+        return breakdown ? `${total} (${breakdown})` : `${translate('total')} ${total}`;
     }
     return breakdown || '—';
 }

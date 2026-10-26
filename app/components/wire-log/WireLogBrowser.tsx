@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import * as stylex from '@stylexjs/stylex';
 
 import { apiFetch } from '../../lib/request';
-import { translate } from '../../compat/i18n.js';
+import { translate, useTranslated } from '../../compat/i18n.js';
 import { formatTimestamp, formatUsage } from './wire-log-helpers';
 import { WireLogDetail } from './WireLogDetail';
 import { wireLogStyles as styles } from './wire-log.styles';
@@ -71,6 +71,7 @@ export type WireLogBrowserProps = {
 };
 
 export function WireLogBrowser({ compact = false, chatId = null, onConfigChange }: WireLogBrowserProps) {
+    useTranslated('');
     const [entries, setEntries] = useState<WireLogListEntry[]>([]);
     const [listState, setListState] = useState<'loading' | 'ready' | 'error'>('loading');
     const [listError, setListError] = useState('');
@@ -108,10 +109,10 @@ export function WireLogBrowser({ compact = false, chatId = null, onConfigChange 
             });
             const data = await readJson(response);
             if (!response.ok) {
-                throw new Error(errorMessageFrom(data, '无法读取 Wire Log 列表。'));
+                throw new Error(errorMessageFrom(data, translate('Could not read the Wire Log list.')));
             }
             if (!Array.isArray(data)) {
-                throw new Error('Wire Log 列表格式无效。');
+                throw new Error(translate('The Wire Log list response is malformed.'));
             }
             if (!signal.aborted) {
                 setEntries(data as WireLogListEntry[]);
@@ -139,7 +140,7 @@ export function WireLogBrowser({ compact = false, chatId = null, onConfigChange 
                 const response = await apiFetch('/api/wire-logs/config', { method: 'GET', signal: controller.signal });
                 const data = await readJson(response);
                 if (!response.ok) {
-                    throw new Error(errorMessageFrom(data, '无法读取 Wire Log 设置。'));
+                    throw new Error(errorMessageFrom(data, translate('Could not read the Wire Log settings.')));
                 }
                 if (!controller.signal.aborted) {
                     setConfig(data as WireLogConfig);
@@ -171,7 +172,7 @@ export function WireLogBrowser({ compact = false, chatId = null, onConfigChange 
                 });
                 const data = await readJson(response);
                 if (!response.ok) {
-                    throw new Error(errorMessageFrom(data, '无法读取该条 Wire Log。'));
+                    throw new Error(errorMessageFrom(data, translate('Could not read this Wire Log record.')));
                 }
                 if (!controller.signal.aborted) {
                     setRecord(data as WireLogRecord);
@@ -201,7 +202,7 @@ export function WireLogBrowser({ compact = false, chatId = null, onConfigChange 
             });
             const data = await readJson(response);
             if (!response.ok) {
-                throw new Error(errorMessageFrom(data, '无法保存 Wire Log 设置。'));
+                throw new Error(errorMessageFrom(data, translate('Could not save the Wire Log settings.')));
             }
             setConfig(data as WireLogConfig);
             onConfigChange?.(data as WireLogConfig);
@@ -218,7 +219,7 @@ export function WireLogBrowser({ compact = false, chatId = null, onConfigChange 
         try {
             const response = await apiFetch(`/api/wire-logs/${encodeURIComponent(id)}`, { method: 'DELETE' });
             if (!response.ok) {
-                throw new Error(errorMessageFrom(await readJson(response), '删除失败。'));
+                throw new Error(errorMessageFrom(await readJson(response), translate('Delete failed.')));
             }
             if (selectedId === id) {
                 setSelectedId(null);
@@ -251,12 +252,14 @@ export function WireLogBrowser({ compact = false, chatId = null, onConfigChange 
         <div {...stylex.props(styles.root)} data-wire-log-browser={compact ? 'compact' : 'full'}>
             <div {...stylex.props(styles.meta)}>
                 <span {...stylex.props(styles.badge, config?.enabled ? styles.badgeOk : styles.badgeError)}>
-                    {config?.enabled ? '追踪已开启' : '追踪未开启'}
+                    {config?.enabled ? translate('Tracing is on') : translate('Tracing is off')}
                 </span>
                 {config ? (
                     <span>
-                        {`保留 ${config.retentionDays} 天 · 正文捕获上限 ${Math.round(config.maxFileBytes / 1024 / 1024 * 10) / 10} MiB`}
-                        {config.persisted === false ? ' · 设置无法持久化' : ''}
+                        {translate('Retained for ${0} days · body capture limit ${1} MiB')
+                    .replace('${0}', String(config.retentionDays))
+                    .replace('${1}', String(Math.round(config.maxFileBytes / 1024 / 1024 * 10) / 10))}
+                        {config.persisted === false ? ` · ${translate('settings cannot be persisted')}` : ''}
                     </span>
                 ) : null}
                 <button
@@ -265,14 +268,14 @@ export function WireLogBrowser({ compact = false, chatId = null, onConfigChange 
                     disabled={configBusy || !config}
                     onClick={() => { void toggleLogging(); }}
                 >
-                    {configBusy ? '保存中…' : config?.enabled ? '关闭追踪' : '开启追踪'}
+                    {configBusy ? translate('Saving…') : config?.enabled ? translate('Turn tracing off') : translate('Turn tracing on')}
                 </button>
                 <button
                     type="button"
                     {...stylex.props(styles.button)}
                     onClick={() => setReloadToken(token => token + 1)}
                 >
-                    {translate('刷新')}
+                    {translate('Refresh')}
                 </button>
             </div>
 
@@ -282,17 +285,17 @@ export function WireLogBrowser({ compact = false, chatId = null, onConfigChange 
 
             <div {...stylex.props(styles.toolbar)}>
                 <label {...stylex.props(styles.field)}>
-                    <span {...stylex.props(styles.fieldLabel)}>请求 ID / 关键字</span>
+                    <span {...stylex.props(styles.fieldLabel)}>{translate('Request ID / keyword')}</span>
                     <input
                         type="search"
                         {...stylex.props(styles.input)}
                         value={keyword}
-                        placeholder="wl_… 或模型/会话"
+                        placeholder={translate('wl_… or model/chat')}
                         onChange={event => setKeyword(event.target.value)}
                     />
                 </label>
                 <label {...stylex.props(styles.field)}>
-                    <span {...stylex.props(styles.fieldLabel)}>模型</span>
+                    <span {...stylex.props(styles.fieldLabel)}>{translate('Model')}</span>
                     <input
                         type="search"
                         {...stylex.props(styles.input)}
@@ -302,20 +305,20 @@ export function WireLogBrowser({ compact = false, chatId = null, onConfigChange 
                     />
                 </label>
                 <label {...stylex.props(styles.field)}>
-                    <span {...stylex.props(styles.fieldLabel)}>状态</span>
+                    <span {...stylex.props(styles.fieldLabel)}>{translate('Status')}</span>
                     <select
                         {...stylex.props(styles.select)}
                         value={statusFilter}
                         onChange={event => setStatusFilter(event.target.value as '' | WireLogStatus)}
                     >
-                        <option value="">全部</option>
-                        <option value="completed">completed</option>
-                        <option value="error">error</option>
-                        <option value="pending">pending</option>
+                        <option value="">{translate('All')}</option>
+                        <option value="completed">{translate('completed')}</option>
+                        <option value="error">{translate('error')}</option>
+                        <option value="pending">{translate('pending')}</option>
                     </select>
                 </label>
                 <label {...stylex.props(styles.field)}>
-                    <span {...stylex.props(styles.fieldLabel)}>日期</span>
+                    <span {...stylex.props(styles.fieldLabel)}>{translate('Date')}</span>
                     <input
                         type="date"
                         {...stylex.props(styles.input)}
@@ -328,8 +331,8 @@ export function WireLogBrowser({ compact = false, chatId = null, onConfigChange 
             <div {...stylex.props(styles.meta)}>
                 <span>
                     {listState === 'ready'
-                        ? `${visibleEntries.length} / ${entries.length} 条记录`
-                        : listState === 'loading' ? '加载中…' : '列表加载失败'}
+                        ? translate('${0} / ${1} records').replace('${0}', String(visibleEntries.length)).replace('${1}', String(entries.length))
+                        : listState === 'loading' ? translate('Loading…') : translate('The list failed to load')}
                 </span>
             </div>
 
@@ -339,12 +342,12 @@ export function WireLogBrowser({ compact = false, chatId = null, onConfigChange 
 
             {listState === 'ready' && entries.length === 0 ? (
                 <p {...stylex.props(styles.emptyNote)}>
-                    还没有记录。开启追踪后，每次真实上游生成都会在这里留下一条请求/响应记录。
+                    {translate('No records yet. Once tracing is on, every real upstream generation leaves a request/response record here.')}
                 </p>
             ) : null}
 
             <div {...stylex.props(styles.layout)}>
-                <div {...stylex.props(styles.list)} role="list" aria-label="Wire Log 记录">
+                <div {...stylex.props(styles.list)} role="list" aria-label={translate('Wire Log records')}>
                     {visibleEntries.map(entry => {
                         const isActive = entry.id === selectedId;
                         return (
@@ -359,17 +362,17 @@ export function WireLogBrowser({ compact = false, chatId = null, onConfigChange 
                                 <span {...stylex.props(styles.rowTitle)}>
                                     <span {...stylex.props(styles.rowTime)}>{formatTimestamp(entry.ts)}</span>
                                     <span {...stylex.props(styles.badge, entry.status === 'error' ? styles.badgeError : styles.badgeOk)}>
-                                        {entry.status}
+                                        {translate(entry.status)}
                                     </span>
                                     {entry.response?.streamed ? (
-                                        <span {...stylex.props(styles.badge)}>stream</span>
+                                        <span {...stylex.props(styles.badge)}>{translate('Streaming')}</span>
                                     ) : null}
                                 </span>
                                 <span {...stylex.props(styles.rowSub)}>
-                                    {`${entry.context.model ?? '未知模型'} · ${entry.request.messageCount} msg · ${entry.request.toolCount} tools · ${formatDuration(entry.response?.durationMs)}`}
+                                    {`${entry.context.model ?? translate('Unknown model')} · ${translate('${0} messages').replace('${0}', String(entry.request.messageCount))} · ${translate('${0} tools').replace('${0}', String(entry.request.toolCount))} · ${formatDuration(entry.response?.durationMs)}`}
                                 </span>
                                 <span {...stylex.props(styles.rowSub)}>
-                                    {`token ${formatUsage(entry.response?.usage)}`}
+                                    {`${translate('Tokens')} ${formatUsage(entry.response?.usage)}`}
                                 </span>
                                 <span {...stylex.props(styles.rowSub)}>{entry.id}</span>
                                 {entry.error ? <span {...stylex.props(styles.rowSub)}>{entry.error}</span> : null}
@@ -377,7 +380,7 @@ export function WireLogBrowser({ compact = false, chatId = null, onConfigChange 
                         );
                     })}
                     {listState === 'ready' && entries.length > 0 && visibleEntries.length === 0 ? (
-                        <p {...stylex.props(styles.emptyNote)}>没有匹配当前筛选条件的记录。</p>
+                        <p {...stylex.props(styles.emptyNote)}>{translate('No records match the current filters.')}</p>
                     ) : null}
                 </div>
 

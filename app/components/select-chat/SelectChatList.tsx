@@ -1,4 +1,4 @@
-import { translate } from '../../compat/i18n.js';
+import { translate, useTranslated } from '../../compat/i18n.js';
 
 /**
  * React-owned past-chat rows rendered inside the legacy #select_chat_div
@@ -29,6 +29,7 @@ export interface SelectChatListBridge {
 }
 
 function SelectChatRow({ item, avatarImg, isCurrent }: { item: SelectChatListItem; avatarImg: string; isCurrent: boolean }) {
+    useTranslated('');
     return (
         <div className="select_chat_block_wrapper flex-container">
             <div
@@ -67,6 +68,7 @@ function SelectChatRow({ item, avatarImg, isCurrent }: { item: SelectChatListIte
 }
 
 export function SelectChatList({ state, bridge }: { state: SelectChatListState; bridge: SelectChatListBridge }) {
+    useTranslated('');
     if (state.items.length === 0) {
         return (
             <output id="select_chat_empty" className="select_chat_empty">

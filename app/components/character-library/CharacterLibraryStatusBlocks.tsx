@@ -1,4 +1,4 @@
-import { t, translate } from '../../compat/i18n.js';
+import { t, translate, useTranslated } from '../../compat/i18n.js';
 
 interface EmptyBlockProps {
     text: string;
@@ -13,14 +13,13 @@ export function CharacterLibraryEmptyBlock({
     showClearFilters = false,
     onClearFilters,
 }: EmptyBlockProps) {
+    useTranslated('');
     return (
         <div className="character_list_empty empty_block flex-container flexFlowColumn alignItemsCenter justifyCenter gap10p">
             <div className="empty_block_text">{text}</div>
             <div className="empty_block_message">{message}</div>
             {showClearFilters ? (
-                <button type="button" className="menu_button clear_character_filters" data-i18n="Clear filters" onClick={onClearFilters}>
-                    {translate('Clear filters')}
-                </button>
+                <button type="button" className="menu_button clear_character_filters"  onClick={onClearFilters}>{translate('Clear filters')}</button>
             ) : null}
         </div>
     );

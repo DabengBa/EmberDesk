@@ -1,6 +1,7 @@
 import type { FormEvent } from 'react';
 import * as stylex from '@stylexjs/stylex';
 import { loginStyles } from '@/styles/login.styles';
+import { translate, useTranslated } from '@/compat/i18n.js';
 type RecoveryFormProps = {
     form: any;
     recoveryVisible: boolean;
@@ -28,11 +29,12 @@ export function RecoveryForm({
     onSubmit,
     onCancel,
 }: RecoveryFormProps) {
+    useTranslated('');
     return (
         <section {...stylex.props(loginStyles.card)} id="recoveryCard" style={{ display: recoveryVisible ? 'block' : 'none' }} aria-labelledby="recovery-title">
             <header {...stylex.props(loginStyles.header)}>
                 <img src="/img/logo.png" alt="" {...stylex.props(loginStyles.logo)} />
-                <h1 id="recovery-title" {...stylex.props(loginStyles.headerTitle)}>重置密码</h1>
+                <h1 id="recovery-title" {...stylex.props(loginStyles.headerTitle)}>{translate('Reset password')}</h1>
             </header>
 
             <form id="recoveryForm" {...stylex.props(loginStyles.form)} noValidate onSubmit={onSubmit}>
@@ -40,14 +42,14 @@ export function RecoveryForm({
                     <form.Field name="handle">
                         {(field: any) => (
                             <div {...stylex.props(loginStyles.field)}>
-                                <label htmlFor="recoverHandle" {...stylex.props(loginStyles.fieldLabel)}>用户名</label>
+                                <label htmlFor="recoverHandle" {...stylex.props(loginStyles.fieldLabel)}>{translate('Username')}</label>
                                 <input
                                     {...stylex.props(loginStyles.input)}
                                     id="recoverHandle"
                                     name="recoverHandle"
                                     type="text"
                                     autoComplete="username"
-                                    placeholder="请输入用户名"
+                                    placeholder={translate('Please enter a username')}
                                     required
                                     aria-required="true"
                                     aria-invalid={invalidField === 'handle' || undefined}
@@ -66,11 +68,11 @@ export function RecoveryForm({
                 </div>
 
                 <p {...stylex.props(loginStyles.recoveryNote)} id="recoveryCodeHint">
-                    恢复码会输出到服务端控制台，不会通过邮件或短信发送，请联系管理员获取。
+                    {translate('Recovery codes are printed to the server console. They are not sent by email or SMS; ask your administrator for one.')}
                 </p>
 
                 <div id="recoveryStep1" {...stylex.props(loginStyles.actions)} style={{ display: currentStep === 1 ? 'flex' : 'none' }}>
-                    <button type="submit" {...stylex.props(loginStyles.btn)} id="sendCodeBtn" disabled={isSubmitting} aria-describedby="recoveryCodeHint">生成恢复码</button>
+                    <button type="submit" {...stylex.props(loginStyles.btn)} id="sendCodeBtn" disabled={isSubmitting} aria-describedby="recoveryCodeHint">{translate('Generate recovery code')}</button>
                 </div>
 
                 <div id="recoveryStep2" style={{ display: currentStep === 2 ? 'block' : 'none' }}>
@@ -78,7 +80,7 @@ export function RecoveryForm({
                         <form.Field name="code">
                             {(field: any) => (
                                 <div {...stylex.props(loginStyles.field)}>
-                                    <label htmlFor="recoveryCode" {...stylex.props(loginStyles.fieldLabel)}>恢复码</label>
+                                    <label htmlFor="recoveryCode" {...stylex.props(loginStyles.fieldLabel)}>{translate('Recovery code')}</label>
                                     <input
                                         {...stylex.props(loginStyles.input)}
                                         id="recoveryCode"
@@ -104,14 +106,14 @@ export function RecoveryForm({
                         <form.Field name="newPassword">
                             {(field: any) => (
                                 <div {...stylex.props(loginStyles.field)}>
-                                    <label htmlFor="newPassword" {...stylex.props(loginStyles.fieldLabel)}>新密码</label>
+                                    <label htmlFor="newPassword" {...stylex.props(loginStyles.fieldLabel)}>{translate('New password')}</label>
                                     <input
                                         {...stylex.props(loginStyles.input)}
                                         id="newPassword"
                                         name="newPassword"
                                         type="password"
                                         autoComplete="new-password"
-                                        placeholder="请输入新密码"
+                                        placeholder={translate('Please enter a new password')}
                                         aria-invalid={invalidField === 'newPassword' || undefined}
                                         aria-describedby={invalidField === 'newPassword' ? 'recoveryError' : undefined}
                                         value={field.state.value}
@@ -127,7 +129,7 @@ export function RecoveryForm({
                         </form.Field>
                     </div>
                     <div {...stylex.props(loginStyles.actions)}>
-                        <button type="submit" {...stylex.props(loginStyles.btn)} id="resetBtn" disabled={isSubmitting}>重置密码</button>
+                        <button type="submit" {...stylex.props(loginStyles.btn)} id="resetBtn" disabled={isSubmitting}>{translate('Reset password')}</button>
                     </div>
                 </div>
             </form>
@@ -140,7 +142,7 @@ export function RecoveryForm({
                 onCancel();
             }}
             >
-                返回登录
+                {translate('Back to sign in')}
             </button>
         </section>
     );
