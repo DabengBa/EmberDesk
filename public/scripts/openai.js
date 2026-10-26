@@ -72,7 +72,7 @@ import {
     resolveReasoningEffort,
     resolveVerbosity,
 } from './openai-provider-capabilities.js';
-import { getActivePipelineRunId } from './reply-pipeline-core.js';
+import { buildStepPrompt, getActivePipelineRunId, getPipelineRunState, PIPELINE_FALLBACK_PROMPT } from './reply-pipeline-core.js';
 
 function syncSegmentedFromSelect(selectId) {
     const value = $('#' + selectId).val();
@@ -926,10 +926,9 @@ async function populateChatCompletion(prompts, chatCompletion, { bias, quietProm
  * @param {string} options.bias - The bias to be added in the conversation.
  * @param {Object} options.extensionPrompts - An object containing additional prompts.
  * @param {string} options.type - The type of generation that triggered the prompt
- * @param {string} [options.pipelineStepTag] - Active reply-pipeline step trigger tag (e.g. 'pipeline:review')
  * @returns {Promise<Object>} prompts - The prepared and merged system and user-defined prompts.
  */
-async function preparePromptsForChatCompletion({ name2: _name2, worldInfo, charDescription, quietPrompt, bias, extensionPrompts, type, pipelineStepTag }) {
+async function preparePromptsForChatCompletion({ name2: _name2, worldInfo, charDescription, quietPrompt, bias, extensionPrompts, type }) {
     // Create entries for system prompts
     const systemPrompts = [
         // Ordered prompts for which a marker should exist
@@ -961,9 +960,9 @@ async function preparePromptsForChatCompletion({ name2: _name2, worldInfo, charD
         }
     }
 
-    // This is the prompt order defined by the user. A live pipeline step adds
-    // its `pipeline:<tool>` tag so step-scoped prompts inject this round only.
-    const prompts = promptManager.getPromptCollection(type, pipelineStepTag ? [pipelineStepTag] : []);
+    // This is the prompt order defined by the user. Step-scoped pipeline prompts
+    // are NOT part of the captured base; they are appended per round as a tail.
+    const prompts = promptManager.getPromptCollection(type);
 
     // Merge system prompts with prompt manager prompts
     systemPrompts.forEach(prompt => {
@@ -989,6 +988,47 @@ async function preparePromptsForChatCompletion({ name2: _name2, worldInfo, charD
     });
 
     return prompts;
+}
+
+/**
+ * Collects prompts that fire ONLY for a pipeline step tag (not for the base
+ * generation type). Shared by live runs and the inspector preview so both
+ * assemble the same step tail.
+ * @param {string} pipelineStepTag Trigger tag, e.g. 'pipeline:analyze'
+ * @param {string} type Generation type receiving the base prompts
+ * @returns {{role: string, content: string}[]}
+ */
+function collectPipelineStepPrompts(pipelineStepTag, type) {
+    const stepPrompts = [];
+    for (const entry of promptManager.getPromptOrderForCharacter(promptManager.activeCharacter)) {
+        const prompt = promptManager.getPromptById(entry.identifier);
+        const triggers = prompt?.injection_trigger ?? [];
+        if (!entry.enabled || !triggers.includes(pipelineStepTag) || triggers.includes(type) || triggers.includes('all')) continue;
+        const prepared = promptManager.preparePrompt(prompt);
+        if (prepared.content) stepPrompts.push({ role: prepared.role, content: prepared.content });
+    }
+    return stepPrompts;
+}
+
+/**
+ * Projects a wire message onto the shape the count route can encode.
+ * src/endpoints/tokenizers.js encodes every value it receives and drops the
+ * rest of a message when one throws, so null content and object/array fields
+ * (tool_calls, refusal, reasoning_details, content parts) must become strings.
+ * The wire history itself is never rewritten.
+ * @param {object} message Chat completion message
+ * @returns {object}
+ */
+function normalizeMessageForTokenCount(message) {
+    const countable = {};
+    for (const [key, value] of Object.entries(message ?? {})) {
+        if (typeof value === 'string') countable[key] = value;
+        else if (value === null || value === undefined) countable[key] = '';
+        else if (Array.isArray(value)) countable[key] = value.length ? JSON.stringify(value) : '';
+        else if (typeof value === 'object') countable[key] = JSON.stringify(value);
+        else countable[key] = String(value);
+    }
+    return countable;
 }
 
 /**
@@ -1023,6 +1063,21 @@ export async function prepareOpenAIMessages({
     messages,
     pipelineStepTag,
 }, dryRun, { squash = null, bookkeep = true } = {}) {
+    const run = !dryRun && type === 'normal' ? getPipelineRunState() : null;
+    if (run) {
+        const round = run.fallbackRound ? 'fallback' : run.index;
+        if (run.promptRound !== round) {
+            run.stepPrompts = pipelineStepTag && !run.fallbackRound
+                ? collectPipelineStepPrompts(pipelineStepTag, type) : [];
+            run.promptRound = round;
+        }
+        // The first normal assembly owns the base. Continuations must never
+        // rerun WI/macros/history trimming or squash the captured wire prefix.
+        if (run.messages) return [structuredClone(run.messages), false];
+    }
+    // Preview carries the same step-only tail the live send appends, without
+    // touching the live run.
+    const previewStepTail = dryRun && pipelineStepTag ? collectPipelineStepPrompts(pipelineStepTag, type) : [];
     // Without a character selected, there is no way to accurately calculate tokens
     if (!promptManager.activeCharacter && dryRun) return [null, false];
 
@@ -1033,6 +1088,14 @@ export async function prepareOpenAIMessages({
     chatCompletion.setTokenBudget(userSettings.openai_max_context, userSettings.openai_max_tokens);
 
     try {
+        if (run) {
+            // The first request has not been sent yet: leave room for the
+            // step tail before the normal history selection spends its budget.
+            const instruction = run.fallbackRound ? PIPELINE_FALLBACK_PROMPT
+                : buildStepPrompt(run.steps[run.index], run.index, run.steps.length);
+            const tail = [...run.stepPrompts, { role: 'system', content: instruction }];
+            chatCompletion.reserveBudget(await countTokensOpenAIAsync(tail.map(normalizeMessageForTokenCount), true));
+        }
         // Merge markers and ordered user prompts with system prompts
         const prompts = await preparePromptsForChatCompletion({
             name2,
@@ -1042,7 +1105,6 @@ export async function prepareOpenAIMessages({
             bias,
             extensionPrompts,
             type,
-            pipelineStepTag,
         });
 
         // Fill the chat completion with as much context as the budget allows
@@ -1074,6 +1136,9 @@ export async function prepareOpenAIMessages({
         }
     }
 
+    // Step materials are appended through the ChatCompletion so the returned
+    // preview carries the same entries, budget and overflow signal as a send.
+    await chatCompletion.appendStepMaterials(previewStepTail);
     const chat = chatCompletion.getChat();
 
     const eventData = { chat, dryRun };
@@ -1376,6 +1441,19 @@ export async function buildChatCompletionRequest({ type, messages, settings = nu
     const { generate_data, stream } = await createGenerationParameters(requestSettings, resolvedModel, type, messages, { jsonSchema });
     if (emitSettingsReady) {
         await eventSource.emit(event_types.CHAT_COMPLETION_SETTINGS_READY, generate_data);
+    }
+    if (emitSettingsReady && type === 'normal' && getPipelineRunState()) {
+        // Every field is projected, not just tool_calls/content: any non-string
+        // native field ahead of the call arguments would abort that message's
+        // count on the server and silently drop the argument bytes.
+        const countableMessages = generate_data.messages.map(normalizeMessageForTokenCount);
+        const messageTokens = await countTokensOpenAIAsync(countableMessages, true);
+        const toolTokens = generate_data.tools?.length
+            ? await countTokensOpenAIAsync([{ role: 'system', content: JSON.stringify(generate_data.tools) }], true) : 0;
+        const reserved = Number(generate_data.max_completion_tokens ?? generate_data.max_tokens);
+        if (!Number.isFinite(reserved) || messageTokens + toolTokens + reserved > Number(requestSettings.openai_max_context)) {
+            throw new Error('Reply pipeline: context budget exceeded; captured prefix cannot be trimmed.');
+        }
     }
     return { generate_data, stream };
 }
@@ -2222,6 +2300,31 @@ export class ChatCompletion {
             }
         }
         return entries;
+    }
+
+    /**
+     * Appends raw pipeline step materials to the assembled request.
+     * These travel outside the prompt collection (so they stay out of the
+     * captured base) but must still be paid for: their tokens leave the budget
+     * and an overflow is reported where the caller already looks for it.
+     * The material itself is never dropped — the caller decides what to do
+     * with the warning.
+     * @param {{role: string, content: string}[]} prompts Step-only prompts in order
+     * @returns {Promise<void>}
+     */
+    async appendStepMaterials(prompts) {
+        if (!prompts?.length) {
+            return;
+        }
+        const collection = new MessageCollection('pipelineStepMaterials');
+        for (const prompt of prompts) {
+            collection.add(await Message.createAsync(prompt.role, prompt.content, 'pipelineStepMaterials'));
+        }
+        if (!this.canAfford(collection) && !this.error) {
+            this.error = new TokenBudgetExceededError(collection.identifier);
+        }
+        this.messages.collection.push(collection);
+        this.decreaseTokenBudgetBy(collection.getTokens());
     }
 
     /**

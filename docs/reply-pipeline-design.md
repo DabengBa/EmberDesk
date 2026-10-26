@@ -51,20 +51,22 @@ round i: 请求组装后 (CHAT_COMPLETION_SETTINGS_READY) 注入:
          → 模型调 X → invoke → role:tool 回写 → preparePipelineRound 决定:
            continue → depth+1 递归（下一轮注入下一步提示）
            final    → final-direct：结果即正文
-           fallback → 标记收口轮（删 tools、注入 "不要调用工具" 收口指令）→ 递归一次
+           fallback → 标记收口轮（保留 tools、tool_choice=none、注入 "不要调用工具" 收口指令）→ 递归一次
 ```
 
-**按轮门控的预设提示词**：`injection_trigger` 支持 `pipeline:<tool>` 值——该提示词只在对应步驱动的轮次注入（匹配是加法：`all`/`normal` 照常命中，额外步标签只加不减）。步标签经 `getPipelineTriggerTag(type)` 传入提示词组装（非 normal 类型/收口轮返回 null——收口轮没有活动步，步级资料不会泄漏进去）。提示词面板按当前可运行步动态渲染 `管线 <tool>` 复选框。
+**按轮门控的预设提示词**：`injection_trigger` 支持 `pipeline:<tool>` 值——该提示词在对应步驱动时追加，随后保留在运行前缀中（`all`/`normal` 基础资料只捕获一次）。步标签经 `getPipelineTriggerTag(type)` 传入提示词组装（非 normal 类型/收口轮返回 null——收口轮没有活动步，不新增步级资料，既有前缀保留）。提示词面板按当前可运行步动态渲染 `管线 <tool>` 复选框。
 
-**步推进语义（前向进展，不回退）**：每轮完成后计划推进到本轮调用中**计划序最靠后**的已匹配步之后——模型并行批量调用、跳步提前产出 final 都被接受；只重调已完成步不会回退计划；本轮无任何步匹配则重发当前步提示。
+**步推进语义（逐步执行，不跳步）**：每轮只允许当前步执行一次；提前调用后续步、重复调用当前步、调用已完成步或无关工具都返回拒绝结果，不执行 action。非法调用报错并释放运行态；没有工具调用的普通正文走正常完成尾部。
 
-**runState 卫生**：请求整形只对 `type === 'normal'` 的请求体生效（quiet/generateRaw/连接测试天然免疫残留注入）；步提示对同一 messages 数组只注入一次（重试不重复）；run 在 final-direct、正常收尾（含兜底轮完成/中途放弃）、stealth/空调停、onError 时释放；收口轮若仍收到 tool_calls（不合规上游）则交出管线控制走普通递归。
+**运行内前缀稳定**：首轮捕获基础上下文，后续轮只追加步级资料、指令、原生 assistant `tool_calls` 和配对 `tool` 结果；不从聚合 UI 卡重建运行中历史。工具定义及顺序整轮固定，收口轮仅将 `tool_choice` 改为 `none`。基础上下文超出预算时明确报错，不静默裁剪。此处保证请求形状，不保证上游缓存命中。
+
+**runState 卫生**：请求整形只对 `type === 'normal'` 的请求体生效（quiet/generateRaw/连接测试天然免疫残留注入）；每轮步提示只追加一次（重试不重复）；run 在 final-direct、正常收尾（含兜底轮完成/中途放弃）、stealth/空调停、onError 时释放；收口轮若仍收到 tool_calls（不合规上游）则拒绝执行并报错清理。
 
 **final-direct**（正常路径，不跑收口轮）：
 
 - final 步 result 为普通字符串 → 直接用（respond 的 actionBody 应 `return String(args.content)`）
 - result 为 JSON 对象 → 仅当配置 `result_field` 时取该字段；`{"ok":true}` 之类绝不当作正文
-- 空串 / `error:true` / 该步未调用 → 触发收口轮：**不带 `tools`**（不是 auto）的一次普通生成，用兜底文本收尾
+- 空串 / `error:true` / 该步未调用 → 触发收口轮：保留工具定义但 `tool_choice: 'none'` 的一次普通生成，用兜底文本收尾
 - 收尾动作照抄 onSuccess 尾部语义：`cleanUpMessage`（保留 AI_OUTPUT regex、**跳过 stopping strings**）→ `saveReply`（带 reasoning）→ 打 `extra.reply_pipeline_run/step` 标记 → `saveChatConditional` → `unblockGeneration` → `state.streamingProcessor = null` → 面板刷新 → 返回 `String + messageChunk` 形状
 
 **单点挂钩**：所有请求形态调整集中在 `CHAT_COMPLETION_SETTINGS_READY`（`generate_data` 最终体），不改 `registerFunctionToolsOpenAI` 签名，预算预估/真实请求不分叉。
@@ -75,7 +77,7 @@ round i: 请求组装后 (CHAT_COMPLETION_SETTINGS_READY) 注入:
 - **为什么是转义标签**：标签定界符存成 `&lt;`/`&gt;` 实体 → 消息把标签名**当字面文本显示**（裸未知元素会被 DOMPurify 吃掉、几段正文糊在一起）。没有正则时用户直接看到 `<analyze>xx</analyze>` 原始包裹文本——零 JSON、零卡片 chrome
 - **末标签即正文**：最后一步（通常是 respond/final）的 tag 里放**原生回复文本**——`<plot-options>` 这类正文内标记保持活体，markdownOnly 正则照旧渲染成 `data-respond-option` 芯片；选项芯片行（数组参数提升）也塞在末标签内。前面步的内容整体转义存字面文本
 - **正则锚点**：写入时 `getRegexedString(mes, AI_OUTPUT)` 跑在完整 markup 上；markdownOnly 规则按 `&lt;tag&gt;` 实体匹配做样式/隐藏/折叠（demo：`analyze→折叠块`、`review 加高亮边`、`隐藏 analyze 块`）；promptOnly 规则可把步骤块改写成文本摘要再发给模型
-- **prompt 侧**：组装时前面步的 `&lt;tool&gt;…&lt;/tool&gt;` 块整段剥掉、末标签解包成纯文本、芯片行剥掉（openai.js，逐 invocation 按工具名匹配，裸标签/旧 `data-pipeline-card` 段兼容剥离）；回放 = assistant `tool_calls` + `role:tool` 结果 + **正文 assistant 消息**（顺序与真实时序一致）
+- **prompt 侧**：运行中使用独立追加日志，不回放聚合卡；已完成的纯管线消息在后续用户轮剥掉前面步骤标签、解包末标签并剥掉芯片行，折叠成普通 assistant 正文。混有普通工具调用的消息仍保留结构化配对回放。
 - 兜底轮（final 不可用）走普通消息尾部：进度卡保留为错误证据 + 收口回复是独立消息
 - `[data-tool-invocation-text]` max-height 6em 滚动（运行中进度卡）
 
@@ -93,7 +95,7 @@ round i: 请求组装后 (CHAT_COMPLETION_SETTINGS_READY) 注入:
 ## 验证（已落地）
 
 - 单测 `reply-pipeline-core`：归一化（含 final 截断/缺省回落/步数钳制）、步提示、result_field 抽取（含 JSON 标量解包）、findStepCompletion 前向推进
-- e2e：`reply_pipeline` 跨重载持久（不再重注入——持久化是承重断言）；3 轮步提示 + final-direct 无第 4 请求；**融合标签**断言（一条 assistant 消息、`mes` 含 `&lt;analyze&gt;`/`&lt;review&gt;`/`&lt;respond&gt;` 转义标签块且顺序正确、无 `data-pipeline-card`、DOM 显示字面标签文本、`tool_invocations`×3、芯片可点、AI_OUTPUT regex 生效于标签 markup、无遗留 runId 卡）；**回放剥离**断言（下一轮请求里该消息回放为 tool_calls+tool 结果+正文且正文不含任何标签/芯片 markup）；后续生成零残留；兜底路径（ok-object → 无 tools/无编号步提示/失败卡留作独立证据消息）
+- e2e：`reply_pipeline` 跨重载持久（不再重注入——持久化是承重断言）；3 轮步提示 + final-direct 无第 4 请求；**融合标签**断言（一条 assistant 消息、`mes` 含 `&lt;analyze&gt;`/`&lt;review&gt;`/`&lt;respond&gt;` 转义标签块且顺序正确、无 `data-pipeline-card`、DOM 显示字面标签文本、`tool_invocations`×3、芯片可点、AI_OUTPUT regex 生效于标签 markup、无遗留 runId 卡）；**回放剥离**断言（下一用户轮请求里纯管线消息折叠成正文且不含任何标签/芯片 markup）；后续生成零残留；兜底路径（ok-object → 固定 tools + tool_choice none/无编号步提示/失败卡留作独立证据消息）
 - `test:compat`；`pnpm run lint`；docs:check
 
 ## 已知边界

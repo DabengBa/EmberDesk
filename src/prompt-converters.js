@@ -43,13 +43,13 @@ export function addAssistantPrefix(prompt, tools, property) {
  * Applies the fixed strict post-processing step to the generated messages:
  * consecutive same-role messages are merged, mid-prompt system messages are
  * demoted to user, and a user placeholder is inserted if the prompt does not
- * start with a user or system message.
+ * start with a user or system message. Native tool calls and results are preserved.
  * @param {object[]} messages Messages to post-process
  * @param {PromptNames} names Prompt names
  * @returns {object[]} Transformed messages
  */
 export function postProcessPrompt(messages, names) {
-    return mergeMessages(messages, names, { strict: true, placeholders: true, single: false, tools: false });
+    return mergeMessages(messages, names, { strict: true, placeholders: true, single: false, tools: true });
 }
 
 /**
@@ -443,7 +443,8 @@ export function mergeMessages(messages, names, { strict = false, placeholders = 
 
     // Squash consecutive messages with the same role
     messages.forEach((message) => {
-        if (mergedMessages.length > 0 && mergedMessages[mergedMessages.length - 1].role === message.role && message.content && message.role !== 'tool') {
+        if (mergedMessages.length > 0 && mergedMessages[mergedMessages.length - 1].role === message.role && message.content && message.role !== 'tool'
+            && !(tools && (message.tool_calls || mergedMessages[mergedMessages.length - 1].tool_calls))) {
             mergedMessages[mergedMessages.length - 1].content += '\n\n' + message.content;
         } else {
             mergedMessages.push(message);

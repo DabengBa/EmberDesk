@@ -439,14 +439,18 @@ test.describe('tool bindings', () => {
         expect(turnRequests[1].messages.some(message => String(message?.content ?? '').includes('[Reply pipeline 2/3]') && String(message?.content ?? '').includes('review'))).toBe(true);
         expect(turnRequests[2].messages.some(message => String(message?.content ?? '').includes('[Reply pipeline 3/3]') && String(message?.content ?? '').includes('respond'))).toBe(true);
         expect(turnRequests[2].tools?.some(tool => tool?.function?.name === 'respond')).toBe(true);
-        // The plan owns the tool surface: each round offers exactly its step.
+        // Tools and all previously sent messages are an immutable run prefix.
         expect(turnRequests.map(request => (request.tools ?? []).map(tool => tool?.function?.name)))
-            .toEqual([['analyze'], ['review'], ['respond']]);
+            .toEqual(Array(3).fill(['analyze', 'review', 'respond']));
+        for (let index = 1; index < turnRequests.length; index++) {
+            const previous = turnRequests[index - 1].messages;
+            expect(turnRequests[index].messages.slice(0, previous.length)).toEqual(previous);
+        }
 
         // A prompt tagged 'pipeline:review' injects only on the review round;
         // the rubric is absent from the analyze and respond rounds.
         const hasRubric = request => request.messages.some(message => String(message?.content ?? '').includes('E2E_REVIEW_RUBRIC_TEXT'));
-        expect(turnRequests.map(hasRubric)).toEqual([false, true, false]);
+        expect(turnRequests.map(hasRubric)).toEqual([false, true, true]);
 
         // The analyze step's reasoning_effort overrides the base value for
         // its round only; later rounds keep the preset-level value.
@@ -595,12 +599,12 @@ test.describe('tool bindings', () => {
         const turnRequests = requests.filter(request => request.messages?.some(message => String(message?.content ?? '').includes('reply pipeline e2e message')));
         expect(turnRequests).toHaveLength(3);
         const fallbackRequest = turnRequests[2];
-        expect(fallbackRequest.tools).toBeUndefined();
-        expect(fallbackRequest.tool_choice).toBeUndefined();
+        expect(fallbackRequest.tools).toEqual(turnRequests[0].tools);
+        expect(fallbackRequest.tool_choice).toBe('none');
         expect(fallbackRequest.messages.some(message => String(message?.content ?? '').includes('Do not call any tools'))).toBe(true);
         // The fallback prompt replaces the step prompt — a numbered
         // "[Reply pipeline i/N]" instruction must not linger alongside it.
-        expect(fallbackRequest.messages.some(message => /\[Reply pipeline \d+\/\d+\]/.test(String(message?.content ?? '')))).toBe(false);
+        expect(fallbackRequest.messages.slice(0, turnRequests[1].messages.length)).toEqual(turnRequests[1].messages);
 
         // The failed final-step card stays visible as evidence — its hidden
         // display must be lifted when the pipeline falls back, so the error is

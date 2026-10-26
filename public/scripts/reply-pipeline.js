@@ -23,6 +23,7 @@ import {
     pipelineTriggerTag,
     resolvePipelineSteps,
     setActivePipelineRunIdProvider,
+    setPipelineRunStateProvider,
 } from './reply-pipeline-core.js';
 import { normalizeToolBindings } from './tool-bindings-core.js';
 import { syncPipelineToolBindings } from './tool-bindings.js';
@@ -35,21 +36,7 @@ let initialized = false;
 // Prompt assembly reads this to keep replaying a mid-run card's invocations;
 // cards whose run ended (or was abandoned) flatten into plain messages.
 setActivePipelineRunIdProvider(() => runState?.runId ?? null);
-
-/**
- * Tracks message arrays already shaped this round. Retry attempts rebuild the
- * request body but share the same messages array — without this, each retry
- * re-emits CHAT_COMPLETION_SETTINGS_READY and the step prompt is pushed again.
- */
-const shapedMessageArrays = new WeakSet();
-
-function pushPipelineMessageOnce(data, content) {
-    if (!Array.isArray(data.messages) || shapedMessageArrays.has(data.messages)) {
-        return;
-    }
-    shapedMessageArrays.add(data.messages);
-    data.messages.push({ role: 'system', content });
-}
+setPipelineRunStateProvider(() => runState);
 
 function getPipelineEligibleToolNames() {
     // Stealth bindings stay registered for ad-hoc calls but can never be
@@ -166,9 +153,14 @@ export function preparePipelineRound(invocations) {
     if (!runState) {
         return null;
     }
-    // The closing round sends no tools; a non-compliant upstream answering it
-    // with tool_calls anyway must not restart the pipeline. Release control
-    // and let ordinary tool recursion handle it.
+    if (runState.pendingAssistant && runState.messages) {
+        runState.messages.push(runState.pendingAssistant, ...invocations.map(invocation => ({
+            role: 'tool', tool_call_id: invocation.id, content: invocation.result,
+        })));
+        runState.pendingAssistant = null;
+    }
+    // Defensive guard; the invocation boundary rejects fallback calls before
+    // execution, so they cannot restart the pipeline.
     if (runState.fallbackRound) {
         endPipelineRun();
         return null;
@@ -177,8 +169,7 @@ export function preparePipelineRound(invocations) {
     if (!completion) {
         return { action: 'continue' };
     }
-    // Every invocation is stamped with its own step's metadata so batched or
-    // out-of-order calls still render their intended card display.
+    // Stamp UI metadata separately from the already captured wire round.
     for (const invocation of invocations) {
         const stepIndex = runState.steps.findIndex(step => step.tool === invocation?.name);
         if (stepIndex >= 0) {
@@ -217,7 +208,7 @@ export function preparePipelineRound(invocations) {
 }
 
 /**
- * Marks the next request as the closing fallback round (no tools, closing prompt).
+ * Marks the next request as the closing fallback round (tool_choice none).
  */
 export function markPipelineFallbackRound() {
     if (runState) {
@@ -244,17 +235,28 @@ export function applyPipelineRequestShaping(data) {
     if (!runState || !data || typeof data !== 'object' || data.type !== 'normal') {
         return;
     }
+    if (!runState.messages) {
+        runState.messages = structuredClone(data.messages);
+        runState.tools = structuredClone(data.tools);
+    }
+    const round = runState.fallbackRound ? 'fallback' : runState.index;
+    if (runState.shapedRound !== round) {
+        runState.messages.push(...structuredClone(runState.stepPrompts ?? []));
+        runState.messages.push({ role: 'system', content: runState.fallbackRound
+            ? FALLBACK_PROMPT : buildStepPrompt(getCurrentPipelineStep(), runState.index, runState.steps.length) });
+        runState.shapedRound = round;
+    }
+    data.messages = structuredClone(runState.messages);
+    data.tools = structuredClone(runState.tools);
     if (runState.fallbackRound) {
-        delete data.tools;
-        delete data.tool_choice;
-        pushPipelineMessageOnce(data, FALLBACK_PROMPT);
+        data.tool_choice = 'none';
         return;
     }
     const step = getCurrentPipelineStep();
     if (!step) {
         return;
     }
-    pushPipelineMessageOnce(data, buildStepPrompt(step, runState.index, runState.steps.length));
+
     applyStepRequestOverrides(data, step, {
         enforceMode: runState.pipeline.enforceMode,
         reasoningEffort: resolveStepReasoningEffort(step, data.model),
