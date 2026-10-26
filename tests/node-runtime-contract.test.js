@@ -4,9 +4,9 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const expectedNodeVersion = '24.16.0';
+const expectedNodeVersion = '26.12.1';
 
-test('pins the application runtime to Node 24.16.0', () => {
+test('pins the application runtime to Node 26.12.1', () => {
     const packageJson = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8'));
     const dockerfile = fs.readFileSync(path.join(repoRoot, 'Dockerfile'), 'utf8');
     const agents = fs.readFileSync(path.join(repoRoot, 'AGENTS.md'), 'utf8');
@@ -14,14 +14,14 @@ test('pins the application runtime to Node 24.16.0', () => {
     const overview = fs.readFileSync(path.join(repoRoot, '.docs', 'project-overview.md'), 'utf8');
     const pnpmWorkflow = fs.readFileSync(path.join(repoRoot, '.docs', 'tech', 'pnpm-workflow.md'), 'utf8');
 
-    expect(packageJson.engines.node).toBe(`>=${expectedNodeVersion} <25`);
+    expect(packageJson.engines.node).toBe(`>=${expectedNodeVersion} <27`);
     expect(dockerfile).toContain(`FROM node:${expectedNodeVersion}-alpine3.23`);
     expect(agents).toContain(`Node.js ${expectedNodeVersion}`);
     expect(readme).toContain(`Node.js ${expectedNodeVersion}`);
     expect(overview).toContain(`Node.js ${expectedNodeVersion}`);
     expect(pnpmWorkflow).toContain(`Node.js ${expectedNodeVersion}`);
-    expect(fs.existsSync(path.join(repoRoot, 'scripts', 'canonical-chat-node24-benchmark.mjs'))).toBe(true);
-    expect(fs.existsSync(path.join(repoRoot, 'scripts', 'canonical-chat-node26-benchmark.mjs'))).toBe(false);
+    expect(fs.existsSync(path.join(repoRoot, 'scripts', 'canonical-chat-node24-benchmark.mjs'))).toBe(false);
+    expect(fs.existsSync(path.join(repoRoot, 'scripts', 'canonical-chat-node26-benchmark.mjs'))).toBe(true);
 });
 
 test('removes obsolete Hono and Webpack stacks', () => {

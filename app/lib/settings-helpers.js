@@ -220,7 +220,6 @@ export const settingsCoverage = {
         'oai_settings.tool_reasoning_mode',
         'oai_settings.send_if_empty',
         'oai_settings.new_chat_prompt',
-        'oai_settings.new_example_chat_prompt',
         'oai_settings.wi_format',
         'oai_settings.description_format',
         'oai_settings.names_behavior',
@@ -387,6 +386,7 @@ export function buildSettingsSavePayload(baseSettings, formValues, { settingsRev
             'fallback_provider_enabled',
             'fallback_provider_base_url',
             'bind_preset_to_connection',
+            'new_example_chat_prompt',
         ]) {
             delete oaiSettings[key];
         }
