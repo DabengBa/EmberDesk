@@ -2,6 +2,8 @@ import type { FormEvent } from 'react';
 import * as stylex from '@stylexjs/stylex';
 import { loginStyles } from '@/styles/login.styles';
 import { PasswordInput } from './PasswordInput';
+import { loginMessages } from '@/lib/login-helpers';
+import { translate, useTranslated } from '@/compat/i18n.js';
 
 type LoginFormProps = {
     form: any;
@@ -32,8 +34,13 @@ export function LoginForm({
     onSubmit,
     onShowRecovery,
 }: LoginFormProps) {
+    useTranslated('');
     const controlsDisabled = isSubmitting || isLockedOut;
-    const buttonLabel = isSubmitting ? '登录中...' : isLockedOut ? '已锁定' : '登录';
+    const buttonLabel = isSubmitting
+        ? loginMessages.signingIn
+        : isLockedOut
+            ? translate('Locked')
+            : translate('Sign in');
 
     return (
         <section {...stylex.props(loginStyles.card)} id="loginCard" style={{ display: loginVisible ? 'block' : 'none' }} aria-labelledby="login-title">
@@ -47,14 +54,14 @@ export function LoginForm({
                     <form.Field name="handle">
                         {(field: any) => (
                             <div {...stylex.props(loginStyles.field)} id="handleField">
-                                <label htmlFor="handle" {...stylex.props(loginStyles.fieldLabel)}>用户名</label>
+                                <label htmlFor="handle" {...stylex.props(loginStyles.fieldLabel)}>{translate('Username')}</label>
                                 <input
                                     {...stylex.props(loginStyles.input)}
                                     id="handle"
                                     name="handle"
                                     type="text"
                                     autoComplete="username"
-                                    placeholder="请输入用户名"
+                                    placeholder={loginMessages.handleRequired}
                                     required
                                     aria-required="true"
                                     aria-invalid={invalidField === 'handle' || undefined}
@@ -77,9 +84,9 @@ export function LoginForm({
                                 id="password"
                                 name="password"
                                 toggleId="passwordToggle"
-                                label="密码"
+                                label={translate('Password')}
                                 autoComplete="current-password"
-                                placeholder="请输入密码"
+                                placeholder={translate('Please enter a password')}
                                 value={field.state.value}
                                 visible={passwordVisible}
                                 disabled={controlsDisabled}
@@ -110,7 +117,7 @@ export function LoginForm({
                 onShowRecovery();
             }}
             >
-                忘记密码？
+                {translate('Forgot your password?')}
             </button>
         </section>
     );

@@ -1,5 +1,6 @@
 import { ContractButton } from '../contract/ContractButton';
 import * as stylex from '@stylexjs/stylex';
+import { translate, useTranslated } from '@/compat/i18n.js';
 
 const optionStyles = stylex.create({ item: { justifyContent: 'flex-start', textAlign: 'start' } });
 
@@ -25,6 +26,7 @@ const optionStyles = stylex.create({ item: { justifyContent: 'flex-start', textA
  * re-checks eligibility before dispatching.
  */
 export function OptionsMenu({ showBackToMain = false, canRegenerate = false }: { showBackToMain?: boolean; canRegenerate?: boolean }) {
+    useTranslated('');
     return (
         <>
         <div className="options-content">
@@ -36,7 +38,7 @@ export function OptionsMenu({ showBackToMain = false, canRegenerate = false }: {
             <ContractButton id="option_close_chat" variant="ghost" xstyle={optionStyles.item} label="Close chat" icon={<i className="fa-lg fa-solid fa-times" aria-hidden="true" />} />
             <ContractButton id="option_select_chat" variant="ghost" xstyle={optionStyles.item} label="Manage chat files" icon={<i className="fa-lg fa-solid fa-address-book" aria-hidden="true" />} tabIndex={0} />
             <ContractButton id="option_regenerate" variant="ghost" xstyle={optionStyles.item} label="Regenerate reply" icon={<i className="fa-lg fa-solid fa-rotate-right" aria-hidden="true" />} tabIndex={0} disabled={!canRegenerate} />
-            <ContractButton id="option_wire_log" variant="ghost" xstyle={optionStyles.item} label="Wire Log / 链路日志" icon={<i className="fa-lg fa-solid fa-diagram-project" aria-hidden="true" />} tabIndex={0} />
+            <ContractButton id="option_wire_log" variant="ghost" xstyle={optionStyles.item} label={translate('Wire Log')} icon={<i className="fa-lg fa-solid fa-diagram-project" aria-hidden="true" />} tabIndex={0} />
             <hr />
             <ContractButton id="option_delete_mes" variant="ghost" xstyle={optionStyles.item} label="Delete messages" icon={<i className="fa-lg fa-solid fa-trash-can" aria-hidden="true" />} tabIndex={0} className="options-menu-danger" />
         </div>

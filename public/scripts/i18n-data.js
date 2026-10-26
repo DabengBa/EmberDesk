@@ -1,3 +1,16 @@
+/**
+ * Marks elements whose text content is rendered by React. Writing
+ * `textContent` on one of their ancestors would unmount the React children, so
+ * the text translation is skipped for those nodes — the React tree owns its own
+ * `translate()` calls for the same string.
+ */
+export const REACT_OWNED_ATTRIBUTE = 'data-react-i18n-children';
+
+function hasReactOwnedChildren(element) {
+    return typeof element.hasAttribute === 'function'
+        && element.hasAttribute(REACT_OWNED_ATTRIBUTE);
+}
+
 export function parseI18nAttributeSpecs(dataI18n) {
     return String(dataI18n ?? '')
         .split(';')
@@ -40,6 +53,10 @@ export function applyI18nTranslations(element, dataI18n, localeData) {
             for (const attribute of entry.attributes) {
                 element.setAttribute(attribute, localizedValue);
             }
+            continue;
+        }
+
+        if (hasReactOwnedChildren(element)) {
             continue;
         }
 

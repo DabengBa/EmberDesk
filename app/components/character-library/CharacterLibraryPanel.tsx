@@ -20,7 +20,7 @@ import {
 } from '@/lib/character-library-grid-helpers.js';
 import type { CharacterLibraryPaginationState } from '@/lib/character-library-helpers';
 import { characterLibraryStyles } from '@/styles/workspace-panels.styles';
-import { translate } from '../../compat/i18n.js';
+import { translate, useTranslated } from '../../compat/i18n.js';
 
 export interface CharacterLibraryPanelEntity {
     type: string;
@@ -135,6 +135,7 @@ function CharacterLibraryPagination({
     container: HTMLElement;
     bridge: CharacterLibraryPanelBridge;
 }) {
+    useTranslated('');
     const totalPages = Math.max(Math.ceil(pagination.totalCount / Math.max(pagination.pageSize, 1)), 1);
     const currentPage = pagination.currentPage;
     const isFirstPage = currentPage <= 1;
@@ -397,6 +398,7 @@ function CharacterLibraryVirtualRows({
 }
 
 export function CharacterLibraryPanel({ bridge, state }: { bridge: CharacterLibraryPanelBridge; state: CharacterLibraryPanelState; }) {
+    useTranslated('');
     const scrollElementRef = useRef<HTMLElement | null>(state.scrollElement);
     const isGrid = Boolean(state.isGrid);
     const [gridColumnCount, setGridColumnCount] = useState(() => (

@@ -16,7 +16,7 @@ import { FieldCheck } from '@/components/fields/FieldCheck';
 import { SegmentedControl } from '@/components/fields/SegmentedControl';
 import { FieldSelect, FieldTextArea, FieldTextInput } from '@/components/fields/FieldInputs';
 import type { WorldInfoCommands } from './compat/workspace-commands';
-import { translate } from './compat/i18n.js';
+import { translate, useTranslated } from './compat/i18n.js';
 
 function parseFiniteNumber(value: string): number | undefined {
     if (value.trim() === '') {
@@ -139,8 +139,8 @@ const worldInfoPanelFormSchema = z.object({
 });
 
 const POSITION_OPTIONS = [
-    { value: 0, label: '世界书' },
-    { value: 4, label: '按深度' },
+    { value: 0, label: translate('World book') },
+    { value: 4, label: translate('By depth') },
 ] as const;
 
 const MAX_KEYWORD_CHIPS = 4;
@@ -188,14 +188,15 @@ function KeywordField({
     field: string;
     onCommit: (values: string[]) => void;
 }) {
+    useTranslated('');
     return (
         <div {...stylex.props(s.field)}>
             <span {...stylex.props(s.fieldLabel)}>{label}</span>
             <TagChipInput
                 values={values}
-                placeholder="输入关键词，回车添加"
-                inputAriaLabel={`${label}（回车或逗号添加）`}
-                removeAriaLabel={keyword => `移除关键词 ${keyword}`}
+                placeholder={translate('Type a keyword and press Enter')}
+                inputAriaLabel={translate('${0} (press Enter or comma to add)').replace('${0}', label)}
+                removeAriaLabel={keyword => translate('Remove keyword ${0}').replace('${0}', keyword)}
                 inputProps={{ 'data-world-info-react-field': field }}
                 onCommit={onCommit}
             />
@@ -215,6 +216,7 @@ function BookActionsMenu({
     commands: WorldInfoCommands;
     runCommand: (command: () => Promise<unknown> | unknown) => void;
 }) {
+    useTranslated('');
     const [open, setOpen] = useState(false);
     const rootRef = useRef<HTMLDivElement>(null);
 
@@ -251,8 +253,8 @@ function BookActionsMenu({
             <button
                 type="button"
                 className={buttonClass(s.button, s.buttonGhost, s.buttonIcon)}
-                title="更多书本操作"
-                aria-label="更多书本操作"
+                title={translate('More book actions')}
+                aria-label={translate('More book actions')}
                 aria-haspopup="menu"
                 aria-expanded={open}
                 data-world-info-react-menu-trigger="book-actions"
@@ -272,7 +274,7 @@ function BookActionsMenu({
                         onClick={() => run(() => commands.renameWorld())}
                     >
                         <i className={iconClass('fa-pencil', s.menuItemIcon)} aria-hidden="true" />
-                        重命名
+                        {translate('Rename')}
                     </button>
                     <button
                         type="button"
@@ -282,7 +284,7 @@ function BookActionsMenu({
                         onClick={() => run(() => commands.duplicateWorld())}
                     >
                         <i className={iconClass('fa-copy', s.menuItemIcon)} aria-hidden="true" />
-                        复制
+                        {translate('Duplicate')}
                     </button>
                     <div {...stylex.props(s.menuSeparator)} aria-hidden="true" />
                     <button
@@ -290,22 +292,22 @@ function BookActionsMenu({
                         {...stylex.props(s.menuItem)}
                         role="menuitem"
                         data-world-info-react-action="backfill-memos"
-                        title="将空标题回填为主关键词"
+                        title={translate('Fill empty titles from the primary keyword')}
                         onClick={() => run(() => commands.backfillMemos())}
                     >
                         <i className={iconClass('fa-notes-medical', s.menuItemIcon)} aria-hidden="true" />
-                        回填标题
+                        {translate('Fill titles')}
                     </button>
                     <button
                         type="button"
                         {...stylex.props(s.menuItem)}
                         role="menuitem"
                         data-world-info-react-action="apply-sorting"
-                        title="将当前排序写入 Order 字段"
+                        title={translate('Write the current order into the Order field')}
                         onClick={() => run(() => commands.applyCurrentSorting())}
                     >
                         <i className={iconClass('fa-arrow-down-9-1', s.menuItemIcon)} aria-hidden="true" />
-                        应用排序
+                        {translate('Apply order')}
                     </button>
                 </div>
             ) : null}
@@ -322,6 +324,7 @@ function EntryRowContent({
     enabledOverride?: boolean;
     onToggleEnabled: (uid: string, enabled: boolean) => void;
 }) {
+    useTranslated('');
     const chips = keywordChips(entry);
     const shownChips = chips.slice(0, MAX_KEYWORD_CHIPS);
     const overflowCount = chips.length - shownChips.length;
@@ -334,8 +337,10 @@ function EntryRowContent({
                 <FieldSwitch
                     checked={enabled}
                     variant="success"
-                    title={enabled ? '点击停用此条目' : '点击启用此条目'}
-                    ariaLabel={enabled ? `停用条目 ${entry.title}` : `启用条目 ${entry.title}`}
+                    title={enabled ? translate('Click to disable this entry') : translate('Click to enable this entry')}
+                    ariaLabel={enabled
+                            ? translate('Disable entry ${0}').replace('${0}', entry.title)
+                            : translate('Enable entry ${0}').replace('${0}', entry.title)}
                     attrs={{ 'data-world-info-react-entry-toggle': entry.uid }}
                     onToggle={(next, event) => {
                         event.stopPropagation();
@@ -344,11 +349,11 @@ function EntryRowContent({
                 />
                 <span {...stylex.props(s.entryTitle)}>{entry.title}</span>
                 {entry.constant ? (
-                    <span {...stylex.props(s.constantBadge)}>常驻</span>
+                    <span {...stylex.props(s.constantBadge)}>{translate('Always')}</span>
                 ) : null}
                 <span {...stylex.props(s.entryMetaRight)}>
                     {!entry.constant ? (
-                        <span {...stylex.props(s.metaTag)}>{entry.positionLabel || '未设位置'}</span>
+                        <span {...stylex.props(s.metaTag)}>{entry.positionLabel || translate('No position set')}</span>
                     ) : null}
                     <span {...stylex.props(s.metaTag)}>#{entry.order ?? 0}</span>
                     {showProbability ? (
@@ -358,7 +363,7 @@ function EntryRowContent({
             </span>
             <span {...stylex.props(s.entryChips)}>
                 {entry.constant ? (
-                    <span {...stylex.props(s.chip, s.chipMuted)}>始终注入</span>
+                    <span {...stylex.props(s.chip, s.chipMuted)}>{translate('Always injected')}</span>
                 ) : shownChips.length > 0 ? (
                     <>
                         {shownChips.map(chip => (
@@ -369,7 +374,7 @@ function EntryRowContent({
                         ) : null}
                     </>
                 ) : (
-                    <span {...stylex.props(s.chip, s.chipMuted)}>无关键词</span>
+                    <span {...stylex.props(s.chip, s.chipMuted)}>{translate('No keywords')}</span>
                 )}
             </span>
         </span>
@@ -380,13 +385,14 @@ function EntryEditor({
     entry,
     commands,
     onBack,
-    emptyMessage = '选择一条条目开始编辑',
+    emptyMessage = translate('Select an entry to start editing'),
 }: {
     entry: WorldInfoWorkbenchEntryDetail | null;
     commands: WorldInfoCommands;
     onBack?: () => void;
     emptyMessage?: string;
 }) {
+    useTranslated('');
     const [draft, setDraft] = useState(entry);
     const [draftEntry, setDraftEntry] = useState(entry);
     const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
@@ -459,14 +465,14 @@ function EntryEditor({
                     onClick={onBack}
                 >
                     <i className={iconClass('fa-arrow-left', s.buttonIconSlot)} aria-hidden="true" />
-                    返回条目列表
+                    {translate('Back to entry list')}
                 </button>
             ) : null}
 
             <section {...stylex.props(s.editorSection)} data-world-info-react-section="basic">
-                <SectionHeader icon="fa-id-card" title="基本信息" />
+                <SectionHeader icon="fa-id-card" title={translate('Basic info')} />
                 <label {...stylex.props(s.field)}>
-                    <span {...stylex.props(s.fieldLabel)}>标题</span>
+                    <span {...stylex.props(s.fieldLabel)}>{translate('Title')}</span>
                     <FieldTextInput
                         ref={titleInputRef}
                         value={draft.comment}
@@ -477,12 +483,12 @@ function EntryEditor({
                 </label>
                 <div {...stylex.props(s.switchRow)}>
                     <SegmentedControl<boolean>
-                        ariaLabel="触发方式"
+                        ariaLabel={translate('Trigger mode')}
                         attrs={{ 'data-world-info-react-field': 'constant' }}
                         value={Boolean(draft.constant)}
                         options={[
-                            { value: false, label: '关键词触发' },
-                            { value: true, label: '始终注入（常驻）' },
+                            { value: false, label: translate('Triggered by keywords') },
+                            { value: true, label: translate('Always injected (constant)') },
                         ]}
                         onSelect={value => saveFields({ constant: value })}
                     />
@@ -490,11 +496,11 @@ function EntryEditor({
             </section>
 
             <section {...stylex.props(s.editorSection)} data-world-info-react-section="trigger">
-                <SectionHeader icon="fa-key" title="何时触发" />
+                <SectionHeader icon="fa-key" title={translate('When to trigger')} />
                 {!draft.constant ? (
                     <>
                         <KeywordField
-                            label="主要关键词"
+                            label={translate('Primary keywords')}
                             values={draft.key ?? []}
                             field="key"
                             onCommit={values => saveFields({ key: values })}
@@ -503,23 +509,23 @@ function EntryEditor({
                         {regexKeywordCount > 0 ? (
                             <p {...stylex.props(s.callout)} data-world-info-react-regex-hint>
                                 <i className={iconClass('fa-circle-info', s.calloutIcon)} aria-hidden="true" />
-                                <span>关键词包含 {regexKeywordCount} 个正则表达式（/pattern/flags 形式直接生效）</span>
+                                <span>{translate('Keywords include ${0} regular expressions (/pattern/flags take effect directly)').replace('${0}', String(regexKeywordCount))}</span>
                             </p>
                         ) : null}
                     </>
                 ) : (
                     <p {...stylex.props(s.callout)}>
                         <i className={iconClass('fa-circle-info', s.calloutIcon)} aria-hidden="true" />
-                        <span>始终注入条目会跳过关键词匹配。</span>
+                        <span>{translate('Always-injected entries skip keyword matching.')}</span>
                     </p>
                 )}
             </section>
 
             <section {...stylex.props(s.editorSection)} data-world-info-react-section="content">
-                <SectionHeader icon="fa-align-left" title="注入内容" />
+                <SectionHeader icon="fa-align-left" title={translate('Injected content')} />
                 <FieldTextArea
                     sx={s.content}
-                    aria-label="注入内容"
+                    aria-label={translate('Injected content')}
                     value={draft.content}
                     data-world-info-react-field="content"
                     rows={12}
@@ -529,21 +535,23 @@ function EntryEditor({
             </section>
 
             <section {...stylex.props(s.editorSection)} data-world-info-react-section="placement">
-                <SectionHeader icon="fa-location-crosshairs" title="注入位置" />
+                <SectionHeader icon="fa-location-crosshairs" title={translate('Injection position')} />
                 <div {...stylex.props(s.placementGrid)}>
                     <div {...stylex.props(s.field)}>
-                        <span {...stylex.props(s.fieldLabel)}>位置</span>
+                        <span {...stylex.props(s.fieldLabel)}>{translate('Position')}</span>
                         <SegmentedControl<number>
-                            ariaLabel="注入位置"
+                            ariaLabel={translate('Injection position')}
                             attrs={{ 'data-world-info-react-field': 'position' }}
                             value={draft.position}
                             options={POSITION_OPTIONS}
-                            fallbackLabel={entry.positionLabel ? `${entry.positionLabel}（已退役）` : `已退役位置 ${draft.position}`}
+                            fallbackLabel={entry.positionLabel
+                                ? translate('${0} (retired)').replace('${0}', entry.positionLabel)
+                                : translate('Retired position ${0}').replace('${0}', String(draft.position))}
                             onSelect={value => saveFields({ position: value })}
                         />
                     </div>
                     <label {...stylex.props(s.field)}>
-                        <span {...stylex.props(s.fieldLabel)}>深度</span>
+                        <span {...stylex.props(s.fieldLabel)}>{translate('Depth')}</span>
                         <FieldTextInput
                             type="number"
                             value={draft.position === 4 ? draft.depth : ''}
@@ -565,7 +573,7 @@ function EntryEditor({
                         />
                     </label>
                     <label {...stylex.props(s.field)}>
-                        <span {...stylex.props(s.fieldLabel)}>顺序</span>
+                        <span {...stylex.props(s.fieldLabel)}>{translate('Order')}</span>
                         <FieldTextInput
                             type="number"
                             value={draft.order}
@@ -585,7 +593,7 @@ function EntryEditor({
                         />
                     </label>
                     <label {...stylex.props(s.field)}>
-                        <span {...stylex.props(s.fieldLabel)}>触发概率</span>
+                        <span {...stylex.props(s.fieldLabel)}>{translate('Trigger chance')}</span>
                         <span {...stylex.props(s.probWrap)}>
                             <FieldTextInput
                                 sx={s.probInput}
@@ -622,7 +630,7 @@ function EntryEditor({
                 onClick={() => void commands.moveOrCopyEntry(entry.uid)}
             >
                 <i className={iconClass('fa-folder-tree', s.buttonIconSlot)} aria-hidden="true" />
-                移动 / 复制
+                {translate('Move / copy')}
             </button>
             <button
                 type="button"
@@ -637,17 +645,17 @@ function EntryEditor({
                 }}
             >
                 <i className={iconClass('fa-trash-can', s.buttonIconSlot)} aria-hidden="true" />
-                删除
+                {translate('Delete')}
             </button>
             <span {...stylex.props(s.statusMeta)} aria-live="polite">
                 <span
                     {...stylex.props(s.statusDot, saveState === 'error' ? s.statusDotError : draft.disable ? s.statusDotOff : draft.constant ? s.statusDotConstant : null)}
                     aria-hidden="true"
                 />
-                UID {entry.uid} · {(draft.content ?? '').length} 字符
+                UID {entry.uid} · {translate('${0} characters').replace('${0}', String((draft.content ?? '').length))}
                 {saveState !== 'idle' ? (
                     <span {...stylex.props(saveState === 'error' ? s.saveStateError : null)}>
-                        {' · '}{saveState === 'saving' ? '保存中…' : saveState === 'error' ? '保存失败' : '已保存'}
+                        {' · '}{saveState === 'saving' ? translate('Saving…') : saveState === 'error' ? translate('Save failed') : translate('Saved')}
                     </span>
                 ) : null}
             </span>
@@ -658,7 +666,7 @@ function EntryEditor({
                     data-world-info-react-action="retry-save"
                     onClick={() => saveFields(pendingFieldsRef.current)}
                 >
-                    重试保存
+                    {translate('Retry saving')}
                 </button>
             ) : null}
         </footer>
@@ -678,6 +686,7 @@ export function WorldInfoWorkbenchPanel({
         children: ReactNode;
     }) => ReactNode;
 }) {
+    useTranslated('');
     const bridgeState = useMemo(
         () => (state && typeof state === 'object' ? state : {}) as WorldInfoWorkspacePanelState,
         [state],
@@ -788,7 +797,7 @@ export function WorldInfoWorkbenchPanel({
     if (status === 'error' && bridgeState.refreshMenuPresent) {
         recoveryActions.push({
             id: 'refresh-world',
-            label: '刷新面板',
+            label: translate('Refresh panel'),
             onClick: () => worldInfoCommandMutation.mutate(() => commands.refreshWorld()),
         });
     }
@@ -893,15 +902,15 @@ export function WorldInfoWorkbenchPanel({
                     </span>
                     <div {...stylex.props(s.globalField)}>
                         <div {...stylex.props(s.globalLabelRow)}>
-                            <span {...stylex.props(s.globalLabel)}>全局启用</span>
+                            <span {...stylex.props(s.globalLabel)}>{translate('Globally enabled')}</span>
                             <span {...stylex.props(s.globalCount, globalCount === 0 ? s.globalCountMuted : null)}>
-                                {globalCount} 本激活
+                                {translate('${0} active').replace('${0}', String(globalCount))}
                             </span>
                         </div>
                         <div
                             {...stylex.props(s.globalPills)}
                             role="group"
-                            aria-label="全局启用的世界书"
+                            aria-label={translate('Globally enabled world books')}
                             data-world-info-react-control="global-world-select"
                         >
                             {worldNames.length > 0 ? worldNames.map(world => {
@@ -914,7 +923,9 @@ export function WorldInfoWorkbenchPanel({
                                         {...stylex.props(s.globalPill, active ? s.globalPillOn : null)}
                                         aria-pressed={active}
                                         data-world-info-react-global-world={worldName}
-                                        title={active ? `取消全局启用「${worldName}」` : `全局启用「${worldName}」`}
+                                        title={active
+                            ? translate('Disable globally for \u201c${0}\u201d').replace('${0}', worldName)
+                            : translate('Enable globally for \u201c${0}\u201d').replace('${0}', worldName)}
                                         onClick={() => worldInfoCommandMutation.mutate(() => commands.setGlobalWorlds(
                                             active
                                                 ? globalNames.filter(name => name !== worldName)
@@ -925,13 +936,13 @@ export function WorldInfoWorkbenchPanel({
                                     </button>
                                 );
                             }) : (
-                                <span {...stylex.props(s.globalEmpty)}>暂无世界书</span>
+                                <span {...stylex.props(s.globalEmpty)}>{translate('No world books yet')}</span>
                             )}
                         </div>
                     </div>
                     <div {...stylex.props(s.globalMeta)}>
                         <label {...stylex.props(s.scanDepthField)}>
-                            <span {...stylex.props(s.scanDepthLabel)}>扫描深度</span>
+                            <span {...stylex.props(s.scanDepthLabel)}>{translate('Scan depth')}</span>
                             <FieldTextInput
                                 sx={s.scanDepthInput}
                                 type="number"
@@ -940,7 +951,7 @@ export function WorldInfoWorkbenchPanel({
                                 step={1}
                                 key={scanDepth ?? 'unset'}
                                 defaultValue={scanDepth ?? ''}
-                                aria-label="扫描深度"
+                                aria-label={translate('Scan depth')}
                                 data-world-info-react-field="scan-depth"
                                 onBlur={event => commitScanDepth(event.currentTarget)}
                                 onKeyDown={event => {
@@ -961,7 +972,7 @@ export function WorldInfoWorkbenchPanel({
                                 <FieldSelect
                                     sx={[s.flexInput, s.bookSelect]}
                                     data-world-info-react-control="world-select"
-                                    aria-label="选择要编辑的世界书"
+                                    aria-label={translate('Select a world book to edit')}
                                     value={field.state.value}
                                     onChange={event => {
                                         const worldIndex = event.target.value;
@@ -970,7 +981,7 @@ export function WorldInfoWorkbenchPanel({
                                         setMobileView('list');
                                     }}
                                 >
-                                    <option value="">选择世界书…</option>
+                                    <option value="">{translate('Select a world book…')}</option>
                                     {worldNames.map(world => (
                                         <option key={world.value} value={world.value}>{world.label}</option>
                                     ))}
@@ -978,7 +989,7 @@ export function WorldInfoWorkbenchPanel({
                             )}
                         </worldInfoForm.Field>
                         <output {...stylex.props(s.countBadge)} data-world-info-react-meta="entry-count">
-                            {selectedWorldName ? `${totalEntryCount} 条目` : '未选择'}
+                            {selectedWorldName ? translate('${0} entries').replace('${0}', String(totalEntryCount)) : translate('Nothing selected')}
                         </output>
                         <span {...stylex.props(s.spacer)} aria-hidden="true" />
                         {selectedWorldName ? (
@@ -987,19 +998,19 @@ export function WorldInfoWorkbenchPanel({
                                 {...stylex.props(s.globalPill, isBookGlobal ? s.globalPillOn : null)}
                                 role="switch"
                                 aria-checked={isBookGlobal}
-                                title={isBookGlobal ? '取消此书的全局启用' : '将此书设为全局启用'}
+                                title={isBookGlobal ? translate('Disable global for this book') : translate('Enable this book globally')}
                                 data-world-info-react-action="toggle-book-global"
                                 onClick={toggleBookGlobal}
                             >
-                                <i className="fa-solid fa-globe" aria-hidden="true" /> 全局
+                                <i className="fa-solid fa-globe" aria-hidden="true" /> {translate('Global')}
                             </button>
                         ) : null}
                         <button
                             type="button"
                             className={buttonClass(s.button, s.buttonGhost, s.buttonIcon)}
                             data-world-info-react-action="new-world"
-                            title="新建世界书"
-                            aria-label="新建世界书"
+                            title={translate('New world book')}
+                            aria-label={translate('New world book')}
                             onClick={() => worldInfoCommandMutation.mutate(() => commands.createWorld())}
                         >
                             <i className={iconClass('fa-plus', s.buttonIconSlot)} aria-hidden="true" />
@@ -1008,8 +1019,8 @@ export function WorldInfoWorkbenchPanel({
                             type="button"
                             className={buttonClass(s.button, s.buttonGhost, s.buttonIcon)}
                             data-world-info-react-action="import"
-                            title="导入世界书"
-                            aria-label="导入世界书"
+                            title={translate('Import world book')}
+                            aria-label={translate('Import world book')}
                             disabled={Boolean(bridgeState.importBusy)}
                             onClick={() => worldInfoCommandMutation.mutate(() => commands.importWorld())}
                         >
@@ -1019,8 +1030,8 @@ export function WorldInfoWorkbenchPanel({
                             type="button"
                             className={buttonClass(s.button, s.buttonGhost, s.buttonIcon)}
                             data-world-info-react-action="refresh"
-                            title="刷新"
-                            aria-label="刷新"
+                            title={translate('Refresh')}
+                            aria-label={translate('Refresh')}
                             disabled={!bridgeState.refreshMenuPresent}
                             onClick={() => worldInfoCommandMutation.mutate(() => commands.refreshWorld())}
                         >
@@ -1032,8 +1043,8 @@ export function WorldInfoWorkbenchPanel({
                                     type="button"
                                     className={buttonClass(s.button, s.buttonGhost, s.buttonIcon)}
                                     data-world-info-react-action="export"
-                                    title="导出世界书"
-                                    aria-label="导出世界书"
+                                    title={translate('Export world book')}
+                                    aria-label={translate('Export world book')}
                                     disabled={!bridgeState.exportMenuPresent}
                                     onClick={() => worldInfoCommandMutation.mutate(() => commands.exportWorld())}
                                 >
@@ -1048,8 +1059,8 @@ export function WorldInfoWorkbenchPanel({
                                     type="button"
                                     className={buttonClass(s.button, s.buttonDanger, s.buttonIcon)}
                                     data-world-info-react-action="delete"
-                                    title="删除世界书"
-                                    aria-label="删除世界书"
+                                    title={translate('Delete world book')}
+                                    aria-label={translate('Delete world book')}
                                     disabled={!bridgeState.deleteMenuPresent}
                                     onClick={() => worldInfoCommandMutation.mutate(() => commands.deleteWorld())}
                                 >
@@ -1068,10 +1079,12 @@ export function WorldInfoWorkbenchPanel({
                     >
                         <div {...stylex.props(s.listHead)}>
                             <div {...stylex.props(s.listHeadRow)}>
-                                <span {...stylex.props(s.listHeadTitle)}>条目</span>
+                                <span {...stylex.props(s.listHeadTitle)}>{translate('Entries')}</span>
                                 {selectedWorldName ? (
                                     <span {...stylex.props(s.listHeadCount)} data-world-info-react-meta="list-count">
-                                        {activeSearchQuery ? `匹配 ${entrySummaries.length} / 共 ${totalEntryCount}` : `${totalEntryCount}`}
+                                        {activeSearchQuery
+                                ? translate('${0} of ${1} match').replace('${0}', String(entrySummaries.length)).replace('${1}', String(totalEntryCount))
+                                : String(totalEntryCount)}
                                     </span>
                                 ) : null}
                             </div>
@@ -1085,8 +1098,8 @@ export function WorldInfoWorkbenchPanel({
                                                     sx={s.searchInput}
                                                     type="search"
                                                     data-world-info-react-control="search"
-                                                    aria-label="搜索条目"
-                                                    placeholder="搜索"
+                                                    aria-label={translate('Search entries')}
+                                                    placeholder={translate('Search')}
                                                     value={field.state.value}
                                                     onChange={event => {
                                                         const searchQuery = event.target.value;
@@ -1100,8 +1113,8 @@ export function WorldInfoWorkbenchPanel({
                                             <button
                                                 type="button"
                                                 className={buttonClass(s.button, s.searchClear)}
-                                                title="清空搜索"
-                                                aria-label="清空搜索"
+                                                title={translate('Clear search')}
+                                                aria-label={translate('Clear search')}
                                                 data-world-info-react-search-clear
                                                 onClick={clearSearch}
                                             >
@@ -1114,7 +1127,7 @@ export function WorldInfoWorkbenchPanel({
                                             <FieldSelect
                                                 sx={s.sortSelect}
                                                 data-world-info-react-control="sort"
-                                                aria-label="排序"
+                                                aria-label={translate('Sort')}
                                                 value={field.state.value}
                                                 onChange={event => {
                                                     const sortValue = event.target.value;
@@ -1132,8 +1145,8 @@ export function WorldInfoWorkbenchPanel({
                                         type="button"
                                         className={buttonClass(s.button, s.buttonPrimary, s.buttonIcon)}
                                         data-world-info-react-action="new-entry"
-                                        title="新建条目"
-                                        aria-label="新建条目"
+                                        title={translate('New entry')}
+                                        aria-label={translate('New entry')}
                                         disabled={!bridgeState.canCreateEntry}
                                         onClick={() => worldInfoCommandMutation.mutate(() => commands.createEntry())}
                                     >
@@ -1143,8 +1156,8 @@ export function WorldInfoWorkbenchPanel({
                                         type="button"
                                         className={buttonClass(s.button, s.buttonGhost, s.buttonIcon, multiSelectMode ? s.buttonGhostActive : null)}
                                         data-world-info-react-action="toggle-multi-select"
-                                        title="多选"
-                                        aria-label="多选"
+                                        title={translate('Multi-select')}
+                                        aria-label={translate('Multi-select')}
                                         aria-pressed={multiSelectMode}
                                         onClick={() => {
                                             if (multiSelectMode) {
@@ -1162,7 +1175,7 @@ export function WorldInfoWorkbenchPanel({
                             <div {...stylex.props(s.multiBar)} data-world-info-react-multiselect-bar>
                                 <span {...stylex.props(s.multiBarCount)} data-world-info-react-selected-count>
                                     <span {...stylex.props(s.pulseDot)} aria-hidden="true" />
-                                    已选 {selectedUids.size}
+                                    {translate('Selected ${0}').replace('${0}', String(selectedUids.size))}
                                 </span>
                                 <button
                                     type="button"
@@ -1170,7 +1183,7 @@ export function WorldInfoWorkbenchPanel({
                                     data-world-info-react-action="multi-select-all"
                                     onClick={() => setSelectedUids(new Set(entrySummaries.map(entry => entry.uid)))}
                                 >
-                                    全选
+                                    {translate('Select all')}
                                 </button>
                                 <button
                                     type="button"
@@ -1179,7 +1192,7 @@ export function WorldInfoWorkbenchPanel({
                                     disabled={selectedUids.size === 0}
                                     onClick={() => setSelectedUids(new Set())}
                                 >
-                                    清空
+                                    {translate('Clear')}
                                 </button>
                                 <span {...stylex.props(s.spacer)} aria-hidden="true" />
                                 <button
@@ -1190,7 +1203,7 @@ export function WorldInfoWorkbenchPanel({
                                     onClick={() => runBulkCommand(uids => commands.bulkSetEntriesEnabled(uids, true))}
                                 >
                                     <i className={iconClass('fa-toggle-on', s.buttonIconSlot)} aria-hidden="true" />
-                                    启用
+                                    {translate('Enable')}
                                 </button>
                                 <button
                                     type="button"
@@ -1200,7 +1213,7 @@ export function WorldInfoWorkbenchPanel({
                                     onClick={() => runBulkCommand(uids => commands.bulkSetEntriesEnabled(uids, false))}
                                 >
                                     <i className={iconClass('fa-toggle-off', s.buttonIconSlot)} aria-hidden="true" />
-                                    停用
+                                    {translate('Disable')}
                                 </button>
                                 <button
                                     type="button"
@@ -1210,7 +1223,7 @@ export function WorldInfoWorkbenchPanel({
                                     onClick={() => runBulkCommand(uids => commands.bulkDeleteEntries(uids))}
                                 >
                                     <i className={iconClass('fa-trash-can', s.buttonIconSlot)} aria-hidden="true" />
-                                    删除
+                                    {translate('Delete')}
                                 </button>
                             </div>
                         ) : null}
@@ -1261,20 +1274,20 @@ export function WorldInfoWorkbenchPanel({
                                         activeSearchQuery ? (
                                             <>
                                                 <i className={iconClass('fa-magnifying-glass', s.emptyBigIcon)} aria-hidden="true" />
-                                                <span>没有匹配“{activeSearchQuery}”的条目</span>
+                                                <span>{translate('No entries match \u201c${0}\u201d').replace('${0}', activeSearchQuery)}</span>
                                                 <button
                                                     type="button"
                                                     className={buttonClass(s.button, s.buttonGhost, s.emptyAction)}
                                                     data-world-info-react-action="clear-search"
                                                     onClick={clearSearch}
                                                 >
-                                                    清除搜索
+                                                    {translate('Clear search')}
                                                 </button>
                                             </>
                                         ) : (
                                             <>
                                                 <i className={iconClass('fa-feather-pointed', s.emptyBigIcon)} aria-hidden="true" />
-                                                <span>此世界书还没有条目</span>
+                                                <span>{translate('This world book has no entries yet')}</span>
                                                 <button
                                                     type="button"
                                                     className={buttonClass(s.button, s.buttonPrimary, s.emptyAction)}
@@ -1283,21 +1296,21 @@ export function WorldInfoWorkbenchPanel({
                                                     onClick={() => worldInfoCommandMutation.mutate(() => commands.createEntry())}
                                                 >
                                                     <i className={iconClass('fa-plus', s.buttonIconSlot)} aria-hidden="true" />
-                                                    新建第一条条目
+                                                    {translate('Create the first entry')}
                                                 </button>
                                             </>
                                         )
                                     ) : (
                                         <>
                                             <i className={iconClass('fa-book-open', s.emptyBigIcon)} aria-hidden="true" />
-                                            <span>请先选择或创建世界书</span>
+                                            <span>{translate('Select or create a world book first')}</span>
                                         </>
                                     )}
                                 </div>
                             )}
                         </div>
                         {selectedWorldName && entrySummaries.length > 0 ? (
-                            <div {...stylex.props(s.listFoot)}>支持拖拽导入 .json / .lorebook / .png</div>
+                            <div {...stylex.props(s.listFoot)}>{translate('Drag and drop a .json / .lorebook / .png file to import')}</div>
                         ) : null}
                     </div>
                     <div
@@ -1310,7 +1323,7 @@ export function WorldInfoWorkbenchPanel({
                             entry={bridgeState.selectedEntry ?? null}
                             commands={commands}
                             onBack={isNarrow && mobileView === 'editor' ? backToList : undefined}
-                            emptyMessage={selectedWorldName ? '选择一条条目开始编辑' : '请先选择或创建世界书'}
+                            emptyMessage={selectedWorldName ? translate('Select an entry to start editing') : translate('Select or create a world book first')}
                         />
                     </div>
                 </div>

@@ -8,8 +8,8 @@ import {
     CHAT_MEMORY_METADATA_KEY,
     CHAT_MEMORY_MAX_AUTO_ATTEMPTS,
     CHAT_MEMORY_ROLES,
-    DEFAULT_CHAT_MEMORY_PROMPT,
-    DEFAULT_CHAT_MEMORY_WRAP,
+    getDefaultChatMemoryPrompt,
+    getDefaultChatMemoryWrap,
     TURN_SUMMARY_STATUS,
     applySummariesToCoreChat,
     computeTurnHash,
@@ -145,7 +145,7 @@ async function requestTurnSummary(job, signal) {
     const { generate_data } = await buildChatCompletionRequest({
         type: MEMORY_REQUEST_TYPE,
         messages: [
-            { role: 'system', content: substitute(memorySettings.prompt || DEFAULT_CHAT_MEMORY_PROMPT) },
+            { role: 'system', content: substitute(memorySettings.prompt || getDefaultChatMemoryPrompt()) },
             { role: 'user', content: substitute(job.sourceText) },
         ],
         settings,
@@ -399,7 +399,7 @@ export function scheduleMemoryMaintenance({ immediate = false } = {}) {
     kickQueue();
 }
 
-/** Manual "整理现在" — immediate maintenance pass over the active chat. */
+/** Manual "summarize now" — immediate maintenance pass over the active chat. */
 export function runImmediateMemoryConsolidation() {
     scheduleMemoryMaintenance({ immediate: true });
 }
@@ -518,4 +518,4 @@ export function initChatMemory() {
     eventSource.on(event_types.CHAT_CHANGED, handleChatTeardown);
 }
 
-export { CHAT_MEMORY_ROLES, DEFAULT_CHAT_MEMORY_PROMPT, DEFAULT_CHAT_MEMORY_WRAP };
+export { CHAT_MEMORY_ROLES, getDefaultChatMemoryPrompt, getDefaultChatMemoryWrap };

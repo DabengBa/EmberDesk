@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from 'react';
 import * as stylex from '@stylexjs/stylex';
 import { JsonViewer } from './JsonViewer';
 import { wireLogStyles as styles } from './wire-log.styles';
+import { translate, useTranslated } from '@/compat/i18n.js';
 import {
     downloadJson,
     formatBytes,
@@ -15,6 +16,17 @@ import {
     sseBody,
 } from './wire-log-helpers';
 import type { WireLogChatMessage, WireLogRecord } from './types';
+
+/** Copy confirmation for each clipboard target. */
+function copySuccessMessage(kind: string) {
+    if (kind === 'record') {
+        return translate('Copied the whole record');
+    }
+    if (kind === 'messages') {
+        return translate('Copied request messages');
+    }
+    return translate('Copied response text');
+}
 
 export interface WireLogDetailProps {
     record: WireLogRecord | null;
@@ -95,6 +107,7 @@ function MessageRow({ message, index }: { message: WireLogChatMessage; index: nu
 }
 
 export function WireLogDetail({ record, isLoading = false, error, onDelete, isDeleting = false }: WireLogDetailProps) {
+    useTranslated('');
     const [copyStatus, setCopyStatus] = useState('');
     const messages = useMemo(() => requestMessages(record), [record]);
     const replyText = useMemo(() => responseText(record), [record]);
@@ -109,7 +122,7 @@ export function WireLogDetail({ record, isLoading = false, error, onDelete, isDe
                 ? serializeForClipboard(messages)
                 : replyText ?? '';
         const ok = await copyText(text);
-        setCopyStatus(ok ? `已复制${kind === 'record' ? '整条记录' : kind === 'messages' ? '请求 messages' : '响应文本'}` : '复制失败');
+        setCopyStatus(ok ? copySuccessMessage(kind) : translate('Copy failed'));
     }, [rawJson, messages, replyText]);
 
     if (error) {
@@ -123,7 +136,7 @@ export function WireLogDetail({ record, isLoading = false, error, onDelete, isDe
     if (isLoading) {
         return (
             <div {...stylex.props(styles.detail)}>
-                <p role="status" {...stylex.props(styles.feedback)}>加载中…</p>
+                <p role="status" {...stylex.props(styles.feedback)}>{translate('Loading…')}</p>
             </div>
         );
     }
@@ -131,7 +144,7 @@ export function WireLogDetail({ record, isLoading = false, error, onDelete, isDe
     if (!record) {
         return (
             <div {...stylex.props(styles.detail)}>
-                <p role="status" {...stylex.props(styles.feedback)}>从左侧选择一条日志查看请求与响应。</p>
+                <p role="status" {...stylex.props(styles.feedback)}>{translate('Select a log entry on the left to inspect its request and response.')}</p>
             </div>
         );
     }
@@ -148,7 +161,7 @@ export function WireLogDetail({ record, isLoading = false, error, onDelete, isDe
                     {...stylex.props(styles.button)}
                     onClick={() => { void copy('record'); }}
                 >
-                    复制 JSON
+                    {translate('Copy JSON')}
                 </button>
                 <button
                     type="button"
@@ -157,7 +170,7 @@ export function WireLogDetail({ record, isLoading = false, error, onDelete, isDe
                     {...stylex.props(styles.button)}
                     onClick={() => downloadJson(record, record.id)}
                 >
-                    下载 JSON
+                    {translate('Download JSON')}
                 </button>
                 <button
                     type="button"
@@ -166,7 +179,7 @@ export function WireLogDetail({ record, isLoading = false, error, onDelete, isDe
                     {...stylex.props(styles.button)}
                     onClick={() => { void copy('messages'); }}
                 >
-                    复制 messages
+                    {translate('Copy messages')}
                 </button>
                 {replyText !== null ? (
                     <button
@@ -176,7 +189,7 @@ export function WireLogDetail({ record, isLoading = false, error, onDelete, isDe
                         {...stylex.props(styles.button)}
                         onClick={() => { void copy('reply'); }}
                     >
-                        复制响应文本
+                        {translate('Copy response text')}
                     </button>
                 ) : null}
                 {onDelete ? (
@@ -188,31 +201,31 @@ export function WireLogDetail({ record, isLoading = false, error, onDelete, isDe
                         disabled={isDeleting}
                         onClick={() => onDelete(record.id)}
                     >
-                        {isDeleting ? '删除中…' : '删除'}
+                        {isDeleting ? translate('Deleting…') : translate('Delete')}
                     </button>
                 ) : null}
             </div>
             {copyStatus ? <p role="status" {...stylex.props(styles.feedback)}>{copyStatus}</p> : null}
 
             <div {...stylex.props(styles.metaGrid)}>
-                <MetaCell label="时间" value={formatTimestamp(record.ts)} />
-                <MetaCell label="状态" value={record.status} />
-                <MetaCell label="模型" value={record.context?.model ?? null} />
-                <MetaCell label="来源" value={record.context?.source ?? null} />
-                <MetaCell label="类型" value={record.context?.type ?? null} />
-                <MetaCell label="角色" value={record.context?.charName ?? null} />
-                <MetaCell label="会话" value={record.context?.chatId ?? null} />
-                <MetaCell label="管线步骤" value={record.context?.pipelineStep ?? null} />
-                <MetaCell label="管线 Run" value={record.context?.pipelineRun ?? null} />
-                <MetaCell label="请求字节" value={formatBytes(record.request?.bytes)} />
+                <MetaCell label={translate('Time')} value={formatTimestamp(record.ts)} />
+                <MetaCell label={translate('Status')} value={record.status} />
+                <MetaCell label={translate('Model')} value={record.context?.model ?? null} />
+                <MetaCell label={translate('Source')} value={record.context?.source ?? null} />
+                <MetaCell label={translate('Type')} value={record.context?.type ?? null} />
+                <MetaCell label={translate('Character')} value={record.context?.charName ?? null} />
+                <MetaCell label={translate('Chat')} value={record.context?.chatId ?? null} />
+                <MetaCell label={translate('Pipeline step')} value={record.context?.pipelineStep ?? null} />
+                <MetaCell label={translate('Pipeline run')} value={record.context?.pipelineRun ?? null} />
+                <MetaCell label={translate('Request bytes')} value={formatBytes(record.request?.bytes)} />
                 <MetaCell
-                    label="响应字节"
+                    label={translate('Response bytes')}
                     value={record.response ? formatBytes(record.response.bytes) : null}
                 />
-                <MetaCell label="分块数" value={record.response?.chunks ?? null} />
-                <MetaCell label="耗时" value={record.response?.durationMs != null ? `${record.response.durationMs} ms` : null} />
-                <MetaCell label="首字节" value={record.response?.ttftMs != null ? `${record.response.ttftMs} ms` : null} />
-                <MetaCell label="Token 用量" value={formatUsage(record.response?.usage)} />
+                <MetaCell label={translate('Chunks')} value={record.response?.chunks ?? null} />
+                <MetaCell label={translate('Duration')} value={record.response?.durationMs != null ? `${record.response.durationMs} ms` : null} />
+                <MetaCell label={translate('First byte')} value={record.response?.ttftMs != null ? `${record.response.ttftMs} ms` : null} />
+                <MetaCell label={translate('Token usage')} value={formatUsage(record.response?.usage)} />
             </div>
 
             {record.error ? (
@@ -222,9 +235,9 @@ export function WireLogDetail({ record, isLoading = false, error, onDelete, isDe
             ) : null}
 
             <div {...stylex.props(styles.sectionLabel)}>
-                <span>请求</span>
+                <span>{translate('Request')}</span>
                 <span {...stylex.props(styles.statusBadge)}>{record.request?.method} {record.request?.url}</span>
-                {record.request?.truncated ? <span {...stylex.props(styles.statusBadge, styles.statusError)}>已截断</span> : null}
+                {record.request?.truncated ? <span {...stylex.props(styles.statusBadge, styles.statusError)}>{translate('Truncated')}</span> : null}
             </div>
             <div {...stylex.props(styles.sectionLabel)}>
                 <span>messages（{messages.length}）</span>
@@ -236,17 +249,17 @@ export function WireLogDetail({ record, isLoading = false, error, onDelete, isDe
                     ))}
                 </div>
             ) : (
-                <p {...stylex.props(styles.feedback)}>该请求没有 messages 数组。</p>
+                <p {...stylex.props(styles.feedback)}>{translate('This request has no messages array.')}</p>
             )}
 
-            <div {...stylex.props(styles.sectionLabel)}>请求体（完整）</div>
+            <div {...stylex.props(styles.sectionLabel)}>{translate('Request body (full)')}</div>
             <JsonViewer value={record.request?.body ?? null} depth={1} label="request body" />
 
-            <div {...stylex.props(styles.sectionLabel)}>请求头</div>
+            <div {...stylex.props(styles.sectionLabel)}>{translate('Request headers')}</div>
             <JsonViewer value={record.request?.headers ?? {}} depth={1} label="request headers" />
 
             <div {...stylex.props(styles.sectionLabel)}>
-                <span>响应</span>
+                <span>{translate('Response')}</span>
                 {record.response ? (
                     <span {...stylex.props(styles.statusBadge)}>
                         {record.response.status} {record.response.streamed ? 'stream' : 'json'}
@@ -256,26 +269,26 @@ export function WireLogDetail({ record, isLoading = false, error, onDelete, isDe
             {replyText !== null ? (
                 <pre {...stylex.props(styles.pre)} data-wire-log-reply>{replyText}</pre>
             ) : (
-                <p {...stylex.props(styles.feedback)}>该记录没有可读的响应文本。</p>
+                <p {...stylex.props(styles.feedback)}>{translate('This record has no readable response text.')}</p>
             )}
             {reasoningText !== null ? (
                 <>
-                    <div {...stylex.props(styles.sectionLabel)}>推理内容</div>
+                    <div {...stylex.props(styles.sectionLabel)}>{translate('Reasoning content')}</div>
                     <pre {...stylex.props(styles.pre)} data-wire-log-reasoning>{reasoningText}</pre>
                 </>
             ) : null}
             {streamed ? (
                 <>
                     <div {...stylex.props(styles.sectionLabel)}>
-                        <span>流式原始字节（SSE）</span>
+                        <span>{translate('Streaming raw bytes (SSE)')}</span>
                         {streamed.rawTruncated ? (
-                            <span {...stylex.props(styles.statusBadge, styles.statusError)}>已截断</span>
+                            <span {...stylex.props(styles.statusBadge, styles.statusError)}>{translate('Truncated')}</span>
                         ) : null}
                     </div>
                     <JsonViewer value={streamed.raw ?? ''} label="response stream" />
                 </>
             ) : null}
-            <div {...stylex.props(styles.sectionLabel)}>响应体（完整）</div>
+            <div {...stylex.props(styles.sectionLabel)}>{translate('Response body (full)')}</div>
             <JsonViewer value={record.response?.body ?? null} depth={1} label="response body" />
         </div>
     );

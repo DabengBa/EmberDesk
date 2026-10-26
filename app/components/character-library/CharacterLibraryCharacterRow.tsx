@@ -5,6 +5,7 @@ import {
     type CharacterLibraryCharacterRowModel,
 } from '@/lib/character-library-row-helpers';
 
+import { translate, useTranslated } from '@/compat/i18n.js';
 interface CharacterLibraryCharacterRowProps {
     model: CharacterLibraryCharacterRowModel;
     selected?: boolean;
@@ -20,6 +21,7 @@ export function CharacterLibraryCharacterRow({
     onSelect,
     onBulkToggle,
 }: CharacterLibraryCharacterRowProps) {
+    useTranslated('');
     const { visible, skipped } = selectVisibleCharacterTags(model.tags ?? [], {
         tagsDisplayLimit: model.tagsDisplayLimit ?? 50,
         shouldPrintTag: tag => Boolean(tag.forceVisible),
@@ -106,7 +108,7 @@ export function CharacterLibraryCharacterRow({
                 </div>
                 <div className="flex-container wide100pLess70px character_select_container">
                     <div className="wide100p character_name_block">
-                        <small className="entity_type_badge character_type_badge" data-i18n="Character">Character</small>
+                        <small className="entity_type_badge character_type_badge" >{translate('Character')}</small>
                         <span className="ch_name" title={`[Character] ${model.name}`}>{model.name}</span>
                         <small className="ch_additional_info ch_add_placeholder">+++</small>
                         {model.auxFieldValue

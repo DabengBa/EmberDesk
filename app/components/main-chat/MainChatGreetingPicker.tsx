@@ -2,11 +2,14 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import * as stylex from '@stylexjs/stylex';
 
 import type { MainChatCommands } from '../../compat/workspace-commands';
+import { translate, useTranslated } from '../../compat/i18n.js';
 import type { MainChatGreetingsSnapshot } from '../../stores/main-chat-store';
 import { mainChatGreetingPickerStyles as styles } from './MainChatGreetingPicker.styles';
 
 function greetingLabel(index: number) {
-    return index === 0 ? '首条消息' : `备用开场白 ${index}`;
+    return index === 0
+        ? translate('First message')
+        : translate('Alternate greeting ${0}').replace('${0}', String(index));
 }
 
 function greetingSummary(text: string, query: string) {
@@ -28,6 +31,7 @@ export function MainChatGreetingPicker({
     greetings: MainChatGreetingsSnapshot;
     commands?: MainChatCommands;
 }) {
+    useTranslated('');
     const dialogRef = useRef<HTMLDialogElement>(null);
     const triggerRef = useRef<HTMLButtonElement>(null);
     const focusRestoreRef = useRef<HTMLElement | null>(null);
@@ -105,9 +109,9 @@ export function MainChatGreetingPicker({
                 setOpen(false);
                 return;
             }
-            setError('未能使用该开场白。会话状态可能已变化，请重试。');
+            setError(translate('Could not use that greeting. The chat state may have changed; try again.'));
         } catch {
-            setError('未能使用该开场白，请检查连接后重试。');
+            setError(translate('Could not use that greeting. Check the connection and try again.'));
         } finally {
             setBusy(false);
         }
@@ -121,16 +125,17 @@ export function MainChatGreetingPicker({
         <section data-testid="main-chat-greeting-picker">
             <button
                 ref={triggerRef}
+                data-greeting-picker-trigger=""
                 type="button"
                 className={`menu_button ${stylex.props(styles.trigger).className ?? ''}`}
                 aria-haspopup="dialog"
                 aria-expanded={open}
-                aria-label="选择开场白"
+                aria-label={translate('Select greeting')}
                 disabled={!greetings.canSelect}
                 onClick={openPicker}
             >
                 <i className="fa-solid fa-message" aria-hidden="true" />
-                <span>{selectedGreeting ? greetingLabel(selectedGreeting.index) : '选择开场白'}</span>
+                <span>{selectedGreeting ? greetingLabel(selectedGreeting.index) : translate('Select greeting')}</span>
                 {selectedGreeting ? <span {...stylex.props(styles.count)}>{greetings.options.indexOf(selectedGreeting) + 1} / {greetings.options.length}</span> : null}
                 <i className="fa-solid fa-chevron-down" aria-hidden="true" />
             </button>
@@ -149,24 +154,24 @@ export function MainChatGreetingPicker({
                 >
                     <div {...stylex.props(styles.panel)}>
                         <div {...stylex.props(styles.header)}>
-                            <h2 id={`${searchId}-title`} {...stylex.props(styles.title)}>选择开场白</h2>
-                            <button type="button" className={`menu_button ${stylex.props(styles.closeButton).className ?? ''}`} aria-label="取消并关闭" disabled={busy} onClick={close}>
+                            <h2 id={`${searchId}-title`} {...stylex.props(styles.title)}>{translate('Select greeting')}</h2>
+                            <button type="button" className={`menu_button ${stylex.props(styles.closeButton).className ?? ''}`} aria-label={translate('Cancel and close')} disabled={busy} onClick={close}>
                                 <i className="fa-solid fa-xmark" aria-hidden="true" />
                             </button>
                         </div>
-                        <label htmlFor={searchId} className="sr-only">搜索开场白</label>
+                        <label htmlFor={searchId} className="sr-only">{translate('Search greetings')}</label>
                         <input
                             id={searchId}
                             type="search"
                             autoFocus
                             {...stylex.props(styles.search)}
-                            placeholder="搜索开场白"
+                            placeholder={translate('Search greetings')}
                             value={search}
                             disabled={busy}
                             onChange={event => setSearch(event.target.value)}
                         />
                         <div {...stylex.props(styles.content)}>
-                            <div {...stylex.props(styles.options)} aria-label="开场白列表">
+                            <div {...stylex.props(styles.options)} aria-label={translate('Greeting list')}>
                                 {filteredGreetings.map(option => {
                                     const active = option.index === previewGreeting?.index;
                                     return (
@@ -183,29 +188,35 @@ export function MainChatGreetingPicker({
                                         >
                                             <span {...stylex.props(styles.optionTitle)}>
                                                 {greetingLabel(option.index)}
-                                                {option.index === greetings.selectedIndex ? <span {...stylex.props(styles.current)}>当前使用</span> : null}
+                                                {option.index === greetings.selectedIndex ? <span {...stylex.props(styles.current)}>{translate('In use')}</span> : null}
                                             </span>
                                             <span {...stylex.props(styles.optionPreview)}>{greetingSummary(option.text, search)}</span>
                                         </button>
                                     );
                                 })}
-                                {filteredGreetings.length === 0 ? <p {...stylex.props(styles.empty)} role="status">没有找到匹配的开场白。</p> : null}
+                                {filteredGreetings.length === 0 ? <p {...stylex.props(styles.empty)} role="status">{translate('No matching greetings found.')}</p> : null}
                             </div>
                             <article {...stylex.props(styles.preview)} aria-live="polite">
-                                <h3 {...stylex.props(styles.previewTitle)}>{previewGreeting ? `预览 · ${greetingLabel(previewGreeting.index)}` : '没有可预览的开场白'}</h3>
-                                <p {...stylex.props(styles.previewText)}>{previewGreeting?.text ?? '请更换或清除搜索条件。'}</p>
+                                <h3 {...stylex.props(styles.previewTitle)}>{previewGreeting
+                    ? translate('Preview · ${0}').replace('${0}', greetingLabel(previewGreeting.index))
+                    : translate('No greeting to preview')}</h3>
+                                <p {...stylex.props(styles.previewText)}>{previewGreeting?.text ?? translate('Change or clear the search to see more.')}</p>
                             </article>
                         </div>
                         {error ? <p {...stylex.props(styles.status)} role="alert"><i className="fa-solid fa-circle-exclamation" aria-hidden="true" /> {error}</p> : null}
                         <div {...stylex.props(styles.actions)}>
-                            <button type="button" className={`menu_button ${stylex.props(styles.action).className ?? ''}`} disabled={busy} onClick={close}>取消</button>
+                            <button type="button" className={`menu_button ${stylex.props(styles.action).className ?? ''}`} disabled={busy} onClick={close}>{translate('Cancel')}</button>
                             <button
                                 type="button"
                                 className={`menu_button ${stylex.props(styles.action, styles.confirmAction).className ?? ''}`}
                                 disabled={busy || !greetings.canSelect || previewGreeting === null}
                                 onClick={() => void confirmSelection()}
                             >
-                                {busy ? '正在使用…' : previewGreeting ? `使用${greetingLabel(previewGreeting.index)}` : '使用此开场白'}
+                                {busy
+                        ? translate('Applying…')
+                        : previewGreeting
+                            ? translate('Use ${0}').replace('${0}', greetingLabel(previewGreeting.index))
+                            : translate('Use this greeting')}
                             </button>
                         </div>
                     </div>

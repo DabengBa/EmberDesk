@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import * as stylex from '@stylexjs/stylex';
 
-import { useTranslated } from '../../compat/i18n.js';
+import { translate, useTranslated } from '../../compat/i18n.js';
 import { wireLogStyles as styles } from './wire-log.styles';
 import { serializeForClipboard } from './wire-log-helpers';
 
@@ -104,6 +104,7 @@ function JsonNode({ value, path, label, depth, collapsed, onToggle }: JsonNodePr
 };
 
 export function JsonViewer({ value, label = 'JSON', depth = 0 }: JsonViewerProps) {
+    useTranslated('');
     const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
     const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
     const timerRef = useRef<number | null>(null);
@@ -145,7 +146,11 @@ export function JsonViewer({ value, label = 'JSON', depth = 0 }: JsonViewerProps
     }, [markCopied, value]);
 
     const copyLabel = useTranslated(
-        copyState === 'copied' ? '已复制' : copyState === 'failed' ? '复制失败' : '复制 JSON',
+        copyState === 'copied'
+                    ? translate('Copied')
+                    : copyState === 'failed'
+                        ? translate('Copy failed')
+                        : translate('Copy JSON'),
     );
 
     return (

@@ -133,7 +133,7 @@ describe('chat workspace structure', () => {
         expect(composerSource).toMatch(/id="send_textarea"[^>]*\baria-label="Chat message"/);
         expect(composerSource).toMatch(/id="send_textarea"[^>]*\baria-describedby="send_textarea_hint"/);
         expect(composerSource).toContain('id="send_textarea_hint"');
-        expect(composerSource).toContain('data-i18n="Type /? for commands. Send requires an API connection."');
+        expect(composerSource).toContain("translate('Type /? for commands. Send requires an API connection.')");
         expect(indexHtml).toContain('id="send_form"');
         expect(scriptSource).toContain("const sendTextareaHint = $('#send_textarea_hint');");
         expect(scriptSource).toContain('sendTextareaHint.text(t`Type /? for commands. Send requires an API connection.`);');
@@ -320,7 +320,7 @@ describe('chat workspace structure', () => {
         // label is 后台模型 — it also serves background tasks (chat memory).
         expectContainsMarkers(settingsSurface, [
             'name="providers.fallbackProviderModel"',
-            'label="后台模型"',
+            "label={t('Background model')}",
             'placeholder="gpt-4.1-mini"',
         ], { contractName: 'fallback provider model field' });
         expect(helpersSource).toContain("formPath: 'providers.fallbackProviderModel'");

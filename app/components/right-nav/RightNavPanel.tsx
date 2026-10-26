@@ -1,5 +1,6 @@
 import { ContractButton } from '../contract/ContractButton';
 import { ContractIconButton } from '../contract/ContractIconButton';
+import { translate, useTranslated } from '@/compat/i18n.js';
 /**
  * Right navigation panel markup (React-owned inside #right-nav-panel).
  * Contains the character create/edit form (#form_create), the import form,
@@ -9,6 +10,7 @@ import { ContractIconButton } from '../contract/ContractIconButton';
  * list itself is rendered dynamically into #rm_print_characters_block.
  */
 export function RightNavPanel() {
+    useTranslated('');
     return (
         <>
                 <div id="right-nav-panelheader" className="fa-solid fa-grip drag-grabber" aria-hidden="true"></div>
@@ -17,24 +19,24 @@ export function RightNavPanel() {
                 <div id="rm_PinAndTabs">
                     <div id="right-nav-panel-tabs" className="workspace-panel-header">
                         <div className="workspace-panel-title">
-                            <span className="workspace-panel-title-label" data-i18n="Characters">Characters</span>
+                            <span className="workspace-panel-title-label" >{translate('Characters')}</span>
                             <div id="rm_button_selected_ch">
                                 {/* Legacy fills this heading with the selected
                                     character name; stays empty until one is
                                     selected so the panel title shows "Characters". */}
                                 <h2 className="interactable"></h2>
-                                <span id="temporary_chat_status" className="temporary-chat-status" data-i18n="Temporary chat" aria-live="polite" aria-hidden="true" hidden>Temporary chat</span>
+                                <span id="temporary_chat_status" className="temporary-chat-status"  aria-live="polite" aria-hidden="true" hidden>{translate('Temporary chat')}</span>
                             </div>
                         </div>
                         <div className="workspace-panel-actions">
                             <div id="result_info" className="flex-container" style={{ "display": "none" }}>
                                 <div id="result_info_text" title="Token counts may be inaccurate and provided just for reference." data-i18n="[title]Token counts may be inaccurate and provided just for reference.">
                                     <div>
-                                        <strong id="result_info_total_tokens" title="Total tokens" data-i18n="[title]Total tokens"><span data-i18n="Calculating...">Calculating...</span></strong>{'\u00a0'}<span data-i18n="Tokens">Tokens</span>
+                                        <strong id="result_info_total_tokens" title="Total tokens" data-i18n="[title]Total tokens"><span >{translate('Calculating...')}</span></strong>{'\u00a0'}<span >{translate('Tokens')}</span>
                                     </div>
                                     <div>
                                         <small title="Permanent tokens" data-i18n="[title]Permanent tokens">
-                                            (<span id="result_info_permanent_tokens"></span>{'\u00a0'}<span data-i18n="Permanent">Permanent</span>)
+                                            (<span id="result_info_permanent_tokens"></span>{'\u00a0'}<span >{translate('Permanent')}</span>)
                                         </small>
                                     </div>
                                 </div>
@@ -61,7 +63,7 @@ export function RightNavPanel() {
                                 <div id="name_div" className="character-detail-name">
                                     <input id="character_name_pole" name="ch_name" className="text_pole" data-i18n="[placeholder]Name this character" placeholder="Name this character" defaultValue="" autoComplete="off" />
                                     <div className="extension_token_counter character-detail-name-meta">
-                                        <span data-i18n="extension_token_counter">Tokens:</span> <span data-token-counter="character_name_pole" data-token-permanent="true">counting...</span>
+                                        <span >{translate('Tokens:')}</span> <span data-token-counter="character_name_pole" data-token-permanent="true">counting...</span>
                                     </div>
                                 </div>
                                 <div className="flex-container flexFlowColumn expander flexNoGap character-detail-main">
@@ -81,45 +83,25 @@ export function RightNavPanel() {
                                                 </div>
                                                 <input type="hidden" id="fav_checkbox" name="fav" />
                                                 <label htmlFor="create_button" id="create_button_label" className="menu_button fa-solid fa-user-check" title="Create Character" data-i18n="[title]Create Character">
-                                                    <span className="sr-only" data-i18n="Create Character">Create Character</span>
+                                                    <span className="sr-only" >{translate('Create Character')}</span>
                                                     <input type="submit" id="create_button" name="create_button" />
                                                 </label>
                                                 <label className="character-detail-more" htmlFor="char-management-dropdown">
                                                     <span className="sr-only">Character actions</span>
                                                     <select id="char-management-dropdown" className="text_pole" defaultValue="default">
-                                                        <option value="default" disabled data-i18n="More...">More...</option>
+                                                        <option value="default" disabled >{translate('More...')}</option>
 
-                                                        <option id="set_character_world" data-i18n="Link to World Info">
-                                                            Link to World Info
-                                                        </option>
-                                                        <option id="character_action_chat_lorebook" data-i18n="Chat Lore">
-                                                            Chat Lore
-                                                        </option>
-                                                        <option id="import_character_info" data-i18n="Import Card Lore">
-                                                            Import Card Lore
-                                                        </option>
-                                                        <option id="set_chat_character_settings" data-i18n="Character Settings Overrides">
-                                                            Character Settings Overrides
-                                                        </option>
-                                                        <option id="renameCharButton" data-i18n="Rename">
-                                                            Rename
-                                                        </option>
+                                                        <option id="set_character_world" >{translate('Link to World Info')}</option>
+                                                        <option id="character_action_chat_lorebook" >{translate('Chat Lore')}</option>
+                                                        <option id="import_character_info" >{translate('Import Card Lore')}</option>
+                                                        <option id="set_chat_character_settings" >{translate('Character Settings Overrides')}</option>
+                                                        <option id="renameCharButton" >{translate('Rename')}</option>
 
-                                                        <option id="replace_update" data-i18n="Replace / Update">
-                                                            Replace / Update
-                                                        </option>
-                                                        <option id="import_tags" data-i18n="Import Tags">
-                                                            Import Tags
-                                                        </option>
-                                                        <option id="character_action_export" className="character-detail-edit-action" data-i18n="Export and Download">
-                                                            Export
-                                                        </option>
-                                                        <option id="character_action_duplicate" className="character-detail-edit-action" data-i18n="Duplicate Character">
-                                                            Duplicate
-                                                        </option>
-                                                        <option id="delete_from_dropdown" className="red_button character-detail-edit-action" data-i18n="Delete Character">
-                                                            Delete Character
-                                                        </option>
+                                                        <option id="replace_update" >{translate('Replace / Update')}</option>
+                                                        <option id="import_tags" >{translate('Import Tags')}</option>
+                                                        <option id="character_action_export" className="character-detail-edit-action" >{translate('Export')}</option>
+                                                        <option id="character_action_duplicate" className="character-detail-edit-action" >{translate('Duplicate')}</option>
+                                                        <option id="delete_from_dropdown" className="red_button character-detail-edit-action" >{translate('Delete Character')}</option>
                                                     </select>
                                                 </label>
                                             </div>
@@ -143,7 +125,7 @@ export function RightNavPanel() {
                             <div id="spoiler_free_desc" className="inline-drawer flex-container flexFlowColumn flexNoGap character-detail-section character-detail-notes">
                                 <div className="inline-drawer-toggle inline-drawer-header padding0 gap5px standoutHeader">
                                     <div id="creators_notes_div" className="title_restorable flexGap5 wide100p character-detail-section-header">
-                                        <span className="flex1" data-i18n="Creator's Notes">Creator's Notes</span>
+                                        <span className="flex1" >{translate("Creator's Notes")}</span>
                                         <ContractIconButton id="creators_note_styles_button" className="margin0 menu_button" label="Allow / Forbid the use of global styles for this character." nativeTitle title="Allow / Forbid the use of global styles for this character." icon={<i className="fa-solid fa-palette fa-fw" aria-hidden="true" />} />
                                         <ContractIconButton id="spoiler_free_desc_button" className="margin0 menu_button" label="Show / Hide Description and First Message" nativeTitle title="Show / Hide Description and First Message" icon={<i className="fa-solid fa-eye fa-fw" aria-hidden="true" />} />
                                     </div>
@@ -153,16 +135,14 @@ export function RightNavPanel() {
                                 </div>
                                 <div className="inline-drawer-content">
                                     <div id="creator_notes_spoiler"></div>
-                                    <div id="creator_notes_empty" data-i18n="No Creator's Notes provided.">
-                                        No Creator's Notes provided.
-                                    </div>
+                                    <div id="creator_notes_empty" >{translate("No Creator's Notes provided.")}</div>
                                 </div>
                             </div>
-                            <small id="creators_note_desc_hidden" data-i18n="Character details are hidden.">Character details are hidden.</small>
+                            <small id="creators_note_desc_hidden" >{translate('Character details are hidden.')}</small>
                             <div id="descriptionWrapper" className="flex-container flexFlowColumn flex1 character-detail-section">
                                 <div id="description_div" className="title_restorable character-detail-section-header">
                                     <div className="flex-container alignitemscenter">
-                                        <span data-i18n="Character Description" className="mdhotkey_location">Description</span>
+                                        <span  className="mdhotkey_location">{translate('Description')}</span>
                                         <ContractIconButton className="editor_maximize right_menu_button" data-for="description_textarea" label="Expand the editor" title="Expand the editor" nativeTitle icon={<i className="fa-solid fa-expand" aria-hidden="true" />} />
                                         <a href="usage/core-concepts/characterdesign/#character-description" className="notes-link" target="_blank" rel="noreferrer" aria-label="Character description documentation">
                                             <span className="fa-solid fa-circle-question note-link-span" aria-hidden="true"></span>
@@ -172,13 +152,13 @@ export function RightNavPanel() {
                                 </div>
                                 <textarea id="description_textarea" data-macros data-i18n="[placeholder]Description" placeholder="Description" name="description"></textarea>
                                 <div className="extension_token_counter">
-                                    <span data-i18n="extension_token_counter">Tokens:</span> <span data-token-counter="description_textarea" data-token-permanent="true">counting...</span>
+                                    <span >{translate('Tokens:')}</span> <span data-token-counter="description_textarea" data-token-permanent="true">counting...</span>
                                 </div>
                             </div>
                             <div id="firstMessageWrapper" className="flex-container flexFlowColumn flex1 character-detail-section">
                                 <div id="first_message_div" className="title_restorable character-detail-section-header">
                                     <div className="flex-container alignitemscenter flex1">
-                                        <span data-i18n="First message" className="mdhotkey_location">First message</span>
+                                        <span  className="mdhotkey_location">{translate('First message')}</span>
                                         <ContractIconButton className="editor_maximize right_menu_button" data-for="firstmessage_textarea" label="Expand the editor" title="Expand the editor" nativeTitle icon={<i className="fa-solid fa-expand" aria-hidden="true" />} />
                                         <a href="usage/core-concepts/characterdesign/#first-message" className="notes-link" target="_blank" rel="noreferrer" aria-label="First message documentation">
                                             <span className="fa-solid fa-circle-question note-link-span" aria-hidden="true"></span>
@@ -188,7 +168,7 @@ export function RightNavPanel() {
                                 </div>
                                 <textarea id="firstmessage_textarea" data-macros data-i18n="[placeholder]First message" placeholder="First message" name="first_mes"></textarea>
                                 <div className="extension_token_counter">
-                                    <span data-i18n="extension_token_counter">Tokens:</span> <span data-token-counter="firstmessage_textarea">counting...</span>
+                                    <span >{translate('Tokens:')}</span> <span data-token-counter="firstmessage_textarea">counting...</span>
                                 </div>
                             </div>
                             {/* these divs are invisible and used for server communication purposes */}
@@ -222,20 +202,20 @@ export function RightNavPanel() {
                                     </div>
                                 </div>
                                 <div className="character-list-tool-group character-list-sort-group">
-                                    <label htmlFor="character_sort_order" className="character-list-sort-label" data-i18n="Character Toolbar Sort">Sort</label>
+                                    <label htmlFor="character_sort_order" className="character-list-sort-label" >{translate('Sort')}</label>
                                     <select id="character_sort_order" className="flex1 text_pole textarea_compact" title="Characters sorting order" data-i18n="[title]Characters sorting order">
-                                        <option data-field="search" data-order="desc" data-i18n="Search" hidden>Search</option>
-                                        <option data-field="name" data-order="asc" data-i18n="A-Z">A-Z</option>
-                                        <option data-field="name" data-order="desc" data-i18n="Z-A">Z-A</option>
-                                        <option data-field="create_date" data-order="desc" data-i18n="Newest">Newest</option>
-                                        <option data-field="create_date" data-order="asc" data-i18n="Oldest">Oldest</option>
-                                        <option data-field="fav" data-order="desc" data-rule="boolean" data-i18n="Favorites">Favorites</option>
-                                        <option data-field="date_last_chat" data-order="desc" data-i18n="Recent">Recent</option>
-                                        <option data-field="chat_size" data-order="desc" data-i18n="Most chats">Most chats</option>
-                                        <option data-field="chat_size" data-order="asc" data-i18n="Least chats">Least chats</option>
-                                        <option data-field="data_size" data-order="desc" data-i18n="Most tokens">Most tokens</option>
-                                        <option data-field="data_size" data-order="asc" data-i18n="Least tokens">Least tokens</option>
-                                        <option data-field="name" data-order="random" data-i18n="Random">Random</option>
+                                        <option data-field="search" data-order="desc"  hidden>{translate('Search')}</option>
+                                        <option data-field="name" data-order="asc" >{translate('A-Z')}</option>
+                                        <option data-field="name" data-order="desc" >{translate('Z-A')}</option>
+                                        <option data-field="create_date" data-order="desc" >{translate('Newest')}</option>
+                                        <option data-field="create_date" data-order="asc" >{translate('Oldest')}</option>
+                                        <option data-field="fav" data-order="desc" data-rule="boolean" >{translate('Favorites')}</option>
+                                        <option data-field="date_last_chat" data-order="desc" >{translate('Recent')}</option>
+                                        <option data-field="chat_size" data-order="desc" >{translate('Most chats')}</option>
+                                        <option data-field="chat_size" data-order="asc" >{translate('Least chats')}</option>
+                                        <option data-field="data_size" data-order="desc" >{translate('Most tokens')}</option>
+                                        <option data-field="data_size" data-order="asc" >{translate('Least tokens')}</option>
+                                        <option data-field="name" data-order="random" >{translate('Random')}</option>
                                     </select>
                                 </div>
                                 <div className="character-list-tool-group character-list-view-group">
@@ -244,7 +224,7 @@ export function RightNavPanel() {
                                     <ContractButton id="bulkEditButton" className="menu_button bulkEditButton character-list-action" label="Bulk" labelKey="Character Toolbar Bulk" labelClassName="character-list-action-label" ariaLabel="Bulk edit characters" title={"Bulk edit characters\r\rClick to toggle characters\rShift + Click to select/deselect a range of characters\rRight-click for actions"} titleKey="Bulk_edit_characters" nativeTitle tabIndex={0} icon={<i className="fa-solid fa-edit" aria-hidden="true" />} />
                                 </div>
                                 <div className="character-list-tool-group character-list-bulk-actions" aria-live="polite">
-                                    <span id="bulkSelectionHint" className="bulkEditOptionElement character-list-bulk-hint" data-i18n="Click character cards to select" style={{ "display": "none" }}>Click character cards to select</span>
+                                    <span id="bulkSelectionHint" className="bulkEditOptionElement character-list-bulk-hint" style={{ "display": "none" }}>{translate('Click character cards to select')}</span>
                                     <output id="bulkSelectedCount" className="bulkEditOptionElement paginationjs-nav" style={{ "display": "none" }}></output>
                                     <ContractButton id="bulkSelectAllButton" className="menu_button bulkEditOptionElement bulkSelectAllButton character-list-action" label="All" labelKey="Character Toolbar All" labelClassName="character-list-action-label" ariaLabel="Bulk select all characters" title="Bulk select all characters" nativeTitle style={{ "display": "none" }} icon={<i className="fa-solid fa-check-double" aria-hidden="true" />} />
                                     <ContractButton id="bulkDeleteButton" className="menu_button bulkEditOptionElement bulkDeleteButton character-list-action" label="Del" labelKey="Character Toolbar Delete" labelClassName="character-list-action-label" ariaLabel="Bulk delete characters" title="Bulk delete characters" nativeTitle style={{ "display": "none" }} icon={<i className="fa-solid fa-trash" aria-hidden="true" />} />
@@ -252,7 +232,7 @@ export function RightNavPanel() {
                             </div>
                             <div id="form_character_search_form">
                                 <input id="character_search_bar" className="text_pole textarea_compact width100p" type="search" data-i18n="[placeholder]Search..." placeholder="Search..." />
-                                <div id="character_search_status" className="character_search_status" data-i18n="Filtering characters…" aria-live="polite" hidden>Filtering characters…</div>
+                                <div id="character_search_status" className="character_search_status"  aria-live="polite" hidden>{translate('Filtering characters…')}</div>
                             </div>
                             <div className="rm_tag_controls">
                                 <div className="tags rm_tag_filter" data-react-tag-filters-owner="react"></div>

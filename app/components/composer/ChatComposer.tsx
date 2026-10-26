@@ -2,6 +2,7 @@ import type { KeyboardEvent } from 'react';
 import { composerStyles } from '../../styles/composer.styles';
 import { ContractIconButton } from '../contract/ContractIconButton';
 
+import { translate, useTranslated } from '@/compat/i18n.js';
 /**
  * Chat composer markup (React-owned shell inside #send_form).
  * The textarea stays UNCONTROLLED as a render target: its text value is owned
@@ -28,6 +29,7 @@ function activateOnEnterOrSpace(event: KeyboardEvent<HTMLElement>) {
 }
 
 export function ChatComposer() {
+    useTranslated('');
     return (
         <>
                 <form id="file_form" className="wide100p displayNone">
@@ -64,7 +66,7 @@ export function ChatComposer() {
                     </div>
                     <div className="send_textarea_wrap">
                         <textarea id="send_textarea" name="text" data-i18n="[aria-label]Chat message;[no_connection_text]Not connected to API!;[connected_text]Type a message, or /? for help" aria-label="Chat message" aria-describedby="send_textarea_hint" placeholder="Not connected to API!" no_connection_text="Not connected to API!" connected_text="Type a message, or /? for help" autoComplete="off"></textarea>
-                        <small id="send_textarea_hint" className="send_textarea_hint" data-i18n="Type /? for commands. Send requires an API connection.">Type /? for commands. Send requires an API connection.</small>
+                        <small id="send_textarea_hint" className="send_textarea_hint" >{translate('Type /? for commands. Send requires an API connection.')}</small>
                     </div>
                     <div id="rightSendForm" className="alignContentCenter">
                         <div id="stscript_continue" title="Continue script execution" className="stscript_btn stscript_continue" role="button" aria-label="Continue script execution" tabIndex={0} onKeyDown={activateOnEnterOrSpace} data-i18n="[title]Continue script execution;[aria-label]Continue script execution">

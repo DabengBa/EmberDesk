@@ -10,6 +10,7 @@ import { setConfigFilePath } from '../src/util.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, '..');
+const zhCn = JSON.parse(fs.readFileSync(path.join(repoRoot, 'public', 'locales', 'zh-cn.json'), 'utf8'));
 
 const tmpConfigDir = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-login-react-config-'));
 const configPath = path.join(tmpConfigDir, 'config.yaml');
@@ -131,7 +132,10 @@ describe('login React sole owner route', () => {
         expect(recoveryFormSource).toContain('loginStyles.recoveryNote');
         expect(recoveryFormSource).toContain('id="recoveryCodeHint"');
         expect(recoveryFormSource).toContain('aria-describedby="recoveryCodeHint"');
-        expect(recoveryFormSource).toContain('恢复码会输出到服务端控制台，不会通过邮件或短信发送，请联系管理员获取。');
+        // The copy lives in the locale files; the component only references the key.
+        expect(recoveryFormSource).toContain("translate('Recovery codes are printed to the server console.");
+        expect(zhCn['Recovery codes are printed to the server console. They are not sent by email or SMS; ask your administrator for one.'])
+            .toBe('恢复码会输出到服务端控制台，不会通过邮件或短信发送，请联系管理员获取。');
     });
 
     test('serves React from /login and redirects /login.html while preserving supported query context', async () => {

@@ -1,9 +1,20 @@
 import { registerDebugFunction } from './power-user.js';
 import { applyI18nTranslations, parseI18nAttributeSpecs } from './i18n-data.js';
+import {
+    DEFAULT_UI_LOCALE,
+    UI_LOCALE_STORAGE_KEY,
+    readStoredUiLocale,
+    resolveUiLocale,
+} from './ui-locale.js';
 
-// EmberDesk is Simplified-Chinese only; multilingual locale selection was removed.
-const localeFile = 'zh-cn';
-var langs = [{ lang: 'zh-cn', display: '简体中文' }];
+// The UI locale comes from the saved language selection; Simplified Chinese is
+// the installed default and English is the source text.
+const storageKey = UI_LOCALE_STORAGE_KEY;
+var langs = [
+    { lang: 'zh-cn', display: '简体中文' },
+    { lang: 'en', display: 'English' },
+];
+let localeFile = readStoredUiLocale();
 // Don't change to let/const! It will break module loading.
 var localeData;
 
@@ -13,8 +24,18 @@ let trackMissingDynamicTranslate = null;
 export const getCurrentLocale = () => localeFile;
 
 /**
+ * Persists the UI language and reloads so the whole surface (legacy shell and
+ * React panels) re-initializes against the same locale data.
+ * @param {string} language Locale id
+ */
+export function chooseLocale(language) {
+    localStorage.setItem(storageKey, resolveUiLocale(language));
+    location.reload();
+}
+
+/**
  * Adds additional localization data to the current locale file.
- * @param {string} localeId Locale ID (must be 'zh-cn' to take effect)
+ * @param {string} localeId Locale ID (must match the current locale to take effect)
  * @param {Record<string, string>} data Localization data to add
  */
 export function addLocaleData(localeId, data) {
@@ -29,7 +50,7 @@ export function addLocaleData(localeId, data) {
     }
 
     for (const [key, value] of Object.entries(data)) {
-        // Overrides for default locale data are not allowed
+        // Runtime data never overrides locale file translations
         if (!Object.hasOwn(localeData, key)) {
             localeData[key] = value;
         }
@@ -105,7 +126,9 @@ export function translate(text, key = null) {
     if (trackMissingDynamicTranslate && localeData && !Object.hasOwn(localeData, translationKey)) {
         trackMissingDynamicTranslate.add(translationKey);
     }
-    return localeData?.[translationKey] || text;
+    // The translation key doubles as the English source text; when the active
+    // locale does not define it, the source text is the fallback.
+    return localeData?.[translationKey] ?? text;
 }
 
 /**
@@ -120,8 +143,8 @@ async function getLocaleData(language) {
     }
 
     const data = await fetch(`./locales/${language}.json`).then(response => {
-        console.log(`Loading locale data from ./locales/${language}.json`);
         if (!response.ok) {
+            console.warn(`Locale data not found at ./locales/${language}.json; falling back to source text.`);
             return {};
         }
         return response.json();
@@ -222,7 +245,7 @@ async function getMissingTranslations() {
  * @returns {Document|string} Translated root, in the same format as the input (Document or HTML string)
  */
 export function applyLocale(root = document) {
-    if (!localeData || Object.keys(localeData).length === 0) {
+    if (!localeData) {
         return root;
     }
 
@@ -237,6 +260,8 @@ export function applyLocale(root = document) {
         return $root.get(0).body.innerHTML;
     }
 
+    // React surfaces subscribe to this event to re-render programmatic strings,
+    // so it must fire even when the active locale has no translation data.
     document.dispatchEvent(new CustomEvent('i18n:applied'));
 }
 

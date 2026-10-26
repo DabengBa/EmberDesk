@@ -27,7 +27,7 @@ Give power users direct in-workspace control over what is sent to the LLM: which
 - Selecting a different preset applies the full preset payload (sampling, formatting, prompts, and prompt order) through the `applyOpenAIPreset` path driven by the restored select's change handler.
 - The drawer's own pin toggle (`#lm_button_panel_pin`) writes `.pinnedOpen` on the host and persists through the `LNavLockOn` / `LNavOpened` accountStorage keys, matching the right panel's `NavLockOn` / `NavOpened` contract.
 - On a fresh account with no stored drawer preference, both the left prompt panel and the right character panel start open and pinned; once the user explicitly closes or unlocks a panel, the persisted `false` value suppresses the default on later visits.
-- The panel content is Simplified Chinese; the workspace ships only the `zh-cn` locale and every `data-i18n` key the markup emits resolves in `zh-cn.json`.
+- The panel content defaults to Simplified Chinese and supports the shared `en` source-text locale; every user-visible key emitted by the panel resolves through the shared i18n contract, with `zh-cn.json` providing the Simplified Chinese value.
 
 ## Semantic Interaction IDs
 
@@ -61,7 +61,7 @@ Give power users direct in-workspace control over what is sent to the LLM: which
 - The preset selector is empty or preset switching leaves stale prompt entries.
 - Prompt reordering/toggling renders but does not change the next request's prompt assembly.
 - The drawer does not persist its open or pinned state across reload, or the default-open seed overrides an explicit user-closed state.
-- A non-`zh-cn` locale file or a language selector reappears in the shipped UI.
+- Panel chrome stays in English under `zh-cn`, or switching to English leaves Chinese panel chrome behind.
 
 ## Boundaries
 

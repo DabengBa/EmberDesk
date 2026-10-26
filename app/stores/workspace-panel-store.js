@@ -22,43 +22,43 @@ export const WORKSPACE_PANEL_DOCK_KINDS = Object.freeze([
  */
 export const WORKSPACE_SHELL_CHILD_SLOTS = Object.freeze({
     characterLibrary: Object.freeze({
-        accessibleName: '角色库',
+        accessibleNameKey: 'Character library',
         allowedCapabilities: Object.freeze(['selectCharacter', 'refreshLibrary']),
         contentOwner: 'character-library',
         mountTarget: '#rm_print_characters_block',
     }),
     worldInfo: Object.freeze({
-        accessibleName: '世界书',
+        accessibleNameKey: 'World book',
         allowedCapabilities: Object.freeze(['refreshWorldInfo', 'openWorldEditor']),
         contentOwner: 'world-info-workbench',
         mountTarget: '#WorldInfo',
     }),
     characterAuthoring: Object.freeze({
-        accessibleName: '角色编辑',
+        accessibleNameKey: 'Character authoring',
         allowedCapabilities: Object.freeze(['editCharacter']),
         contentOwner: 'character-authoring',
         mountTarget: '#rm_ch_create_block',
     }),
     regex: Object.freeze({
-        accessibleName: '正则',
+        accessibleNameKey: 'Regex',
         allowedCapabilities: Object.freeze(['editRegexScripts', 'openRegexEditor', 'openRegexDebugger']),
         contentOwner: 'regex',
         mountTarget: '#RegexPanel',
     }),
     promptManager: Object.freeze({
-        accessibleName: '提示词',
+        accessibleNameKey: 'Prompt manager',
         allowedCapabilities: Object.freeze(['selectPromptPreset', 'editPrompts']),
         contentOwner: 'prompt-panel',
         mountTarget: '#left-nav-panel',
     }),
     settings: Object.freeze({
-        accessibleName: '设置',
+        accessibleNameKey: 'Settings',
         allowedCapabilities: Object.freeze(['openSettings']),
         contentOwner: 'settings-panel',
         mountTarget: '#SettingsPanel',
     }),
     mainChat: Object.freeze({
-        accessibleName: '主聊天',
+        accessibleNameKey: 'Main chat',
         allowedCapabilities: Object.freeze(['loadMoreMessages', 'submitComposer']),
         contentOwner: 'main-chat',
         mountTarget: '#chat, #send_form, #nonQRFormItems',

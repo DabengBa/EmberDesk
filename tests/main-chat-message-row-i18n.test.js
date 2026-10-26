@@ -30,9 +30,14 @@ describe('main chat message row i18n parity', () => {
     test.each(templateSpecs.map(spec => [spec]))('React row preserves spec: %s', (spec) => {
         // JSX writes multi-line attribute values with real newlines instead of &#10; entities.
         const jsxSpec = spec.replace(/&#10;/g, '\\n');
+        // React-owned text resolves through translate() at render time so the
+        // live locale drives it; attribute specs still resolve through the
+        // legacy observer.
         const found = rowSource.includes(`data-i18n="${spec}"`)
             || rowSource.includes(`data-i18n="${jsxSpec}"`)
-            || rowSource.includes(`data-i18n={'${jsxSpec}'}`);
+            || rowSource.includes(`data-i18n={'${jsxSpec}'}`)
+            || rowSource.includes("translate('" + spec.replace(/'/g, "\\'") + "')")
+            || rowSource.includes('translate("' + spec + '")');
         expect(found).toBe(true);
     });
 

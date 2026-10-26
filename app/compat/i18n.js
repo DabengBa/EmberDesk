@@ -1,13 +1,18 @@
 /**
  * i18n bridge for React surfaces.
  *
- * The legacy shell owns locale data (public/scripts/i18n.js): it loads the
- * locale JSON, translates `data-i18n` elements via applyLocale + a
- * MutationObserver, and exposes t/translate/getCurrentLocale through
- * SillyTavern.getContext(). React code must NOT import i18n.js directly —
- * the workspace bundle would inline a second module instance with its own
- * (empty) localeData. This module resolves the live functions through the
- * global context instead.
+ * There is exactly one runtime locale context per page:
+ *
+ * - Workspace pages load the legacy shell. It owns the locale data
+ *   (public/scripts/i18n.js), translates `data-i18n` markup, and exposes
+ *   t/translate/getCurrentLocale through SillyTavern.getContext(). React
+ *   resolves those live functions through the global context — importing
+ *   i18n.js here would inline a second module instance with empty localeData.
+ * - Standalone pages (/login, /setup, /settings) never load the shell, so
+ *   nothing else would provide that context. For those entry points
+ *   `initializeUiLocale()` installs the same contract (translate/t/
+ *   getCurrentLocale) backed by the same locale JSON, so every surface keeps
+ *   reading one authoritative locale without importing shell modules.
  *
  * Static markup keeps using data-i18n attributes (the observer translates
  * them). Use t/translate for programmatic strings (computed labels, toast
@@ -17,6 +22,57 @@
  */
 
 import { useEffect, useReducer } from 'react';
+import { DEFAULT_UI_LOCALE, readStoredUiLocale } from '../../public/scripts/ui-locale.js';
+
+// English ships no resource (source text is the English copy), so only the
+// non-English locales are reachable here. Vite rewrites each static import into
+// its own chunk; a bundle whose entry never reaches this module (the workspace
+// panels resolve the shell context instead) never carries the dictionary.
+const localeResources = {
+    'zh-cn': () => import('../../public/locales/zh-cn.json'),
+};
+
+/** Locale data installed by initializeUiLocale(); null while the shell owns it. */
+let standaloneLocaleData = null;
+let standaloneLocale = DEFAULT_UI_LOCALE;
+
+function translateWith(data, text, key = null) {
+    const translationKey = key || text;
+    return data?.[translationKey] ?? text;
+}
+
+function tWith(data, strings, values) {
+    const template = strings.reduce(
+        (result, string, index) => result + string + (values[index] !== undefined ? `\${${index}}` : ''),
+        '',
+    );
+    return translateWith(data, template).replace(/\$\{(\d+)\}/g, (match, index) => (
+        values[Number(index)] !== undefined ? String(values[Number(index)]) : match
+    ));
+}
+
+/**
+ * Installs the locale contract for bundles that do not load the legacy shell.
+ * Loads the saved locale's resource before the first render so no surface
+ * mounts untranslated and then flips. English needs no resource: source text is
+ * the English copy.
+ * @returns {Promise<void>}
+ */
+export async function initializeUiLocale() {
+    standaloneLocale = readStoredUiLocale();
+    const load = localeResources[standaloneLocale];
+    if (!load) {
+        return;
+    }
+
+    try {
+        const module = await load();
+        standaloneLocaleData = module.default ?? module;
+    } catch {
+        console.warn(`Locale data for ${standaloneLocale} could not be loaded; falling back to source text.`);
+        standaloneLocaleData = null;
+    }
+}
 
 /** @type {{ t: Function, translate: Function, getCurrentLocale: Function } | null} */
 let cached = null;
@@ -45,7 +101,10 @@ function resolveI18n() {
  */
 export function translate(text, key = null) {
     const i18n = resolveI18n();
-    return i18n ? i18n.translate(text, key) : text;
+    if (i18n) {
+        return i18n.translate(text, key);
+    }
+    return translateWith(standaloneLocaleData, text, key);
 }
 
 /**
@@ -60,13 +119,13 @@ export function t(strings, ...values) {
     if (i18n) {
         return i18n.t(strings, ...values);
     }
-    return strings.reduce((result, str, i) => result + str + (values[i] !== undefined ? String(values[i]) : ''), '');
+    return tWith(standaloneLocaleData, strings, values);
 }
 
-/** Current locale id. EmberDesk ships zh-cn only; the fallback matches. */
+/** Current locale id: the shell's when loaded, otherwise the saved selection. */
 export function getCurrentLocale() {
     const i18n = resolveI18n();
-    return i18n ? i18n.getCurrentLocale() : 'zh-cn';
+    return i18n ? i18n.getCurrentLocale() : standaloneLocale;
 }
 
 /**
@@ -96,4 +155,6 @@ export function useTranslated(text, key = null) {
 /** Test hook: drop the cached function refs. */
 export function resetI18nBridgeForTests() {
     cached = null;
+    standaloneLocaleData = null;
+    standaloneLocale = DEFAULT_UI_LOCALE;
 }

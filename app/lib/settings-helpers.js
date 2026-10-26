@@ -1,7 +1,13 @@
+/**
+ * Settings tabs rendered by the React surface.
+ *
+ * `labelKey` is the English source string and the translation key; the tab label
+ * is resolved at render time so the tab follows the live locale.
+ */
 export const settingsTabDefinitions = [
     {
         id: 'providers',
-        label: '服务',
+        labelKey: 'Providers',
     },
 ];
 

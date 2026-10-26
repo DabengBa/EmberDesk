@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { ContractButton } from '../contract/ContractButton';
 import type { PromptPanelBridge } from '../prompt-panel/PromptPanel';
+import { translate, useTranslated } from '@/compat/i18n.js';
 
 /**
  * Save-preset button with built-in dirty awareness. Reads the shared
@@ -11,6 +12,7 @@ import type { PromptPanelBridge } from '../prompt-panel/PromptPanel';
  * preset file.
  */
 export function PresetSaveButton({ bridge }: { bridge: PromptPanelBridge }) {
+    useTranslated('');
     const dirty = useSyncExternalStore(
         listener => bridge.subscribe(listener),
         () => bridge.getState().presetDirty,
@@ -21,10 +23,12 @@ export function PresetSaveButton({ bridge }: { bridge: PromptPanelBridge }) {
             type="button"
             id="update_oai_preset"
             className={dirty ? 'menu_button preset-save-button is-dirty' : 'menu_button preset-save-button'}
-            title={dirty ? '当前配置有未保存的修改，点击写入所选预设' : '将当前配置保存到所选预设'}
-            aria-label={dirty ? '保存修改到预设' : '保存到预设'}
+            title={dirty
+                            ? translate('The current configuration has unsaved changes; click to write them into the selected preset')
+                            : translate('Save the current configuration into the selected preset')}
+            aria-label={dirty ? translate('Save changes to preset') : translate('Save to preset')}
         >
-            <i className="fa-solid fa-floppy-disk" aria-hidden="true" /> {dirty ? '保存修改' : '保存'}
+            <i className="fa-solid fa-floppy-disk" aria-hidden="true" /> {dirty ? translate('Save changes') : translate('Save')}
         </button>
     );
 }

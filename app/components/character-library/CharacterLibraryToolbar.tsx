@@ -11,7 +11,7 @@ import {
     type CharacterLibraryToolbarState,
 } from '@/lib/character-library-helpers';
 import { characterLibraryStyles } from '@/styles/workspace-panels.styles';
-import { translate } from '../../compat/i18n.js';
+import { translate, useTranslated } from '../../compat/i18n.js';
 import { HostedDomSlot } from './HostedDomSlot';
 
 export interface CharacterLibraryToolbarBridge {
@@ -56,6 +56,7 @@ function ToolbarActionButton({
     ariaExpanded?: boolean;
     ariaPressed?: boolean;
 }) {
+    useTranslated('');
     const resolvedTitle = translate(title, titleKey ?? null);
     const resolvedLabel = translate(label, labelKey ?? null);
     return (
@@ -89,6 +90,7 @@ function CharacterTagFilterChip({
     hasActiveTagFilters?: boolean;
     onActivate?: () => void;
 }) {
+    useTranslated('');
     const isShowTagListChip = Boolean(chip.className?.split(' ').includes('showTagList'));
     const stateClass = chip.filterState ? TAG_FILTER_STATE_CLASS[String(chip.filterState).toUpperCase()] ?? 'undefined' : null;
     // The stylesheet hides non-actionable filter chips by default; the visibility

@@ -123,8 +123,10 @@ describe('setup React sole owner route', () => {
         expect(routeSource).toContain('const csrfTokenQuery = useQuery(');
         expect(routeSource).toContain('const setupMutation = useMutation(');
         expect(routeSource).toContain('const setupForm = useForm(');
-        expect(helperSource).toContain("from '../../public/scripts/setup-shared.js';");
-        expect(sharedSource).toContain('export const setupMessages = {');
+        // React reads lazily-resolved messages from auth-messages.ts, which the
+        // shared legacy module owns the copy for.
+        expect(helperSource).toContain("from './auth-messages.js';");
+        expect(sharedSource).toContain('export function getSetupMessages()');
         expect(sharedSource).toContain('export function getSetupErrorMessage');
         expect(sharedSource).toContain('export function getSetupPasswordVisibilityState');
         expect(sharedSource).toContain('export function buildSetupRequestBody');

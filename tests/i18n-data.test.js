@@ -1,17 +1,25 @@
 import { describe, expect, test } from '@jest/globals';
 
-import { applyI18nTranslations, parseI18nAttributeSpecs } from '../public/scripts/i18n-data.js';
+import {
+    REACT_OWNED_ATTRIBUTE,
+    applyI18nTranslations,
+    parseI18nAttributeSpecs,
+} from '../public/scripts/i18n-data.js';
 
 function createFakeElement(dataI18n) {
     const attributes = new Map([['data-i18n', dataI18n]]);
 
     return {
-        textContent: '',
+        // Mirrors the DOM: untranslated text nodes keep their rendered content.
+        textContent: dataI18n,
         getAttribute(name) {
             return attributes.get(name) ?? null;
         },
         setAttribute(name, value) {
             attributes.set(name, String(value));
+        },
+        hasAttribute(name) {
+            return attributes.has(name);
         },
         readAttribute(name) {
             return attributes.get(name) ?? null;
@@ -49,5 +57,23 @@ describe('i18n data helpers', () => {
         });
 
         expect(element.textContent).toBe('星标');
+    });
+
+    test('keeps React-owned text nodes intact and still translates their bound attributes', () => {
+        const textElement = createFakeElement('Loading…');
+        textElement.setAttribute(REACT_OWNED_ATTRIBUTE, '');
+
+        applyI18nTranslations(textElement, textElement.getAttribute('data-i18n'), {
+            'Loading…': '加载中…',
+        });
+        // Writing textContent here would unmount the React children of this node.
+        expect(textElement.textContent).toBe('Loading…');
+
+        const attributeElement = createFakeElement('[aria-label]Search chats');
+        attributeElement.setAttribute(REACT_OWNED_ATTRIBUTE, '');
+        applyI18nTranslations(attributeElement, attributeElement.getAttribute('data-i18n'), {
+            'Search chats': '搜索聊天',
+        });
+        expect(attributeElement.readAttribute('aria-label')).toBe('搜索聊天');
     });
 });
