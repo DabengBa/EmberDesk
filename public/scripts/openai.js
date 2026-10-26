@@ -72,7 +72,7 @@ import {
     resolveReasoningEffort,
     resolveVerbosity,
 } from './openai-provider-capabilities.js';
-import { getActivePipelineRunId, getPipelineRunState } from './reply-pipeline-core.js';
+import { buildStepPrompt, getActivePipelineRunId, getPipelineRunState, PIPELINE_FALLBACK_PROMPT } from './reply-pipeline-core.js';
 
 function syncSegmentedFromSelect(selectId) {
     const value = $('#' + selectId).val();
@@ -1088,6 +1088,14 @@ export async function prepareOpenAIMessages({
     chatCompletion.setTokenBudget(userSettings.openai_max_context, userSettings.openai_max_tokens);
 
     try {
+        if (run) {
+            // The first request has not been sent yet: leave room for the
+            // step tail before the normal history selection spends its budget.
+            const instruction = run.fallbackRound ? PIPELINE_FALLBACK_PROMPT
+                : buildStepPrompt(run.steps[run.index], run.index, run.steps.length);
+            const tail = [...run.stepPrompts, { role: 'system', content: instruction }];
+            chatCompletion.reserveBudget(await countTokensOpenAIAsync(tail.map(normalizeMessageForTokenCount), true));
+        }
         // Merge markers and ordered user prompts with system prompts
         const prompts = await preparePromptsForChatCompletion({
             name2,
@@ -1443,7 +1451,7 @@ export async function buildChatCompletionRequest({ type, messages, settings = nu
         const toolTokens = generate_data.tools?.length
             ? await countTokensOpenAIAsync([{ role: 'system', content: JSON.stringify(generate_data.tools) }], true) : 0;
         const reserved = Number(generate_data.max_completion_tokens ?? generate_data.max_tokens);
-        if (messageTokens + toolTokens + reserved > Number(requestSettings.openai_max_context)) {
+        if (!Number.isFinite(reserved) || messageTokens + toolTokens + reserved > Number(requestSettings.openai_max_context)) {
             throw new Error('Reply pipeline: context budget exceeded; captured prefix cannot be trimmed.');
         }
     }

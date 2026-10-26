@@ -7,10 +7,11 @@ globalThis.localStorage = { getItem: () => null };
 const count = jest.fn(async () => 10);
 let tailContent = 'STEP_TAIL';
 let toolCallingSupported = true;
+let includeHistory = false;
 // Minimal prompt collection so the real base assembly runs (and stays empty)
 // instead of being stubbed out: only the pipeline step tail is under test.
 const emptyPrompts = () => {
-    const items = [];
+    const items = includeHistory ? [{ identifier: 'chatHistory', system_prompt: true }] : [];
     return {
         collection: items, overriddenPrompts: [],
         add(prompt) { items.push(prompt); },
@@ -37,7 +38,7 @@ jest.unstable_mockModule('../public/script.js', () => Object.fromEntries([
     'saveSettingsDebounced', 'setOnlineStatus', 'substituteParams', 'system_message_types',
 ].map(key => [key, key === 'substituteParams' ? substitute : jest.fn()])));
 jest.unstable_mockModule('../public/scripts/PromptManager.js', () => ({ chatCompletionDefaultPrompts: [],
-    INJECTION_POSITION: {}, Prompt: class {}, PromptManager: class { constructor() { return manager; } }, promptManagerDefaultPromptOrders: [],
+    INJECTION_POSITION: { ABSOLUTE: 1 }, Prompt: class { constructor(value) { Object.assign(this, value); } }, PromptManager: class { constructor() { return manager; } }, promptManagerDefaultPromptOrders: [],
     // openai.js imports this migration helper; the mock must expose it too.
     removeRetiredExamplePrompts: jest.fn() }));
 jest.unstable_mockModule('../public/scripts/request-context.js', () => ({ getRequestHeaders: jest.fn() }));
@@ -54,6 +55,7 @@ jest.unstable_mockModule('../public/scripts/popup.js', () => ({ callGenericPopup
 jest.unstable_mockModule('../public/scripts/i18n.js', () => ({ t: strings => strings[0] }));
 jest.unstable_mockModule('../public/scripts/tool-calling.js', () => ({ ToolManager: {
     canPerformToolCalls: () => toolCallingSupported,
+    isToolCallingSupported: () => false,
     registerFunctionToolsOpenAI: async data => { data.tools = [{ type: 'function', function: { name: 'analyze' } }]; },
 } }));
 jest.unstable_mockModule('../public/scripts/feature-settings.js', () => ({ feature_settings: { tool_bindings: [{ name: 'analyze', enabled: true }] } }));
@@ -71,6 +73,21 @@ beforeEach(() => {
     count.mockResolvedValue(10); substitute.mockClear();
     tailContent = 'STEP_TAIL';
     toolCallingSupported = true;
+    includeHistory = false;
+});
+
+test('first request reserves step material and instruction before trimming real history', async () => {
+    includeHistory = true;
+    globalThis.toastr = { error: jest.fn(), warning: jest.fn() };
+    count.mockImplementation(async value => (Array.isArray(value) ? value : [value]).reduce((sum, m) => sum + (m.content ? 10 : 0), 0));
+    const history = Array.from({ length: 8 }, (_, i) => ({ role: 'user', content: `history-${7 - i}` }));
+    const [messages] = await openai.prepareOpenAIMessages({ type: 'normal', pipelineStepTag: 'pipeline:analyze', messages: history }, false);
+    const { generate_data } = await openai.buildChatCompletionRequest({ type: 'normal', messages, model: 'gpt-4o-mini', emitSettingsReady: true });
+
+    expect(generate_data.messages.some(m => m.content === 'history-0')).toBe(false);
+    expect(generate_data.messages.some(m => m.content === 'history-7')).toBe(true);
+    expect(generate_data.messages.some(m => m.content === 'STEP_TAIL')).toBe(true);
+    expect(generate_data.messages.at(-1).content).toContain('must call the analyze tool exactly once');
 });
 
 test('captured run bypasses base assembly and only prepares step-only tail once', async () => {
@@ -91,6 +108,13 @@ test('final request budget overflow rejects rather than trimming the captured pr
     await expect(openai.buildChatCompletionRequest({ type: 'normal', messages: base, model: 'gpt-4o-mini', emitSettingsReady: true }))
         .rejects.toThrow(/Reply pipeline.*budget/);
     expect(core.getPipelineRunState().messages[0]).toEqual(base[0]);
+});
+
+test('missing output limit cannot bypass pipeline context overflow check', async () => {
+    count.mockResolvedValue(90);
+    const settings = { ...openai.oai_settings, openai_max_tokens: undefined };
+    await expect(openai.buildChatCompletionRequest({ type: 'normal', messages: [], settings, model: 'gpt-4o-mini', emitSettingsReady: true }))
+        .rejects.toThrow(/Reply pipeline.*budget/);
 });
 
 test('completed-run display folding still projects only final content for the next base', () => {
