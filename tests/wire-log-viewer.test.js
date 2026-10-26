@@ -134,7 +134,8 @@ describe('wire log viewer contract', () => {
         const domHandlers = sources['public/scripts/dom-handlers.js'];
 
         expect(optionsMenu).toContain('id="option_wire_log"');
-        expect(optionsMenu).toContain('Wire Log / 链路日志');
+        // The menu passes the stable source key; ContractButton translates it.
+        expect(optionsMenu).toContain('label="Wire Log"');
         expect(domHandlers).toContain('id == \'option_wire_log\'');
         expect(domHandlers).toContain('await openWireLogPanel();');
         expect(script).toContain('async function openWireLogPanel()');
@@ -149,10 +150,10 @@ describe('wire log viewer contract', () => {
         expect(helpers).toContain('URL.createObjectURL(blob)');
         expect(helpers).toContain('URL.revokeObjectURL(url)');
         expect(detail).toContain('data-wire-log-download="record"');
-        expect(detail).toContain('下载 JSON');
+        expect(detail).toContain('translate(\'Download JSON\')');
         // Copy stays: the download is additive, not a replacement.
         expect(detail).toContain('data-wire-log-copy="record"');
-        expect(detail).toContain('复制 JSON');
+        expect(detail).toContain('translate(\'Copy JSON\')');
     });
 
     test('renders every style key its components reference', async () => {
@@ -191,7 +192,7 @@ describe('wire log viewer contract', () => {
         expect(types).toContain('usage');
         expect(helpers).toContain('export function formatUsage(');
         // Detail: a real grid cell reading the record, not a raw JSON dump.
-        expect(detail).toContain('label="Token 用量"');
+        expect(detail).toContain('label={translate(\'Token usage\')}');
         expect(detail).toContain('value={formatUsage(record.response?.usage)}');
         // List row: counts stay visible while scanning.
         expect(browser).toContain('formatUsage(entry.response?.usage)');
@@ -304,10 +305,10 @@ describe('wire log viewer helpers', () => {
                 helpers.formatUsage('1200'),
             ];
         `)).toEqual([
-            '1234 (提示 1200 / 完成 34)',
-            '提示 5 / 完成 6',
-            '提示 7',
-            '总计 9',
+            '1234 (prompt 1200 / completion 34)',
+            'prompt 5 / completion 6',
+            'prompt 7',
+            'total 9',
             '—',
             '—',
             '—',
