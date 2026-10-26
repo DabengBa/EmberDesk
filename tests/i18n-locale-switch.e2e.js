@@ -56,6 +56,38 @@ async function collectVisibleText(page) {
 }
 
 test.describe('UI locale switching', () => {
+    test('chat menu and connected composer use the selected language', async ({ page }) => {
+        await startWithLocale(page, 'zh-cn');
+        await page.reload();
+        await testSetup.awaitST({ page });
+
+        for (const [locale, regenerate, wireLog, hint] of [
+            ['zh-cn', '重新生成回复', '链路日志', '输入 /? 查看命令。'],
+            ['en', 'Regenerate reply', 'Wire Log', 'Type /? for commands.'],
+            ['zh-cn', '重新生成回复', '链路日志', '输入 /? 查看命令。'],
+        ]) {
+            await page.evaluate(language => localStorage.setItem('language', language), locale);
+            await page.reload();
+            await testSetup.awaitST({ page });
+            await page.evaluate(async () => {
+                const { setOnlineStatus, displayOnlineStatus } = await import('/script.js');
+                setOnlineStatus('locale-test');
+                displayOnlineStatus();
+            });
+            await page.locator('#options_button').click();
+            await expect(page.locator('#option_regenerate')).toBeVisible();
+            await expect(page.locator('#option_regenerate')).toHaveText(regenerate);
+            await expect(page.locator('#option_regenerate')).toHaveAccessibleName(regenerate);
+            await expect(page.locator('#option_wire_log')).toHaveText(wireLog);
+            await expect(page.locator('#option_wire_log')).toHaveAccessibleName(wireLog);
+            await expect(page.locator('#send_textarea_hint')).toHaveText(hint);
+            // The English source strings only ever appear on the English surface.
+            const optionsText = await page.locator('#options').innerText();
+            expect(/Regenerate reply|Wire Log/.test(optionsText)).toBe(locale === 'en');
+            await page.locator('#options_button').click();
+        }
+    });
+
     test('mounted prompt editor re-translates role and trigger labels without losing edits', async ({ page }) => {
         await startWithLocale(page, 'zh-cn');
         await page.reload();
