@@ -29,7 +29,7 @@
 | | `custom_url` | OpenAI-compatible endpoint;空 = 官方 api.openai.com |
 | | `fallback_provider_model` | fallback 模型,与主连接共用 URL/key;空 = 关闭 |
 | 采样/生成 | `temperature` `top_p` `top_k` `min_p` `top_a` `frequency_penalty` `presence_penalty` `repetition_penalty` `n` `seed` `openai_max_context` `openai_max_tokens` `stream_openai` | 常规采样参数 |
-| 行为 | `reasoning_effort`(`auto/low/medium/high`)`verbosity`(`auto`)`tool_reasoning_mode` `names_behavior` `media_inlining` `inline_image_quality` `continue_prefill` `continue_postfix` `continue_nudge_prompt` `squash_system_messages` `show_thoughts` `send_if_empty` `impersonation_prompt` `new_chat_prompt` `new_example_chat_prompt` `wi_format` `description_format` | 生成期行为开关与模板 |
+| 行为 | `reasoning_effort`(`auto/low/medium/high`)`verbosity`(`auto`)`tool_reasoning_mode` `names_behavior` `media_inlining` `inline_image_quality` `continue_prefill` `continue_postfix` `continue_nudge_prompt` `squash_system_messages` `show_thoughts` `send_if_empty` `impersonation_prompt` `new_chat_prompt` `wi_format` `description_format` | 生成期行为开关与模板 |
 | prompt 集 | `prompts` `prompt_order` `extensions` | 见下节 |
 
 载入时 `migrateChatCompletionSettings` 只应用 `default_settings` 表内已知键;未知键(上游专属,如 `claude_model`、`vertexai_*`、`openrouter_*`)惰性忽略、下次保存时剥离。
@@ -40,7 +40,7 @@
 
 注:prompt post-processing 已固定为 strict 语义(合并连续同角色、中间 system 降级为 user、必要时补首条 user 占位),不再是预设字段;请求发出前由服务端统一应用。function calling 随之退役——strict 会剥离 tool 字段。
 
-退役 prompt 标识符在载入时由 `PromptManager` 归一:`worldInfoBefore`/`worldInfoAfter` 折叠为 `worldInfo`;`main`、`nsfw`、`jailbreak`、`enhanceDefinitions`、`summary`、`authorsNote`、`vectorsMemory`、`vectorsDataBank`、`smartContext`、`scenario`、`personaDescription`、`charPersonality` 从 `prompt_order` 与 `prompts[]` 中剔除。
+退役 prompt 标识符在载入时由 `PromptManager` 归一:`worldInfoBefore`/`worldInfoAfter` 折叠为 `worldInfo`;`main`、`nsfw`、`jailbreak`、`enhanceDefinitions`、`summary`、`authorsNote`、`vectorsMemory`、`vectorsDataBank`、`smartContext`、`scenario`、`personaDescription`、`charPersonality` 从 `prompt_order` 与 `prompts[]` 中剔除。`dialogueExamples` 同样剔除，并在预设导入、缓存加载和导出时清理；退役设置键 `new_example_chat_prompt` 在设置加载、预设导入/导出和设置保存时删除。
 
 注:`reverse_proxy` 有半迁移语义——仅当 `custom_url` 为空时折叠为 `custom_url`,随后仍被删除。`fallback_provider_enabled: false` 会连带删除 `fallback_provider_model`(显式关闭不复活)。
 
@@ -67,7 +67,7 @@
 
 | 字段 | 类型 | 说明 |
 |---|---|---|
-| `identifier` | string | 稳定 ID。自定义条目用 UUID;内置占位符是固定名(`chatHistory`、`charDescription`、`worldInfo`、`dialogueExamples`) |
+| `identifier` | string | 稳定 ID。自定义条目用 UUID;内置占位符是固定名(`chatHistory`、`charDescription`、`worldInfo`) |
 | `name` | string | Prompt Manager 显示名 |
 | `enabled` | bool | 条目级开关;`prompt_order` 中的 enabled 优先 |
 | `role` | `system`/`user`/`assistant` | 组装时的消息角色 |

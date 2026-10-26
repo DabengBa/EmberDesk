@@ -32,6 +32,7 @@ import {
     Prompt,
     PromptManager,
     promptManagerDefaultPromptOrders,
+    removeRetiredExamplePrompts,
 } from './PromptManager.js';
 
 import { forceCharacterEditorTokenize, getCustomStoppingStrings } from './power-user.js';
@@ -96,7 +97,6 @@ let openai_messages_count = 0;
 const default_wi_format = '{0}';
 const default_description_format = '{0}';
 const default_new_chat_prompt = '[Start a new Chat]';
-const default_new_example_chat_prompt = '[Example Chat]';
 const API_TEST_REQUEST_TIMEOUT_MS = 15000;
 
 const max_64k = 65535;
@@ -198,7 +198,6 @@ export const settingsToUpdate = {
     names_behavior: ['#names_behavior', 'names_behavior', false, false],
     send_if_empty: ['#send_if_empty_textarea', 'send_if_empty', false, false],
     new_chat_prompt: ['#newchat_prompt_textarea', 'new_chat_prompt', false, false],
-    new_example_chat_prompt: ['#NULL_SELECTOR', 'new_example_chat_prompt', false, false],
     wi_format: ['#wi_format_textarea', 'wi_format', false, false],
     description_format: ['#description_format_textarea', 'description_format', false, false],
     stream_openai: ['#stream_toggle', 'stream_openai', true, false],
@@ -234,7 +233,6 @@ const default_settings = {
     ...promptManagerDefaultPromptOrders,
     send_if_empty: '',
     new_chat_prompt: default_new_chat_prompt,
-    new_example_chat_prompt: default_new_example_chat_prompt,
     wi_format: default_wi_format,
     description_format: default_description_format,
     openai_model: 'gpt-4-turbo',
@@ -2375,6 +2373,7 @@ export class ChatCompletion {
  * @param {ChatCompletionSettings} settings Settings to migrate
  */
 function migrateChatCompletionSettings(settings) {
+    removeRetiredExamplePrompts(settings);
     delete settings.max_context_unlocked;
     delete settings.custom_prompt_post_processing;
     delete settings.function_calling;
@@ -2431,6 +2430,7 @@ function migrateChatCompletionSettings(settings) {
         'fallback_provider_enabled',
         'fallback_provider_base_url',
         'bind_preset_to_connection',
+        'new_example_chat_prompt',
     ]) {
         delete settings[key];
     }
@@ -2449,6 +2449,7 @@ function loadOpenAISettings(data, settings) {
     openai_settings = data.openai_settings;
     openai_settings.forEach(function (item, i) {
         openai_settings[i] = JSON.parse(item);
+        migrateChatCompletionSettings(openai_settings[i]);
     });
 
     $('#settings_preset_openai').empty();
@@ -2738,6 +2739,8 @@ async function onPresetImportFileChange(e) {
     }
 
     await eventSource.emit(event_types.OAI_PRESET_IMPORT_READY, { data: presetBody, presetName: name });
+
+    migrateChatCompletionSettings(presetBody);
 
     const savePresetSettings = await fetch('/api/presets/save', {
         method: 'POST',

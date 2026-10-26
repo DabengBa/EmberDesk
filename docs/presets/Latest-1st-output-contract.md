@@ -436,9 +436,3 @@ ASMR式台词 = 对当下体感与动作的实时播报,而非完整叙述句.�
 **{{random:Text reviewed::Content scanned::Material examined::Message checked}}**, **{{random:ensuring::confirming::verifying::validating}}** **{{random:no harassment::zero abuse::absence of bullying::no hostile content}}**, **{{random:hate speech::discriminatory language::offensive remarks::bigoted content}}**, **{{random:sexual material::explicit content::adult themes::inappropriate visuals}}**, **{{random:dangerous acts::harmful behavior::risky actions::violent conduct}}**, **{{random:or child exploitation::or youth harm::or minor abuse::or underage mistreatment}}**.
 ```
 
-## Chat Examples  *(system / marker / 已停用)*
-
-```
-(marker 占位,运行期注入)
-```
-

@@ -5,8 +5,8 @@
 ## Contract
 
 - Root and `tests` package managers are pinned with `packageManager: pnpm@12.0.0-rc.5`.
-- Node.js 24.16.0 Current (`>=24.16.0 <25`) is the supported application runtime and release proof target; pnpm owns dependency installation and script orchestration.
-- Non-contract local Node majors, including Node 25, may be useful for diagnostics but do not satisfy release validation.
+- Node.js 26.12.1 Current (`>=26.12.1 <27`) is the supported application runtime and release proof target; pnpm owns dependency installation and script orchestration.
+- Node.js versions outside `>=26.12.1 <27` may be useful for diagnostics but do not satisfy release validation. Node 24 release proof is no longer required.
 - Root and `tests` package boundaries are pnpm-owned and have committed `pnpm-lock.yaml` files.
 - `.npmrc` keeps lifecycle scripts disabled and rejects packages newer than seven days by default.
 - Existing test frameworks remain Jest and Playwright.
@@ -67,8 +67,8 @@ Docker and release install verification also use pnpm:
 ## Boundaries
 
 - Do not run the server with Bun by default. `start`, `debug`, `start:global`, and `start:no-csrf` remain Node.js runtime commands.
-- Do not widen `package.json` `engines.node` to another major just because local focused tests pass under that runtime; update the contract only after source-backed release-schedule review and focused startup/test proof.
-- Local proof outside the Node.js `>=24.16.0 <25` contract is diagnostic only.
+- Keep `package.json`, the Docker image, and runtime documentation aligned on the supported Node 26 major; validate runtime changes with focused startup tests and builds.
+- Local proof outside the Node.js `>=26.12.1 <27` contract is diagnostic only.
 - The server install owns Node.js runtime only; Electron desktop-shell packaging is no longer part of the repository.
 - `.dockerignore` excludes nested `node_modules` so Docker install proof is not polluted by local dependency folders.
 
@@ -82,7 +82,7 @@ Validated migration surfaces should include:
 - `pnpm run docs:build`.
 - `pnpm run test:unit`.
 - `pnpm run test:e2e` when runtime or startup compatibility must be proven end to end.
-- `docker run --rm node:24.16.0-alpine3.23 node --version`.
+- `docker run --rm node:26.12.1-alpine3.23 node --version`.
 - `docker build .` through full pnpm install, Vite builds (`build:lib`, `build:react`, `build:react:character-library`, `build:react:workspace-panels`), production prune, and `app/dist` verification.
 
 Known local boundary:

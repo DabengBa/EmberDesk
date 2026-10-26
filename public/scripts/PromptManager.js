@@ -7,6 +7,18 @@ import { uuidv4 } from './utils.js';
 
 const DEFAULT_ORDER = 100;
 
+/** Drop the retired built-in example marker without touching custom prompts. */
+export function removeRetiredExamplePrompts(settings) {
+    if (Array.isArray(settings.prompts)) {
+        settings.prompts = settings.prompts.filter(prompt => prompt?.identifier !== 'dialogueExamples');
+    }
+    for (const bucket of Array.isArray(settings.prompt_order) ? settings.prompt_order : []) {
+        if (Array.isArray(bucket?.order)) {
+            bucket.order = bucket.order.filter(entry => entry?.identifier !== 'dialogueExamples');
+        }
+    }
+}
+
 /**
  * @enum {number}
  */
@@ -395,6 +407,7 @@ class PromptManager {
      * the prompt library so foreign presets are ignored gracefully.
      */
     #normalizeRetiredPromptIdentifiers() {
+        removeRetiredExamplePrompts(this.serviceSettings);
         const RETIRED_IDENTIFIERS = new Set([
             'main', 'nsfw', 'jailbreak', 'enhanceDefinitions',
             'summary', 'authorsNote', 'vectorsMemory', 'vectorsDataBank', 'smartContext',
@@ -694,12 +707,6 @@ class PromptManager {
 const chatCompletionDefaultPrompts = {
     'prompts': [
         {
-            'identifier': 'dialogueExamples',
-            'name': 'Chat Examples',
-            'system_prompt': true,
-            'marker': true,
-        },
-        {
             'identifier': 'chatHistory',
             'name': 'Chat History',
             'system_prompt': true,
@@ -731,10 +738,6 @@ const promptManagerDefaultPromptOrder = [
     },
     {
         'identifier': 'charDescription',
-        'enabled': true,
-    },
-    {
-        'identifier': 'dialogueExamples',
         'enabled': true,
     },
     {

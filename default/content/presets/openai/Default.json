@@ -36,7 +36,6 @@
     "send_if_empty": "",
     "impersonation_prompt": "[Write your next reply from the point of view of {{user}}, using the chat history so far as a guideline for the writing style of {{user}}. Don't write as {{char}} or system. Don't describe actions of {{char}}.]",
     "new_chat_prompt": "[Start a new Chat]",
-    "new_example_chat_prompt": "[Example Chat]",
     "continue_nudge_prompt": "[Continue your last message without repeating its original content.]",
     "bias_preset_selected": "Default (none)",
     "reverse_proxy": "",
@@ -58,12 +57,6 @@
             "marker": true
         },
         {
-            "identifier": "dialogueExamples",
-            "name": "Chat Examples",
-            "system_prompt": true,
-            "marker": true
-        },
-        {
             "identifier": "chatHistory",
             "name": "Chat History",
             "system_prompt": true,
@@ -80,10 +73,6 @@
                 },
                 {
                     "identifier": "charDescription",
-                    "enabled": true
-                },
-                {
-                    "identifier": "dialogueExamples",
                     "enabled": true
                 },
                 {

@@ -55,7 +55,6 @@
     "send_if_empty": "",
     "impersonation_prompt": "",
     "new_chat_prompt": "[Start a new Chat]",
-    "new_example_chat_prompt": "[Example Chat]",
     "continue_nudge_prompt": "[Continue the following message. Do not include ANY parts of the original message. Use capitalization and punctuation as if your reply is a part of the original message: {{lastChatMessage}}]",
     "bias_preset_selected": "Default (none)",
     "wi_format": "<world_info>\n{0}\n</world_info>\n",
@@ -270,15 +269,6 @@
             "forbid_overrides": false
         },
         {
-            "identifier": "dialogueExamples",
-            "name": "Chat Examples",
-            "enabled": false,
-            "role": "system",
-            "system_prompt": true,
-            "marker": true,
-            "forbid_overrides": false
-        },
-        {
             "identifier": "f7b962ff-83ea-4739-868c-8f4c2fcda59b",
             "name": "<nsfw_technique>",
             "enabled": true,
@@ -381,10 +371,6 @@
                 },
                 {
                     "identifier": "ef337206-24ea-4402-8279-8fd585471bea",
-                    "enabled": false
-                },
-                {
-                    "identifier": "dialogueExamples",
                     "enabled": false
                 }
             ]

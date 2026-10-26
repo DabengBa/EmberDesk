@@ -26,7 +26,7 @@ It is not optimized for users who want a managed cloud product or a minimal one-
 
 ## Architecture And Boundaries
 
-- Runtime: Node.js 24.16.0 Current (`>=24.16.0 <25`)
+- Runtime: Node.js 26.12.1 Current (`>=26.12.1 <27`)
 - Package manager and task runner: pnpm 12.0.0-rc.5
 - Server: Express-based API and startup pipeline
 - Frontend: HTML/CSS/jQuery compatibility substrate plus progressive React page/panel islands; the root `/` workspace shell boundary has been reopened as an opt-in same-entry React chrome/layout takeover path rather than a separate SPA route
