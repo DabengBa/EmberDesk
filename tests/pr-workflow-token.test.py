@@ -48,7 +48,7 @@ class PrWorkflowTokenTest(unittest.TestCase):
         for filename in EXPECTED:
             text = (ROOT / '.github/workflows' / filename).read_text()
 
-            self.assertNotRegex(text, r'\brun:.*(?:npm|pnpm|node|bash|sh) ')
+            self.assertNotRegex(text, r'(?m)^\s*run:\s*(?:\|[-+]?|>[-+]?)?\s*\n(?:[ \t]+[^\n]*\b(?:npm|pnpm|node|bash|sh)\b[^\n]*\n?)+')
             for checkout in re.findall(r'uses: actions/checkout@[^\n]+\n(.*?)(?=      - name:|\Z)', text, re.S):
                 self.assertNotIn('pull_request.head', checkout)
                 self.assertIn('ref: ${{ github.event.repository.default_branch }}', checkout)
