@@ -57,10 +57,9 @@ const settingsSchema = z.object({
         frontendFramesEnabled: z.boolean(),
         frontendFramesDepth: z.number().int().min(0),
         frontendFramesDepthIgnoreHidden: z.boolean(),
-        frontendFramesCollapseCodeBlock: z.enum(['all', 'frontend_only', 'none']),
+        frontendFramesCollapseCodeBlock: z.enum(['all', 'none']),
         frontendFramesSkipHighlight: z.boolean(),
         frontendFramesUseBlobUrl: z.boolean(),
-        frontendFramesAllowStreaming: z.boolean(),
     }),
 });
 
@@ -955,7 +954,7 @@ export function SettingsSurface({
                                         label={t('Max output tokens per summary')}
                                         variant="number"
                                         min={1}
-                                        step={50}
+                                        step={1}
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
                                     />
@@ -1014,11 +1013,10 @@ export function SettingsSurface({
                                     <SettingField
                                         form={settingsForm}
                                         name="rendering.frontendFramesCollapseCodeBlock"
-                                        label={t('Collapse code blocks')}
+                                        label={t('Collapse ordinary code blocks')}
                                         variant="select"
                                         options={[
-                                            { value: 'frontend_only', label: t('Frontend blocks only') },
-                                            { value: 'all', label: t('All code blocks') },
+                                            { value: 'all', label: t('Ordinary code blocks') },
                                             { value: 'none', label: t('Never') },
                                         ]}
                                         disabled={isBusy}
@@ -1036,14 +1034,6 @@ export function SettingsSurface({
                                         form={settingsForm}
                                         name="rendering.frontendFramesUseBlobUrl"
                                         label={t('Use blob URL (debug)')}
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="rendering.frontendFramesAllowStreaming"
-                                        label={t('Render while streaming')}
                                         variant="toggle"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}

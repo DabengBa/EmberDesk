@@ -29,7 +29,7 @@ The main chat message list is a shared surface for first-party message actions, 
 - `.swipe_left`, `.swipe_right`
 - `.extraMesButtonsHint` before `.extraMesButtons`; the hidden `data-main-chat-message-actions-owner="react"` marker stays appended after protected controls.
 
-Generation-recovery status (`.generation_auto_recovery_status`) stays outside `.mes_text`. Frontend-frame iframe hosts (`data-frontend-frame`, `.ed-frontend-stream`) are owned by the frame controller.
+Generation-recovery status (`.generation_auto_recovery_status`) stays outside `.mes_text`. Frontend-frame iframe hosts (`data-frontend-frame`) are owned by the frame controller.
 
 ### Character list DOM contract
 

@@ -121,7 +121,7 @@ describe('settings React route flag', () => {
         expect(routeSource).toContain('<settingsForm.Subscribe');
         expect(routeSource).toContain('selector={state => state.isPristine}');
         expect(routeSource).toContain('disabled={isBusy || settingsQuery.isPending || settingsQuery.isFetching || isPristine || hasRevisionConflict}');
-        expect(routeSource).toContain("import { startTransition, useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';");
+        expect(routeSource).toContain("import { startTransition, useCallback, useEffect, useMemo, useReducer, useState, useSyncExternalStore } from 'react';");
         expect(routeSource).toContain('const [isSettingsFormLoaded, setIsSettingsFormLoaded] = useState(false);');
         expect(routeSource).toContain('const isSettingsFormReady = isSettingsFormLoaded && parsedPayload !== null;');
         expect(routeSource).toContain('const openSettingsTab = useCallback((tabId: string)');
@@ -233,9 +233,8 @@ describe('settings React route flag', () => {
             'power_user.frontend_frames.collapse_code_block',
             'power_user.frontend_frames.skip_highlight',
             'power_user.frontend_frames.use_blob_url',
-            'power_user.frontend_frames.allow_streaming',
         ]));
-        expect(helperModule.settingsCoverage.reactOwned.providers).toHaveLength(16);
+        expect(helperModule.settingsCoverage.reactOwned.providers).toHaveLength(15);
         // The interface tab is retired; UI keys are stripped from saved payloads.
         expect(helperModule.settingsCoverage.reactOwned.userInterface).toBeUndefined();
         // The advanced tab is retired entirely; no react-owned advanced paths.
@@ -755,6 +754,33 @@ describe('settings React route flag', () => {
         expect(saved.power_user.context).toBeUndefined();
     });
 
+    test('a stale allow_streaming key never survives a settings save', async () => {
+        const helperModule = await import(`../app/lib/settings-helpers.js?settingsStreamingSave=${Date.now()}-${Math.random()}`);
+        const fixture = {
+            power_user: {
+                frontend_frames: {
+                    enabled: true,
+                    depth: 2,
+                    collapse_code_block: 'all',
+                    allow_streaming: true,
+                },
+            },
+        };
+        const defaults = helperModule.buildSettingsFormDefaults(fixture);
+
+        const savedUnchanged = helperModule.buildSettingsSavePayload(fixture, defaults);
+        expect(savedUnchanged.power_user.frontend_frames.allow_streaming).toBeUndefined();
+        expect(Object.keys(savedUnchanged.power_user.frontend_frames).sort()).toEqual([
+            'collapse_code_block', 'depth', 'depth_ignore_hidden', 'enabled', 'skip_highlight', 'use_blob_url',
+        ]);
+
+        const edited = structuredClone(defaults);
+        edited.rendering.frontendFramesCollapseCodeBlock = 'none';
+        const savedEdited = helperModule.buildSettingsSavePayload(fixture, edited, { baselineFormValues: defaults });
+        expect(savedEdited.power_user.frontend_frames.allow_streaming).toBeUndefined();
+        expect(savedEdited.power_user.frontend_frames.collapse_code_block).toBe('none');
+    });
+
     test('keeps secrets out of settings JSON and retires the connection-profile picker', async () => {
         const routeSource = fs.readFileSync(path.join(repoRoot, 'app', 'components', 'settings', 'SettingsSurface.tsx'), 'utf8');
         const helperModule = await import(`../app/lib/settings-helpers.js?settingsSecrets=${Date.now()}-${Math.random()}`);
@@ -827,12 +853,19 @@ describe('settings React route flag', () => {
             "settingsPath: 'power_user.frontend_frames.enabled'",
             "settingsPath: 'power_user.frontend_frames.depth'",
             "settingsPath: 'power_user.frontend_frames.collapse_code_block'",
-            "settingsPath: 'power_user.frontend_frames.allow_streaming'",
         ]) {
             expect(helperSource).toContain(binding);
         }
+        // The streaming preview is retired; its binding and field are gone.
+        expect(helperSource).not.toContain('frontendFramesAllowStreaming');
+        expect(helperSource).not.toContain("settingsPath: 'power_user.frontend_frames.allow_streaming'");
+        expect(routeSource).not.toContain('frontendFramesAllowStreaming');
+        expect(routeSource).not.toContain('Render while streaming');
         expect(routeSource).toContain('rendering.frontendFramesEnabled');
         expect(routeSource).toContain('rendering.frontendFramesCollapseCodeBlock');
+        expect(routeSource).toContain("label={t('Collapse ordinary code blocks')}");
+        expect(routeSource).not.toContain('frontend_only');
+        expect(helperSource).not.toContain('frontend_only');
         expect(routeSource).not.toContain('openWorkspaceDrawer');
 
         // With no drawer links left, the openWorkspaceDrawer runtime command

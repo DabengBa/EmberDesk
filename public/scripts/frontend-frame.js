@@ -18,11 +18,8 @@ export const FRONTEND_FRAME_MARKERS = Object.freeze(['html>', '<head>', '<body']
 export const FRONTEND_FRAME_SLOT_CLASS = 'ed-frontend-frame';
 export const FRONTEND_FRAME_SLOT_ATTR = 'data-frontend-slot';
 export const FRONTEND_FRAME_IFRAME_CLASS = 'ed-frontend-frame__iframe';
-export const FRONTEND_FRAME_TOGGLE_CLASS = 'ed-frontend-frame__toggle';
 export const FRONTEND_CODE_TOGGLE_CLASS = 'ed-code-collapse-toggle';
 export const FRONTEND_CODE_COLLAPSED_ATTR = 'data-ed-code-collapsed';
-export const FRONTEND_STREAM_HOST_CLASS = 'ed-frontend-stream';
-export const FRONTEND_FRAME_DOC_ATTR = 'data-frontend-doc';
 
 /** Host window key exposing the frame bridge to same-origin frame scripts. */
 const HOST_FRAME_API_KEY = '__ED_FRAME_API__';
@@ -63,16 +60,15 @@ export const FRONTEND_FRAME_EVENTS = Object.freeze({
 /** Document-level signal asking mounted rows to re-run their frame scan. */
 export const FRONTEND_FRAMES_CHANGED_EVENT = 'ed:frontend-frames-changed';
 
-export const FRONTEND_FRAME_COLLAPSE_MODES = Object.freeze(['all', 'frontend_only', 'none']);
+export const FRONTEND_FRAME_COLLAPSE_MODES = Object.freeze(['all', 'none']);
 
 export const DEFAULT_FRONTEND_FRAME_SETTINGS = Object.freeze({
     enabled: true,
     depth: 0,
     depth_ignore_hidden: true,
-    collapse_code_block: 'frontend_only',
+    collapse_code_block: 'none',
     use_blob_url: false,
     skip_highlight: true,
-    allow_streaming: false,
 });
 
 /**
@@ -80,7 +76,7 @@ export const DEFAULT_FRONTEND_FRAME_SETTINGS = Object.freeze({
  * path shallow-assigns `power_user`, so stored partial/garbage values must be
  * rebuilt against defaults here.
  * @param {unknown} value Stored value
- * @returns {{enabled:boolean,depth:number,depth_ignore_hidden:boolean,collapse_code_block:string,use_blob_url:boolean,skip_highlight:boolean,allow_streaming:boolean}}
+ * @returns {{enabled:boolean,depth:number,depth_ignore_hidden:boolean,collapse_code_block:string,use_blob_url:boolean,skip_highlight:boolean}}
  */
 export function normalizeFrontendFramesSettings(value) {
     const defaults = DEFAULT_FRONTEND_FRAME_SETTINGS;
@@ -98,7 +94,6 @@ export function normalizeFrontendFramesSettings(value) {
             : defaults.collapse_code_block,
         use_blob_url: boolOr('use_blob_url'),
         skip_highlight: boolOr('skip_highlight'),
-        allow_streaming: boolOr('allow_streaming'),
     };
 }
 
@@ -453,30 +448,8 @@ export function findFrontendBlocks(rootEl) {
 }
 
 /**
- * Streaming-time detection on RAW message text: returns the source of every
- * CLOSED fenced code block (` ``` ` or `~~~` pairs) whose content qualifies as
- * a frontend document. Fences still open at the tail of a streaming message are
- * never matched — a document only mounts once its fence is complete.
- * @param {unknown} text Raw message source
- * @returns {string[]}
- */
-export function findClosedFrontendDocuments(text) {
-    const source = String(text ?? '');
-    const docs = [];
-    const fencePattern = /(^|\n)(`{3,}|~{3,})[^\n]*\r?\n([\s\S]*?)\r?\n\2[^\n]*(?=\r?\n|$)/g;
-    let match;
-    while ((match = fencePattern.exec(source)) !== null) {
-        if (isFrontendContent(match[3])) {
-            docs.push(match[3]);
-        }
-    }
-    return docs;
-}
-
-/**
- * Cheap content fingerprint for streaming-frame reuse: lets `mountStreamingFrames`
- * detect when an already-mounted document's source changed (swipe/edit) without
- * storing the full text on the slot.
+ * Cheap content fingerprint for the frame height cache: lets a remounted frame
+ * start at the height it last measured without keeping the full text around.
  * @param {string} text
  * @returns {string}
  */
@@ -758,129 +731,19 @@ function createFrameIframe(frameId, frameDocument, useBlobUrl, emit, { signature
  * @param {string} options.frameId
  * @param {string} options.document Assembled frame document
  * @param {boolean} options.useBlobUrl
- * @param {boolean} options.showToggle
- * @param {(text:string)=>string} options.translate
  * @param {(eventName:string, frameId:string)=>void|null} [options.emit]
  * @param {FrontendFrameContext} [options.bridgeCtx] Bridge inputs (eventSource/getContextSnapshot)
  */
-function mountFrontendSlot(pre, { frameId, document: frameDocument, useBlobUrl, showToggle, translate, emit, bridgeCtx, signature = null }) {
+function mountFrontendSlot(pre, { frameId, document: frameDocument, useBlobUrl, emit, bridgeCtx, signature = null }) {
     const slot = document.createElement('div');
     slot.className = FRONTEND_FRAME_SLOT_CLASS;
     slot.setAttribute(FRONTEND_FRAME_SLOT_ATTR, frameId);
 
-    const toggle = document.createElement('button');
-    toggle.type = 'button';
-    toggle.className = FRONTEND_FRAME_TOGGLE_CLASS;
-    toggle.addEventListener('click', () => {
-        const hidden = pre.style.display === 'none';
-        pre.style.display = hidden ? '' : 'none';
-        toggle.textContent = hidden ? translate('Hide frontend code block') : translate('Show frontend code block');
-        toggle.setAttribute('aria-expanded', String(hidden));
-        if (hidden) {
-            expandedBlockKeys.add(frameId);
-        } else {
-            expandedBlockKeys.delete(frameId);
-        }
-    });
-    const expanded = expandedBlockKeys.has(frameId);
-    toggle.textContent = expanded ? translate('Hide frontend code block') : translate('Show frontend code block');
-    toggle.setAttribute('aria-expanded', String(expanded));
-
     pre.replaceWith(slot);
-    if (showToggle) {
-        slot.appendChild(toggle);
-    }
-    pre.style.display = showToggle && !expanded ? 'none' : '';
+    pre.style.display = 'none';
     slot.appendChild(pre);
     registerFrameBridge(frameId, bridgeCtx);
     slot.appendChild(createFrameIframe(frameId, frameDocument, useBlobUrl, emit, { signature }));
-}
-
-/**
- * Removes the streaming preview host(s) under a row root, including all frames
- * inside them (bridges disposed via `unmountFrontendSlot`).
- * @param {Element|null|undefined} rowRootEl `.mes` row element
- */
-export function unmountStreamingFrames(rowRootEl) {
-    if (!rowRootEl || typeof rowRootEl.querySelectorAll !== 'function') {
-        return;
-    }
-    rowRootEl.querySelectorAll(`.${FRONTEND_STREAM_HOST_CLASS}`).forEach(host => {
-        host.querySelectorAll(`.${FRONTEND_FRAME_SLOT_CLASS}`).forEach(slot => unmountFrontendSlot(slot));
-        host.remove();
-    });
-}
-
-/**
- * Streaming-time frame mounting. Frames live in a sibling
- * `.ed-frontend-stream` host right after `.mes_text` — NOT inside it — because
- * React rewrites the `.mes_text` innerHTML on every streamed token and would
- * destroy any iframe mounted within. Idempotent: already-mounted docs (same
- * frameId + doc signature) are reused across commits, so frames persist while
- * later tokens stream in. The still-visible `<pre>` inside `.mes_text` doubles
- * as the streaming source view.
- * @param {Element|null|undefined} rowRootEl `.mes` row element
- * @param {FrontendFrameContext & {text?:unknown}} [ctx]
- * @returns {number} Number of new frames mounted this call
- */
-export function mountStreamingFrames(rowRootEl, ctx = {}) {
-    if (!rowRootEl || typeof rowRootEl.querySelector !== 'function') {
-        return 0;
-    }
-    const settings = normalizeFrontendFramesSettings(ctx.settings);
-    const docs = settings.enabled && settings.allow_streaming && ctx.eligible !== false
-        ? findClosedFrontendDocuments(ctx.text)
-        : [];
-    const mesTextEl = rowRootEl.querySelector('.mes_text');
-    if (docs.length === 0 || !mesTextEl) {
-        unmountStreamingFrames(rowRootEl);
-        return 0;
-    }
-    installHostFrameApi();
-    let host = rowRootEl.querySelector(`.${FRONTEND_STREAM_HOST_CLASS}`);
-    if (!host) {
-        host = document.createElement('div');
-        host.className = FRONTEND_STREAM_HOST_CLASS;
-        mesTextEl.insertAdjacentElement('afterend', host);
-    }
-    const messageId = String(ctx.messageId ?? rowRootEl.getAttribute?.('mesid') ?? '');
-    const frameIdSeed = String(ctx.frameIdSeed ?? messageId);
-    const wanted = new Set();
-    let mounted = 0;
-    docs.forEach((doc, index) => {
-        const frameId = `ed-frame--${frameIdSeed}--${index}`;
-        wanted.add(frameId);
-        const signature = docSignature(doc);
-        const existing = host.querySelector(`[${FRONTEND_FRAME_SLOT_ATTR}="${frameId}"]`);
-        if (existing && existing.getAttribute(FRONTEND_FRAME_DOC_ATTR) === signature) {
-            return;
-        }
-        if (existing) {
-            unmountFrontendSlot(existing);
-        }
-        const slot = document.createElement('div');
-        slot.className = FRONTEND_FRAME_SLOT_CLASS;
-        slot.setAttribute(FRONTEND_FRAME_SLOT_ATTR, frameId);
-        slot.setAttribute(FRONTEND_FRAME_DOC_ATTR, signature);
-        registerFrameBridge(frameId, ctx);
-        slot.appendChild(createFrameIframe(frameId, buildFrontendFrameDocument(doc, {
-            frameId,
-            messageId,
-            userAvatarUrl: ctx.userAvatarUrl,
-            charAvatarUrl: ctx.charAvatarUrl,
-            useBlobUrl: settings.use_blob_url,
-            baseHref: ctx.baseHref,
-        }), settings.use_blob_url, ctx.emit, { signature }));
-        host.appendChild(slot);
-        mounted += 1;
-    });
-    host.querySelectorAll(`.${FRONTEND_FRAME_SLOT_CLASS}`).forEach(slot => {
-        if (!wanted.has(slot.getAttribute(FRONTEND_FRAME_SLOT_ATTR))) {
-            unmountFrontendSlot(slot);
-        }
-    });
-    pruneFrameBridges();
-    return mounted;
 }
 
 /**
@@ -936,8 +799,6 @@ export function mountFrontendFrames(mesTextEl, ctx = {}) {
             frameId,
             document: frameDocument,
             useBlobUrl: settings.use_blob_url,
-            showToggle: settings.collapse_code_block !== 'none',
-            translate,
             emit: ctx.emit,
             bridgeCtx: ctx,
             signature,

@@ -1,5 +1,6 @@
 import { describe, expect, test } from '@jest/globals';
 
+import * as frontendFrameModule from '../public/scripts/frontend-frame.js';
 import {
     DEFAULT_FRONTEND_FRAME_SETTINGS,
     FRONTEND_CODE_COLLAPSED_ATTR,
@@ -10,13 +11,10 @@ import {
     FRONTEND_FRAME_MARKERS,
     FRONTEND_FRAME_SLOT_ATTR,
     FRONTEND_FRAME_SLOT_CLASS,
-    FRONTEND_FRAME_TOGGLE_CLASS,
     FRONTEND_FRAMES_CHANGED_EVENT,
-    FRONTEND_STREAM_HOST_CLASS,
     buildFrontendFrameDocument,
     computeDepthEligible,
     createFrameBridge,
-    findClosedFrontendDocuments,
     findFrontendBlocks,
     getCachedFrameHeight,
     isFrontendContent,
@@ -149,7 +147,6 @@ describe('normalizeFrontendFramesSettings', () => {
             collapse_code_block: 'all',
             use_blob_url: true,
             skip_highlight: false,
-            allow_streaming: 'yes',
         });
         expect(normalized).toEqual({
             enabled: false,
@@ -158,12 +155,26 @@ describe('normalizeFrontendFramesSettings', () => {
             collapse_code_block: 'all',
             use_blob_url: true,
             skip_highlight: false,
-            allow_streaming: false,
         });
     });
 
+    test('drops the retired allow_streaming key instead of round-tripping it', () => {
+        // A stale `allow_streaming: true` in a stored document must not survive
+        // normalization: there is no streaming preview left to enable.
+        expect(normalizeFrontendFramesSettings({ allow_streaming: true })).not.toHaveProperty('allow_streaming');
+        expect(Object.keys(normalizeFrontendFramesSettings({ allow_streaming: true })).sort()).toEqual([
+            'collapse_code_block',
+            'depth',
+            'depth_ignore_hidden',
+            'enabled',
+            'skip_highlight',
+            'use_blob_url',
+        ]);
+    });
+
     test('rejects invalid collapse modes and depths', () => {
-        expect(normalizeFrontendFramesSettings({ collapse_code_block: 'everything' }).collapse_code_block).toBe('frontend_only');
+        expect(normalizeFrontendFramesSettings({ collapse_code_block: 'everything' }).collapse_code_block).toBe('none');
+        expect(normalizeFrontendFramesSettings({ collapse_code_block: 'frontend_only' }).collapse_code_block).toBe('none');
         expect(normalizeFrontendFramesSettings({ depth: -2 }).depth).toBe(0);
         expect(normalizeFrontendFramesSettings({ depth: 1.5 }).depth).toBe(0);
     });
@@ -218,10 +229,8 @@ describe('first-party frame markers', () => {
         expect(FRONTEND_FRAME_SLOT_CLASS).toBe('ed-frontend-frame');
         expect(FRONTEND_FRAME_SLOT_ATTR).toBe('data-frontend-slot');
         expect(FRONTEND_FRAME_IFRAME_CLASS).toBe('ed-frontend-frame__iframe');
-        expect(FRONTEND_FRAME_TOGGLE_CLASS).toBe('ed-frontend-frame__toggle');
         expect(FRONTEND_CODE_TOGGLE_CLASS).toBe('ed-code-collapse-toggle');
         expect(FRONTEND_CODE_COLLAPSED_ATTR).toBe('data-ed-code-collapsed');
-        expect(FRONTEND_STREAM_HOST_CLASS).toBe('ed-frontend-stream');
         expect(FRONTEND_FRAME_MARKERS).toEqual(['html>', '<head>', '<body']);
         expect(FRONTEND_FRAME_EVENTS).toEqual({
             started: 'frontend_frame_render_started',
@@ -231,32 +240,20 @@ describe('first-party frame markers', () => {
     });
 });
 
-describe('findClosedFrontendDocuments', () => {
-    const doc = '<!DOCTYPE html><html><body>card</body></html>';
-
-    test('extracts closed fenced frontend documents', () => {
-        const text = `intro\n\`\`\`html\n${doc}\n\`\`\`\noutro`;
-        expect(findClosedFrontendDocuments(text)).toEqual([doc]);
-    });
-
-    test('skips fences still open while streaming', () => {
-        const openTail = `\`\`\`html\n${doc.slice(0, 20)}`;
-        const closedThenOpen = `\`\`\`html\n${doc}\n\`\`\`\n\`\`\`html\n${doc.slice(0, 10)}`;
-        expect(findClosedFrontendDocuments(openTail)).toEqual([]);
-        expect(findClosedFrontendDocuments(closedThenOpen)).toEqual([doc]);
-    });
-
-    test('skips non-frontend fenced blocks and plain text', () => {
-        const text = '```js\nconst x = 1;\n```\nno fence here';
-        expect(findClosedFrontendDocuments(text)).toEqual([]);
-        expect(findClosedFrontendDocuments('')).toEqual([]);
-        expect(findClosedFrontendDocuments(null)).toEqual([]);
-    });
-
-    test('supports tilde fences and multiple documents in order', () => {
-        const docTwo = '<html><head></head><body>second</body></html>';
-        const text = `~~~html\n${doc}\n~~~\nmid\n\`\`\`\n${docTwo}\n\`\`\``;
-        expect(findClosedFrontendDocuments(text)).toEqual([doc, docTwo]);
+describe('retired streaming preview surface', () => {
+    test('exports no streaming preview runtime', () => {
+        // The streaming preview could not be proven reliable (per-token
+        // innerHTML rewrites destroy any iframe inside `.mes_text`, and no path
+        // establishes closed-fence DOM provenance), so the whole surface is
+        // gone rather than left as a misleading option.
+        for (const retiredExport of [
+            'FRONTEND_STREAM_HOST_CLASS',
+            'findClosedFrontendDocuments',
+            'mountStreamingFrames',
+            'unmountStreamingFrames',
+        ]) {
+            expect(frontendFrameModule).not.toHaveProperty(retiredExport);
+        }
     });
 });
 

@@ -275,20 +275,58 @@ test.describe('workspace shell panel navigation', () => {
         await expect(page.locator('#SettingsPanel .settings-tab')).toHaveCount(0);
         const modelField = page.locator('#SettingsPanel #settings-providers-fallbackProviderModel');
         await expect(modelField).toBeVisible();
+        const maxTokens = page.locator('#SettingsPanel #settings-memory-maxTokens');
+        await expect(maxTokens).toHaveValue('400');
+        await expect(maxTokens).toHaveAttribute('step', '1');
+        expect(await maxTokens.evaluate(input => input.validity.valid)).toBe(true);
+        await expect(page.locator('#SettingsPanel form')).not.toHaveAttribute('novalidate', '');
         // The fallback model is auxiliary: editing it dirties the form without
         // touching fields sibling tests depend on. Restore it before closing.
         const originalFallback = await modelField.inputValue();
-        await modelField.fill('e2e-shell-fallback');
         const saveButton = page.locator('#SettingsPanel button[type="submit"]');
-        await expect(saveButton).toBeEnabled();
-        await saveButton.focus();
-        await page.keyboard.press('Enter');
-        await expect(page.locator('#SettingsPanel .settings-status--success')).toContainText('已保存', { timeout: 30_000 });
-        await modelField.fill(originalFallback);
-        if (await saveButton.isEnabled()) {
-            await saveButton.click();
-            await expect(page.locator('#SettingsPanel .settings-status--success')).toContainText('已保存', { timeout: 30_000 });
+        const success = page.locator('#SettingsPanel .settings-status--success');
+        const conflict = page.getByText(/本地草稿仍保留/);
+        // Drawer state is persisted by the legacy settings writer, which can
+        // advance the revision while this test edits the React form. Preserve
+        // the conflict contract: reload and reapply the draft rather than
+        // expecting a stale revision to save successfully.
+        async function saveModel(value, requireSuccess = false) {
+            for (let attempt = 0; attempt < 5; attempt++) {
+                if (attempt > 0 && await modelField.inputValue() === value) {
+                    const persisted = await page.evaluate(async () => {
+                        const csrfResponse = await fetch('/csrf-token');
+                        const csrf = await csrfResponse.json();
+                        const response = await fetch('/api/settings/get', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf.token ?? csrf.data?.token },
+                            body: '{}',
+                        });
+                        if (!response.ok) throw new Error('Could not verify saved settings');
+                        const data = await response.json();
+                        const settings = typeof data.settings === 'string' ? JSON.parse(data.settings) : data.settings;
+                        return settings?.oai_settings?.fallback_provider_model ?? '';
+                    });
+                    expect(persisted).toBe(value);
+                    expect(requireSuccess, 'The initial edit must produce a save success').toBe(false);
+                    return;
+                }
+                await modelField.fill(value);
+                await expect(saveButton).toBeEnabled();
+                await saveButton.focus();
+                await page.keyboard.press('Enter');
+                await expect(success.or(conflict).first()).toBeVisible({ timeout: 30_000 });
+                if (await success.isVisible()) {
+                    await expect(success).toContainText('已保存');
+                    return;
+                }
+                await page.getByRole('button', { name: '重新加载当前设置', exact: true }).click();
+                await expect(conflict).toHaveCount(0);
+            }
+            throw new Error('Settings save repeatedly conflicted');
         }
+        await saveModel(`e2e-shell-fallback-${Date.now()}`, true);
+        await expect(maxTokens).toHaveValue('400');
+        await saveModel(originalFallback);
         await page.keyboard.press('Escape');
         await expect(page.locator('#SettingsPanel')).toHaveClass(/closedDrawer/, { timeout: 15_000 });
         await expect(settingsButton).toHaveAttribute('aria-pressed', 'false', { timeout: 15_000 });
@@ -376,7 +414,15 @@ test.describe('workspace shell panel navigation', () => {
         await expect(framesToggle).toBeVisible();
         await expect(page.locator('#settings-rendering-frontendFramesDepth')).toBeVisible();
         await expect(page.locator('#settings-rendering-frontendFramesCollapseCodeBlock')).toBeVisible();
-        await expect(page.locator('#settings-rendering-frontendFramesAllowStreaming')).toBeVisible();
+        // The render-while-streaming toggle is retired with the streaming
+        // preview; the field must not linger as an inert option.
+        await expect(page.locator('#settings-rendering-frontendFramesAllowStreaming')).toHaveCount(0);
+        await expect(page.locator('#SettingsPanel')).not.toContainText('流式期间渲染');
+
+        // The two code-block labels are translated, so a Chinese UI never falls
+        // back to the English source text inside the merged fields.
+        await expect(page.locator('#SettingsPanel')).toContainText('折叠普通代码块');
+        await expect(page.locator('#settings-rendering-frontendFramesCollapseCodeBlock')).toContainText('普通代码块');
 
         // Toggling a merged field dirties the form through the normal save flow:
         // the save button enables and the dirty-close guard intercepts Escape —

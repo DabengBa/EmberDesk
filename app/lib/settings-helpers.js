@@ -35,14 +35,13 @@ export const defaultSettingsFormValues = {
         frontendFramesEnabled: true,
         frontendFramesDepth: 0,
         frontendFramesDepthIgnoreHidden: true,
-        frontendFramesCollapseCodeBlock: 'frontend_only',
+        frontendFramesCollapseCodeBlock: 'none',
         frontendFramesSkipHighlight: true,
         frontendFramesUseBlobUrl: false,
-        frontendFramesAllowStreaming: false,
     },
 };
 
-const FRONTEND_FRAME_COLLAPSE_MODES = ['all', 'frontend_only', 'none'];
+const FRONTEND_FRAME_COLLAPSE_MODES = ['all', 'none'];
 
 function boolOr(value, fallback) {
     return typeof value === 'boolean' ? value : fallback;
@@ -133,7 +132,7 @@ const fieldBindings = [
         tab: 'providers',
         formPath: 'rendering.frontendFramesCollapseCodeBlock',
         settingsPath: 'power_user.frontend_frames.collapse_code_block',
-        toForm: value => (FRONTEND_FRAME_COLLAPSE_MODES.includes(value) ? value : 'frontend_only'),
+        toForm: value => (FRONTEND_FRAME_COLLAPSE_MODES.includes(value) ? value : 'none'),
     },
     {
         tab: 'providers',
@@ -147,14 +146,7 @@ const fieldBindings = [
         settingsPath: 'power_user.frontend_frames.use_blob_url',
         toForm: value => boolOr(value, false),
     },
-    {
-        tab: 'providers',
-        formPath: 'rendering.frontendFramesAllowStreaming',
-        settingsPath: 'power_user.frontend_frames.allow_streaming',
-        toForm: value => boolOr(value, false),
-    },
 ];
-
 
 /**
  * Owner inventory for settings retirement.
@@ -442,6 +434,10 @@ export function buildSettingsSavePayload(baseSettings, formValues, { settingsRev
         // runtime uses fixed markers and card/Prompt Manager prompts.
         delete powerUser.sysprompt;
         delete powerUser.reasoning;
+        // The streaming preview is retired; a stale stored flag must not survive a save.
+        if (powerUser.frontend_frames && typeof powerUser.frontend_frames === 'object') {
+            delete powerUser.frontend_frames.allow_streaming;
+        }
     }
 
     // The swipes toggle and swipe generation are retired; strip on save.
