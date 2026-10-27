@@ -46,6 +46,7 @@ import {
     createCharacterAuthoringSession,
     shouldApplyCharacterAuthoringSaveResult,
 } from '../public/scripts/character-authoring.js';
+import { resolveBoundWorldInfoBookName } from '../public/scripts/world-info-bound-book.js';
 
 import {
     WorldInfoWorkbenchPanel,
@@ -564,6 +565,7 @@ function AuthoringFieldLabel({ text, dirty, meta, onExpand }: { text: string; di
                     onClick={onExpand}
                 >
                     <i className="fa-solid fa-expand" aria-hidden="true" />
+                    <span {...stylex.props(authoringStyles.expandLabel)}>{translate('Expand')}</span>
                 </button>
             ) : null}
         </span>
@@ -1170,7 +1172,7 @@ function AuthoringWorkspacePanel({
     useTranslated('');
     const bridgeState = asAuthoringState(state);
     const title = bridgeState.title ?? 'Character Authoring';
-    const unsupportedFields = Array.isArray(bridgeState.unsupportedFields) ? bridgeState.unsupportedFields : [];
+
     const worldNames = Array.isArray(bridgeState.worldNames)
         ? bridgeState.worldNames.filter((name): name is string => typeof name === 'string' && name.trim().length > 0)
         : [];
@@ -1293,6 +1295,7 @@ function AuthoringWorkspacePanel({
     const characterToolActionPayload = characterActionPayload ? { ...characterActionPayload, draft } : undefined;
     const isCreateMode = authoringMode === 'create';
     const isActionPending = authoringCommandMutation.isPending;
+    const boundWorldInfoBookName = resolveBoundWorldInfoBookName(stringDraft('characterWorld'), worldNames);
     const dirtyFieldSet = new Set(authoringSession.dirtyFields);
     const isFieldDirty = (key: string) => dirtyFieldSet.has(key);
     const advancedChips = [
@@ -1381,7 +1384,7 @@ function AuthoringWorkspacePanel({
                 }}
             >
                 <header {...stylex.props(authoringStyles.panelHeader)}>
-                    <div {...stylex.props(authoringStyles.panelKicker)}>{bridgeState.mode === 'edit' ? 'Editing' : 'Creating'}</div>
+                    <div {...stylex.props(authoringStyles.panelKicker)}>{translate(bridgeState.mode === 'edit' ? 'Editing' : 'Creating')}</div>
                     {!isCreateMode ? (
                         <span {...stylex.props(authoringStyles.footerStatus, authoringStyles.headerStatus)} aria-live="polite">
                             <i
@@ -1405,11 +1408,7 @@ function AuthoringWorkspacePanel({
                         </span>
                     ) : null}
                 </header>
-                {unsupportedFields.length > 0 ? (
-                    <output {...stylex.props(authoringStyles.panelWarning)}>
-                        {translate('Extension data preserved on save but not editable here:')} {unsupportedFields.join(', ')}
-                    </output>
-                ) : null}
+
                 <fieldset
                     {...stylex.props(authoringStyles.fields)}
                     disabled={isActionPending}
@@ -1534,6 +1533,21 @@ function AuthoringWorkspacePanel({
                                     {stringDraft('characterWorld').trim() && worldNames.length > 0 && !worldNames.includes(stringDraft('characterWorld').trim()) ? (
                                         <small {...stylex.props(authoringStyles.fieldWarning)}>{translate("No world file with this name — the link will be ignored.")}</small>
                                     ) : null}
+                                    <button
+                                        type="button"
+                                        className={`menu_button ${stylex.props(authoringStyles.toolAction).className ?? ''}`}
+                                        data-react-authoring-action="openBoundWorldInfo"
+                                        disabled={!boundWorldInfoBookName || isActionPending}
+                                        title={boundWorldInfoBookName
+                                            ? translate('Open bound World Info book')
+                                            : translate('No bound world book to open')}
+                                        aria-label={boundWorldInfoBookName
+                                            ? translate('Open bound World Info book')
+                                            : translate('No bound world book to open')}
+                                        onClick={() => void commands?.openBoundWorldInfo?.(characterToolActionPayload)}
+                                    >
+                                        <i className="fa-solid fa-book-open" aria-hidden="true" />
+                                    </button>
                                 </label>
                             </div>
                         </div>
@@ -1544,7 +1558,7 @@ function AuthoringWorkspacePanel({
                             <AuthoringFieldLabel
                                 text="Description"
                                 dirty={isFieldDirty('description')}
-                                meta={descriptionValue.trim() ? `${descriptionValue.length} ${translate("characters")}` : undefined}
+                                meta={descriptionValue.trim() ? translate('${0} characters').replace('${0}', String(descriptionValue.length)) : undefined}
                                 onExpand={() => setExpandedField({ key: 'description', label: 'Description' })}
                             />
                             <AuthoringTextarea
@@ -1560,7 +1574,7 @@ function AuthoringWorkspacePanel({
                             <AuthoringFieldLabel
                                 text="First message"
                                 dirty={isFieldDirty('firstMessage')}
-                                meta={firstMessageValue.trim() ? `${firstMessageValue.length} ${translate("characters")}` : undefined}
+                                meta={firstMessageValue.trim() ? translate('${0} characters').replace('${0}', String(firstMessageValue.length)) : undefined}
                                 onExpand={() => setExpandedField({ key: 'firstMessage', label: 'First message' })}
                             />
                             <AuthoringTextarea
@@ -1586,11 +1600,7 @@ function AuthoringWorkspacePanel({
                                 <i className="fa-solid fa-pen-to-square" aria-hidden="true" />
                                 {translate(greetings.length > 0 ? 'Manage greetings' : 'Add alternate greetings')}
                             </button>
-                            {greetings.length > 0 ? (
-                                <p {...stylex.props(authoringStyles.greetingPreview)} title={greetings[0]}>
-                                    {greetings[0]}
-                                </p>
-                            ) : null}
+
                         </div>
                     </div>
                     <section {...stylex.props(authoringStyles.advancedSection)} data-react-authoring-section="advanced">
@@ -1652,7 +1662,7 @@ function AuthoringWorkspacePanel({
                                 <div {...stylex.props(authoringStyles.advancedSubgroup)}>
                                     <h4 {...stylex.props(authoringStyles.subsectionLabel)}>{translate("Prompt overrides")}</h4>
                                     <label {...stylex.props(authoringStyles.field)} htmlFor="authoring-system-prompt" data-react-authoring-field="systemPrompt">
-                                        <AuthoringFieldLabel text="System prompt" dirty={isFieldDirty('systemPrompt')} meta={stringDraft('systemPrompt').trim() ? `${stringDraft('systemPrompt').length} ${translate("characters")}` : undefined} onExpand={() => setExpandedField({ key: 'systemPrompt', label: translate('System prompt') })} />
+                                        <AuthoringFieldLabel text="System prompt" dirty={isFieldDirty('systemPrompt')} meta={stringDraft('systemPrompt').trim() ? translate('${0} characters').replace('${0}', String(stringDraft('systemPrompt').length)) : undefined} onExpand={() => setExpandedField({ key: 'systemPrompt', label: translate('System prompt') })} />
                                         <AuthoringTextarea
                                             id="authoring-system-prompt"
                                             rows={2}
@@ -1662,7 +1672,7 @@ function AuthoringWorkspacePanel({
                                         />
                                     </label>
                                     <label {...stylex.props(authoringStyles.field)} htmlFor="authoring-post-history-instructions" data-react-authoring-field="postHistoryInstructions">
-                                        <AuthoringFieldLabel text="Post-history instructions" dirty={isFieldDirty('postHistoryInstructions')} meta={stringDraft('postHistoryInstructions').trim() ? `${stringDraft('postHistoryInstructions').length} ${translate("characters")}` : undefined} onExpand={() => setExpandedField({ key: 'postHistoryInstructions', label: 'Post-history instructions' })} />
+                                        <AuthoringFieldLabel text="Post-history instructions" dirty={isFieldDirty('postHistoryInstructions')} meta={stringDraft('postHistoryInstructions').trim() ? translate('${0} characters').replace('${0}', String(stringDraft('postHistoryInstructions').length)) : undefined} onExpand={() => setExpandedField({ key: 'postHistoryInstructions', label: 'Post-history instructions' })} />
                                         <AuthoringTextarea
                                             id="authoring-post-history-instructions"
                                             rows={2}
@@ -1675,7 +1685,7 @@ function AuthoringWorkspacePanel({
                                 <div {...stylex.props(authoringStyles.advancedSubgroup)}>
                                     <h4 {...stylex.props(authoringStyles.subsectionLabel)}>{translate("Definition")}</h4>
                                     <label {...stylex.props(authoringStyles.field)} htmlFor="authoring-scenario" data-react-authoring-field="scenario">
-                                        <AuthoringFieldLabel text="Scenario" dirty={isFieldDirty('scenario')} meta={stringDraft('scenario').trim() ? `${stringDraft('scenario').length} ${translate("characters")}` : undefined} onExpand={() => setExpandedField({ key: 'scenario', label: translate('Scenario') })} />
+                                        <AuthoringFieldLabel text="Scenario" dirty={isFieldDirty('scenario')} meta={stringDraft('scenario').trim() ? translate('${0} characters').replace('${0}', String(stringDraft('scenario').length)) : undefined} onExpand={() => setExpandedField({ key: 'scenario', label: translate('Scenario') })} />
                                         <AuthoringTextarea
                                             id="authoring-scenario"
                                             rows={2}
@@ -1687,7 +1697,7 @@ function AuthoringWorkspacePanel({
                                 <div {...stylex.props(authoringStyles.advancedSubgroup)}>
                                     <h4 {...stylex.props(authoringStyles.subsectionLabel)}>{translate("Character's note")}</h4>
                                     <label {...stylex.props(authoringStyles.field)} htmlFor="authoring-depth-prompt" data-react-authoring-field="depthPrompt.prompt">
-                                        <AuthoringFieldLabel text="Depth prompt" dirty={isFieldDirty('depthPrompt')} meta={depthPrompt.prompt?.trim() ? `${depthPrompt.prompt.length} ${translate("characters")}` : undefined} onExpand={() => setExpandedField({ key: 'depthPrompt.prompt', label: 'Depth prompt' })} />
+                                        <AuthoringFieldLabel text="Depth prompt" dirty={isFieldDirty('depthPrompt')} meta={depthPrompt.prompt?.trim() ? translate('${0} characters').replace('${0}', String(depthPrompt.prompt.length)) : undefined} onExpand={() => setExpandedField({ key: 'depthPrompt.prompt', label: 'Depth prompt' })} />
                                         <AuthoringTextarea
                                             id="authoring-depth-prompt"
                                             rows={2}
@@ -1763,7 +1773,7 @@ function AuthoringWorkspacePanel({
                                         </div>
                                     </div>
                                     <label {...stylex.props(authoringStyles.field)} htmlFor="authoring-creator-notes" data-react-authoring-field="creatorNotes">
-                                        <AuthoringFieldLabel text="Creator notes" dirty={isFieldDirty('creatorNotes')} meta={stringDraft('creatorNotes').trim() ? `${stringDraft('creatorNotes').length} ${translate("characters")}` : undefined} onExpand={() => setExpandedField({ key: 'creatorNotes', label: 'Creator notes' })} />
+                                        <AuthoringFieldLabel text="Creator notes" dirty={isFieldDirty('creatorNotes')} meta={stringDraft('creatorNotes').trim() ? translate('${0} characters').replace('${0}', String(stringDraft('creatorNotes').length)) : undefined} onExpand={() => setExpandedField({ key: 'creatorNotes', label: 'Creator notes' })} />
                                         <AuthoringTextarea
                                             id="authoring-creator-notes"
                                             rows={2}
@@ -1778,6 +1788,7 @@ function AuthoringWorkspacePanel({
                     </section>
                 </fieldset>
                 <div {...stylex.props(authoringStyles.panelActions)} aria-label={translate('${0} actions').replace('${0}', title)}>
+                    <div {...stylex.props(authoringStyles.footerPrimaryActions)}>
                     {!isCreateMode ? (
                         <button
                             type="button"
@@ -1801,6 +1812,7 @@ function AuthoringWorkspacePanel({
                             {translate('Create')}
                         </button>
                     ) : null}
+                    </div>
                     <div {...stylex.props(authoringStyles.footerTools)}>
                         <button
                             type="button"
@@ -1879,7 +1891,7 @@ function AuthoringWorkspacePanel({
                             <div {...stylex.props(authoringStyles.modalHead)}>
                                 <span {...stylex.props(authoringStyles.modalTitle)}>{translate(expandedField.label)}</span>
                                 <span {...stylex.props(authoringStyles.fieldMeta)}>
-                                    {getExpandedFieldValue(expandedField.key).length} {translate("characters")}
+                                    {translate('${0} characters').replace('${0}', String(getExpandedFieldValue(expandedField.key).length))}
                                 </span>
                                 <button
                                     type="button"

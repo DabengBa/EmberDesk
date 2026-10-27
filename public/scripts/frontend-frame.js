@@ -418,7 +418,7 @@ export function buildFrontendFrameDocument(code, {
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 ${baseTag}<style>
 *,*::before,*::after{box-sizing:border-box;}
-html,body{margin:0!important;padding:0;overflow:hidden!important;max-width:100%!important;}
+html,body{margin:0!important;padding:0;overflow:hidden!important;max-width:100%!important;background:transparent;}
 .user_avatar,.user-avatar{background-image:url('${userAvatar}')}
 .char_avatar,.char-avatar{background-image:url('${charAvatar}')}
 </style>

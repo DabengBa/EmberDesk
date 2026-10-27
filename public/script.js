@@ -41,6 +41,7 @@ import {
     deleteCurrentWorldInfo,
     refreshCurrentWorldInfoEditor,
     selectWorldInfoWorkbenchEntry,
+    openWorldInfoEditor,
     updateWorldInfoWorkbenchEntryFields,
     getWorldInfoWorkbenchFacadeSnapshot,
     getWorldInfoReactPanelState,
@@ -51,6 +52,7 @@ import {
     promptMoveOrCopyWorldInfoEntry,
     updateWorldInfoScanDepth,
 } from './scripts/world-info.js';
+import { openBoundWorldInfoBook } from './scripts/world-info-bound-book.js';
 import { scanImportedCharacter, showUnifiedImportConfirm, applyImportChoices, buildSkipAllChoices } from './scripts/import-confirm-dialog.js';
 
 import {
@@ -2348,6 +2350,7 @@ function applyCharacterAuthoringSaveModel(saveModel = {}, { submit: _submit = tr
     setAuthoringInputValue('#creator_textarea', fields.creator);
     setAuthoringInputValue('#character_version_textarea', fields.character_version);
     setAuthoringInputValue('#tags_textarea', Array.isArray(fields.tags) ? fields.tags.join(', ') : '');
+    setAuthoringInputValue('#character_world', extensions.world);
     setAuthoringInputValue('#depth_prompt_prompt', extensions.depth_prompt?.prompt);
     setAuthoringInputValue('#depth_prompt_depth', extensions.depth_prompt?.depth);
     setAuthoringInputValue('#depth_prompt_role', extensions.depth_prompt?.role);
@@ -2513,6 +2516,25 @@ function getCharacterAuthoringReactCommands() {
                 // draft so the remount doesn't lose popup edits.
                 syncAuthoringDraftFromPopups(payload?.draft);
                 await reopenCharacterAuthoringAfterLegacyPopup(payload?.draft);
+                return false;
+            },
+            openBoundWorldInfo: async payload => {
+                // Opens the book this card is bound to, not the general panel and
+                // not the binding popup. An absent or dangling binding resolves to
+                // '' and does nothing — the React button is disabled for it, so a
+                // mismatch here means no book to open rather than a fallback.
+                const openedBookName = await openBoundWorldInfoBook({
+                    boundName: payload?.draft?.characterWorld,
+                    worldNames: world_names,
+                    openEditor: openWorldInfoEditor,
+                });
+                if (openedBookName) {
+                    // The editor selection lives in workbench session state, which
+                    // the mounted React host only reads on mount. Without this the
+                    // drawer opens on the empty option while the legacy mirror (and
+                    // the session) already point at the bound book.
+                    await mountReactWorldInfoPanel();
+                }
                 return false;
             },
             openAlternateGreetings: async payload => {

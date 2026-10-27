@@ -9,7 +9,7 @@ related: [page.chat_workspace, page.settings, feature.fallback_provider, feature
 
 ## ID 解释
 
-`feature.chat_memory` is the opt-in conversation-round summarization system on the chat-completions (`openai`) backend. Older turns are compressed into background-generated summaries that mask the original messages during prompt assembly, while the canonical `chat` array and every original message row are preserved untouched. It does not cover retrieval/RAG memory, cross-chat memory, or writing summaries into World Info.
+`feature.chat_memory` is the default-on conversation-round summarization system on the chat-completions (`openai`) backend. Older turns are compressed into background-generated summaries that mask the original messages during prompt assembly, while the canonical `chat` array and every original message row are preserved untouched. It does not cover retrieval/RAG memory, cross-chat memory, or writing summaries into World Info.
 
 ## Purpose
 
@@ -21,7 +21,7 @@ Keep long chats prompt-affordable without losing continuity: recent turns stay v
 
 Turn summarization, summary cards, Inspector integration, global Settings controls and the current-chat panel are delivered. The panel provides chat-local settings, turn actions and bounded execution history.
 
-- The feature is off by default; enabling the "历史会话轮次总结" toggle on the Providers tab of [Settings](page.settings) activates it for chats on the chat-completions backend.
+- The feature is on by default for chats on the chat-completions backend. The "历史会话轮次总结" toggle on the Providers tab of [Settings](page.settings) can disable it; an explicitly saved off setting and chat-local overrides remain in effect.
 - The newest N closed turns (default 5, configurable "保留完整显示的最近轮数") always stay verbatim; older closed turns are summarized in the background.
 - A summarized turn renders in the main chat list as a compact summary card ("第 X 轮 · 已摘要") at the turn's original position; expanding the card reveals the covered original message rows with full view/edit/regenerate affordances.
 - Deleting or otherwise removing newer verbatim turns automatically expands older summarized turns back to original display so the newest N complete turns are always shown.

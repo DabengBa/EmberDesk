@@ -476,6 +476,13 @@ describe('filterMemoryForBranch', () => {
 });
 
 describe('resolveChatMemorySettings / renderSummaryWrap / getChatMemoryMetadata', () => {
+    test('summarization defaults on while explicit global and chat choices are preserved', () => {
+        expect(resolveChatMemorySettings({}, {}).enabled).toBe(true);
+        expect(resolveChatMemorySettings({ chat_memory_enabled: null }, {}).enabled).toBe(true);
+        expect(resolveChatMemorySettings({ chat_memory_enabled: false }, {}).enabled).toBe(false);
+        expect(resolveChatMemorySettings({}, { chat_memory: { disabled: true } }).enabled).toBe(false);
+    });
+
     test('defaults and per-chat overrides', () => {
         const oai = { chat_memory_enabled: true, chat_memory_keep_turns: '7' };
         const resolved = resolveChatMemorySettings(oai, {});

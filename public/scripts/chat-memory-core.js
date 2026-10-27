@@ -284,7 +284,7 @@ export function resolveChatMemorySettings(oaiSettings, chatMetadata) {
     return {
         enabled: typeof overrides.disabled === 'boolean'
             ? !overrides.disabled
-            : !!oaiSettings?.chat_memory_enabled,
+            : !!(oaiSettings?.chat_memory_enabled ?? true),
         keepTurns,
         prompt: String(overrides.prompt ?? globalPrompt) || getDefaultChatMemoryPrompt(),
         wrap: String(overrides.wrap ?? globalWrap) || getDefaultChatMemoryWrap(),

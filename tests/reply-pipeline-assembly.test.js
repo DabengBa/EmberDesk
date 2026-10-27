@@ -61,6 +61,7 @@ jest.unstable_mockModule('../public/scripts/tool-calling.js', () => ({ ToolManag
 jest.unstable_mockModule('../public/scripts/feature-settings.js', () => ({ feature_settings: { tool_bindings: [{ name: 'analyze', enabled: true }] } }));
 jest.unstable_mockModule('../public/scripts/tool-bindings.js', () => ({ syncPipelineToolBindings: jest.fn() }));
 const openai = await import('../public/scripts/openai.js');
+const initialChatMemoryEnabled = openai.oai_settings.chat_memory_enabled;
 const runtime = await import('../public/scripts/reply-pipeline.js');
 const core = await import('../public/scripts/reply-pipeline-core.js');
 const { eventSource, event_types } = await import('../public/scripts/events.js');
@@ -74,6 +75,10 @@ beforeEach(() => {
     tailContent = 'STEP_TAIL';
     toolCallingSupported = true;
     includeHistory = false;
+});
+
+test('chat memory is enabled in the initial provider settings', () => {
+    expect(initialChatMemoryEnabled).toBe(true);
 });
 
 test('first request reserves step material and instruction before trimming real history', async () => {

@@ -96,6 +96,7 @@ describe('buildFrontendFrameDocument', () => {
     test('injects reset styles, viewport meta, and avatar helper classes', () => {
         expect(documentHtml).toContain('content="width=device-width, initial-scale=1.0"');
         expect(documentHtml).toContain('margin:0!important');
+        expect(documentHtml).toMatch(/html,body\{[^}]*background:transparent;/);
         expect(documentHtml).toContain('url(\'/img/user-default.png\')');
         expect(documentHtml).toContain('url(\'/thumbnail?type=avatar&file=c.png\')');
     });

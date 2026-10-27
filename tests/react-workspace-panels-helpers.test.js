@@ -422,7 +422,7 @@ describe('React workspace panels bridge helpers', () => {
         expect(workspacePanelSource).toContain('authoringStyles.footerStatus');
         expect(workspacePanelSource).toContain('authoringStyles.toolAction');
         expect(workspacePanelSource).toContain('authoringStyles.dangerButton');
-        expect(workspacePanelSource).toContain('<output {...stylex.props(authoringStyles.panelWarning)}>');
+        expect(workspacePanelSource).not.toContain('<output {...stylex.props(authoringStyles.panelWarning)}>');
         expect(workspacePanelSource).toContain('disabled={isActionPending}');
         expect(workspacePanelSource).toContain('{!isCreateMode ? (');
         expect(scriptSource).toContain('function getCharacterAuthoringReactCommands()');

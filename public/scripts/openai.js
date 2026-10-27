@@ -251,7 +251,7 @@ const default_settings = {
     fallback_provider_model: '',
     extensions: {},
     reply_pipeline: null,
-    chat_memory_enabled: false,
+    chat_memory_enabled: true,
     chat_memory_keep_turns: 5,
     chat_memory_prompt: '',
     chat_memory_wrap: '',

@@ -11,6 +11,7 @@ const FRAME_DOCUMENT_ONE = [
     '<html>',
     '<body>',
     '<div id="ed-e2e-app" style="min-height: 50vh">FRAME CONTENT ONE</div>',
+    '<style>#ed-e2e-app { background-color: rgb(18, 52, 86); }</style>',
     '<script>window.__e2eMarker = 42;</scr' + 'ipt>',
     '</body>',
     '</html>',
@@ -165,6 +166,8 @@ test.describe('chat message frontend frames', () => {
                 messageId: frameWindow?.EmberDeskFrame?.messageId,
                 appExists: Boolean(frameWindow?.document?.querySelector('#ed-e2e-app')),
                 lodashCopied: typeof frameWindow?._ === 'function',
+                frameBackground: frameWindow ? getComputedStyle(frameWindow.document.body).backgroundColor : null,
+                appBackground: frameWindow ? getComputedStyle(frameWindow.document.querySelector('#ed-e2e-app')).backgroundColor : null,
             };
         });
         expect(frameFacts).toEqual({
@@ -174,6 +177,8 @@ test.describe('chat message frontend frames', () => {
             messageId: '1',
             appExists: true,
             lodashCopied: true,
+            frameBackground: 'rgba(0, 0, 0, 0)',
+            appBackground: 'rgb(18, 52, 86)',
         });
 
         // Auto-height: the predefine script sizes the iframe to its content.

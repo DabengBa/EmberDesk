@@ -22,7 +22,7 @@ export const defaultSettingsFormValues = {
         fallbackProviderModel: '',
     },
     memory: {
-        enabled: false,
+        enabled: true,
         keepTurns: 5,
         role: 'system',
         prompt: '',
@@ -65,7 +65,7 @@ const fieldBindings = [
         tab: 'providers',
         formPath: 'memory.enabled',
         settingsPath: 'oai_settings.chat_memory_enabled',
-        toForm: value => boolOr(value, false),
+        toForm: value => boolOr(value, true),
     },
     {
         tab: 'providers',

@@ -225,7 +225,7 @@ export const authoringStyles = stylex.create({
     fieldMeta: {
         marginLeft: 'auto',
         fontWeight: 400,
-        color: 'color-mix(in srgb, var(--SmartThemeBodyColor) 50%, transparent)',
+        color: 'color-mix(in srgb, var(--SmartThemeBodyColor) 66%, transparent)',
         fontSize: 'calc(var(--mainFontSize) * 0.76)',
         whiteSpace: 'nowrap',
     },
@@ -249,6 +249,16 @@ export const authoringStyles = stylex.create({
         backgroundImage: 'linear-gradient(color-mix(in srgb, var(--SmartThemeBlurTintColor) 86%, transparent), color-mix(in srgb, var(--SmartThemeBlurTintColor) 86%, transparent))',
         backgroundColor: 'color-mix(in srgb, black 88%, var(--SmartThemeBodyColor) 12%)',
         boxShadow: '0 -8px 18px color-mix(in srgb, black 22%, transparent)',
+    },
+    footerPrimaryActions: {
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '6px',
+        marginRight: 'auto',
+    },
+    expandLabel: {
+        fontSize: 'calc(var(--mainFontSize) * 0.76)',
+        fontWeight: 600,
     },
     iconAction: {
         display: 'inline-flex',
@@ -444,9 +454,12 @@ export const authoringStyles = stylex.create({
         transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
     },
     textareaAuto: {
-        resize: 'none',
+        resize: 'vertical',
         overflowY: 'auto',
         maxHeight: '38vh',
+    },
+    secondaryText: {
+        color: 'color-mix(in srgb, var(--SmartThemeBodyColor) 66%, transparent)',
     },
     textareaPreview: {
         maxHeight: '9.5em',
