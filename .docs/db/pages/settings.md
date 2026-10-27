@@ -27,7 +27,7 @@ Authenticated users complete supported settings work on `/settings`. The workspa
 
 6. **Diagnostics sidebar**: collapsed by default behind the `诊断` toggle (page header on `/settings`, save bar in the drawer variant); when expanded it shows the optional ownership ledger and payload summary for debugging.
 7. **Save bar**: submits a compatibility payload derived from the loaded document while rewriting only the React-bound fields the user changed; save stays disabled until the form is dirty.
-8. **消息渲染设置 section**: the Providers page ends with the merged Frontend Frames fields (enable, render depth, ignore-hidden, collapse code block, skip highlight, blob-URL debug, render-while-streaming) bound to `power_user.frontend_frames.*` — the former `user-settings-block` drawer is retired, and the fields save through the same dirty-aware form bar. Swipe arrows are always on, and the initial long-chat window is fixed at `CHAT_TRUNCATION` = 100 with load-more paginating the same step.
+8. **消息渲染设置 section**: the Providers page ends with the merged Frontend Frames fields (enable, render depth, ignore-hidden, ordinary code collapse (all or never; frontend cards always hide source), skip highlight, blob-URL debug) bound to `power_user.frontend_frames.*` — the former `user-settings-block` drawer is retired, and the fields save through the same dirty-aware form bar. There is no render-while-streaming field: frames mount only on finalized rows, and any stored `allow_streaming` key is stripped on load and on save. Swipe arrows are always on, and the initial long-chat window is fixed at `CHAT_TRUNCATION` = 100 with load-more paginating the same step.
 
 ## Page-Level Semantic IDs
 

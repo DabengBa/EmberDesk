@@ -7,12 +7,12 @@
  * global directly — and owns the row-level lifecycle effect:
  *
  *   finalized non-streaming row → inline frames inside `.mes_text`
- *   streaming row               → closed-fence frames in a sibling
- *                                 `.ed-frontend-stream` host (`.mes_text`
- *                                 innerHTML is rewritten per token, so iframes
- *                                 must live outside it); gated by
- *                                 `allow_streaming`. NOTE: streaming rows keep
- *                                 `state === 'finalized'` — the real signal is
+ *   streaming row               → nothing mounts; `.mes_text` innerHTML is
+ *                                 rewritten per token, so an iframe there would
+ *                                 be destroyed mid-render. The source stays
+ *                                 visible until the row finalizes. NOTE:
+ *                                 streaming rows keep `state === 'finalized'` —
+ *                                 the real signal is
  *                                 `snapshot.streaming.activeMessageId`, not
  *                                 the message state field.
  *   depth ineligible            → never mount (pre-insertion eligibility, not
@@ -29,10 +29,8 @@ import {
     FRONTEND_FRAMES_CHANGED_EVENT,
     computeDepthEligible,
     mountFrontendFrames,
-    mountStreamingFrames,
     normalizeFrontendFramesSettings,
     unmountFrontendFrames,
-    unmountStreamingFrames,
 } from '../../public/scripts/frontend-frame.js';
 import { translate } from './i18n.js';
 import { getMainChatSnapshot } from '../stores/main-chat-store';
@@ -130,8 +128,8 @@ function buildFrameContext(messageId: string, frameIdSeed?: string) {
 
 /**
  * Mounts/unmounts frontend frames for one React main-chat row.
- * @param rowRef Ref to the row root (`.mes`) element — frames may live either
- *               inside `.mes_text` (finalized) or in a sibling stream host
+ * @param rowRef Ref to the row root (`.mes`) element — frames live inside
+ *               `.mes_text` of finalized rows only
  * @param message Owning message record (drives the state guard)
  */
 export function useFrontendFrames(
@@ -153,25 +151,16 @@ export function useFrontendFrames(
         }
         const ctx = buildFrameContext(message.id, message.uid);
         const mesTextEl = rowEl.querySelector('.mes_text');
+        // Live streaming rows mount nothing; editing and error rows likewise.
+        // Every branch only ever tears leftover frames down.
         const streamingRow = ctx.isStreamingRow || message.state === 'streaming';
-        if (streamingRow && !message.editing && message.state !== 'error') {
-            if (mesTextEl instanceof HTMLElement) {
+        const mountable = !streamingRow && message.state === 'finalized' && !message.editing;
+        if (mesTextEl instanceof HTMLElement) {
+            if (mountable) {
+                mountFrontendFrames(mesTextEl, ctx);
+            } else {
                 unmountFrontendFrames(mesTextEl);
             }
-            mountStreamingFrames(rowEl, { ...ctx, text: message.content });
-            return;
         }
-        if (message.state === 'finalized' && !message.editing) {
-            unmountStreamingFrames(rowEl);
-            if (mesTextEl instanceof HTMLElement) {
-                mountFrontendFrames(mesTextEl, ctx);
-            }
-            return;
-        }
-        // editing / error: mount nothing, clean leftovers.
-        if (mesTextEl instanceof HTMLElement) {
-            unmountFrontendFrames(mesTextEl);
-        }
-        unmountStreamingFrames(rowEl);
     });
 }

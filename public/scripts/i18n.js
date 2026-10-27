@@ -1,7 +1,6 @@
 import { registerDebugFunction } from './power-user.js';
 import { applyI18nTranslations, parseI18nAttributeSpecs } from './i18n-data.js';
 import {
-    DEFAULT_UI_LOCALE,
     UI_LOCALE_STORAGE_KEY,
     readStoredUiLocale,
     resolveUiLocale,

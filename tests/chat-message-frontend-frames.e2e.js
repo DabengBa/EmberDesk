@@ -192,7 +192,7 @@ test.describe('chat message frontend frames', () => {
         expect(Math.abs(rewrittenHeight - viewportHeight * 0.5)).toBeLessThan(8);
     });
 
-    test('collapses the source block behind a view-source toggle', async ({ page }) => {
+    test('shows only the card without a frontend source control', async ({ page }) => {
         await testSetup.awaitST({ page });
         await selectCharacterByName(page, characterName);
         await openFrontendChat(page);
@@ -203,12 +203,55 @@ test.describe('chat message frontend frames', () => {
         const toggle = slot.locator('.ed-frontend-frame__toggle');
 
         await expect(sourcePre).toBeHidden();
-        await expect(toggle).toHaveAttribute('aria-expanded', 'false');
-        await toggle.click();
-        await expect(sourcePre).toBeVisible();
-        await expect(toggle).toHaveAttribute('aria-expanded', 'true');
-        await toggle.click();
-        await expect(sourcePre).toBeHidden();
+        await expect(toggle).toHaveCount(0);
+        await expect(slot.locator('iframe')).toBeVisible();
+    });
+
+    test('preserves ordinary code collapse and restores card sources on teardown', async ({ page }) => {
+        const facts = await page.evaluate(async (html) => {
+            const frames = await import('/scripts/frontend-frame.js');
+            const row = document.createElement('div');
+            row.innerHTML = '<div class="mes_text"></div>';
+            document.body.append(row);
+            const text = row.firstElementChild;
+            const source = document.createElement('pre');
+            source.textContent = html;
+            const second = document.createElement('pre');
+            second.textContent = '<html><body>second card</body></html>';
+            const plain = document.createElement('pre');
+            plain.textContent = 'const answer = 42;';
+            text.append(source, second, plain);
+            try {
+                // Ordinary code folding is independent of frontend cards.
+                const mounted = frames.mountFrontendFrames(text, { settings: { collapse_code_block: 'all' } });
+                const toggle = text.querySelector('.ed-code-collapse-toggle');
+                const ordinaryCollapsed = plain.style.display === 'none';
+                toggle.click();
+                const ordinaryExpanded = plain.style.display === '';
+                const cardSourcesHidden = source.closest('.ed-frontend-frame').querySelector('pre').style.display === 'none'
+                    && second.closest('.ed-frontend-frame').querySelector('pre').style.display === 'none';
+                frames.unmountFrontendFrames(text);
+                const inlineRestored = source.style.display === ''
+                    && second.style.display === ''
+                    && !text.querySelector('button, iframe');
+                // The streaming preview is retired: no module entry point can
+                // mount a frame while a row is still receiving tokens.
+                const retiredRuntime = ['mountStreamingFrames', 'unmountStreamingFrames', 'findClosedFrontendDocuments', 'FRONTEND_STREAM_HOST_CLASS']
+                    .filter(name => name in frames);
+                return { mounted, ordinaryCollapsed, ordinaryExpanded, cardSourcesHidden, inlineRestored, retiredRuntime };
+            } finally {
+                frames.unmountFrontendFrames(text);
+                row.remove();
+            }
+        }, FRAME_DOCUMENT_ONE);
+        expect(facts).toEqual({
+            mounted: 2,
+            ordinaryCollapsed: true,
+            ordinaryExpanded: true,
+            cardSourcesHidden: true,
+            inlineRestored: true,
+            retiredRuntime: [],
+        });
     });
 
     test('honours the render-depth window without re-executing older frames', async ({ page }) => {
@@ -404,8 +447,8 @@ async function enableOpenAiStreaming(page) {
     });
 }
 
-async function installStreamingFetchStub(page, { chunks, delayMs = 150 }) {
-    await page.evaluate(({ streamChunks, streamDelayMs }) => {
+async function installStreamingFetchStub(page, { chunks, delayMs = 150, keepStreamOpen = true }) {
+    await page.evaluate(({ streamChunks, streamDelayMs, holdStreamOpen }) => {
         window.__edStreamGeneration = null;
         window.__edStreamOriginalFetch ??= window.fetch.bind(window);
         window.fetch = async (input, init = {}) => {
@@ -423,15 +466,22 @@ async function installStreamingFetchStub(page, { chunks, delayMs = 150 }) {
                             })}\n\n`));
                             await new Promise(resolve => setTimeout(resolve, streamDelayMs));
                         }
-                        // Keep the stream open: the row stays in `streaming`
-                        // state until the test aborts the generation.
-                        await new Promise(resolve => {
-                            if (init.signal?.aborted) {
-                                resolve();
-                                return;
-                            }
-                            init.signal?.addEventListener('abort', resolve, { once: true });
-                        });
+                        if (holdStreamOpen) {
+                            // Keep the stream open: the row stays in `streaming`
+                            // state until the test aborts the generation.
+                            await new Promise(resolve => {
+                                if (init.signal?.aborted) {
+                                    resolve();
+                                    return;
+                                }
+                                init.signal?.addEventListener('abort', resolve, { once: true });
+                            });
+                            return;
+                        }
+                        // Natural completion: the provider terminator ends the
+                        // generation without an abort.
+                        controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+                        controller.close();
                     } finally {
                         try { controller.close(); } catch { /* already closed */ }
                     }
@@ -439,7 +489,7 @@ async function installStreamingFetchStub(page, { chunks, delayMs = 150 }) {
             });
             return new Response(body, { status: 200, headers: { 'Content-Type': 'text/event-stream' } });
         };
-    }, { streamChunks: chunks, streamDelayMs: delayMs });
+    }, { streamChunks: chunks, streamDelayMs: delayMs, holdStreamOpen: keepStreamOpen });
 }
 
 async function startGeneration(page, prompt) {
@@ -455,7 +505,22 @@ async function startGeneration(page, prompt) {
 
 async function stopAndFinalize(page) {
     await page.getByRole('button', { name: '中止请求' }).click({ timeout: 10_000 });
-    await expect.poll(() => page.evaluate(() => window.SillyTavern.getContext().streamingProcessor === null), { timeout: 15_000 }).toBe(true);
+    await settleGeneration(page);
+}
+
+async function startFreshGeneratingChat(page) {
+    await testSetup.awaitST({ page });
+    await selectCharacterByName(page, characterName);
+    await page.evaluate(async () => {
+        const script = await import('/script.js');
+        await script.doNewChat({ deleteCurrentChat: false });
+        await script.eventSource.emit(script.event_types.CHAT_LOADED, { detail: { source: 'e2e-fresh-chat' } });
+    });
+    await enableOpenAiStreaming(page);
+}
+
+async function settleGeneration(page) {
+    await expect.poll(() => page.evaluate(() => window.SillyTavern.getContext().streamingProcessor === null), { timeout: 20_000 }).toBe(true);
     // Bounded wait — the generate() promise may already be settled.
     await page.evaluate(() => Promise.race([
         window.__edStreamGeneration,
@@ -463,73 +528,72 @@ async function stopAndFinalize(page) {
     ]));
 }
 
+function streamingCardSource(page) {
+    return page.locator('#chat .mes.last_mes .mes_text pre').filter({ hasText: 'stream-live' });
+}
+
 test.describe('chat message frontend frames — streaming', () => {
-    test('mounts closed-fence frames mid-stream and hands off to inline mount on finalize', async ({ page }) => {
-        await testSetup.awaitST({ page });
-        await selectCharacterByName(page, characterName);
-        await page.evaluate(async () => {
-            const script = await import('/script.js');
-            await script.doNewChat({ deleteCurrentChat: false });
-            await script.eventSource.emit(script.event_types.CHAT_LOADED, { detail: { source: 'e2e-fresh-chat' } });
+    for (const [format, documentHtml] of [
+        ['LF', STREAMING_FRAME_DOC],
+        ['entity', STREAMING_FRAME_DOC.replace('</body>', '<p>&amp;</p></body>')],
+        ['Tab', STREAMING_FRAME_DOC.replace('<div', '\t<div')],
+        ['CRLF', STREAMING_FRAME_DOC.replaceAll('\n', '\r\n')],
+    ]) {
+        test(`keeps the streaming row source-only after the fence closes, then aborts into a card (${format})`, async ({ page }) => {
+            await startFreshGeneratingChat(page);
+            // A stale `allow_streaming: true` from a stored document must not
+            // resurrect the retired preview.
+            await setFrontendFramesSettings(page, { allow_streaming: true });
+            await installStreamingFetchStub(page, {
+                chunks: [
+                    'Here is the card.\n\n    <html><body>Indented example, not a card</body></html>\n\n',
+                    '```html\n' + documentHtml,
+                    '\n```',
+                    '\n\nAfter one.',
+                    ' After two.',
+                ],
+                delayMs: 250,
+            });
+            await startGeneration(page, 'render a frame');
+
+            // Fence still open mid-stream: source visible, no frame anywhere.
+            await expect(streamingCardSource(page)).toBeVisible({ timeout: 15_000 });
+            await expect(page.locator('#chat .mes.last_mes .mes_text iframe')).toHaveCount(0);
+            await expect(page.locator('.ed-frontend-stream')).toHaveCount(0);
+
+            // Fence now closed but the row is still receiving tokens: the
+            // source stays visible and no frame may exist.
+            await expect(page.locator('#chat .mes.last_mes .mes_text')).toContainText('After two.', { timeout: 15_000 });
+            await expect(streamingCardSource(page)).toBeVisible();
+            await expect(page.locator('#chat .mes.last_mes .mes_text iframe')).toHaveCount(0);
+            await expect(page.locator('.ed-frontend-stream')).toHaveCount(0);
+            await page.waitForTimeout(600);
+            await expect(streamingCardSource(page)).toBeVisible();
+            await expect(page.locator('#chat .mes.last_mes .mes_text iframe')).toHaveCount(0);
+
+            // Abort finalizes the row: the finished card mounts and its source hides.
+            await stopAndFinalize(page);
+            await expect(page.locator('#chat .mes.last_mes .mes_text .ed-frontend-frame iframe')).toHaveCount(2, { timeout: 15_000 });
+            await expect(streamingCardSource(page)).toBeHidden();
         });
-        await enableOpenAiStreaming(page);
+    }
+
+    test('natural completion finalizes the card without ever rendering a streaming preview', async ({ page }) => {
+        await startFreshGeneratingChat(page);
         await setFrontendFramesSettings(page, { allow_streaming: true });
-        await installStreamingFetchStub(page, {
-            chunks: [
-                'Here is the card.\n\n',
-                '```html\n' + STREAMING_FRAME_DOC,
-                '\n```',
-                '\n\nAfter one.',
-                ' After two.',
-            ],
-            delayMs: 250,
-        });
-        await startGeneration(page, 'render a frame');
-
-        // While streaming: frame lives in the sibling stream host, NOT in .mes_text.
-        const streamFrame = page.locator('#chat .mes .ed-frontend-stream iframe.ed-frontend-frame__iframe');
-        await expect(streamFrame).toHaveCount(1, { timeout: 15_000 });
-        await expect.poll(() => page.evaluate(() =>
-            document.querySelector('.ed-frontend-stream iframe')?.contentWindow?.document?.querySelector('#stream-live')?.textContent,
-        ), { timeout: 15_000 }).toBe('STREAM LIVE');
-        await expect(page.locator('#chat .mes .mes_text .ed-frontend-frame')).toHaveCount(0);
-
-        // The iframe survives later token commits (no flicker remount).
-        await page.evaluate(() => {
-            document.querySelector('.ed-frontend-stream iframe').contentWindow.__persist = 'kept';
-        });
-        await page.waitForTimeout(600);
-        expect(await page.evaluate(() =>
-            document.querySelector('.ed-frontend-stream iframe')?.contentWindow?.__persist,
-        )).toBe('kept');
-
-        // Abort → row finalizes → stream host removed, inline mount takes over.
-        await stopAndFinalize(page);
-        await expect(page.locator('.ed-frontend-stream')).toHaveCount(0, { timeout: 15_000 });
-        await expect(page.locator('#chat .mes .mes_text .ed-frontend-frame iframe')).toHaveCount(1, { timeout: 15_000 });
-    });
-
-    test('allow_streaming=false keeps streaming text as plain code until finalize', async ({ page }) => {
-        await testSetup.awaitST({ page });
-        await selectCharacterByName(page, characterName);
-        await page.evaluate(async () => {
-            const script = await import('/script.js');
-            await script.doNewChat({ deleteCurrentChat: false });
-            await script.eventSource.emit(script.event_types.CHAT_LOADED, { detail: { source: 'e2e-fresh-chat' } });
-        });
-        await enableOpenAiStreaming(page);
-        await setFrontendFramesSettings(page, { allow_streaming: false });
         await installStreamingFetchStub(page, {
             chunks: ['```html\n' + STREAMING_FRAME_DOC, '\n```', '\n\nDone.'],
             delayMs: 250,
+            keepStreamOpen: false,
         });
         await startGeneration(page, 'render a frame');
 
-        await page.waitForTimeout(900);
+        await expect(streamingCardSource(page)).toBeVisible({ timeout: 15_000 });
+        await expect(page.locator('#chat .mes.last_mes .mes_text iframe')).toHaveCount(0);
         await expect(page.locator('.ed-frontend-stream')).toHaveCount(0);
-        await expect(page.locator('#chat .mes .mes_text iframe')).toHaveCount(0);
 
-        await stopAndFinalize(page);
-        await expect(page.locator('#chat .mes .mes_text .ed-frontend-frame iframe')).toHaveCount(1, { timeout: 15_000 });
+        await settleGeneration(page);
+        await expect(page.locator('#chat .mes.last_mes .mes_text .ed-frontend-frame iframe')).toHaveCount(1, { timeout: 15_000 });
+        await expect(streamingCardSource(page)).toBeHidden();
     });
 });

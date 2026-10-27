@@ -1010,10 +1010,10 @@ describe('React workspace panels bridge helpers', () => {
         expect(rowSource).toContain('ref={rowRef}');
         // Non-finalized rows (editing, error) must never mount frames inline
         expect(compatSource).toContain("message.state === 'finalized'");
-        // Streaming rows mount only closed-fence docs in a sibling stream host
-        expect(compatSource).toContain("message.state === 'streaming'");
-        expect(compatSource).toContain('mountStreamingFrames(rowEl');
-        expect(compatSource).toContain('message.content');
+        // Streaming rows mount nothing: the row stays source-only until the
+        // transport finalizes it, so no preview can outlive a token rewrite.
+        expect(compatSource).toContain('isStreamingRow');
+        expect(compatSource).not.toContain('mountStreamingFrames');
         // Depth eligibility is computed before any iframe exists
         expect(compatSource).toContain('computeDepthEligible');
         // EmberDeskFrame event bridge resolves through the shell eventSource
@@ -1026,8 +1026,8 @@ describe('React workspace panels bridge helpers', () => {
         expect(frameModuleSource).toContain('FRONTEND_FRAME_ALLOWED_EVENTS');
         expect(frameModuleSource).toContain('createFrameBridge');
         expect(frameModuleSource).toContain('disposeFrameBridge');
-        expect(frameModuleSource).toContain('unmountStreamingFrames');
-        expect(frameModuleSource).toContain('findClosedFrontendDocuments');
+        expect(frameModuleSource).not.toContain('mountStreamingFrames');
+        expect(frameModuleSource).not.toContain('findClosedFrontendDocuments');
     });
 
     test('expands only the React window when loading earlier messages', () => {

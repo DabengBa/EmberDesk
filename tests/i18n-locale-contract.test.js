@@ -103,6 +103,8 @@ describe('i18n locale resources', () => {
             'Please enter a username': '请输入用户名',
             'Settings sections': '设置分区',
             'Switching the language reloads the page.': '切换语言会重新加载页面。',
+            'Collapse ordinary code blocks': '折叠普通代码块',
+            'Ordinary code blocks': '普通代码块',
             'Generation failed. You can retry by sending a new message or keep chatting.':
                 '生成失败。你可以重新发送一条消息重试，或继续聊天。',
         };
