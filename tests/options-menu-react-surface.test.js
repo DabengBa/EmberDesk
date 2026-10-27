@@ -33,6 +33,23 @@ describe('options menu + character context menu React surfaces', () => {
         }
     });
 
+    test('current-chat memory is a Wire Log peer with lazy panel lifecycle and chat-change cleanup', () => {
+        const domHandlers = readRepoFile('public/scripts/dom-handlers.js');
+        const panels = readRepoFile('app/workspace-panels.tsx');
+        expect(options).toContain('id="option_chat_memory"');
+        expect(options.indexOf('id="option_chat_memory"')).toBeLessThan(options.indexOf('id="option_wire_log"'));
+        expect(domHandlers).toContain("id == 'option_chat_memory'");
+        expect(domHandlers).toContain('await openChatMemoryPanel()');
+        expect(script).toContain('openChatMemoryPanel: (...args) => openChatMemoryPanel(...args)');
+        expect(script).toContain('eventSource.on(event_types.CHAT_CHANGED, closeChatMemoryPanel)');
+        expect(script).toContain('if (openId !== chatMemoryPanelOpenId) return');
+        expect(script).toContain('module.mountChatMemoryPanel(chatMemoryPanelHost, {');
+        expect(script).toContain('onDraftDiscarded: () => toastr.warning(');
+        expect(script).toContain('module.unmountChatMemoryPanel(host)');
+        expect(panels).toContain('export function mountChatMemoryPanel');
+        expect(panels).toContain('export function unmountChatMemoryPanel');
+    });
+
     test('regenerate availability is a React state projection with a shell sync point', () => {
         const domHandlers = readRepoFile('public/scripts/dom-handlers.js');
         expect(options).toContain('canRegenerate');
