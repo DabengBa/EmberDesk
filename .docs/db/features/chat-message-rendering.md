@@ -19,7 +19,7 @@ Let users reliably read opened chat history and finalized generated messages as 
 
 ## User-Visible Contract
 
-- First-party frontend frames render fenced complete HTML documents as same-origin iframes inside React-owned rows; the frame lifecycle (mount/unmount/stream handoff) is owned by the frontend-frame controller.
+- First-party frontend cards render complete HTML documents after message generation finishes; while the message is arriving, its source remains visible instead of showing a partial card.
 
 - Stored and finalized user, assistant, character, or system messages render as readable message rows whose visible text matches the source message after normal browser whitespace handling.
 - Message text remains the primary content of each row; reasoning, media, files, bias, swipe state, and row actions may appear around it only when valid for that message.
