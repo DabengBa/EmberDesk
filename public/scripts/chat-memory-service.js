@@ -12,10 +12,12 @@ import {
     getDefaultChatMemoryWrap,
     TURN_SUMMARY_STATUS,
     applySummariesToCoreChat,
+    appendChatMemoryHistory,
     computeTurnHash,
     ensureChatMessageIds,
     extractTurnSourceText,
     getChatMemoryMetadata,
+    partitionChatTurns,
     reconcileChatMemory,
     resolveChatMemorySettings,
 } from './chat-memory-core.js';
@@ -50,6 +52,62 @@ const maintenance = {
     chatId: null,
     retryTimer: null,
 };
+const listeners = new Set();
+let sessionGeneration = 0;
+let actionRunning = null;
+let foregroundStarting = false;
+let mutationQueue = Promise.resolve();
+
+function serializeMutation(token, operation) {
+    const task = mutationQueue.then(() => ownsSession(token) ? operation() : { ok: false, error: 'Chat changed before operation started' });
+    mutationQueue = task.catch(() => {});
+    return task;
+}
+
+function snapshotMemory() {
+    const present = Object.hasOwn(state.chat_metadata, CHAT_MEMORY_METADATA_KEY);
+    const value = present ? structuredClone(state.chat_metadata[CHAT_MEMORY_METADATA_KEY]) : undefined;
+    return () => {
+        if (present) state.chat_metadata[CHAT_MEMORY_METADATA_KEY] = value;
+        else delete state.chat_metadata[CHAT_MEMORY_METADATA_KEY];
+    };
+}
+
+function notify() {
+    for (const listener of listeners) { try { listener(); } catch { /* observer isolation */ } }
+}
+
+function sessionToken() {
+    return { chat: state.chat, metadata: state.chat_metadata, chatId: getCurrentChatId(), character: state.this_chid, generation: sessionGeneration };
+}
+
+function ownsSession(token) {
+    return token.chat === state.chat && token.metadata === state.chat_metadata && token.chatId === getCurrentChatId() && token.character === state.this_chid && token.generation === sessionGeneration;
+}
+
+function recordHistory(action, turnKey, status, error) {
+    const memory = getChatMemoryMetadata(state.chat_metadata);
+    state.chat_metadata[CHAT_MEMORY_METADATA_KEY] = { ...memory, history: appendChatMemoryHistory(memory, { action, turnKey, status, ...(error ? { error } : {}), at: Date.now() }) };
+}
+
+async function saveMutation(action, turnKey, status = 'success', rollback = () => {}) {
+    const token = sessionToken();
+    recordHistory(action, turnKey, status, status === 'failed' ? 'Operation failed' : undefined);
+    try {
+        const saved = await shell().saveChatConditional(() => ownsSession(token));
+        if (saved === false || saved == null) throw new Error('Could not save chat memory changes');
+        if (!ownsSession(token)) return { ok: false, error: 'Chat changed before save completed' };
+        shell().scheduleMainChatMessageListPanelRefresh?.();
+        notify();
+        return { ok: true };
+    } catch (error) {
+        if (!ownsSession(token)) return { ok: false, error: 'Chat changed before save completed' };
+        rollback();
+
+        notify();
+        return { ok: false, error: 'Could not save chat memory changes' };
+    }
+}
 
 function getCurrentChatId() {
     return state.characters?.[state.this_chid]?.chat ?? null;
@@ -61,6 +119,92 @@ function isMemoryEligibleChat() {
 
 function getSettings() {
     return resolveChatMemorySettings(state.oai_settings, state.chat_metadata);
+}
+
+export function subscribeChatMemory(listener) { listeners.add(listener); return () => listeners.delete(listener); }
+
+export function updateChatMemorySettings(overrides = {}) {
+    if (!state.chat_metadata || !overrides || typeof overrides !== 'object') return { ok: false, error: 'No active chat' };
+    const token = sessionToken();
+    return serializeMutation(token, async () => {
+        const rollback = snapshotMemory();
+        const memory = getChatMemoryMetadata(state.chat_metadata);
+        const next = { ...memory };
+        const keys = { enabled: 'disabled', keepTurns: 'keepTurns', role: 'role', prompt: 'prompt', wrap: 'wrap', maxTokens: 'maxTokens' };
+        for (const [key, stored] of Object.entries(keys)) {
+            if (!Object.hasOwn(overrides, key)) continue;
+            if (overrides[key] === null) delete next[stored];
+            else next[stored] = key === 'enabled' ? !overrides[key] : overrides[key];
+        }
+        state.chat_metadata[CHAT_MEMORY_METADATA_KEY] = next;
+        return saveMutation('settings', null, 'success', rollback);
+    });
+}
+
+export function setChatMemoryPinned(turnKey, pinned) {
+    const token = sessionToken();
+    return serializeMutation(token, async () => {
+        const turn = partitionChatTurns(state.chat).turns.find(item => item.key === turnKey);
+        if (!turn || !ownsSession(token)) return { ok: false, error: 'Turn is no longer available' };
+        const rollbackMemory = snapshotMemory();
+        const previous = turn.items.map(item => ({ extra: state.chat[item.index].extra, present: Object.hasOwn(state.chat[item.index].extra, 'pinned'), value: state.chat[item.index].extra.pinned }));
+        for (const item of turn.items) state.chat[item.index].extra.pinned = !!pinned;
+        reconcileActiveChatMemory(); notify();
+        return saveMutation('pin', turnKey, 'success', () => {
+            rollbackMemory();
+            for (const item of previous) { if (item.present) item.extra.pinned = item.value; else delete item.extra.pinned; }
+        });
+    });
+}
+
+export function regenerateChatMemoryTurn(turnKey) { return enqueueTurnAction(turnKey, 'regenerate'); }
+export function retryChatMemoryTurn(turnKey) { return enqueueTurnAction(turnKey, 'retry'); }
+
+function enqueueTurnAction(turnKey, action) {
+    const token = sessionToken();
+    return new Promise(resolve => {
+        const firstAuto = maintenance.queue.findIndex(job => !job.action);
+        maintenance.queue.splice(firstAuto < 0 ? maintenance.queue.length : firstAuto, 0, { token, turnKey, action, resolve });
+        notify();
+        kickQueue();
+    });
+}
+
+async function runTurnAction(turnKey, action) {
+    const token = sessionToken();
+    const eligibleTurn = (checkRetry = true) => {
+        if (!ownsSession(token) || !isMemoryEligibleChat() || !getSettings().enabled) return null;
+        const result = reconcileChatMemory(state.chat, getChatMemoryMetadata(state.chat_metadata), getSettings().keepTurns);
+        const turn = result.summarizableTurns.find(item => item.key === turnKey);
+        if (checkRetry && action === 'retry' && result.summaries.find(item => item.turnKey === turnKey)?.status !== TURN_SUMMARY_STATUS.FAILED) return null;
+        return turn ?? null;
+    };
+    const turn = eligibleTurn();
+    if (!turn) return { ok: false, error: 'Turn is no longer eligible' };
+    const sourceHash = computeTurnHash(token.chat, turn);
+    const sourceText = extractTurnSourceText(token.chat, turn);
+    if (!sourceText.trim()) return { ok: false, error: 'Turn has no summarizable content' };
+    try {
+        const signal = maintenance.abort.signal;
+        const summaryText = await requestTurnSummary({ sourceText }, signal, () => {
+            const current = eligibleTurn();
+            return !!current && !foregroundStarting && !state.is_send_press && !state.generationPending && computeTurnHash(state.chat, current) === sourceHash && JSON.stringify(current.messageIds) === JSON.stringify(turn.messageIds);
+        });
+        const current = eligibleTurn();
+        if (signal.aborted || foregroundStarting || state.is_send_press || state.generationPending || !current || computeTurnHash(state.chat, current) !== sourceHash || JSON.stringify(current.messageIds) !== JSON.stringify(turn.messageIds)) return { ok: false, error: 'Turn changed before summary completed' };
+        return await serializeMutation(token, async () => {
+            const latest = eligibleTurn();
+            if (signal.aborted || !latest || computeTurnHash(state.chat, latest) !== sourceHash || JSON.stringify(latest.messageIds) !== JSON.stringify(turn.messageIds)) return { ok: false, error: 'Turn changed before summary completed' };
+            const rollback = snapshotMemory();
+            upsertSummaryRecord({ id: uuidv4(), turnKey, turnIndex: turn.index, firstIndex: turn.startIndex, messageIds: turn.messageIds, contentHash: sourceHash, text: summaryText, status: TURN_SUMMARY_STATUS.ACTIVE, retries: 0, manual: false, stale: false, createdAt: Date.now(), updatedAt: Date.now() });
+            const saved = await saveMutation(action, turnKey, 'success', rollback);
+            if (saved.ok && !eligibleTurn(false)) return { ok: false, error: 'Turn changed before save completed' };
+            return saved;
+        });
+    } catch {
+        if (ownsSession(token) && !maintenance.abort?.signal.aborted) await serializeMutation(token, () => saveMutation(action, turnKey, 'failed', snapshotMemory()));
+        return { ok: false, error: 'Could not generate summary' };
+    }
 }
 
 function writeBackSummaries(summaries) {
@@ -132,7 +276,7 @@ export function applyChatMemoryToCoreChat(coreChat, { chat = null, dryRun = fals
  * @param {AbortSignal} signal
  * @returns {Promise<string>}
  */
-async function requestTurnSummary(job, signal) {
+async function requestTurnSummary(job, signal, shouldSend = () => true) {
     const trace = { type: MEMORY_REQUEST_TYPE, chatId: getCurrentChatId(), charName: state.name2 };
     const settings = structuredClone(state.oai_settings);
     settings.stream_openai = false;
@@ -152,6 +296,7 @@ async function requestTurnSummary(job, signal) {
         model,
         emitSettingsReady: false,
     });
+    if (signal.aborted || !shouldSend()) throw new DOMException('Summary canceled', 'AbortError');
     const response = await fetch('/api/backends/chat-completions/generate', {
         method: 'POST',
         headers: getRequestHeaders(),
@@ -182,7 +327,8 @@ function flushMemorySave() {
     // that path picks up the mutated chat_metadata — never POST a competing
     // save mid-stream.
     if (!state.is_send_press) {
-        shell().saveChatConditional();
+        const token = sessionToken();
+        shell().saveChatConditional(() => ownsSession(token));
     }
     shell().scheduleMainChatMessageListPanelRefresh?.();
 }
@@ -199,7 +345,7 @@ function scheduleRetryKick() {
     }
     maintenance.retryTimer = setTimeout(() => {
         maintenance.retryTimer = null;
-        if (maintenance.chatId === getCurrentChatId() && maintenance.queue.length) {
+        if (maintenance.queue.length) {
             kickQueue();
         }
     }, 1500);
@@ -214,17 +360,24 @@ function clearRetryKick() {
 
 async function runMaintenanceLoop() {
     while (maintenance.queue.length) {
-        if (maintenance.chatId !== getCurrentChatId()) {
-            maintenance.queue.length = 0;
-            return;
-        }
         // Foreground generation always wins; the retry kick resumes the
         // queue once it unblocks regardless of which event path fired.
-        if (state.is_send_press) {
+        if (foregroundStarting || state.is_send_press || state.generationPending) {
             scheduleRetryKick();
             return;
         }
         const job = maintenance.queue.shift();
+        if (job.action) {
+            if (!ownsSession(job.token)) { job.resolve({ ok: false, error: 'Chat changed before summary started' }); continue; }
+            actionRunning = { token: job.token, turnKey: job.turnKey };
+            maintenance.abort = new AbortController();
+            notify();
+            try { job.resolve(await runTurnAction(job.turnKey, job.action)); } catch { job.resolve({ ok: false, error: 'Could not generate summary' }); } finally { actionRunning = null; maintenance.abort = null; notify(); }
+            continue;
+        }
+        if (!ownsSession(job.token)) continue;
+        if (!isMemoryEligibleChat() || !getSettings().enabled) continue;
+        const token = sessionToken();
         const memory = getChatMemoryMetadata(state.chat_metadata);
         const result = reconcileChatMemory(state.chat, memory, getSettings().keepTurns);
         writeBackSummaries(result.summaries);
@@ -245,65 +398,87 @@ async function runMaintenanceLoop() {
 
         maintenance.abort = new AbortController();
         try {
-            const text = await requestTurnSummary({ sourceText }, maintenance.abort.signal);
+            const signal = maintenance.abort.signal;
+            const shouldSend = () => {
+                if (!ownsSession(token) || !isMemoryEligibleChat() || !getSettings().enabled || foregroundStarting || state.is_send_press || state.generationPending) return false;
+                const current = reconcileChatMemory(state.chat, getChatMemoryMetadata(state.chat_metadata), getSettings().keepTurns);
+                const candidate = current.summarizableTurns.find(item => item.key === job.turnKey);
+                return !!candidate && computeTurnHash(state.chat, candidate) === currentHash && JSON.stringify(candidate.messageIds) === JSON.stringify(turn.messageIds);
+            };
+            const text = await requestTurnSummary({ sourceText }, signal, shouldSend);
             // CAS write-back: chat unchanged and fingerprint still matching —
             // otherwise the result is discarded and reconcile re-queues.
-            if (maintenance.chatId !== getCurrentChatId()) {
+            if (!ownsSession(token) || signal.aborted || foregroundStarting || state.is_send_press || state.generationPending) {
                 continue;
             }
             const verify = reconcileChatMemory(state.chat, getChatMemoryMetadata(state.chat_metadata), getSettings().keepTurns);
             const verifyTurn = verify.partition.turns.find(candidate => candidate.key === job.turnKey);
-            if (!verifyTurn || !verify.summarizableTurns.includes(verifyTurn)) {
+            if (!verifyTurn || !verify.summarizableTurns.includes(verifyTurn) || JSON.stringify(verifyTurn.messageIds) !== JSON.stringify(turn.messageIds)) {
                 continue;
             }
             const verifyHash = computeTurnHash(state.chat, verifyTurn);
             if (verifyHash !== currentHash) {
                 continue;
             }
-            upsertSummaryRecord({
-                id: record?.id ?? uuidv4(),
-                turnKey: job.turnKey,
-                turnIndex: verifyTurn.index,
-                firstIndex: verifyTurn.startIndex,
-                messageIds: verifyTurn.messageIds,
-                contentHash: verifyHash,
-                lastAttemptHash: verifyHash,
-                text,
-                status: TURN_SUMMARY_STATUS.ACTIVE,
-                retries: 0,
-                manual: false,
-                stale: false,
-                createdAt: record?.createdAt ?? Date.now(),
-                updatedAt: Date.now(),
+            await serializeMutation(token, async () => {
+                const latest = reconcileActiveChatMemory({ persist: false });
+                const eligible = latest?.summarizableTurns.find(item => item.key === job.turnKey);
+                if (signal.aborted || !eligible || computeTurnHash(state.chat, eligible) !== currentHash || JSON.stringify(eligible.messageIds) !== JSON.stringify(turn.messageIds)) return;
+                const rollback = snapshotMemory();
+                upsertSummaryRecord({
+                    id: record?.id ?? uuidv4(),
+                    turnKey: job.turnKey,
+                    turnIndex: verifyTurn.index,
+                    firstIndex: verifyTurn.startIndex,
+                    messageIds: verifyTurn.messageIds,
+                    contentHash: verifyHash,
+                    lastAttemptHash: verifyHash,
+                    text,
+                    status: TURN_SUMMARY_STATUS.ACTIVE,
+                    retries: 0,
+                    manual: false,
+                    stale: false,
+                    createdAt: record?.createdAt ?? Date.now(),
+                    updatedAt: Date.now(),
+                });
+                await saveMutation('automatic', job.turnKey, 'success', rollback);
             });
-            flushMemorySave();
         } catch (error) {
+            if (!ownsSession(token)) continue;
             if (error?.name === 'AbortError') {
                 continue;
             }
-            console.error('Chat memory summary failed', error);
-            const target = getChatMemoryMetadata(state.chat_metadata).summaries
-                .find(item => item.turnKey === job.turnKey) ?? {
-                id: uuidv4(),
-                turnKey: job.turnKey,
-                turnIndex: turn.index,
-                firstIndex: turn.startIndex,
-                messageIds: turn.messageIds,
-                contentHash: currentHash,
-                text: '',
-                manual: false,
-                createdAt: Date.now(),
-            };
-            const retries = target.lastAttemptHash === currentHash ? (target.retries ?? 0) + 1 : 1;
-            upsertSummaryRecord({
-                ...target,
-                lastAttemptHash: currentHash,
-                retries,
-                status: retries >= CHAT_MEMORY_MAX_AUTO_ATTEMPTS ? TURN_SUMMARY_STATUS.FAILED : TURN_SUMMARY_STATUS.STALE,
-                stale: true,
-                updatedAt: Date.now(),
+            const currentTurn = partitionChatTurns(state.chat).turns.find(item => item.key === job.turnKey);
+            if (!currentTurn || computeTurnHash(state.chat, currentTurn) !== currentHash || JSON.stringify(currentTurn.messageIds) !== JSON.stringify(turn.messageIds)) continue;
+            console.error('Chat memory summary failed');
+            await serializeMutation(token, async () => {
+                const latest = reconcileActiveChatMemory({ persist: false });
+                const eligible = latest?.summarizableTurns.find(item => item.key === job.turnKey);
+                if (!eligible || computeTurnHash(state.chat, eligible) !== currentHash || JSON.stringify(eligible.messageIds) !== JSON.stringify(turn.messageIds)) return;
+                const rollback = snapshotMemory();
+                const target = getChatMemoryMetadata(state.chat_metadata).summaries
+                    .find(item => item.turnKey === job.turnKey) ?? {
+                    id: uuidv4(),
+                    turnKey: job.turnKey,
+                    turnIndex: turn.index,
+                    firstIndex: turn.startIndex,
+                    messageIds: turn.messageIds,
+                    contentHash: currentHash,
+                    text: '',
+                    manual: false,
+                    createdAt: Date.now(),
+                };
+                const retries = target.lastAttemptHash === currentHash ? (target.retries ?? 0) + 1 : 1;
+                upsertSummaryRecord({
+                    ...target,
+                    lastAttemptHash: currentHash,
+                    retries,
+                    status: retries >= CHAT_MEMORY_MAX_AUTO_ATTEMPTS ? TURN_SUMMARY_STATUS.FAILED : TURN_SUMMARY_STATUS.STALE,
+                    stale: true,
+                    updatedAt: Date.now(),
+                });
+                await saveMutation('automatic', job.turnKey, 'failed', rollback);
             });
-            flushMemorySave();
         }
     }
 }
@@ -313,11 +488,14 @@ function kickQueue() {
         return;
     }
     maintenance.running = true;
+    notify();
     runMaintenanceLoop()
         .catch(error => console.error('Chat memory maintenance loop failed', error))
         .finally(() => {
             maintenance.running = false;
             maintenance.abort = null;
+            notify();
+            if (maintenance.queue.length && !maintenance.retryTimer) kickQueue();
         });
 }
 
@@ -332,7 +510,10 @@ export function scheduleMemoryMaintenance({ immediate = false } = {}) {
     ensureChatMessageIds(state.chat, uuidv4);
     const chatId = getCurrentChatId();
     if (maintenance.chatId !== chatId) {
-        maintenance.queue.length = 0;
+        for (const job of maintenance.queue.splice(0)) {
+            if (job.action && ownsSession(job.token)) maintenance.queue.push(job);
+            else job.resolve?.({ ok: false, error: 'Chat changed before summary started' });
+        }
         maintenance.chatId = chatId;
     }
     const result = reconcileActiveChatMemory({ persist: true });
@@ -350,7 +531,7 @@ export function scheduleMemoryMaintenance({ immediate = false } = {}) {
         if (queued.has(job.turn.key)) {
             continue;
         }
-        maintenance.queue.push({ turnKey: job.turn.key });
+        maintenance.queue.push({ turnKey: job.turn.key, token: sessionToken() });
         queued.add(job.turn.key);
         if (job.record) {
             job.record.status = TURN_SUMMARY_STATUS.PENDING;
@@ -388,7 +569,7 @@ export function scheduleMemoryMaintenance({ immediate = false } = {}) {
             }
             record.retries = 0;
             record.status = TURN_SUMMARY_STATUS.PENDING;
-            maintenance.queue.push({ turnKey: record.turnKey });
+            maintenance.queue.push({ turnKey: record.turnKey, token: sessionToken() });
             queued.add(record.turnKey);
             dirty = true;
         }
@@ -459,23 +640,40 @@ export function getChatMemoryView() {
     ensureChatMessageIds(state.chat, uuidv4);
     const memory = getChatMemoryMetadata(state.chat_metadata);
     const result = reconcileChatMemory(state.chat, memory, getSettings().keepTurns);
+    const settings = getSettings();
+    const overrides = {};
+    for (const key of ['keepTurns', 'role', 'prompt', 'wrap', 'maxTokens']) {
+        if (Object.hasOwn(memory, key)) overrides[key] = memory[key];
+    }
+    if (typeof memory.disabled === 'boolean') overrides.enabled = !memory.disabled;
     return {
+        settings,
+        overrides,
+        globalSettings: resolveChatMemorySettings(state.oai_settings, {}),
+        history: memory.history ?? [],
+        turns: result.partition.turns.map(turn => {
+            const summary = result.summaries.find(record => record.turnKey === turn.key) ?? null;
+            return { key: turn.key, index: turn.index, pinned: turn.pinned, eligible: result.summarizableTurns.includes(turn), status: summary?.status ?? null, summary, running: !!actionRunning && ownsSession(actionRunning.token) && actionRunning.turnKey === turn.key };
+        }),
         enabled: getSettings().enabled,
         keepTurns: getSettings().keepTurns,
         summaries: result.summaries,
         notes: memory.notes,
         stats: result.stats,
         partition: result.partition,
-        queueDepth: maintenance.queue.length,
+        queueDepth: maintenance.queue.filter(job => ownsSession(job.token)).length,
         running: maintenance.running,
     };
 }
 
 function handleChatTeardown() {
+    sessionGeneration++;
+    foregroundStarting = false;
     clearRetryKick();
     maintenance.abort?.abort();
-    maintenance.queue.length = 0;
+    for (const job of maintenance.queue.splice(0)) job.resolve?.({ ok: false, error: 'Chat changed before summary started' });
     maintenance.chatId = null;
+    notify();
 }
 
 function handleChatLoaded() {
@@ -486,17 +684,20 @@ function handleChatLoaded() {
 }
 
 function handleGenerationEnded() {
+    foregroundStarting = false;
     scheduleMemoryMaintenance();
+    kickQueue();
 }
 
 function handleGenerationStarted() {
     // Foreground always wins: abort any in-flight summary request — the
     // aborted turn reverts to STALE and is re-queued by the reconcile inside
     // scheduleMemoryMaintenance (its retry budget is not consumed).
+    foregroundStarting = true;
     maintenance.abort?.abort();
     // GENERATION_STARTED fires a few statements before is_send_press flips —
     // defer the kick so the loop's gate observes the pressed state.
-    setTimeout(() => scheduleMemoryMaintenance(), 0);
+    setTimeout(() => { foregroundStarting = false; scheduleMemoryMaintenance(); kickQueue(); }, 0);
 }
 
 function handleHistoryMutation() {

@@ -94,7 +94,7 @@ import { addGlobalVariable, addLocalVariable, decrementGlobalVariable, decrement
 import { convertCharacterBook, getWorldInfoPrompt, loadWorldInfo, reloadEditor, saveWorldInfo, updateWorldInfoList, world_names } from './world-info.js';
 import { ChatCompletionService } from './custom-request.js';
 import { updateReasoningUI, parseReasoningFromString } from './reasoning.js';
-import { getChatMemoryView, runImmediateMemoryConsolidation } from './chat-memory-service.js';
+import { getChatMemoryView, runImmediateMemoryConsolidation, subscribeChatMemory, updateChatMemorySettings, regenerateChatMemoryTurn, retryChatMemoryTurn, setChatMemoryPinned } from './chat-memory-service.js';
 import { IGNORE_SYMBOL } from './constants.js';
 import { macros } from './macros/macro-system.js';
 
@@ -263,6 +263,11 @@ export function getContext() {
         unshallowCharacter,
         chatMemory: {
             getView: getChatMemoryView,
+            subscribe: subscribeChatMemory,
+            updateSettings: updateChatMemorySettings,
+            regenerate: regenerateChatMemoryTurn,
+            retry: retryChatMemoryTurn,
+            setPinned: setChatMemoryPinned,
             runImmediateConsolidation: runImmediateMemoryConsolidation,
         },
         symbols: {

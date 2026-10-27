@@ -976,6 +976,7 @@ registerDomHandlersShellContext({
     openCharacterWorldPopup: (...args) => openCharacterWorldPopup(...args),
     openMessageDelete: (...args) => openMessageDelete(...args),
     openWireLogPanel: (...args) => openWireLogPanel(...args),
+    openChatMemoryPanel: (...args) => openChatMemoryPanel(...args),
     pauseScriptExecution: (...args) => pauseScriptExecution(...args),
     processDroppedFiles: (...args) => processDroppedFiles(...args),
     queueReactCharacterAuthoringRemount: (...args) => queueReactCharacterAuthoringRemount(...args),
@@ -4126,6 +4127,7 @@ export let chat_metadata = {};
 
 // Chat metadata is deliberately retained as-is; only the active visual override is read here.
 eventSource.on(event_types.CHAT_CHANGED, applyActiveBackground);
+eventSource.on(event_types.CHAT_CHANGED, closeChatMemoryPanel);
 /** @type {GenerationStreamSession} */
 export let streamingProcessor = null;
 let crop_data = undefined;
@@ -10248,6 +10250,56 @@ function closePromptInspectorOverlay() {
         .then(module => module.unmountPromptInspector?.())
         .catch(() => {})
         .finally(() => host.remove());
+}
+
+let chatMemoryPanelHost = null;
+let chatMemoryPanelOpenId = 0;
+let chatMemoryReturnFocus = null;
+
+async function openChatMemoryPanel() {
+    if (chatMemoryPanelHost?.isConnected) return;
+    const memory = getContext().chatMemory;
+    if (!memory.getView()) {
+        toastr.info('请先打开一个可用的会话。', '对话记忆');
+        return;
+    }
+    const openId = ++chatMemoryPanelOpenId;
+    chatMemoryReturnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    try {
+        const module = await loadWorkspacePanelsModule();
+        if (openId !== chatMemoryPanelOpenId) return;
+        chatMemoryPanelHost = document.createElement('div');
+        chatMemoryPanelHost.id = 'emberdesk-chat-memory-panel-host';
+        document.body.appendChild(chatMemoryPanelHost);
+        module.mountChatMemoryPanel(chatMemoryPanelHost, {
+            ...memory,
+            close: closeChatMemoryPanel,
+            onDraftDiscarded: () => toastr.warning('会话已切换或面板已关闭，未应用的设置草稿已丢弃，未写入其他会话。', '对话记忆'),
+        });
+    } catch (error) {
+        console.error('Failed to mount chat memory panel:', error);
+        chatMemoryPanelHost?.remove();
+        chatMemoryPanelHost = null;
+        toastr.error('对话记忆面板加载失败，请重试。');
+    }
+}
+
+function closeChatMemoryPanel() {
+    chatMemoryPanelOpenId++;
+    if (!chatMemoryPanelHost) return;
+    const host = chatMemoryPanelHost;
+    const returnFocus = chatMemoryReturnFocus;
+    chatMemoryPanelHost = null;
+    chatMemoryReturnFocus = null;
+    loadWorkspacePanelsModule()
+        .then(module => module.unmountChatMemoryPanel(host))
+        .catch(error => console.error('Failed to unmount chat memory panel:', error))
+        .finally(() => {
+            host.remove();
+            const target = returnFocus?.isConnected && returnFocus.getClientRects().length
+                ? returnFocus : document.getElementById('options_button');
+            target?.focus();
+        });
 }
 
 let wireLogPanelHost = null;

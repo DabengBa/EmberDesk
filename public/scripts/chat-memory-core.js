@@ -10,6 +10,7 @@ import { translate } from './i18n.js';
  */
 
 export const CHAT_MEMORY_METADATA_KEY = 'chat_memory';
+export const CHAT_MEMORY_HISTORY_LIMIT = 50;
 
 export const TURN_SUMMARY_STATUS = Object.freeze({
     /** Masking the covered turn in prompt assembly and (later) display. */
@@ -275,22 +276,29 @@ export function resolveChatMemorySettings(oaiSettings, chatMetadata) {
         : CHAT_MEMORY_ROLES.includes(oaiSettings?.chat_memory_role)
             ? oaiSettings.chat_memory_role
             : 'system';
+    const globalPrompt = String(oaiSettings?.chat_memory_prompt ?? '') || getDefaultChatMemoryPrompt();
+    const globalWrap = String(oaiSettings?.chat_memory_wrap ?? '') || getDefaultChatMemoryWrap();
+    const globalMaxTokens = Number.isInteger(Number(oaiSettings?.chat_memory_max_tokens)) && Number(oaiSettings.chat_memory_max_tokens) > 0
+        ? Number(oaiSettings.chat_memory_max_tokens)
+        : 400;
     return {
-        enabled: !!oaiSettings?.chat_memory_enabled && overrides.disabled !== true,
+        enabled: typeof overrides.disabled === 'boolean'
+            ? !overrides.disabled
+            : !!oaiSettings?.chat_memory_enabled,
         keepTurns,
-        prompt: String(oaiSettings?.chat_memory_prompt ?? '') || getDefaultChatMemoryPrompt(),
-        wrap: String(oaiSettings?.chat_memory_wrap ?? '') || getDefaultChatMemoryWrap(),
+        prompt: String(overrides.prompt ?? globalPrompt) || getDefaultChatMemoryPrompt(),
+        wrap: String(overrides.wrap ?? globalWrap) || getDefaultChatMemoryWrap(),
         role,
-        maxTokens: Number.isInteger(Number(oaiSettings?.chat_memory_max_tokens)) && Number(oaiSettings.chat_memory_max_tokens) > 0
-            ? Number(oaiSettings.chat_memory_max_tokens)
-            : 400,
+        maxTokens: Number.isInteger(Number(overrides.maxTokens ?? globalMaxTokens)) && Number(overrides.maxTokens ?? globalMaxTokens) > 0
+            ? Number(overrides.maxTokens ?? globalMaxTokens)
+            : globalMaxTokens,
     };
 }
 
 /**
  * Reads (and normalizes the shape of) `chat_metadata.chat_memory`.
  * @param {object} chatMetadata
- * @returns {{summaries: object[], notes: object[], disabled?: boolean, keepTurns?: number}}
+ * @returns {{summaries: object[], notes: object[], history: object[], disabled?: boolean, keepTurns?: number}}
  */
 export function getChatMemoryMetadata(chatMetadata) {
     const memory = chatMetadata?.[CHAT_MEMORY_METADATA_KEY];
@@ -301,7 +309,21 @@ export function getChatMemoryMetadata(chatMetadata) {
         ...memory,
         summaries: Array.isArray(memory.summaries) ? memory.summaries : [],
         notes: Array.isArray(memory.notes) ? memory.notes : [],
+        history: appendChatMemoryHistory(memory),
     };
+}
+
+/** Appends a bounded, per-chat operation record without retaining source text. */
+export function appendChatMemoryHistory(memory, entry) {
+    const history = Array.isArray(memory?.history) ? memory.history : [];
+    return [...history, ...(entry ? [entry] : [])].filter(item => item && typeof item === 'object' && !Array.isArray(item))
+        .slice(-CHAT_MEMORY_HISTORY_LIMIT).map(item => ({
+            at: Number.isFinite(item.at) ? item.at : 0,
+            action: ['settings', 'pin', 'regenerate', 'retry', 'automatic'].includes(item.action) ? item.action : 'unknown',
+            turnKey: typeof item.turnKey === 'string' && /^[\w-]{1,128}$/.test(item.turnKey) ? item.turnKey : null,
+            status: item.status === 'success' ? 'success' : 'failed',
+            ...(item.error ? { error: 'Operation failed' } : {}),
+        }));
 }
 
 /**
@@ -653,13 +675,15 @@ export function filterMemoryForBranch(memory, chat, upToIndex) {
         && record.messageIds.length > 0
         && record.messageIds.every(id => survivingIds.has(id)),
     );
-    if (!summaries.length && !(Array.isArray(memory.notes) && memory.notes.length)) {
+    const settingKeys = ['disabled', 'keepTurns', 'role', 'prompt', 'wrap', 'maxTokens'];
+    const settings = Object.fromEntries(settingKeys
+        .filter(key => Object.hasOwn(memory, key))
+        .map(key => [key, memory[key]]));
+    if (!summaries.length && !(Array.isArray(memory.notes) && memory.notes.length) && !Object.keys(settings).length) {
         return null;
     }
     return {
-        ...(memory.keepTurns !== undefined ? { keepTurns: memory.keepTurns } : {}),
-        ...(memory.disabled !== undefined ? { disabled: memory.disabled } : {}),
-        ...(memory.role !== undefined ? { role: memory.role } : {}),
+        ...settings,
         summaries,
         notes: Array.isArray(memory.notes) ? memory.notes : [],
     };

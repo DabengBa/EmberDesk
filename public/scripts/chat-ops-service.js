@@ -653,25 +653,30 @@ export async function displayChats(searchQuery, currentChat, displayName, avatar
 }
 
 
-export async function saveChatConditional() {
+export async function saveChatConditional(shouldSave = () => true) {
     try {
         await waitUntilCondition(() => !state.isChatSaving, state.DEFAULT_SAVE_EDIT_TIMEOUT, 100);
     } catch {
         console.warn('Timeout waiting for chat to save');
-        return;
+        return false;
     }
 
     try {
+        if (!shouldSave()) return false;
         cancelDebouncedChatSave();
 
         state.isChatSaving = true;
 
-        await saveChat();
+        if (!shouldSave()) return false;
+        const saved = await saveChat();
+        if (saved !== true) return false;
 
         // Save token cache to IndexedDB storage
         saveTokenCache();
+        return true;
     } catch (error) {
         console.error('Error saving chat', error);
+        return false;
     } finally {
         state.isChatSaving = false;
     }

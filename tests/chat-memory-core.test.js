@@ -1,5 +1,10 @@
-import { describe, expect, test } from '@jest/globals';
-import { IGNORE_SYMBOL } from '../public/scripts/constants.js';
+import { describe, expect, jest, test } from '@jest/globals';
+
+jest.unstable_mockModule('../public/scripts/constants.js', () => ({ IGNORE_SYMBOL: 'ignore' }));
+jest.unstable_mockModule('../public/scripts/i18n.js', () => ({
+    translate: value => value === 'Turn ${0}: ${1}' ? '第${0}轮：${1}' : value,
+}));
+const { IGNORE_SYMBOL } = await import('../public/scripts/constants.js');
 
 const {
     CHAT_MEMORY_MAX_AUTO_ATTEMPTS,
@@ -479,6 +484,35 @@ describe('resolveChatMemorySettings / renderSummaryWrap / getChatMemoryMetadata'
         expect(resolveChatMemorySettings(oai, { [CHAT_MEMORY_METADATA_KEY]: { keepTurns: 2 } }).keepTurns).toBe(2);
     });
 
+    test('chat-local settings override global defaults and can explicitly enable the feature', () => {
+        const globalSettings = {
+            chat_memory_enabled: false,
+            chat_memory_keep_turns: 7,
+            chat_memory_role: 'system',
+            chat_memory_prompt: 'global prompt',
+            chat_memory_wrap: 'global {{summary}}',
+            chat_memory_max_tokens: 400,
+        };
+        const overrides = {
+            disabled: false,
+            keepTurns: 2,
+            role: 'assistant',
+            prompt: 'local prompt',
+            wrap: 'local {{summary}}',
+            maxTokens: 128,
+        };
+
+        expect(resolveChatMemorySettings(globalSettings, { chat_memory: overrides })).toEqual({
+            enabled: true,
+            keepTurns: 2,
+            role: 'assistant',
+            prompt: 'local prompt',
+            wrap: 'local {{summary}}',
+            maxTokens: 128,
+        });
+        expect(resolveChatMemorySettings(globalSettings, {})).toMatchObject({ enabled: false, keepTurns: 7, role: 'system' });
+    });
+
     test('wrap renders {{summary}}, {{turnIndex}}, {{user}} and {{char}}', () => {
         expect(renderSummaryWrap('[T{{turnIndex}}] {{summary}}', { summary: 'X', turnIndex: 3 })).toBe('[T3] X');
         expect(renderSummaryWrap('', { summary: 'X', turnIndex: 0 })).toContain('X');
@@ -491,5 +525,21 @@ describe('resolveChatMemorySettings / renderSummaryWrap / getChatMemoryMetadata'
         expect(getChatMemoryMetadata(null)).toEqual({ summaries: [], notes: [] });
         expect(getChatMemoryMetadata({ [CHAT_MEMORY_METADATA_KEY]: 'x' }).summaries).toEqual([]);
         expect(getChatMemoryMetadata({ [CHAT_MEMORY_METADATA_KEY]: { summaries: 'x' } }).notes).toEqual([]);
+    });
+
+    test('metadata reader returns operation history without accepting malformed records', () => {
+        expect(getChatMemoryMetadata({ chat_memory: { history: [{ id: 'run-1', status: 'success' }] } }).history)
+            .toEqual([{ at: 0, action: 'unknown', turnKey: null, status: 'success' }]);
+        expect(getChatMemoryMetadata({ chat_memory: { history: 'not an array' } }).history).toEqual([]);
+    });
+
+    test('metadata normalization bounds history and branch copies settings but never operation history', () => {
+        const history = Array.from({ length: 55 }, (_, index) => ({ id: index }));
+        const metadata = getChatMemoryMetadata({ chat_memory: { history } });
+        expect(metadata.history).toHaveLength(50);
+        expect(metadata.history[0]).not.toHaveProperty('id');
+        const branch = filterMemoryForBranch({ disabled: false, keepTurns: 3, history, summaries: [], notes: [] }, makeChat(1), 2);
+        expect(branch).toMatchObject({ disabled: false, keepTurns: 3 });
+        expect(branch).not.toHaveProperty('history');
     });
 });

@@ -73,6 +73,8 @@ import { PresetSaveButton } from './components/ai-config/PresetActionsMenu';
 import { PromptInspectorButton, PromptManagerAddButton, PromptManagerList, type PromptPanelBridge } from './components/prompt-panel/PromptPanel';
 import { PromptInspector, type PromptInspectorBridge } from './components/prompt-panel/PromptInspector';
 import { WireLogPanel, type WireLogPanelBridge } from './components/wire-log/WireLogPanel';
+import { ChatMemoryPanel } from './components/chat-memory/ChatMemoryPanel';
+import type { ChatMemoryPanelBridge } from './components/chat-memory/types';
 import { SelectChatPopup } from './components/select-chat/SelectChatPopup';
 import {
     SelectChatList,
@@ -2903,6 +2905,16 @@ export function unmountPromptInspector() {
     if (!container) {
         return;
     }
+    const root = mountedSmallPanels.get(container);
+    mountedSmallPanels.delete(container);
+    root?.unmount();
+}
+
+export function mountChatMemoryPanel(container: HTMLElement, bridge: ChatMemoryPanelBridge) {
+    mountSmallPanel(container, <ChatMemoryPanel bridge={bridge} />);
+}
+
+export function unmountChatMemoryPanel(container: HTMLElement) {
     const root = mountedSmallPanels.get(container);
     mountedSmallPanels.delete(container);
     root?.unmount();
