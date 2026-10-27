@@ -19,7 +19,7 @@ Keep long chats prompt-affordable without losing continuity: recent turns stay v
 
 ### Delivery boundary
 
-The turn summarization, summary cards, Inspector integration and global Settings controls below are delivered. The **current-chat panel contract** in the next section is approved design, not a claim that its UI, per-chat overrides or execution history are already shipped.
+Turn summarization, summary cards, Inspector integration, global Settings controls and the current-chat panel are delivered. The panel provides chat-local settings, turn actions and bounded execution history.
 
 - The feature is off by default; enabling the "历史会话轮次总结" toggle on the Providers tab of [Settings](page.settings) activates it for chats on the chat-completions backend.
 - The newest N closed turns (default 5, configurable "保留完整显示的最近轮数") always stay verbatim; older closed turns are summarized in the background.
@@ -32,15 +32,15 @@ The turn summarization, summary cards, Inspector integration and global Settings
 - Summary generation runs on the background model (`fallback_provider_model`, labeled 后台模型) and falls back to the primary model when unset; requests are minimal two-message side-channel calls — never `Generate('quiet')` — forced non-streaming, tool-calls disabled, serialized behind the foreground generation.
 - Summaries persist under `chat_metadata.chat_memory`; creating a branch carries over only summary records whose covered messages all survive into the branch.
 
-### Approved current-chat panel contract (pending implementation)
+### Current-chat panel
 
 - Open `对话记忆` from the chat-options menu, at the same level as `链路日志`. It is an independent panel scoped only to the conversation currently open, not a Settings tab or a cross-chat manager.
-- The panel separates current-chat settings, turns and read-only summaries, and execution history. An empty or unsupported/temporary conversation explains why persistent actions are unavailable rather than showing another chat's data.
-- Settings inherit the global defaults from [Settings](page.settings) until overridden for this chat. Show whether values are inherited or overridden; saving changes affects only this chat. `恢复继承` removes the chat override and uses the current global defaults, without changing global settings or deleting summaries, pins or history.
-- Saving exposes unsaved, saving, saved and failed states. Failure retains the draft and offers retry; neither a queued task nor an in-memory result is presented as durably saved. Closing the panel with unsaved changes requires an explicit discard decision. If the chat changes independently, the panel closes, discards the draft and notifies the user.
+- The panel has `管理`, `设置` and `历史` views. Opening it without a supported persistent conversation shows a warning instead of opening an editable panel. Turns without summaries and an empty history have their own empty states.
+- Settings inherit the global defaults from [Settings](page.settings) until overridden for this chat. Values show `继承全局设置`, `当前会话覆盖` or `尚未应用`; applying changes affects only this chat. Per-field `恢复默认` removes that chat override and uses the current global default, without changing other unapplied fields, global settings, summaries, pins or history.
+- Applying settings shows a pending state and disables duplicate actions. Failure retains the draft and displays an error so the user can apply again. Success clears the applied draft and updates the displayed source; there is no separate saved-success banner. Closing with unapplied changes requires confirmation. An independent chat switch closes the panel, discards the draft and notifies the user.
 - List turns with their original-text/pinned, summarized, pending, generating, stale or failed state as applicable. Summary text is read-only. Users may inspect original messages, re-summarize one eligible turn, retry **only failed turns**, or pin/unpin original text for the whole turn. These controls do not edit or delete source messages; pinned turns are not summarized. Pinning avoids summary substitution, not the model's context limit.
 - Background work uses the configured `后台模型`, otherwise the primary model, with the same connection URL and key. This panel does not configure a separate provider. Busy/unavailable actions explain their state and prevent duplicate execution; a failed summary keeps original text available for sends.
-- Execution history belongs only to this chat, survives reopening, and keeps at most the latest **50** entries. Show operation, turn, time, model when available, outcome and a sanitized failure category. Do not record source text, summary prompt, request/response bodies or raw errors in this history. It is not [Wire Log](feature.wire_log) and does not change Wire Log's separate capture policy.
+- Execution history belongs only to this chat, survives reopening after a successful save, and keeps at most the latest **50** entries. It shows operation, turn identifier, time, outcome and a generic failure message when present; model information and cancellation records are not displayed. Source text, summary prompts, request/response bodies and raw errors are not part of this history. It is not [Wire Log](feature.wire_log) and does not change Wire Log's separate capture policy. A failed save does not create a durable history entry.
 - Switching chats closes the panel and clears the old chat's transient selection and draft; the user is notified if a draft was discarded. Late results must never appear in or save to the newly opened chat. A new branch may retain eligible summaries, but starts with **no execution history**.
 
 ## Semantic Interaction IDs
@@ -51,7 +51,7 @@ The turn summarization, summary cards, Inspector integration and global Settings
 - `feature.chat_memory.pin`: pinning a message to lock its whole turn verbatim.
 - `feature.chat_memory.consolidate_now`: manually triggering an immediate consolidation pass (`getContext().chatMemory.runImmediateConsolidation()`).
 
-Approved panel interaction IDs (reserved design intent, not evidence of shipped controls):
+Panel interaction IDs:
 
 - `feature.chat_memory.panel.open`: opening the current-chat panel from chat options.
 - `feature.chat_memory.settings.override`: saving a current-chat override.
@@ -62,6 +62,8 @@ Approved panel interaction IDs (reserved design intent, not evidence of shipped 
 
 ## Acceptance Workflows
 
+- From chat options, open `对话记忆`, change a setting and apply it; reopen the conversation to confirm the override persists. Use `恢复默认` to resume global inheritance. On save failure, the draft remains available for retry and no success banner appears.
+- In `管理`, re-summarize an eligible turn, retry a failed turn or pin its originals; inspect `历史` after reopening. Switching chats during a request must close the panel without showing the old result in the next chat; discarding a draft must produce a notification.
 - As a user with memory enabled in a chat longer than the verbatim window, send a message and inspect the next request in the Prompt Inspector; older turns must appear as wrapped summary entries with `chatSummary-turn-N` identifiers and the summarized section must list them, and failure is the covered originals still occupying prompt budget.
 - As a user reviewing history, expand a summary card in the main chat list; the covered original rows must render as ordinary message rows (view/edit/regenerate), and failure is a read-only or duplicated rendering.
 - As a user who deletes the newest turn, observe the list and the next prompt; the oldest summarized turns must automatically expand so N newest complete turns show verbatim, and failure is permanently collapsed history.
@@ -83,5 +85,5 @@ Approved panel interaction IDs (reserved design intent, not evidence of shipped 
 ## Boundaries
 
 - Writing extracted facts/timelines into World Info is explicitly out of scope.
-- The approved panel remains pending implementation. Summary editing, handwritten-note editing, summary deletion and usage-bar visualization are not included in its approved scope.
+- Summary editing, handwritten-note editing, summary deletion and usage-bar visualization are not provided. Original messages are inspected through the main-chat summary cards, not an original-message viewer inside the panel.
 - Background model field semantics belong to [Fallback Provider](feature.fallback_provider); prompt entry inspection belongs to [Prompt Inspector](feature.prompt_inspector).
