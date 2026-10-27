@@ -2,10 +2,11 @@ import { beforeEach, expect, jest, test } from '@jest/globals';
 
 jest.unstable_mockModule('../public/lib.js', () => ({ DOMPurify: {} }));
 jest.unstable_mockModule('../public/script.js', () => Object.fromEntries(['addOneMessage', 'chat', 'getGeneratingApi', 'getGeneratingModel', 'main_api', 'saveChatConditional', 'system_avatar', 'systemUserName'].map(key => [key, jest.fn()])));
-jest.unstable_mockModule('../public/scripts/feature-settings.js', () => ({ feature_settings: {} }));
+jest.unstable_mockModule('../public/scripts/feature-settings.js', () => ({ feature_settings: { tool_bindings: [{ name: 'analyze', enabled: true }, { name: 'later', enabled: true }] } }));
 jest.unstable_mockModule('../public/scripts/extensions/regex/engine.js', () => ({ getRegexedString: jest.fn(), regex_placement: {} }));
 jest.unstable_mockModule('../public/scripts/message-service.js', () => ({ updateMessageBlock: jest.fn() }));
-jest.unstable_mockModule('../public/scripts/openai.js', () => ({ chat_completion_sources: {}, getChatCompletionModel: jest.fn(), model_list: [], oai_settings: {} }));
+jest.unstable_mockModule('../public/scripts/openai.js', () => ({ chat_completion_sources: {}, getChatCompletionModel: jest.fn(), model_list: [], oai_settings: { reply_pipeline: { enabled: true, steps: [{ tool: 'analyze' }, { tool: 'later' }] } } }));
+jest.unstable_mockModule('../public/scripts/tool-bindings.js', () => ({ syncPipelineToolBindings: jest.fn() }));
 jest.unstable_mockModule('../public/scripts/popup.js', () => ({ Popup: {} }));
 jest.unstable_mockModule('../public/scripts/slash-commands/SlashCommand.js', () => ({ SlashCommand: {} }));
 jest.unstable_mockModule('../public/scripts/slash-commands/SlashCommandArgument.js', () => ({ ARGUMENT_TYPE: {}, SlashCommandArgument: {}, SlashCommandNamedArgument: {} }));
@@ -17,6 +18,7 @@ jest.unstable_mockModule('../public/scripts/slash-commands/SlashCommandReturnHel
 jest.unstable_mockModule('../public/scripts/utils.js', () => ({ isTrueBoolean: jest.fn() }));
 const { ToolManager } = await import('../public/scripts/tool-calling.js');
 const { setPipelineRunStateProvider } = await import('../public/scripts/reply-pipeline-core.js');
+const runtime = await import('../public/scripts/reply-pipeline.js');
 let run;
 const action = jest.fn(async () => 'raw text');
 const formatter = jest.fn(() => 'toast');
@@ -28,7 +30,7 @@ beforeEach(() => {
     setPipelineRunStateProvider(() => run);
     for (const name of ['analyze', 'later', 'outside']) {
         ToolManager.unregisterFunctionTool(name);
-        ToolManager.registerFunctionTool({ name, action, formatMessage: formatter, parameters: {}, stealth: false });
+        ToolManager.registerFunctionTool({ name, description: `${name} description`, action, formatMessage: formatter, parameters: {}, stealth: false });
     }
 });
 
@@ -58,4 +60,25 @@ test('fallback cannot execute tools; ending run restores ordinary tool calls', a
     run = null;
     await ToolManager.invokeFunctionTools([[call('outside')]]);
     expect(action).toHaveBeenCalledTimes(1);
+});
+
+test('real registered tools survive pipeline shaping across two rounds', async () => {
+
+    runtime.endPipelineRun();
+    expect(runtime.beginPipelineRun()).toBe(true);
+    const first = { type: 'normal', messages: [{ role: 'user', content: 'hello' }] };
+    await ToolManager.registerFunctionToolsOpenAI(first);
+    const wireTools = JSON.parse(JSON.stringify(first.tools));
+    expect(first.tools[0].toString()).toContain('<b>analyze</b>');
+    runtime.applyPipelineRequestShaping(first);
+    expect(first.tools).toEqual(wireTools);
+    expect(first.messages.at(-1).content).toContain('analyze');
+
+    runtime.preparePipelineRound([{ name: 'analyze', id: 'id', result: 'raw text' }]);
+    const second = { type: 'normal', messages: [{ role: 'user', content: 'hello' }] };
+    await ToolManager.registerFunctionToolsOpenAI(second);
+    runtime.applyPipelineRequestShaping(second);
+    expect(second.tools).toEqual(wireTools);
+    expect(second.messages.at(-1).content).toContain('later');
+    runtime.endPipelineRun();
 });

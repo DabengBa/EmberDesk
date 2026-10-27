@@ -194,17 +194,20 @@ class ToolDefinition {
      * @returns {ToolDefinitionOpenAI} OpenAI API representation of the tool.
      */
     toFunctionOpenAI() {
-        return {
+        const tool = {
             type: 'function',
             function: {
                 name: this.#name,
                 description: this.#description,
                 parameters: this.#parameters,
             },
-            toString: function () {
+        };
+        Object.defineProperty(tool, 'toString', {
+            value: function () {
                 return `<div><b>${this.function.name}</b></div><div><small>${this.function.description}</small></div><pre class="justifyLeft wordBreakAll"><code class="flex padding5">${JSON.stringify(this.function.parameters, null, 2)}</code></pre><hr>`;
             },
-        };
+        });
+        return tool;
     }
 
     /**
