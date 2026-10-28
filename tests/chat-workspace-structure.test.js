@@ -9,6 +9,19 @@ import {
 } from './helpers/frontend-structure-contract.js';
 
 describe('chat workspace structure', () => {
+    test('uses a single shared message-card surface and keeps frontend frames borderless', () => {
+        const styleSource = readRepoFile('public/style.css');
+        const frameStyleSource = readRepoFile('public/css/toggle-dependent.css');
+        const cardStyles = styleSource.match(/\.mes \.mes_block \{[^}]+\}/)?.[0] ?? '';
+
+        expect(cardStyles).toContain('border: 0;');
+        expect(cardStyles).toContain('border-radius: 8px;');
+        expect(styleSource).not.toMatch(/\.mes\[is_user="true"\] \.mes_block,[\s\S]*?\.mes\[is_system="true"\] \.mes_block \{/);
+        expect(frameStyleSource).toContain('.ed-frontend-frame {');
+        expect(frameStyleSource).toContain('border: 0;');
+        expect(frameStyleSource).toContain('max-width: 100%;');
+    });
+
     test('keeps the first-paint preloader visible before startup scripts run', () => {
         const indexHtml = readRepoFile('public/index.html');
         const loaderCss = readRepoFile('public/css/loader.css');

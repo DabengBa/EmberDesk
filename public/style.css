@@ -1204,10 +1204,8 @@ body .panelControlBar {
     background-color: var(--chat-message-hover-bg);
 }
 
-.mes[is_user="true"] .mes_block,
-.mes:not([is_user="true"]):not([is_system="true"]) .mes_block,
-.mes[is_system="true"] .mes_block {
-    border: 1px solid var(--chat-message-border-subtle);
+.mes .mes_block {
+    border: 0;
     border-radius: 8px;
     padding: 5px 10px;
 }
@@ -5832,6 +5830,10 @@ body:has(#character_popup.open) #top-settings-holder:has(.drawer-content.openDra
     z-index: 4005;
 }
 
+body:has(#emberdesk-react-workspace-shell-chrome-host) {
+    --topBarBlockSize: max(calc(var(--topBarIconSize) + var(--topBarBlockPadding)), 42px);
+}
+
 .drawer {
     align-items: center;
     justify-content: center;
@@ -6239,8 +6241,89 @@ body:has(#character_popup.open) #top-settings-holder:has(.drawer-content.openDra
 /* Folded pipeline card inside the reply message (leads mes — process first). */
 [data-pipeline-card] {
     display: block;
-    margin-bottom: 8px;
+    margin: 8px 0 0;
+    padding: 8px 10px;
+    border-left: 2px solid var(--SmartThemeBorderColor);
+    border-radius: 0 6px 6px 0;
+    background: var(--chat-system-bubble-bg, rgba(255, 255, 255, 0.02));
     text-align: left;
+}
+
+/* Turn cards are a visual treatment over the original direct `.mes` siblings;
+   no message content or action shell is moved or cloned. */
+#chat > .mes[data-turn-card] {
+    /* Geometry applies to every card row, selected or not, so a selected row
+       keeps the card's corner slot instead of falling back to `.mes`'s 8px. */
+    border-radius: 0;
+}
+
+/* Background is scoped with :not(.selected) so the legacy
+   `#chat .mes.selected` highlight keeps painting the row inside a turn card. */
+#chat > .mes[data-turn-card]:not(.selected) {
+    background-color: color-mix(in srgb, var(--chat-bot-bubble-bg) 58%, var(--SmartThemeBlurTintColor) 42%);
+}
+
+/* #chat is a flex column with a 2px gap; continuation rows cancel it so the
+   card reads as one surface. A new card keeps the normal gap. */
+#chat > .mes[data-turn-card-position="middle"],
+#chat > .mes[data-turn-card-position="end"] {
+    margin-top: -2px;
+}
+
+/* Position rules carry `[data-turn-card]` as well so they out-specify the
+   `:not(.selected)` background rule above; otherwise every row painted four
+   square corners and the card lost its rounded ends. */
+#chat > .mes[data-turn-card][data-turn-card-position="single"],
+#chat > .mes[data-turn-card][data-turn-card-position="start"] {
+    border-radius: 8px 8px 0 0;
+}
+
+#chat > .mes[data-turn-card][data-turn-card-position="single"] {
+    border-radius: 8px;
+}
+
+#chat > .mes[data-turn-card][data-turn-card-position="end"] {
+    border-radius: 0 0 8px 8px;
+}
+
+/* A turn summary header is the card's head, not a card of its own: it shares
+   the same surface and corner slots as the rows it covers. */
+#chat > .turn-summary-row[data-turn-card] {
+    background-color: color-mix(in srgb, var(--chat-bot-bubble-bg) 58%, var(--SmartThemeBlurTintColor) 42%);
+    border-radius: 0;
+}
+
+#chat > .turn-summary-row[data-turn-card-position="middle"],
+#chat > .turn-summary-row[data-turn-card-position="end"] {
+    margin-top: -2px;
+}
+
+#chat > .turn-summary-row[data-turn-card][data-turn-card-position="single"],
+#chat > .turn-summary-row[data-turn-card][data-turn-card-position="start"] {
+    border-radius: 8px 8px 0 0;
+}
+
+#chat > .turn-summary-row[data-turn-card][data-turn-card-position="single"] {
+    border-radius: 8px;
+}
+
+#chat > .turn-summary-row[data-turn-card][data-turn-card-position="end"] {
+    border-radius: 0 0 8px 8px;
+}
+
+#chat > .mes[data-turn-card] .mes_block {
+    background: transparent !important;
+}
+
+/* The user message keeps its accent so the turn's author stays readable
+   inside the shared surface. */
+#chat > .mes[data-turn-card][is_user="true"] .mes_block {
+    background-color: var(--chat-user-bubble-bg) !important;
+}
+
+#chat > .mes[data-turn-card]:not(.selected):hover,
+#chat > .mes[data-turn-card]:not(.selected):focus-within {
+    background-color: var(--chat-message-hover-bg);
 }
 
 .wpc-body {
@@ -7047,11 +7130,11 @@ body:has(#character_popup.open) #top-settings-holder:has(.drawer-content.openDra
     background: var(--chat-system-bubble-bg, rgba(255, 255, 255, 0.02));
     color: var(--SmartThemeBodyColor);
     font: inherit;
-    font-size: calc(var(--mainFontSize) * 0.85);
+    font-size: calc(var(--mainFontSize) * 0.95);
     line-height: 1.35;
     text-align: left;
     cursor: pointer;
-    opacity: 0.72;
+    opacity: 1;
     transition: opacity 0.12s ease, border-color 0.12s ease, background-color 0.12s ease;
 }
 

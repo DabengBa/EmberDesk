@@ -42,6 +42,7 @@ import type {
 import { MainChatMessageRow } from './components/main-chat/MainChatMessageRow';
 import { MainChatGreetingPicker } from './components/main-chat/MainChatGreetingPicker';
 import { TurnSummaryCard } from './components/main-chat/TurnSummaryCard';
+import { projectChatTurnCards } from '../public/scripts/chat-turn-card-projection.js';
 import {
     createCharacterAuthoringSession,
     shouldApplyCharacterAuthoringSaveResult,
@@ -1980,6 +1981,49 @@ function MainChatMessageListWorkspacePanel({
         }
         return pruned;
     }, [expandedTurnKeys, turnSummaries]);
+    // Rows a collapsed turn summary replaces on screen: these render as the
+    // summary card (anchor) or not at all (remaining covered rows).
+    const collapsedMessageIds = useMemo(() => {
+        const ids = new Set<string>();
+        for (const message of messages) {
+            if (!coveredMessageIds.has(message.id)) {
+                continue;
+            }
+            const turnSummary = turnSummaryByAnchor.get(message.id);
+            if (turnSummary) {
+                if (!expandedActiveTurnKeys.has(turnSummary.turnKey)) {
+                    ids.add(message.id);
+                }
+                continue;
+            }
+            const owner = turnSummaries.find(entry => entry.coveredMessageIds.includes(message.id));
+            if (owner && !expandedActiveTurnKeys.has(owner.turnKey)) {
+                ids.add(message.id);
+            }
+        }
+        return ids;
+    }, [messages, coveredMessageIds, turnSummaryByAnchor, turnSummaries, expandedActiveTurnKeys]);
+    // Card entries mirror the render order exactly, so a summary header and the
+    // rows it reintroduces resolve to one card instead of two. Every message
+    // stays a direct `.mes` child; the card is styling metadata only.
+    const cardEntries = useMemo(() => {
+        const entries: Array<{ id: string; kind?: 'summary'; role?: string; rootClassNames?: readonly string[]; expanded?: boolean }> = [];
+        for (const message of messages) {
+            const turnSummary = turnSummaryByAnchor.get(message.id);
+            if (collapsedMessageIds.has(message.id)) {
+                if (turnSummary) {
+                    entries.push({ id: `summary:${turnSummary.turnKey}`, kind: 'summary', expanded: false });
+                }
+                continue;
+            }
+            if (turnSummary) {
+                entries.push({ id: `summary:${turnSummary.turnKey}`, kind: 'summary', expanded: true });
+            }
+            entries.push({ id: message.id, role: message.role, rootClassNames: message.rootClassNames });
+        }
+        return entries;
+    }, [messages, turnSummaryByAnchor, collapsedMessageIds]);
+    const turnCardByEntryId = useMemo(() => projectChatTurnCards(cardEntries), [cardEntries]);
     const handleTurnSummaryToggle = useCallback((turnKey: string, expanded: boolean) => {
         setExpandedTurnKeys(current => {
             const next = new Set(current);
@@ -2095,25 +2139,18 @@ button.menu_button {
             ) : null}
             {messages.map(message => {
                 const turnSummary = turnSummaryByAnchor.get(message.id);
-                const covered = coveredMessageIds.has(message.id);
-                if (covered && !turnSummary) {
-                    // Covered by a summary whose anchor is elsewhere in the list —
-                    // collapsed turns only render their card.
-                    const owner = turnSummaries.find(entry => entry.coveredMessageIds.includes(message.id));
-                    if (owner && !expandedActiveTurnKeys.has(owner.turnKey)) {
-                        return null;
-                    }
-                }
-                const expanded = turnSummary ? expandedActiveTurnKeys.has(turnSummary.turnKey) : false;
-                if (covered && turnSummary && !expanded) {
-                    return (
+                if (collapsedMessageIds.has(message.id)) {
+                    // Collapsed turn: the anchor renders the card, every other
+                    // covered row disappears behind it.
+                    return turnSummary ? (
                         <TurnSummaryCard
                             key={`summary:${turnSummary.turnKey}`}
                             summary={turnSummary}
                             expanded={false}
+                            turnCard={turnCardByEntryId.get(`summary:${turnSummary.turnKey}`)}
                             onToggle={handleTurnSummaryToggle}
                         />
-                    );
+                    ) : null;
                 }
                 return (
                     <Fragment key={message.uid || message.id}>
@@ -2121,6 +2158,7 @@ button.menu_button {
                             <TurnSummaryCard
                                 summary={turnSummary}
                                 expanded={true}
+                                turnCard={turnCardByEntryId.get(`summary:${turnSummary.turnKey}`)}
                                 onToggle={handleTurnSummaryToggle}
                             />
                         ) : null}
@@ -2128,6 +2166,7 @@ button.menu_button {
                             message={message}
                             commands={commands}
                             isLast={message.id === messageIds.at(-1)}
+                            turnCard={turnCardByEntryId.get(message.id)}
                         />
                     </Fragment>
                 );
@@ -2500,13 +2539,19 @@ function renderIntoPanel(mount: WorkspacePanelMount) {
         updateMainChatObservation(mount.state ?? {});
     }
     queryClient.setQueryData(workspacePanelStateQueryKey(mount.kind), mount.state ?? null);
+    const panel = (
+        <QueryClientProvider client={queryClient}>
+            <WorkspacePanelRoot kind={mount.kind} commands={mount.commands} />
+        </QueryClientProvider>
+    );
     mount.root.render(
         <StrictMode>
-            <Theme theme={emberDeskTheme} mode="dark">
-                <QueryClientProvider client={queryClient}>
-                    <WorkspacePanelRoot kind={mount.kind} commands={mount.commands} />
-                </QueryClientProvider>
-            </Theme>
+            {mount.kind === 'mainChatMessageList'
+                // Theme creates a DOM wrapper; the legacy #chat surface requires
+                // message rows to remain its direct children. The shell chrome
+                // Theme already establishes the document theme for this app.
+                ? panel
+                : <Theme theme={emberDeskTheme} mode="dark">{panel}</Theme>}
         </StrictMode>,
     );
 }
