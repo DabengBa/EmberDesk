@@ -53,7 +53,7 @@ The legacy formatter and row builder still produce the row data and rich-body HT
 3. `getChatResult()` (`public/script.js:7455`) seeds the first message for an empty chat, calls `printMessages()`, selects the character, then emits `CHAT_CHANGED` (plus `CHAT_CREATED`, and for a one-message chat `MESSAGE_RECEIVED` / `CHARACTER_MESSAGE_RENDERED`). `getChat()` emits `CHAT_LOADED` afterwards.
 4. Itemized prompts are a module-level array read through `hasItemizedPromptForMessage(message, messageId)` (`public/script.js:3155`) when the bridge snapshot is built; there is no per-render lookup step.
 
-Failure modes: a failed fetch still falls through to `getChatResult()` and logs the error, so the visible chat is stale rather than absent; empty or missing chat data produces first-message or empty-chat behavior instead of a distinct error surface.
+Failure modes: a failed read throws before any splice (`public/scripts/chat-ops-service.js:504`), and the caller only re-runs `getChatResult()` and `console.log`s the error (`public/scripts/chat-ops-service.js:536`), so the failure has no user-facing surface. Do not read this as a guarantee that the previous chat survives a failed load: a partial or interrupted read can still leave `state.chat` overwritten, and that overwrite risk is a known existing hazard rather than a documented, proven-safe behavior. Empty or missing chat data produces first-message or empty-chat behavior instead of a distinct error surface.
 
 ### Bridge Snapshot And Row Rendering
 
@@ -65,7 +65,7 @@ Failure modes: a failed fetch still falls through to `getChatResult()` and logs 
 
 ### Turn Cards
 
-`projectChatTurnCards()` (`public/scripts/chat-turn-card-projection.js:60`) assigns one card id plus a `single`/`start`/`middle`/`end` position to the render-ordered entries. A card opens at a user row or an expanded summary header, includes the following tool/result rows and the final answer, and ignores rows hidden by the reply pipeline so hidden rows consume no corner slot. `app/workspace-panels.tsx:2026` builds those entries in exact render order and passes the assignment to `MainChatMessageRow`, which writes `data-turn-card` / `data-turn-card-position`. The styling lives in `public/style.css:6254` and paints the shared surface without moving or cloning content; a turn-summary header shares the same card surface.
+`projectChatTurnCards()` (`public/scripts/chat-turn-card-projection.js:60`) assigns one card id plus a `single`/`start`/`middle`/`end` position to the render-ordered entries. A summary entry always opens a card — collapsed summaries open their own single card, expanded summaries open the card carrying the rows they reintroduce (`public/scripts/chat-turn-card-projection.js:36`). A user row opens a card unless it directly follows an expanded summary (`public/scripts/chat-turn-card-projection.js:45`), which is one of the rows that summary reintroduced rather than a new turn. Each card then includes the following tool/result rows and the final answer, and ignores rows hidden by the reply pipeline so hidden rows consume no corner slot. `app/workspace-panels.tsx:2026` builds those entries in exact render order and passes the assignment to `MainChatMessageRow`, which writes `data-turn-card` / `data-turn-card-position`. The styling lives in `public/style.css:6254` and paints the shared surface without moving or cloning content; a turn-summary header shares the same card surface.
 
 ### Long Chat Load Earlier
 
@@ -78,14 +78,14 @@ Scrolling: `queueMainChatMessageListScrollRestore()` / `getMainChatMessageListSc
 
 ### User Message Append
 
-`sendTextareaMessage()` (`public/script.js:5587`) guards concurrent send/regenerate entry and calls `Generate('normal')` (`public/script.js:6423`). `sendMessageAsUser()` (`public/script.js:6856`) builds the message, saves it, emits `MESSAGE_SENT`, appends it to `state.chat`, calls `addOneMessage()` (`public/scripts/message-service.js:732`) — which on the React path remounts the panel and scrolls — and emits `USER_MESSAGE_RENDERED`. Insert-in-middle edits go through `reloadCurrentChat()` instead.
+`sendTextareaMessage()` (`public/script.js:5587`) guards concurrent send/regenerate entry and calls `Generate('normal')` (`public/script.js:6423`). `sendMessageAsUser()` (`public/script.js:6856`) builds the message, pushes it onto `state.chat`, awaits `saveChatConditional()`, emits `MESSAGE_SENT`, calls `addOneMessage()` (`public/scripts/message-service.js:732`) — which on the React path remounts the panel and scrolls — and then emits `USER_MESSAGE_RENDERED`. The insert-in-middle path splices the message into `state.chat` at its target index, saves, emits `MESSAGE_SENT`, and calls `reloadCurrentChat()` before `USER_MESSAGE_RENDERED`, so it re-renders the list instead of appending one row.
 
 ### Streaming Token Path
 
 1. `Generate()` wraps the request in a generation envelope and delegates to `executeGenerationRequestInShell()` (`public/scripts/generation-service.js:418`); attempt planning and recovery decisions belong to [main-chat-generation-lifecycle.md](main-chat-generation-lifecycle.md).
 2. When streaming is enabled and the type is not `quiet`, the attempt loop creates `GenerationStreamSession` (`public/scripts/generation-service.js:127`, instantiated at `:1278`) and assigns it to `state.streamingProcessor`.
 3. `onStartStreaming()` (`:208`) persists the placeholder reply via `saveReply()`, resolves the row id, and marks the UI as generating.
-4. `onProgressStreaming()` (`:217`) cleans and brace-balances the partial text, writes it into `state.chat[messageId]`, updates reasoning, and then branches: on the legacy host it writes `messageFormatting()` output into `.mes_text` and updates the timer; on the React host it only calls `scheduleMainChatMessageListPanelRefresh()` (`public/script.js:1612`) and lets React re-render the row.
+4. `onProgressStreaming()` (`:217`) cleans the partial text and balances one unclosed trailing Markdown marker — the list is `*`, `"`, a triple-backtick fence, and `~~~` (`public/scripts/generation-service.js:224`) — writes it into `state.chat[messageId]`, updates reasoning, and then branches: on the legacy host it writes `messageFormatting()` output into `.mes_text` and updates the timer; on the React host it only calls `scheduleMainChatMessageListPanelRefresh()` (`public/script.js:1612`) and lets React re-render the row.
 5. `finalizeIntermediaryMessage()` (`:285`) mounts the panel, runs the final progress pass, finishes reasoning, attaches images, emits `MESSAGE_RECEIVED` / `CHARACTER_MESSAGE_RENDERED`, and remounts; `onFinishStreaming()` (`:323`) then saves the chat. `onErrorStreaming()` (`:329`) and `onStopStreaming()` (`:348`) keep the partial text, restore controls, and remount without entering the streaming path again.
 6. Streaming transport phase facts are produced by `getMainChatStreamingTransportState()` (`public/scripts/main-chat-streaming-transport-state.js:33`) and published as `data-main-chat-streaming-transport-*` diagnostics; that helper explicitly owns no provider request, token append, or DOM.
 
@@ -116,13 +116,13 @@ Stable binding points:
 
 Windowing calculation (reproducible): inputs are the chat length, the saved start index for the chat id, and `CHAT_TRUNCATION` (100). Output is the contiguous `visibleMessageIds` slice plus `showMoreVisible`. Load-earlier reduces the start index by the requested count, clamped at 0; a zero start index means the full chat is visible and the load-more control disappears.
 
-Degradation: if the React panel fails to mount, the surface fails closed visibly instead of silently restoring a legacy list; rollback is previous-version deploy, not an in-process dual-owner flag.
+Degradation: a React panel mount failure does not surface to the user. `mountWorkspacePanelHost()` (`public/scripts/workspace-panel-host-controller.js:26`) returns a fallback result carrying one of `bundle-load-failed`, `mount-failed`, `missing-container`, or `feature-disabled` (`public/scripts/workspace-panel-mount-contract.js:6`), and the default `onError` only logs `console.warn('React ${panelKind} workspace panel failed to ${action}. Falling back to legacy panel.', error)` (`public/scripts/workspace-panels-react-bridge.js:75`). `mountReactMainChatMessageListPanel()` (`public/script.js:3355`) acts only on `result?.mounted`, so an unmounted panel leaves the host container as-is. Recovery is a previous-version deploy, not an in-process dual-owner flag.
 
 Focused proof:
 
 ```bash
-pnpm --dir tests run test:unit -- chat-turn-card-projection.test.js chat-message-render-descriptor.test.js react-workspace-panels-helpers.test.js --runInBand
-pnpm --dir tests run test:e2e -- chat-message-layout.e2e.js chat-message-rendering.e2e.js --workers=1
+pnpm --dir tests run test:unit chat-turn-card-projection.test.js chat-message-render-descriptor.test.js react-workspace-panels-helpers.test.js --runInBand
+pnpm --dir tests run test:e2e chat-message-layout.e2e.js chat-message-rendering.e2e.js --workers=1
 pnpm run test:compat
 ```
 

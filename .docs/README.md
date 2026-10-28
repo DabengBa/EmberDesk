@@ -11,8 +11,9 @@ in a transition stage: keep the power-user workflow, simplify inherited
 complexity, and modernize incrementally in React-owned slices while the
 file-backed and canonical SQLite storage direction stays explicit.
 
-Read [project-overview](project-overview.md) for the durable direction,
-audience, capability set, and guardrails. Do not restate those facts here.
+[project-overview](project-overview.md) is an orientation narrative, not a
+fact owner: when it disagrees with `.docs/db/`, `.docs/tech/`, or the source, the
+owner wins. Do not restate product or technical facts here.
 
 ## Owners
 
@@ -20,14 +21,20 @@ audience, capability set, and guardrails. Do not restate those facts here.
 | --- | --- | --- |
 | Pages, features, terms | [`.docs/db/`](db/) | Semantic product database with stable IDs; validated by `pnpm run docs:check` |
 | Implementation, architecture, operations | [`.docs/tech/`](tech/) | Current code is authoritative |
-| Processing flows and sandbox proofs | [`.docs/logic-description/`](logic-description/) | Derived reasoning artifacts for storage and list flows |
 | Accepted trade-offs | `.docs/adr/` | Created only when a hard-to-reverse decision needs a record |
 | Repository rules | [AGENTS.md](AGENTS.md) and [../AGENTS.md](../AGENTS.md) | Instruction layer, not a knowledge base |
+
+[`.docs/logic-description/`](logic-description/) is not an owner. It holds
+derived processing-flow notes and sandbox proofs generated from the flows they
+describe; treat them as non-authoritative reference material that goes stale
+silently. Verify against the owning `.docs/tech/` doc or the source before
+relying on one.
 
 ## Reading Order
 
 1. [AGENTS.md](AGENTS.md) for the documentation workspace rules.
-2. [project-overview.md](project-overview.md) for direction and boundaries.
+2. [project-overview.md](project-overview.md) for an orientation narrative
+   that points at the owners above.
 3. [`.docs/db/pages/`](db/pages/) for user-visible surfaces,
    [`.docs/db/features/`](db/features/) for capabilities, and
    [`.docs/db/terms/`](db/terms/) for vocabulary.
