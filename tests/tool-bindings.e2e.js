@@ -258,6 +258,63 @@ test.describe('tool bindings', () => {
 
         // The final assistant reply is rendered into the chat.
         await expect(page.locator('#chat').last()).toContainText('FINAL_ANSWER_TEXT', { timeout: 15_000 });
+        const userTurn = page.locator('#chat .mes[is_user="true"]').filter({ hasText: 'tool binding e2e message' }).last();
+        const turnId = await userTurn.getAttribute('data-turn-card');
+        expect(turnId).toBeTruthy();
+        const turnCard = page.locator(`#chat .mes[data-turn-card="${turnId}"]`);
+        const turnMembers = await turnCard.evaluateAll(rows => rows.map(row => ({
+            id: row.getAttribute('mesid'),
+            role: row.getAttribute('is_user') === 'true' ? 'user' : row.getAttribute('is_system') === 'true' ? 'system' : 'character',
+            turnId: row.getAttribute('data-turn-card'),
+            position: row.getAttribute('data-turn-card-position'),
+            directChild: row.parentElement?.id === 'chat',
+            bodyVisible: getComputedStyle(row.querySelector('.mes_text')).display !== 'none',
+            surface: getComputedStyle(row).backgroundColor,
+            topRadius: getComputedStyle(row).borderTopLeftRadius,
+            bottomRadius: getComputedStyle(row).borderBottomLeftRadius,
+        })));
+        const placement = await page.locator('#chat .mes[is_system="true"]').filter({ has: page.locator('[data-tool-invocations]') }).last().evaluate(toolRow => {
+            const followingRow = toolRow.nextElementSibling;
+            return {
+                remainsDirectMes: toolRow.parentElement?.id === 'chat',
+                bodyVisible: getComputedStyle(toolRow.querySelector('.mes_text')).display !== 'none',
+                sameTurnAsNext: toolRow.getAttribute('data-turn-card') === followingRow?.getAttribute('data-turn-card'),
+            };
+        });
+        expect(turnMembers.some(member => member.role === 'user' && member.bodyVisible)).toBe(true);
+        expect(turnMembers.some(member => member.role === 'character' && member.bodyVisible && member.turnId === turnMembers[0]?.turnId)).toBe(true);
+        expect(turnMembers.every(member => member.directChild), JSON.stringify(turnMembers)).toBe(true);
+        // One continuous surface: every row in the turn paints the same card
+        // background, only the outer corners are rounded.
+        expect(new Set(turnMembers.map(member => member.surface)).size, JSON.stringify(turnMembers)).toBe(1);
+        expect(turnMembers[0].topRadius).toBe('8px');
+        expect(turnMembers.at(-1).bottomRadius).toBe('8px');
+        expect(placement).toEqual({
+            remainsDirectMes: true,
+            bodyVisible: true,
+            sameTurnAsNext: true,
+        });
+
+        // Deleting the reply leaves the original user/tool rows in their turn
+        // card, with the tool body still visible and no moved/duplicated HTML.
+        const replyId = await page.locator('#chat .mes[data-turn-card]').filter({ hasText: 'FINAL_ANSWER_TEXT' }).last()
+            .getAttribute('mesid');
+        expect(replyId).toBeTruthy();
+        await page.evaluate(async (id) => {
+            const context = window.SillyTavern.getContext();
+            context.powerUserSettings.confirm_message_delete = false;
+            await context.deleteMessage(Number(id));
+        }, replyId);
+        const reverted = await page.locator('#chat .mes.toolCall').last().evaluate(toolRow => ({
+            hasTurnCard: Boolean(toolRow.getAttribute('data-turn-card')),
+            sourceBodyVisible: getComputedStyle(toolRow.querySelector('.mes_text')).display !== 'none',
+            ownInvocations: Boolean(toolRow.querySelector('.mes_text [data-tool-invocations]')),
+        }));
+        expect(reverted).toEqual({
+            hasTurnCard: true,
+            sourceBodyVisible: true,
+            ownInvocations: true,
+        });
 
         // Flip the required flag — the next request must force a tool call.
         await page.evaluate(async () => {
@@ -497,6 +554,12 @@ test.describe('tool bindings', () => {
         await expect(replyRow).toContainText('<review>');
         await expect(replyRow).toContainText('<respond>');
         await expect(replyRow).toContainText('RESPOND_TEXT');
+        const pipelineUser = page.locator('#chat > .mes[is_user="true"]').filter({ hasText: 'reply pipeline e2e message' }).last();
+        const pipelineTurnId = await pipelineUser.getAttribute('data-turn-card');
+        const pipelineTurnRows = page.locator(`#chat > .mes[data-turn-card="${pipelineTurnId}"]`);
+        await expect(pipelineTurnRows).toHaveCount(2);
+        expect(await replyRow.getAttribute('data-turn-card')).toBe(pipelineTurnId);
+        expect(await pipelineTurnRows.evaluateAll(rows => rows.every(row => row.parentElement?.id === 'chat'))).toBe(true);
 
         // Option chips stay live inside the reply and remain clickable.
         const chips = replyRow.locator('[data-respond-option]');

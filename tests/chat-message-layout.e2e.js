@@ -185,4 +185,82 @@ test.describe('chat message layout', () => {
         expect(geometry.overlapsTextarea).toBe(false);
         expect(geometry.hitIsRecoveryButton).toBe(false);
     });
+
+    test('keeps the batch-selection highlight and the card corners visible on a selected turn row', async ({ page }) => {
+        await page.goto('/style.css');
+        await page.setContent(`
+            <!doctype html>
+            <html>
+                <head>
+                    <link rel="stylesheet" href="/style.css">
+                    <style>
+                        :root {
+                            --SmartThemeQuoteColor: rgb(255, 0, 0);
+                            --chat-bot-bubble-bg: rgb(0, 0, 255);
+                            --SmartThemeBlurTintColor: rgb(0, 0, 0);
+                            --chat-user-bubble-bg: rgb(0, 128, 0);
+                        }
+                    </style>
+                </head>
+                <body>
+                    <main id="chat">
+                        <div class="mes" mesid="0" is_user="true" data-turn-card="t0" data-turn-card-position="start">
+                            <section class="mes_block"><div class="mes_text">first</div></section>
+                        </div>
+                        <div class="mes selected" mesid="1" is_user="false" data-turn-card="t0" data-turn-card-position="middle">
+                            <section class="mes_block"><div class="mes_text">selected row</div></section>
+                        </div>
+                        <div class="mes" mesid="2" is_user="false" data-turn-card="t0" data-turn-card-position="end">
+                            <section class="mes_block"><div class="mes_text">last</div></section>
+                        </div>
+                        <div class="turn-summary-row" data-turn-card="t1" data-turn-card-position="single">
+                            <button type="button" class="turn-summary-pill">summary</button>
+                        </div>
+                    </main>
+                </body>
+            </html>
+        `);
+
+        const styles = await page.evaluate(() => {
+            const read = (selector) => {
+                const element = document.querySelector(selector);
+                const computed = getComputedStyle(element);
+                return {
+                    background: computed.backgroundColor,
+                    topLeft: computed.borderTopLeftRadius,
+                    bottomLeft: computed.borderBottomLeftRadius,
+                };
+            };
+            return {
+                start: read('#chat > .mes[mesid="0"]'),
+                selected: read('#chat > .mes[mesid="1"]'),
+                end: read('#chat > .mes[mesid="2"]'),
+                summary: read('#chat > .turn-summary-row'),
+            };
+        });
+
+        // Chosen colours make the assertions readable: the card surface mixes
+        // blue into black, the legacy selection mixes red into transparency.
+        expect(styles.selected.background).not.toBe(styles.start.background);
+        expect(styles.selected.background).toContain('0.2');
+        expect(styles.end.background).toBe(styles.start.background);
+
+        // A selected row must keep its card slot corner, not fall back to the
+        // plain `.mes` 8px rounding on all four corners.
+        expect(styles.start.topLeft).toBe('8px');
+        expect(styles.start.bottomLeft).toBe('0px');
+        expect(styles.end.bottomLeft).toBe('8px');
+        expect(styles.end.topLeft).toBe('0px');
+        expect(styles.selected.topLeft).toBe('0px');
+        expect(styles.selected.bottomLeft).toBe('0px');
+        expect(styles.summary.topLeft).toBe('8px');
+        expect(styles.summary.bottomLeft).toBe('8px');
+
+        // Hovering a selected row must not repaint the card surface over the
+        // selection highlight.
+        await page.locator('#chat > .mes[mesid="1"]').hover();
+        const hoverBackground = await page.locator('#chat > .mes[mesid="1"]')
+            .evaluate(element => getComputedStyle(element).backgroundColor);
+        expect(hoverBackground).toBe(styles.selected.background);
+    });
 });

@@ -297,7 +297,9 @@ body.noShadows * {
 
 .ed-frontend-frame {
     display: block;
+    max-width: 100%;
     margin: 0.5em 0;
+    border: 0;
 }
 
 .ed-frontend-frame__iframe {

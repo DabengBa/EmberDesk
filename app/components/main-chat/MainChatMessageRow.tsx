@@ -295,10 +295,12 @@ export const MainChatMessageRow = memo(function MainChatMessageRow({
     message,
     commands,
     isLast = false,
+    turnCard,
 }: {
     message: MainChatMessageRecord;
     commands?: MainChatCommands;
     isLast?: boolean;
+    turnCard?: { turnId: string; position: 'single' | 'start' | 'middle' | 'end' };
 }) {
     const render = { ...EMPTY_RENDER, ...message.render };
     const numericMessageId = Number(message.id);
@@ -356,6 +358,8 @@ export const MainChatMessageRow = memo(function MainChatMessageRow({
             data-main-chat-message-row-owner="react"
             data-main-chat-message-row={message.id}
             data-main-chat-message-row-state={message.state}
+            data-turn-card={turnCard?.turnId}
+            data-turn-card-position={turnCard?.position}
             data-reasoning-state={message.reasoningState ?? undefined}
             data-media-display={message.mediaDisplay ?? undefined}
             onClickCapture={event => {
@@ -656,4 +660,8 @@ export const MainChatMessageRow = memo(function MainChatMessageRow({
             </div>
         </div>
     );
-}, (prev, next) => prev.message === next.message && prev.isLast === next.isLast && prev.commands === next.commands);
+}, (prev, next) => prev.message === next.message
+    && prev.isLast === next.isLast
+    && prev.commands === next.commands
+    && prev.turnCard?.turnId === next.turnCard?.turnId
+    && prev.turnCard?.position === next.turnCard?.position);

@@ -22,7 +22,7 @@ This page exists so a user can run their daily LLM workflow from one browser sur
 
 1. **Primary shell frame**: the always-present application chrome that becomes usable after the startup overlay disappears.
 2. **Character and navigation region**: the area where users browse character cards, search/filter the library, enter bulk edit flows, and switch the active working context.
-3. **Main chat region**: the central conversation surface where messages, generation output, and chat actions are shown.
+3. **Main chat region**: the central conversation surface where messages, generation output, and chat actions are shown. Each user turn—including tool results, pipeline output, and the final answer—is presented as one continuous visual card while retaining the original message rows and actions.
 4. **Supporting panels and drawers**: secondary UI surfaces for the prompt preset panel (left side drawer), World Info, and Regex. Active chat background selection remains part of chat context, not a library drawer.
 5. **Composer and action region**: the place where users type prompts and trigger chat actions, with the primary textarea, send button, stop/continue/impersonate actions, and chat-options entry discoverable through stable roles and accessible names.
 

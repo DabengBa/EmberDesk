@@ -19,10 +19,12 @@ const stopActivationKeyPropagation = (event: KeyboardEvent<HTMLElement>) => {
 export function TurnSummaryCard({
     summary,
     expanded,
+    turnCard,
     onToggle,
 }: {
     summary: MainChatTurnSummaryRecord;
     expanded: boolean;
+    turnCard?: { turnId: string; position: 'single' | 'start' | 'middle' | 'end' };
     onToggle: (turnKey: string, expanded: boolean) => void;
 }) {
     useTranslated('');
@@ -31,6 +33,8 @@ export function TurnSummaryCard({
         <div
             className={`turn-summary-row${expanded ? ' turn-summary-row-expanded' : ''}`}
             data-turn-summary={summary.turnKey}
+            data-turn-card={turnCard?.turnId}
+            data-turn-card-position={turnCard?.position}
             data-main-chat-message-row-owner="react"
         >
             <button
