@@ -70,6 +70,8 @@ class MessageError extends Error {
     }
 }
 
+class SettingsRevisionConflictError extends MessageError {}
+
 function getSchemaErrorMessage(schema: z.ZodTypeAny, values: unknown) {
     const parsed = schema.safeParse(values);
     if (parsed.success) {
@@ -403,7 +405,6 @@ export function SettingsSurface({
             }
 
             if (hasRevisionConflict) {
-                setPageError(t('Settings were updated in another session. Reload the current settings, then merge and save the draft.'));
                 return;
             }
 
@@ -418,7 +419,9 @@ export function SettingsSurface({
                 settingsForm.reset(value);
             } catch (error) {
                 setSaveStatus(null);
-                setPageError(error instanceof Error ? error.message : String(error));
+                if (!(error instanceof SettingsRevisionConflictError)) {
+                    setPageError(error instanceof Error ? error.message : String(error));
+                }
             }
         },
     });
@@ -436,34 +439,48 @@ export function SettingsSurface({
                 settingsRevision: parsedPayload.settingsRevision,
                 baselineFormValues,
             });
-            const response = await fetch('/api/settings/save', {
+            let savedPayload = payload;
+            const postSettings = (nextPayload: typeof payload) => fetch('/api/settings/save', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'X-CSRF-Token': csrfToken,
                 },
-                body: JSON.stringify(payload),
+                body: JSON.stringify(nextPayload),
             });
+            let response = await postSettings(payload);
+            if (response.status === 409) {
+                const refreshed = await refetchSettings();
+                if (refreshed.data) {
+                    const refreshedPayload = parseSettingsPayload(refreshed.data);
+                    const rebasedPayload = buildSettingsSavePayload(refreshedPayload.settings, values, {
+                        settingsRevision: refreshedPayload.settingsRevision,
+                        baselineFormValues: buildSettingsFormDefaults(refreshedPayload.settings),
+                    });
+                    savedPayload = rebasedPayload;
+                    response = await postSettings(rebasedPayload);
+                }
+            }
 
             if (!response.ok) {
                 if (response.status === 409) {
                     setHasRevisionConflict(true);
-                    throw new MessageError(t('Settings were updated in another session; the local draft is still kept. Reload the current settings, merge, and save again.'));
+                    throw new SettingsRevisionConflictError(t('Settings were updated in another session; the local draft is still kept. Reload the current settings, merge, and save again.'));
                 }
                 throw new MessageError(t('Settings could not be saved.'));
             }
 
-            await saveSettingsToRuntime(payload, runtime);
+            await saveSettingsToRuntime(savedPayload, runtime);
             await refetchSettings();
             setHasRevisionConflict(false);
             setSaveStatus({ kind: 'success', message: t('Saved') });
             try {
                 window.sessionStorage.setItem('emberdesk-settings-saved-at', String(Date.now()));
-                window.sessionStorage.setItem('emberdesk-settings-revision', String(parsedPayload.settingsRevision ?? ''));
+                window.sessionStorage.setItem('emberdesk-settings-revision', String(savedPayload.settings_revision ?? ''));
             } catch {
                 // sessionStorage may be unavailable in private contexts
             }
-            return payload;
+            return savedPayload;
         },
         retry: false,
     });

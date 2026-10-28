@@ -87,11 +87,19 @@ Git work runs as root on `vps-kl`; the checkout is owned by uid 1002, so pass `-
 ssh vps-kl "git -c safe.directory=/opt/emberdesk-test -C /opt/emberdesk-test fetch origin csp-dev-techupgrade && git -c safe.directory=/opt/emberdesk-test -C /opt/emberdesk-test pull --ff-only origin csp-dev-techupgrade && git -c safe.directory=/opt/emberdesk-test -C /opt/emberdesk-test rev-parse HEAD"
 ```
 
-Rebuild and restart the container as root:
+Rebuild and restart the container as root. The image build runs dependency
+installation and several frontend builds, so the local SSH command must allow
+at least five minutes for a cold build:
 
 ```bash
-ssh vps-kl "cd /opt/emberdesk-test/deploy && docker compose up -d --build"
+timeout 300s ssh vps-kl "cd /opt/emberdesk-test/deploy && docker compose up -d --build"
 ```
+
+`timeout 300s` applies to the local deployment command, not to Docker's
+internal build steps. If it expires, treat the deployment as indeterminate:
+check `docker ps`, the container health status, and the build output before
+retrying with a longer operator timeout. Do not assume that a client-side SSH
+timeout means the Docker build failed.
 
 Record the deployed revision:
 
@@ -129,7 +137,7 @@ Prefer rolling back to a known-good commit and rebuilding rather than using dest
 
 ```bash
 ssh vps-kl "git -c safe.directory=/opt/emberdesk-test -C /opt/emberdesk-test fetch origin csp-dev-techupgrade && git -c safe.directory=/opt/emberdesk-test -C /opt/emberdesk-test checkout <known-good-sha>"
-ssh vps-kl "cd /opt/emberdesk-test/deploy && docker compose up -d --build"
+timeout 300s ssh vps-kl "cd /opt/emberdesk-test/deploy && docker compose up -d --build"
 ssh vps-kl "git -c safe.directory=/opt/emberdesk-test -C /opt/emberdesk-test rev-parse HEAD > /opt/emberdesk-test/.deploy-revision && cat /opt/emberdesk-test/.deploy-revision"
 ```
 

@@ -80,7 +80,7 @@ ssh hostinger "cd /opt/emberdesk && git fetch origin csp-dev-techupgrade && git 
 Rebuild and restart the container as root:
 
 ```bash
-ssh hostinger-root "cd /opt/emberdesk/deploy && docker compose up -d --build"
+timeout 300s ssh hostinger-root "cd /opt/emberdesk/deploy && docker compose up -d --build"
 ```
 
 Record the deployed revision:
@@ -117,7 +117,7 @@ Prefer rolling back to a known-good commit and rebuilding rather than using dest
 
 ```bash
 ssh hostinger "cd /opt/emberdesk && git fetch origin csp-dev-techupgrade && git checkout <known-good-sha>"
-ssh hostinger-root "cd /opt/emberdesk/deploy && docker compose up -d --build"
+timeout 300s ssh hostinger-root "cd /opt/emberdesk/deploy && docker compose up -d --build"
 ssh hostinger "cd /opt/emberdesk && git rev-parse HEAD > .deploy-revision && cat .deploy-revision"
 ```
 

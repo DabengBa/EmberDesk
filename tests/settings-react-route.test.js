@@ -114,6 +114,11 @@ describe('settings React route flag', () => {
         expect(pageRouteSource).toContain("variant=\"page\"");
         expect(routeSource).toContain('const secretsQuery = useQuery(');
         expect(routeSource).toContain('const saveMutation = useMutation(');
+        expect(routeSource).toContain('class SettingsRevisionConflictError extends MessageError');
+        expect(routeSource).toContain('if (!(error instanceof SettingsRevisionConflictError))');
+        expect(routeSource).toContain('const refreshed = await refetchSettings();');
+        expect(routeSource).toContain('let response = await postSettings(payload);');
+        expect(routeSource).toContain('if (response.status === 409)');
         expect(routeSource).toContain('const settingsForm = useForm(');
         expect(routeSource).toContain('const settingsSchema = z.object(');
         expect(routeSource).toContain('settingsForm.reset(nextDefaults, { keepDefaultValues: true });');
@@ -496,7 +501,7 @@ describe('settings React route flag', () => {
             power_user: { fast_ui_mode: false },
             feature_settings: { stale: false },
         }]);
-        expect(routeSource).toContain('await saveSettingsToRuntime(payload, runtime);');
+        expect(routeSource).toContain('await saveSettingsToRuntime(savedPayload, runtime);');
     });
 
     test('coerces string numeric enums into form numbers for lossless save validation', async () => {
