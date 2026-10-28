@@ -1,3 +1,9 @@
+---
+description: "src/derived-cache-sqlite.js owns the shared lifecycle for SQLite files that are derived from canonical filesystem data. Project-level cache boundaries are summarized in [project-overview](../project-overview.md), and the retired..."
+kind: technical
+topic: derived-cache-sqlite
+---
+
 # Derived Cache SQLite Helper
 
 ## Module Responsibility

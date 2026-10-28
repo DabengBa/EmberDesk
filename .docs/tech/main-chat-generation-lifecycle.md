@@ -1,3 +1,9 @@
+---
+description: "This document records the implementation-facing boundary for all main-chat generation lifecycle coordination."
+kind: technical
+topic: main-chat-generation-lifecycle
+---
+
 # Main Chat Generation Lifecycle
 
 ## Module Responsibility

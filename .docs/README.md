@@ -47,6 +47,7 @@ relying on one.
 
 ```bash
 pnpm run docs:tree
+pnpm run docs:index -- --topic main-chat-rendering
 pnpm run docs:search -- "main chat rendering"
 pnpm run docs:show -- .docs/tech/main-chat-rendering-call-chain.md
 pnpm run docs:check

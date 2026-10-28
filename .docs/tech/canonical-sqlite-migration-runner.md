@@ -1,3 +1,9 @@
+---
+description: "src/canonical-sqlite-migrations.js owns the schema-history and migration contract for EmberDesk's future canonical per-user SQLite store under the [canonical per-user SQLite storage contract](canonical-sqlite-storage-roadmap.md). It..."
+kind: technical
+topic: canonical-sqlite-migration-runner
+---
+
 # Canonical SQLite Migration Runner
 
 ## Module Responsibility

@@ -1,3 +1,9 @@
+---
+description: "This document covers the server-side boot pipeline in src/server-main.js that brings EmberDesk from process start to accepting HTTP connections. It describes the phase structure, cleanup contract, and key module interactions."
+kind: technical
+topic: server-startup-orchestration
+---
+
 # Server Startup Orchestration
 
 ## Module Responsibility

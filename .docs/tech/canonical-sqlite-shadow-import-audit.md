@@ -1,3 +1,9 @@
+---
+description: "src/canonical-sqlite-shadow-import.js owns the Phase 1 bridge between EmberDesk's file-backed character data and the canonical per-user SQLite store defined by the [storage roadmap](canonical-sqlite-storage-roadmap.md). It imports..."
+kind: technical
+topic: canonical-sqlite-shadow-import-audit
+---
+
 # Canonical SQLite Shadow Import And Audit
 
 ## Module Responsibility

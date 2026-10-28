@@ -1,3 +1,9 @@
+---
+description: "public/scripts/world-info-shell-context.js owns the narrow runtime context that lets public/scripts/world-info.js remain the World Info compatibility facade without importing ../script.js directly. It is one of the composition-root..."
+kind: technical
+topic: world-info-shell-context
+---
+
 # World Info Shell Context
 
 ## Module Responsibility

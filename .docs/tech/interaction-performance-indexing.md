@@ -1,3 +1,9 @@
+---
+description: "This document covers EmberDesk's historical interaction-performance work for the character list hot path and the current retired state of the legacy character-index sidecar."
+kind: technical
+topic: interaction-performance-indexing
+---
+
 # Interaction Performance Indexing
 
 ## Module Responsibility

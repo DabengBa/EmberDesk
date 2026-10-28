@@ -1,3 +1,9 @@
+---
+description: "This document records the route-adjacent service boundary for importing external character, lorebook, and asset content from URLs or provider IDs."
+kind: technical
+topic: external-content-import-pipeline
+---
+
 # External Content Import Pipeline
 
 ## Module Responsibility

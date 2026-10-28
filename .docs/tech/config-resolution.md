@@ -1,3 +1,9 @@
+---
+description: "This document covers the three-phase config resolution pipeline in src/command-line.js that produces the CommandLineArguments object consumed by the rest of the server boot sequence. It describes the phase structure, the global-mode..."
+kind: technical
+topic: config-resolution
+---
+
 # Config Resolution
 
 ## Module Responsibility

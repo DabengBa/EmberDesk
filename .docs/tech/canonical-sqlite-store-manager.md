@@ -1,3 +1,9 @@
+---
+description: "src/canonical-sqlite.js owns the first durable runtime foundation for canonical per-user SQLite storage under the [canonical per-user SQLite storage contract](canonical-sqlite-storage-roadmap.md). It does not make SQLite authoritative..."
+kind: technical
+topic: canonical-sqlite-store-manager
+---
+
 # Canonical SQLite Store Manager
 
 ## Module Responsibility

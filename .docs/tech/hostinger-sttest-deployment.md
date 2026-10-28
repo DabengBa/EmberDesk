@@ -1,3 +1,9 @@
+---
+description: "This runbook documents the Hostinger-hosted sttest deployment for EmberDesk. It covers the local commit and push sequence, the remote Git update, Docker Compose rebuild, revision tracking, verification, rollback, and operational..."
+kind: technical
+topic: hostinger-sttest-deployment
+---
+
 # Hostinger Sttest Deployment
 
 ## Module Responsibility
