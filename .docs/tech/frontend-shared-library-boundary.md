@@ -1,3 +1,9 @@
+---
+description: "This document covers EmberDesk's browser shared-library boundary at public/lib.js. The file is the compatibility layer between modern ES module imports and legacy extension globals. It is distinct from the Workspace Composition Root at..."
+kind: technical
+topic: frontend-shared-library-boundary
+---
+
 # Frontend Shared Library Boundary
 
 ## Module Responsibility

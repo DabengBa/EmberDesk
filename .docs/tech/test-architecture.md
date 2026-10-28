@@ -1,3 +1,9 @@
+---
+description: "EmberDesk keeps Jest for Node-side tests and Playwright for browser E2E. Vitest is not added as a second runner: the repository already has Jest-specific compatibility gates, Playwright fixtures, and a separate tests package. Replacing..."
+kind: technical
+topic: test-architecture
+---
+
 # Test Architecture And Inventory
 
 ## Decision

@@ -1,3 +1,9 @@
+---
+description: "This document covers the split of src/users.js (~1244 lines, ~40 exports) into four focused modules for identity, filesystem layout, migrations, and auth. src/users.js is retained as a re-export barrel plus middleware/routes."
+kind: technical
+topic: user-module-split
+---
+
 # User Module Split
 
 ## Module Responsibility

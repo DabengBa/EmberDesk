@@ -1,3 +1,9 @@
+---
+description: "src/validation-gate-selector.js maps touched file paths or surface names to the focused validation commands that are most likely to prove the affected EmberDesk boundary. scripts/validation-gate-selector.mjs is a read-only CLI wrapper..."
+kind: technical
+topic: validation-gate-selector
+---
+
 # Validation Gate Selector
 
 ## Module Responsibility

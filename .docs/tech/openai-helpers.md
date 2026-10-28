@@ -1,3 +1,9 @@
+---
+description: "public/scripts/openai-provider-capabilities.js owns the first pure helper boundary for OpenAI-style chat-completion provider decisions. It accepts explicit settings-like inputs and returns derived values for model selection, reasoning..."
+kind: technical
+topic: openai-helpers
+---
+
 # OpenAI Provider Helper Boundary
 
 ## Module Responsibility

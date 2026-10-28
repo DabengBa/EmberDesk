@@ -1,3 +1,9 @@
+---
+description: "This note documents the same-entry React workspace shell at /. React owns the visible chrome, navigation, active/open/close/refocus/pin state, layout markers, and local status. It does not own child-feature data, backend contracts, or..."
+kind: technical
+topic: workspace-shell-panel-dock-coordination
+---
+
 # Workspace Shell Child-Slot Coordination
 
 ## Module Responsibility

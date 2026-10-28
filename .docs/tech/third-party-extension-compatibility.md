@@ -1,3 +1,9 @@
+---
+description: "- Regex is a fixed product feature under public/scripts/extensions/regex/ (the directory name is retained; it is a directly imported module, not a plugin system). It initializes via initCoreFeatures() in..."
+kind: technical
+topic: third-party-extension-compatibility
+---
+
 # First-Party Internal Compatibility Contracts
 
 > Internal contract reference for regex, slash commands, message-row DOM, character-list DOM, events, and module surfaces that first-party EmberDesk code still depends on. There is no third-party extension system: no extension loading, discovery, install, update, serving, or `/api/extensions/*` endpoints exist.

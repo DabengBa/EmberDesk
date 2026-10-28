@@ -1,3 +1,9 @@
+---
+description: "This document records EmberDesk's repeatable migration pattern for shrinking legacy jQuery page scripts into narrow, testable page controllers."
+kind: technical
+topic: frontend-jquery-slice-migration
+---
+
 # Frontend jQuery Slice Migration
 
 ## Module Responsibility

@@ -1,3 +1,9 @@
+---
+description: "- Root and tests package managers are pinned with packageManager: pnpm@12.0.0-rc.5. - Node.js 26.12.1 Current (>=26.12.1 <27) is the supported application runtime and release proof target; pnpm owns dependency installation and script..."
+kind: technical
+topic: pnpm-workflow
+---
+
 # pnpm Workflow
 
 > Current package-management and task-runner contract for EmberDesk.

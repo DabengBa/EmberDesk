@@ -10,6 +10,8 @@ instead of creating a duplicate summary. Run `pnpm run docs:check` after
 semantic documentation changes; generated files under `.docs/db/dist/` are
 validation output and are not committed.
 
-Use `pnpm run docs:tree`, `pnpm run docs:search -- <query>`, and
-`pnpm run docs:show -- <path>` to narrow documentation retrieval before broad
-source inspection.
+Use `pnpm run docs:tree`, `pnpm run docs:index -- --topic <topic>`,
+`pnpm run docs:search -- <query>`, and `pnpm run docs:show -- <path>` to narrow
+documentation retrieval before broad source inspection. These commands are the
+Node/pnpm equivalent of the read-only runtime described by the documentation
+workflow; they do not modify the documentation tree.

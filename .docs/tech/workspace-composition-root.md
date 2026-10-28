@@ -1,3 +1,9 @@
+---
+description: "public/script.js is the browser workspace's composition root and public compatibility entry. It currently assembles the legacy workspace, installs extracted browser contracts, preserves approved /script.js exports, and invokes the..."
+kind: technical
+topic: workspace-composition-root
+---
+
 # Workspace Composition Root
 
 ## Module Responsibility

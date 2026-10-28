@@ -1,3 +1,9 @@
+---
+description: "This document records the tests-only helper boundary for frontend structure contracts."
+kind: technical
+topic: frontend-structure-contracts
+---
+
 # Frontend Structure Contracts
 
 ## Module Responsibility

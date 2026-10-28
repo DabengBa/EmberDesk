@@ -1,3 +1,9 @@
+---
+description: "This document owns the canonical per-user SQLite storage contract and rollout direction. It defines the first storage slice, phase acceptance gates, task order, feature flags, rollback rules, and validation expectations."
+kind: technical
+topic: canonical-sqlite-storage-roadmap
+---
+
 # Canonical SQLite Storage Roadmap
 
 ## Module Responsibility

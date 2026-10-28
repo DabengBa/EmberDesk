@@ -1,3 +1,9 @@
+---
+description: "This document records the frontend state boundary for provider-owned secret fields in the API configuration drawer."
+kind: technical
+topic: provider-secret-field-state
+---
+
 # Provider Secret Field State
 
 ## Module Responsibility

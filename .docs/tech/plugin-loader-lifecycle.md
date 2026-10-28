@@ -1,3 +1,9 @@
+---
+description: "This document covers the plugin loading pipeline that discovers, updates, validates, and initializes server plugins at startup, and collects cleanup hooks for shutdown."
+kind: technical
+topic: plugin-loader-lifecycle
+---
+
 # Plugin Loader Lifecycle
 
 ## Module Responsibility

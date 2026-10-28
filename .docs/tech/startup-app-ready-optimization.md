@@ -1,3 +1,9 @@
+---
+description: "This document covers the implementation that shortens browser startup for the already-running-service scenario without redefining APPREADY. The browser entry and composition boundary are defined by bootstrapWorkspace() in..."
+kind: technical
+topic: startup-app-ready-optimization
+---
+
 # Startup APP_READY Optimization
 
 ## Module Responsibility
