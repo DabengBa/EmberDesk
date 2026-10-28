@@ -1,244 +1,129 @@
+---
+description: Maps each main-chat user journey (stored open, row rendering, turn cards, load-earlier, send, streaming finalize) to the current React-owned call chain, so a renderer change can be traced from the bridge snapshot to the direct #chat children.
+kind: technical
+topic: main-chat-rendering
+relations:
+  requires:
+    - tech/third-party-extension-compatibility.md
+  related:
+    - tech/main-chat-generation-lifecycle.md
+code:
+  paths:
+    - public/script.js
+    - public/scripts/chat-ops-service.js
+    - public/scripts/message-service.js
+    - public/scripts/main-chat-store-projection.js
+    - public/scripts/chat-message-render-service.js
+    - public/scripts/chat-turn-card-projection.js
+    - public/scripts/chat-message-render-descriptor.js
+    - public/scripts/generation-service.js
+    - app/workspace-panels.tsx
+    - app/components/main-chat/
+---
+
 # Main Chat Rendering Call Chain
 
-## Module Responsibility
+## Scope
 
-This document maps main-chat user journeys to current rendering and streaming call chains. It is an implementation map for future successor slices and does not change product semantics.
+- **Owner:** main-chat message list rendering, row output, turn-card grouping, long-chat windowing, and the streaming row update path inside `#chat`.
+- **Authoritative for:** how a stored chat, a sent message, and a streamed reply become visible direct-child rows; which layer owns that output at each step.
+- **Excludes:** product semantics (`.docs/db/`), generation command/recovery policy ([main-chat-generation-lifecycle.md](main-chat-generation-lifecycle.md)), the third-party-facing selector contract ([third-party-extension-compatibility.md](third-party-extension-compatibility.md)), and provider payload builders.
 
-## Protected Product Context
+## Responsibility
 
-Message rendering is owned semantically by:
+React is the sole runtime owner of the visible main-chat message list. `public/script.js` keeps the bridge that builds the snapshot, the command port that React calls back into, and compatibility adapters such as `printMessages()`, `showMoreMessages()`, `redisplayChat()`, and `addOneMessage()`.
+
+The legacy formatter and row builder still produce the row data and rich-body HTML; React replays that output into the legacy shells. There is no second renderer stack and no product flag that restores a dual-owner list.
+
+## Architecture And Constraints
+
+- Ownership is published as DOM state, not a config flag: `ensureMainChatMessageListReactHost()` (`public/script.js:2846`) marks `#chat` with `data-react-main-chat-owner="react"` and the composer items with `data-main-chat-composer-owner="react"`; `isReactMainChatOwner()` (`public/script.js:3003`) reads it; `cleanupMainChatMessageListReactHost()` (`public/script.js:2967`) deletes it.
+- Rows must stay direct children of `#chat` (`#chat > .mes[mesid]`). No wrapper element is introduced, and turn cards are styling metadata applied to the original siblings rather than a container.
+- `buildChatMessageRichBodyRender()` (`public/scripts/chat-message-render-service.js:28`) is the framework-neutral rich-body projection seam: it returns message/reasoning/media/file/bias HTML strings and always reports `insertsDom: false`. It delegates markdown/regex work to the injected `formatMessage`, so `messageFormatting()` (`public/scripts/message-service.js:64`) and `getMessageTextHTML()` (`public/scripts/message-service.js:701`) stay the only markdown/regex/media producers. React consumes that HTML; it does not re-implement formatting.
+- `updateMessageElement()` (`public/scripts/message-service.js:796`) and `redisplayChat()` (`public/script.js:5394`) survive only as adapters for the load-earlier insert path and for callers that still need a row element. Neither is a parallel visible owner.
+- Stored chat rendering is a bounded window of the newest `CHAT_TRUNCATION` (=100, `public/scripts/constants.js:156`) messages. `power_user.chat_truncation` is retired and stripped on load/save.
+- Compatibility-sensitive selectors stay reachable: `.mes`, `.mes[mesid]`, `.mes_text`, `.mes_reasoning_details`, `.mes_reasoning`, `.mes_media_wrapper`, `.mes_file_wrapper`, `.mes_buttons`, swipe controls, `#show_more_messages`.
+
+## Core Implementation
+
+### Stored Chat Open
+
+1. `selectCharacterById(id, { switchMenu })` (`public/script.js:4629`) updates active character state and calls `getChat()`.
+2. `getChat()` (`public/scripts/chat-ops-service.js:488`) calls `unshallowCharacter()`, then `POST /api/chats/get`; it splices the loaded messages into `state.chat`, normalizes media arrays, restores `chat_metadata`, clears `reactMainChatProjectionCleared`, queues the reading-position snapshot, and calls `getChatResult()`.
+3. `getChatResult()` (`public/script.js:7455`) seeds the first message for an empty chat, calls `printMessages()`, selects the character, then emits `CHAT_CHANGED` (plus `CHAT_CREATED`, and for a one-message chat `MESSAGE_RECEIVED` / `CHARACTER_MESSAGE_RENDERED`). `getChat()` emits `CHAT_LOADED` afterwards.
+4. Itemized prompts are a module-level array read through `hasItemizedPromptForMessage(message, messageId)` (`public/script.js:3155`) when the bridge snapshot is built; there is no per-render lookup step.
+
+Failure modes: a failed read throws before any splice (`public/scripts/chat-ops-service.js:504`), and the caller only re-runs `getChatResult()` and `console.log`s the error (`public/scripts/chat-ops-service.js:536`), so the failure has no user-facing surface. Do not read this as a guarantee that the previous chat survives a failed load: a partial or interrupted read can still leave `state.chat` overwritten, and that overwrite risk is a known existing hazard rather than a documented, proven-safe behavior. Empty or missing chat data produces first-message or empty-chat behavior instead of a distinct error surface.
+
+### Bridge Snapshot And Row Rendering
+
+1. `printMessages()` (`public/scripts/chat-ops-service.js:191`) clears transient row UI state. On the React path it resets `state.reactMainChatProjectionCleared` to `false`, mounts the panel, and only scrolls to the bottom when no reading-position restore is pending; the legacy path re-appends `#show_more_messages` when the chat is longer than `CHAT_TRUNCATION` and calls `redisplayChat()`.
+2. `mountReactMainChatMessageListPanel()` (`public/script.js:3355`) mounts `kind: 'mainChatMessageList'` through `mountWorkspacePanelHost()` with `ensureContainer`, `getState`, and `commands`, then schedules the scroll restore.
+3. `getMainChatMessageListReactBridgeState()` (`public/script.js:3107`) assembles the snapshot: `buildMainChatSnapshotFromLegacyChat()` (`public/scripts/main-chat-store-projection.js:269`) over `buildMainChatMessageRecord()` (`public/scripts/main-chat-store-projection.js:55`), plus composer, generation control, streaming transport, slash UI, row UI state, visible window, turn summaries (`getChatMemoryDisplayItems()`), and greetings.
+4. `app/workspace-panels.tsx` renders the snapshot with `useSyncExternalStore`. Each message becomes a direct `#chat` child through `MainChatMessageRow` (`app/components/main-chat/MainChatMessageRow.tsx`), which replays `messageHtml`, reasoning HTML, media, file, and bias fragments into the protected shells and renders recovery status and failure notices as `<output>` elements outside `.mes_text`.
+5. Row ownership classification lives in `public/scripts/chat-message-render-descriptor.js`: `classifyChatMessageRendererContract()` (`:113`) returns `{ rendererOwner: 'react', phase7Candidate: 'react-rich-body-owner' }` for every supported row state, differing only in `fallback` — `not-needed` for finalized rows, `preserve-editing-live-content` and `preserve-streaming-live-content` when live content must survive — and returns `unsupported-with-reason` when `.mes_text` is missing or the row is structurally unsafe. `buildMainChatRowLifecycleContract()` (`:177`) records the React message-list controller as the single lifecycle policy owner.
+
+### Turn Cards
+
+`projectChatTurnCards()` (`public/scripts/chat-turn-card-projection.js:60`) assigns one card id plus a `single`/`start`/`middle`/`end` position to the render-ordered entries. A summary entry always opens a card — collapsed summaries open their own single card, expanded summaries open the card carrying the rows they reintroduce (`public/scripts/chat-turn-card-projection.js:36`). A user row opens a card unless it directly follows an expanded summary (`public/scripts/chat-turn-card-projection.js:45`), which is one of the rows that summary reintroduced rather than a new turn. Each card then includes the following tool/result rows and the final answer, and ignores rows hidden by the reply pipeline so hidden rows consume no corner slot. `app/workspace-panels.tsx:2026` builds those entries in exact render order and passes the assignment to `MainChatMessageRow`, which writes `data-turn-card` / `data-turn-card-position`. The styling lives in `public/style.css:6254` and paints the shared surface without moving or cloning content; a turn-summary header shares the same card surface.
+
+### Long Chat Load Earlier
+
+1. `getMainChatReactVisibleWindow()` (`public/script.js:3045`) starts at the saved `mainChatVisibleStartIndices` entry for the chat, otherwise at `max(total - CHAT_TRUNCATION, 0)`, and returns `{ visibleMessageIds, showMoreVisible }`.
+2. `#show_more_messages` is rendered by React (`app/workspace-panels.tsx:2072`) with `data-main-chat-windowing-owner="react"` and `data-main-chat-load-more-owner="react"`, and dispatches `commands.loadMoreMessages`.
+3. `loadEarlierChatMessages(messagesToLoad = null)` (`public/scripts/chat-ops-service.js:125`) lowers the stored start index by the requested count (default `CHAT_TRUNCATION`), emits `MORE_MESSAGES_LOADED`, and remounts. The legacy branch of the same function still inserts rows before the current first row and compensates `scrollTop` by the scroll-height delta when the load-more control is in view.
+4. `showMoreMessages(messagesToLoad = null)` (`public/script.js:5245`) is a compatibility alias that delegates to `loadEarlierChatMessages()`; the React command port maps `loadMoreMessages` onto the same function (`public/script.js:3268`), so slash-command, welcome-prompt, and UI callers share one path.
+
+Scrolling: `queueMainChatMessageListScrollRestore()` / `getMainChatMessageListScrollRestoreSnapshot()` / `consumeMainChatMessageListScrollRestore()` (`public/script.js:1490`, `:1521`, `:1503`) keep the reading anchor across remounts, and `scrollChatToBottom()` (`public/scripts/message-service.js:929`) owns the bottom pin.
+
+### User Message Append
+
+`sendTextareaMessage()` (`public/script.js:5587`) guards concurrent send/regenerate entry and calls `Generate('normal')` (`public/script.js:6423`). `sendMessageAsUser()` (`public/script.js:6856`) builds the message, pushes it onto `state.chat`, awaits `saveChatConditional()`, emits `MESSAGE_SENT`, calls `addOneMessage()` (`public/scripts/message-service.js:732`) — which on the React path remounts the panel and scrolls — and then emits `USER_MESSAGE_RENDERED`. The insert-in-middle path splices the message into `state.chat` at its target index, saves, emits `MESSAGE_SENT`, and calls `reloadCurrentChat()` before `USER_MESSAGE_RENDERED`, so it re-renders the list instead of appending one row.
+
+### Streaming Token Path
+
+1. `Generate()` wraps the request in a generation envelope and delegates to `executeGenerationRequestInShell()` (`public/scripts/generation-service.js:418`); attempt planning and recovery decisions belong to [main-chat-generation-lifecycle.md](main-chat-generation-lifecycle.md).
+2. When streaming is enabled and the type is not `quiet`, the attempt loop creates `GenerationStreamSession` (`public/scripts/generation-service.js:127`, instantiated at `:1278`) and assigns it to `state.streamingProcessor`.
+3. `onStartStreaming()` (`:208`) persists the placeholder reply via `saveReply()`, resolves the row id, and marks the UI as generating.
+4. `onProgressStreaming()` (`:217`) cleans the partial text and balances one unclosed trailing Markdown marker — the list is `*`, `"`, a triple-backtick fence, and `~~~` (`public/scripts/generation-service.js:224`) — writes it into `state.chat[messageId]`, updates reasoning, and then branches: on the legacy host it writes `messageFormatting()` output into `.mes_text` and updates the timer; on the React host it only calls `scheduleMainChatMessageListPanelRefresh()` (`public/script.js:1612`) and lets React re-render the row.
+5. `finalizeIntermediaryMessage()` (`:285`) mounts the panel, runs the final progress pass, finishes reasoning, attaches images, emits `MESSAGE_RECEIVED` / `CHARACTER_MESSAGE_RENDERED`, and remounts; `onFinishStreaming()` (`:323`) then saves the chat. `onErrorStreaming()` (`:329`) and `onStopStreaming()` (`:348`) keep the partial text, restore controls, and remount without entering the streaming path again.
+6. Streaming transport phase facts are produced by `getMainChatStreamingTransportState()` (`public/scripts/main-chat-streaming-transport-state.js:33`) and published as `data-main-chat-streaming-transport-*` diagnostics; that helper explicitly owns no provider request, token append, or DOM.
+
+Failure modes: stop must leave the composer/stop controls consistent; provider errors must leave a readable row plus a recovery affordance instead of duplicated or vanished partial text.
+
+### Finalized Character Message
+
+Finalization runs through the same row builder as a stored message: `state.chat` is authoritative, the React row re-renders from the new record, and action affordances come from `feature.chat_message_actions`. Changing row structure or classes can break first-party actions and extension-adjacent scripts, so `pnpm run test:compat` is part of the change gate.
+
+## Related Product Semantics And Binding Points
+
+Semantic IDs:
 
 - `page.chat_workspace`
 - `feature.chat_message_rendering`
 - `feature.chat_message_actions`
 
-Compatibility-sensitive DOM and event surfaces are recorded in `.docs/tech/third-party-extension-compatibility.md`.
+Stable binding points:
 
-## Core Call Chain
+- `#chat` with `data-react-main-chat-owner="react"`
+- `#chat > .mes[mesid]`, `.mes_text`, `.mes_reasoning_details`, `.mes_media_wrapper`, `.mes_file_wrapper`
+- `#chat > .mes[data-turn-card][data-turn-card-position]`, `#chat > .turn-summary-row[data-turn-card]`
+- `#show_more_messages` with `data-main-chat-windowing-owner="react"`
+- `printMessages`, `showMoreMessages`, `addOneMessage`, `updateMessageElement`, `redisplayChat`
+- `GenerationStreamSession`, `scheduleMainChatMessageListPanelRefresh`
 
-### Stored Chat Open
+## Operations, Calculation, And Failure Boundaries
 
-User journey: user opens an existing character chat and waits for readable messages.
+Windowing calculation (reproducible): inputs are the chat length, the saved start index for the chat id, and `CHAT_TRUNCATION` (100). Output is the contiguous `visibleMessageIds` slice plus `showMoreVisible`. Load-earlier reduces the start index by the requested count, clamped at 0; a zero start index means the full chat is visible and the load-more control disappears.
 
-Current path:
+Degradation: a React panel mount failure does not surface to the user. `mountWorkspacePanelHost()` (`public/scripts/workspace-panel-host-controller.js:26`) returns a fallback result carrying one of `bundle-load-failed`, `mount-failed`, `missing-container`, or `feature-disabled` (`public/scripts/workspace-panel-mount-contract.js:6`), and the default `onError` only logs `console.warn('React ${panelKind} workspace panel failed to ${action}. Falling back to legacy panel.', error)` (`public/scripts/workspace-panels-react-bridge.js:75`). `mountReactMainChatMessageListPanel()` (`public/script.js:3355`) acts only on `result?.mounted`, so an unmounted panel leaves the host container as-is. Recovery is a previous-version deploy, not an in-process dual-owner flag.
 
-1. `selectCharacterById(id)` updates active character state and calls `getChat()`.
-2. `getChat()` calls `unshallowCharacter(this_chid)` and `POST /api/chats/get`.
-3. `getChat()` updates `chat_metadata`, replaces `chat`, ensures media arrays, then calls `getChatResult()`.
-4. `getChatResult()` may add the first message for empty chats, calls `loadItemizedPrompts(getCurrentChatId())`, calls `printMessages()`, then `select_selected_character(this_chid)`.
-5. `getChatResult()` emits `CHAT_CHANGED`; fresh chats emit `CHAT_CREATED`; single first-message chats emit `MESSAGE_RECEIVED` and `CHARACTER_MESSAGE_RENDERED`.
-6. `getChat()` emits `CHAT_LOADED` after successful load.
+Focused proof:
 
-Primary user-visible wait: `POST /api/chats/get` plus `printMessages()` and DOM insertion.
+```bash
+pnpm --dir tests run test:unit chat-turn-card-projection.test.js chat-message-render-descriptor.test.js react-workspace-panels-helpers.test.js --runInBand
+pnpm --dir tests run test:e2e chat-message-layout.e2e.js chat-message-rendering.e2e.js --workers=1
+pnpm run test:compat
+```
 
-Current proof:
-
-- `tests/chat-message-rendering.e2e.js` opens seeded chat through `openCharacterChat()`, waits for `.mes_text`, records `first-message-visible-ms`, and validates stored text fidelity.
-
-Failure modes:
-
-- Fetch failure falls into `getChat()` catch, still calls `getChatResult()`, and logs the error.
-- Empty or missing chat data can produce first-message or empty-chat behavior rather than a distinct visible error.
-
-### Message List Rendering
-
-User journey: loaded chat history appears as stable message rows.
-
-Current path:
-
-1. `printMessages()` computes a `startIndex` from `power_user.chat_truncation`.
-2. `printMessages()` calls `redisplayChat({ startIndex, fade: false })`.
-3. `redisplayChat()` clears or updates the message list and calls `addOneMessage()` for messages in range.
-4. `addOneMessage()` creates or inserts a message element and delegates row population to `updateMessageElement()`.
-5. `updateMessageElement()` owns row identity, role flags, name/avatar presentation, swipes, reasoning, media/file wrappers, and `.mes_text`.
-6. `getMessageTextHTML()` and `messageFormatting()` produce rendered message body HTML.
-
-Primary compatibility boundary:
-
-- `#chat > .mes`
-- `.mes_text`
-- `.mes[mesid]`
-- `.mes_reasoning_details`
-- `.mes_reasoning`
-- `.mes_media_wrapper`
-- `.mes_file_wrapper`
-- `.swipe_left`
-- `.swipe_right`
-
-Current proof:
-
-- `tests/chat-workspace-structure.test.js`
-- `tests/chat-message-rendering.e2e.js`
-- `tests/chat-message-layout.e2e.js`
-- `tests/chat-message-render-descriptor.test.js`
-
-Failure modes:
-
-- Moving formatter logic can affect markdown, regex, comments, system messages, reasoning, and extension-visible HTML.
-- Row identity changes can break first-party actions and extension-adjacent scripts.
-
-### Current Rich-Body Owner Contract
-
-`public/scripts/chat-message-render-descriptor.js` now records the current rich-body, row-lifecycle, and long-chat windowing contracts, and `public/script.js` plus `app/workspace-panels.tsx` apply the approved cutover for safe finalized rows without introducing a second renderer stack. `buildChatMessageRenderDescriptor()` and `buildChatMessageRowPopulation()` still describe stable row metadata. `classifyChatMessageRendererContract()` now classifies the current owner state as:
-
-- safe finalized rows with `.mes_text` are `react-rich-body-owner`
-- extension-mutated rows, editing rows, and streaming rows are `legacy-fallback-required`
-- missing `.mes_text` or unsafe rows are `unsupported-with-reason`
-
-For the approved safe finalized row family, the legacy formatter path still produces the validated rich-body snapshot, but React is now the final visible owner that replays `messageHtml`, reasoning, media, file, and bias HTML into the protected legacy shells inside the existing `.mes_block`. This keeps one visible owner per approved row without forking Markdown, code-highlight, LaTeX, media, or file rendering logic.
-
-Rows with extension-owned mutation markers such as `.mes_streaming`, `.TH-streaming`, or `.TH-render` fail closed back to the legacy owner so `JS-Slash-Runner` and similar third-party mutations are not silently swallowed by the React rich-body path.
-
-`buildMainChatRowLifecycleContract()` now records the remaining non-finalized or excluded row families under one explicit current-code policy instead of an implicit mixed owner:
-
-- the React message-list controller is the single lifecycle policy owner
-- editing rows, active streaming rows, structurally unsafe rows, and extension-mutated rows remain on explicit legacy facades
-- hidden controller markers now publish the row-lifecycle owner plus the editing/streaming/unsafe/extension fallback owners for diagnostics and compatibility proof
-
-### Long Chat Show More
-
-User journey: user opens a long chat, sees the recent bounded window, and loads earlier messages.
-
-Current path:
-
-1. `printMessages()` starts at `chat.length - power_user.chat_truncation` when truncation is active.
-2. `showMoreMessages(messagesToLoad = null)` calculates additional earlier messages to load.
-3. `showMoreMessages()` inserts the earlier message slice before the current first rendered row by calling `updateMessageElement()` for each loaded message.
-4. If the load-more button is in view, `showMoreMessages()` adjusts `#chat` scrollTop using the scroll-height delta so the current reading anchor remains coherent.
-
-Current proof:
-
-- `tests/chat-message-rendering.e2e.js` creates a long-chat fixture, sets `chat_truncation`, opens the long chat, verifies `#show_more_messages`, verifies bounded row count, verifies the first rendered `mesid`, clicks load-more, verifies older seeded rows appear, verifies the previous anchor row remains within an 8px position tolerance, and verifies the latest row remains reachable.
-- `buildMainChatWindowingContract()` now records the React message-list controller as the single windowing policy owner, freezes reading-position restore onto the React path, and keeps the actual `showMoreMessages()` execution path as the explicit `legacy-show-more-messages-facade` with `loadMoreOwner: legacy` until a later algorithm cutover is proven.
-
-UX gap:
-
-- Search, jump-to-message, range indicators, and context summaries remain future UX candidates. The current proof covers bounded rendering, load-more position stability, and latest-row reachability without a separate return-to-newest control.
-
-### Retirement Gate
-
-The current code has these explicit owner boundaries. They are the baseline for final-wave retirement, not its completed state:
-
-- safe finalized rows are the only approved React rich-body owner class
-- editing rows, streaming rows, extension-mutated rows, unsafe rows, and rows missing `.mes_text` still keep explicit legacy ownership
-- `.mes_text`, `.mes[mesid]`, `.mes_reasoning_details`, `.mes_media_wrapper`, `.mes_file_wrapper`, swipe controls, and visible action shell reachability keep compatibility proof
-- long-chat windows preserve direct-child `.mes[mesid]` order, `#show_more_messages` reachability, reading-position restore, and mobile load-more access
-- the hidden controller records `data-main-chat-windowing-*` and `data-main-chat-row-lifecycle-*` markers so the final fallback split is auditable instead of implicit
-- React owns every listed row family and the long-chat algorithm while these proof gates remain green; previous-version deploy is the release rollback mechanism
-
-### User Message Append
-
-User journey: user sends a message and sees it appear in the conversation.
-
-Current path:
-
-1. Send handlers update `chat` with the user message.
-2. `addOneMessage()` appends or inserts the row.
-3. The path emits `MESSAGE_SENT` and `USER_MESSAGE_RENDERED`.
-
-Current proof:
-
-- Main-chat send-form structure is covered by `tests/chat-workspace-structure.test.js`.
-- User-message timing is covered by the `main_chat_send_local_echo` scenario in `scripts/interaction-performance-runner.mjs`.
-
-Failure modes:
-
-- The user may not know whether send was accepted if local echo timing regresses.
-- Duplicate listener binding can duplicate actions or message append side effects.
-
-### Finalized Character Message
-
-User journey: AI response finishes and becomes an ordinary rendered message row.
-
-Current path:
-
-1. Generation code builds response text and message data.
-2. Non-streaming finalized paths call `addOneMessage()` / `updateMessageElement()`.
-3. Finalized character messages emit `MESSAGE_RECEIVED` and `CHARACTER_MESSAGE_RENDERED`.
-
-Current proof:
-
-- Stored character messages are covered by `tests/chat-message-rendering.e2e.js`.
-- Live provider finalization is not part of the current baseline.
-
-Failure modes:
-
-- Final row can lose action affordance if row structure or classes change.
-- Formatting changes can alter text fidelity or extension-visible content.
-
-### Streaming Token Path
-
-User journey: AI response streams token by token, user may stop generation, final row should remain stable.
-
-Current path:
-
-1. `Generate()` asks `public/scripts/chat-generation-lifecycle.js` whether the visible request should use the bounded automatic recovery plan.
-2. `Generate()` captures an existing-row recovery baseline for `continue` and `swipe` before attempts mutate the current assistant row.
-3. For supported visible `submitComposer` / `continueLast` requests, `public/script.js` prepares a React-owned visible transport request and `app/workspace-panels.tsx` runs the active transport mutation for streaming state, token append, and final row completion on that same assistant row.
-4. Unsupported visible kinds and excluded paths still fall back to `StreamingProcessor` in `public/script.js`, which owns streaming state and DOM updates for those attempts.
-5. Streaming receives token chunks and emits `STREAM_TOKEN_RECEIVED`.
-6. Completion paths emit `MESSAGE_RECEIVED` and `CHARACTER_MESSAGE_RENDERED`.
-7. Stop and abort paths restore generation controls according to current send/stop state rules and do not enter automatic recovery.
-8. Recoverable failures clear or restore the active attempt row through the lifecycle decision, then either retry, fall back once, or expose the existing manual retry CTA.
-
-Current proof:
-
-- `tests/chat-message-streaming.e2e.js` records deterministic local browser proof for successful streaming and user stop recovery with a Playwright-only fetch stub.
-- `tests/chat-message-streaming.e2e.js` also proves the current supported React-owned visible transport slice for send/continue and legacy fallback for unsupported direct generation.
-- `tests/chat-generation-lifecycle.test.js` records unit proof for visible-generation attempt planning, fallback readiness, finalization, baseline decisions, and quiet/background exclusions.
-- `scripts/interaction-performance-runner.mjs` records `main_chat_stream_first_token` and `main_chat_stream_stop_to_usable` scenarios for user-perceived timing evidence.
-
-Failure modes:
-
-- Stop may leave controls in the wrong state.
-- Partial output may duplicate or vanish.
-- Provider errors may not have a readable recovery path.
-
-## Deferred High-Risk Boundaries
-
-Do not start extraction with:
-
-- `messageFormatting()`
-- `getMessageTextHTML()`
-- `StreamingProcessor`
-- slash-command parser or injected message semantics
-- regex placement or markdown sanitizer behavior
-- extension mount points or `@sillytavern/*` aliases
-
-These surfaces need dedicated proof before behavior changes.
-
-## Safer Extraction Candidates
-
-Candidate 1: stored message descriptor helper.
-
-- Scope: derive message row descriptor fields from existing message/context data.
-- Reason: can be pure and unit tested.
-- Guard: rendered DOM and `.mes_text` must remain unchanged.
-
-Candidate 2: message action controller boundary.
-
-- Scope: root-scoped delegated event binding for a low-risk action set.
-- Reason: event ownership can be tested without changing markup.
-- Guard: role/name and protected selectors must remain stable.
-
-Candidate 3: long-chat proof expansion.
-
-- Scope: E2E proof for load-more and position stability.
-- Reason: improves regression signal without changing rendering strategy.
-- Guard: no truncation threshold or virtualization change.
-
-Candidate 4: interaction performance evidence.
-
-- Scope: runner/report fields for user-perceived timings.
-- Reason: supports future claims with repeatable evidence.
-- Guard: no hard KPI or production hook unless separately justified.
-
-## Related Files
-
-- `public/script.js`
-- `public/scripts/events.js`
-- `tests/chat-workspace-structure.test.js`
-- `tests/chat-message-layout.e2e.js`
-- `tests/chat-message-rendering.e2e.js`
-- `tests/chat-message-render-descriptor.test.js`
-- `.docs/tech/third-party-extension-compatibility.md`
+Covered by `tests/chat-turn-card-projection.test.js`, `tests/chat-message-layout.e2e.js`, `tests/chat-message-rendering.e2e.js`, `tests/chat-message-streaming.e2e.js`, `tests/chat-message-list-walkthrough.e2e.js`, `tests/chat-workspace-structure.test.js`, and `tests/chat-message-render-descriptor.test.js`.
