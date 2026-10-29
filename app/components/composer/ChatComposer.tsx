@@ -65,8 +65,9 @@ export function ChatComposer() {
                         />
                     </div>
                     <div className="send_textarea_wrap">
-                        <textarea id="send_textarea" name="text" data-i18n="[aria-label]Chat message;[no_connection_text]Not connected to API!;[connected_text]Type a message, or /? for help" aria-label="Chat message" aria-describedby="send_textarea_hint" placeholder="Not connected to API!" no_connection_text="Not connected to API!" connected_text="Type a message, or /? for help" autoComplete="off"></textarea>
-                        <small id="send_textarea_hint" className="send_textarea_hint" >{translate('Type /? for commands. Send requires an API connection.')}</small>
+                        <textarea id="send_textarea" name="text" data-i18n="[aria-label]Chat message;[no_connection_text]Not connected to API!;[connected_text]Type a message, or /? for help" aria-label="Chat message" aria-describedby="send_textarea_hint" placeholder="Not connected to API!" no_connection_text="Not connected to API!" connected_text="Type a message, or /? for help" autoComplete="off" enterKeyHint="send"></textarea>
+                        <small id="send_textarea_hint" className="send_textarea_hint" aria-live="polite">{translate('Type /? for commands. Send requires an API connection.')}</small>
+                        <a id="composer_connect_link" className="send_textarea_hint" href="/settings">{translate('Open connection settings →')}</a>
                     </div>
                     <div id="rightSendForm" className="alignContentCenter">
                         <div id="stscript_continue" title="Continue script execution" className="stscript_btn stscript_continue" role="button" aria-label="Continue script execution" tabIndex={0} onKeyDown={activateOnEnterOrSpace} data-i18n="[title]Continue script execution;[aria-label]Continue script execution">

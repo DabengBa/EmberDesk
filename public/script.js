@@ -5582,6 +5582,19 @@ export async function reloadCurrentChatUnsafe() {
 }
 
 /**
+ * Briefly flashes the composer border to signal a rejected send attempt.
+ */
+function flashComposerSendBlocked() {
+    const sendForm = document.getElementById('send_form');
+    if (!sendForm) {
+        return;
+    }
+    sendForm.classList.remove('composer-send-blocked');
+    void sendForm.offsetWidth;
+    sendForm.classList.add('composer-send-blocked');
+}
+
+/**
  * Send the message currently typed into the chat box.
  */
 export async function sendTextareaMessage() {
@@ -5591,6 +5604,13 @@ export async function sendTextareaMessage() {
     if (regenerateRequestInFlight || generationEntryPending) return;
 
     const textareaText = getComposerValue();
+
+    // Slash commands (e.g. /api to reconnect) still run while offline; a plain send cannot.
+    if (online_status === 'no_connection' && !textareaText.trimStart().startsWith('/')) {
+        flashComposerSendBlocked();
+        toastr.warning(t`Not connected to API!`, '', { preventDuplicates: true });
+        return;
+    }
 
     if (textareaText && this_chid === undefined && name2 !== neutralCharacterName) {
         await newAssistantChat({ temporary: false });

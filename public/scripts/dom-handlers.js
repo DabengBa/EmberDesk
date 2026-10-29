@@ -3,7 +3,7 @@ import { debounce_timeout } from './constants.js';
 import { eventSource, event_types } from './events.js';
 import { updateMessageElement } from './message-service.js';
 import { requireDomHandlersShellContext } from './dom-handlers-shell-context.js';
-import { initMainChatComposerService } from './main-chat-composer-service.js';
+import { initMainChatComposerService, renameComposerDraftContext, setComposerDraftContext } from './main-chat-composer-service.js';
 
 function shell() {
     return requireDomHandlersShellContext();
@@ -1553,9 +1553,16 @@ export async function bindLegacyShellHandlers() {
         await shell().openCharacterLibrary();
     });
 
-    eventSource.on(event_types.CHAT_CHANGED, () => {
+    // Draft restore runs first in this handler: later CHAT_CHANGED subscribers
+    // must not overwrite it with text belonging to the outgoing chat.
+    eventSource.on(event_types.CHAT_CHANGED, (chatId) => {
+        setComposerDraftContext(chatId);
         void mountReactWorkspaceShellChromeHost();
         void mountReactMainChatMessageListPanel();
+    });
+
+    eventSource.on(event_types.CHAT_RENAMED, ({ oldFileName, newFileName }) => {
+        renameComposerDraftContext(oldFileName, newFileName);
     });
 
     eventSource.on(event_types.CHAT_LOADED, () => {

@@ -16,6 +16,15 @@ let composerValue = '';
 let listenerBound = false;
 const listeners = new Set();
 
+/**
+ * Per-chat draft store. Each chat context keeps its own pending text so a
+ * half-written message stays with the chat it belongs to instead of leaking
+ * into the next one. `null`/`undefined` contexts share the '' bucket.
+ */
+const composerDrafts = new Map();
+let draftContextKey = null;
+let draftContextReady = false;
+
 function getComposerElement() {
     const element = document.getElementById(COMPOSER_ELEMENT_ID);
     return element instanceof HTMLTextAreaElement ? element : null;
@@ -108,4 +117,49 @@ export function subscribeComposerValue(listener) {
     initMainChatComposerService();
     listeners.add(listener);
     return () => listeners.delete(listener);
+}
+
+/**
+ * Switches the active chat draft context. The current text is stashed under
+ * the outgoing context key and the incoming context's saved draft is restored
+ * (empty when none exists). The first call only adopts the key so text typed
+ * before any chat context is known (e.g. pre-login or neutral surface) is not
+ * destroyed.
+ * @param {string|number|null|undefined} contextKey Stable chat identifier (e.g. getCurrentChatId()).
+ */
+export function setComposerDraftContext(contextKey) {
+    initMainChatComposerService();
+    const nextKey = contextKey === null || contextKey === undefined ? '' : String(contextKey);
+    if (!draftContextReady) {
+        draftContextReady = true;
+        draftContextKey = nextKey;
+        return;
+    }
+    if (nextKey === draftContextKey) {
+        return;
+    }
+    composerDrafts.set(draftContextKey, composerValue);
+    draftContextKey = nextKey;
+    setComposerValue(composerDrafts.get(nextKey) ?? '');
+}
+
+/**
+ * Migrates a stashed draft when its chat is renamed. CHAT_RENAMED reports file
+ * names with the .jsonl extension while draft keys are extension-less chat ids.
+ * @param {string} oldFileName Previous chat file name.
+ * @param {string} newFileName New chat file name.
+ */
+export function renameComposerDraftContext(oldFileName, newFileName) {
+    const from = String(oldFileName ?? '').replace(/\.jsonl$/i, '');
+    const to = String(newFileName ?? '').replace(/\.jsonl$/i, '');
+    if (from === to) {
+        return;
+    }
+    if (composerDrafts.has(from)) {
+        composerDrafts.set(to, composerDrafts.get(from));
+        composerDrafts.delete(from);
+    }
+    if (draftContextReady && draftContextKey === from) {
+        draftContextKey = to;
+    }
 }

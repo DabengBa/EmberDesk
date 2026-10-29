@@ -36,8 +36,9 @@ export function OptionsMenu({ showBackToMain = false, canRegenerate = false }: {
             <ContractButton id="option_close_chat" variant="ghost" xstyle={optionStyles.item} label="Close chat" icon={<i className="fa-lg fa-solid fa-times" aria-hidden="true" />} />
             <ContractButton id="option_select_chat" variant="ghost" xstyle={optionStyles.item} label="Manage chat files" icon={<i className="fa-lg fa-solid fa-address-book" aria-hidden="true" />} tabIndex={0} />
             <ContractButton id="option_regenerate" variant="ghost" xstyle={optionStyles.item} label="Regenerate reply" icon={<i className="fa-lg fa-solid fa-rotate-right" aria-hidden="true" />} tabIndex={0} disabled={!canRegenerate} />
-            <ContractButton id="option_chat_memory" variant="ghost" xstyle={optionStyles.item} label="对话记忆" icon={<i className="fa-lg fa-solid fa-brain" aria-hidden="true" />} tabIndex={0} />
+            <ContractButton id="option_chat_memory" variant="ghost" xstyle={optionStyles.item} label="Chat memory" icon={<i className="fa-lg fa-solid fa-brain" aria-hidden="true" />} tabIndex={0} />
             <ContractButton id="option_wire_log" variant="ghost" xstyle={optionStyles.item} label="Wire Log" icon={<i className="fa-lg fa-solid fa-diagram-project" aria-hidden="true" />} tabIndex={0} />
+            <ContractButton id="attachFile" variant="ghost" xstyle={optionStyles.item} label="Attach a File" icon={<i className="fa-lg fa-solid fa-paperclip" aria-hidden="true" />} tabIndex={0} />
             <hr />
             <ContractButton id="option_delete_mes" variant="ghost" xstyle={optionStyles.item} label="Delete messages" icon={<i className="fa-lg fa-solid fa-trash-can" aria-hidden="true" />} tabIndex={0} className="options-menu-danger" />
         </div>

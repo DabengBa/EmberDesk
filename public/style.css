@@ -881,14 +881,26 @@ body .panelControlBar {
     margin: 0 auto 0 auto;
     border: 1px solid var(--chat-workspace-border);
     border-top-color: var(--chat-message-border-subtle);
-    border-radius: 0 0 8px 8px;
+    border-radius: 0 0 10px 10px;
     background-color: color-mix(in srgb, var(--SmartThemeBlurTintColor) 84%, var(--black70a) 16%);
     backdrop-filter: blur(var(--SmartThemeBlurStrength));
 }
 
 #send_form.no-connection {
     border-color: color-mix(in srgb, var(--warning) 55%, var(--chat-workspace-border));
-    background-color: color-mix(in srgb, var(--SmartThemeBlurTintColor) 82%, var(--warning) 7%);
+}
+
+@keyframes composer-send-blocked-flash {
+    0%, 100% {
+        border-color: color-mix(in srgb, var(--warning) 55%, var(--chat-workspace-border));
+    }
+    35% {
+        border-color: var(--clay-warning);
+    }
+}
+
+#send_form.composer-send-blocked {
+    animation: composer-send-blocked-flash 0.6s ease-out;
 }
 
 #nonQRFormItems {
@@ -935,13 +947,13 @@ body .panelControlBar {
     transition: opacity var(--animation-duration-2x);
 }
 
-#rightSendForm>div:hover,
-#leftSendForm>div:hover {
+#rightSendForm>:is(div,button):hover,
+#leftSendForm>:is(div,button):hover {
     opacity: 1;
     filter: brightness(1.2);
 }
 
-#send_but {
+#rightSendForm>#send_but {
     order: 2;
     opacity: 1;
     color: var(--SmartThemeQuoteColor);
@@ -954,7 +966,8 @@ body .panelControlBar {
     place-self: center;
     cursor: pointer;
     transition: var(--animation-duration-2x);
-    opacity: 0.7;
+    opacity: 1;
+    color: var(--clay-warning);
 }
 
 
@@ -1467,8 +1480,9 @@ button {
     word-wrap: break-word;
     resize: vertical;
     display: block;
-    background-color: rgba(255, 0, 0, 0);
-    border: 0;
+    background-color: var(--form-control-bg);
+    border: 1px solid var(--form-control-border-color);
+    border-radius: 5px;
     box-shadow: none;
     padding: 6px;
     font-family: var(--mainFontFamily);
@@ -1512,10 +1526,32 @@ button {
     padding: 0 6px 4px;
     white-space: normal;
     overflow-wrap: anywhere;
+    display: none;
+}
+
+#send_form.no-connection .send_textarea_hint {
+    display: block;
+}
+
+#composer_connect_link {
+    color: var(--frost-blue);
+    opacity: 1;
+    text-decoration: none;
+}
+
+#composer_connect_link:is(:hover, :focus-visible) {
+    text-decoration: underline;
 }
 
 #send_textarea:placeholder-shown {
     overflow: hidden;
+}
+
+#send_textarea:focus {
+    background-color: var(--form-control-bg-focus);
+    border-right-color: var(--form-control-border-color-focus);
+    border-bottom-color: var(--form-control-border-color-focus);
+    border-left-color: var(--form-control-border-color-focus);
 }
 
 #send_textarea:focus-visible {
@@ -2512,8 +2548,6 @@ textarea::placeholder {
 
 #send_textarea::placeholder {
     color: var(--SmartThemeEmColor) !important;
-    text-align: center;
-    white-space: nowrap;
 }
 
 #creator_notes_spoiler {

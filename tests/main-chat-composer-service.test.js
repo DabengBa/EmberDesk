@@ -108,4 +108,55 @@ describe('main chat composer service', () => {
         other.dispatchEvent(new Event('input', { bubbles: true }));
         expect(service.getComposerValue()).toBe('');
     });
+
+    test('draft context stores and restores per-chat text', async () => {
+        const service = await importFreshService();
+        service.setComposerDraftContext('chat-a');
+        service.setComposerValue('draft for a');
+
+        service.setComposerDraftContext('chat-b');
+        expect(service.getComposerValue()).toBe('');
+        expect(composerElement.value).toBe('');
+
+        service.setComposerValue('draft for b');
+        service.setComposerDraftContext('chat-a');
+        expect(service.getComposerValue()).toBe('draft for a');
+        expect(composerElement.value).toBe('draft for a');
+
+        service.setComposerDraftContext('chat-b');
+        expect(service.getComposerValue()).toBe('draft for b');
+    });
+
+    test('first draft context call adopts the key without wiping typed text', async () => {
+        const service = await importFreshService();
+        service.setComposerValue('typed before chat');
+        service.setComposerDraftContext('chat-a');
+        expect(service.getComposerValue()).toBe('typed before chat');
+    });
+
+    test('re-entering the same draft context is a no-op', async () => {
+        const service = await importFreshService();
+        service.setComposerDraftContext('chat-a');
+        service.setComposerValue('keep me');
+        service.setComposerDraftContext('chat-a');
+        expect(service.getComposerValue()).toBe('keep me');
+    });
+
+    test('renameComposerDraftContext moves the stash and live key to the new name', async () => {
+        const service = await importFreshService();
+        service.setComposerDraftContext('chat-a');
+        service.setComposerValue('draft for a');
+        service.setComposerDraftContext('chat-b');
+        service.setComposerValue('draft for b');
+
+        service.renameComposerDraftContext('chat-a.jsonl', 'chat-a-renamed.jsonl');
+        service.renameComposerDraftContext('chat-b.jsonl', 'chat-b-renamed.jsonl');
+        expect(service.getComposerValue()).toBe('draft for b');
+
+        service.setComposerDraftContext('chat-a-renamed');
+        expect(service.getComposerValue()).toBe('draft for a');
+
+        service.setComposerDraftContext('chat-b-renamed');
+        expect(service.getComposerValue()).toBe('draft for b');
+    });
 });

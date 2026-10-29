@@ -15,7 +15,7 @@ describe('locale remediation wiring', () => {
         const zh = JSON.parse(readRepoFile('public/locales/zh-cn.json'));
         const labels = [...source.matchAll(/label=(?:"([^"]+)"|\{translate\('([^']+)'\)\})/g)]
             .map(match => match[1] ?? match[2]);
-        expect(labels).toHaveLength(8);
+        expect(labels).toHaveLength(10);
         for (const label of labels) {
             expect(zh[label]).toMatch(/[\u4e00-\u9fff]/);
         }

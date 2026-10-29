@@ -43,7 +43,7 @@
 .mes_file_container .mes_file_size,
 .file_attached .file_size {
     font-size: 0.9em;
-    color: var(--SmartThemeQuoteColor);
+    color: var(--SmartThemeEmColor);
 }
 
 .file_attached .file_name,
