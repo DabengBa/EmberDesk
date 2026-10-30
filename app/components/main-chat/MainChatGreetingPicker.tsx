@@ -126,6 +126,11 @@ export function MainChatGreetingPicker({
         void applyGreeting(getAdjacentGreetingIndex(greetings.options, greetings.selectedIndex, direction));
     };
 
+    const markUserInteraction = () => {
+        const picker = document.querySelector<HTMLElement>('[data-testid="main-chat-greeting-picker"]');
+        if (picker) picker.dataset.userInteracted = 'true';
+    };
+
     // A pending save can temporarily disable selection in a refreshed snapshot.
     // Keep an open native dialog mounted so its modal/focus lifecycle survives.
     if (!open && (!greetings.canSelect || greetings.options.length < 2)) return null;
@@ -138,6 +143,7 @@ export function MainChatGreetingPicker({
                     className={`menu_button ${stylex.props(styles.arrow).className ?? ''}`}
                     aria-label={translate('Previous greeting')}
                     disabled={busy || !greetings.canSelect}
+                    onPointerDown={markUserInteraction}
                     onClick={() => switchGreeting(-1)}
                 >
                     <i className="fa-solid fa-chevron-left" aria-hidden="true" />
@@ -152,10 +158,12 @@ export function MainChatGreetingPicker({
                     aria-label={translate('Select greeting')}
                     aria-keyshortcuts="ArrowLeft ArrowRight"
                     disabled={!greetings.canSelect}
+                    onPointerDown={markUserInteraction}
                     onClick={openPicker}
                     onKeyDown={event => {
                         if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
                         event.preventDefault();
+                        markUserInteraction();
                         switchGreeting(event.key === 'ArrowLeft' ? -1 : 1);
                     }}
                 >
@@ -169,6 +177,7 @@ export function MainChatGreetingPicker({
                     className={`menu_button ${stylex.props(styles.arrow).className ?? ''}`}
                     aria-label={translate('Next greeting')}
                     disabled={busy || !greetings.canSelect}
+                    onPointerDown={markUserInteraction}
                     onClick={() => switchGreeting(1)}
                 >
                     <i className="fa-solid fa-chevron-right" aria-hidden="true" />
