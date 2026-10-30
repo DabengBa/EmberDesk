@@ -3,6 +3,25 @@ import * as stylex from '@stylexjs/stylex';
 const narrow = '@media (max-width: 640px)';
 
 export const mainChatGreetingPickerStyles = stylex.create({
+    controls: {
+        display: 'flex',
+        alignItems: 'stretch',
+        gap: '5px',
+    },
+    arrow: {
+        width: { default: '32px', [narrow]: '44px' },
+        height: { default: '32px', [narrow]: '44px' },
+        minWidth: { default: '32px', [narrow]: '44px' },
+        minHeight: { default: '32px', [narrow]: '44px' },
+        margin: 0,
+        padding: 0,
+        outline: {
+            ':focus-visible': '2px solid var(--interactable-outline-color, var(--SmartThemeQuoteColor))',
+        },
+        outlineOffset: {
+            ':focus-visible': '1px',
+        },
+    },
     trigger: {
         width: 'auto',
         minWidth: { default: 0, [narrow]: '44px' },
