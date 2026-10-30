@@ -40,7 +40,6 @@ const delay = (...args) => shell().delay(...args);
 const deleteCharacter = (...args) => shell().deleteCharacter(...args);
 const deleteMessage = (...args) => shell().deleteMessage(...args);
 const displayPastChats = (...args) => shell().displayPastChats(...args);
-const doCharListDisplaySwitch = (...args) => shell().doCharListDisplaySwitch(...args);
 const doDrawerOpenClick = (...args) => shell().doDrawerOpenClick(...args);
 const doNewChat = (...args) => shell().doNewChat(...args);
 const download = (...args) => shell().download(...args);
@@ -114,7 +113,6 @@ const t = (...args) => shell().t(...args);
 const toggleCharacterExportPopup = (...args) => shell().toggleCharacterExportPopup(...args);
 const getVisibleCharacterExportTrigger = (...args) => shell().getVisibleCharacterExportTrigger(...args);
 const toggleDrawer = (...args) => shell().toggleDrawer(...args);
-const updateCharListGridToggleLabel = (...args) => shell().updateCharListGridToggleLabel(...args);
 const updateCharacterRow = (...args) => shell().updateCharacterRow(...args);
 const updateFavButtonState = (...args) => shell().updateFavButtonState(...args);
 const updateViewMessageIds = (...args) => shell().updateViewMessageIds(...args);
@@ -511,7 +509,7 @@ export async function bindLegacyShellHandlers() {
         $(id).on('input', function () {
             if (state.menu_type == 'create') {
                 elementsToUpdate[id]();
-            } else {
+            } else if (!shell().isAuthoringMirrorWrite?.()) {
                 saveCharacterDebounced();
             }
         });
@@ -1529,11 +1527,6 @@ export async function bindLegacyShellHandlers() {
             $(importFile).trigger('change');
         }
     });
-
-    $('#charListGridToggle').on('click', async () => {
-        doCharListDisplaySwitch();
-    });
-    updateCharListGridToggleLabel();
 
     $('#hideCharPanelAvatarButton').on('click', () => {
         $('#avatar-and-name-block').slideToggle();

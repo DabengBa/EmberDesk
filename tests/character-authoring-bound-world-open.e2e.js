@@ -41,17 +41,16 @@ test('character authoring opens the bound world book directly and disables the a
     await expect(authoring).toBeVisible();
 
     const worldField = authoring.locator('[data-react-authoring-field="characterWorld"]');
-    await expect(worldField.locator('input')).toHaveValue(book);
+    const worldSelect = worldField.locator('select');
+    await expect(worldSelect).toHaveValue(book);
     const openBound = worldField.locator('[data-react-authoring-action="openBoundWorldInfo"]');
     await expect(openBound).toBeEnabled();
 
-    // Removing or dangling the binding disables the action instead of falling
-    // back to the general World Info panel.
-    await worldField.locator('input').fill('');
+    // Clearing the binding disables the action instead of falling back to the
+    // general World Info panel.
+    await worldSelect.selectOption('');
     await expect(openBound).toBeDisabled();
-    await worldField.locator('input').fill('No Such Book');
-    await expect(openBound).toBeDisabled();
-    await worldField.locator('input').fill(book);
+    await worldSelect.selectOption(book);
     await expect(openBound).toBeEnabled();
 
     await openBound.click();

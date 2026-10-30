@@ -103,6 +103,8 @@ export interface AuthoringCommands {
     exportAuthoring?(payload?: Record<string, unknown>): CommandResult;
     openWorldInfo?(payload?: Record<string, unknown>): CommandResult;
     openBoundWorldInfo?(payload?: Record<string, unknown>): CommandResult;
+    createBoundWorldInfo?(payload?: Record<string, unknown>): CommandResult;
+    setAuxWorldBooks?(payload?: Record<string, unknown>): CommandResult;
     openAlternateGreetings?(payload?: Record<string, unknown>): CommandResult;
     runManagementAction?(payload: Record<string, unknown>): CommandResult;
     previewTextReplace?(payload: Record<string, unknown>): CommandResult;

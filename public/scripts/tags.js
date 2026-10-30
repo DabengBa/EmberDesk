@@ -83,7 +83,6 @@ function getFilterHelper(_listSelector) {
 
 const ACTIONABLE_FILTER_STORAGE_KEYS = Object.freeze({
     FAV: 'TagFilterState_FAV',
-    FOLDER: 'TagFilterState_FOLDER',
 });
 
 /**
@@ -131,17 +130,6 @@ function getTagFilterVisibility(type) {
     return power_user[settingKey] ?? false;
 }
 
-/**
- * Sets the tag filter visibility state for a given context.
- * @param {number} type - The tag_filter_type
- * @param {boolean} visible - Whether tag filters should be shown
- */
-function setTagFilterVisibility(type, visible) {
-    const settingKey = getTagFilterVisibilitySetting(type);
-    power_user[settingKey] = visible;
-    saveSettingsDebounced();
-}
-
 /** @enum {number} */
 export const tag_import_setting = {
     ASK: 1,
@@ -160,23 +148,20 @@ export const tag_sort_mode = {
 /**
  * A collection of global actionable tags for the filter panel.
  *
- * Tags with `filter_state` property (FAV, FOLDER) maintain persistent state:
+ * Tags with `filter_state` property (FAV) maintain persistent state:
  * - The character list saves state in account storage.
  * - The main character list also maintains tag.filter_state for backward compatibility.
  *
- * Tags without `filter_state` (VIEW, HINT, UNFILTER) are action buttons only.
+ * Tags without `filter_state` (VIEW) are action buttons only.
  */
 const ACTIONABLE_TAGS = {
     FAV: { id: '1', sort_order: 1, name: 'Show only favorites', color: 'color-mix(in srgb, var(--golden) 50%, transparent)', filter_state: undefined, action: filterByFav, icon: 'fa-solid fa-star', class: 'filterByFavorites' },
-    FOLDER: { id: '4', sort_order: 3, name: 'Show only folders', color: 'color-mix(in srgb, var(--SmartThemeBodyColor) 40%, transparent)', filter_state: undefined, action: filterByFolder, icon: 'fa-solid fa-folder-plus', class: 'filterByFolder' },
     VIEW: { id: '2', sort_order: 4, name: 'Manage tags', color: 'color-mix(in srgb, var(--SmartThemeEmColor) 45%, transparent)', action: onViewTagsListClick, icon: 'fa-solid fa-gear', class: 'manageTags' },
-    HINT: { id: '3', sort_order: 5, name: 'Show Tag List', color: 'color-mix(in srgb, var(--SmartThemeEmColor) 45%, transparent)', action: onTagListHintClick, icon: 'fa-solid fa-tags', class: 'showTagList' },
-    UNFILTER: { id: '5', sort_order: 6, name: 'Clear all filters', action: onClearAllFiltersClick, icon: 'fa-solid fa-filter-circle-xmark', class: 'clearAllFilters' },
 };
 
 /**
  * Map of tag IDs to their corresponding filter types.
- * Used for actionable tags (Favorites and Folders).
+ * Used for the actionable Favorites tag.
  * Built lazily: tags.js participates in an import cycle with filters.js, so
  * FILTER_TYPES cannot be read at module evaluation time.
  * @type {Map<string, string>}
@@ -190,7 +175,6 @@ let tagIdToFilterType = null;
 function getTagIdToFilterType() {
     tagIdToFilterType ??= new Map([
         [ACTIONABLE_TAGS.FAV.id, FILTER_TYPES.FAV],
-        [ACTIONABLE_TAGS.FOLDER.id, FILTER_TYPES.FOLDER],
     ]);
     return tagIdToFilterType;
 }
@@ -434,7 +418,7 @@ function getTagBlock(tag, entities, hidden = 0, isUseless = false) {
 }
 
 /**
- * Common logic for applying actionable tag filters (Favorites and Folders).
+ * Common logic for applying actionable tag filters (Favorites).
  * Persists state to storage for all filter contexts.
  * @param {FilterHelper} filterHelper - Instance of FilterHelper class
  * @param {object} tag - The actionable tag object
@@ -496,14 +480,6 @@ function determineTagFilterState(filterHelper, tag, isFilterActionable) {
  */
 function filterByFav(filterHelper) {
     applyActionableTagFilter.call(this, filterHelper, ACTIONABLE_TAGS.FAV, FILTER_TYPES.FAV, ACTIONABLE_FILTER_STORAGE_KEYS.FAV);
-}
-
-/**
- * Applies the "only folder" filter to the character list.
- * @param {FilterHelper} filterHelper Instance of FilterHelper class.
- */
-function filterByFolder(filterHelper) {
-    applyActionableTagFilter.call(this, filterHelper, ACTIONABLE_TAGS.FOLDER, FILTER_TYPES.FOLDER, ACTIONABLE_FILTER_STORAGE_KEYS.FOLDER);
 }
 
 function loadTagsSettings(settings) {
@@ -1253,28 +1229,17 @@ function onTagFilterClick(listElement) {
     updateTagFilterIndicator(listElement);
 }
 
-const CHARACTER_TAG_FILTER_CHIP_LIMIT = 50;
-let characterTagFilterListExpanded = false;
-
 /**
- * Marks the React-rendered character tag filter list as expanded.
- * Session-scoped, mirroring expanded_tags_cache behavior for the "..." overflow chip.
- */
-export function expandCharacterTagFilterList() {
-    characterTagFilterListExpanded = true;
-}
-
-/**
- * Builds the plain-data view state for the React-owned character tag filter chips.
- * Semantics mirror printTagFilters: actionable tags first, then in-list actionables,
- * then used tags limited to CHARACTER_TAG_FILTER_CHIP_LIMIT with bogus/active tags
- * always printed.
+ * Builds the plain-data view state for the React-owned character tag filter
+ * controls. Actionable tags come first, then every used tag with its current
+ * filter state (for the popover picker rows), then the subset with an active
+ * filter state for the always-visible inline pills, plus open-folder drilldown
+ * chips.
  * @param {FilterHelper} filterHelper - Filter helper owning the character list context
- * @returns {{showTagFilters: boolean, actionableTags: object[], inListActionableTags: object[], tags: object[], skippedTagCount: number, drilldownTags: object[], hasActiveTagFilters: boolean}}
+ * @returns {{actionableTags: object[], inListActionableTags: object[], tags: object[], activeTags: object[], drilldownTags: object[], hasActiveTagFilters: boolean}}
  */
 export function createCharacterTagFilterViewState(filterHelper) {
     const actionTags = Object.values(ACTIONABLE_TAGS);
-    actionTags.find(x => x == ACTIONABLE_TAGS.FOLDER).name = 'Show only folders';
 
     const toChipModel = (tag) => {
         const isActionableFilter = 'filter_state' in tag;
@@ -1294,37 +1259,21 @@ export function createCharacterTagFilterViewState(filterHelper) {
 
     const usedTagIds = new Set(Object.values(tag_map).flat());
     const printableTags = tags.filter(tag => usedTagIds.has(tag.id)).sort(compareTagsForSort);
-    const isFilterActive = (tag) => Boolean(tag.filter_state) && !isFilterState(tag.filter_state, FILTER_STATES.UNDEFINED);
-    const isMandatory = (tag) => isBogusFolder(tag) || isFilterActive(tag);
-    const mandatoryCount = printableTags.filter(isMandatory).length;
-    const availableSlots = characterTagFilterListExpanded
-        ? Number.MAX_SAFE_INTEGER
-        : Math.max(CHARACTER_TAG_FILTER_CHIP_LIMIT - mandatoryCount, 0);
-    const tagModels = [];
-    let additionalPrinted = 0;
-    let skippedTagCount = 0;
-    for (const tag of printableTags) {
-        const mandatory = isMandatory(tag);
-        if (mandatory || additionalPrinted < availableSlots) {
-            if (!mandatory) {
-                additionalPrinted++;
-            }
-            tagModels.push({
-                id: String(tag.id),
-                name: String(tag.name ?? ''),
-                title: tag.title ? String(tag.title) : '',
-                icon: '',
-                className: tag.class ? String(tag.class) : '',
-                color: tag.color ?? '',
-                color2: tag.color2 ?? '',
-                actionable: false,
-                removable: false,
-                filterState: determineTagFilterState(filterHelper, tag, false),
-            });
-        } else {
-            skippedTagCount++;
-        }
-    }
+    const tagModels = printableTags.map(tag => ({
+        id: String(tag.id),
+        name: String(tag.name ?? ''),
+        title: tag.title ? String(tag.title) : '',
+        icon: '',
+        className: tag.class ? String(tag.class) : '',
+        color: tag.color ?? '',
+        color2: tag.color2 ?? '',
+        actionable: false,
+        removable: false,
+        filterState: determineTagFilterState(filterHelper, tag, false),
+    }));
+    const activeTags = tagModels
+        .filter(tag => !isFilterState(tag.filterState, FILTER_STATES.UNDEFINED))
+        .map(tag => ({ ...tag, removable: true, blockLegacyRemove: true }));
 
     const drilldownTags = getOpenBogusFolders().map(tag => ({
         id: String(tag.id),
@@ -1342,11 +1291,10 @@ export function createCharacterTagFilterViewState(filterHelper) {
     const tagFilterData = filterHelper.getFilterData(FILTER_TYPES.TAG) ?? { selected: [], excluded: [] };
 
     return {
-        showTagFilters: getTagFilterVisibility(tag_filter_type.character),
         actionableTags: actionTags.map(toChipModel),
         inListActionableTags: Object.values(InListActionable).map(toChipModel),
         tags: tagModels,
-        skippedTagCount,
+        activeTags,
         drilldownTags,
         hasActiveTagFilters: (Array.isArray(tagFilterData.selected) ? tagFilterData.selected.length : 0) > 0
             || (Array.isArray(tagFilterData.excluded) ? tagFilterData.excluded.length : 0) > 0,
@@ -1354,28 +1302,25 @@ export function createCharacterTagFilterViewState(filterHelper) {
 }
 
 /**
- * Cycles a character-list tag filter chip through SELECTED → EXCLUDED → UNDEFINED
- * directly on the filter data, without reading DOM state. Used by React-owned chips.
- * @param {string} tagId - The tag id to cycle
- * @param {FilterHelper} [filterHelper] - Filter helper owning the list context
- * @returns {string} The resulting filter state key
+ * Persists a tag's tri-state filter value for a character-list context: updates
+ * the filter helper data, mirrors the state onto the tag entity (main list only),
+ * and writes the per-account storage override.
+ * @param {string} tagId - The tag id to update
+ * @param {string} nextState - A FILTER_STATES key (SELECTED/EXCLUDED/UNDEFINED)
+ * @param {FilterHelper} filterHelper - Filter helper owning the list context
+ * @returns {string} The applied filter state key
  */
-export function cycleCharacterTagFilterState(tagId, filterHelper = entitiesFilter) {
+function writeCharacterTagFilterState(tagId, nextState, filterHelper) {
     const tagFilterData = filterHelper.getFilterData(FILTER_TYPES.TAG) ?? { selected: [], excluded: [] };
-    const selected = Array.isArray(tagFilterData.selected) ? tagFilterData.selected : [];
-    const excluded = Array.isArray(tagFilterData.excluded) ? tagFilterData.excluded : [];
+    const selected = Array.isArray(tagFilterData.selected) ? tagFilterData.selected.filter(id => String(id) !== String(tagId)) : [];
+    const excluded = Array.isArray(tagFilterData.excluded) ? tagFilterData.excluded.filter(id => String(id) !== String(tagId)) : [];
 
-    let nextState;
-    if (selected.includes(tagId)) {
-        removeFromArray(selected, tagId);
-        excluded.push(tagId);
-        nextState = FILTER_STATES.EXCLUDED.key;
-    } else if (excluded.includes(tagId)) {
-        removeFromArray(excluded, tagId);
-        nextState = FILTER_STATES.UNDEFINED.key;
-    } else {
+    if (isFilterState(nextState, FILTER_STATES.SELECTED)) {
         selected.push(tagId);
-        nextState = FILTER_STATES.SELECTED.key;
+    } else if (isFilterState(nextState, FILTER_STATES.EXCLUDED)) {
+        excluded.push(tagId);
+    } else {
+        nextState = FILTER_STATES.UNDEFINED.key;
     }
 
     filterHelper.setFilterData(FILTER_TYPES.TAG, { selected, excluded });
@@ -1394,6 +1339,50 @@ export function cycleCharacterTagFilterState(tagId, filterHelper = entitiesFilte
 }
 
 /**
+ * Sets a character-list tag filter to an explicit tri-state value, without
+ * reading DOM state. Used by the React-owned tag filter popover and pills.
+ * @param {string} tagId - The tag id to update
+ * @param {string} nextState - A FILTER_STATES key (SELECTED/EXCLUDED/UNDEFINED)
+ * @param {FilterHelper} [filterHelper] - Filter helper owning the list context
+ * @returns {string} The applied filter state key
+ */
+export function setCharacterTagFilterState(tagId, nextState, filterHelper = entitiesFilter) {
+    return writeCharacterTagFilterState(tagId, nextState, filterHelper);
+}
+
+/**
+ * Cycles a character-list tag filter chip through SELECTED → EXCLUDED → UNDEFINED
+ * directly on the filter data, without reading DOM state. Used by React-owned chips.
+ * @param {string} tagId - The tag id to cycle
+ * @param {FilterHelper} [filterHelper] - Filter helper owning the list context
+ * @returns {string} The resulting filter state key
+ */
+export function cycleCharacterTagFilterState(tagId, filterHelper = entitiesFilter) {
+    const tagFilterData = filterHelper.getFilterData(FILTER_TYPES.TAG) ?? { selected: [], excluded: [] };
+    const selected = Array.isArray(tagFilterData.selected) ? tagFilterData.selected : [];
+    const excluded = Array.isArray(tagFilterData.excluded) ? tagFilterData.excluded : [];
+
+    let nextState;
+    if (selected.includes(tagId)) {
+        nextState = FILTER_STATES.EXCLUDED.key;
+    } else if (excluded.includes(tagId)) {
+        nextState = FILTER_STATES.UNDEFINED.key;
+    } else {
+        nextState = FILTER_STATES.SELECTED.key;
+    }
+
+    return writeCharacterTagFilterState(tagId, nextState, filterHelper);
+}
+
+/**
+ * Opens the tag management popup for the character list context.
+ * @returns {Promise<void>}
+ */
+export function openCharacterTagManager() {
+    return onViewTagsListClick();
+}
+
+/**
  * Runs the click action of an actionable character tag filter chip (favorites,
  * folders, tag manager, tag list visibility, clear filters, or extension-provided
  * in-list actionables) with the same arguments the legacy chip binding used.
@@ -1406,12 +1395,6 @@ export function runCharacterTagFilterAction(tagId, filterHelper = entitiesFilter
     const tag = actionableTags.find(item => String(item.id) === String(tagId));
     if (!tag || typeof tag.action !== 'function') {
         return false;
-    }
-
-    if (tag === ACTIONABLE_TAGS.HINT) {
-        // The React chips own their own visibility; persist the toggle without DOM juggling.
-        setTagFilterVisibility(tag_filter_type.character, !getTagFilterVisibility(tag_filter_type.character));
-        return true;
     }
 
     const element = document.querySelector(`#rm_characters_block .rm_tag_filter .tag[id="${CSS.escape(String(tagId))}"]`);
@@ -1431,15 +1414,10 @@ function loadFilterStatesForContext(filterHelper, storagePrefix) {
         return v && validStates.has(v) ? v : null;
     };
 
-    // Load actionable tag states (Favorites and Folders)
+    // Load actionable tag states (Favorites)
     const favState = readState(`${storagePrefix}_${ACTIONABLE_FILTER_STORAGE_KEYS.FAV}`);
     if (favState) {
         filterHelper.setFilterData(FILTER_TYPES.FAV, favState, true);
-    }
-
-    const folderState = readState(`${storagePrefix}_${ACTIONABLE_FILTER_STORAGE_KEYS.FOLDER}`);
-    if (folderState) {
-        filterHelper.setFilterData(FILTER_TYPES.FOLDER, folderState, true);
     }
 
     // Load regular tag filter states
@@ -1537,9 +1515,8 @@ function printTagFilters(type = tag_filter_type.character) {
 
     $(FILTER_SELECTOR).empty();
 
-    // Print all action tags. (Rework 'Folder' button to some kind of onboarding if no folders are enabled yet)
+    // Print all action tags.
     let actionTags = Object.values(ACTIONABLE_TAGS);
-    actionTags.find(x => x == ACTIONABLE_TAGS.FOLDER).name = 'Show only folders';
 
     printTagList($(FILTER_SELECTOR), { empty: false, sort: false, tags: actionTags, tagActionSelector: tag => tag.action, tagOptions: { isGeneralList: true } });
 
@@ -2187,32 +2164,11 @@ const debouncedTagColoring = debounce((tagId, cssProperty, newColor) => {
     $(`.bogus_folder_select[tagid="${tagId}"] .avatar`).css(cssProperty, newColor);
 }, debounce_timeout.quick);
 
-function onTagListHintClick() {
-    $(this).toggleClass('selected');
-
-    const $tagSiblings = $(this).siblings('.tag:not(.actionable)');
-
-    if ($(this).hasClass('selected')) {
-        $tagSiblings.show();
-    } else {
-        $tagSiblings.hide();
-    }
-
-    $(this).siblings('.innerActionable').toggleClass('hidden');
-
-    // Determine which context this button belongs to and save the setting for the character list.
-    const filterType = tag_filter_type.character;
-
-    const isSelected = $(this).hasClass('selected');
-    setTagFilterVisibility(filterType, isSelected);
-    console.debug('show_tag_filters for type', filterType, ':', isSelected);
-}
-
 /**
  * Clears all filters for the current list context.
  * @param {FilterHelper} filterHelper - The filter helper for the current context
  */
-function onClearAllFiltersClick(filterHelper) {
+export function onClearAllFiltersClick(filterHelper) {
     console.debug('clear all filters clicked');
 
     const context = getFilterContext(filterHelper);

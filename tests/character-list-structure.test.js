@@ -70,7 +70,6 @@ describe('character list structure', () => {
             'id="rm_buttons_container"',
             'id="character_sort_order"',
             'id="rm_button_search"',
-            'id="charListGridToggle"',
             'id="bulkEditButton"',
             'id="bulkSelectedCount"',
             'id="bulkSelectAllButton"',
@@ -94,7 +93,6 @@ describe('character list structure', () => {
             ['character_import_button', 'Character Toolbar File', 'File', 'Import Character from File'],
             ['external_import_button', 'Character Toolbar URL', 'URL', 'Import content from external URL'],
             ['rm_button_search', 'Character Toolbar Find', 'Find', 'Toggle search bar'],
-            ['charListGridToggle', 'Character Toolbar Grid', 'Grid', 'Toggle character grid view'],
             ['bulkEditButton', 'Character Toolbar Bulk', 'Bulk', 'Bulk edit characters'],
             ['bulkSelectAllButton', 'Character Toolbar All', 'All', 'Bulk select all characters'],
             ['bulkDeleteButton', 'Character Toolbar Delete', 'Del', 'Bulk delete characters'],
@@ -110,7 +108,6 @@ describe('character list structure', () => {
             ['character_import_button', 'Import Character from File'],
             ['external_import_button', 'Import content from external URL'],
             ['rm_button_search', 'Toggle search bar'],
-            ['charListGridToggle', 'Toggle character grid view'],
             ['bulkSelectAllButton', 'Bulk select all characters'],
             ['bulkDeleteButton', 'Bulk delete characters'],
         ].forEach(([id, title]) => {
@@ -131,11 +128,11 @@ describe('character list structure', () => {
         ].forEach(id => expectElementWithId(rightNavSource, id));
     });
 
-    test('keeps the character folder filter actionable', () => {
+    test('does not reintroduce retired group or folder actionable filters', () => {
         const tagsSource = read('public/scripts/tags.js');
 
-        expect(tagsSource).toMatch(/FOLDER: \{ id: '4', sort_order: 3, name: 'Show only folders',[^\n]*action: filterByFolder,[^\n]*icon: 'fa-solid fa-folder-plus', class: 'filterByFolder' \}/);
-        expect(tagsSource).toContain('[ACTIONABLE_TAGS.FOLDER.id, FILTER_TYPES.FOLDER]');
+        expect(tagsSource).not.toContain('ACTIONABLE_TAGS.FOLDER');
+        expect(tagsSource).not.toContain('FILTER_TYPES.FOLDER');
         expect(tagsSource).not.toContain('ACTIONABLE_TAGS.GROUP');
         expect(tagsSource).not.toContain('FILTER_TYPES.GROUP');
     });
@@ -155,8 +152,9 @@ describe('character list structure', () => {
         // Snapshot + DOM-free commands exported for the bridge.
         expect(tagsSource).toContain('export function createCharacterTagFilterViewState(');
         expect(tagsSource).toContain('export function cycleCharacterTagFilterState(');
+        expect(tagsSource).toContain('export function setCharacterTagFilterState(');
+        expect(tagsSource).toContain('export function openCharacterTagManager(');
         expect(tagsSource).toContain('export function runCharacterTagFilterAction(');
-        expect(tagsSource).toContain('export function expandCharacterTagFilterList(');
         expect(tagsSource).toContain('determineTagFilterState(filterHelper, tag, true)');
         expect(tagsSource).toContain('getOpenBogusFolders()');
         expect(tagsSource).toContain('filterHelper.setFilterData(FILTER_TYPES.TAG, { selected, excluded })');
@@ -164,8 +162,10 @@ describe('character list structure', () => {
         // Bridge routes React chip events back into the filter pipeline.
         expect(scriptSource).toContain('tagFilters: createCharacterTagFilterViewState(entitiesFilter)');
         expect(scriptSource).toContain('cycleCharacterTagFilterState(String(tagId), entitiesFilter)');
+        expect(scriptSource).toContain('setCharacterTagFilterState(String(tagId)');
+        expect(scriptSource).toContain('onClearAllFiltersClick(entitiesFilter)');
+        expect(scriptSource).toContain('openCharacterTagManager()');
         expect(scriptSource).toContain('runCharacterTagFilterAction(String(tagId), entitiesFilter)');
-        expect(scriptSource).toContain('expandCharacterTagFilterList()');
 
         // Toolbar renders chips into the contract containers and keeps
         // data-toggle-state/class semantics that legacy DOM readers rely on.
@@ -173,10 +173,12 @@ describe('character list structure', () => {
         expect(toolbarSource).toContain("querySelector('.rm_tag_bogus_drilldown')");
         expect(toolbarSource).toContain('data-toggle-state={chip.filterState ?? undefined}');
         expect(toolbarSource).toContain('tag_remove');
-        expect(toolbarSource).toContain('placeholder-expander');
-        expect(toolbarSource).toContain('bridge.cycleTagFilter?.(chip.id)');
+        expect(toolbarSource).toContain('character-tag-filter-picker');
+        expect(toolbarSource).toContain('bridge.setTagFilter?.(tag.id');
+        expect(toolbarSource).toContain('bridge.clearTagFilter?.(chip.id)');
+        expect(toolbarSource).toContain('bridge.clearAllTagFilters?.()');
+        expect(toolbarSource).toContain('bridge.openTagManager?.()');
         expect(toolbarSource).toContain('bridge.runTagFilterAction?.(chip.id)');
-        expect(toolbarSource).toContain('bridge.expandTagFilterList?.()');
         expect(toolbarSource).toContain('hasActiveTagFilters');
     });
 
@@ -314,7 +316,7 @@ describe('character list structure', () => {
         expect(renderStateSource).toMatch(/const displayCount = pageEntities\.filter\(entity => entity\.type === 'character'\)\.length;/);
         expect(renderStateSource).toMatch(/const hiddenCount = totalCharacters - displayCount;/);
         expect(scriptSource).toContain('$(\'#character_search_bar\').val(\'\').trigger(\'input\')');
-        expect(scriptSource).toContain('$(\'.rm_tag_filter .clearAllFilters\').trigger(\'click\')');
+        expect(scriptSource).toContain('onClearAllFiltersClick(entitiesFilter)');
         expect(statusBlockSource).toContain('className="empty_block_message"');
         expect(statusBlockSource).toContain('className="menu_button clear_character_filters"');
         expect(rowHelperSource).toContain('tagsDisplayLimit = 50');
@@ -456,7 +458,7 @@ describe('character list structure', () => {
         const newAssistantChatSource = extractFunctionSource(scriptSource, 'newAssistantChat');
 
         expect(rightNavSource).toContain('id="temporary_chat_status"');
-        expect(rightNavSource).toContain('data-i18n="Temporary chat"');
+        expect(rightNavSource).toContain("translate('Temporary chat')");
         expect(styleSource).toMatch(/#temporary_chat_status/);
         expect(scriptSource).toContain('function setTemporaryChatStatus');
         expect(scriptSource).toContain('$(\'#temporary_chat_status\')');
@@ -516,7 +518,7 @@ describe('character list structure', () => {
         const rightNavSource = read('app/components/right-nav/RightNavPanel.tsx');
 
         expect(rightNavSource).toMatch(/<button id="delete_button"[^>]*type="button"[^>]*className="[^"]*\bmenu_button\b[^"]*\bred_button\b[^"]*"[^>]*title="Delete Character"[^>]*aria-label="Delete Character"[^>]*data-i18n="\[title\]\[aria-label\]Delete Character"[^>]*><\/button>/);
-        expect(rightNavSource).toContain('<option id="delete_from_dropdown" className="red_button character-detail-edit-action" data-i18n="Delete Character">');
+        expect(rightNavSource).toContain('<option id="delete_from_dropdown" className="red_button character-detail-edit-action" >{translate(\'Delete Character\')}</option>');
     });
 
     test('keeps search feedback, grid labels, and bulk selection semantics wired', () => {
@@ -532,22 +534,20 @@ describe('character list structure', () => {
 
         const rightNavSource = read('app/components/right-nav/RightNavPanel.tsx');
         expect(rightNavSource).toContain('id="character_search_status"');
-        expect(rightNavSource).toContain('data-i18n="Filtering characters…"');
+        expect(rightNavSource).toContain("translate('Filtering characters…')");
         expect(rightNavSource).toContain('aria-live="polite"');
         expect(rightNavSource).toContain('id="bulkSelectionHint"');
-        expect(rightNavSource).toContain('data-i18n="Click character cards to select"');
+        expect(rightNavSource).toContain("translate('Click character cards to select')");
         expect(rightNavSource).toContain('labelKey="Character Toolbar URL"');
         expect(rightNavSource).toContain('label="URL"');
         expect(rightNavSource).toContain('labelKey="Character Toolbar Bulk"');
         expect(rightNavSource).toContain('label="Bulk"');
-        expect(rightNavSource).toContain('data-i18n="Character Toolbar Sort">Sort</label>');
+        expect(rightNavSource).toContain("translate('Sort')");
         expect(rightNavSource).toMatch(/<output id="bulkSelectedCount"[^>]*"display": "none"/);
         expect(rightNavSource).toContain('className="character-list-tool-group character-list-bulk-actions" aria-live="polite"');
         expect(rightNavSource).toMatch(/id="bulkEditButton"[^>]*tabIndex=\{0\}/);
         expect(scriptSource).toContain('setCharacterSearchBusy(true)');
         expect(scriptSource).toContain('setCharacterSearchBusy(false)');
-        expect(scriptSource).toContain('updateCharListGridToggleLabel()');
-        expect(scriptSource).toContain('power_user.charListGrid ? \'Character Toolbar List\' : \'Character Toolbar Grid\'');
         expect(scriptSource).toContain('renderCharacterListPageReact');
         expect(scriptSource).not.toContain('const desiredElementSet = new Set(desiredElements);');
         expect(powerUserSource).toContain('const instance = $(this).autocomplete(\'instance\');');
@@ -589,7 +589,6 @@ describe('character list structure', () => {
         expect(zhCnLocale).toContain('"Character Toolbar URL": "URL"');
         expect(zhCnLocale).not.toContain('"Character Toolbar Group": "群"');
         expect(zhCnLocale).toContain('"Character Toolbar Bulk": "批"');
-        expect(zhCnLocale).toContain('"Character Toolbar List": "列"');
         expect(zhCnLocale).toContain('"Character Toolbar Sort": "排"');
         expect(zhCnLocale).toContain('"Delete ${0} characters?": "删除 ${0} 个角色？"');
         expect(zhCnLocale).toContain('"Filtering characters…": "正在筛选角色…"');

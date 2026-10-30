@@ -80,7 +80,7 @@ function MacroItem({ macro, selected, filtered, onSelect, formatSignature, detai
             <code className="macro-signature">{formatSignature(macro)}</code>
             <span className="macro-desc-preview">{macro.description || translate('No description')}</span>
             {macro.aliasOf && (
-                <span className="macro-alias-indicator fa-solid fa-arrow-turn-up" title={t`Alias of ${`{{${macro.aliasOf}}}`}`} aria-hidden="true" />
+                <span className="macro-alias-indicator fa-solid fa-arrow-turn-up" title={t`Alias of ${'{{' + macro.aliasOf + '}}'}`} aria-hidden="true" />
             )}
             <SourceIndicator macro={macro} />
         </button>

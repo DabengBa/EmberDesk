@@ -405,7 +405,8 @@ describe('React workspace panels bridge helpers', () => {
         expect(workspacePanelSource).not.toContain('data-react-authoring-action="remove-member"');
         expect(workspacePanelSource).not.toContain('data-react-authoring-action="move-up"');
         expect(workspacePanelSource).not.toContain('data-react-authoring-action="move-down"');
-        expect(workspacePanelSource).toContain('authoringCommandMutation.mutateAsync((submitResult.payload ?? {}) as Record<string, unknown>)');
+        expect(workspacePanelSource).toContain('authoringCommandMutation.mutateAsync({');
+        expect(workspacePanelSource).toContain('...(submitResult.payload ?? {}) as Record<string, unknown>');
         expect(workspacePanelSource).toContain('shouldApplyCharacterAuthoringSaveResult');
         expect(workspacePanelSource).toContain('createCharacterAuthoringSession(');
         expect(workspacePanelSource).toContain('saveGenerationRef');
@@ -484,6 +485,30 @@ describe('React workspace panels bridge helpers', () => {
         expect(panelSource).toContain('authoringStyles.toolAction');
         expect(styleSource).not.toContain('memberRow');
         expect(styleSource).not.toContain('candidates');
+    });
+
+    test('scopes edit-mode save fanout to display-facing fields and silences mirror-write autosaves', () => {
+        const lifecycleSource = read('public/scripts/character-lifecycle-service.js');
+        const scriptSource = read('public/script.js');
+        const domHandlersSource = read('public/scripts/dom-handlers.js');
+        const workspacePanelSource = read('app/workspace-panels.tsx');
+
+        // React submits the session's dirty draft keys so the service can tell
+        // content edits from display-affecting edits.
+        expect(workspacePanelSource).toContain('changedFields: [...authoringSession.dirtyFields]');
+        // The fanout gate refreshes the in-memory card for every edit but only
+        // rebuilds the fav strip / emits CHARACTER_EDITED for display fields.
+        expect(lifecycleSource).toContain('AUTHORING_FANOUT_FIELDS');
+        const editTail = lifecycleSource.match(/if \(shouldRefreshCharacterAfterEdit[\s\S]*?\n    \}/)?.[0] ?? '';
+        expect(editTail).toContain('await getOneCharacter(editedAvatar)');
+        expect(editTail).toContain('AUTHORING_FANOUT_FIELDS.has(key)');
+        expect(editTail.indexOf('await getOneCharacter')).toBeLessThan(editTail.indexOf('favsToHotswap()'));
+        // Mirror writes into the hidden legacy form still emit `input` (needed
+        // for create_save sync) but must not arm the debounced legacy edit-save
+        // on top of the direct API save already in flight.
+        expect(scriptSource).toContain('authoringMirrorWriteDepth += 1');
+        expect(scriptSource).toContain('isAuthoringMirrorWrite: () => authoringMirrorWriteDepth > 0');
+        expect(domHandlersSource).toContain('!shell().isAuthoringMirrorWrite?.()');
     });
 
     test('routes quiet/background requests through the generation service without owner markers', () => {

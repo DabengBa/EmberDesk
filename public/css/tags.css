@@ -83,10 +83,7 @@
     align-items: center;
 }
 
-.tag.actionable.clearAllFilters {
-    border: 0;
-    background: none;
-}
+
 
 .tag.placeholder-expander {
     cursor: alias;
@@ -173,13 +170,34 @@
 }
 
 #charListFixedTop .rm_tag_filter .tag.actionable {
-    border-radius: 3px;
+    border-radius: 5px;
+    border: 1px solid color-mix(in srgb, var(--SmartThemeBorderColor) 72%, transparent);
+    background-color: color-mix(in srgb, var(--SmartThemeBlurTintColor) 72%, transparent) !important;
+    color: var(--SmartThemeBodyColor);
     aspect-ratio: unset;
     min-height: unset;
-    min-width: unset;
+    min-width: calc(var(--mainFontSize) * 1.9);
+    justify-content: center;
     font-size: calc(var(--mainFontSize) * 0.78);
-    padding: 1px 6px;
-    height: calc(var(--mainFontSize) * 1.6);
+    padding: 0 6px;
+    height: calc(var(--mainFontSize) * 1.9);
+    opacity: 1;
+    filter: none;
+    cursor: pointer;
+}
+
+#charListFixedTop .rm_tag_filter .tag.actionable:hover {
+    opacity: 1;
+    filter: brightness(1.15);
+}
+
+#charListFixedTop .rm_tag_filter .tag.actionable.selected {
+    border-color: var(--SmartThemeEmColor);
+    filter: none;
+}
+
+#charListFixedTop .rm_tag_filter .tag.actionable.filterByFavorites {
+    color: var(--golden);
 }
 
 .rm_tag_filter .tag {

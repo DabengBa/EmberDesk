@@ -17,16 +17,16 @@ export interface CharacterLibraryTagChip {
     color2?: string;
     actionable?: boolean;
     removable?: boolean;
+    blockLegacyRemove?: boolean;
     filterState?: string | null;
 }
 
 export interface CharacterLibraryTagFiltersState {
-    showTagFilters: boolean;
     hasActiveTagFilters: boolean;
     actionableTags: CharacterLibraryTagChip[];
     inListActionableTags: CharacterLibraryTagChip[];
     tags: CharacterLibraryTagChip[];
-    skippedTagCount: number;
+    activeTags: CharacterLibraryTagChip[];
     drilldownTags: CharacterLibraryTagChip[];
 }
 
@@ -42,7 +42,6 @@ export interface CharacterLibraryToolbarState {
     searchQuery: string;
     sortValue: string;
     sortOptions: CharacterLibraryToolbarSortOption[];
-    isGrid: boolean;
     isBulkEdit: boolean;
     bulkSelectedCount: number;
     tagControlsElement: HTMLElement | null;
@@ -53,7 +52,6 @@ export interface CharacterLibraryToolbarState {
 export const characterLibraryToolbarSchema = z.object({
     searchQuery: z.string(),
     sortValue: z.string(),
-    isGrid: z.boolean(),
     isBulkEdit: z.boolean(),
     bulkSelectedCount: z.number().int().min(0),
 });
@@ -62,7 +60,6 @@ export function buildCharacterLibraryToolbarDefaults(state: CharacterLibraryTool
     return {
         searchQuery: state.searchQuery,
         sortValue: state.sortValue,
-        isGrid: state.isGrid,
         isBulkEdit: state.isBulkEdit,
         bulkSelectedCount: state.bulkSelectedCount,
     };

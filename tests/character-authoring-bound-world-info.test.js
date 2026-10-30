@@ -117,7 +117,7 @@ describe('character authoring opens the currently bound World Info book', () => 
         const panels = readRepoFile('app/workspace-panels.tsx');
         const fieldStart = panels.indexOf('data-react-authoring-field="characterWorld"');
         expect(fieldStart).toBeGreaterThan(-1);
-        const field = panels.slice(fieldStart, fieldStart + 3400);
+        const field = panels.slice(fieldStart, fieldStart + 4300);
 
         expect(field).toContain('data-react-authoring-action="openBoundWorldInfo"');
         expect(field).toContain('disabled={!boundWorldInfoBookName || isActionPending}');

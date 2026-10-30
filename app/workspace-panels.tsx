@@ -90,6 +90,7 @@ import { ExportFormatPopup } from './components/export-format/ExportFormatPopup'
 import * as stylex from '@stylexjs/stylex';
 import type { StyleXStyles } from '@stylexjs/stylex';
 import { authoringStyles, workspacePanelStyles, workspaceShellStyles } from './styles/workspace-panels.styles.js';
+import { chipInputStyles } from './styles/fields.styles.js';
 import { Theme } from '@astryxdesign/core';
 import { emberDeskTheme } from './lib/theme-tokens';
 import '@astryxdesign/core/astryx.css';
@@ -227,6 +228,7 @@ interface AuthoringWorkspacePanelState {
     tagOptions?: AuthoringCandidateState[];
     managementActions?: AuthoringManagementAction[];
     worldNames?: string[];
+    auxWorldNames?: string[];
 }
 
 interface AuthoringManagementAction {
@@ -560,13 +562,12 @@ function AuthoringFieldLabel({ text, dirty, meta, onExpand }: { text: string; di
             {onExpand ? (
                 <button
                     type="button"
-                    {...stylex.props(authoringStyles.iconAction)}
+                    {...stylex.props(authoringStyles.iconAction, authoringStyles.fieldExpandButton)}
                     title={translate('Maximize editing')}
                     aria-label={translate('Maximize editing ${0}').replace('${0}', translate(text))}
                     onClick={onExpand}
                 >
                     <i className="fa-solid fa-expand" aria-hidden="true" />
-                    <span {...stylex.props(authoringStyles.expandLabel)}>{translate('Expand')}</span>
                 </button>
             ) : null}
         </span>
@@ -1177,11 +1178,15 @@ function AuthoringWorkspacePanel({
     const worldNames = Array.isArray(bridgeState.worldNames)
         ? bridgeState.worldNames.filter((name): name is string => typeof name === 'string' && name.trim().length > 0)
         : [];
+    const auxWorldNames = useMemo(() => (Array.isArray(bridgeState.auxWorldNames)
+        ? bridgeState.auxWorldNames.filter((name): name is string => typeof name === 'string' && name.trim().length > 0)
+        : []), [bridgeState.auxWorldNames]);
     const authoringDraft = bridgeState.draft;
     const authoringMode = bridgeState.mode ?? 'create';
     const managementActionDefs = bridgeState.managementActions;
     const initialSession = useMemo(() => createCharacterAuthoringSession(authoringDraft ?? {}, { mode: authoringMode }), [authoringDraft, authoringMode]);
     const [authoringSession, setAuthoringSession] = useState(initialSession);
+    const [auxBooks, setAuxBooks] = useState<string[]>(auxWorldNames);
     const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
     const [advancedOpen, setAdvancedOpen] = useState(false);
     const [expandedField, setExpandedField] = useState<{ key: string; label: string } | null>(null);
@@ -1202,6 +1207,7 @@ function AuthoringWorkspacePanel({
     if (previousInitialSession !== initialSession) {
         setPreviousInitialSession(initialSession);
         setAuthoringSession(initialSession);
+        setAuxBooks(auxWorldNames);
         setFieldErrors({});
         setAdvancedOpen(false);
         setExpandedField(null);
@@ -1237,7 +1243,10 @@ function AuthoringWorkspacePanel({
         setFieldErrors({});
         const saveGeneration = saveGenerationRef.current;
         const submittedDraft = authoringSession.draft;
-        authoringCommandMutation.mutateAsync((submitResult.payload ?? {}) as Record<string, unknown>)
+        authoringCommandMutation.mutateAsync({
+            ...(submitResult.payload ?? {}) as Record<string, unknown>,
+            changedFields: [...authoringSession.dirtyFields],
+        })
             .then((result) => {
                 const ok = !(result && typeof result === 'object' && 'ok' in (result as Record<string, unknown>)
                     && (result as { ok?: boolean }).ok === false);
@@ -1297,6 +1306,10 @@ function AuthoringWorkspacePanel({
     const isCreateMode = authoringMode === 'create';
     const isActionPending = authoringCommandMutation.isPending;
     const boundWorldInfoBookName = resolveBoundWorldInfoBookName(stringDraft('characterWorld'), worldNames);
+    const applyAuxBooks = (next: string[]) => {
+        setAuxBooks(next);
+        void commands?.setAuxWorldBooks?.({ ...(characterToolActionPayload ?? {}), books: next });
+    };
     const dirtyFieldSet = new Set(authoringSession.dirtyFields);
     const isFieldDirty = (key: string) => dirtyFieldSet.has(key);
     const advancedChips = [
@@ -1385,7 +1398,6 @@ function AuthoringWorkspacePanel({
                 }}
             >
                 <header {...stylex.props(authoringStyles.panelHeader)}>
-                    <div {...stylex.props(authoringStyles.panelKicker)}>{translate(bridgeState.mode === 'edit' ? 'Editing' : 'Creating')}</div>
                     {!isCreateMode ? (
                         <span {...stylex.props(authoringStyles.footerStatus, authoringStyles.headerStatus)} aria-live="polite">
                             <i
@@ -1412,7 +1424,6 @@ function AuthoringWorkspacePanel({
 
                 <fieldset
                     {...stylex.props(authoringStyles.fields)}
-                    disabled={isActionPending}
                     style={{ border: 0, margin: 0, minWidth: 0, padding: 0 }}
                 >
                     <div {...stylex.props(authoringStyles.section, authoringStyles.sectionFirst)} data-react-authoring-section="basics">
@@ -1516,39 +1527,114 @@ function AuthoringWorkspacePanel({
                             </div>
                             <div {...stylex.props(authoringStyles.fieldRowItem)}>
                                 <label {...stylex.props(authoringStyles.field)} data-react-authoring-field="characterWorld">
-                                    <AuthoringFieldLabel text="World Info" dirty={isFieldDirty('characterWorld')} />
-                                    <input
-                                        className="text_pole"
-                                        {...stylex.props(authoringStyles.control)}
-                                        value={stringDraft('characterWorld')}
-                                        onChange={(event) => updateDraft({ characterWorld: event.target.value })}
-                                        placeholder={translate("Linked world file name")}
-                                        list="authoring-character-world-names"
-                                        aria-invalid={Boolean(stringDraft('characterWorld').trim()) && worldNames.length > 0 && !worldNames.includes(stringDraft('characterWorld').trim()) ? 'true' : undefined}
-                                    />
-                                    <datalist id="authoring-character-world-names">
-                                        {worldNames.map(name => (
-                                            <option key={name} value={name} />
-                                        ))}
-                                    </datalist>
+                                    <AuthoringFieldLabel text="World Info" dirty={isFieldDirty('characterWorld')} meta={translate('Travels with card')} />
+                                    <div {...stylex.props(authoringStyles.fieldInputRow)}>
+                                        <select
+                                            className="text_pole"
+                                            {...stylex.props(authoringStyles.control, authoringStyles.fieldInput)}
+                                            value={stringDraft('characterWorld')}
+                                            aria-label={translate("Bound World Info file")}
+                                            aria-invalid={Boolean(stringDraft('characterWorld').trim()) && worldNames.length > 0 && !worldNames.includes(stringDraft('characterWorld').trim()) ? 'true' : undefined}
+                                            onChange={(event) => {
+                                                const value = event.target.value;
+                                                if (value === '__create_new_world__') {
+                                                    void (async () => {
+                                                        const created = await commands?.createBoundWorldInfo?.(characterToolActionPayload) as string | false | null;
+                                                        if (typeof created === 'string' && created) {
+                                                            updateDraft({ characterWorld: created });
+                                                        }
+                                                    })();
+                                                } else {
+                                                    updateDraft({ characterWorld: value });
+                                                }
+                                            }}
+                                        >
+                                            <option value="">{translate("(no binding)")}</option>
+                                            {worldNames.map(name => (
+                                                <option key={name} value={name}>{name}</option>
+                                            ))}
+                                            {stringDraft('characterWorld').trim() && worldNames.length > 0 && !worldNames.includes(stringDraft('characterWorld').trim()) ? (
+                                                <option value={stringDraft('characterWorld')}>
+                                                    {translate("Not found")}: {stringDraft('characterWorld')}
+                                                </option>
+                                            ) : null}
+                                            <option value="__create_new_world__">{translate("+ Create new world book...")}</option>
+                                        </select>
+                                        <button
+                                            type="button"
+                                            className={`menu_button ${stylex.props(authoringStyles.toolAction, authoringStyles.fieldRowAction).className ?? ''}`}
+                                            data-react-authoring-action="openBoundWorldInfo"
+                                            disabled={!boundWorldInfoBookName || isActionPending}
+                                            title={boundWorldInfoBookName
+                                                ? translate('Open bound World Info book')
+                                                : translate('No bound world book to open')}
+                                            aria-label={boundWorldInfoBookName
+                                                ? translate('Open bound World Info book')
+                                                : translate('No bound world book to open')}
+                                            onClick={() => void commands?.openBoundWorldInfo?.(characterToolActionPayload)}
+                                        >
+                                            <i className="fa-solid fa-book-open" aria-hidden="true" />
+                                        </button>
+                                    </div>
+                                    <small {...stylex.props(authoringStyles.fieldHint)}>{translate("Auxiliary books (local only)")}</small>
+                                    {auxBooks.length > 0 ? (
+                                        <div {...stylex.props(chipInputStyles.box, authoringStyles.auxBox)}>
+                                            {auxBooks.map(name => (
+                                                <span key={name} {...stylex.props(chipInputStyles.chip)}>
+                                                    {name}
+                                                    <button
+                                                        type="button"
+                                                        {...stylex.props(chipInputStyles.chipRemove)}
+                                                        aria-label={translate("Remove auxiliary book ${0}").replace('${0}', name)}
+                                                        onClick={() => applyAuxBooks(auxBooks.filter(book => book !== name))}
+                                                    >
+                                                        ×
+                                                    </button>
+                                                </span>
+                                            ))}
+                                            <select
+                                                className="text_pole"
+                                                {...stylex.props(authoringStyles.auxAddSelect)}
+                                                value=""
+                                                aria-label={translate("Add auxiliary book")}
+                                                onChange={event => {
+                                                    const name = event.target.value;
+                                                    if (name) {
+                                                        applyAuxBooks([...auxBooks, name]);
+                                                    }
+                                                }}
+                                            >
+                                                <option value="">{translate("+ Add…")}</option>
+                                                {worldNames
+                                                    .filter(name => !auxBooks.includes(name) && name !== boundWorldInfoBookName)
+                                                    .map(name => (
+                                                        <option key={name} value={name}>{name}</option>
+                                                    ))}
+                                            </select>
+                                        </div>
+                                    ) : (
+                                        <select
+                                            {...stylex.props(authoringStyles.auxAddGhost)}
+                                            value=""
+                                            aria-label={translate("Add auxiliary book")}
+                                            onChange={event => {
+                                                const name = event.target.value;
+                                                if (name) {
+                                                    applyAuxBooks([...auxBooks, name]);
+                                                }
+                                            }}
+                                        >
+                                            <option value="">{translate("+ Add auxiliary book…")}</option>
+                                            {worldNames
+                                                .filter(name => name !== boundWorldInfoBookName)
+                                                .map(name => (
+                                                    <option key={name} value={name}>{name}</option>
+                                                ))}
+                                        </select>
+                                    )}
                                     {stringDraft('characterWorld').trim() && worldNames.length > 0 && !worldNames.includes(stringDraft('characterWorld').trim()) ? (
                                         <small {...stylex.props(authoringStyles.fieldWarning)}>{translate("No world file with this name — the link will be ignored.")}</small>
                                     ) : null}
-                                    <button
-                                        type="button"
-                                        className={`menu_button ${stylex.props(authoringStyles.toolAction).className ?? ''}`}
-                                        data-react-authoring-action="openBoundWorldInfo"
-                                        disabled={!boundWorldInfoBookName || isActionPending}
-                                        title={boundWorldInfoBookName
-                                            ? translate('Open bound World Info book')
-                                            : translate('No bound world book to open')}
-                                        aria-label={boundWorldInfoBookName
-                                            ? translate('Open bound World Info book')
-                                            : translate('No bound world book to open')}
-                                        onClick={() => void commands?.openBoundWorldInfo?.(characterToolActionPayload)}
-                                    >
-                                        <i className="fa-solid fa-book-open" aria-hidden="true" />
-                                    </button>
                                 </label>
                             </div>
                         </div>

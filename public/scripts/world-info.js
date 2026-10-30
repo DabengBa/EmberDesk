@@ -4691,13 +4691,13 @@ export function charSetAuxWorlds(fileName, books) {
 }
 
 function updateAuxBooks(fileName, computeNext) {
-    if (!fileName) return;
-
     if (getCurrentShellMenuType() === 'create') {
         const current = create_save.extra_books ?? [];
         create_save.extra_books = normalizeArray(computeNext(current));
         return; // no debounced save in create flow
     }
+
+    if (!fileName) return;
 
     const charLore = world_info.charLore ?? [];
     const idx = charLore.findIndex(e => e.name === fileName);

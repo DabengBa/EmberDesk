@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import * as stylex from '@stylexjs/stylex';
 import { chipInputStyles as s } from '@/styles/fields.styles';
+import { translate, useTranslated } from '@/compat/i18n.js';
 
 /**
  * Shared chip-style list editor: Enter/comma/blur commits, Backspace on empty
@@ -13,7 +14,7 @@ export function TagChipInput({
     onCommit,
     placeholder,
     inputAriaLabel,
-    removeAriaLabel = (tag: string) => `Remove tag ${tag}`,
+    removeAriaLabel = (tag: string) => translate('Remove tag ${0}').replace('${0}', tag),
     inputProps,
 }: {
     values: string[];
@@ -23,6 +24,7 @@ export function TagChipInput({
     removeAriaLabel?: (tag: string) => string;
     inputProps?: Record<string, string>;
 }) {
+    useTranslated('');
     const [pending, setPending] = useState('');
     const inputRef = useRef<HTMLInputElement | null>(null);
 
@@ -72,8 +74,8 @@ export function TagChipInput({
                 {...stylex.props(s.input)}
                 {...inputProps}
                 value={pending}
-                aria-label={inputAriaLabel ?? placeholder ?? 'Tags'}
-                placeholder={values.length === 0 ? placeholder : ''}
+                aria-label={inputAriaLabel ?? placeholder ?? translate('Tags')}
+                placeholder={placeholder}
                 onChange={event => {
                     const raw = event.target.value;
                     const nativeEvent = event.nativeEvent;

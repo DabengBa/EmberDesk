@@ -153,8 +153,10 @@ import {
     printTagFilters,
     createCharacterTagFilterViewState,
     cycleCharacterTagFilterState,
+    setCharacterTagFilterState,
+    onClearAllFiltersClick,
+    openCharacterTagManager,
     runCharacterTagFilterAction,
-    expandCharacterTagFilterList,
     getTagKeyForEntity,
     printTagList,
     createTagMapFromList,
@@ -741,6 +743,7 @@ registerCharacterLifecycleShellContext({
     },
     t: (...args) => t(...args),
     applyCharacterAuthoringSaveModel: (...args) => applyCharacterAuthoringSaveModel(...args),
+    isAuthoringMirrorWrite: () => authoringMirrorWriteDepth > 0,
     cancelDebounce: (...args) => cancelDebounce(...args),
     clearChat: (...args) => clearChat(...args),
     closeCurrentChatForDelete: (...args) => closeCurrentChatForDelete(...args),
@@ -929,7 +932,6 @@ registerDomHandlersShellContext({
     deleteCharacter: (...args) => deleteCharacter(...args),
     deleteMessage: (...args) => deleteMessage(...args),
     displayPastChats: (...args) => displayPastChats(...args),
-    doCharListDisplaySwitch: (...args) => doCharListDisplaySwitch(...args),
     doDrawerOpenClick: (...args) => doDrawerOpenClick(...args),
     doNewChat: (...args) => doNewChat(...args),
     download: (...args) => download(...args),
@@ -991,6 +993,7 @@ registerDomHandlersShellContext({
     resetScrollHeight: (...args) => resetScrollHeight(...args),
     runMainChatVisibleMessageActionsShellAction: (...args) => runMainChatVisibleMessageActionsShellAction(...args),
     saveCharacterDebounced: (...args) => saveCharacterDebounced(...args),
+    isAuthoringMirrorWrite: () => authoringMirrorWriteDepth > 0,
     saveChatConditional: (...args) => saveChatConditional(...args),
     saveSettingsDebounced: (...args) => saveSettingsDebounced(...args),
     selectCharacterById: (...args) => selectCharacterById(...args),
@@ -1013,7 +1016,6 @@ registerDomHandlersShellContext({
     toggleDrawer: (...args) => toggleDrawer(...args),
     translate: (...args) => translate(...args),
     updateCharacterRow: (...args) => updateCharacterRow(...args),
-    updateCharListGridToggleLabel: (...args) => updateCharListGridToggleLabel(...args),
     updateFavButtonState: (...args) => updateFavButtonState(...args),
     updateViewMessageIds: (...args) => updateViewMessageIds(...args),
     waitUntilCondition: (...args) => waitUntilCondition(...args),
@@ -2305,7 +2307,22 @@ function getCharacterAuthoringReactBridgeState(stateOverrides = {}) {
         unsupportedFields: Array.isArray(draft.unsupportedFields) ? [...draft.unsupportedFields] : [],
         managementActions: getCharacterManagementDropdownActions(),
         worldNames: Array.isArray(world_names) ? [...world_names] : [],
+        auxWorldNames: getAuthoringAuxWorldNames(mode),
     };
+}
+
+/**
+ * Auxiliary world books for the character being authored. Edit mode reads
+ * world_info.charLore (keyed by the avatar-derived file name); create mode
+ * reads the pending create_save.extra_books.
+ */
+function getAuthoringAuxWorldNames(mode) {
+    if (mode === 'edit') {
+        const fileName = this_chid !== undefined ? getCharaFilename(this_chid) : '';
+        const entry = world_info?.charLore?.find(e => e.name === fileName);
+        return Array.isArray(entry?.extraBooks) ? [...entry.extraBooks] : [];
+    }
+    return Array.isArray(create_save?.extra_books) ? [...create_save.extra_books] : [];
 }
 
 /**
@@ -2330,10 +2347,20 @@ function getCharacterManagementDropdownActions() {
         }));
 }
 
+// Programmatic draft→form mirror writes still emit `input` so create-mode
+// create_save sync and other listeners keep working — but they must not arm
+// the legacy debounced edit-save on top of the direct API save in flight.
+let authoringMirrorWriteDepth = 0;
+
 function setAuthoringInputValue(selector, value) {
     const element = $(selector);
     element.val(value ?? '');
-    element.trigger('input');
+    authoringMirrorWriteDepth += 1;
+    try {
+        element.trigger('input');
+    } finally {
+        authoringMirrorWriteDepth -= 1;
+    }
 }
 
 function applyCharacterAuthoringSaveModel(saveModel = {}, { submit: _submit = true } = {}) {
@@ -2535,6 +2562,36 @@ function getCharacterAuthoringReactCommands() {
                     // the session) already point at the bound book.
                     await mountReactWorldInfoPanel();
                 }
+                return false;
+            },
+            createBoundWorldInfo: async payload => {
+                // Creates a world book via the legacy name prompt, then remounts
+                // with the draft merged (not rebuilt from the saved card) so the
+                // new binding lands while in-flight edits survive. Returning a
+                // bare name would let the command port remount draftless and
+                // wipe them — the reopen helper mirrors the popup flow.
+                const before = new Set(world_names);
+                const created = await promptToCreateWorldInfo();
+                if (!created) {
+                    return false;
+                }
+                const newName = world_names.find(name => !before.has(name)) ?? null;
+                if (newName) {
+                    await reopenCharacterAuthoringAfterLegacyPopup({ ...(payload?.draft ?? {}), characterWorld: newName });
+                }
+                return false;
+            },
+            setAuxWorldBooks: async payload => {
+                // Auxiliary books persist to settings (world_info.charLore) for edit
+                // mode and to create_save.extra_books for create mode — both handled
+                // inside charSetAuxWorlds via updateAuxBooks.
+                const books = Array.isArray(payload?.books)
+                    ? payload.books.filter(name => typeof name === 'string' && name.trim().length > 0)
+                    : [];
+                const fileName = getCurrentCharacterAuthoringMode() === 'edit' && this_chid !== undefined
+                    ? getCharaFilename(this_chid)
+                    : '';
+                charSetAuxWorlds(fileName, books);
                 return false;
             },
             openAlternateGreetings: async payload => {
@@ -3518,7 +3575,7 @@ function getReactCharacterLibraryPanelBridge() {
         },
         onClearFilters() {
             $('#character_search_bar').val('').trigger('input');
-            $('.rm_tag_filter .clearAllFilters').trigger('click');
+            onClearAllFiltersClick(entitiesFilter);
         },
         onBulkToggleCharacter(id, checked) {
             const row = document.getElementById(`CharID${id}`) || document.querySelector(`.character_select[data-chid="${CSS.escape(String(id))}"]`);
@@ -3562,9 +3619,6 @@ function getReactCharacterLibraryPanelBridge() {
             });
             selector.selectedIndex = optionIndex;
             $('#character_sort_order').trigger('change');
-        },
-        toggleGrid() {
-            doCharListDisplaySwitch();
         },
         toggleBulkEdit() {
             if (!characterGroupOverlay) {
@@ -3627,12 +3681,23 @@ function getReactCharacterLibraryPanelBridge() {
             cycleCharacterTagFilterState(String(tagId), entitiesFilter);
             void syncReactCharacterLibraryToolbarState();
         },
-        runTagFilterAction(tagId) {
-            runCharacterTagFilterAction(String(tagId), entitiesFilter);
+        setTagFilter(tagId, nextState) {
+            setCharacterTagFilterState(String(tagId), String(nextState ?? ''), entitiesFilter);
             void syncReactCharacterLibraryToolbarState();
         },
-        expandTagFilterList() {
-            expandCharacterTagFilterList();
+        clearTagFilter(tagId) {
+            setCharacterTagFilterState(String(tagId), FILTER_STATES.UNDEFINED.key, entitiesFilter);
+            void syncReactCharacterLibraryToolbarState();
+        },
+        clearAllTagFilters() {
+            onClearAllFiltersClick(entitiesFilter);
+            void syncReactCharacterLibraryToolbarState();
+        },
+        openTagManager() {
+            void openCharacterTagManager();
+        },
+        runTagFilterAction(tagId) {
+            runCharacterTagFilterAction(String(tagId), entitiesFilter);
             void syncReactCharacterLibraryToolbarState();
         },
     };
@@ -3734,9 +3799,8 @@ function createCharacterLibraryPanelStateSnapshot({ listElement, pageEntities, r
                 : undefined,
             showClearFilters: Boolean(renderPlan.showEmptyBlock && entitiesFilter?.hasAnyFilter?.()),
         },
-        estimatedRowHeight: power_user.charListGrid ? 144 : 72,
+        estimatedRowHeight: 72,
         scrollElement: listElement,
-        isGrid: Boolean(power_user.charListGrid),
         bulkMode,
         selectedCharacterIds,
         activeCharacterId: this_chid,
@@ -3748,7 +3812,6 @@ function createCharacterLibraryToolbarStateSnapshot() {
         searchQuery: getCharacterLibraryToolbarSearchQuery(),
         sortValue: getCharacterLibraryToolbarSortValue(),
         sortOptions: getCharacterLibrarySortOptions(),
-        isGrid: Boolean(power_user.charListGrid),
         isBulkEdit: $('#rm_print_characters_block').hasClass('bulk_select'),
         bulkSelectedCount: characterGroupOverlay?.selectedCharacters?.length ?? 0,
         tagControlsElement: document.querySelector('#charListFixedTop .rm_tag_controls'),
@@ -4992,8 +5055,7 @@ export function getEntitiesList({ doFilter = false, doSort = true } = {}) {
             const subCount = subEntities.length;
             subEntities = filterByTagState(entities, { subForEntity: entity });
             if (doFilter) {
-                // sub entities filter "hacked" because folder filter should not be applied there, so even in "only folders" mode characters show up
-                subEntities = entitiesFilter.applyFilters(subEntities, { clearScoreCache: false, tempOverrides: { [FILTER_TYPES.FOLDER]: FILTER_STATES.UNDEFINED }, clearFuzzySearchCaches: false });
+                subEntities = entitiesFilter.applyFilters(subEntities, { clearScoreCache: false, clearFuzzySearchCaches: false });
             }
             if (doSort) {
                 sortEntitiesList(subEntities, false);
@@ -5007,11 +5069,6 @@ export function getEntitiesList({ doFilter = false, doSort = true } = {}) {
     if (doFilter) {
         const beforeFinalEntities = filterByTagState(entities, { globalDisplayFilters: true });
         entities = entitiesFilter.applyFilters(beforeFinalEntities, { clearFuzzySearchCaches: false });
-
-        // Magic for folder filter. If that one is enabled, and no folders are display anymore, we remove that filter to actually show the characters.
-        if (isFilterState(entitiesFilter.getFilterData(FILTER_TYPES.FOLDER), FILTER_STATES.SELECTED) && entities.filter(x => x.type == 'tag').length == 0) {
-            entities = entitiesFilter.applyFilters(beforeFinalEntities, { tempOverrides: { [FILTER_TYPES.FOLDER]: FILTER_STATES.UNDEFINED }, clearFuzzySearchCaches: false });
-        }
     }
 
     // Final step, updating some properties after the last filter run
@@ -9391,22 +9448,6 @@ export async function updateRemoteChatName(characterId, newName) {
     }
 }
 
-
-function doCharListDisplaySwitch() {
-    power_user.charListGrid = !power_user.charListGrid;
-    document.body.classList.toggle('charListGrid', power_user.charListGrid);
-    updateCharListGridToggleLabel();
-    saveSettingsDebounced();
-    void syncReactCharacterLibraryToolbarState();
-}
-
-function updateCharListGridToggleLabel() {
-    const toggle = $('#charListGridToggle');
-    const label = toggle.find('.character-list-action-label');
-    const key = power_user.charListGrid ? 'Character Toolbar List' : 'Character Toolbar Grid';
-    const nextLabel = power_user.charListGrid ? translate('List', key) : translate('Grid', key);
-    label.attr('data-i18n', key).text(nextLabel);
-}
 
 /**
  * Function to handle the deletion of a character, given a specific popup type and character ID.

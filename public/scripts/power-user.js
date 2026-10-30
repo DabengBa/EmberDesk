@@ -62,8 +62,6 @@ const defaultToastPosition = 'toast-top-center';
 
 
 export const power_user = {
-    charListGrid: false,
-
     frontend_frames: { ...DEFAULT_FRONTEND_FRAME_SETTINGS },
 
     sort_field: 'name',
@@ -263,7 +261,7 @@ export async function loadPowerUserSettings(settings) {
         'custom_stopping_strings', 'stscript', 'instruct', 'context',
         'chat_truncation', 'custom_css', 'pin_examples', 'strip_examples',
         'movingUI', 'movingUIState', 'movingUIPreset', 'max_context_unlocked',
-        'ui_mode']) {
+        'ui_mode', 'charListGrid']) {
         delete power_user[key];
     }
 
@@ -271,12 +269,7 @@ export async function loadPowerUserSettings(settings) {
     $(`#character_sort_order option[data-order="${power_user.sort_order}"][data-field="${power_user.sort_field}"]`).prop('selected', true);
     switchReducedMotion();
     reloadMarkdownProcessor();
-    loadCharListState();
     applyToastrPosition();
-}
-
-function loadCharListState() {
-    document.body.classList.toggle('charListGrid', power_user.charListGrid);
 }
 
 export function loadMovingUIState() {

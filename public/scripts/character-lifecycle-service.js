@@ -71,7 +71,24 @@ const setTemporaryChatStatus = (...args) => shell().setTemporaryChatStatus(...ar
 const timestampToMoment = (...args) => shell().timestampToMoment(...args);
 const unshallowCharacter = (...args) => shell().unshallowCharacter(...args);
 const updateFavButtonState = (...args) => shell().updateFavButtonState(...args);
-
+/**
+ * Draft fields whose change should fan out to display or prompt consumers:
+ * the fav strip, chat projection, and CHARACTER_EDITED subscribers such as
+ * PromptManager. Anything else (description, scenario, notes, world binding,
+ * …) only needs the in-memory card refresh.
+ */
+const AUTHORING_FANOUT_FIELDS = new Set([
+    'name',
+    'avatar',
+    'favorite',
+    'tags',
+    'characterVersion',
+    'firstMessage',
+    'alternateGreetings',
+    'systemPrompt',
+    'postHistoryInstructions',
+    'depthPrompt',
+]);
 
 export async function saveCharacterAuthoringFromPayload(saveModel = {}) {
     if (!state.settingsReady) {
@@ -138,6 +155,20 @@ export async function saveCharacterAuthoringFromPayload(saveModel = {}) {
         await getCharacters();
         const createdIndex = state.characters.findIndex(character => character?.avatar === avatarId);
         if (createdIndex >= 0) {
+            // select_selected_character alone leaves this_chid/menu_type in
+            // create-mode state — the authoring remount would rebuild an empty
+            // edit draft (avatar_url-less saves → 400) and aux writes would
+            // keep landing in create_save.
+            setCharacterId(createdIndex);
+            setMenuType('character_edit');
+            if (Array.isArray(state.create_save.extra_books) && state.create_save.extra_books.length > 0) {
+                const fileName = getCharaFilename(null, { manualAvatarKey: avatarId });
+                const charLore = state.world_info.charLore ?? [];
+                charLore.push({ name: fileName, extraBooks: state.create_save.extra_books });
+                Object.assign(state.world_info, { charLore: charLore });
+                saveSettingsDebounced();
+            }
+            state.create_save.extra_books = [];
             select_selected_character(createdIndex, { switchMenu: false });
             await eventSource.emit(event_types.CHARACTER_EDITED, {
                 detail: { id: createdIndex, character: state.characters[createdIndex] },
@@ -155,12 +186,45 @@ export async function saveCharacterAuthoringFromPayload(saveModel = {}) {
     }
 
     const editedAvatar = String(formData.get('avatar_url') || sourceCharacter?.avatar || '');
+    // The file input keeps the just-uploaded File; without clearing it every
+    // later autosave would re-attach and re-embed the same image.
+    if (avatarFile) {
+        $('#add_avatar_button').replaceWith($('#add_avatar_button').val('').clone(true));
+        state.create_save.avatar = null;
+    }
     if (shouldRefreshCharacterAfterEdit(state.characters, editedAvatar)) {
         await getOneCharacter(editedAvatar);
-        state.favsToHotswap();
-        await eventSource.emit(event_types.CHARACTER_EDITED, {
-            detail: { id: state.this_chid, character: state.characters[state.this_chid] },
-        });
+        // Only display-affecting edits justify the render fanout: favsToHotswap
+        // rebuilds the top avatar strip and CHARACTER_EDITED re-projects the
+        // whole chat. Pure-content autosaves (description, scenario, …) would
+        // otherwise flicker the sidebar on every debounce.
+        const changedFields = Array.isArray(saveModel?.changedFields) ? saveModel.changedFields : null;
+        const needsFanout = !changedFields || changedFields.some(key => AUTHORING_FANOUT_FIELDS.has(key));
+        if (needsFanout) {
+            state.favsToHotswap();
+            await eventSource.emit(event_types.CHARACTER_EDITED, {
+                detail: { id: state.this_chid, character: state.characters[state.this_chid] },
+            });
+        }
+        // Parity with the legacy edit-save: a changed first message refreshes
+        // the greeting of an untouched open chat.
+        if (!changedFields || changedFields.includes('firstMessage')) {
+            const message = getFirstMessage();
+            if (
+                message.mes &&
+                !state.chat_metadata.tainted &&
+                !state.chat_metadata.greeting &&
+                (state.chat.length === 0 || (state.chat.length === 1 && !state.chat[0].is_user && !state.chat[0].is_system))
+            ) {
+                state.chat.splice(0, state.chat.length, message);
+                const messageId = (state.chat.length - 1);
+                await eventSource.emit(event_types.MESSAGE_RECEIVED, messageId, 'first_message');
+                await clearChat();
+                await printMessages();
+                await eventSource.emit(event_types.CHARACTER_MESSAGE_RENDERED, messageId, 'first_message');
+                await saveChatConditional();
+            }
+        }
     }
     state.crop_data = undefined;
     return {

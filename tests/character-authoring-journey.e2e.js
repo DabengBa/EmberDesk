@@ -43,9 +43,9 @@ test('character authoring keeps management usable without extension notice or gr
     await page.locator('.character_select').filter({ hasText: name }).first().click();
     const authoring = page.locator('[data-react-authoring-owner="characterAuthoring"]');
     await expect(authoring).toBeVisible();
-    await authoring.locator('[data-react-authoring-field="characterWorld"] input').fill(book);
+    await authoring.locator('[data-react-authoring-field="characterWorld"] select').selectOption(book);
     await expect.poll(async () => (await readCard(page, avatar)).data?.extensions?.world).toBe(book);
-    await expect(authoring.locator('[data-react-authoring-field="characterWorld"] input')).toHaveValue(book);
+    await expect(authoring.locator('[data-react-authoring-field="characterWorld"] select')).toHaveValue(book);
 
     // Soft assertions keep the rest of this journey observable on the old UI.
     await expect.soft(authoring.getByText(/保存时会保留扩展数据|Extension data preserved on save/)).toHaveCount(0);
@@ -65,7 +65,7 @@ test('character authoring keeps management usable without extension notice or gr
         const data = (await readCard(page, avatar)).data;
         return { world: data?.extensions?.world, greetings: data?.alternate_greetings, extension: data?.extensions?.fixture_extension };
     }).toEqual({ world: book, greetings: [updated], extension: { retained: true } });
-    await expect.soft(authoring.locator('[data-react-authoring-field="characterWorld"] input')).toHaveValue(book);
+    await expect.soft(authoring.locator('[data-react-authoring-field="characterWorld"] select')).toHaveValue(book);
     await authoring.locator('[data-react-authoring-action="openBoundWorldInfo"]').click({ timeout: 5_000 });
 
     const worldSelect = page.locator('[data-world-info-react-control="world-select"]');

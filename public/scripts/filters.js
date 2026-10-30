@@ -10,12 +10,11 @@ import { includesIgnoreCaseAndAccents } from './utils.js';
 
 /**
  * The filter types
- * @type {{ SEARCH: 'search', TAG: 'tag', FOLDER: 'folder', FAV: 'fav', WORLD_INFO_SEARCH: 'world_info_search'}}
+ * @type {{ SEARCH: 'search', TAG: 'tag', FAV: 'fav', WORLD_INFO_SEARCH: 'world_info_search'}}
  */
 export const FILTER_TYPES = {
     SEARCH: 'search',
     TAG: 'tag',
-    FOLDER: 'folder',
     FAV: 'fav',
     WORLD_INFO_SEARCH: 'world_info_search',
 };
@@ -135,7 +134,6 @@ export class FilterHelper {
     filterFunctions = {
         [FILTER_TYPES.SEARCH]: this.searchFilter.bind(this),
         [FILTER_TYPES.FAV]: this.favFilter.bind(this),
-        [FILTER_TYPES.FOLDER]: this.folderFilter.bind(this),
         [FILTER_TYPES.TAG]: this.tagFilter.bind(this),
         [FILTER_TYPES.WORLD_INFO_SEARCH]: this.wiSearchFilter.bind(this),
     };
@@ -147,7 +145,6 @@ export class FilterHelper {
     filterData = {
         [FILTER_TYPES.SEARCH]: '',
         [FILTER_TYPES.FAV]: false,
-        [FILTER_TYPES.FOLDER]: false,
         [FILTER_TYPES.TAG]: { excluded: [], selected: [] },
         [FILTER_TYPES.WORLD_INFO_SEARCH]: '',
     };
@@ -231,19 +228,6 @@ export class FilterHelper {
         const isFav = entity => entity.item.fav || entity.item.fav == 'true';
 
         return this.filterDataByState(data, state, isFav, { includeFolders: true });
-    }
-
-    /**
-     * Applies a "folder" filter to the data.
-     * @param {any[]} data The data to filter.
-     * @returns {any[]} The filtered data.
-     */
-    folderFilter(data) {
-        const state = this.filterData[FILTER_TYPES.FOLDER];
-        // Filter directly on folder. Special rules on still displaying characters with active folder filter are implemented in 'getEntitiesList' directly.
-        const isFolder = entity => entity.type === 'tag';
-
-        return this.filterDataByState(data, state, isFolder);
     }
 
     /**
