@@ -57,7 +57,7 @@ import { SettingsSurface } from './components/settings/SettingsSurface';
 import { ChatBackupsBrowser, type ChatBackupsCommands } from './components/chat-backups/ChatBackupsBrowser';
 
 import { TagManagement } from './components/tags/TagManagement';
-import { TagChipInput } from './components/fields/TagChipInput';
+import { CharacterTagManagerDialog } from './components/fields/CharacterTagManagerDialog';
 import { useAutosizeTextareaRef } from './lib/autosize-textarea';
 import { RegexEditor } from './components/regex/RegexEditor';
 import { RegexSettingsPanel } from './components/regex/RegexSettingsPanel';
@@ -1191,6 +1191,7 @@ function AuthoringWorkspacePanel({
     const [advancedOpen, setAdvancedOpen] = useState(false);
     const [expandedField, setExpandedField] = useState<{ key: string; label: string } | null>(null);
     const [textReplaceOpen, setTextReplaceOpen] = useState(false);
+    const [tagManagerOpen, setTagManagerOpen] = useState(false);
     const [avatarPreviewOverride, setAvatarPreviewOverride] = useState<string | null>(null);
     const [liveManagementActions, setLiveManagementActions] = useState<AuthoringManagementAction[] | null>(null);
     const saveGenerationRef = useRef(0);
@@ -1212,6 +1213,7 @@ function AuthoringWorkspacePanel({
         setAdvancedOpen(false);
         setExpandedField(null);
         setTextReplaceOpen(false);
+        setTagManagerOpen(false);
         setAvatarPreviewOverride(null);
     }
 
@@ -1518,11 +1520,22 @@ function AuthoringWorkspacePanel({
                             <div {...stylex.props(authoringStyles.fieldRowItem)}>
                                 <div {...stylex.props(authoringStyles.field)} data-react-authoring-field="tags">
                                     <AuthoringFieldLabel text="Tags" dirty={isFieldDirty('tags')} />
-                                    <TagChipInput
-                                        values={tagsList}
-                                        placeholder={translate("Type a tag, press Enter")}
-                                        onCommit={next => updateDraft({ tags: next })}
-                                    />
+                                    <button
+                                        type="button"
+                                        {...stylex.props(authoringStyles.tagManagerTrigger)}
+                                        aria-label={translate('Manage tags')}
+                                        onClick={() => setTagManagerOpen(true)}
+                                    >
+                                        <span {...stylex.props(authoringStyles.tagManagerPreview)}>
+                                            {tagsList.slice(0, 4).map(tag => (
+                                                <span key={tag} {...stylex.props(authoringStyles.tagManagerPreviewChip)} title={tag}>{tag}</span>
+                                            ))}
+                                            {tagsList.length === 0 ? <span {...stylex.props(authoringStyles.fieldMeta)}>{translate('No tags')}</span> : null}
+                                        </span>
+                                        <span {...stylex.props(authoringStyles.tagManagerPreviewCount)}>
+                                            {translate('Manage tags')} · {tagsList.length}
+                                        </span>
+                                    </button>
                                 </div>
                             </div>
                             <div {...stylex.props(authoringStyles.fieldRowItem)}>
@@ -1949,6 +1962,13 @@ function AuthoringWorkspacePanel({
                                 void commands?.closeTextReplace?.({ applied });
                             }
                         }}
+                    />
+                ) : null}
+                {tagManagerOpen ? (
+                    <CharacterTagManagerDialog
+                        values={tagsList}
+                        onChange={next => updateDraft({ tags: next })}
+                        onClose={() => setTagManagerOpen(false)}
                     />
                 ) : null}
                 {expandedField ? createPortal(
