@@ -16,6 +16,7 @@ describe('character library React row helpers', () => {
         const helperSource = fs.readFileSync(path.join(repoRoot, 'app/lib/character-library-row-helpers.ts'), 'utf8');
         const rowSource = fs.readFileSync(path.join(repoRoot, 'app/components/character-library/CharacterLibraryCharacterRow.tsx'), 'utf8');
         const panelSource = fs.readFileSync(path.join(repoRoot, 'app/components/character-library/CharacterLibraryPanel.tsx'), 'utf8');
+        const styleSource = fs.readFileSync(path.join(repoRoot, 'public/style.css'), 'utf8');
 
         expect(helperSource).toContain('export function buildCharacterRowClassName');
         expect(helperSource).toContain('export function buildCharacterRowDomId');
@@ -39,6 +40,8 @@ describe('character library React row helpers', () => {
         expect(panelSource).toContain('projectCharacterEntityToRowModel');
         expect(panelSource).toContain("entity.type === 'character' && entity.item");
         expect(panelSource).toContain('resolveTags: () => entity.tags ?? []');
+        expect(styleSource).toMatch(/#rm_print_characters_block \.character-library-react-panel__row[\s\S]*?height: max-content;/);
+        expect(styleSource).toMatch(/#rm_print_characters_block \.character_select \.tags\.tags_inline[\s\S]*?max-height: none;/);
     });
 
     test('keeps protected selector contract names available for retirement gate', () => {
