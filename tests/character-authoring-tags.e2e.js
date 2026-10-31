@@ -48,12 +48,12 @@ test('character authoring manages many tags in a scoped panel', async ({ page })
 
     const dialog = page.getByRole('dialog', { name: /Tags|标签/ });
     await expect(dialog).toBeVisible();
-    await expect(dialog.getByText('26 tags', { exact: true })).toBeVisible();
+    await expect(dialog.getByText(/^(26 tags|26 个标签)$/)).toBeVisible();
     const desktopViewport = page.viewportSize();
     await page.setViewportSize({ width: 390, height: 844 });
 
     const addButton = dialog.getByRole('button', { name: /Add|添加/ });
-    const removeSelectedButton = dialog.getByRole('button', { name: /Remove selected|删除所选/ });
+    const removeSelectedButton = dialog.getByRole('button', { name: /Remove selected|移除所选标签/ });
     await expect(addButton).toHaveCSS('white-space', 'nowrap');
     await expect(removeSelectedButton).toHaveCSS('white-space', 'nowrap');
     await expect.poll(async () => dialog.evaluate(element => {
@@ -69,7 +69,7 @@ test('character authoring manages many tags in a scoped panel', async ({ page })
 
     await dialog.getByRole('checkbox', { name: 'Sister' }).check();
     await dialog.getByRole('checkbox', { name: 'Scenario' }).check();
-    await dialog.getByRole('button', { name: /Remove selected|删除所选/ }).click();
+    await dialog.getByRole('button', { name: /Remove selected|移除所选标签/ }).click();
     await dialog.getByRole('textbox', { name: /Add tag|添加标签/ }).fill('New tag');
     await dialog.getByRole('button', { name: /Add|添加/ }).click();
 
