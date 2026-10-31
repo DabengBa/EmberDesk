@@ -70,7 +70,9 @@ test('loaded character chat previews greetings without writes, persists a select
     });
     await page.evaluate(async fileName => window.SillyTavern.getContext().openCharacterChat(fileName), chatName);
     const picker = page.getByTestId('main-chat-greeting-picker');
-    const trigger = picker.getByRole('button').first();
+    const trigger = picker.locator('[data-greeting-picker-trigger]');
+    const previousGreeting = picker.getByRole('button', { name: /上一个开场白|Previous greeting/ });
+    const nextGreeting = picker.getByRole('button', { name: /下一个开场白|Next greeting/ });
     await expect(trigger).toBeVisible();
     await expect(trigger).toBeEnabled();
     const message = page.locator('#chat .mes[mesid="0"] .mes_text');
@@ -82,6 +84,29 @@ test('loaded character chat previews greetings without writes, persists a select
             writes.push(request.url());
         }
     });
+
+    const saveGreetingWith = async action => {
+        const saved = page.waitForResponse(response => response.url().endsWith('/api/chats/save') && response.request().method() === 'POST');
+        await action();
+        expect((await saved).ok()).toBe(true);
+    };
+
+    await saveGreetingWith(() => nextGreeting.click());
+    await expect(message).toContainText(alternates[0]);
+    await expect(trigger).toContainText('2 / 3');
+    await saveGreetingWith(async () => {
+        await trigger.focus();
+        await page.keyboard.press('ArrowRight');
+    });
+    await expect(message).toContainText(alternates[1]);
+    await expect(trigger).toContainText('3 / 3');
+    await saveGreetingWith(async () => page.keyboard.press('ArrowLeft'));
+    await expect(message).toContainText(alternates[0]);
+    await saveGreetingWith(async () => page.keyboard.press('ArrowLeft'));
+    await expect(message).toContainText(main);
+    await expect(trigger).toContainText('1 / 3');
+    expect(await readStoredState(page, avatar, chatName)).toEqual(before);
+    writes.length = 0;
 
     await trigger.click();
     const dialog = page.getByRole('dialog', { name: /选择开场白|Choose a greeting/ });

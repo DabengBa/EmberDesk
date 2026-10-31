@@ -3,6 +3,7 @@ import { describe, expect, test } from '@jest/globals';
 import {
     buildGreetingOptions,
     canSwitchGreeting,
+    getAdjacentGreetingIndex,
     replaceGreeting,
     summarizeGreeting,
 } from '../public/scripts/main-chat-greetings.js';
@@ -77,6 +78,21 @@ describe('main chat greeting options', () => {
         expect(summarizeGreeting('  Hello\n\tthere   {{user}}!  ')).toBe('Hello there {{user}}!');
         expect(summarizeGreeting('Short greeting')).toBe('Short greeting');
         expect(summarizeGreeting('   ')).toBe('');
+    });
+
+    test('cycles through valid greetings while preserving authored indices', () => {
+        const options = [
+            { index: 0, text: 'Main greeting' },
+            { index: 1, text: 'First alternate' },
+            { index: 4, text: 'Last alternate' },
+        ];
+
+        expect(getAdjacentGreetingIndex(options, 1, -1)).toBe(0);
+        expect(getAdjacentGreetingIndex(options, 1, 1)).toBe(4);
+        expect(getAdjacentGreetingIndex(options, 0, -1)).toBe(4);
+        expect(getAdjacentGreetingIndex(options, 4, 1)).toBe(0);
+        expect(getAdjacentGreetingIndex(options, null, -1)).toBe(4);
+        expect(getAdjacentGreetingIndex(options, null, 1)).toBe(0);
     });
 });
 

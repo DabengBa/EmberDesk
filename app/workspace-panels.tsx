@@ -2166,7 +2166,7 @@ button.menu_button {
                     Show more messages
                 </button>
             ) : null}
-            <MainChatGreetingPicker greetings={mainChatStoreSnapshot.greetings} commands={commands} />
+            <MainChatGreetingPicker key={mainChatStoreSnapshot.greetings.chatId} greetings={mainChatStoreSnapshot.greetings} commands={commands} />
             {shouldShowSlashAutocomplete ? (
                 <div
                     className="autoComplete-wrap"

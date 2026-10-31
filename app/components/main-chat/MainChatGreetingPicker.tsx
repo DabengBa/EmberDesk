@@ -4,6 +4,7 @@ import * as stylex from '@stylexjs/stylex';
 import type { MainChatCommands } from '../../compat/workspace-commands';
 import { translate, useTranslated } from '../../compat/i18n.js';
 import type { MainChatGreetingsSnapshot } from '../../stores/main-chat-store';
+import { getAdjacentGreetingIndex } from '../../../public/scripts/main-chat-greetings.js';
 import { mainChatGreetingPickerStyles as styles } from './MainChatGreetingPicker.styles';
 
 function greetingLabel(index: number) {
@@ -99,12 +100,12 @@ export function MainChatGreetingPicker({
         setOpen(true);
     };
 
-    const confirmSelection = async () => {
-        if (busy || previewGreeting === null || !greetings.characterId || !greetings.chatId) return;
+    const applyGreeting = async (index: number | null) => {
+        if (busy || index === null || !greetings.canSelect || !greetings.characterId || !greetings.chatId) return;
         setBusy(true);
         setError('');
         try {
-            const selected = await commands?.selectGreeting(previewGreeting.index, greetings.characterId, greetings.chatId);
+            const selected = await commands?.selectGreeting(index, greetings.characterId, greetings.chatId);
             if (selected === true) {
                 setOpen(false);
                 return;
@@ -117,28 +118,71 @@ export function MainChatGreetingPicker({
         }
     };
 
+    const confirmSelection = async () => {
+        await applyGreeting(previewGreeting?.index ?? null);
+    };
+
+    const switchGreeting = (direction: -1 | 1) => {
+        void applyGreeting(getAdjacentGreetingIndex(greetings.options, greetings.selectedIndex, direction));
+    };
+
+    const markUserInteraction = () => {
+        const picker = document.querySelector<HTMLElement>('[data-testid="main-chat-greeting-picker"]');
+        if (picker) picker.dataset.userInteracted = 'true';
+    };
+
     // A pending save can temporarily disable selection in a refreshed snapshot.
     // Keep an open native dialog mounted so its modal/focus lifecycle survives.
     if (!open && (!greetings.canSelect || greetings.options.length < 2)) return null;
 
     return (
         <section data-testid="main-chat-greeting-picker">
-            <button
-                ref={triggerRef}
-                data-greeting-picker-trigger=""
-                type="button"
-                className={`menu_button ${stylex.props(styles.trigger).className ?? ''}`}
-                aria-haspopup="dialog"
-                aria-expanded={open}
-                aria-label={translate('Select greeting')}
-                disabled={!greetings.canSelect}
-                onClick={openPicker}
-            >
-                <i className="fa-solid fa-message" aria-hidden="true" />
-                <span>{selectedGreeting ? greetingLabel(selectedGreeting.index) : translate('Select greeting')}</span>
-                {selectedGreeting ? <span {...stylex.props(styles.count)}>{greetings.options.indexOf(selectedGreeting) + 1} / {greetings.options.length}</span> : null}
-                <i className="fa-solid fa-chevron-down" aria-hidden="true" />
-            </button>
+            <div {...stylex.props(styles.controls)}>
+                <button
+                    type="button"
+                    className={`menu_button ${stylex.props(styles.arrow).className ?? ''}`}
+                    aria-label={translate('Previous greeting')}
+                    disabled={busy || !greetings.canSelect}
+                    onPointerDown={markUserInteraction}
+                    onClick={() => switchGreeting(-1)}
+                >
+                    <i className="fa-solid fa-chevron-left" aria-hidden="true" />
+                </button>
+                <button
+                    ref={triggerRef}
+                    data-greeting-picker-trigger=""
+                    type="button"
+                    className={`menu_button ${stylex.props(styles.trigger).className ?? ''}`}
+                    aria-haspopup="dialog"
+                    aria-expanded={open}
+                    aria-label={translate('Select greeting')}
+                    aria-keyshortcuts="ArrowLeft ArrowRight"
+                    disabled={!greetings.canSelect}
+                    onPointerDown={markUserInteraction}
+                    onClick={openPicker}
+                    onKeyDown={event => {
+                        if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+                        event.preventDefault();
+                        markUserInteraction();
+                        switchGreeting(event.key === 'ArrowLeft' ? -1 : 1);
+                    }}
+                >
+                    <i className="fa-solid fa-message" aria-hidden="true" />
+                    <span>{selectedGreeting ? greetingLabel(selectedGreeting.index) : translate('Select greeting')}</span>
+                    {selectedGreeting ? <span {...stylex.props(styles.count)}>{greetings.options.indexOf(selectedGreeting) + 1} / {greetings.options.length}</span> : null}
+                    <i className="fa-solid fa-chevron-down" aria-hidden="true" />
+                </button>
+                <button
+                    type="button"
+                    className={`menu_button ${stylex.props(styles.arrow).className ?? ''}`}
+                    aria-label={translate('Next greeting')}
+                    disabled={busy || !greetings.canSelect}
+                    onPointerDown={markUserInteraction}
+                    onClick={() => switchGreeting(1)}
+                >
+                    <i className="fa-solid fa-chevron-right" aria-hidden="true" />
+                </button>
+            </div>
             {open ? (
                 <dialog
                     ref={dialogRef}

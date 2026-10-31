@@ -9376,9 +9376,18 @@ export async function doNewChat({ deleteCurrentChat = false } = {}) {
     if (deleteCurrentChat) await delChat(chat_file_for_del + '.jsonl');
 
     // A new chat has multiple authored greetings: expose the choice immediately
-    // instead of requiring the user to discover the small header selector.
-    await new Promise(resolve => requestAnimationFrame(resolve));
-    document.querySelector('[data-greeting-picker-trigger]')?.click();
+    // instead of requiring the user to discover the small header selector. A
+    // greeting selection can update the chat while this frame is pending, so
+    // check the metadata both before and after waiting. A user interaction
+    // with the newly rendered picker should not be interrupted by auto-open.
+    if (!chat_metadata.greeting) {
+        await new Promise(resolve => requestAnimationFrame(resolve));
+        const trigger = document.querySelector('[data-greeting-picker-trigger]');
+        const picker = trigger?.closest('[data-testid="main-chat-greeting-picker"]');
+        if (!chat_metadata.greeting && picker?.dataset.userInteracted !== 'true') {
+            trigger?.click();
+        }
+    }
 }
 
 
