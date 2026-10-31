@@ -16,37 +16,40 @@ export function CharacterTagManagerDialog({
     useTranslated('');
     const [query, setQuery] = useState('');
     const [pending, setPending] = useState('');
-    const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
+    const [selected, setSelected] = useState<ReadonlySet<number>>(() => new Set());
     const filteredValues = useMemo(() => {
         const normalizedQuery = query.trim().toLocaleLowerCase();
-        return normalizedQuery
-            ? values.filter(value => value.toLocaleLowerCase().includes(normalizedQuery))
-            : values;
+        return values
+            .map((value, index) => ({ value, index }))
+            .filter(({ value }) => !normalizedQuery || value.toLocaleLowerCase().includes(normalizedQuery));
     }, [query, values]);
 
     const addTag = () => {
-        const value = pending.trim();
-        if (!value || values.includes(value)) {
+        const pendingValues = pending.split(',').map(value => value.trim()).filter(Boolean);
+        const nextValues = pendingValues.filter((value, index) => (
+            pendingValues.indexOf(value) === index && !values.includes(value)
+        ));
+        if (nextValues.length === 0) {
             return;
         }
-        onChange([...values, value]);
+        onChange([...values, ...nextValues]);
         setPending('');
     };
 
-    const toggleSelected = (value: string, checked: boolean) => {
+    const toggleSelected = (index: number, checked: boolean) => {
         setSelected(current => {
             const next = new Set(current);
             if (checked) {
-                next.add(value);
+                next.add(index);
             } else {
-                next.delete(value);
+                next.delete(index);
             }
             return next;
         });
     };
 
     const removeSelected = () => {
-        onChange(values.filter(value => !selected.has(value)));
+        onChange(values.filter((_, index) => !selected.has(index)));
         setSelected(new Set());
     };
 
@@ -112,15 +115,15 @@ export function CharacterTagManagerDialog({
                     </button>
                 </form>
                 <div {...stylex.props(authoringStyles.tagManagerList)}>
-                    {filteredValues.length > 0 ? filteredValues.map(value => (
-                        <div key={value} {...stylex.props(authoringStyles.tagManagerRow)}>
+                    {filteredValues.length > 0 ? filteredValues.map(({ value, index }) => (
+                        <div key={index} {...stylex.props(authoringStyles.tagManagerRow)}>
                             <label {...stylex.props(authoringStyles.tagManagerChoice)}>
                                 <input
                                     type="checkbox"
-                                    checked={selected.has(value)}
+                                    checked={selected.has(index)}
                                     aria-label={value}
                                     {...stylex.props(authoringStyles.tagManagerCheckbox)}
-                                    onChange={event => toggleSelected(value, event.target.checked)}
+                                    onChange={event => toggleSelected(index, event.target.checked)}
                                 />
                                 <span title={value}>{value}</span>
                             </label>
@@ -130,12 +133,8 @@ export function CharacterTagManagerDialog({
                                 title={translate('Remove tag ${0}').replace('${0}', value)}
                                 aria-label={translate('Remove tag ${0}').replace('${0}', value)}
                                 onClick={() => {
-                                    onChange(values.filter(tag => tag !== value));
-                                    setSelected(current => {
-                                        const next = new Set(current);
-                                        next.delete(value);
-                                        return next;
-                                    });
+                                    onChange(values.filter((_, valueIndex) => valueIndex !== index));
+                                    setSelected(new Set());
                                 }}
                             >
                                 <i className="fa-solid fa-xmark" aria-hidden="true" />

@@ -18,7 +18,7 @@ test('character authoring manages many tags in a scoped panel', async ({ page })
     const id = crypto.randomUUID();
     const name = `Tag manager ${id}`;
     const tags = Array.from({ length: 24 }, (_, index) => `Tag ${String(index + 1).padStart(2, '0')}`);
-    tags.push('Sister', 'Scenario');
+    tags.push('Sister', 'Scenario', 'Duplicate', 'Duplicate');
     const card = {
         spec: 'chara_card_v2', spec_version: '2.0',
         data: {
@@ -48,7 +48,7 @@ test('character authoring manages many tags in a scoped panel', async ({ page })
 
     const dialog = page.getByRole('dialog', { name: /Tags|标签/ });
     await expect(dialog).toBeVisible();
-    await expect(dialog.getByText(/^(26 tags|26 个标签)$/)).toBeVisible();
+    await expect(dialog.getByText(/^(28 tags|28 个标签)$/)).toBeVisible();
     const desktopViewport = page.viewportSize();
     await page.setViewportSize({ width: 390, height: 844 });
 
@@ -66,15 +66,19 @@ test('character authoring manages many tags in a scoped panel', async ({ page })
     await expect(dialog.getByText('Scenario', { exact: true })).toHaveCount(0);
     await dialog.getByRole('searchbox').fill('');
     await dialog.getByRole('button', { name: /Remove tag Tag 01|移除标签 Tag 01/ }).click();
+    await expect(dialog.getByRole('button', { name: /Remove tag Duplicate|移除标签 Duplicate/ })).toHaveCount(2);
+    await dialog.getByRole('button', { name: /Remove tag Duplicate|移除标签 Duplicate/ }).first().click();
+    await expect(dialog.getByRole('button', { name: /Remove tag Duplicate|移除标签 Duplicate/ })).toHaveCount(1);
 
     await dialog.getByRole('checkbox', { name: 'Sister' }).check();
     await dialog.getByRole('checkbox', { name: 'Scenario' }).check();
+    await dialog.getByRole('checkbox', { name: 'Duplicate' }).check();
     await dialog.getByRole('button', { name: /Remove selected|移除所选标签/ }).click();
-    await dialog.getByRole('textbox', { name: /Add tag|添加标签/ }).fill('New tag');
+    await dialog.getByRole('textbox', { name: /Add tag|添加标签/ }).fill('alpha, beta, alpha');
     await dialog.getByRole('button', { name: /Add|添加/ }).click();
 
     await expect.poll(async () => (await readCard(page, avatar)).data?.tags).toEqual([
-        ...tags.slice(1, 24), 'New tag',
+        ...tags.slice(1, 24), 'alpha', 'beta',
     ]);
-    await expect(authoring.getByRole('button', { name: /Manage tags|管理标签/ })).toContainText('24');
+    await expect(authoring.getByRole('button', { name: /Manage tags|管理标签/ })).toContainText('25');
 });
