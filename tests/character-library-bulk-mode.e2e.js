@@ -19,11 +19,21 @@ test.describe('character library bulk mode', () => {
         const characterRows = page.locator('#rm_print_characters_block .character_select');
         await expect(characterRows.nth(1)).toBeVisible({ timeout: 15_000 });
 
-        const firstRowBox = await characterRows.nth(0).boundingBox();
-        const secondRowBox = await characterRows.nth(1).boundingBox();
-        expect(firstRowBox).not.toBeNull();
-        expect(secondRowBox).not.toBeNull();
-        expect(secondRowBox.y - firstRowBox.y).toBeLessThanOrEqual(firstRowBox.height + 28);
+        const rowBounds = await characterRows.evaluateAll(rows => rows.map(row => {
+            const rowBox = row.getBoundingClientRect();
+            const content = row.querySelector('.character_select_container');
+            const contentBox = content?.getBoundingClientRect();
+            return {
+                top: rowBox.top,
+                bottom: rowBox.bottom,
+                contentBottom: contentBox?.bottom ?? rowBox.bottom,
+            };
+        }));
+
+        for (let index = 0; index < rowBounds.length - 1; index += 1) {
+            expect(rowBounds[index].contentBottom, `row ${index} content overlaps row ${index + 1}`).toBeLessThanOrEqual(rowBounds[index + 1].top + 1);
+            expect(rowBounds[index + 1].top - rowBounds[index].top, `row ${index} has an unexpectedly large gap before row ${index + 1}`).toBeLessThanOrEqual(rowBounds[index].bottom - rowBounds[index].top + 28);
+        }
     });
 
     test('keeps a filtered React character row visible after exiting bulk mode', async ({ page }) => {

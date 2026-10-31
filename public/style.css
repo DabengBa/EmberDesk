@@ -2926,6 +2926,18 @@ input[type="file"] {
         border-color var(--animation-duration-2x) ease-out;
 }
 
+/* Virtual rows are absolutely positioned from the measured wrapper height. */
+#rm_print_characters_block .character-library-react-panel__row,
+#rm_print_characters_block .character-library-react-panel__cell,
+#rm_print_characters_block .character_select,
+#rm_print_characters_block .bogus_folder_select {
+    height: max-content;
+}
+
+#rm_print_characters_block .character_select .tags.tags_inline {
+    max-height: none;
+}
+
 #rm_print_characters_block .character_select:hover,
 #rm_print_characters_block .character_select:focus-visible,
 #rm_print_characters_block .character_select:has(:focus-visible),
