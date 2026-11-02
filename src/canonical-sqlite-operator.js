@@ -864,7 +864,7 @@ async function runCanonicalSettingsAudit({ handle, directories, db, auditedAtMs 
     });
 }
 
-async function repairCanonicalSettingsProjection({ db, directories, repairKeys = null, nowMs = Date.now() }) {
+async function repairCanonicalSettingsProjection({ db, directories: _directories, repairKeys = null, nowMs = Date.now() }) {
     const requested = toRequestedRepairKeySet(repairKeys);
     const openRepairs = listOpenSettingsProjectionRepairs(db);
     const repairs = openRepairs

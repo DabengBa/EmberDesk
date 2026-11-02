@@ -675,6 +675,7 @@ export function PromptManagerList({ bridge }: { bridge: PromptPanelBridge }) {
                         <textarea
                             className="text_pole prompt-content-modal-textarea"
                             value={contentPopup.draft}
+                            aria-label={translate('Edit ${0} content').replace('${0}', state.promptsById[contentPopup.id]?.name ?? contentPopup.id)}
                             autoFocus
                             onChange={event => setContentPopup({ ...contentPopup, draft: event.target.value })}
                         />

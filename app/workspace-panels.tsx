@@ -245,6 +245,7 @@ interface AuthoringCandidateState {
 
 
 const queryClient = new QueryClient();
+const EMPTY_TURN_SUMMARIES: NonNullable<MainChatSnapshot['turnSummaries']> = [];
 const mountedPanels = new Map<WorkspacePanelKind, WorkspacePanelMount>();
 let mountedShellChrome: WorkspaceShellChromeMount | null = null;
 
@@ -2043,15 +2044,15 @@ function MainChatMessageListWorkspacePanel({
     const messageIds = mainChatStoreSnapshot.window.visibleMessageIds.length > 0
         ? mainChatStoreSnapshot.window.visibleMessageIds
         : mainChatStoreSnapshot.orderedMessageIds;
-    const messages = messageIds
+    const messages = useMemo(() => messageIds
         .map(messageId => mainChatStoreSnapshot.messagesById[messageId])
-        .filter((message): message is NonNullable<typeof message> => Boolean(message));
+        .filter((message): message is NonNullable<typeof message> => Boolean(message)), [messageIds, mainChatStoreSnapshot]);
     // Turn-summary display projection: covered ids collapse into a card at the
     // anchor position; expanded cards keep the card header and render the
     // covered rows underneath. Auto-refill is authoritative in the legacy
     // reconcile (status flip reintroduces raw rows on the next snapshot).
     const [expandedTurnKeys, setExpandedTurnKeys] = useState<ReadonlySet<string>>(() => new Set());
-    const turnSummaries = mainChatStoreSnapshot.turnSummaries ?? [];
+    const turnSummaries = mainChatStoreSnapshot.turnSummaries ?? EMPTY_TURN_SUMMARIES;
     const turnSummaryByAnchor = useMemo(() => {
         const map = new Map<string, (typeof turnSummaries)[number]>();
         const visibleIds = new Set(messages.map(message => message.id));

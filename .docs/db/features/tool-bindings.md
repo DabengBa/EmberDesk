@@ -22,6 +22,7 @@ Let users register real OpenAI-style function tools without writing an extension
 ## User-Visible Contract
 
 - The Regex drawer carries two tabs: 正则 (the legacy regex workbench, unchanged) and 工具绑定 (the bindings list and editor entry point).
+- The tool-binding settings include a keyboard-accessible `强制调用` switch. Its visible label is also exposed as the switch's accessible name, and the switch can be focused and toggled with the keyboard.
 - Bindings persist globally in `feature_settings.tool_bindings` inside the user settings document — not inside preset files and not per character.
 - Each binding carries: name (API tool name, 1-64 chars of letters/digits/`_`/`-`), optional display name, model-facing description, parameters JSON Schema, action body, optional format-message body, enabled flag, and stealth flag.
 - There is no master switch: at least one enabled binding means tool calling is on for OpenAI-compatible sources; zero enabled bindings means no `tools` payload is sent.

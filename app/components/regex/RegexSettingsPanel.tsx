@@ -102,7 +102,7 @@ export function RegexSettingsPanel() {
                     <ContractButton id="open_tool_binding_editor" className="menu_button menu_button_icon" label={translate('+ Tool binding')} nativeTitle title={translate("New tool binding")} icon={<i className="fa-solid fa-wrench" aria-hidden="true" />} />
                     <div className="flex1"></div>
                     <label className="checkbox flex-container margin-r5" htmlFor="tool_choice_required" title={translate("Force the model to call a tool on every request (tool_choice: required)")}>
-                        <input type="checkbox" id="tool_choice_required" className="enable_scoped tool-binding-enabled" />
+                        <input type="checkbox" id="tool_choice_required" className="sr-only tool-binding-enabled" aria-label={translate('Force call')} />
                         <span className="tool-binding-toggle-on fa-solid fa-toggle-on fa-lg" title={translate("tool_choice: required")}></span>
                         <span className="tool-binding-toggle-off fa-solid fa-toggle-off fa-lg" title={translate("tool_choice: auto")}></span>
                     </label>

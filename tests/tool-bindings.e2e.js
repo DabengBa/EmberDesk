@@ -161,6 +161,23 @@ async function installPipelineStub(page, { steps, closingText = 'PIPELINE_FINAL_
 test.describe.configure({ mode: 'serial' });
 
 test.describe('tool bindings', () => {
+    test('force call switch has the visible accessible name', async ({ page }) => {
+        await testSetup.awaitST({ page });
+        await page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: '正则' }).first().click();
+        await page.locator('#RegexPanel .wpc-tab').filter({ hasText: '工具绑定' }).click();
+        const visibleText = (await page.locator('#RegexPanel label[for="tool_choice_required"] + span').textContent())?.trim();
+        expect(visibleText).toBeTruthy();
+        const checkbox = page.locator('#tool_choice_required');
+        await expect(checkbox).toHaveAccessibleName(visibleText);
+        const checked = await checkbox.isChecked();
+        await checkbox.focus();
+        await expect(checkbox).toBeFocused();
+        await checkbox.press('Space');
+        await expect(checkbox).toBeChecked({ checked: !checked });
+        await checkbox.press('Space');
+        await expect(checkbox).toBeChecked({ checked });
+    });
+
     test('tools tab editor creates a persisted, registered binding', async ({ page }) => {
         await testSetup.awaitST({ page });
 

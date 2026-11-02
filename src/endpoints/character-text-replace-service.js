@@ -656,7 +656,7 @@ export async function runCharacterTextReplace({ request, apply = false, dependen
                 result.applied.worldBook = true;
                 try {
                     deps.writeWorldInfoProjection(directories, normalizedWorldName, bookPayload, worldInfoState.db);
-                } catch (error) {
+                } catch {
                     const repairKey = `world_info:${normalizedWorldName}:text-replace`;
                     deps.recordWorldInfoProjectionRepair(worldInfoState.db, {
                         repairKey,
