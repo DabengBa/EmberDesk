@@ -13,6 +13,44 @@ async function readCard(page, avatar) {
     }, avatar);
 }
 
+test('bulk deletion waits for an in-flight character save', async ({ page }) => {
+    let release;
+    let intercepted;
+    const held = new Promise(resolve => { intercepted = resolve; });
+    const gate = new Promise(resolve => { release = resolve; });
+    let deleteSent = false;
+    await page.route('**/api/characters/edit', async route => {
+        intercepted();
+        await gate;
+        await route.continue();
+    });
+    page.on('request', request => {
+        if (request.url().endsWith('/api/characters/delete')) deleteSent = true;
+    });
+    try {
+        await testSetup.awaitST({ page });
+        const library = page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: '角色库' });
+        await library.click();
+        const row = page.locator('#rm_print_characters_block .character_select').filter({ hasText: 'Dev Character 002' }).first();
+        await row.click();
+        await page.locator('[data-react-authoring-owner="characterAuthoring"] [data-react-authoring-field="description"] textarea').fill('Pending save');
+        await held;
+        await library.click();
+        await page.getByRole('button', { name: /批量编辑角色|Bulk edit characters/ }).click();
+        await row.click();
+        await page.getByRole('button', { name: /批量删除角色|Bulk delete characters/ }).click();
+        await page.locator('dialog[open] .popup-button-ok').click();
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        expect(deleteSent).toBe(false);
+        release();
+        await expect(row).toHaveCount(0);
+        await expect(page.locator('#toast-container').locator('.toast-error')).toHaveCount(0);
+        expect(deleteSent).toBe(true);
+    } finally {
+        release();
+    }
+});
+
 test('character authoring keeps management usable without extension notice or greeting preview', async ({ page }) => {
     await testSetup.awaitST({ page });
     const id = crypto.randomUUID();

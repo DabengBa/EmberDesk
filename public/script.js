@@ -768,7 +768,7 @@ registerCharacterLifecycleShellContext({
     removeCharacterFromUI: (...args) => removeCharacterFromUI(...args),
     renamePastChats: (...args) => renamePastChats(...args),
     renameTagKey: (...args) => renameTagKey(...args),
-    saveCharacterDebounced: (...args) => saveCharacterDebounced(...args),
+    cancelCharacterSave: () => cancelDebounce(saveCharacterDebounced),
     saveChatConditional: (...args) => saveChatConditional(...args),
     saveSettingsDebounced: (...args) => saveSettingsDebounced(...args),
     selectCharacterById: (...args) => selectCharacterById(...args),

@@ -34,7 +34,7 @@ const Popup = new Proxy(function () {}, {
 const POPUP_RESULT = new Proxy({}, { get: (_, key) => shell().POPUP_RESULT[key] });
 const POPUP_TYPE = new Proxy({}, { get: (_, key) => shell().POPUP_TYPE[key] });
 const t = (...args) => shell().t(...args);
-const cancelDebounce = (...args) => shell().cancelDebounce(...args);
+
 const clearChat = (...args) => shell().clearChat(...args);
 const closeCurrentChatForDelete = (...args) => shell().closeCurrentChatForDelete(...args);
 const createTagMapFromList = (...args) => shell().createTagMapFromList(...args);
@@ -58,7 +58,7 @@ const reloadCurrentChat = (...args) => shell().reloadCurrentChat(...args);
 const removeCharacterFromUI = (...args) => shell().removeCharacterFromUI(...args);
 const renamePastChats = (...args) => shell().renamePastChats(...args);
 const renameTagKey = (...args) => shell().renameTagKey(...args);
-const saveCharacterDebounced = (...args) => shell().saveCharacterDebounced(...args);
+const cancelCharacterSave = () => shell().cancelCharacterSave();
 const saveChatConditional = (...args) => shell().saveChatConditional(...args);
 const saveSettingsDebounced = (...args) => shell().saveSettingsDebounced(...args);
 const selectCharacterById = (...args) => shell().selectCharacterById(...args);
@@ -90,6 +90,24 @@ const AUTHORING_FANOUT_FIELDS = new Set([
     'depthPrompt',
 ]);
 
+const pendingCharacterSaves = new Map();
+const deletingCharacters = new Set();
+
+function beginCharacterSave(avatar) {
+    if (!avatar) return () => {};
+    if (deletingCharacters.has(avatar)) return null;
+    let finish;
+    const pending = new Promise(resolve => { finish = resolve; });
+    const saves = pendingCharacterSaves.get(avatar) ?? new Set();
+    saves.add(pending);
+    pendingCharacterSaves.set(avatar, saves);
+    return () => {
+        saves.delete(pending);
+        if (!saves.size) pendingCharacterSaves.delete(avatar);
+        finish();
+    };
+}
+
 export async function saveCharacterAuthoringFromPayload(saveModel = {}) {
     if (!state.settingsReady) {
         throw new Error('Settings not ready');
@@ -97,142 +115,148 @@ export async function saveCharacterAuthoringFromPayload(saveModel = {}) {
 
     const mode = getCurrentCharacterAuthoringMode();
     const sourceCharacter = getCurrentCharacterAuthoringSource();
-    const expectedName = String(saveModel?.fields?.name || '').trim();
-    if (!expectedName) {
-        toastr.error(t`Name is required`);
-        throw new Error('Name is required');
-    }
-    if (mode === 'create' && state.is_send_press) {
-        toastr.error(t`Cannot create characters while generating. Stop the request and try again.`, t`Creation aborted`);
-        throw new Error('Creation aborted while generating');
-    }
+    const finishSave = beginCharacterSave(mode === 'edit' ? String(sourceCharacter?.avatar || saveModel?.fields?.avatar || '') : '');
+    if (!finishSave) return { ok: false, mode };
+    try {
+        const expectedName = String(saveModel?.fields?.name || '').trim();
+        if (!expectedName) {
+            toastr.error(t`Name is required`);
+            throw new Error('Name is required');
+        }
+        if (mode === 'create' && state.is_send_press) {
+            toastr.error(t`Cannot create characters while generating. Stop the request and try again.`, t`Creation aborted`);
+            throw new Error('Creation aborted while generating');
+        }
 
-    const avatarFileInput = /** @type {HTMLInputElement|null} */ (document.getElementById('add_avatar_button'));
-    const avatarFile = avatarFileInput?.files?.[0] ?? (state.create_save.avatar?.[0] ?? null);
-    let preparedAvatarFile = null;
-    if (avatarFile instanceof File) {
-        preparedAvatarFile = await ensureImageFormatSupported(avatarFile);
-    }
+        const avatarFileInput = /** @type {HTMLInputElement|null} */ (document.getElementById('add_avatar_button'));
+        const avatarFile = avatarFileInput?.files?.[0] ?? (state.create_save.avatar?.[0] ?? null);
+        let preparedAvatarFile = null;
+        if (avatarFile instanceof File) {
+            preparedAvatarFile = await ensureImageFormatSupported(avatarFile);
+        }
 
-    const formData = buildCharacterAuthoringFormData(saveModel, {
-        mode,
-        existingAvatar: sourceCharacter?.avatar || saveModel?.fields?.avatar || '',
-        chat: sourceCharacter?.chat || String($('#selected_chat_pole').val() || ''),
-        createDate: sourceCharacter?.create_date
-            ? timestampToMoment(sourceCharacter.create_date).toISOString()
-            : String($('#create_date_pole').val() || ''),
-        jsonData: sourceCharacter?.json_data || String($('#character_json_data').val() || ''),
-        avatarFile: preparedAvatarFile,
-    });
+        const formData = buildCharacterAuthoringFormData(saveModel, {
+            mode,
+            existingAvatar: sourceCharacter?.avatar || saveModel?.fields?.avatar || '',
+            chat: sourceCharacter?.chat || String($('#selected_chat_pole').val() || ''),
+            createDate: sourceCharacter?.create_date
+                ? timestampToMoment(sourceCharacter.create_date).toISOString()
+                : String($('#create_date_pole').val() || ''),
+            jsonData: sourceCharacter?.json_data || String($('#character_json_data').val() || ''),
+            avatarFile: preparedAvatarFile,
+        });
 
-    // Keep create_save / legacy form mirrors in sync for remaining tool popups without submitting.
-    applyCharacterAuthoringSaveModel(saveModel, { submit: false });
+        // Keep create_save / legacy form mirrors in sync for remaining tool popups without submitting.
+        applyCharacterAuthoringSaveModel(saveModel, { submit: false });
 
-    let url = getCharacterAuthoringWriteUrl(mode);
-    if (state.crop_data != undefined) {
-        url = getCharacterAuthoringWriteUrl(mode, JSON.stringify(state.crop_data));
-    }
+        let url = getCharacterAuthoringWriteUrl(mode);
+        if (state.crop_data != undefined) {
+            url = getCharacterAuthoringWriteUrl(mode, JSON.stringify(state.crop_data));
+        }
 
-    const headers = getRequestHeaders({ omitContentType: true });
-    const fetchResult = await fetch(url, {
-        method: 'POST',
-        headers,
-        body: formData,
-        cache: 'no-cache',
-    });
+        const headers = getRequestHeaders({ omitContentType: true });
+        const fetchResult = await fetch(url, {
+            method: 'POST',
+            headers,
+            body: formData,
+            cache: 'no-cache',
+        });
 
-    if (!fetchResult.ok) {
-        const message = mode === 'create'
-            ? t`Failed to create character`
-            : t`Something went wrong while saving the character, or the image file provided was in an invalid format. Double check that the image is not a webp.`;
-        toastr.error(message);
-        throw new Error(`Character authoring ${mode} failed with status ${fetchResult.status}`);
-    }
+        if (!fetchResult.ok) {
+            const message = mode === 'create'
+                ? t`Failed to create character`
+                : t`Something went wrong while saving the character, or the image file provided was in an invalid format. Double check that the image is not a webp.`;
+            toastr.error(message);
+            throw new Error(`Character authoring ${mode} failed with status ${fetchResult.status}`);
+        }
 
-    if (mode === 'create') {
-        const avatarId = await fetchResult.text();
-        createTagMapFromList('#tagList', avatarId);
-        await getCharacters();
-        const createdIndex = state.characters.findIndex(character => character?.avatar === avatarId);
-        if (createdIndex >= 0) {
+        if (mode === 'create') {
+            const avatarId = await fetchResult.text();
+            createTagMapFromList('#tagList', avatarId);
+            await getCharacters();
+            const createdIndex = state.characters.findIndex(character => character?.avatar === avatarId);
+            if (createdIndex >= 0) {
             // select_selected_character alone leaves this_chid/menu_type in
             // create-mode state — the authoring remount would rebuild an empty
             // edit draft (avatar_url-less saves → 400) and aux writes would
             // keep landing in create_save.
-            setCharacterId(createdIndex);
-            setMenuType('character_edit');
-            if (Array.isArray(state.create_save.extra_books) && state.create_save.extra_books.length > 0) {
-                const fileName = getCharaFilename(null, { manualAvatarKey: avatarId });
-                const charLore = state.world_info.charLore ?? [];
-                charLore.push({ name: fileName, extraBooks: state.create_save.extra_books });
-                Object.assign(state.world_info, { charLore: charLore });
-                saveSettingsDebounced();
+                setCharacterId(createdIndex);
+                setMenuType('character_edit');
+                if (Array.isArray(state.create_save.extra_books) && state.create_save.extra_books.length > 0) {
+                    const fileName = getCharaFilename(null, { manualAvatarKey: avatarId });
+                    const charLore = state.world_info.charLore ?? [];
+                    charLore.push({ name: fileName, extraBooks: state.create_save.extra_books });
+                    Object.assign(state.world_info, { charLore: charLore });
+                    saveSettingsDebounced();
+                }
+                state.create_save.extra_books = [];
+                select_selected_character(createdIndex, { switchMenu: false });
+                await eventSource.emit(event_types.CHARACTER_EDITED, {
+                    detail: { id: createdIndex, character: state.characters[createdIndex] },
+                });
+            } else {
+                select_rm_info('char_create', avatarId, state.this_chid !== undefined ? state.characters[state.this_chid]?.avatar : null);
             }
-            state.create_save.extra_books = [];
-            select_selected_character(createdIndex, { switchMenu: false });
-            await eventSource.emit(event_types.CHARACTER_EDITED, {
-                detail: { id: createdIndex, character: state.characters[createdIndex] },
-            });
-        } else {
-            select_rm_info('char_create', avatarId, state.this_chid !== undefined ? state.characters[state.this_chid]?.avatar : null);
+            state.crop_data = undefined;
+            return {
+                ok: true,
+                mode,
+                avatar: avatarId,
+                character: createdIndex >= 0 ? state.characters[createdIndex] : null,
+            };
+        }
+
+        const editedAvatar = String(formData.get('avatar_url') || sourceCharacter?.avatar || '');
+        // The file input keeps the just-uploaded File; without clearing it every
+        // later autosave would re-attach and re-embed the same image.
+        if (avatarFile) {
+            $('#add_avatar_button').replaceWith($('#add_avatar_button').val('').clone(true));
+            state.create_save.avatar = null;
+        }
+        if (shouldRefreshCharacterAfterEdit(state.characters, editedAvatar)) {
+            await getOneCharacter(editedAvatar);
+            // Only display-affecting edits justify the render fanout: favsToHotswap
+            // rebuilds the top avatar strip and CHARACTER_EDITED re-projects the
+            // whole chat. Pure-content autosaves (description, scenario, …) would
+            // otherwise flicker the sidebar on every debounce.
+            const changedFields = Array.isArray(saveModel?.changedFields) ? saveModel.changedFields : null;
+            const needsFanout = !changedFields || changedFields.some(key => AUTHORING_FANOUT_FIELDS.has(key));
+            if (needsFanout) {
+                state.favsToHotswap();
+                await eventSource.emit(event_types.CHARACTER_EDITED, {
+                    detail: { id: state.this_chid, character: state.characters[state.this_chid] },
+                });
+            }
+            // Parity with the legacy edit-save: a changed first message refreshes
+            // the greeting of an untouched open chat.
+            if (!changedFields || changedFields.includes('firstMessage')) {
+                const message = getFirstMessage();
+                if (
+                    message.mes &&
+                !state.chat_metadata.tainted &&
+                !state.chat_metadata.greeting &&
+                (state.chat.length === 0 || (state.chat.length === 1 && !state.chat[0].is_user && !state.chat[0].is_system))
+                ) {
+                    state.chat.splice(0, state.chat.length, message);
+                    const messageId = (state.chat.length - 1);
+                    await eventSource.emit(event_types.MESSAGE_RECEIVED, messageId, 'first_message');
+                    await clearChat();
+                    await printMessages();
+                    await eventSource.emit(event_types.CHARACTER_MESSAGE_RENDERED, messageId, 'first_message');
+                    await saveChatConditional();
+                }
+            }
         }
         state.crop_data = undefined;
         return {
             ok: true,
             mode,
-            avatar: avatarId,
-            character: createdIndex >= 0 ? state.characters[createdIndex] : null,
+            avatar: editedAvatar,
+            character: state.this_chid !== undefined ? state.characters[state.this_chid] : null,
         };
+    } finally {
+        finishSave();
     }
-
-    const editedAvatar = String(formData.get('avatar_url') || sourceCharacter?.avatar || '');
-    // The file input keeps the just-uploaded File; without clearing it every
-    // later autosave would re-attach and re-embed the same image.
-    if (avatarFile) {
-        $('#add_avatar_button').replaceWith($('#add_avatar_button').val('').clone(true));
-        state.create_save.avatar = null;
-    }
-    if (shouldRefreshCharacterAfterEdit(state.characters, editedAvatar)) {
-        await getOneCharacter(editedAvatar);
-        // Only display-affecting edits justify the render fanout: favsToHotswap
-        // rebuilds the top avatar strip and CHARACTER_EDITED re-projects the
-        // whole chat. Pure-content autosaves (description, scenario, …) would
-        // otherwise flicker the sidebar on every debounce.
-        const changedFields = Array.isArray(saveModel?.changedFields) ? saveModel.changedFields : null;
-        const needsFanout = !changedFields || changedFields.some(key => AUTHORING_FANOUT_FIELDS.has(key));
-        if (needsFanout) {
-            state.favsToHotswap();
-            await eventSource.emit(event_types.CHARACTER_EDITED, {
-                detail: { id: state.this_chid, character: state.characters[state.this_chid] },
-            });
-        }
-        // Parity with the legacy edit-save: a changed first message refreshes
-        // the greeting of an untouched open chat.
-        if (!changedFields || changedFields.includes('firstMessage')) {
-            const message = getFirstMessage();
-            if (
-                message.mes &&
-                !state.chat_metadata.tainted &&
-                !state.chat_metadata.greeting &&
-                (state.chat.length === 0 || (state.chat.length === 1 && !state.chat[0].is_user && !state.chat[0].is_system))
-            ) {
-                state.chat.splice(0, state.chat.length, message);
-                const messageId = (state.chat.length - 1);
-                await eventSource.emit(event_types.MESSAGE_RECEIVED, messageId, 'first_message');
-                await clearChat();
-                await printMessages();
-                await eventSource.emit(event_types.CHARACTER_MESSAGE_RENDERED, messageId, 'first_message');
-                await saveChatConditional();
-            }
-        }
-    }
-    state.crop_data = undefined;
-    return {
-        ok: true,
-        mode,
-        avatar: editedAvatar,
-        character: state.this_chid !== undefined ? state.characters[state.this_chid] : null,
-    };
 }
 
 
@@ -542,178 +566,184 @@ export async function createOrEditCharacter(e) {
 
     $('#rm_info_avatar').html('');
     const formData = new FormData(/** @type {HTMLFormElement} */($('#form_create').get(0)));
-    formData.set('fav', String(state.fav_ch_checked));
-    const isNewChat = e instanceof CustomEvent && e.type === 'newChat';
+    const finishSave = beginCharacterSave($('#form_create').attr('actiontype') === 'createcharacter' ? '' : String(formData.get('avatar_url') || ''));
+    if (!finishSave) return;
+    try {
+        formData.set('fav', String(state.fav_ch_checked));
+        const isNewChat = e instanceof CustomEvent && e.type === 'newChat';
 
-    const rawFile = formData.get('avatar');
-    if (rawFile instanceof File) {
-        const convertedFile = await ensureImageFormatSupported(rawFile);
-        formData.set('avatar', convertedFile);
-    }
-
-    const headers = getRequestHeaders({ omitContentType: true });
-
-    if ($('#form_create').attr('actiontype') == 'createcharacter') {
-        if (String($('#character_name_pole').val()).length === 0) {
-            toastr.error(t`Name is required`);
-            return;
+        const rawFile = formData.get('avatar');
+        if (rawFile instanceof File) {
+            const convertedFile = await ensureImageFormatSupported(rawFile);
+            formData.set('avatar', convertedFile);
         }
-        if (state.is_send_press) {
-            toastr.error(t`Cannot create characters while generating. Stop the request and try again.`, t`Creation aborted`);
-            return;
-        }
-        try {
-            //if the character name text area isn't empty (only posible when creating a new character)
-            let url = '/api/characters/create';
 
-            if (state.crop_data != undefined) {
-                url += `?crop=${encodeURIComponent(JSON.stringify(state.crop_data))}`;
-            }
+        const headers = getRequestHeaders({ omitContentType: true });
 
-            formData.delete('alternate_greetings');
-            for (const value of state.create_save.alternate_greetings) {
-                formData.append('alternate_greetings', value);
-            }
-
-            formData.append('extensions', JSON.stringify(state.create_save.extensions));
-
-            const fetchResult = await fetch(url, {
-                method: 'POST',
-                headers: headers,
-                body: formData,
-                cache: 'no-cache',
-            });
-
-            if (!fetchResult.ok) {
-                throw new Error('Fetch result is not ok');
-            }
-
-            const avatarId = await fetchResult.text();
-
-            $('#character_cross').trigger('click'); //closes the advanced character editing popup
-            const fields = [
-                { id: '#character_name_pole', callback: value => state.create_save.name = value },
-                { id: '#description_textarea', callback: value => state.create_save.description = value },
-                { id: '#creator_notes_textarea', callback: value => state.create_save.creator_notes = value },
-                { id: '#character_version_textarea', callback: value => state.create_save.character_version = value },
-                { id: '#post_history_instructions_textarea', callback: value => state.create_save.post_history_instructions = value },
-                { id: '#system_prompt_textarea', callback: value => state.create_save.system_prompt = value },
-                { id: '#tags_textarea', callback: value => state.create_save.tags = value },
-                { id: '#creator_textarea', callback: value => state.create_save.creator = value },
-                { id: '#firstmessage_textarea', callback: value => state.create_save.first_message = value },
-                { id: '#scenario_pole', callback: value => state.create_save.scenario = value },
-                { id: '#depth_prompt_prompt', callback: value => state.create_save.depth_prompt_prompt = value },
-                { id: '#depth_prompt_depth', callback: value => state.create_save.depth_prompt_depth = value, defaultValue: state.depth_prompt_depth_default },
-                { id: '#depth_prompt_role', callback: value => state.create_save.depth_prompt_role = value, defaultValue: state.depth_prompt_role_default },
-                { id: '#character_json_data', callback: () => { } },
-                { id: '#alternate_greetings_template', callback: value => state.create_save.alternate_greetings = value, defaultValue: [] },
-                { id: '#character_world', callback: value => state.create_save.world = value },
-                { id: '#_character_extensions_fake', callback: _value => state.create_save.extensions = {} },
-            ];
-
-            fields.forEach(field => {
-                const fieldValue = field.defaultValue !== undefined ? field.defaultValue : '';
-                $(field.id).val(fieldValue);
-                if (field.callback) field.callback(fieldValue);
-            });
-
-            if (Array.isArray(state.create_save.extra_books) && state.create_save.extra_books.length > 0) {
-                const fileName = getCharaFilename(null, { manualAvatarKey: avatarId });
-                const charLore = state.world_info.charLore ?? [];
-                charLore.push({ name: fileName, extraBooks: state.create_save.extra_books });
-                Object.assign(state.world_info, { charLore: charLore });
-                saveSettingsDebounced();
-            }
-            state.create_save.extra_books = [];
-
-            $('#character_popup-button-h3').text('Create character');
-
-            state.create_save.avatar = null;
-
-            $('#add_avatar_button').replaceWith(
-                $('#add_avatar_button').val('').clone(true),
-            );
-
-            let oldSelectedChar = null;
-            if (state.this_chid !== undefined) {
-                oldSelectedChar = state.characters[state.this_chid].avatar;
-            }
-
-            console.log(`new avatar id: ${avatarId}`);
-            createTagMapFromList('#tagList', avatarId);
-            await getCharacters();
-
-            select_rm_info('char_create', avatarId, oldSelectedChar);
-
-            state.crop_data = undefined;
-        } catch (error) {
-            console.error('Error creating character', error);
-            toastr.error(t`Failed to create character`);
-        }
-    } else {
-        try {
-            let url = '/api/characters/edit';
-
-            if (state.crop_data != undefined) {
-                url += `?crop=${encodeURIComponent(JSON.stringify(state.crop_data))}`;
-            }
-
-            formData.delete('alternate_greetings');
-            const chid = $('.open_alternate_greetings').data('chid');
-            if (state.characters[chid] && Array.isArray(state.characters[chid]?.data?.alternate_greetings)) {
-                for (const value of state.characters[chid].data.alternate_greetings) {
-                    formData.append('alternate_greetings', value);
-                }
-            }
-
-            const fetchResult = await fetch(url, {
-                method: 'POST',
-                headers: headers,
-                body: formData,
-                cache: 'no-cache',
-            });
-
-            if (!fetchResult.ok) {
-                throw new Error('Fetch result is not ok');
-            }
-
-            const editedAvatar = formData.get('avatar_url');
-            if (!shouldRefreshCharacterAfterEdit(state.characters, editedAvatar)) {
+        if ($('#form_create').attr('actiontype') == 'createcharacter') {
+            if (String($('#character_name_pole').val()).length === 0) {
+                toastr.error(t`Name is required`);
                 return;
             }
+            if (state.is_send_press) {
+                toastr.error(t`Cannot create characters while generating. Stop the request and try again.`, t`Creation aborted`);
+                return;
+            }
+            try {
+            //if the character name text area isn't empty (only posible when creating a new character)
+                let url = '/api/characters/create';
 
-            await getOneCharacter(editedAvatar);
-            state.favsToHotswap(); // Update fav state
+                if (state.crop_data != undefined) {
+                    url += `?crop=${encodeURIComponent(JSON.stringify(state.crop_data))}`;
+                }
 
-            $('#add_avatar_button').replaceWith(
-                $('#add_avatar_button').val('').clone(true),
-            );
-            $('#create_button').attr('value', 'Save');
-            state.crop_data = undefined;
-            await eventSource.emit(event_types.CHARACTER_EDITED, { detail: { id: state.this_chid, character: state.characters[state.this_chid] } });
+                formData.delete('alternate_greetings');
+                for (const value of state.create_save.alternate_greetings) {
+                    formData.append('alternate_greetings', value);
+                }
 
-            // Recreate the chat if it hasn't been used at least once (i.e. with continue).
-            const message = getFirstMessage();
-            const shouldRegenerateMessage =
+                formData.append('extensions', JSON.stringify(state.create_save.extensions));
+
+                const fetchResult = await fetch(url, {
+                    method: 'POST',
+                    headers: headers,
+                    body: formData,
+                    cache: 'no-cache',
+                });
+
+                if (!fetchResult.ok) {
+                    throw new Error('Fetch result is not ok');
+                }
+
+                const avatarId = await fetchResult.text();
+
+                $('#character_cross').trigger('click'); //closes the advanced character editing popup
+                const fields = [
+                    { id: '#character_name_pole', callback: value => state.create_save.name = value },
+                    { id: '#description_textarea', callback: value => state.create_save.description = value },
+                    { id: '#creator_notes_textarea', callback: value => state.create_save.creator_notes = value },
+                    { id: '#character_version_textarea', callback: value => state.create_save.character_version = value },
+                    { id: '#post_history_instructions_textarea', callback: value => state.create_save.post_history_instructions = value },
+                    { id: '#system_prompt_textarea', callback: value => state.create_save.system_prompt = value },
+                    { id: '#tags_textarea', callback: value => state.create_save.tags = value },
+                    { id: '#creator_textarea', callback: value => state.create_save.creator = value },
+                    { id: '#firstmessage_textarea', callback: value => state.create_save.first_message = value },
+                    { id: '#scenario_pole', callback: value => state.create_save.scenario = value },
+                    { id: '#depth_prompt_prompt', callback: value => state.create_save.depth_prompt_prompt = value },
+                    { id: '#depth_prompt_depth', callback: value => state.create_save.depth_prompt_depth = value, defaultValue: state.depth_prompt_depth_default },
+                    { id: '#depth_prompt_role', callback: value => state.create_save.depth_prompt_role = value, defaultValue: state.depth_prompt_role_default },
+                    { id: '#character_json_data', callback: () => { } },
+                    { id: '#alternate_greetings_template', callback: value => state.create_save.alternate_greetings = value, defaultValue: [] },
+                    { id: '#character_world', callback: value => state.create_save.world = value },
+                    { id: '#_character_extensions_fake', callback: _value => state.create_save.extensions = {} },
+                ];
+
+                fields.forEach(field => {
+                    const fieldValue = field.defaultValue !== undefined ? field.defaultValue : '';
+                    $(field.id).val(fieldValue);
+                    if (field.callback) field.callback(fieldValue);
+                });
+
+                if (Array.isArray(state.create_save.extra_books) && state.create_save.extra_books.length > 0) {
+                    const fileName = getCharaFilename(null, { manualAvatarKey: avatarId });
+                    const charLore = state.world_info.charLore ?? [];
+                    charLore.push({ name: fileName, extraBooks: state.create_save.extra_books });
+                    Object.assign(state.world_info, { charLore: charLore });
+                    saveSettingsDebounced();
+                }
+                state.create_save.extra_books = [];
+
+                $('#character_popup-button-h3').text('Create character');
+
+                state.create_save.avatar = null;
+
+                $('#add_avatar_button').replaceWith(
+                    $('#add_avatar_button').val('').clone(true),
+                );
+
+                let oldSelectedChar = null;
+                if (state.this_chid !== undefined) {
+                    oldSelectedChar = state.characters[state.this_chid].avatar;
+                }
+
+                console.log(`new avatar id: ${avatarId}`);
+                createTagMapFromList('#tagList', avatarId);
+                await getCharacters();
+
+                select_rm_info('char_create', avatarId, oldSelectedChar);
+
+                state.crop_data = undefined;
+            } catch (error) {
+                console.error('Error creating character', error);
+                toastr.error(t`Failed to create character`);
+            }
+        } else {
+            try {
+                let url = '/api/characters/edit';
+
+                if (state.crop_data != undefined) {
+                    url += `?crop=${encodeURIComponent(JSON.stringify(state.crop_data))}`;
+                }
+
+                formData.delete('alternate_greetings');
+                const chid = $('.open_alternate_greetings').data('chid');
+                if (state.characters[chid] && Array.isArray(state.characters[chid]?.data?.alternate_greetings)) {
+                    for (const value of state.characters[chid].data.alternate_greetings) {
+                        formData.append('alternate_greetings', value);
+                    }
+                }
+
+                const fetchResult = await fetch(url, {
+                    method: 'POST',
+                    headers: headers,
+                    body: formData,
+                    cache: 'no-cache',
+                });
+
+                if (!fetchResult.ok) {
+                    throw new Error('Fetch result is not ok');
+                }
+
+                const editedAvatar = formData.get('avatar_url');
+                if (!shouldRefreshCharacterAfterEdit(state.characters, editedAvatar)) {
+                    return;
+                }
+
+                await getOneCharacter(editedAvatar);
+                state.favsToHotswap(); // Update fav state
+
+                $('#add_avatar_button').replaceWith(
+                    $('#add_avatar_button').val('').clone(true),
+                );
+                $('#create_button').attr('value', 'Save');
+                state.crop_data = undefined;
+                await eventSource.emit(event_types.CHARACTER_EDITED, { detail: { id: state.this_chid, character: state.characters[state.this_chid] } });
+
+                // Recreate the chat if it hasn't been used at least once (i.e. with continue).
+                const message = getFirstMessage();
+                const shouldRegenerateMessage =
                 !isNewChat &&
                 message.mes &&
                 !state.chat_metadata.tainted &&
                 !state.chat_metadata.greeting &&
                 (state.chat.length === 0 || (state.chat.length === 1 && !state.chat[0].is_user && !state.chat[0].is_system));
 
-            if (shouldRegenerateMessage) {
-                state.chat.splice(0, state.chat.length, message);
-                const messageId = (state.chat.length - 1);
-                await eventSource.emit(event_types.MESSAGE_RECEIVED, messageId, 'first_message');
-                await clearChat();
-                await printMessages();
-                await eventSource.emit(event_types.CHARACTER_MESSAGE_RENDERED, messageId, 'first_message');
-                await saveChatConditional();
+                if (shouldRegenerateMessage) {
+                    state.chat.splice(0, state.chat.length, message);
+                    const messageId = (state.chat.length - 1);
+                    await eventSource.emit(event_types.MESSAGE_RECEIVED, messageId, 'first_message');
+                    await clearChat();
+                    await printMessages();
+                    await eventSource.emit(event_types.CHARACTER_MESSAGE_RENDERED, messageId, 'first_message');
+                    await saveChatConditional();
+                }
+            } catch (error) {
+                console.log(error);
+                toastr.error(t`Something went wrong while saving the character, or the image file provided was in an invalid format. Double check that the image is not a webp.`);
             }
-        } catch (error) {
-            console.log(error);
-            toastr.error(t`Something went wrong while saving the character, or the image file provided was in an invalid format. Double check that the image is not a webp.`);
         }
+    } finally {
+        finishSave();
     }
 }
 
@@ -731,7 +761,6 @@ export async function createOrEditCharacter(e) {
  */
 export async function deleteCharacter(characterKey, { deleteChats = true, deleteWorlds, clearWorldReferences, temporaryChatAcknowledged = false, deleteContext = null } = {}) {
     const deleteFlowStartedAt = performance.now();
-    cancelDebounce(saveCharacterDebounced);
     if (!Array.isArray(characterKey)) {
         characterKey = [characterKey];
     }
@@ -748,8 +777,11 @@ export async function deleteCharacter(characterKey, { deleteChats = true, delete
         }
     }
 
+    cancelCharacterSave();
+    for (const avatar of characterKey) deletingCharacters.add(avatar);
     state.isCharacterDeleteReconcileInProgress = true;
     try {
+        await Promise.all(characterKey.flatMap(avatar => [...(pendingCharacterSaves.get(avatar) ?? [])]));
         const closeChatResult = await closeCurrentChatForDelete();
         if (!closeChatResult) {
             return false;
@@ -848,6 +880,7 @@ export async function deleteCharacter(characterKey, { deleteChats = true, delete
         markPerfInteractionMetric('deleteFlowMs', performance.now() - deleteFlowStartedAt);
         return deleted;
     } finally {
+        for (const avatar of characterKey) deletingCharacters.delete(avatar);
         state.isCharacterDeleteReconcileInProgress = false;
         state.characterDeleteReconcileGeneration++;
     }
