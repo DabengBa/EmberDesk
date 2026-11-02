@@ -299,6 +299,13 @@ describe('chat workspace structure', () => {
         expect(indexHtml).toMatch(/class="[^"]*\bmes_edit_cancel\b[^"]*"[^>]*\bdata-action="cancel-edit"/);
     });
 
+    test('keeps workspace message projections stable for memoized summary work', () => {
+        const source = readRepoFile('app/workspace-panels.tsx');
+        expect(source).toContain('const EMPTY_TURN_SUMMARIES: NonNullable<MainChatSnapshot[\'turnSummaries\']> = [];');
+        expect(source).toMatch(/const messages = useMemo\(\(\) =>[\s\S]*?\[messageIds, mainChatStoreSnapshot\]\);/);
+        expect(source).toContain('const turnSummaries = mainChatStoreSnapshot.turnSummaries ?? EMPTY_TURN_SUMMARIES;');
+    });
+
     test('keeps React message rows compatible with last-message and reasoning/edit selectors', () => {
         const rowSource = readRepoFile('app/components/main-chat/MainChatMessageRow.tsx');
         const panelSource = readRepoFile('app/workspace-panels.tsx');

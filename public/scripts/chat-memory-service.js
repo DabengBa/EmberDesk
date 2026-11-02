@@ -100,7 +100,7 @@ async function saveMutation(action, turnKey, status = 'success', rollback = () =
         shell().scheduleMainChatMessageListPanelRefresh?.();
         notify();
         return { ok: true };
-    } catch (error) {
+    } catch {
         if (!ownsSession(token)) return { ok: false, error: 'Chat changed before save completed' };
         rollback();
 

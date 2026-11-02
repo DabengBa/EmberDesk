@@ -383,6 +383,7 @@ export function PromptInspector({ bridge }: { bridge: PromptInspectorBridge }) {
                     <button
                         type="button"
                         className="menu_button"
+                        aria-label={translate('Close')}
                         title={translate('Close')}
                         onClick={() => bridge.close()}
                     >

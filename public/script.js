@@ -3061,7 +3061,7 @@ function isReactMainChatOwner() {
     return document.getElementById('chat')?.dataset.reactMainChatOwner === 'react';
 }
 
-async function runMainChatVisibleGenerationAction({ kind, messageId } = {}) {
+async function runMainChatVisibleGenerationAction({ kind, messageId: _messageId } = {}) {
     switch (kind) {
         case 'submitComposer':
             await sendTextareaMessage();
@@ -5448,7 +5448,7 @@ function showGenerationFailureRecovery(messageId) {
  * @param {Number} [options.startIndex=0] Everything including and after startIndex will be replaced.
  * @param {Boolean} [options.fade=true] Kept for API compatibility; no longer used.
  */
-export async function redisplayChat({ targetChat = chat, startIndex = 0, fade = true } = {}) {
+export async function redisplayChat({ targetChat = chat, startIndex = 0, fade: _fade = true } = {}) {
     if (isReactMainChatOwner()) {
         void mountReactMainChatMessageListPanel();
         return;
@@ -6825,11 +6825,11 @@ function unblockGeneration(type) {
     flushWIInjections();
 }
 
-export function getNextMessageId(type) {
+export function getNextMessageId(_type) {
     return chat.length;
 }
 
-export function getBiasStrings(textareaText, type) {
+export function getBiasStrings(textareaText, _type) {
     let promptBias = '';
     let messageBias = extractMessageBias(textareaText);
 
@@ -7052,7 +7052,7 @@ export async function duplicateCharacter({ avatar = null, silent = false } = {})
     return data.path;
 }
 
-function setInContextMessages(msgInContextCount, type) {
+function setInContextMessages(msgInContextCount, _type) {
     if (isReactMainChatOwner()) {
         const lastMessageId = Math.max(0, chat.length - msgInContextCount);
         chat_metadata.lastInContextMessageId = lastMessageId;
@@ -7651,7 +7651,7 @@ async function fetchStartupSettings() {
     return response.json();
 }
 
-async function applyStartupSettingsCore(data, initLoaderHandle = null) {
+async function applyStartupSettingsCore(data, _initLoaderHandle = null) {
     const settingsPlan = resolveStartupSettingsPlan({ data });
 
     if (settingsPlan.hasSettings && settingsPlan.settings) {

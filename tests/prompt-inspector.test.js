@@ -64,6 +64,13 @@ describe('pipeline request shaping shared by live send and preview', () => {
 });
 
 describe('prompt inspector wiring (structure)', () => {
+    test('keeps prompt inspector controls discoverable by accessible name', () => {
+        const inspector = read('app/components/prompt-panel/PromptInspector.tsx');
+        const panel = read('app/components/prompt-panel/PromptPanel.tsx');
+        expect(inspector).toContain("aria-label={translate('Close')}");
+        expect(panel).toMatch(/<textarea\s+className="text_pole prompt-content-modal-textarea"[\s\S]*?aria-label=\{translate\('Edit \$\{0\} content'\)\.replace\('\$\{0\}', state\.promptsById\[contentPopup\.id\]\?\.name \?\? contentPopup\.id\)\}/);
+    });
+
     test('sendOpenAIRequest delegates request building and emits SETTINGS_READY itself', () => {
         const openai = read('public/scripts/openai.js');
         expect(openai).toContain('export async function buildChatCompletionRequest');
