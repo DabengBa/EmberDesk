@@ -1,6 +1,49 @@
 import { test, expect } from '@playwright/test';
 
 test.describe('chat message layout', () => {
+    for (const viewport of [{ width: 390, height: 844 }, { width: 1440, height: 900 }]) {
+        test(`keeps the composer as one spacious surface at ${viewport.width}px`, async ({ page }) => {
+            await page.setViewportSize(viewport);
+            await page.goto('/style.css');
+            await page.setContent(`
+                <link rel="stylesheet" href="/style.css">
+                <link rel="stylesheet" href="/css/mobile-styles.css">
+                <form id="send_form" class="no-connection">
+                    <div id="nonQRFormItems">
+                        <div id="leftSendForm"><button id="options_button" type="button">Options</button></div>
+                        <div class="send_textarea_wrap">
+                            <textarea id="send_textarea" aria-label="Message" placeholder="Not connected"></textarea>
+                            <small class="send_textarea_hint">Send requires an API connection.</small>
+                            <a id="composer_connect_link" class="send_textarea_hint" href="/settings">Open connection settings</a>
+                        </div>
+                        <div id="rightSendForm"><button id="send_but" type="button">Send</button></div>
+                    </div>
+                </form>
+            `);
+            const input = page.getByRole('textbox', { name: 'Message' });
+            await expect(input).toBeVisible();
+            await expect(page.getByText('Send requires an API connection.')).toBeVisible();
+            await expect(page.getByRole('link', { name: 'Open connection settings' })).toBeVisible();
+            const layout = await input.evaluate(element => {
+                const form = element.closest('#send_form');
+                const inputRect = element.getBoundingClientRect();
+                const formRect = form.getBoundingClientRect();
+                return {
+                    height: inputRect.height,
+                    background: getComputedStyle(element).backgroundColor,
+                    withinForm: inputRect.left >= formRect.left && inputRect.right <= formRect.right,
+                    scrollWidth: document.documentElement.scrollWidth,
+                };
+            });
+            expect(layout.height).toBeGreaterThanOrEqual(50);
+            expect(layout.background).toBe('rgba(0, 0, 0, 0)');
+            expect(layout.withinForm).toBe(true);
+            expect(layout.scrollWidth).toBeLessThanOrEqual(viewport.width);
+            await input.fill('First line\nSecond line');
+            await expect(input).toHaveValue('First line\nSecond line');
+        });
+    }
+
     async function loadStaticChatLayout(page, { localStatusMarkup = '' } = {}) {
         await page.goto('/style.css');
         await page.setContent(`

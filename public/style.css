@@ -65,7 +65,7 @@
     --form-control-menu-bg: color-mix(in srgb, var(--SmartThemeBlurTintColor) 62%, var(--black70a) 38%);
     --form-control-border-color: color-mix(in srgb, var(--SmartThemeBorderColor) 72%, var(--SmartThemeBodyColor) 28%);
     --form-control-border-color-focus: color-mix(in srgb, var(--SmartThemeQuoteColor) 62%, var(--SmartThemeBorderColor) 38%);
-    --chat-workspace-bg: color-mix(in srgb, var(--SmartThemeChatTintColor) 78%, var(--black70a) 22%);
+    --chat-workspace-bg: color-mix(in srgb, var(--SmartThemeChatTintColor) 93%, var(--SmartThemeBodyColor) 7%);
     --chat-workspace-border: color-mix(in srgb, var(--SmartThemeBorderColor) 68%, var(--SmartThemeBodyColor) 12%);
     --chat-user-bubble-bg: color-mix(in srgb, var(--SmartThemeUserMesBlurTintColor) 72%, var(--black70a) 28%);
     --chat-bot-bubble-bg: color-mix(in srgb, var(--SmartThemeBotMesBlurTintColor) 78%, var(--SmartThemeBlurTintColor) 22%);
@@ -842,13 +842,13 @@ body .panelControlBar {
 #chat {
     max-height: calc(100vh - calc(var(--topBarBlockSize) + var(--bottomFormBlockSize)));
     overflow-x: hidden;
-    padding: 5px;
+    padding: 12px 16px;
     overflow-y: scroll;
     display: flex;
     bottom: 10px;
     border: 1px solid var(--chat-workspace-border);
     border-bottom: 0;
-    border-radius: 10px 10px 0 0;
+    border-radius: 6px 6px 0 0;
     backdrop-filter: blur(var(--SmartThemeBlurStrength));
     background-color: var(--chat-workspace-bg);
     -webkit-backdrop-filter: blur(var(--SmartThemeBlurStrength));
@@ -877,12 +877,12 @@ body .panelControlBar {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    width: 100%;
-    margin: 0 auto 0 auto;
-    border: 1px solid var(--chat-workspace-border);
-    border-top-color: var(--chat-message-border-subtle);
-    border-radius: 0 0 10px 10px;
-    background-color: color-mix(in srgb, var(--SmartThemeBlurTintColor) 84%, var(--black70a) 16%);
+    width: calc(100% - 40px);
+    margin: 0 20px 20px;
+    border: 1px solid var(--form-control-border-color);
+    border-radius: 5px;
+    padding: 8px;
+    background-color: var(--form-control-bg);
     backdrop-filter: blur(var(--SmartThemeBlurStrength));
 }
 
@@ -1196,7 +1196,7 @@ body .panelControlBar {
     display: flex;
     align-items: flex-start;
     justify-content: center;
-    padding: 5px;
+    padding: 14px 5px;
     margin-top: 0;
     width: 100%;
     color: var(--SmartThemeBodyColor);
@@ -1413,8 +1413,8 @@ body .panelControlBar {
 
 .mes_text,
 .mes_reasoning {
-    font-weight: 500;
-    line-height: calc(var(--mainFontSize) + 0.55rem);
+    font-weight: 400;
+    line-height: 1.8;
     max-width: 100%;
     overflow-wrap: anywhere;
     text-shadow: 0px 0px calc(var(--shadowWidth) * 1px) var(--SmartThemeShadowColor);
@@ -1473,18 +1473,18 @@ button {
 }
 
 #send_textarea {
-    min-height: calc(var(--bottomFormBlockSize) + 2px);
-    height: calc(var(--bottomFormBlockSize) + 2px);
+    min-height: max(50px, calc(var(--bottomFormBlockSize) + 2px));
+    height: 50px;
     max-height: 50vh;
     max-height: 50dvh;
     word-wrap: break-word;
     resize: vertical;
     display: block;
-    background-color: var(--form-control-bg);
-    border: 1px solid var(--form-control-border-color);
-    border-radius: 5px;
+    background-color: transparent;
+    border: 1px solid transparent;
+    border-radius: 0;
     box-shadow: none;
-    padding: 6px;
+    padding: 8px 10px;
     font-family: var(--mainFontFamily);
     margin: 0;
     text-shadow: 0px 0px calc(var(--shadowWidth) * 1px) var(--SmartThemeShadowColor);
@@ -1548,10 +1548,7 @@ button {
 }
 
 #send_textarea:focus {
-    background-color: var(--form-control-bg-focus);
-    border-right-color: var(--form-control-border-color-focus);
-    border-bottom-color: var(--form-control-border-color-focus);
-    border-left-color: var(--form-control-border-color-focus);
+    background-color: transparent;
 }
 
 #send_textarea:focus-visible {
