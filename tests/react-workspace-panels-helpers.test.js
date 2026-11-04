@@ -604,6 +604,23 @@ describe('React workspace panels bridge helpers', () => {
         expect(panelModule.mountWorkspacePanel).toHaveBeenCalledWith('worldInfo', container, expect.objectContaining({ state: { selectorsSeparated: true } }));
     });
 
+    test('reports a main-chat React mount failure in the existing chat host without restoring legacy ownership', () => {
+        const scriptSource = read('public/script.js');
+        const mountSource = scriptSource.match(/async function mountReactMainChatMessageListPanel\(\) \{[\s\S]*?\n\}/)?.[0] ?? '';
+
+        expect(mountSource).toContain('data-react-main-chat-build-error');
+        expect(mountSource).toContain('Could not load chat data. Try reloading the page.');
+        expect(mountSource).toContain('role="alert"');
+        expect(mountSource).toContain("host.insertAdjacentHTML('beforeend'");
+        expect(mountSource).not.toContain('host.innerHTML');
+        expect(mountSource).toContain('result?.reason === WORKSPACE_PANEL_MOUNT_FALLBACK_REASONS.BUNDLE_LOAD_FAILED');
+        expect(mountSource).toContain('result?.reason === WORKSPACE_PANEL_MOUNT_FALLBACK_REASONS.MOUNT_FAILED');
+        expect(mountSource).not.toContain('result?.reason === WORKSPACE_PANEL_MOUNT_FALLBACK_REASONS.FEATURE_DISABLED');
+        expect(mountSource).not.toContain('result?.reason === WORKSPACE_PANEL_MOUNT_FALLBACK_REASONS.MISSING_CONTAINER');
+        expect(mountSource).not.toContain('showLegacyChat');
+        expect(mountSource).not.toContain('renderChat');
+    });
+
     test('mounts workspace panel hosts only when the guarded flag stays enabled and forwards disabled cleanup', async () => {
         const ensureContainer = jest.fn(() => ({ nodeType: 1 }));
         const getState = jest.fn(() => ({ ready: true }));

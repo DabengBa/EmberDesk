@@ -177,3 +177,65 @@ When a learning is promoted to a skill, add these fields:
 - Disposition: retain; Application: applied
 
 ---
+
+## [LRN-20261105-004] best_practice
+
+**Logged**: 2026-11-05T07:12:44+08:00
+**Priority**: medium
+**Status**: pending
+**Area**: tests
+
+### Summary
+Validate frozen installs separately for the root and tests package boundaries.
+
+### Details
+The repository tracks both `pnpm-lock.yaml` and `tests/pnpm-lock.yaml`; installing only the root does not establish that the separate tests package can be installed from its own lockfile. With pnpm 12.0.0-rc.5, the documented install from `tests` failed with `ERR_PNPM_PACKAGE_MANAGER_NO_IMPORTER` because pnpm selected the root workspace lockfile, which has no `tests` importer. Installing a copy of the tests manifest and lockfile outside the workspace succeeded and supplied isolated dependencies for this task; it did not repair the documented command.
+
+### Suggested Action
+When dependency or lockfile changes affect validation, run the documented frozen install in the root and in `tests`, using the pinned Node and pnpm versions; report each result separately. Investigate the workspace boundary if the tests install fails; do not treat an existing `tests/node_modules` or the isolated workaround as proof that the documented command works.
+
+### Metadata
+- Source: conversation
+- Related Files: AGENTS.md, .docs/tech/pnpm-workflow.md, pnpm-lock.yaml, tests/package.json, tests/pnpm-lock.yaml
+- Tags: pnpm, frozen-lockfile, tests
+
+### Context Maintenance
+- Decay-Type: decision
+- Decay-Rate: slow (recheck when package boundaries or installation policy change)
+- Authority: AGENTS.md and .docs/tech/pnpm-workflow.md; Owner: unknown
+- Revalidation: inspect both package boundaries, lockfiles, and workflow before dependency validation; if sources are unavailable, treat the procedure as unverified.
+- Validation: verified; Last-Validated: 2026-11-05; Evidence: documented tests install failed with `ERR_PNPM_PACKAGE_MANAGER_NO_IMPORTER`; an isolated copy installed successfully using its own lockfile.
+- Disposition: unassessed; Application: proposed
+
+---
+
+## [LRN-20261105-005] best_practice
+
+**Logged**: 2026-11-05T07:21:18+08:00
+**Priority**: medium
+**Status**: pending
+**Area**: tests
+
+### Summary
+Test development proxy behavior through a running Vite server, not only its configuration object.
+
+### Details
+The current integration runner starts Vite with the real project configuration and a local fixture HTTP backend. It checks CSRF cookie and token forwarding, representative legacy and React asset paths, page responses, and absence of SPA fallback for an unknown HTML path. On Node v26.12.1 the runner reported `vite-dev-proxy: ok`. This proves the checked fixture interactions, not an actual Express deployment, browser cookie policy, or every proxied route.
+
+### Suggested Action
+When changing dev proxy routes or Vite fallback behavior, run `node tests/vite-dev-proxy.integration.runner.mjs` alongside focused config tests; use a separate isolated Express/browser test when the change requires end-to-end proof.
+
+### Metadata
+- Source: conversation
+- Related Files: vite.config.ts, vite-dev-server-config.mjs, tests/vite-dev-proxy.integration.runner.mjs, tests/vite-dev-proxy.integration.test.js
+- Tags: vite, proxy, integration, csrf
+
+### Context Maintenance
+- Decay-Type: dependency
+- Decay-Rate: medium (recheck when Vite, proxy configuration, or the runner changes)
+- Authority: project Vite configuration and integration runner; Owner: unknown
+- Revalidation: run the current runner with the supported Node version and inspect its assertions at proxy-related changes; if the runner is unavailable, do not claim runtime proxy proof.
+- Validation: verified; Last-Validated: 2026-11-05; Evidence: runner passed on Node v26.12.1 against a fixture backend.
+- Disposition: unassessed; Application: proposed
+
+---
