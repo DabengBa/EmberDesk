@@ -6040,7 +6040,8 @@ body:has(#emberdesk-react-workspace-shell-chrome-host) {
 
 .fillLeft.openDrawer {
     display: flex;
-    height: 100%;
+    height: 100vh;
+    height: 100dvh;
 
     @starting-style {
         height: 0;

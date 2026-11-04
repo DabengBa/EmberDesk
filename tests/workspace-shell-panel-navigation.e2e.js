@@ -76,6 +76,33 @@ async function resetSeededSideDrawers(page) {
 }
 
 test.describe('workspace shell panel navigation', () => {
+    test('mobile side panels display their content and switch from the toolbar', async ({ page }) => {
+        await page.setViewportSize({ width: 390, height: 844 });
+        await testSetup.awaitST({ page });
+        await resetSeededSideDrawers(page);
+
+        await openShellPanel(page, '提示词');
+        const left = page.locator('#left-nav-panel.openDrawer');
+        await expect(left).toBeVisible();
+        await expect.poll(async () => left.evaluate(el => el.getBoundingClientRect().height)).toBeGreaterThan(400);
+        await expect.poll(async () => left.locator('.scrollableInner').evaluate(el => el.getBoundingClientRect().height)).toBeGreaterThan(100);
+        await expect(left.locator('#settings_preset_openai')).toBeVisible();
+
+        await openShellPanel(page, '角色库');
+        await expect(left).toHaveCount(0);
+        const right = page.locator('#right-nav-panel.openDrawer');
+        await expect(right.locator('#rm_characters_block')).toBeVisible();
+        await expect.poll(async () => right.evaluate(el => el.getBoundingClientRect().height)).toBeGreaterThan(400);
+        await openShellPanel(page, '提示词');
+        await expect(right).toHaveCount(0);
+        await expect(left.locator('#settings_preset_openai')).toBeVisible();
+        await clickShellPanel(page, '提示词');
+        await expect(left).toHaveCount(0);
+        await openShellPanel(page, '角色库');
+        await clickShellPanel(page, '角色库');
+        await expect(right).toHaveCount(0);
+    });
+
     test('primary registry entries expose unified pressed state without redundant status copy', async ({ page }) => {
         test.setTimeout(120_000);
         await testSetup.awaitST({ page });
