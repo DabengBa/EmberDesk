@@ -1,4 +1,4 @@
-import { Fragment, StrictMode, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ChangeEvent, type ReactElement, type ReactNode, type TextareaHTMLAttributes } from 'react';
+import { Component, Fragment, StrictMode, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ChangeEvent, type ReactElement, type ReactNode, type TextareaHTMLAttributes } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { createPortal, flushSync } from 'react-dom';
 import { QueryClient, QueryClientProvider, useMutation, useQuery } from '@tanstack/react-query';
@@ -43,6 +43,7 @@ import { MainChatMessageRow } from './components/main-chat/MainChatMessageRow';
 import { MainChatGreetingPicker } from './components/main-chat/MainChatGreetingPicker';
 import { TurnSummaryCard } from './components/main-chat/TurnSummaryCard';
 import { projectChatTurnCards } from '../public/scripts/chat-turn-card-projection.js';
+import { clearMainChatFailure, getMainChatFailure, showMainChatFailure } from '../public/scripts/main-chat-failure.js';
 import {
     createCharacterAuthoringSession,
     shouldApplyCharacterAuthoringSaveResult,
@@ -103,12 +104,37 @@ interface WorkspacePanelMount {
     runtime: RuntimePort;
     state?: unknown;
     commands?: WorkspacePanelBridge;
+    revision?: number;
+}
+
+class MainChatErrorBoundary extends Component<{ host: HTMLElement; revision: number; children: ReactNode }, { failed: boolean; revision: number }> {
+    state = { failed: false, revision: this.props.revision };
+
+    static getDerivedStateFromError() { return { failed: true }; }
+
+    static getDerivedStateFromProps(props: { revision: number }, state: { failed: boolean; revision: number }) {
+        return props.revision !== state.revision ? { failed: false, revision: props.revision } : null;
+    }
+
+    componentDidCatch(error: Error) {
+        console.error('React main chat render failed.', error);
+        showMainChatFailure(this.props.host, translate('Could not load chat data. Try reloading the page.'));
+    }
+
+    render() { return this.state.failed ? null : this.props.children; }
+}
+
+class MainChatCommit extends Component<{ host: HTMLElement; failure: Element | null; children: ReactNode }> {
+    componentDidMount() { clearMainChatFailure(this.props.host, this.props.failure); }
+    componentDidUpdate() { clearMainChatFailure(this.props.host, this.props.failure); }
+    render() { return this.props.children; }
 }
 
 interface WorkspacePanelMountOptions {
     runtime: RuntimePort;
     state?: unknown;
     commands?: WorkspacePanelBridge;
+    mainChatFailure?: Element | null;
 }
 
 type WorkspacePanelStatus = 'idle' | 'loading' | 'empty' | 'success' | 'error';
@@ -2637,7 +2663,7 @@ function syncMainChatStoreSnapshot(state: unknown) {
     mainChatStore.getState().reset();
 }
 
-function renderIntoPanel(mount: WorkspacePanelMount) {
+function renderIntoPanel(mount: WorkspacePanelMount, mainChatFailure: Element | null = null) {
     if (mount.kind === 'mainChatMessageList') {
         syncMainChatStoreSnapshot(mount.state);
     }
@@ -2657,7 +2683,7 @@ function renderIntoPanel(mount: WorkspacePanelMount) {
                 // Theme creates a DOM wrapper; the legacy #chat surface requires
                 // message rows to remain its direct children. The shell chrome
                 // Theme already establishes the document theme for this app.
-                ? panel
+                ? <MainChatErrorBoundary host={mount.container} revision={mount.revision ?? 0}><MainChatCommit host={mount.container} failure={mainChatFailure}>{panel}</MainChatCommit></MainChatErrorBoundary>
                 : <Theme theme={emberDeskTheme} mode="dark">{panel}</Theme>}
         </StrictMode>,
     );
@@ -2766,6 +2792,7 @@ export function unmountSettingsPanel() {
 
 export function mountWorkspacePanel(kind: WorkspacePanelKind, container: HTMLElement, options: WorkspacePanelMountOptions) {
     attachGlobalCompatibilityBridge();
+    const mainChatFailure = kind === 'mainChatMessageList' ? (options.mainChatFailure === undefined ? getMainChatFailure(container) : options.mainChatFailure) : null;
     const existingPanel = mountedPanels.get(kind);
     if (existingPanel) {
         if (existingPanel.container !== container) {
@@ -2773,9 +2800,10 @@ export function mountWorkspacePanel(kind: WorkspacePanelKind, container: HTMLEle
             mountedPanels.delete(kind);
         } else {
             existingPanel.state = options.state;
+            if (kind === 'mainChatMessageList') existingPanel.revision = (existingPanel.revision ?? 0) + 1;
             existingPanel.commands = options.commands;
             existingPanel.runtime = options.runtime;
-            renderIntoPanel(existingPanel);
+            renderIntoPanel(existingPanel, mainChatFailure);
             return;
         }
     }
@@ -2790,7 +2818,7 @@ export function mountWorkspacePanel(kind: WorkspacePanelKind, container: HTMLEle
     };
     mountedPanels.set(kind, mount);
     recordWorkspacePanelMount(kind, options.state ?? null, options.commands);
-    renderIntoPanel(mount);
+    renderIntoPanel(mount, mainChatFailure);
 }
 
 export function mountWorkspaceShellChrome(container: HTMLElement, options: WorkspaceShellChromeMountOptions) {

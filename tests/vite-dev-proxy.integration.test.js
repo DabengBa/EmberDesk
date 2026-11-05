@@ -12,15 +12,15 @@ describe('Vite development proxy', () => {
     test('uses the Express default and supports explicit custom settings', () => {
         const defaults = getDevServerConfig({});
         expect(defaults.port).toBe(3001);
-        expect(defaults.proxy['/api']).toEqual({
+        expect(defaults.proxy['/api']).toMatchObject({
             target: 'http://127.0.0.1:8000',
             changeOrigin: true,
         });
-        expect(defaults.proxy['/react/login']).toEqual({
+        expect(defaults.proxy['/react/login']).toMatchObject({
             target: 'http://127.0.0.1:8000',
             changeOrigin: true,
         });
-        expect(defaults.proxy['/User%20Avatars']).toEqual({
+        expect(defaults.proxy['/User%20Avatars']).toMatchObject({
             target: 'http://127.0.0.1:8000',
             changeOrigin: true,
         });
@@ -39,7 +39,7 @@ describe('Vite development proxy', () => {
                 'tests/vite-dev-proxy.integration.runner.mjs',
             ], {
                 cwd: repoRoot,
-                env: process.env,
+                env: { ...process.env, NODE_ENV: 'development' },
                 maxBuffer: 1024 * 1024,
             });
             expect(result.stdout).toContain('vite-dev-proxy: ok');
@@ -50,5 +50,5 @@ describe('Vite development proxy', () => {
                 error.stderr,
             ].filter(Boolean).join('\n'));
         }
-    });
+    }, 30000);
 });

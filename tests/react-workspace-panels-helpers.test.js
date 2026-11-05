@@ -31,6 +31,17 @@ function read(relativePath) {
 }
 
 describe('React workspace panels bridge helpers', () => {
+    test.each([
+        ['synchronous throw', () => { throw new Error('snapshot failed'); }],
+        ['asynchronous rejection', () => Promise.reject(new Error('snapshot failed'))],
+    ])('returns a main-chat mount failure on snapshot %s', async (_label, getState) => {
+        await expect(mountWorkspacePanelHost({
+            kind: 'mainChatMessageList',
+            features: { reactPanels: { mainChatMessageList: true } },
+            ensureContainer: () => ({}),
+            getState,
+        })).resolves.toEqual(createWorkspacePanelFallbackResult('mainChatMessageList', WORKSPACE_PANEL_MOUNT_FALLBACK_REASONS.MOUNT_FAILED));
+    });
     test('uses a default sole-owner feature payload for retired workspace panel islands', () => {
         expect(getDefaultWorkspaceReactFeatures()).toEqual({
             reactPanels: {
@@ -608,10 +619,9 @@ describe('React workspace panels bridge helpers', () => {
         const scriptSource = read('public/script.js');
         const mountSource = scriptSource.match(/async function mountReactMainChatMessageListPanel\(\) \{[\s\S]*?\n\}/)?.[0] ?? '';
 
-        expect(mountSource).toContain('data-react-main-chat-build-error');
+        expect(mountSource).toContain('showMainChatFailure');
         expect(mountSource).toContain('Could not load chat data. Try reloading the page.');
-        expect(mountSource).toContain('role="alert"');
-        expect(mountSource).toContain("host.insertAdjacentHTML('beforeend'");
+
         expect(mountSource).not.toContain('host.innerHTML');
         expect(mountSource).toContain('result?.reason === WORKSPACE_PANEL_MOUNT_FALLBACK_REASONS.BUNDLE_LOAD_FAILED');
         expect(mountSource).toContain('result?.reason === WORKSPACE_PANEL_MOUNT_FALLBACK_REASONS.MOUNT_FAILED');
@@ -1118,7 +1128,7 @@ describe('React workspace panels bridge helpers', () => {
         expect(scriptSource).toContain('selectWorldInfoWorkbenchEntry');
         expect(scriptSource).toContain('updateWorldInfoWorkbenchEntryFields');
         expect(scriptSource).not.toContain("document.getElementById('world_import_menu_item')?.click();");
-        expect(hostControllerSource).toContain('const resolvedState = await Promise.resolve(getState(stateOverrides));');
+        expect(hostControllerSource).toContain('resolvedState = await Promise.resolve(getState(stateOverrides));');
         expect(workbenchSource).toContain('data-world-info-react-workflow="workbench"');
         expect(workbenchSource).toContain('data-world-info-react-layout="split"');
         expect(workbenchSource).toContain('data-world-info-react-mobile-view');

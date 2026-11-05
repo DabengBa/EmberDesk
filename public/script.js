@@ -250,6 +250,7 @@ import {
 } from './scripts/character-authoring.js';
 import { mountWorkspacePanelHost, createWorkspacePanelCommandPort } from './scripts/workspace-panel-host-controller.js';
 import { WORKSPACE_PANEL_MOUNT_FALLBACK_REASONS } from './scripts/workspace-panel-mount-contract.js';
+import { showMainChatFailure } from './scripts/main-chat-failure.js';
 import { registerWorldInfoShellContext } from './scripts/world-info-shell-context.js';
 import {
     executeGenerationRequestInShell,
@@ -3428,10 +3429,7 @@ async function mountReactMainChatMessageListPanel() {
         result?.reason === WORKSPACE_PANEL_MOUNT_FALLBACK_REASONS.BUNDLE_LOAD_FAILED
         || result?.reason === WORKSPACE_PANEL_MOUNT_FALLBACK_REASONS.MOUNT_FAILED
     ) {
-        const host = ensureMainChatMessageListReactHost();
-        if (host && !host.querySelector('[data-react-main-chat-build-error]')) {
-            host.insertAdjacentHTML('beforeend', `<div class="react-main-chat-panel" data-react-main-chat-build-error="true" role="alert">${translate('Could not load chat data. Try reloading the page.')}</div>`);
-        }
+        showMainChatFailure(ensureMainChatMessageListReactHost(), translate('Could not load chat data. Try reloading the page.'));
     }
     return result;
 }

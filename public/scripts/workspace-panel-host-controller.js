@@ -4,6 +4,7 @@ import {
     createWorkspacePanelMountedResult,
 } from './workspace-panel-mount-contract.js';
 import { mountReactWorkspacePanel } from './workspace-panels-react-bridge.js';
+import { getMainChatFailure } from './main-chat-failure.js';
 
 export function decideWorkspacePanelHostLifecycle({
     kind,
@@ -51,7 +52,15 @@ export async function mountWorkspacePanelHost({
         return decision;
     }
 
-    const resolvedState = await Promise.resolve(getState(stateOverrides));
+    const mainChatFailure = kind === 'mainChatMessageList' ? getMainChatFailure(container) : undefined;
+    let resolvedState;
+    try {
+        resolvedState = await Promise.resolve(getState(stateOverrides));
+    } catch (error) {
+        if (kind !== 'mainChatMessageList') throw error;
+        console.warn('React main chat snapshot failed.', error);
+        return createWorkspacePanelFallbackResult(kind, WORKSPACE_PANEL_MOUNT_FALLBACK_REASONS.MOUNT_FAILED);
+    }
     return mountReactWorkspacePanel({
         kind,
         container,
@@ -59,6 +68,7 @@ export async function mountWorkspacePanelHost({
         commands,
         runtime,
         features,
+        mainChatFailure,
     });
 }
 

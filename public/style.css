@@ -839,6 +839,15 @@ body .panelControlBar {
     cursor: -webkit-grabbing;
 }
 
+[data-react-main-chat-build-error] {
+    flex: none;
+    padding: 10px 16px;
+    color: var(--SmartThemeBodyColor);
+    background: var(--SmartThemeBlurTintColor);
+    border: 1px solid var(--SmartThemeBorderColor);
+    overflow-wrap: anywhere;
+}
+
 #chat {
     max-height: calc(100vh - calc(var(--topBarBlockSize) + var(--bottomFormBlockSize)));
     overflow-x: hidden;
