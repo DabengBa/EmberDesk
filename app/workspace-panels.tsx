@@ -110,6 +110,7 @@ interface WorkspacePanelMount {
 class MainChatErrorBoundary extends Component<{ host: HTMLElement; revision: number; children: ReactNode }, { failed: boolean; revision: number }> {
     state = { failed: false, revision: this.props.revision };
 
+
     static getDerivedStateFromError() { return { failed: true }; }
 
     static getDerivedStateFromProps(props: { revision: number }, state: { failed: boolean; revision: number }) {
@@ -124,10 +125,26 @@ class MainChatErrorBoundary extends Component<{ host: HTMLElement; revision: num
     render() { return this.state.failed ? null : this.props.children; }
 }
 
-class MainChatCommit extends Component<{ host: HTMLElement; failure: Element | null; children: ReactNode }> {
-    componentDidMount() { clearMainChatFailure(this.props.host, this.props.failure); }
-    componentDidUpdate() { clearMainChatFailure(this.props.host, this.props.failure); }
-    render() { return this.props.children; }
+class MainChatEffectBoundary extends Component<{ host: HTMLElement; revision: number; children: ReactNode }, { failed: boolean; revision: number }> {
+    state = { failed: false, revision: this.props.revision };
+    static getDerivedStateFromError() { return { failed: true }; }
+    static getDerivedStateFromProps(props: { revision: number }, state: { failed: boolean; revision: number }) {
+        return props.revision !== state.revision ? { failed: false, revision: props.revision } : null;
+    }
+    componentDidCatch(error: Error) {
+        console.error('React main chat effect failed.', error);
+        showMainChatFailure(this.props.host, translate('Could not load chat data. Try reloading the page.'));
+    }
+    render() { return this.state.failed ? null : this.props.children; }
+}
+
+function MainChatSlashOwner({ commands, host, failure, revision }: { commands?: MainChatCommands; host: HTMLElement; failure: Element | null; revision: number }) {
+    useEffect(() => {
+        void commands?.setSlashVisibleOwner(true);
+        clearMainChatFailure(host, failure);
+        return () => { void commands?.setSlashVisibleOwner(false); };
+    }, [commands, host, failure, revision]);
+    return null;
 }
 
 interface WorkspacePanelMountOptions {
@@ -2173,13 +2190,6 @@ function MainChatMessageListWorkspacePanel({
     const shouldShowSlashDetails = slash.detailsVisible && slash.detailsHtml !== '';
     const shouldShowSlashStatus = slash.paused || slash.aborted || slash.errorLabel !== null;
 
-    useEffect(() => {
-        void commands?.setSlashVisibleOwner(true);
-        return () => {
-            void commands?.setSlashVisibleOwner(false);
-        };
-    }, [commands]);
-
     return (
         <>
             {/* Message-row controls render as native <button> elements carrying
@@ -2683,7 +2693,12 @@ function renderIntoPanel(mount: WorkspacePanelMount, mainChatFailure: Element | 
                 // Theme creates a DOM wrapper; the legacy #chat surface requires
                 // message rows to remain its direct children. The shell chrome
                 // Theme already establishes the document theme for this app.
-                ? <MainChatErrorBoundary host={mount.container} revision={mount.revision ?? 0}><MainChatCommit host={mount.container} failure={mainChatFailure}>{panel}</MainChatCommit></MainChatErrorBoundary>
+                ? <MainChatErrorBoundary host={mount.container} revision={mount.revision ?? 0}>
+                    {panel}
+                    <MainChatEffectBoundary host={mount.container} revision={mount.revision ?? 0}>
+                        <MainChatSlashOwner commands={mount.commands as MainChatCommands | undefined} host={mount.container} failure={mainChatFailure} revision={mount.revision ?? 0} />
+                    </MainChatEffectBoundary>
+                </MainChatErrorBoundary>
                 : <Theme theme={emberDeskTheme} mode="dark">{panel}</Theme>}
         </StrictMode>,
     );

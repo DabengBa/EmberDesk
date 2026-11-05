@@ -73,6 +73,57 @@ test('main chat reports a React effect failure and clears it after a successful 
     await expect(page.locator('#chat > .mes[mesid="0"] .mes_text')).toContainText('Recovered message');
 });
 
+test('main chat keeps messages visible during a slash-owner effect failure', async ({ page }) => {
+    await page.route('**/chat-failure-preserves-message', route => route.fulfill({
+        contentType: 'text/html',
+        body: '<!doctype html><html><body><div id="sheld"><div id="chat"></div><div id="form_sheld"></div></div></body></html>',
+    }));
+    await page.goto('/chat-failure-preserves-message');
+    await page.evaluate(async () => {
+        const panels = await import('/react/login/assets/workspace-panels.js');
+        const host = document.getElementById('chat');
+        window.testPanels = panels;
+        window.testPanelState = snapshot => ({ state: { mainChatSnapshot: snapshot }, runtime: {} });
+        panels.mountWorkspacePanel('mainChatMessageList', host, {
+            ...window.testPanelState({
+                orderedMessageIds: ['0'],
+                messagesById: { '0': { id: '0', content: 'Existing message', render: { messageHtml: 'Existing message' } } },
+            }),
+            commands: { setSlashVisibleOwner: () => {} },
+        });
+    });
+    const existingMessage = page.locator('#chat > .mes[mesid="0"] .mes_text');
+    await expect(existingMessage).toContainText('Existing message');
+
+    await page.evaluate(() => {
+        const commands = new Proxy({}, { get(_target, key) {
+            if (key === 'setSlashVisibleOwner') throw new Error('injected effect failure');
+            return () => {};
+        } });
+        window.testPanels.mountWorkspacePanel('mainChatMessageList', document.getElementById('chat'), {
+            ...window.testPanelState({
+                orderedMessageIds: ['0'],
+                messagesById: { '0': { id: '0', content: 'Existing message', render: { messageHtml: 'Existing message' } } },
+            }),
+            commands,
+        });
+    });
+    await expect(page.locator('[data-react-main-chat-build-error]')).toBeVisible();
+    await expect(existingMessage).toContainText('Existing message');
+
+    await page.evaluate(() => {
+        window.testPanels.mountWorkspacePanel('mainChatMessageList', document.getElementById('chat'), {
+            ...window.testPanelState({
+                orderedMessageIds: ['1'],
+                messagesById: { '1': { id: '1', content: 'Recovered message', render: { messageHtml: 'Recovered message' } } },
+            }),
+            commands: { setSlashVisibleOwner: () => {} },
+        });
+    });
+    await expect(page.locator('[data-react-main-chat-build-error]')).toHaveCount(0);
+    await expect(page.locator('#chat > .mes[mesid="1"] .mes_text')).toContainText('Recovered message');
+});
+
 test('an earlier React commit cannot clear a later snapshot failure', async ({ page }) => {
     await page.route('**/chat-failure-race', route => route.fulfill({ contentType: 'text/html', body: '<div id="sheld"><div id="chat"></div></div>' }));
     await page.goto('/chat-failure-race');
