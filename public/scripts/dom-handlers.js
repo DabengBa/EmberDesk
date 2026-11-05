@@ -783,15 +783,25 @@ export async function bindLegacyShellHandlers() {
 
         try {
             if (state.this_del_mes >= 0) {
-                state.chatElement.find(`.mes[mesid="${state.this_del_mes}"]`).nextAll('div').remove();
-                state.chatElement.find(`.mes[mesid="${state.this_del_mes}"]`).remove();
+                const reactOwner = isReactMainChatOwner();
+                const identity = reactOwner ? shell().getMainChatIdentity() : null;
+                const deletedFrom = state.this_del_mes;
+                if (!reactOwner) {
+                    state.chatElement.find(`.mes[mesid="${state.this_del_mes}"]`).nextAll('div').remove();
+                    state.chatElement.find(`.mes[mesid="${state.this_del_mes}"]`).remove();
+                }
                 state.chat.length = state.this_del_mes;
+                if (reactOwner) shell().truncateMainChatUiState(deletedFrom);
                 state.chat_metadata.tainted = true;
                 await saveChatConditional();
-                state.chatElement.scrollTop(state.chatElement[0].scrollHeight);
-                await eventSource.emit(event_types.MESSAGE_DELETED, state.chat.length);
-                state.chatElement.find('.mes').removeClass('last_mes');
-                state.chatElement.find('.mes').last().addClass('last_mes');
+                if (!reactOwner) state.chatElement.scrollTop(state.chatElement[0].scrollHeight);
+                await eventSource.emit(event_types.MESSAGE_DELETED, deletedFrom);
+                if (reactOwner) {
+                    await shell().refreshMainChatAfterBulkDelete(identity);
+                } else {
+                    state.chatElement.find('.mes').removeClass('last_mes');
+                    state.chatElement.find('.mes').last().addClass('last_mes');
+                }
             } else {
                 console.log('this_del_mes is not >= 0, not deleting');
             }

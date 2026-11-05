@@ -972,6 +972,26 @@ registerDomHandlersShellContext({
     mountExportFormatPopup: (...args) => mountExportFormatPopup(...args),
     mountOptionsMenu: (...args) => mountOptionsMenu(...args),
     mountReactMainChatMessageListPanel: (...args) => mountReactMainChatMessageListPanel(...args),
+    getMainChatIdentity: () => ({ character: characters[this_chid]?.avatar, chat: getCurrentChatId(), metadata: chat_metadata }),
+    truncateMainChatUiState: (startIndex) => {
+        for (const key of mainChatMessageUiState.keys()) {
+            if (Number(key) >= startIndex) mainChatMessageUiState.delete(key);
+        }
+        if (Number(this_edit_mes_id) >= startIndex && this_edit_mes_id !== undefined) this_edit_mes_id = undefined;
+        const chatId = getCurrentChatId();
+        const visibleStart = mainChatVisibleStartIndices.get(chatId);
+        if (Number.isInteger(visibleStart) && visibleStart >= startIndex) {
+            mainChatVisibleStartIndices.set(chatId, Math.max(startIndex - CHAT_TRUNCATION, 0));
+        }
+    },
+    refreshMainChatAfterBulkDelete: async (identity) => {
+        const isCurrentChat = () => characters[this_chid]?.avatar === identity.character && getCurrentChatId() === identity.chat && chat_metadata === identity.metadata;
+        if (!isCurrentChat()) return;
+        await mountReactMainChatMessageListPanel();
+        requestAnimationFrame(() => {
+            if (isCurrentChat()) scrollChatToBottom();
+        });
+    },
     mountReactWorkspaceShellChromeHost: (...args) => mountReactWorkspaceShellChromeHost(...args),
     mountRightNavPanel: (...args) => mountRightNavPanel(...args),
     mountSelectChatPopup: (...args) => mountSelectChatPopup(...args),

@@ -679,6 +679,165 @@ test.describe('chat message rendering', () => {
         expect(getUnexpectedConsoleErrors(consoleErrors)).toEqual([]);
     });
 
+    test('deletes a message range through the React owner and persists it', async ({ page }) => {
+        const chatName = 'Dev Character 001 Bulk Delete Proof';
+        const fixture = buildLongChatFixture(seededChatPath, 20);
+        const errors = createConsoleErrorCollector(page);
+        const pageErrors = [];
+        page.on('pageerror', error => pageErrors.push(error.message));
+        await testSetup.awaitST({ page });
+        await page.evaluate(() => { window.SillyTavern.getContext().chatCompletionSettings.chat_memory_enabled = false; });
+        await seedLongChatFixture(page, chatName, fixture);
+        await selectCharacterByName(page, characterName);
+        await openCharacterChat(page, chatName);
+        const retainedRow = page.locator('#chat .mes[mesid="3"]');
+        await page.evaluate(() => {
+            const context = window.SillyTavern.getContext();
+            window.bulkDeleteEvents = [];
+            context.eventSource.on(context.eventTypes.MESSAGE_DELETED, count => {
+                window.bulkDeleteEvents.push({ count, rowStillOwned: !!document.querySelector('#chat .mes[mesid="10"]') });
+            });
+        });
+        await page.getByRole('button', { name: /Chat options|聊天选项/ }).click();
+        await page.getByRole('button', { name: '删除消息' }).click();
+        await expect(page.locator('#chat .mes[mesid="10"] .del_checkbox')).toBeVisible();
+        await retainedRow.locator('.mes_edit').evaluate(element => element.click());
+        await retainedRow.locator('.edit_textarea').fill('unsaved retained draft');
+        await page.locator('#chat .mes[mesid="10"]').evaluate(row => row.click());
+        await page.locator('#dialogue_del_mes_ok').click();
+        await expect(page.locator('#dialogue_del_mes')).not.toBeVisible();
+        await expect(page.locator('#chat .mes[mesid="9"]')).toBeVisible();
+        await expect(page.locator('#chat .mes[mesid="10"]')).toHaveCount(0);
+        await expect(retainedRow.locator('.edit_textarea')).toHaveValue('unsaved retained draft');
+        expect(await page.evaluate(() => window.bulkDeleteEvents)).toEqual([{ count: 10, rowStillOwned: true }]);
+        await expect.poll(() => page.evaluate(() => {
+            const chat = document.querySelector('#chat');
+            return chat.scrollHeight - chat.clientHeight - chat.scrollTop;
+        })).toBeLessThanOrEqual(2);
+        await page.reload();
+        await testSetup.awaitST({ page });
+        await selectCharacterByName(page, characterName);
+        await openCharacterChat(page, chatName);
+        await expect(page.locator('#chat .mes[mesid="9"]')).toBeVisible();
+        await expect(page.locator('#chat .mes[mesid="10"]')).toHaveCount(0);
+        expect(getUnexpectedConsoleErrors(errors)).toEqual([]);
+        expect(pageErrors).toEqual([]);
+    });
+
+    test('does not refresh or scroll a new chat when deletion event switches chats', async ({ page }) => {
+        const source = 'Bulk Delete Switch Source';
+        const target = 'Bulk Delete Switch Target';
+        const fixture = buildLongChatFixture(seededChatPath, 30);
+        await testSetup.awaitST({ page });
+        await page.evaluate(() => { window.SillyTavern.getContext().chatCompletionSettings.chat_memory_enabled = false; });
+        await seedLongChatFixture(page, source, fixture);
+        await seedLongChatFixture(page, target, fixture);
+
+        await selectCharacterByName(page, characterName);
+        await openCharacterChat(page, source);
+        await page.evaluate(targetName => {
+            const context = window.SillyTavern.getContext();
+            context.eventSource.on(context.eventTypes.MESSAGE_DELETED, async () => {
+                await context.openCharacterChat(targetName);
+                document.querySelector('#chat .mes[mesid="3"] .mes_edit').click();
+                await new Promise(resolve => setTimeout(resolve, 150));
+                const editor = document.querySelector('#chat .mes[mesid="3"] .edit_textarea');
+                Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(editor, 'new chat draft');
+                editor.dispatchEvent(new Event('input', { bubbles: true }));
+                document.querySelector('#chat').scrollTop = 0;
+            });
+        }, target);
+        await page.getByRole('button', { name: /Chat options|聊天选项/ }).click();
+        await page.getByRole('button', { name: '删除消息' }).click();
+        await expect(page.locator('#chat .mes[mesid="10"] .del_checkbox')).toBeVisible();
+        await page.locator('#chat .mes[mesid="10"]').evaluate(row => row.click());
+        await page.locator('#dialogue_del_mes_ok').click();
+        await expect(page.locator('#dialogue_del_mes')).not.toBeVisible();
+        await expect(page.locator('#chat .mes[mesid="3"] .edit_textarea')).toHaveValue('new chat draft');
+        await page.waitForTimeout(250);
+        expect(await page.locator('#chat').evaluate(element => element.scrollTop)).toBe(0);
+    });
+
+    test('bulk deletion keeps a new message draft created during the deletion event', async ({ page }) => {
+        const name = 'Bulk Delete Concurrent Append';
+        await testSetup.awaitST({ page });
+        await page.evaluate(() => { window.SillyTavern.getContext().chatCompletionSettings.chat_memory_enabled = false; });
+        await seedLongChatFixture(page, name, buildLongChatFixture(seededChatPath, 20));
+        await selectCharacterByName(page, characterName);
+        await openCharacterChat(page, name);
+        await page.evaluate(() => {
+            const context = window.SillyTavern.getContext();
+            context.eventSource.on(context.eventTypes.MESSAGE_DELETED, async () => {
+                const message = { name: 'User', is_user: true, mes: 'new message', send_date: new Date().toISOString() };
+                context.chat.push(message);
+                context.addOneMessage(message, { scroll: false });
+                await new Promise(resolve => setTimeout(resolve, 200));
+                document.querySelector('#chat .mes[mesid="10"] .mes_edit').click();
+                await new Promise(resolve => setTimeout(resolve, 100));
+                const editor = document.querySelector('#chat .mes[mesid="10"] .edit_textarea');
+                Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(editor, 'new message draft');
+                editor.dispatchEvent(new Event('input', { bubbles: true }));
+                await new Promise(resolve => setTimeout(resolve, 100));
+            });
+        });
+        await page.getByRole('button', { name: /Chat options|聊天选项/ }).click();
+        await page.getByRole('button', { name: '删除消息' }).click();
+        await expect(page.locator('#chat .mes[mesid="10"] .del_checkbox')).toBeVisible();
+        await page.locator('#chat .mes[mesid="10"]').evaluate(row => row.click());
+        await page.locator('#dialogue_del_mes_ok').click();
+        await expect(page.locator('#dialogue_del_mes')).not.toBeVisible();
+        await expect(page.locator('#chat .mes[mesid="10"] .edit_textarea')).toHaveValue('new message draft');
+    });
+
+    test('bulk deletion does not scroll a reopened instance of the same chat', async ({ page }) => {
+        const source = 'Bulk Delete Reopen Source';
+        const target = 'Bulk Delete Reopen Target';
+        await testSetup.awaitST({ page });
+        await page.evaluate(() => { window.SillyTavern.getContext().chatCompletionSettings.chat_memory_enabled = false; });
+        await seedLongChatFixture(page, source, buildLongChatFixture(seededChatPath, 30));
+        await seedLongChatFixture(page, target, buildLongChatFixture(seededChatPath, 30));
+        await selectCharacterByName(page, characterName);
+        await openCharacterChat(page, source);
+        await page.evaluate(({ source, target }) => {
+            const context = window.SillyTavern.getContext();
+            context.eventSource.on(context.eventTypes.MESSAGE_DELETED, async () => {
+                await context.openCharacterChat(target);
+                await context.openCharacterChat(source);
+                await new Promise(resolve => setTimeout(resolve, 200));
+                document.querySelector('#chat').scrollTop = 0;
+                window.bulkReopenComplete = true;
+            });
+        }, { source, target });
+        await page.getByRole('button', { name: /Chat options|聊天选项/ }).click();
+        await page.getByRole('button', { name: '删除消息' }).click();
+        await expect(page.locator('#chat .mes[mesid="10"] .del_checkbox')).toBeVisible();
+        await page.locator('#chat .mes[mesid="10"]').evaluate(row => row.click());
+        await page.locator('#dialogue_del_mes_ok').click();
+        await expect.poll(() => page.evaluate(() => window.bulkReopenComplete)).toBe(true);
+        await expect(page.locator('#dialogue_del_mes')).not.toBeVisible();
+        await page.waitForTimeout(250);
+        expect(await page.locator('#chat').evaluate(element => element.scrollTop)).toBe(0);
+    });
+
+    test('bulk deletion preserves an expanded long chat window and its draft', async ({ page }) => {
+        const name = 'Bulk Delete Long Window';
+        await testSetup.awaitST({ page });
+        await page.evaluate(() => { window.SillyTavern.getContext().chatCompletionSettings.chat_memory_enabled = false; });
+        await seedLongChatFixture(page, name, buildLongChatFixture(seededChatPath, 130));
+        await selectCharacterByName(page, characterName);
+        await openCharacterChat(page, name);
+        await page.locator('#show_more_messages').evaluate(element => element.click());
+        await expect(page.locator('#chat .mes[mesid="3"]')).toBeVisible();
+        await page.getByRole('button', { name: /Chat options|聊天选项/ }).click();
+        await page.getByRole('button', { name: '删除消息' }).click();
+        await expect(page.locator('#chat .mes[mesid="120"] .del_checkbox')).toBeVisible();
+        await page.locator('#chat .mes[mesid="3"] .mes_edit').evaluate(element => element.click());
+        await page.locator('#chat .mes[mesid="3"] .edit_textarea').fill('old message draft');
+        await page.locator('#chat .mes[mesid="120"]').evaluate(row => row.click());
+        await page.locator('#dialogue_del_mes_ok').click();
+        await expect(page.locator('#dialogue_del_mes')).not.toBeVisible();
+        await expect(page.locator('#chat .mes[mesid="3"] .edit_textarea')).toHaveValue('old message draft');
+    });
     test('restores per-chat reading position when switching back to a long chat', async ({ page }) => {
         test.skip(!reactMainChatMessageListEnabled, 'scroll restore is only required behind the React main-chat flag');
 
