@@ -100,6 +100,16 @@ function createResponse() {
     };
 }
 
+async function invokeChangeAvatar(request) {
+    const layer = router.stack.find(entry => entry.route?.path === '/change-avatar' && entry.route.methods?.post);
+    if (!layer) {
+        throw new Error('Route not found: POST /change-avatar');
+    }
+    const response = createResponse();
+    await layer.route.stack[0].handle(request, response);
+    return response;
+}
+
 async function invokeReset(directories, { body = {}, handle = 'alice', password = null } = {}) {
     const layer = router.stack.find(entry => entry.route?.path === '/reset-settings' && entry.route.methods?.post);
     if (!layer) {
@@ -241,6 +251,18 @@ describe('reset-settings under canonical authority', () => {
 
         expect(response.statusCode).toBe(403);
         expect(readDocument(directories).payload).toEqual({ custom: 'v1' });
+    });
+});
+
+describe('change-avatar input validation', () => {
+    test('rejects a non-string avatar as an invalid data URL', async () => {
+        const response = await invokeChangeAvatar({
+            body: { handle: 'alice', avatar: { malformed: true } },
+            user: { profile: { handle: 'alice', admin: false } },
+        });
+
+        expect(response.statusCode).toBe(400);
+        expect(response.body).toEqual({ error: 'Invalid data URL' });
     });
 });
 

@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react';
 import { TanStackRouterVite } from '@tanstack/router-vite-plugin';
 import stylex from '@stylexjs/unplugin/vite';
 import path from 'node:path';
+import { getDevServerConfig } from './vite-dev-server-config.mjs';
 
 /**
  * Shared Vite config for guarded React panel bundles (library-mode builds
@@ -45,6 +46,7 @@ function reactPanelConfig(name: string): UserConfig {
 }
 
 export default defineConfig(({ mode }) => {
+    let devServer: import('vite').ViteDevServer | undefined;
     const isLibBuild = mode === 'lib';
     const isLoginBuild = mode === 'login';
     const isCharacterLibraryPanelBuild = mode === 'character-library-panel';
@@ -85,8 +87,29 @@ export default defineConfig(({ mode }) => {
     return {
         base: isLoginBuild ? '/react/login/' : '/',
         publicDir: false,
+        appType: 'mpa',
 
         plugins: [
+            { name: 'dev-page-proxy', configResolved(config) {
+                if (config.command !== 'serve') return;
+                const host = config.server.host;
+                if (host !== undefined && host !== false && !['localhost', '127.0.0.1', '::1'].includes(String(host))) {
+                    throw new Error('The Vite development proxy must listen on a loopback address.');
+                }
+            }, configureServer(server) {
+                devServer = server;
+                server.middlewares.use((req, res, next) => {
+                    const match = /^\/react\/login\/assets\/(workspace-panels|character-library-panel)\.(js|css)(?:\?.*)?$/.exec(req.url ?? '');
+                    if (!match || (req.method !== 'GET' && req.method !== 'HEAD')) return next();
+                    if (match[2] === 'css') {
+                        // Vite injects the panel's imported and StyleX styles with its module.
+                        res.writeHead(200, { 'content-type': 'text/css; charset=utf-8', 'cache-control': 'no-store' });
+                        return res.end();
+                    }
+                    res.writeHead(302, { location: `/app/${match[1]}.tsx`, 'cache-control': 'no-store' });
+                    return res.end();
+                });
+            } },
             TanStackRouterVite({
                 routesDirectory: path.resolve(process.cwd(), 'app/routes'),
                 generatedRouteTree: path.resolve(process.cwd(), 'app/routeTree.gen.ts'),
@@ -104,17 +127,7 @@ export default defineConfig(({ mode }) => {
         },
 
         server: {
-            port: 3001,
-            proxy: {
-                '/api': {
-                    target: 'http://localhost:3000',
-                    changeOrigin: true,
-                },
-                '/lib.js': {
-                    target: 'http://localhost:3000',
-                    changeOrigin: true,
-                },
-            },
+            ...getDevServerConfig(process.env, () => devServer),
         },
 
         build: {

@@ -3,6 +3,7 @@ import {
     createWorkspacePanelFallbackResult,
     createWorkspacePanelMountedResult,
 } from './workspace-panel-mount-contract.js';
+import { getMainChatFailure } from './main-chat-failure.js';
 
 export const REACT_WORKSPACE_PANELS_ASSET_PATH = '/react/login/assets/workspace-panels.js';
 export const REACT_WORKSPACE_PANELS_STYLES_PATH = '/react/login/assets/workspace-panels.css';
@@ -69,6 +70,7 @@ export async function mountReactWorkspacePanel({
     commands,
     runtime,
     features,
+    mainChatFailure = undefined,
     loadModule = loadWorkspacePanelsModule,
     onError = (error, panelKind, reason) => {
         const action = reason === WORKSPACE_PANEL_MOUNT_FALLBACK_REASONS.MOUNT_FAILED ? 'mount' : 'load';
@@ -83,6 +85,9 @@ export async function mountReactWorkspacePanel({
         return createWorkspacePanelFallbackResult(kind, WORKSPACE_PANEL_MOUNT_FALLBACK_REASONS.MISSING_CONTAINER);
     }
 
+    if (kind === 'mainChatMessageList' && mainChatFailure === undefined) {
+        mainChatFailure = getMainChatFailure(container);
+    }
     let panelModule;
     try {
         panelModule = await loadModule();
@@ -92,7 +97,11 @@ export async function mountReactWorkspacePanel({
     }
 
     try {
-        panelModule.mountWorkspacePanel(kind, container, { state, commands, runtime });
+        if (kind === 'mainChatMessageList') {
+            panelModule.mountWorkspacePanel(kind, container, { state, commands, runtime, mainChatFailure });
+        } else {
+            panelModule.mountWorkspacePanel(kind, container, { state, commands, runtime });
+        }
         return createWorkspacePanelMountedResult(kind);
     } catch (error) {
         onError(error, kind, WORKSPACE_PANEL_MOUNT_FALLBACK_REASONS.MOUNT_FAILED);

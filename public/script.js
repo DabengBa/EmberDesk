@@ -249,6 +249,8 @@ import {
     getCharacterAuthoringDirtyFields,
 } from './scripts/character-authoring.js';
 import { mountWorkspacePanelHost, createWorkspacePanelCommandPort } from './scripts/workspace-panel-host-controller.js';
+import { WORKSPACE_PANEL_MOUNT_FALLBACK_REASONS } from './scripts/workspace-panel-mount-contract.js';
+import { showMainChatFailure } from './scripts/main-chat-failure.js';
 import { registerWorldInfoShellContext } from './scripts/world-info-shell-context.js';
 import {
     executeGenerationRequestInShell,
@@ -3423,6 +3425,11 @@ async function mountReactMainChatMessageListPanel() {
     });
     if (result?.mounted) {
         scheduleMainChatMessageListScrollRestore();
+    } else if (
+        result?.reason === WORKSPACE_PANEL_MOUNT_FALLBACK_REASONS.BUNDLE_LOAD_FAILED
+        || result?.reason === WORKSPACE_PANEL_MOUNT_FALLBACK_REASONS.MOUNT_FAILED
+    ) {
+        showMainChatFailure(ensureMainChatMessageListReactHost(), translate('Could not load chat data. Try reloading the page.'));
     }
     return result;
 }
