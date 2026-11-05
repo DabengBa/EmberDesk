@@ -1,24 +1,42 @@
 # Product
 
-## Register
+<!-- impeccable:product-schema 1 -->
 
-product
+This file is a non-authoritative, derived design-tool brief. Product facts and behavior are owned by `.docs/`; consult the linked owners for current details and update them there rather than maintaining parallel facts here. The design guidance below is context for design work, not a replacement for those owners.
+
+## Platform
+
+web
 
 ## Users
 
-Two overlapping groups share the workspace:
-
-**LLM power users** spend hours in a single session. They manage multiple models, tweak parameters in real time, and treat the interface as a persistent workbench rather than a disposable chat window. Screen real estate and low-latency feedback matter more to them than onboarding polish. They will discover every shortcut, pin every panel, and push the density to its limit.
-
-**General AI chat users** come for a conversation and stay for the control. They want the interface to get out of the way: type, read, respond. They benefit from the same density but shouldn't need to configure anything to have a good experience. The defaults must be excellent.
-
-Both groups share one expectation: this is their private space. Self-hosting means no telemetry, no upsells, no "try Pro" banners. The interface should feel like a tool that belongs to the user, not a service they're renting.
+See [audience and operating context](.docs/project-overview.md#audience) for the users and their environments.
 
 ## Product Purpose
 
-EmberDesk is a self-hosted LLM frontend that gives users full control over how they interact with language models. It exists because every hosted alternative imposes constraints: rate limits, content policies, UI decisions, data retention. EmberDesk removes those constraints.
+See [product positioning and direction](.docs/project-overview.md#positioning).
 
-Success looks like a user who installs it once, configures it to their taste, and then forgets it's there. The interface becomes infrastructure, not a destination.
+## Positioning
+
+See [positioning](.docs/project-overview.md#positioning).
+
+## Operating Context
+
+See [audience](.docs/project-overview.md#audience) and the [workspace page](.docs/db/pages/chat-workspace.md).
+
+## Capabilities and Constraints
+
+See [current capabilities](.docs/project-overview.md#current-capability-set), [exclusions](.docs/project-overview.md#explicit-exclusions), and the [storage roadmap](.docs/tech/canonical-sqlite-storage-roadmap.md). For individual behaviors and terminology, use the [page](.docs/db/pages/), [feature](.docs/db/features/), and [term](.docs/db/terms/) owners.
+
+## Evidence on Hand
+
+- [Project overview](.docs/project-overview.md) — product direction, audience, architecture, and capabilities.
+- [Semantic documentation](.docs/db/) — user-facing pages, features, and terms.
+- [Technical notes](.docs/tech/) — implementation and architecture boundaries.
+
+## Product Principles
+
+See the [product principles](.docs/project-overview.md#principles).
 
 ## Brand Personality
 
