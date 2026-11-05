@@ -701,6 +701,8 @@ function describeTextReplaceFailure(result: TextReplaceResult | null | undefined
     if (!reason) {
         return translate('The operation failed');
     }
+    if (reason === 'character_save_failed') return translate('The character could not be saved. Your edits are still here.');
+    if (reason === 'character_refresh_failed') return translate('The character could not be reloaded. Retry before closing.');
     if (reason.startsWith('invalid_regex:')) {
         return `${TEXT_REPLACE_REASON_LABELS.invalid_regex}：${reason.slice('invalid_regex:'.length).trim()}`;
     }
@@ -782,7 +784,7 @@ function CharacterAuthoringTextReplaceDialog({
 }: {
     commands?: AuthoringCommands;
     payload?: Record<string, unknown>;
-    onClose: (applied: false | { card?: boolean; worldBook?: boolean; chat?: boolean }) => void;
+    onClose: (applied: false | { card?: boolean; worldBook?: boolean; chat?: boolean }) => Promise<unknown> | unknown;
 }) {
     useTranslated('');
     const [query, setQuery] = useState('');
@@ -802,6 +804,16 @@ function CharacterAuthoringTextReplaceDialog({
     const [applyResult, setApplyResult] = useState<TextReplaceResult | null>(null);
     const [excluded, setExcluded] = useState<Set<string>>(() => new Set());
     const appliedRef = useRef<{ card?: boolean; worldBook?: boolean; chat?: boolean } | null>(null);
+    const [finalizing, setFinalizing] = useState(false);
+    const overlayRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const background = Array.from(document.body.children).filter((element): element is HTMLElement =>
+            element instanceof HTMLElement && element !== overlayRef.current && !element.inert,
+        );
+        background.forEach(element => { element.inert = true; });
+        return () => { background.forEach(element => { element.inert = false; }); };
+    }, []);
 
     const toggleField = useCallback((set: Set<string>, setter: (next: Set<string>) => void, id: string, checked: boolean) => {
         const next = new Set(set);
@@ -930,18 +942,37 @@ function CharacterAuthoringTextReplaceDialog({
         }
     }
 
-    const handleClose = useCallback(() => {
-        onClose(appliedRef.current ?? false);
-    }, [onClose]);
+    const handleClose = useCallback(async () => {
+        if (busy || finalizing) {
+            return;
+        }
+        if (!appliedRef.current) {
+            onClose(false);
+            return;
+        }
+        setFinalizing(true);
+        setError('');
+        try {
+            const result = await onClose(appliedRef.current);
+            if (result && typeof result === 'object' && 'ok' in result && result.ok === false) {
+                setError(describeTextReplaceFailure(result as TextReplaceResult));
+            }
+        } catch {
+            setError(translate('Character refresh failed. Retry before closing.'));
+        } finally {
+            setFinalizing(false);
+        }
+    }, [busy, finalizing, onClose]);
 
     return createPortal(
         <div
+            ref={overlayRef}
             {...stylex.props(authoringStyles.modalOverlay)}
             role="presentation"
             onMouseDown={(event) => {
                 event.stopPropagation();
                 if (event.target === event.currentTarget) {
-                    handleClose();
+                    void handleClose();
                 }
             }}
             onMouseUp={event => event.stopPropagation()}
@@ -949,7 +980,7 @@ function CharacterAuthoringTextReplaceDialog({
             onKeyDown={(event) => {
                 if (event.key === 'Escape') {
                     event.stopPropagation();
-                    handleClose();
+                    void handleClose();
                 }
             }}
         >
@@ -962,7 +993,8 @@ function CharacterAuthoringTextReplaceDialog({
                         {...stylex.props(authoringStyles.iconAction)}
                         title={translate('Close')}
                         aria-label={translate('Close')}
-                        onClick={handleClose}
+                        disabled={busy !== '' || finalizing}
+                        onClick={() => void handleClose()}
                     >
                         <i className="fa-solid fa-xmark" aria-hidden="true" />
                     </button>
@@ -992,9 +1024,11 @@ function CharacterAuthoringTextReplaceDialog({
                                 </div>
                             ))}
                         </div>
+                        {error ? <div {...stylex.props(authoringStyles.replaceErrorText)}>{error}</div> : null}
+
                         <div {...stylex.props(authoringStyles.replaceFooter)}>
-                            <button type="button" className={`menu_button ${stylex.props(authoringStyles.saveButton).className ?? ''}`} onClick={handleClose}>
-                                {translate('Done')}
+                            <button type="button" className={`menu_button ${stylex.props(authoringStyles.saveButton).className ?? ''}`} disabled={busy !== '' || finalizing} onClick={() => void handleClose()}>
+                                {finalizing ? translate('Loading…') : translate('Done')}
                             </button>
                         </div>
                     </div>
@@ -1196,6 +1230,8 @@ function AuthoringWorkspacePanel({
     const [avatarPreviewOverride, setAvatarPreviewOverride] = useState<string | null>(null);
     const [liveManagementActions, setLiveManagementActions] = useState<AuthoringManagementAction[] | null>(null);
     const saveGenerationRef = useRef(0);
+    const saveInFlightRef = useRef<Promise<boolean> | null>(null);
+
     const authoringCommandMutation = useMutation({
         mutationFn: async (payload: Record<string, unknown>) => await commands?.saveCharacterAuthoring?.(payload),
         retry: false,
@@ -1233,20 +1269,23 @@ function AuthoringWorkspacePanel({
         setFieldErrors({});
     }, []);
 
-    const submitDraft = useCallback(() => {
+    const submitDraft = useCallback(async (): Promise<boolean> => {
+        if (textReplaceOpen) {
+            return false;
+        }
         if (authoringCommandMutation.isPending) {
-            return;
+            return await (saveInFlightRef.current ?? Promise.resolve(false));
         }
         const submitResult = authoringSession.submit();
         if (!submitResult.ok) {
             setFieldErrors((submitResult.fieldErrors ?? {}) as Record<string, string>);
-            return;
+            return false;
         }
 
         setFieldErrors({});
         const saveGeneration = saveGenerationRef.current;
         const submittedDraft = authoringSession.draft;
-        authoringCommandMutation.mutateAsync({
+        const savePromise = authoringCommandMutation.mutateAsync({
             ...(submitResult.payload ?? {}) as Record<string, unknown>,
             changedFields: [...authoringSession.dirtyFields],
         })
@@ -1258,7 +1297,7 @@ function AuthoringWorkspacePanel({
                     activeGeneration: saveGenerationRef.current,
                     ok,
                 })) {
-                    return;
+                    return ok;
                 }
                 setAuthoringSession((currentSession: typeof initialSession) => {
                     if (currentSession.draft === submittedDraft) {
@@ -1271,12 +1310,19 @@ function AuthoringWorkspacePanel({
                         ? currentSession.rebase(submittedDraft)
                         : createCharacterAuthoringSession(currentSession.draft, { mode: authoringMode });
                 });
+                return ok;
             })
             .catch(() => {
                 // Mutation state carries the failed status; keep the dirty draft intact for retry.
+                return false;
             });
-    }, [authoringCommandMutation, authoringSession, authoringMode]);
-
+        saveInFlightRef.current = savePromise;
+        const ok = await savePromise;
+        if (saveInFlightRef.current === savePromise) {
+            saveInFlightRef.current = null;
+        }
+        return ok;
+    }, [authoringCommandMutation, authoringSession, authoringMode, textReplaceOpen]);
     const submitDraftRef = useRef(submitDraft);
     useEffect(() => {
         submitDraftRef.current = submitDraft;
@@ -1284,12 +1330,12 @@ function AuthoringWorkspacePanel({
 
     // Autosave: edit mode only — create-mode submits would mint a new card per pass.
     useEffect(() => {
-        if (bridgeState.mode !== 'edit' || !authoringSession.dirty) {
+        if (bridgeState.mode !== 'edit' || textReplaceOpen || !authoringSession.dirty) {
             return;
         }
         const timer = window.setTimeout(() => submitDraftRef.current(), 900);
         return () => window.clearTimeout(timer);
-    }, [authoringSession, bridgeState.mode]);
+    }, [authoringSession, bridgeState.mode, textReplaceOpen]);
 
     const draft = authoringSession.draft as Record<string, unknown>;
     const stringDraft = (key: string) => (typeof draft[key] === 'string' ? draft[key] as string : '');
@@ -1955,13 +2001,52 @@ function AuthoringWorkspacePanel({
                 </div>
                 {textReplaceOpen ? (
                     <CharacterAuthoringTextReplaceDialog
-                        commands={commands}
+                        commands={{
+                            ...commands,
+                            previewTextReplace: async request => {
+                                if (saveInFlightRef.current && !await saveInFlightRef.current) return { ok: false, reason: 'character_save_failed' };
+                                return commands?.previewTextReplace?.(request);
+                            },
+                            applyTextReplace: async request => {
+                                if (saveInFlightRef.current && !await saveInFlightRef.current) return { ok: false, reason: 'character_save_failed' };
+                                return commands?.applyTextReplace?.(request);
+                            },
+                        }}
                         payload={characterToolActionPayload}
-                        onClose={(applied) => {
-                            setTextReplaceOpen(false);
-                            if (applied) {
-                                void commands?.closeTextReplace?.({ applied });
+                        onClose={async (applied) => {
+                            if (!applied) {
+                                setTextReplaceOpen(false);
+                                return { ok: true };
                             }
+
+                            // Preview/apply already persisted the latest draft before mutating
+                            // canonical storage. Saving again here would restore stale text.
+                            if (saveInFlightRef.current && !await saveInFlightRef.current) {
+                                return { ok: false, reason: 'character_save_failed' };
+                            }
+
+                            // Without a host command there is nothing to refresh from;
+                            // closing is the only way out, so do not trap the dialog.
+                            if (typeof commands?.closeTextReplace !== 'function') {
+                                setTextReplaceOpen(false);
+                                return { ok: true };
+                            }
+
+                            const result = await commands.closeTextReplace({ applied });
+                            if (!result || typeof result !== 'object' || !('ok' in result) || result.ok !== true) {
+                                return { ok: false, reason: 'character_refresh_failed' };
+                            }
+
+                            const draft = (result as { draft?: unknown }).draft;
+                            if (applied.card && (!draft || typeof draft !== 'object')) {
+                                return { ok: false, reason: 'character_refresh_failed' };
+                            }
+                            if (draft && typeof draft === 'object') {
+                                saveGenerationRef.current += 1;
+                                setAuthoringSession(createCharacterAuthoringSession(draft, { mode: authoringMode }));
+                            }
+                            setTextReplaceOpen(false);
+                            return { ok: true };
                         }}
                     />
                 ) : null}

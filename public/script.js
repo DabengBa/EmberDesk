@@ -2404,6 +2404,7 @@ async function persistAuthoringDraftBeforeLegacyAction(payload) {
     if (!(payload?.fields || payload?.extensions)) {
         return false;
     }
+
     if (getCurrentCharacterAuthoringMode() !== 'edit') {
         applyCharacterAuthoringSaveModel(payload, { submit: false });
         return false;
@@ -2629,7 +2630,9 @@ function getCharacterAuthoringReactCommands() {
             previewTextReplace: async payload => {
                 // Preview reads the saved card — persist pending edits first so the
                 // match list reflects what the user sees in the draft.
-                await persistAuthoringDraftBeforeLegacyAction(payload);
+                if (!await persistAuthoringDraftBeforeLegacyAction(payload)) {
+                    return { ok: false, reason: 'character_save_failed' };
+                }
                 return await requestCharacterTextReplace('/api/characters/text-replace/preview', payload);
             },
             applyTextReplace: async payload => {
@@ -2640,7 +2643,9 @@ function getCharacterAuthoringReactCommands() {
                     toastr.warning('Generation is in progress — wait for it to finish (or stop it) before applying replacements.');
                     return { ok: false, reason: 'generation_in_flight' };
                 }
-                await persistAuthoringDraftBeforeLegacyAction(payload);
+                if (!await persistAuthoringDraftBeforeLegacyAction(payload)) {
+                    return { ok: false, reason: 'character_save_failed' };
+                }
                 return await requestCharacterTextReplace('/api/characters/text-replace/apply', payload);
             },
             closeTextReplace: async payload => {
@@ -2662,14 +2667,19 @@ function getCharacterAuthoringReactCommands() {
                     // authoring remount builds its draft from it. Refetch so the
                     // panel shows (and later re-saves) the replaced card.
                     const avatarUrl = characters[this_chid]?.avatar;
-                    if (avatarUrl) {
-                        await getOneCharacter(avatarUrl);
+                    if (applied.card && (!avatarUrl || !await getOneCharacter(avatarUrl))) {
+                        return { ok: false, reason: 'character_refresh_failed' };
                     }
                 }
                 if (applied.worldBook) {
                     queueReactWorldInfoRemount();
                 }
-                return { applied: true };
+                const character = applied.card ? characters[this_chid] : null;
+                return {
+                    ok: true,
+                    applied: true,
+                    ...(character ? { draft: createCharacterAuthoringDraft(character, { mode: 'edit' }) } : {}),
+                };
             },
         },
         shouldRemount(commandResult, commandName) {
@@ -2681,8 +2691,13 @@ function getCharacterAuthoringReactCommands() {
                 return commandResult?.mode !== 'edit';
             }
             // Preview/apply keep the find & replace dialog open; the dialog itself
-            // triggers a remount on close via closeTextReplace when it wrote.
+            // refreshes from canonical on close and installs that draft itself.
             if (commandName === 'previewTextReplace' || commandName === 'applyTextReplace') {
+                return false;
+            }
+            // A failed close must keep the dialog and the draft it protects;
+            // remounting here would rebuild the panel from the pre-apply card.
+            if (commandName === 'closeTextReplace') {
                 return false;
             }
             return commandResult !== false;
@@ -5105,10 +5120,12 @@ export async function getOneCharacter(avatarUrl) {
 
         if (indexOf !== -1) {
             characters[indexOf] = getData;
+            return true;
         } else {
             toastr.error(t`Character ${avatarUrl} not found in the list`, t`Error`, { timeOut: 5000, preventDuplicates: true });
         }
     }
+    return false;
 }
 
 export function getCharacterSource(chId = this_chid) {

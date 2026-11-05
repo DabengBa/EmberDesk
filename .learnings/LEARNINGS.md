@@ -177,3 +177,136 @@ When a learning is promoted to a skill, add these fields:
 - Disposition: retain; Application: applied
 
 ---
+
+## [LRN-20261105-004] correction
+
+**Logged**: 2026-11-05T14:17:59+08:00
+**Priority**: high
+**Status**: resolved
+**Area**: frontend
+
+### Summary
+修复角色卡替换竞态时，曾把范围扩展到断线重连、跨标签页并发和操作日志；用户纠正要求避免过度设计，以最简洁的方式解决实际问题。
+
+### Details
+已复现的一种失败序列：替换写入成功后，编辑器此前排队的延迟保存（`app/workspace-panels.tsx` 中 900ms 的 autosave）再次提交替换前的草稿，把结果覆盖回去。
+
+实际实现曾扩展到：持久化操作日志、跨页面版本协议、聊天保存锁与多层锁、跨重载恢复。这些扩展没有完整解决问题，反而引入新的死锁与「重载后无法判定执行中断状态」的恢复缺口，属于没有可运行失败用例支撑的防御性设计。
+
+用户在会话中两次纠正（paraphrased）：先是「我们的数据都存在 sqlite 中对吗？就一个 sqlite 数据批量替换，怎么被你弄得这么复杂？」；在解释后再次要求「禁止将问题复杂化，禁止防御性编程和过度设计」，并要求以最快最简洁的方式实现。
+
+### Suggested Action
+扩大修复范围前，明确具体失败场景和证据，优先解决已复现的问题；未验证的风险标明为 open question，避免为假设场景添加复杂机制。
+
+### Metadata
+- Source: user_feedback
+- Related Files: app/workspace-panels.tsx, public/script.js, tests/character-text-replace.e2e.js
+- Tags: scope-control, over-engineering, defensive-programming, race-condition, user-correction
+- See Also: LRN-20261105-005
+- Pattern-Key: process.scope.only-reproduced-failure
+- Recurrence-Count: 1
+- First-Seen: 2026-11-05
+- Last-Seen: 2026-11-05
+
+### Context Maintenance
+- Decay-Type: decision
+- Decay-Rate: durable（属于协作方式约束，不随代码演进失效）
+- Authority: 用户原话 + `AGENTS.md`「写代码前按以下顺序决策…最后实现满足当前需求的最小方案，不做预防性抽象或多余配置层」；Owner: 项目负责人
+- Revalidation: 复查 `AGENTS.md` 的 YAGNI 段落是否仍在；若该原则已被写进项目指令并稳定执行，本条可 externalize 为指针；失效触发 = 项目改为允许探索性防御设计
+- Validation: verified; Last-Validated: 2026-11-05; Evidence: 用户两次纠正了修复范围和复杂度；延迟保存覆盖替换结果的场景已有回归用例。
+- Disposition: retain; Application: applied
+
+### Resolution
+- **Resolved**: 2026-11-05T14:17:59+08:00
+- **Commit/PR**: 无（worktree `fix/character-replace-race` 未提交）
+- **Notes**: 保留用户对控制范围、避免防御性过度设计的纠正；具体实现以当前代码和测试为准。
+
+---
+
+## [LRN-20261105-005] best_practice
+
+**Logged**: 2026-11-05T14:17:59+08:00
+**Priority**: high
+**Status**: resolved
+**Area**: frontend
+
+### Summary
+带延迟自动保存的编辑器执行替换时，旧草稿的待发保存可能覆盖替换结果；需要检查保存顺序及替换后的编辑器状态。
+
+### Details
+失败机制：`app/workspace-panels.tsx:1331-1338` 的 autosave effect 在草稿变脏后 900ms 提交，弹窗打开时该定时器已在队列中；替换写入成功后定时器触发，用旧草稿覆盖了新内容。
+
+当前工作树的处理包括：
+- 弹窗打开即停：`app/workspace-panels.tsx:1272-1275` 的 `submitDraft` 在 `textReplaceOpen` 为真时直接 `return false`；`:1333-1338` autosave effect 在 `textReplaceOpen` 时提前 return。
+- 提交串行化：`app/workspace-panels.tsx:1233` 的 `saveInFlightRef` 让并发提交复用同一 Promise，`app/workspace-panels.tsx:2024-2026` 关闭前等待在途保存，失败返回 `character_save_failed`。
+- 关闭时以权威数据为准：`public/script.js:2651-2683` 的 `closeTextReplace` 先 `reloadCurrentChat()`，再用 `getOneCharacter(avatarUrl)` 重读；失败返回 `character_refresh_failed` 并保留弹窗与草稿。`public/script.js:5105-5129` 把 `getOneCharacter` 从「只弹 toast」改为返回 boolean，调用方才有判断依据。
+
+配套细节：`app/workspace-panels.tsx` 用 `overlayRef` 把背景元素设为 `inert`，防止弹窗期间操作背后编辑器。
+
+回归测试：`tests/character-text-replace.e2e.js:164` 用 `page.clock.install/pauseAt/runFor` 让旧 900ms 定时器在 apply 之后才触发，断言 `/api/characters/edit` 调用数为 0 且描述仍为新值；`:216` 拦截 `/api/characters/get` 返回 500，断言弹窗保留可重试；`:257` 断言取消后草稿仍在。
+
+### Suggested Action
+给编辑器加延迟保存时，检查其他写操作是否会被旧草稿覆盖；根据实际保存和刷新流程添加针对性的回归测试。
+
+### Metadata
+- Source: conversation
+- Related Files: app/workspace-panels.tsx, public/script.js, tests/character-text-replace.e2e.js
+- Tags: autosave, race-condition, canonical-sqlite, stale-state, inert, e2e, playwright-clock
+- See Also: LRN-20261105-004
+- Pattern-Key: frontend.deferred-autosave.stale-write
+- Recurrence-Count: 1
+- First-Seen: 2026-11-05
+- Last-Seen: 2026-11-05
+
+### Context Maintenance
+- Decay-Type: reality
+- Decay-Rate: medium（autosave 门控与关闭路径一改就可能失效）
+- Authority: 当前工作树 `app/workspace-panels.tsx`、`public/script.js`、`tests/character-text-replace.e2e.js` 的实际 diff；Owner: 角色创作/工作区面板前端维护者
+- Revalidation: 跑 `tests/character-text-replace.e2e.js`，并确认三处门控仍存在——`submitDraft` 的 `textReplaceOpen` 早退、autosave effect 的 `textReplaceOpen` 早退、`closeTextReplace` 中的 `getOneCharacter` 返回值检查；失效触发 = 引入新的保存触发点（快捷键/离开页面）、把 autosave 改成服务端推送、`getOneCharacter` 再次改为无返回值
+- Validation: verified; Last-Validated: 2026-11-05; Evidence: `tests/character-text-replace.e2e.js` 4 个用例通过（含 `:164` 定时器竞态用例，该用例在旧代码上复现出覆盖）；`pnpm run test:compat` 102 项通过；React 构建、TypeScript、`docs:check` 通过
+- Disposition: retain; Application: applied
+
+### Resolution
+- **Resolved**: 2026-11-05T14:17:59+08:00
+- **Commit/PR**: 无（worktree `fix/character-replace-race` 未提交）
+- **Notes**: 单页面范围；断线重连与跨标签页并发明确不承诺，见 LRN-20261105-004。
+
+---
+
+## [LRN-20261105-006] best_practice
+
+**Logged**: 2026-11-05T14:17:59+08:00
+**Priority**: medium
+**Status**: resolved
+**Area**: tests
+
+### Summary
+多个 Playwright 用例改写同一张角色卡时必须 `test.describe.configure({ mode: 'serial' })`；本地化 UI 的 locator 用中英双语正则，不要写死中文。
+
+### Details
+- `tests/character-text-replace.e2e.js:14` 加了 `test.describe.configure({ mode: 'serial' })`：4 个用例都读写同一个 `avatarUrl` 的角色卡，并行执行会互相覆盖断言。
+- 搜索框 locator 用 `page.getByRole('searchbox', { name: /Search characters|搜索角色/ })`，在英文与中文运行环境都能命中；`dialog[aria-label="查找替换"]` 依赖当前语种，仅在本仓库测试数据固定为 zh-cn 时可用。
+- 控制 900ms autosave 用 `page.clock.install({ time })/pauseAt()/runFor()`，比 `waitForTimeout` 更能确定性地让旧定时器在目标时刻触发。
+
+### Suggested Action
+新增改写共享 fixture 的用例前先判断是否需要 serial；写 locator 时优先 role + 双语正则，避免语言环境切换后整组失效。
+
+### Metadata
+- Source: conversation
+- Related Files: tests/character-text-replace.e2e.js
+- Tags: playwright, serial-mode, i18n, fixtures, clock-control
+- See Also: LRN-20261105-005
+- Pattern-Key: tests.playwright.shared-fixture.serial
+- Recurrence-Count: 1
+- First-Seen: 2026-11-05
+- Last-Seen: 2026-11-05
+
+### Context Maintenance
+- Decay-Type: reality
+- Decay-Rate: slow（Playwright 语义稳定；测试数据语种或 fixture 策略改变才会失效）
+- Authority: `tests/character-text-replace.e2e.js` 实际内容 + Playwright serial 模式语义；Owner: 测试维护者
+- Revalidation: 读 `tests/character-text-replace.e2e.js:14` 与各用例的 `avatarUrl` 使用；失效触发 = 用例改为各自创建独立角色卡、或项目统一切换英文测试数据
+- Validation: verified; Last-Validated: 2026-11-05; Evidence: 加 serial 后 4 个用例连续通过；搜索框双语正则在 zh-cn 数据下命中
+- Disposition: retain; Application: applied
+
+---

@@ -9,6 +9,10 @@ const chatFileName = 'Dev Character 001 Session 04';
 const markerBefore = 'AlphaMarker';
 const markerAfter = 'BetaMarker';
 
+// Every case rewrites the same seeded card's description, so they cannot run
+// concurrently inside this file.
+test.describe.configure({ mode: 'serial' });
+
 async function openCharacterLibrary(page) {
     const panelButton = page.locator('[data-react-workspace-shell-chrome] nav button[data-workspace-shell-panel-entry="characterLibrary"]');
     await panelButton.click({ timeout: 10_000 });
@@ -91,7 +95,7 @@ test.describe('character text replace', () => {
         await testSetup.awaitST({ page });
 
         await openCharacterLibrary(page);
-        await page.getByRole('searchbox', { name: 'Search characters' }).fill(characterName);
+        await page.getByRole('searchbox', { name: /Search characters|搜索角色/ }).fill(characterName);
         const characterRow = page.locator('#rm_print_characters_block .character_select').filter({ hasText: characterName }).first();
         await expect(characterRow).toBeVisible({ timeout: 15_000 });
         await characterRow.click();
@@ -155,4 +159,120 @@ test.describe('character text replace', () => {
         expect(assistant.extra.reasoning).toContain(markerAfter);
         expect(assistant.name).toBe(characterName);
     });
+});
+
+test('a pending autosave cannot overwrite an applied replacement while the dialog is open', async ({ page }) => {
+    await testSetup.awaitST({ page });
+    await openCharacterLibrary(page);
+    await page.getByRole('searchbox', { name: /Search characters|搜索角色/ }).fill(characterName);
+    await page.locator('#rm_print_characters_block .character_select').filter({ hasText: characterName }).first().click();
+    const authoring = page.locator('[data-react-authoring-owner="characterAuthoring"]');
+    const description = authoring.locator('[data-react-authoring-field="description"] textarea');
+    await expect(description).toBeVisible();
+    const now = Date.now();
+    await page.clock.install({ time: now });
+    await page.clock.pauseAt(now + 1000);
+    await description.fill('TimerRaceBefore draft');
+    await authoring.getByRole('button', { name: '查找替换', exact: true }).click();
+    const dialog = page.locator('dialog[aria-label="查找替换"]');
+    await dialog.getByPlaceholder('要查找的文本').fill('TimerRaceBefore');
+    await dialog.getByPlaceholder('替换文本（可为空）').fill('TimerRaceAfter');
+    await dialog.getByRole('button', { name: '预览', exact: true }).click();
+    await expect(dialog.getByText(/「TimerRaceBefore」/).first()).toBeVisible();
+    page.once('dialog', confirm => void confirm.accept());
+    await dialog.getByRole('button', { name: /^应用 .* 处替换$/ }).click();
+    await expect(dialog.getByText('✓ 角色卡已更新')).toBeVisible();
+
+    // Keyboard navigation must not reach the stale authoring controls behind
+    // the result dialog, including Export, before canonical refresh on close.
+    await dialog.getByRole('button', { name: '完成', exact: true }).focus();
+    for (let i = 0; i < 12; i++) {
+        await page.keyboard.press('Tab');
+        expect(await dialog.evaluate(element => document.activeElement === document.body || element.contains(document.activeElement))).toBe(true);
+    }
+
+    // The old 900ms autosave timer was scheduled before opening the dialog.
+    // Fire it only after apply has committed and before closing/remounting.
+    const appliedCard = await fetchWithCsrf(page, '/api/characters/get', { avatar_url: avatarUrl });
+    expect(appliedCard.json?.data?.description ?? appliedCard.json?.description).toBe('TimerRaceAfter draft');
+    let lateSaves = 0;
+    await page.route('**/api/characters/edit', async route => {
+        lateSaves++;
+        await route.continue();
+    });
+    await page.clock.runFor(1000);
+    await expect.poll(async () => {
+        const card = await fetchWithCsrf(page, '/api/characters/get', { avatar_url: avatarUrl });
+        return card.json?.data?.description ?? card.json?.description;
+    }).toBe('TimerRaceAfter draft');
+    expect(lateSaves).toBe(0);
+    await dialog.getByRole('button', { name: '完成', exact: true }).click();
+    await expect(description).toHaveValue('TimerRaceAfter draft');
+    const exportButton = authoring.locator('[data-character-export-trigger]');
+    await exportButton.focus();
+    await expect(exportButton).toBeFocused();
+});
+
+test('a failed canonical refresh keeps the dialog open so closing can be retried', async ({ page }) => {
+    await testSetup.awaitST({ page });
+    await openCharacterLibrary(page);
+    await page.getByRole('searchbox', { name: /Search characters|搜索角色/ }).fill(characterName);
+    await page.locator('#rm_print_characters_block .character_select').filter({ hasText: characterName }).first().click();
+    const authoring = page.locator('[data-react-authoring-owner="characterAuthoring"]');
+    const description = authoring.locator('[data-react-authoring-field="description"] textarea');
+    await expect(description).toBeVisible();
+    await description.fill('RefreshFailBefore draft');
+    await authoring.getByRole('button', { name: '查找替换', exact: true }).click();
+    const dialog = page.locator('dialog[aria-label="查找替换"]');
+    await dialog.getByPlaceholder('要查找的文本').fill('RefreshFailBefore');
+    await dialog.getByPlaceholder('替换文本（可为空）').fill('RefreshFailAfter');
+    await dialog.getByRole('button', { name: '预览', exact: true }).click();
+    await expect(dialog.getByText(/「RefreshFailBefore」/).first()).toBeVisible();
+    page.once('dialog', confirm => void confirm.accept());
+    await dialog.getByRole('button', { name: /^应用 .* 处替换$/ }).click();
+    await expect(dialog.getByText('✓ 角色卡已更新')).toBeVisible();
+
+    // The write itself committed; only the post-apply read of the canonical
+    // card fails. The dialog must stay open instead of closing on a draft that
+    // still holds pre-replacement text.
+    let failedRefresh = false;
+    await page.route('**/api/characters/get', async route => {
+        if (failedRefresh) {
+            await route.fulfill({ status: 500, body: 'unavailable' });
+            return;
+        }
+        await route.continue();
+    });
+    failedRefresh = true;
+    await dialog.getByRole('button', { name: '完成', exact: true }).click();
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByText('无法重新读取角色。请在关闭前重试。')).toBeVisible();
+
+    failedRefresh = false;
+    await dialog.getByRole('button', { name: '完成', exact: true }).click();
+    await expect(dialog).toBeHidden({ timeout: 15_000 });
+    await expect(description).toHaveValue('RefreshFailAfter draft', { timeout: 15_000 });
+});
+
+test('cancelling the dialog keeps the unsaved draft', async ({ page }) => {
+    await testSetup.awaitST({ page });
+    await openCharacterLibrary(page);
+    await page.getByRole('searchbox', { name: /Search characters|搜索角色/ }).fill(characterName);
+    await page.locator('#rm_print_characters_block .character_select').filter({ hasText: characterName }).first().click();
+    const authoring = page.locator('[data-react-authoring-owner="characterAuthoring"]');
+    const description = authoring.locator('[data-react-authoring-field="description"] textarea');
+    await expect(description).toBeVisible();
+    await description.fill('CancelDraft draft');
+    await authoring.getByRole('button', { name: '查找替换', exact: true }).click();
+    const dialog = page.locator('dialog[aria-label="查找替换"]');
+    await expect(dialog).toBeVisible();
+    // Autosave is paused while the dialog is open; cancelling must not drop the
+    // draft that the pause protected.
+    await dialog.getByRole('button', { name: /^(Close|关闭)$/ }).click();
+    await expect(dialog).toBeHidden();
+    await expect(description).toHaveValue('CancelDraft draft');
+    await expect.poll(async () => {
+        const card = await fetchWithCsrf(page, '/api/characters/get', { avatar_url: avatarUrl });
+        return card.json?.data?.description ?? card.json?.description;
+    }).toBe('CancelDraft draft');
 });
