@@ -76,6 +76,57 @@ async function resetSeededSideDrawers(page) {
 }
 
 test.describe('workspace shell panel navigation', () => {
+    for (const viewport of [{ width: 320, height: 568 }, { width: 844, height: 390 }]) {
+        test(`prompt drawer keeps its header and bottom controls accessible at ${viewport.width}x${viewport.height}`, async ({ page }) => {
+            await page.setViewportSize(viewport);
+            await testSetup.awaitST({ page });
+            await resetSeededSideDrawers(page);
+            await openShellPanel(page, '提示词');
+
+            const drawer = page.locator('#left-nav-panel.openDrawer');
+            const inner = drawer.locator('.scrollableInner');
+            const header = drawer.locator('.workspace-panel-header');
+            await expect(header).toBeVisible();
+            await drawer.locator('.inline-drawer-toggle').click();
+            const bottomControl = drawer.locator('#send_if_empty_textarea');
+            await expect(bottomControl).toBeVisible();
+            await expect.poll(() => inner.evaluate(el => el.scrollHeight - el.clientHeight)).toBeGreaterThan(0);
+            const box = await inner.boundingBox();
+            await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+            for (let i = 0; i < 30; i++) {
+                await page.mouse.wheel(0, 500);
+                await page.waitForTimeout(40);
+            }
+
+            await expect.poll(() => inner.evaluate(el => Math.abs(el.scrollHeight - el.clientHeight - el.scrollTop))).toBeLessThanOrEqual(1);
+            const measure = () => drawer.evaluate(el => {
+                const bounds = el.getBoundingClientRect();
+                const title = el.querySelector('.workspace-panel-header').getBoundingClientRect();
+                return { drawerScroll: el.scrollTop, drawerTop: bounds.top, titleTop: title.top };
+            });
+            const atBottom = await measure();
+            expect(atBottom.drawerScroll).toBe(0);
+            expect(atBottom.titleTop).toBeGreaterThanOrEqual(atBottom.drawerTop);
+            for (let i = 0; i < 5; i++) {
+                await page.mouse.wheel(0, 500);
+                await page.waitForTimeout(40);
+            }
+            const afterExtraScroll = await measure();
+            expect(afterExtraScroll.drawerScroll).toBe(atBottom.drawerScroll);
+            expect(Math.abs(afterExtraScroll.drawerTop - atBottom.drawerTop)).toBeLessThanOrEqual(1);
+            expect(Math.abs(afterExtraScroll.titleTop - atBottom.titleTop)).toBeLessThanOrEqual(1);
+            const geometry = await inner.evaluate(el => {
+                const bounds = el.getBoundingClientRect();
+                const control = el.querySelector('#send_if_empty_textarea').getBoundingClientRect();
+                return { top: control.top, bottom: control.bottom, innerTop: bounds.top, innerBottom: bounds.bottom };
+            });
+            expect(geometry.top).toBeGreaterThanOrEqual(Math.max(0, geometry.innerTop));
+            expect(geometry.bottom).toBeLessThanOrEqual(Math.min(viewport.height, geometry.innerBottom));
+            await bottomControl.fill('fallback test');
+            await expect(bottomControl).toHaveValue('fallback test');
+        });
+    }
+
     test('mobile side panels display their content and switch from the toolbar', async ({ page }) => {
         await page.setViewportSize({ width: 390, height: 844 });
         await testSetup.awaitST({ page });
