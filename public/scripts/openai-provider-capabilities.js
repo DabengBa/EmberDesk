@@ -85,6 +85,12 @@ export function getChatCompletionModelFromSettings(settings = {}) {
     }
 }
 
+/** The same per-attempt stream decision is used by request and consumer. */
+export function isChatCompletionStreaming(settings, model, type) {
+    const isO1 = settings.chat_completion_source === CHAT_COMPLETION_SOURCES.OPENAI && ['o1-2024-12-17', 'o1'].includes(model);
+    return Boolean(settings.stream_openai && type !== 'quiet' && type !== 'chat_memory' && !isO1);
+}
+
 export function resolveVerbosity(settings = {}) {
     if (settings.verbosity === VERBOSITY_LEVELS.auto) {
         return undefined;

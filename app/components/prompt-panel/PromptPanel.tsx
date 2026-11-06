@@ -29,6 +29,7 @@ export interface PromptPanelPipelineStep {
     tool: string;
     /** Per-round instruction appended to the request tail. */
     prompt: string;
+    model: string;
 }
 
 export interface PromptPanelState {
@@ -44,6 +45,7 @@ export interface PromptPanelState {
     pipelineTriggerTags?: string[];
     /** Reply-pipeline rows: order is execution order, last row is the final step. */
     pipeline?: { enabled: boolean; steps: PromptPanelPipelineStep[] };
+    pipelineModelNames?: string[];
     /** Enabled non-stealth binding names — suggestions for the tool field. */
     bindingToolNames?: string[];
 }
@@ -547,6 +549,9 @@ export function PromptManagerList({ bridge }: { bridge: PromptPanelBridge }) {
                 ) : null}
             </div>
             <div className="prompt-panel-pipeline">
+                <datalist id="prompt-panel-pipeline-models">
+                    {(state.pipelineModelNames ?? []).map(name => <option key={name} value={name} />)}
+                </datalist>
                 <div className="prompt-panel-pipeline-head">
                     <span className="prompt-panel-field-label">{translate('Reply pipeline')}</span>
                     <label className="checkbox_label" title={translate('When enabled, one user message runs multiple tool rounds in the order below')}>
@@ -614,6 +619,18 @@ export function PromptManagerList({ bridge }: { bridge: PromptPanelBridge }) {
                                                         event.currentTarget.blur();
                                                     }
                                                 }}
+                                            />
+                                        </div>
+                                        <div className="prompt-panel-field">
+                                            <label className="prompt-panel-field-label">{translate('Step model')}</label>
+                                            <input
+                                                type="text"
+                                                className="text_pole"
+                                                aria-label={translate('Step model')}
+                                                list="prompt-panel-pipeline-models"
+                                                placeholder={translate('Use preset model')}
+                                                value={step.model}
+                                                onChange={event => bridge.updatePipelineStep(index, { model: event.target.value })}
                                             />
                                         </div>
                                         <div className="prompt-panel-field">

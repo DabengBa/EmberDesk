@@ -64,6 +64,30 @@ describe('pipeline request shaping shared by live send and preview', () => {
 });
 
 describe('prompt inspector wiring (structure)', () => {
+    test('live attempts and preview resolve model before request assembly', () => {
+        const service = read('public/scripts/generation-service.js');
+        const openai = read('public/scripts/openai.js');
+        expect(service).toContain('resolvePipelineModel(');
+        expect(service).toContain('resolvePreviewPipelineModel(');
+        expect(service).toContain('isChatCompletionStreaming(state.oai_settings, attemptModel, type)');
+        expect(openai).toContain('model: requestedModel');
+    });
+    test('attempt model is used for message provenance and not attributed to pipeline progress cards', () => {
+        const service = read('public/scripts/generation-service.js');
+        const script = read('public/script.js');
+        const tools = read('public/scripts/tool-calling.js');
+        expect(service).toContain('state.generatingAttemptModel = attemptModel');
+        expect(script).toContain('generatingAttemptModel ?? getChatCompletionModel()');
+        expect(tools).toContain('model: pipelineMeta ? null : getGeneratingModel()');
+    });
+    test('non-chat-completion streaming keeps the existing consumer decision', () => {
+        const service = read('public/scripts/generation-service.js');
+        expect(service).toContain(": isStreamingEnabled() && type !== 'quiet'");
+    });
+    test('preview validates provider tool metadata against its resolved step model', () => {
+        const service = read('public/scripts/generation-service.js');
+        expect(service).toContain('pipeline && !pipeline.fallback && !state.ToolManager.canPerformToolCalls(type, state.oai_settings, requestBody.model)');
+    });
     test('keeps prompt inspector controls discoverable by accessible name', () => {
         const inspector = read('app/components/prompt-panel/PromptInspector.tsx');
         const panel = read('app/components/prompt-panel/PromptPanel.tsx');

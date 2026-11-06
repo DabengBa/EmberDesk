@@ -1110,7 +1110,7 @@ export class ToolManager {
                 isSmallSys: true,
                 tool_invocations: invocations,
                 api: getGeneratingApi(),
-                model: getGeneratingModel(),
+                model: pipelineMeta ? null : getGeneratingModel(),
                 ...(pipelineMeta ? {
                     reply_pipeline_run: pipelineMeta.runId ?? null,
                     reply_pipeline_step: pipelineMeta.stepId ?? null,

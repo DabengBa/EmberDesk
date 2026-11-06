@@ -44,6 +44,7 @@ function normalizeStep(raw, index) {
         id: typeof raw.id === 'string' && raw.id.length > 0 ? raw.id : `step-${index + 1}`,
         tool,
         prompt: typeof raw.prompt === 'string' ? raw.prompt : '',
+        model: typeof raw.model === 'string' ? raw.model.trim() : '',
         // Resolved to a display default after the final step is known.
         rawDisplay: DISPLAY_MODES.has(raw.display) ? raw.display : null,
         display: 'summary',
@@ -170,7 +171,8 @@ export function applyFallbackRequestShape(data, fallbackPrompt = PIPELINE_FALLBA
     if (!data || typeof data !== 'object') {
         return data;
     }
-    data.tool_choice = 'none';
+    if (data.tools?.length) data.tool_choice = 'none';
+    else delete data.tool_choice;
     data.messages.push({ role: 'system', content: fallbackPrompt });
     return data;
 }
@@ -192,6 +194,25 @@ export function setPipelineRunStateProvider(provider) {
 
 export function getPipelineRunState() {
     return pipelineRunStateProvider?.() ?? null;
+}
+
+/** Models whose existing OpenAI request branches explicitly remove tools. */
+export function pipelineModelRemovesTools(data) {
+    return data.chat_completion_source === 'openai'
+        && (/^o1/.test(data.model) || /gpt-5-chat-latest/.test(data.model));
+}
+
+export function createPipelineToolCompatibilityError(model) {
+    const error = new Error(`Reply pipeline: model ${model} does not support tools in this provider.`);
+    error.code = 'REPLY_PIPELINE_TOOLS_UNSUPPORTED';
+    return error;
+}
+
+/** Apply o1 role restrictions only to the outgoing request, never the stored prefix. */
+export function applyPipelineModelMessageRoles(data) {
+    if (data.chat_completion_source === 'openai' && /^o1/.test(data.model)) {
+        data.messages = data.messages.map(message => message.role === 'system' ? { ...message, role: 'user' } : message);
+    }
 }
 
 /** Validate the entire batch before formatters or actions can have side effects. */

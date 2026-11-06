@@ -392,6 +392,7 @@ test.describe('tool bindings', () => {
     });
 
     test('reply pipeline drives analyze → review → respond, hides the final card, and stops at the final step', async ({ page }) => {
+
         await testSetup.awaitST({ page });
 
         const pipelineBindings = ['analyze', 'review', 'respond'].map(name => ({
@@ -420,9 +421,9 @@ test.describe('tool bindings', () => {
             context.chatCompletionSettings.reply_pipeline = {
                 enabled: true,
                 steps: [
-                    { tool: 'analyze', prompt: 'PLAN_FIRST', reasoning_effort: 'low' },
-                    { tool: 'review', prompt: 'RATE_PLAN' },
-                    { tool: 'respond', prompt: 'WRITE_REPLY' },
+                    { tool: 'analyze', prompt: 'PLAN_FIRST', reasoning_effort: 'low', model: 'gpt-4.1-mini' },
+                    { tool: 'review', prompt: 'RATE_PLAN', model: '' },
+                    { tool: 'respond', prompt: 'WRITE_REPLY', model: 'gpt-4.1' },
                 ],
                 final: 'respond',
             };
@@ -438,7 +439,7 @@ test.describe('tool bindings', () => {
                 identifier: 'e2e_review_rubric',
                 name: 'E2E Review Rubric',
                 role: 'system',
-                content: 'E2E_REVIEW_RUBRIC_TEXT',
+                content: 'E2E_REVIEW_RUBRIC_TEXT MODEL={{model}}',
                 marker: false,
                 system_prompt: false,
                 injection_position: 0,
@@ -484,6 +485,40 @@ test.describe('tool bindings', () => {
         await prepareOpenAiProvider(page);
 
         await page.evaluate(() => {
+            const context = window.SillyTavern.getContext();
+            context.chatCompletionSettings.media_inlining = true;
+            context.chat.push({ name: 'User', is_user: true, is_system: false, mes: 'media history proof',
+                extra: { media: [{ type: 'image', url: 'data:image/png;base64,aGVsbG8=' }] } });
+        });
+        await page.locator('#send_textarea').fill('reply pipeline e2e message');
+        const previews = await page.evaluate(async () => {
+            const { previewNextGenerationRequest } = await import('/scripts/generation-service.js');
+            const { getPipelineRunState } = await import('/scripts/reply-pipeline-core.js');
+            const first = window.SillyTavern.getContext().chatCompletionSettings.reply_pipeline.steps[0];
+            const model = first.model;
+            first.model = 'gpt-3.5-turbo';
+            const noVision = await previewNextGenerationRequest({ round: 0 });
+            first.model = model;
+            const before = structuredClone(getPipelineRunState());
+            const second = window.SillyTavern.getContext().chatCompletionSettings.reply_pipeline.steps[1];
+            const secondModel = second.model;
+            second.model = 'gpt-4.1';
+            const explicitSecond = await previewNextGenerationRequest({ round: 1 });
+            second.model = secondModel;
+            const results = [];
+            for (const round of [0, 1, 2]) results.push(await previewNextGenerationRequest({ round }));
+            return { results, noVision, explicitSecond, before, after: structuredClone(getPipelineRunState()), requests: window.__emberdeskToolRequests.length };
+        });
+        expect(previews.explicitSecond.request.model).toBe('gpt-4.1');
+        expect(JSON.stringify(previews.explicitSecond.request.messages)).toContain('E2E_REVIEW_RUBRIC_TEXT MODEL=gpt-4.1');
+        expect(previews.results.map(preview => preview.request.model)).toEqual(['gpt-4.1-mini', 'gpt-4o-mini', 'gpt-4.1']);
+        expect(JSON.stringify(previews.results[1].request.messages)).toContain('E2E_REVIEW_RUBRIC_TEXT MODEL=gpt-4o-mini');
+        expect(JSON.stringify(previews.noVision.request.messages)).not.toContain('data:image/png;base64,aGVsbG8=');
+        expect(previews.results.map(preview => JSON.stringify(preview.request.messages).includes('data:image/png;base64,aGVsbG8='))).toEqual([true, true, true]);
+        expect(previews.after).toEqual(previews.before);
+        expect(previews.requests).toBe(0);
+
+        await page.evaluate(() => {
             const textarea = document.querySelector('#send_textarea');
             textarea.value = 'reply pipeline e2e message';
             textarea.dispatchEvent(new Event('input', { bubbles: true }));
@@ -500,6 +535,7 @@ test.describe('tool bindings', () => {
         await expect.poll(() => page.evaluate(() =>
             window.SillyTavern.getContext().chat.some(message => String(message?.mes ?? '').includes('RESPOND_TEXT')),
         ), { timeout: 30_000 }).toBe(true);
+        await page.evaluate(() => window.__emberdeskToolGeneration);
 
         const generationError = await page.evaluate(() => window.__emberdeskToolGenerationError);
         expect(generationError).toBeNull();
@@ -509,6 +545,9 @@ test.describe('tool bindings', () => {
 
         // Exactly three rounds: analyze → review → respond. No closing round.
         expect(turnRequests).toHaveLength(3);
+        expect(turnRequests.map(request => request.model)).toEqual(['gpt-4.1-mini', 'gpt-4o-mini', 'gpt-4.1']);
+        expect(JSON.stringify(turnRequests[1].messages)).toContain('E2E_REVIEW_RUBRIC_TEXT MODEL=gpt-4o-mini');
+        expect(turnRequests.map(request => JSON.stringify(request.messages).includes('data:image/png;base64,aGVsbG8='))).toEqual([true, true, true]);
         expect(turnRequests[0].messages.some(message => String(message?.content ?? '').includes('[Reply pipeline 1/3]') && String(message?.content ?? '').includes('analyze'))).toBe(true);
         expect(turnRequests[1].messages.some(message => String(message?.content ?? '').includes('[Reply pipeline 2/3]') && String(message?.content ?? '').includes('review'))).toBe(true);
         expect(turnRequests[2].messages.some(message => String(message?.content ?? '').includes('[Reply pipeline 3/3]') && String(message?.content ?? '').includes('respond'))).toBe(true);
@@ -537,6 +576,7 @@ test.describe('tool bindings', () => {
             return {
                 isSystem: !!reply?.is_system,
                 mes: reply?.mes,
+                model: reply?.extra?.model,
                 run: reply?.extra?.reply_pipeline_run,
                 step: reply?.extra?.reply_pipeline_step,
                 steps: reply?.extra?.tool_invocations?.map(invocation => ({
@@ -553,6 +593,7 @@ test.describe('tool bindings', () => {
         // &lt;tool&gt;…&lt;/tool&gt; tag text leading `mes` — the tag names
         // display literally, the last tag carries the reply raw.
         expect(chatState.isSystem).toBe(false);
+        expect(chatState.model).toBe('gpt-4.1');
         expect(chatState.mes).toContain('&lt;analyze&gt;');
         expect(chatState.mes).toContain('&lt;review&gt;[E2E-MARKED]');
         expect(chatState.mes).toContain('&lt;respond&gt;');
@@ -646,8 +687,8 @@ test.describe('tool bindings', () => {
             context.chatCompletionSettings.reply_pipeline = {
                 enabled: true,
                 steps: [
-                    { tool: 'analyze', prompt: 'PLAN_FIRST' },
-                    { tool: 'respond', prompt: 'WRITE_REPLY' },
+                    { tool: 'analyze', prompt: 'PLAN_FIRST', model: 'gpt-4.1-mini' },
+                    { tool: 'respond', prompt: 'WRITE_REPLY', model: 'gpt-4.1' },
                 ],
                 final: 'respond',
             };
@@ -678,6 +719,8 @@ test.describe('tool bindings', () => {
         const requests = await page.evaluate(() => window.__emberdeskToolRequests);
         const turnRequests = requests.filter(request => request.messages?.some(message => String(message?.content ?? '').includes('reply pipeline e2e message')));
         expect(turnRequests).toHaveLength(3);
+        expect(turnRequests.map(request => request.model)).toEqual(['gpt-4.1-mini', 'gpt-4.1', 'gpt-4o-mini']);
+        expect(await page.evaluate(() => window.SillyTavern.getContext().chat.findLast(message => message.mes === 'FALLBACK_REPLY_TEXT')?.extra?.model)).toBe('gpt-4o-mini');
         const fallbackRequest = turnRequests[2];
         expect(fallbackRequest.tools).toEqual(turnRequests[0].tools);
         expect(fallbackRequest.tool_choice).toBe('none');
@@ -709,9 +752,9 @@ test.describe('reply pipeline step editor', () => {
         await expect(page.locator('html')).toHaveAttribute('data-reply-pipeline-init', 'true', { timeout: 15_000 });
         await page.evaluate(async () => {
             const { saveOpenAIPreset, applyOpenAIPreset, oai_settings } = await import('/scripts/openai.js');
-            for (const [name, tool] of [['AutoBind A', 'preset_alpha'], ['AutoBind B', 'preset_beta']]) {
+            for (const [name, tool, model] of [['AutoBind A', 'preset_alpha', 'model-alpha'], ['AutoBind B', 'preset_beta', 'model-beta']]) {
                 await saveOpenAIPreset(name, { ...oai_settings, reply_pipeline: {
-                    enabled: true, steps: [{ tool, prompt: 'Reply' }], final: tool,
+                    enabled: true, steps: [{ tool, prompt: 'Reply', model }], final: tool,
                 } }, false);
             }
             applyOpenAIPreset('AutoBind A');
@@ -730,6 +773,12 @@ test.describe('reply pipeline step editor', () => {
         if (await page.locator('.popup-button-cancel').isVisible()) await page.locator('.popup-button-cancel').click();
         await expect(row.locator('.prompt-panel-item-name-text')).toHaveText('preset_beta');
         await expect(input).toHaveValue('preset_beta');
+        expect(await page.evaluate(() => window.SillyTavern.getContext().chatCompletionSettings.reply_pipeline.steps[0].model)).toBe('model-beta');
+        await chooser.selectOption({ label: 'AutoBind A' }, { force: true });
+        await expect(row.locator('.prompt-panel-item-name-text')).toHaveText('preset_alpha');
+        expect(await page.evaluate(() => window.SillyTavern.getContext().chatCompletionSettings.reply_pipeline.steps[0].model)).toBe('model-alpha');
+        await chooser.selectOption({ label: 'AutoBind B' }, { force: true });
+        await expect(row.locator('.prompt-panel-item-name-text')).toHaveText('preset_beta');
         await page.evaluate(previous => {
             const bridge = window.__emberDeskPromptPanelBridge;
             const current = bridge.getState();
@@ -810,8 +859,8 @@ test.describe('reply pipeline step editor', () => {
             context.chatCompletionSettings.reply_pipeline = {
                 enabled: true,
                 steps: [
-                    { tool: 'analyze', prompt: 'PLAN_FIRST', reasoning_effort: 'low' },
-                    { tool: 'respond', prompt: 'WRITE_REPLY' },
+                    { tool: 'analyze', prompt: 'PLAN_FIRST', reasoning_effort: 'low', model: 'model-analyze' },
+                    { tool: 'respond', prompt: 'WRITE_REPLY', model: 'model-respond' },
                 ],
                 final: 'respond',
             };
@@ -851,6 +900,13 @@ test.describe('reply pipeline step editor', () => {
         await rows.nth(0).locator('.prompt-panel-drag-handle').press('ArrowDown');
         stored = await page.evaluate(() => window.SillyTavern.getContext().chatCompletionSettings.reply_pipeline);
         expect(stored.steps.map(step => step.tool)).toEqual(['respond', 'analyze', 'temp']);
+        expect(stored.steps.map(step => step.model ?? '')).toEqual(['model-respond', 'model-analyze', '']);
+        await page.evaluate(async () => { const { saveSettings } = await import('/script.js'); await saveSettings(); });
+        await page.reload();
+        await testSetup.awaitST({ page });
+        await expect(rows).toHaveCount(3);
+        stored = await page.evaluate(() => window.SillyTavern.getContext().chatCompletionSettings.reply_pipeline);
+        expect(stored.steps.map(step => [step.tool, step.model ?? ''])).toEqual([['respond', 'model-respond'], ['analyze', 'model-analyze'], ['temp', '']]);
 
         // Delete a row via its expanded editor → the plan shrinks.
         await rows.nth(1).locator('.prompt-panel-item-name').click();
@@ -870,5 +926,26 @@ test.describe('reply pipeline step editor', () => {
         await page.locator('#completion_prompt_manager .prompt-panel-pipeline-head input[type="checkbox"]').check();
         const tagsBack = await page.evaluate(() => window.__emberDeskPromptPanelBridge.getState().pipelineTriggerTags);
         expect(tagsBack).toEqual(['pipeline:respond', 'pipeline:temp']);
+    });
+
+    test('step model editor persists a free-form model through settings reload', async ({ page }) => {
+        await testSetup.awaitST({ page });
+        await page.evaluate(() => {
+            window.SillyTavern.getContext().chatCompletionSettings.reply_pipeline = {
+                enabled: true, steps: [{ tool: 'analyze', prompt: 'keep prompt', reasoning_effort: 'low' }],
+            };
+            window.__emberDeskPromptPanelBridge.setPipelineEnabled(true);
+        });
+        const row = page.locator('#completion_prompt_manager .prompt-panel-pipeline .prompt-panel-item').first();
+        await row.locator('.prompt-panel-item-name').click();
+        const model = row.getByRole('combobox', { name: 'Step model' });
+        await model.fill('custom/model-v1');
+        await page.evaluate(async () => { const { saveSettings } = await import('/script.js'); await saveSettings(); });
+        await page.reload();
+        await testSetup.awaitST({ page });
+        const step = await page.evaluate(() => window.SillyTavern.getContext().chatCompletionSettings.reply_pipeline.steps[0]);
+        expect(step).toMatchObject({ tool: 'analyze', prompt: 'keep prompt', reasoning_effort: 'low', model: 'custom/model-v1' });
+        if (!(await model.isVisible())) await row.locator('.prompt-panel-item-name').click();
+        await expect(model).toHaveValue('custom/model-v1');
     });
 });

@@ -27,8 +27,8 @@ It does not replace provider-specific payload builders, the compatibility-visibl
 Important constraints:
 
 - every visible and non-visible request is classified into an explicit generation command; unsupported command kinds reject instead of falling through to a second transport owner
-- only eligible top-level visible OpenAI-compatible generation may enter bounded automatic recovery
-- `quiet`, nested `depth > 0`, dry-run, user abort, and non-OpenAI main API paths must not auto-retry
+- Eligible top-level visible OpenAI-compatible generation may enter bounded automatic recovery; an active normal reply-pipeline continuation also gets its own bounded recovery chain.
+- `quiet`, ordinary nested `depth > 0` requests, dry-run, user abort, and non-OpenAI main API paths must not auto-retry. The active reply-pipeline continuation above is the nested-depth exception.
 - fallback readiness must use the shared `hasFallbackProviderSettings()` helper
 - automatic recovery remains bounded to the existing chain: original request, one primary retry, optional fallback retry, then the existing manual retry CTA
 - recovery status rows must stay outside `.mes_text` so message text remains readable and extension-facing row selectors stay stable
@@ -46,6 +46,8 @@ Important constraints:
 `public/script.js` keeps compatibility entry points such as `Generate()` and `swipe()`, but `Generate()` first creates a generation request envelope and delegates to the service-owned attempt loop. React composer and message actions dispatch visible commands directly; slash, group, quiet, background, dry-run, nested, and provider-specific callers keep their public APIs while reaching the same command/lifecycle boundary. The React composer also capture-owns the visible stop control, then dispatches the existing `stopGeneration()` lifecycle through its bridge after the pointer event settles; it does not implement a second abort path. Before a visible generation starts, the shell captures an existing-message baseline with `createExistingMessageRecoveryBaseline(type)` for `continue` and `swipe`. Failed intermediate attempts call `clearGenerationAttemptMessage(messageId, baseline)` so partial failed text does not leak into the next attempt, while final failure restores the original assistant row when the generation started from an existing row.
 
 The shell continues to reuse the existing provider payload builders and stable row/event behavior. `GenerationStreamSession` is the internal streaming implementation for request execution; it keeps token append and final row completion compatible with the current renderer. React does not own a second transport executor, and visible/quiet owner markers or fallback handoffs no longer exist. Quiet/background requests use their non-visible contract: no assistant row, return generated text, and no automatic recovery.
+
+For an active reply pipeline, `public/scripts/generation-service.js` plans recovery per continuation round, so a failed later round does not replay completed tool actions. The attempt model is resolved before request construction and stream selection: fallback-provider recovery takes precedence over the active step model, then the preset model. `public/scripts/reply-pipeline.js` retains the captured prefix and `public/scripts/openai.js` retains the step prompt tail for retries; the tail's macros use the initial attempt model even if a retry switches models. See [Reply Pipeline](../db/features/reply-pipeline.md) for the user-facing boundary.
 
 ## Scope Boundary
 
@@ -72,6 +74,7 @@ Semantic IDs:
 - `feature.chat_message_rendering`
 - `feature.chat_message_actions`
 - `feature.fallback_provider`
+- `feature.reply_pipeline`
 
 Stable binding points:
 

@@ -13,6 +13,7 @@ export function hasFallbackProviderSettings(settings) {
 }
 
 export function isRecoverableGenerationFailure(failure) {
+    if (failure?.code === 'REPLY_PIPELINE_TOOLS_UNSUPPORTED') return false;
     const message = String(
         failure?.message
         ?? failure?.error?.message

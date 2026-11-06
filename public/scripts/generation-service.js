@@ -19,7 +19,11 @@ import {
     isPipelineFallbackRound,
     preparePipelineRound,
     previewPipelineRequestShaping,
+    resolvePipelineModel,
+    resolvePreviewPipelineModel,
 } from './reply-pipeline.js';
+import { getChatCompletionModelFromSettings, isChatCompletionStreaming } from './openai-provider-capabilities.js';
+import { getFallbackOpenAIModel } from './chat-generation-auto-recovery.js';
 import { t } from './i18n.js';
 import { assertPipelineResponseAllowed, getActivePipelineRunId, getPipelineRunState } from './reply-pipeline-core.js';
 
@@ -73,6 +77,7 @@ const getGenerationLifecycleStatusLabels = (...args) => shell().getGenerationLif
 const getMaxPromptTokens = (...args) => shell().getMaxPromptTokens(...args);
 const isAssistantRecoveryMessageId = (...args) => shell().isAssistantRecoveryMessageId(...args);
 const isStreamingEnabled = (...args) => shell().isStreamingEnabled(...args);
+
 const pingServer = (...args) => shell().pingServer(...args);
 const processCommands = (...args) => shell().processCommands(...args);
 const rememberMainChatStreamingTransportProcessorTerminal = (...args) => shell().rememberMainChatStreamingTransportProcessorTerminal(...args);
@@ -613,7 +618,7 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
         };
     }
 
-    const canPerformToolCalls = !dryRun && state.ToolManager.canPerformToolCalls(type) && depth < state.ToolManager.RECURSE_LIMIT;
+    let canPerformToolCalls = !dryRun && state.ToolManager.canPerformToolCalls(type) && depth < state.ToolManager.RECURSE_LIMIT;
     let generate_data;
     let previewChatCompletion = null;
     let summarizedEntries = [];
@@ -621,7 +626,7 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
     if (!dryRun && type === 'normal' && state.main_api === 'openai' && getPipelineRunState()?.messages) {
         // Keep the existing generation owner, but never rescan WI, re-expand
         // macros or replay folded UI cards for an in-flight continuation.
-        const [prompt] = await prepareOpenAIMessages({ type, pipelineStepTag: getPipelineTriggerTag(type) }, false);
+        const [prompt] = await prepareOpenAIMessages({ type, pipelineStepTag: getPipelineTriggerTag(type), pipelineStepModel: resolvePipelineModel(getChatCompletionModelFromSettings(state.oai_settings)) }, false);
         generate_data = { prompt };
     } else {
         let {
@@ -807,7 +812,9 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
         let oaiMessages = [];
 
         if (state.main_api === 'openai') {
-            oaiMessages = setOpenAIMessages(coreChat);
+            const presetModel = getChatCompletionModelFromSettings(state.oai_settings);
+            const assemblyModel = isPreview ? resolvePreviewPipelineModel(presetModel, 0) : (type === 'normal' ? resolvePipelineModel(presetModel) : presetModel);
+            oaiMessages = setOpenAIMessages(coreChat, assemblyModel);
         }
 
         // hack for regeneration of the first message
@@ -1093,6 +1100,8 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
                     quietPrompt: quiet_prompt,
                     quietImage: quietImage,
                     messages: oaiMessages,
+                    assemblyModel: isPreview ? resolvePreviewPipelineModel(getChatCompletionModelFromSettings(state.oai_settings), 0) : (type === 'normal' ? resolvePipelineModel(getChatCompletionModelFromSettings(state.oai_settings)) : null),
+                    pipelineStepModel: isPreview ? resolvePreviewPipelineModel(getChatCompletionModelFromSettings(state.oai_settings), Number(preview?.round ?? 0)) : (type === 'normal' ? resolvePipelineModel(getChatCompletionModelFromSettings(state.oai_settings)) : null),
                     pipelineStepTag: isPreview ? getPreviewPipelineTriggerTag(Number(preview?.round ?? 0)) : getPipelineTriggerTag(type),
                 }, dryRun, { squash: isPreview ? true : null, bookkeep: !isPreview });
                 generate_data = { prompt: prompt };
@@ -1210,7 +1219,12 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
 
         showStopButton();
 
-        const lifecyclePlan = createGenerationCommandPlan(generationEnvelope.command, {
+        // A pipeline continuation owns its own retries.  Its parent must not
+        // retry an already completed tool round when this round fails.
+        const command = generationEnvelope.command;
+        const pipelineContinuation = depth > 0 && type === 'normal' && state.main_api === 'openai' && Boolean(getPipelineRunState());
+        const recoveryCommand = pipelineContinuation ? { ...command, depth: 0, capabilities: { ...command.capabilities, autoRecover: true } } : command;
+        const lifecyclePlan = createGenerationCommandPlan(recoveryCommand, {
             fallbackReady: hasFallbackProviderForGeneration({
                 settings: state.oai_settings,
             }),
@@ -1268,13 +1282,24 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
         }
         const runGenerationAttempt = async (attempt, attemptIndex) => {
             const isIntermediateAttempt = attemptIndex < attempts.length - 1;
+            const presetModel = getChatCompletionModelFromSettings(state.oai_settings);
+            const fallbackModel = attempt.fallbackProvider ? getFallbackOpenAIModel(state.oai_settings) : null;
+            const attemptModel = type === 'normal' ? resolvePipelineModel(presetModel, { fallbackModel }) : (fallbackModel || presetModel);
+            state.generatingAttemptModel = attemptModel;
+            if (state.main_api === 'openai') {
+                canPerformToolCalls = state.ToolManager.canPerformToolCalls(type, state.oai_settings, attemptModel) && depth < state.ToolManager.RECURSE_LIMIT;
+            }
             const requestOptions = {
                 jsonSchema,
                 fallbackProvider: attempt.fallbackProvider,
+                model: attemptModel,
                 trace: requestTrace,
             };
 
-            if (isStreamingEnabled() && type !== 'quiet') {
+            const useStreaming = state.main_api === 'openai'
+                ? isChatCompletionStreaming(state.oai_settings, attemptModel, type)
+                : isStreamingEnabled() && type !== 'quiet';
+            if (useStreaming) {
                 state.streamingProcessor = new GenerationStreamSession(type, force_name2, state.generation_started, promptReasoning);
                 state.streamingProcessor.suppressErrorRecovery = isIntermediateAttempt;
                 state.streamingProcessor.fromFallbackAttempt = Boolean(attempt.fallbackProvider);
@@ -1305,6 +1330,10 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
                     const shouldDeleteMessage = ['', '...'].includes(lastMessage?.mes) && !lastMessage?.extra?.reasoning && ['', '...'].includes(state.streamingProcessor?.result);
                     if (hasToolCalls && shouldDeleteMessage) await deleteLastMessage();
                     if (hasToolCalls && !shouldDeleteMessage) {
+                        if (getPipelineRunState() && state.chat[state.streamingProcessor.messageId]) {
+                            state.chat[state.streamingProcessor.messageId].extra ??= {};
+                            state.chat[state.streamingProcessor.messageId].extra.model = attemptModel;
+                        }
                         await state.streamingProcessor.finalizeIntermediaryMessage(state.streamingProcessor.messageId, getMessage, { unlockUI: false });
                     }
                     const invocationResult = await state.ToolManager.invokeFunctionTools(state.streamingProcessor.toolCalls, {
@@ -1345,6 +1374,7 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
                                 fromStream: true,
                             });
                         }
+                        if (getPipelineRunState()) return { pipelineContinuation: true };
                         depth = depth + 1;
                         return Generate('normal', { automatic_trigger, force_name2, quiet_prompt, quietToLoud, skipWIAN, signal, quietImage, quietName, depth }, dryRun);
                     }
@@ -1352,11 +1382,16 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
 
                 if (isStreamFinished) {
                     const finishedMessageId = state.streamingProcessor.messageId;
+
                     if (!String(messageChunk ?? '').trim()) {
                         state.streamingProcessor = null;
                         throw createEmptyReplyFailure(finishedMessageId);
                     }
 
+                    if (state.main_api === 'openai' && state.chat[finishedMessageId] && attemptModel) {
+                        state.chat[finishedMessageId].extra ??= {};
+                        state.chat[finishedMessageId].extra.model = attemptModel;
+                    }
                     await state.streamingProcessor.onFinishStreaming(finishedMessageId, getMessage);
                     rememberMainChatStreamingTransportProcessorTerminal(state.streamingProcessor, 'completed');
                     scheduleMainChatMessageListPanelRefresh();
@@ -1451,11 +1486,14 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
         });
     }
 
+    const previousAttemptModel = state.generatingAttemptModel;
     try {
         const generationResult = await finishGenerating();
         return await onSuccess(generationResult);
     } catch (exception) {
         return onError(exception);
+    } finally {
+        state.generatingAttemptModel = previousAttemptModel;
     }
 
     /**
@@ -1466,6 +1504,10 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
      */
     async function onSuccess(data) {
         if (!data) return;
+
+        if (data.pipelineContinuation) {
+            return Generate('normal', { automatic_trigger, force_name2, quiet_prompt, quietToLoud, skipWIAN, signal, quietImage, quietName, depth: depth + 1 }, dryRun);
+        }
 
         if (data?.fromStream) {
             return data;
@@ -1675,9 +1717,13 @@ async function buildPreviewRequestResult({ type, generateData, chatCompletion, r
     const { generate_data: requestBody, stream } = await buildChatCompletionRequest({
         type,
         messages,
+        model: type === 'normal' ? resolvePreviewPipelineModel(getChatCompletionModelFromSettings(state.oai_settings), round) : null,
         emitSettingsReady: false,
     });
     const pipeline = previewPipelineRequestShaping(requestBody, { round });
+    if (pipeline && !pipeline.fallback && !state.ToolManager.canPerformToolCalls(type, state.oai_settings, requestBody.model)) {
+        throw new Error(`Reply pipeline: model ${requestBody.model} does not support tools in this provider.`);
+    }
     const responseTokens = Number(state.oai_settings?.openai_max_tokens) || 0;
     const contextTokens = getMaxPromptTokens() + responseTokens;
     const previewBudget = derivePreviewBudget({ chatCompletion, contextTokens, responseTokens });

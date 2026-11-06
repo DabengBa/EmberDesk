@@ -83,6 +83,7 @@ import {
     promptManager,
     chat_completion_sources,
     getChatCompletionModel,
+    getOpenAIModelList,
     isOpenAIPresetDirty,
     initOpenAI,
     connectProviderConnection,
@@ -494,6 +495,8 @@ registerWorldInfoShellContext({
 
 registerGenerationShellContext({
     state: {
+        get generatingAttemptModel() { return generatingAttemptModel; },
+        set generatingAttemptModel(value) { generatingAttemptModel = value; },
         get INTERACTABLE_CONTROL_CLASS() { return INTERACTABLE_CONTROL_CLASS; },
         get chat() { return chat; },
         get chat_metadata() { return chat_metadata; },
@@ -4263,6 +4266,18 @@ let deferredCoreFeatureTask = null;
 const deferredVersionTask = createSingleFlightTask(() => measureStartupStage('deferred.getClientVersion', () => getClientVersion()));
 
 let generation_started = new Date();
+let generatingAttemptModel = null;
+
+/** Run synchronous step-only macro expansion with the step's model. */
+export function withGeneratingModel(model, callback) {
+    const previous = generatingAttemptModel;
+    generatingAttemptModel = model ?? previous;
+    try {
+        return callback();
+    } finally {
+        generatingAttemptModel = previous;
+    }
+}
 /** @type {Character[]} */
 export let characters = [];
 const pendingDeletedCharacterAvatars = new Set();
@@ -7425,7 +7440,7 @@ export function getGeneratingModel(_mes) {
     let model = '';
     switch (main_api) {
         case 'openai':
-            model = getChatCompletionModel();
+            model = generatingAttemptModel ?? getChatCompletionModel();
             break;
     }
     return model;
@@ -10223,6 +10238,7 @@ function getPromptPanelBridge() {
             id: typeof step?.id === 'string' && step.id.length > 0 ? step.id : `step-${index + 1}`,
             tool: String(step?.tool ?? ''),
             prompt: typeof step?.prompt === 'string' ? step.prompt : '',
+            model: typeof step?.model === 'string' ? step.model : '',
         }));
     };
 
@@ -10311,6 +10327,7 @@ function getPromptPanelBridge() {
                     steps: getPipelineStepRows(),
                 },
                 bindingToolNames: getEligibleToolNames(),
+                pipelineModelNames: getOpenAIModelList().map(model => model.id).filter(id => typeof id === 'string'),
             };
             return cachedState;
         },
@@ -10406,6 +10423,9 @@ function getPromptPanelBridge() {
             }
             if (patch && Object.prototype.hasOwnProperty.call(patch, 'prompt')) {
                 step.prompt = String(patch.prompt ?? '');
+            }
+            if (patch && Object.prototype.hasOwnProperty.call(patch, 'model')) {
+                step.model = String(patch.model ?? '');
             }
             persist();
         },

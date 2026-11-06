@@ -5,6 +5,15 @@ async function importFreshCore() {
 }
 
 describe('normalizeReplyPipeline', () => {
+    test('retains a trimmed step model and treats blank or missing models as inherited', async () => {
+        const { normalizeReplyPipeline } = await importFreshCore();
+        const pipeline = normalizeReplyPipeline({ enabled: true, steps: [
+            { tool: 'a', model: ' gpt-4o-mini ' },
+            { tool: 'b', model: '  ' },
+            { tool: 'c' },
+        ] });
+        expect(pipeline.steps.map(step => step.model)).toEqual(['gpt-4o-mini', '', '']);
+    });
     test('returns a disabled pipeline for non-object input', async () => {
         const { normalizeReplyPipeline } = await importFreshCore();
 
