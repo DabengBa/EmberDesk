@@ -87,6 +87,9 @@ async function installStreamingFetchSequenceStub(page, { responses }) {
 
             window.__emberdeskStreamingRequests.push(JSON.parse(String(init.body ?? '{}')));
             const responseConfig = streamResponses[Math.min(window.__emberdeskStreamingRequests.length - 1, streamResponses.length - 1)] ?? {};
+            if (responseConfig.status) {
+                return new Response(JSON.stringify({ error: { message: 'provider network failure' } }), { status: responseConfig.status, headers: { 'Content-Type': 'application/json' } });
+            }
             const streamChunks = responseConfig.chunks ?? [];
             const streamDelayMs = responseConfig.delayMs ?? 40;
             const keepStreamOpen = Boolean(responseConfig.keepOpenAfterChunks);
@@ -115,7 +118,7 @@ async function installStreamingFetchSequenceStub(page, { responses }) {
                             controller.enqueue(encoder.encode(`data: ${JSON.stringify({
                                 choices: [{
                                     index: 0,
-                                    delta: { content: chunk },
+                                    delta: typeof chunk === 'string' ? { content: chunk } : chunk,
                                     finish_reason: null,
                                 }],
                             })}\n\n`));
@@ -1142,6 +1145,232 @@ test.describe('chat message streaming', () => {
             aborted: false,
             error: '',
         });
+    });
+
+    test('pipeline incompatible model never retries or reaches fallback provider', async ({ page }) => {
+        await testSetup.awaitST({ page });
+        await selectCharacterInFreshChat(page, characterName);
+        await enableOpenAiStreaming(page);
+        await enableFallbackProvider(page);
+        await page.evaluate(async () => {
+            const context = window.SillyTavern.getContext();
+            context.featureSettings.tool_bindings = [{ id: 'terminal_test', name: 'analyze', enabled: true, description: 'analyze', parameters: { type: 'object', properties: {} }, actionBody: 'return "ok";' }];
+            context.chatCompletionSettings.reply_pipeline = { enabled: true, steps: [{ tool: 'analyze', model: 'o1' }] };
+            const { syncPipelineToolBindings } = await import('/scripts/tool-bindings.js');
+            syncPipelineToolBindings(['analyze'], { activate: true });
+        });
+        await installStreamingFetchSequenceStub(page, { responses: [{ chunks: ['must not send'] }] });
+        await startGeneration(page, 'Incompatible pipeline model proof');
+        await page.evaluate(async () => { try { await window.__emberdeskStreamingGeneration; } catch { /* reported by generation */ } });
+        expect(await page.evaluate(() => window.__emberdeskStreamingRequests)).toHaveLength(0);
+        await expect(page.locator('#toast-container')).toContainText('does not support tools');
+    });
+
+    test('pipeline streaming recovery records the successful fallback model on the reused row', async ({ page }) => {
+        await testSetup.awaitST({ page });
+        await selectCharacterInFreshChat(page, characterName);
+        await enableOpenAiStreaming(page);
+        await enableFallbackProvider(page);
+        await page.evaluate(async () => {
+            const context = window.SillyTavern.getContext();
+            context.featureSettings.tool_bindings = [{ id: 'recovery_test', name: 'analyze', enabled: true, description: 'analyze', parameters: { type: 'object', properties: {} }, actionBody: 'return "ok";' }];
+            context.chatCompletionSettings.reply_pipeline = { enabled: true, steps: [{ tool: 'analyze', model: 'gpt-4.1-mini' }] };
+            const { syncPipelineToolBindings } = await import('/scripts/tool-bindings.js');
+            syncPipelineToolBindings(['analyze'], { activate: true });
+        });
+
+        await installStreamingFetchSequenceStub(page, { responses: [
+            { chunks: ['discarded partial'], failAfterChunks: true },
+            { chunks: [] },
+            { chunks: ['successful fallback'] },
+        ] });
+        await startGeneration(page, 'Pipeline recovery model proof');
+        await waitForGeneration(page);
+        const actual = await page.evaluate(() => ({
+            requests: window.__emberdeskStreamingRequests.map(request => request.model),
+            reply: window.SillyTavern.getContext().chat.findLast(message => String(message.mes).includes('successful fallback')),
+        }));
+        expect(actual.requests).toEqual(['gpt-4.1-mini', 'gpt-4.1-mini', 'fallback-model']);
+        expect(actual.reply?.extra?.model).toBe('fallback-model');
+    });
+
+    test('pipeline recovery keeps successful model on streamed text with tool call', async ({ page }) => {
+        await testSetup.awaitST({ page });
+        await selectCharacterInFreshChat(page, characterName);
+        await enableOpenAiStreaming(page);
+        await enableFallbackProvider(page);
+        await page.evaluate(async () => {
+            const context = window.SillyTavern.getContext();
+            context.featureSettings.tool_bindings = [{ id: 'recovery_tool', name: 'analyze', enabled: true, description: 'analyze', parameters: { type: 'object', properties: {} }, actionBody: 'return "ok";' }];
+            context.chatCompletionSettings.reply_pipeline = { enabled: true, steps: [{ tool: 'analyze', model: 'gpt-4.1-mini' }, { tool: 'analyze', model: 'gpt-4.1' }] };
+            const { promptManager } = await import('/scripts/openai.js');
+            const settings = context.chatCompletionSettings;
+            settings.prompts.push({ identifier: 'attempt4_model', name: 'Attempt 4 model', role: 'system', content: 'ATTEMPT4 MODEL={{model}} {{setvar::attempt5_nested::{{model}}}}{{incvar::attempt5_count}}COUNT={{getvar::attempt5_count}} STORED={{getvar::attempt5_nested}} RANDOM={{random::alpha::beta::gamma}}', marker: false, system_prompt: false, injection_position: 0, injection_depth: 4, injection_order: 100, injection_trigger: ['pipeline:analyze'] });
+            const { setLocalVariable } = await import('/scripts/variables.js');
+            setLocalVariable('attempt5_count', 0);
+            const characterId = promptManager.activeCharacter?.id ?? null;
+            let order = settings.prompt_order.find(item => String(item.character_id) === String(characterId));
+            if (!order) { order = { character_id: characterId, order: [] }; settings.prompt_order.push(order); }
+            order.order.push({ identifier: 'attempt4_model', enabled: true });
+            const { syncPipelineToolBindings } = await import('/scripts/tool-bindings.js');
+            syncPipelineToolBindings(['analyze'], { activate: true });
+            const { eventSource, event_types } = await import('/scripts/events.js');
+            window.__attempt3Received = [];
+            eventSource.on(event_types.MESSAGE_RECEIVED, id => {
+                const message = context.chat[id];
+                if (message?.mes?.includes('fallback intermediary')) window.__attempt3Received.push(structuredClone(message));
+            });
+
+        });
+        await installStreamingFetchSequenceStub(page, { responses: [
+            { chunks: ['discarded partial'], failAfterChunks: true },
+            { chunks: [] },
+            { chunks: ['fallback intermediary', { tool_calls: [{ index: 0, id: 'call_fallback', type: 'function', function: { name: 'analyze', arguments: '{}' } }] }] },
+            { chunks: ['next step response'] },
+        ] });
+        await startGeneration(page, 'Pipeline fallback tool provenance');
+        await waitForGeneration(page);
+        const observed = await page.evaluate(async () => ({ requests: window.__emberdeskStreamingRequests, received: window.__attempt3Received, count: (await import('/scripts/variables.js')).getLocalVariable('attempt5_count'), nested: (await import('/scripts/variables.js')).getLocalVariable('attempt5_nested') }));
+        expect(observed.requests.slice(0, 3).map(request => request.model)).toEqual(['gpt-4.1-mini', 'gpt-4.1-mini', 'fallback-model']);
+        expect(JSON.stringify(observed.requests[0].messages)).toContain('ATTEMPT4 MODEL=gpt-4.1-mini');
+        expect(JSON.stringify(observed.requests[2].messages)).toContain('ATTEMPT4 MODEL=gpt-4.1-mini');
+        expect(JSON.stringify(observed.requests[0].messages)).toContain('COUNT=1');
+        expect(JSON.stringify(observed.requests[2].messages)).toContain('COUNT=1');
+        expect(Number(observed.count)).toBe(1);
+        expect(observed.nested).toBe('gpt-4.1-mini');
+        expect(JSON.stringify(observed.requests[0].messages)).toContain('STORED=gpt-4.1-mini');
+        expect(JSON.stringify(observed.requests[2].messages)).toContain('STORED=gpt-4.1-mini');
+        expect(JSON.stringify(observed.requests)).not.toContain('PIPELINE_MODEL_');
+        const firstRandom = JSON.stringify(observed.requests[0].messages).match(/RANDOM=(alpha|beta|gamma)/)?.[1];
+        expect(firstRandom).toBeTruthy();
+        expect(JSON.stringify(observed.requests[2].messages)).toContain(`RANDOM=${firstRandom}`);
+        expect(observed.received.length).toBeGreaterThan(0);
+        expect(observed.received[0].extra.model).toBe('fallback-model');
+    });
+
+    test('ordinary streaming tool continuation failure recovers through the parent attempt', async ({ page }) => {
+        await testSetup.awaitST({ page });
+        await selectCharacterInFreshChat(page, characterName);
+        await enableOpenAiStreaming(page);
+        await enableFallbackProvider(page);
+        await page.evaluate(async () => {
+            const context = window.SillyTavern.getContext();
+            context.chatCompletionSettings.reply_pipeline = { enabled: false, steps: [] };
+            context.featureSettings.tool_bindings = [{ id: 'ordinary_tool', name: 'analyze', enabled: true, description: 'analyze', parameters: { type: 'object', properties: {} }, actionBody: 'return "ordinary tool result";' }];
+            const { syncPipelineToolBindings } = await import('/scripts/tool-bindings.js');
+            syncPipelineToolBindings(['analyze'], { activate: true });
+        });
+        await installStreamingFetchSequenceStub(page, { responses: [
+            { chunks: [{ tool_calls: [{ index: 0, id: 'ordinary_call', type: 'function', function: { name: 'analyze', arguments: '{}' } }] }] },
+            { status: 503 }, { chunks: ['ordinary recovered'] },
+        ] });
+        await startGeneration(page, 'ordinary tool continuation recovery');
+        await waitForGeneration(page);
+        const actual = await page.evaluate(() => ({ requests: window.__emberdeskStreamingRequests, chat: window.SillyTavern.getContext().chat }));
+        expect(actual.requests).toHaveLength(3);
+        expect(JSON.stringify(actual.chat)).toContain('ordinary recovered');
+    });
+
+    test('pipeline switches stream consumption across preset o1 and fallback recovery', async ({ page }) => {
+
+        await testSetup.awaitST({ page });
+        await selectCharacterInFreshChat(page, characterName);
+        await enableOpenAiStreaming(page);
+        await enableFallbackProvider(page);
+        await page.evaluate(async () => {
+            const context = window.SillyTavern.getContext();
+            context.chatCompletionSettings.openai_model = 'o1';
+            context.featureSettings.tool_bindings = [{ id: 'stream_modes', name: 'analyze', enabled: true, description: 'analyze', parameters: { type: 'object', properties: {} }, actionBody: 'return JSON.stringify({ ok: true });' }];
+            context.chatCompletionSettings.reply_pipeline = { enabled: true, steps: [{ tool: 'analyze', model: 'gpt-4o-mini' }], final: 'analyze' };
+            const { syncPipelineToolBindings } = await import('/scripts/tool-bindings.js');
+            syncPipelineToolBindings(['analyze'], { activate: true });
+        });
+        await installStreamingFetchSequenceStub(page, { responses: [
+            { chunks: [{ tool_calls: [{ index: 0, id: 'call_modes', type: 'function', function: { name: 'analyze', arguments: '{}' } }] }] },
+            { status: 500 }, { status: 500 }, { chunks: ['streaming fallback succeeded'] },
+        ] });
+        await startGeneration(page, 'Pipeline cross mode recovery');
+        await waitForGeneration(page);
+        const actual = await page.evaluate(async () => ({ requests: window.__emberdeskStreamingRequests, chat: window.SillyTavern.getContext().chat, run: (await import('/scripts/reply-pipeline-core.js')).getPipelineRunState() }));
+
+        expect(actual.requests.map(request => [request.model, request.stream])).toEqual([
+            ['gpt-4o-mini', true], ['o1', false], ['o1', false], ['fallback-model', true],
+        ]);
+        expect(actual.chat.findLast(message => String(message.mes).includes('streaming fallback succeeded'))?.extra?.model).toBe('fallback-model');
+        for (const request of actual.requests.slice(1)) {
+            expect(JSON.stringify(request.messages)).toContain('call_modes');
+            expect(JSON.stringify(request.messages)).toContain('{\\"ok\\":true}');
+            expect(JSON.stringify(request.messages)).toContain('Do not call any tools');
+        }
+        expect(actual.requests[3].tool_choice).toBe('none');
+        expect(actual.run).toBeNull();
+    });
+
+    test('pipeline retries the unfinished second step without replaying the completed tool', async ({ page }) => {
+        await testSetup.awaitST({ page });
+        await selectCharacterInFreshChat(page, characterName);
+        await enableOpenAiStreaming(page);
+        await enableFallbackProvider(page);
+        await page.evaluate(async () => {
+            const context = window.SillyTavern.getContext();
+            context.featureSettings.tool_bindings = ['analyze', 'review'].map(name => ({ id: name, name, enabled: true, description: name, parameters: { type: 'object', properties: {} }, actionBody: name === 'analyze' ? 'window.__completedToolCount = (window.__completedToolCount || 0) + 1; return "FIRST_RESULT";' : 'return "FINAL_RESULT";' }));
+            context.chatCompletionSettings.reply_pipeline = { enabled: true, enforce_mode: 'forced', steps: [{ tool: 'analyze', model: 'gpt-4.1-mini' }, { tool: 'review', model: 'gpt-4.1' }], final: 'review' };
+            const { promptManager } = await import('/scripts/openai.js');
+            const settings = context.chatCompletionSettings;
+            const characterId = promptManager.activeCharacter?.id ?? null;
+            let order = settings.prompt_order.find(item => String(item.character_id) === String(characterId));
+            if (!order) { order = { character_id: characterId, order: [] }; settings.prompt_order.push(order); }
+            for (const step of ['analyze', 'review']) {
+                const identifier = `attempt4_${step}`;
+                settings.prompts.push({ identifier, name: identifier, role: 'system', content: `STEP_${step} MODEL={{model}}`, marker: false, system_prompt: false, injection_position: 0, injection_depth: 4, injection_order: 100, injection_trigger: [`pipeline:${step}`] });
+                order.order.push({ identifier, enabled: true });
+            }
+            const { syncPipelineToolBindings } = await import('/scripts/tool-bindings.js');
+            syncPipelineToolBindings(['analyze', 'review'], { activate: true });
+        });
+        await installStreamingFetchSequenceStub(page, { responses: [
+            { chunks: [{ tool_calls: [{ index: 0, id: 'call_first', type: 'function', function: { name: 'analyze', arguments: '{}' } }] }] },
+            { status: 500 }, { status: 500 },
+            { chunks: [{ tool_calls: [{ index: 0, id: 'call_second', type: 'function', function: { name: 'review', arguments: '{}' } }] }] },
+        ] });
+        await startGeneration(page, 'Pipeline second step recovery');
+        await waitForGeneration(page);
+        const actual = await page.evaluate(async () => ({ requests: window.__emberdeskStreamingRequests, count: window.__completedToolCount, chat: window.SillyTavern.getContext().chat, run: (await import('/scripts/reply-pipeline-core.js')).getPipelineRunState() }));
+        expect(actual.requests.map(request => request.model)).toEqual(['gpt-4.1-mini', 'gpt-4.1', 'gpt-4.1', 'fallback-model']);
+        expect(actual.count).toBe(1);
+        for (const request of actual.requests.slice(1)) {
+            expect(JSON.stringify(request.messages)).toContain('FIRST_RESULT');
+            expect(JSON.stringify(request.messages)).toContain('STEP_analyze MODEL=gpt-4.1-mini');
+            expect(request.tool_choice.function.name).toBe('review');
+        }
+        expect(JSON.stringify(actual.requests[1].messages)).toContain('STEP_review MODEL=gpt-4.1');
+        expect(JSON.stringify(actual.requests[3].messages)).toContain('STEP_review MODEL=gpt-4.1');
+        expect(JSON.stringify(actual.chat)).toContain('FINAL_RESULT');
+        expect(actual.run).toBeNull();
+    });
+
+    test('pipeline clears its run after nested recovery is exhausted', async ({ page }) => {
+        await testSetup.awaitST({ page });
+        await selectCharacterInFreshChat(page, characterName);
+        await enableOpenAiStreaming(page);
+        await enableFallbackProvider(page);
+        await page.evaluate(async () => {
+            const context = window.SillyTavern.getContext();
+            context.featureSettings.tool_bindings = [{ id: 'fail_close', name: 'analyze', enabled: true, description: 'analyze', parameters: { type: 'object', properties: {} }, actionBody: 'window.__completedToolCount = (window.__completedToolCount || 0) + 1; return JSON.stringify({ ok: true });' }];
+            context.chatCompletionSettings.reply_pipeline = { enabled: true, steps: [{ tool: 'analyze', model: 'gpt-4o-mini' }], final: 'analyze' };
+            const { syncPipelineToolBindings } = await import('/scripts/tool-bindings.js');
+            syncPipelineToolBindings(['analyze'], { activate: true });
+        });
+        await installStreamingFetchSequenceStub(page, { responses: [
+            { chunks: [{ tool_calls: [{ index: 0, id: 'call_once', type: 'function', function: { name: 'analyze', arguments: '{}' } }] }] },
+            { status: 500 }, { status: 500 }, { status: 500 },
+        ] });
+        await startGeneration(page, 'Pipeline exhausted recovery');
+        await waitForGeneration(page).catch(() => {});
+        const actual = await page.evaluate(async () => ({ requests: window.__emberdeskStreamingRequests, count: window.__completedToolCount, run: (await import('/scripts/reply-pipeline-core.js')).getPipelineRunState() }));
+        expect(actual.requests).toHaveLength(4);
+        expect(actual.count).toBe(1);
+        expect(actual.run).toBeNull();
     });
 
     test('auto retries primary failures once, switches to fallback, and keeps one assistant row', async ({ page }) => {

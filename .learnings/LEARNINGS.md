@@ -388,3 +388,73 @@ When changing dev proxy routes or Vite fallback behavior, run `node tests/vite-d
 - Disposition: retain; Application: applied
 
 ---
+
+## [LRN-20261106-001] best_practice
+
+**Logged**: 2026-11-06T17:12:42+08:00
+**Priority**: high
+**Status**: pending
+**Area**: frontend
+
+### Summary
+流式工具递归的恢复与清理须归属于实际失败的管线轮次，不要重试已完成的父轮。
+
+### Details
+本次 nested command 默认禁用自动恢复，外层 attempt 等待工具调用后的递归；内层失败清理 run 后向外冒泡，导致外层重试已完成轮。修复将流式递归移出 attempt，在成功处理阶段启动，并仅为活动管线的 OpenAI normal 递归启用该轮独立恢复；普通非管线递归保留原父 attempt 策略。恢复应保留工具结果、当前轮上下文及 tool_choice，并在最终成功或重试耗尽后清理。
+
+### Suggested Action
+调整递归或恢复时，在真实生成路径测试内层失败、fallback、已完成工具只执行一次、上下文保留及成功/耗尽清理；另覆盖普通非管线续轮，避免改变其恢复策略。
+
+### Metadata
+- Source: conversation
+- Related Files: public/scripts/generation-service.js, public/scripts/chat-generation-auto-recovery.js, tests/chat-message-streaming.e2e.js
+- Tags: streaming, tool-calling, recovery, lifecycle
+- Pattern-Key: frontend.pipeline.recursive-recovery-ownership
+- Recurrence-Count: 1
+- First-Seen: 2026-11-06
+- Last-Seen: 2026-11-06
+
+### Context Maintenance
+- Decay-Type: reality
+- Decay-Rate: medium（递归及恢复边界变动会影响结论）
+- Authority: public/scripts/generation-service.js 和 tests/chat-message-streaming.e2e.js；Owner: unknown
+- Revalidation: 修改递归、恢复或清理路径时检查当前实现并运行相关浏览器回归；证据不可用时保留历史记录但不声称当前行为通过
+- Validation: verified; Last-Validated: 2026-11-06; Evidence: tests/chat-message-streaming.e2e.js 对应浏览器测试通过；provider 为网络桩，独立取消和真实 provider 未覆盖
+- Disposition: retain; Application: applied
+
+---
+
+## [LRN-20261106-002] correction
+
+**Logged**: 2026-11-06T17:12:42+08:00
+**Priority**: high
+**Status**: pending
+**Area**: frontend
+
+### Summary
+含副作用或随机宏的步骤提示不能为 fallback 重新求值，也不能让内部模型标记进入嵌套宏；本任务采用首次完整展开快照。
+
+### Details
+重算会再次执行 `{{incvar}}` 或改变随机值；预先把 `{{model}}` 替换成内部标记则会在 `{{setvar::attempt5_nested::{{model}}}}` 中把标记写入变量。本次由协调者裁决，步骤用首次实际模型正常展开并保存整段提示，fallback 请求选择备用模型但提示仍包含首次模型值；共享前缀及已完成步骤不重算。该方案不承诺 fallback 提示中的模型宏随备用模型更新，也未修改共享宏引擎。
+
+### Suggested Action
+变更重试语义前明确模型值与副作用的契约；用真实请求路径检查嵌套 setvar、incvar 恰好一次、随机值稳定、无内部标记及备用请求模型正确，避免只测并列宏。
+
+### Metadata
+- Source: conversation
+- Related Files: public/scripts/openai.js, public/scripts/reply-pipeline.js, tests/tool-bindings.e2e.js, docs/reply-pipeline-design.md
+- Tags: macros, fallback, side-effects, snapshot, nested
+- Pattern-Key: frontend.pipeline.retry-macro-snapshot
+- Recurrence-Count: 1
+- First-Seen: 2026-11-06
+- Last-Seen: 2026-11-06
+
+### Context Maintenance
+- Decay-Type: decision
+- Decay-Rate: slow（用户裁决的提示快照语义，除非授权变更）
+- Authority: .docs/db/features/reply-pipeline.md 和 tests/chat-message-streaming.e2e.js；Owner: unknown
+- Revalidation: 宏引擎、步骤提示或 fallback 语义变化时复核决策与嵌套副作用浏览器用例；证据不可用时不假设该契约仍生效
+- Validation: verified; Last-Validated: 2026-11-06; Evidence: tests/chat-message-streaming.e2e.js 嵌套宏及恢复浏览器测试通过；隔离 provider 桩，非真实外部服务
+- Disposition: retain; Application: applied
+
+---

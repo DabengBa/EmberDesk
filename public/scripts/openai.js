@@ -21,6 +21,7 @@ import {
     saveSettingsDebounced,
     setOnlineStatus,
     substituteParams,
+    withGeneratingModel,
     system_message_types,
 } from '../script.js';
 import { eventSource, event_types } from './events.js';
@@ -66,13 +67,14 @@ import { getFallbackOpenAIModel } from './chat-generation-auto-recovery.js';
 
 import {
     getChatCompletionModelFromSettings,
+    isChatCompletionStreaming,
     isAudioInliningSupportedForSettings,
     isImageInliningSupportedForSettings,
     isVideoInliningSupportedForSettings,
     resolveReasoningEffort,
     resolveVerbosity,
 } from './openai-provider-capabilities.js';
-import { buildStepPrompt, getActivePipelineRunId, getPipelineRunState, PIPELINE_FALLBACK_PROMPT } from './reply-pipeline-core.js';
+import { buildStepPrompt, createPipelineToolCompatibilityError, getActivePipelineRunId, getPipelineRunState, PIPELINE_FALLBACK_PROMPT, pipelineModelRemovesTools } from './reply-pipeline-core.js';
 
 function syncSegmentedFromSelect(selectId) {
     const value = $('#' + selectId).val();
@@ -273,13 +275,13 @@ export let promptManager = null;
  * @param {ChatMessage[]} chat - Array containing all messages.
  * @returns {object[]} - Array containing all messages formatted for chat completion.
  */
-function setOpenAIMessages(chat) {
+function setOpenAIMessages(chat, model = null) {
     let j = 0;
     // clean openai msgs
     const messages = [];
     // Get current API and model for thought signature validation
     const currentApi = oai_settings.chat_completion_source;
-    const currentModel = getChatCompletionModel();
+    const currentModel = model ?? getChatCompletionModel();
 
     for (let i = chat.length - 1; i >= 0; i--) {
         let role = chat[j].is_user ? 'user' : 'assistant';
@@ -510,7 +512,7 @@ async function populationInjectionPrompts(prompts, messages) {
  * @param {ChatCompletion} chatCompletion - An instance of ChatCompletion class that will be populated with the prompts.
  * @param type
  */
-async function populateChatHistory(messages, prompts, chatCompletion) {
+async function populateChatHistory(messages, prompts, chatCompletion, assemblySettings = oai_settings) {
     if (!prompts.has('chatHistory')) {
         return;
     }
@@ -530,9 +532,9 @@ async function populateChatHistory(messages, prompts, chatCompletion) {
         chatCompletion.insert(message, 'chatHistory');
     }
 
-    const imageInlining = isImageInliningSupported();
-    const videoInlining = isVideoInliningSupported();
-    const audioInlining = isAudioInliningSupported();
+    const imageInlining = isImageInliningSupportedForSettings(assemblySettings, { mainApi: main_api });
+    const videoInlining = isVideoInliningSupportedForSettings(assemblySettings, { mainApi: main_api });
+    const audioInlining = isAudioInliningSupportedForSettings(assemblySettings, { mainApi: main_api });
     const canUseTools = ToolManager.isToolCallingSupported();
     const includeSignature = isReasoningSignatureSupported();
     const isToolReasoningProvider = interleaved_reasoning_providers.includes(oai_settings.chat_completion_source);
@@ -788,7 +790,7 @@ export function getPromptRole(role) {
  * @param {object[]} options.messages - Array containing all messages.
  * @returns {Promise<void>}
  */
-async function populateChatCompletion(prompts, chatCompletion, { bias, quietPrompt: _quietPrompt, quietImage, type, messages }) {
+async function populateChatCompletion(prompts, chatCompletion, { bias, quietPrompt: _quietPrompt, quietImage, type, messages, assemblySettings = oai_settings }) {
     // Helper function for preparing a prompt, that already exists within the prompt collection, for completion
     const addToChatCompletion = async (source, target = null) => {
         // We need the prompts array to determine a position for the source.
@@ -826,7 +828,7 @@ async function populateChatCompletion(prompts, chatCompletion, { bias, quietProm
     // This should always be last, even in control prompts. Add all further control prompts BEFORE this prompt
     const quietPromptMessage = await Message.fromPromptAsync(prompts.get('quietPrompt')) ?? null;
     if (quietPromptMessage && quietPromptMessage.content) {
-        if (isImageInliningSupported() && quietImage) {
+        if (isImageInliningSupportedForSettings(assemblySettings, { mainApi: main_api }) && quietImage) {
             await quietPromptMessage.addImage(quietImage);
         }
 
@@ -909,7 +911,7 @@ async function populateChatCompletion(prompts, chatCompletion, { bias, quietProm
     // Add in-chat injections
     messages = await populationInjectionPrompts(absolutePrompts, messages);
 
-    await populateChatHistory(messages, prompts, chatCompletion);
+    await populateChatHistory(messages, prompts, chatCompletion, assemblySettings);
 
     chatCompletion.freeBudget(controlPrompts);
     if (controlPrompts.collection.length) chatCompletion.add(controlPrompts);
@@ -998,17 +1000,20 @@ async function preparePromptsForChatCompletion({ name2: _name2, worldInfo, charD
  * @param {string} type Generation type receiving the base prompts
  * @returns {{role: string, content: string}[]}
  */
-function collectPipelineStepPrompts(pipelineStepTag, type) {
-    const stepPrompts = [];
-    for (const entry of promptManager.getPromptOrderForCharacter(promptManager.activeCharacter)) {
-        const prompt = promptManager.getPromptById(entry.identifier);
-        const triggers = prompt?.injection_trigger ?? [];
-        if (!entry.enabled || !triggers.includes(pipelineStepTag) || triggers.includes(type) || triggers.includes('all')) continue;
-        const prepared = promptManager.preparePrompt(prompt);
-        if (prepared.content) stepPrompts.push({ role: prepared.role, content: prepared.content });
-    }
-    return stepPrompts;
+function collectPipelineStepPrompts(pipelineStepTag, type, model) {
+    return withGeneratingModel(model, () => {
+        const stepPrompts = [];
+        for (const entry of promptManager.getPromptOrderForCharacter(promptManager.activeCharacter)) {
+            const prompt = promptManager.getPromptById(entry.identifier);
+            const triggers = prompt?.injection_trigger ?? [];
+            if (!entry.enabled || !triggers.includes(pipelineStepTag) || triggers.includes(type) || triggers.includes('all')) continue;
+            const prepared = promptManager.preparePrompt(prompt);
+            if (prepared.content) stepPrompts.push({ role: prepared.role, content: prepared.content });
+        }
+        return stepPrompts;
+    });
 }
+
 
 /**
  * Projects a wire message onto the shape the count route can encode.
@@ -1062,13 +1067,15 @@ export async function prepareOpenAIMessages({
     extensionPrompts,
     messages,
     pipelineStepTag,
+    assemblyModel,
+    pipelineStepModel,
 }, dryRun, { squash = null, bookkeep = true } = {}) {
     const run = !dryRun && type === 'normal' ? getPipelineRunState() : null;
     if (run) {
         const round = run.fallbackRound ? 'fallback' : run.index;
         if (run.promptRound !== round) {
             run.stepPrompts = pipelineStepTag && !run.fallbackRound
-                ? collectPipelineStepPrompts(pipelineStepTag, type) : [];
+                ? collectPipelineStepPrompts(pipelineStepTag, type, pipelineStepModel) : [];
             run.promptRound = round;
         }
         // The first normal assembly owns the base. Continuations must never
@@ -1077,7 +1084,7 @@ export async function prepareOpenAIMessages({
     }
     // Preview carries the same step-only tail the live send appends, without
     // touching the live run.
-    const previewStepTail = dryRun && pipelineStepTag ? collectPipelineStepPrompts(pipelineStepTag, type) : [];
+    const previewStepTail = dryRun && pipelineStepTag ? collectPipelineStepPrompts(pipelineStepTag, type, pipelineStepModel) : [];
     // Without a character selected, there is no way to accurately calculate tokens
     if (!promptManager.activeCharacter && dryRun) return [null, false];
 
@@ -1108,7 +1115,8 @@ export async function prepareOpenAIMessages({
         });
 
         // Fill the chat completion with as much context as the budget allows
-        await populateChatCompletion(prompts, chatCompletion, { bias, quietPrompt, quietImage, type, messages });
+        const assemblySettings = assemblyModel ? { ...oai_settings, openai_model: assemblyModel } : oai_settings;
+        await populateChatCompletion(prompts, chatCompletion, { bias, quietPrompt, quietImage, type, messages, assemblySettings });
     } catch (error) {
         chatCompletion.error = error;
         if (error instanceof TokenBudgetExceededError) {
@@ -1317,9 +1325,7 @@ export async function createGenerationParameters(settings, model, type, messages
         chat_completion_sources.OPENAI,
     ];
 
-    const isO1 = gptSources.includes(settings.chat_completion_source) && ['o1-2024-12-17', 'o1'].includes(model);
-    const isWorkersAIJsonMode = false;
-    const stream = settings.stream_openai && type !== 'quiet' && type !== 'chat_memory' && !isO1 && !isWorkersAIJsonMode;
+    const stream = isChatCompletionStreaming(settings, model, type);
 
     const generate_data = {
         'type': type,
@@ -1439,6 +1445,10 @@ export async function buildChatCompletionRequest({ type, messages, settings = nu
     const requestSettings = settings ?? structuredClone(oai_settings);
     const resolvedModel = model ?? getChatCompletionModel(requestSettings);
     const { generate_data, stream } = await createGenerationParameters(requestSettings, resolvedModel, type, messages, { jsonSchema });
+    if (emitSettingsReady && type === 'normal' && getPipelineRunState() && !getPipelineRunState().fallbackRound
+        && (pipelineModelRemovesTools(generate_data) || !ToolManager.canPerformToolCalls(type, requestSettings, resolvedModel))) {
+        throw createPipelineToolCompatibilityError(resolvedModel);
+    }
     if (emitSettingsReady) {
         await eventSource.emit(event_types.CHAT_COMPLETION_SETTINGS_READY, generate_data);
     }
@@ -1467,7 +1477,7 @@ export async function buildChatCompletionRequest({ type, messages, settings = nu
  * @returns {Promise<unknown>}
  * @throws {Error}
  */
-async function sendOpenAIRequest(type, messages, signal, { jsonSchema = null, fallbackProvider = false, trace = null } = {}) {
+async function sendOpenAIRequest(type, messages, signal, { jsonSchema = null, fallbackProvider = false, model: requestedModel = null, trace = null } = {}) {
     // Provide default abort signal
     if (!signal) {
         signal = new AbortController().signal;
@@ -1478,7 +1488,8 @@ async function sendOpenAIRequest(type, messages, signal, { jsonSchema = null, fa
         requestSettings.openai_model = getFallbackOpenAIModel(oai_settings);
     }
 
-    const model = getChatCompletionModel(requestSettings);
+    const model = requestedModel ?? getChatCompletionModel(requestSettings);
+
     const { generate_data, stream } = await buildChatCompletionRequest({
         type,
         messages,

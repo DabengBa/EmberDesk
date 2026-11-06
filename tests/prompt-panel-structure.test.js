@@ -13,6 +13,16 @@ function read(relativePath) {
 }
 
 describe('prompt panel + side-nav defaults', () => {
+    test('pipeline model field round-trips through the editor bridge', () => {
+        const panel = read('app/components/prompt-panel/PromptPanel.tsx');
+        const script = read('public/script.js');
+        expect(panel).toContain("bridge.updatePipelineStep(index, { model: event.target.value })");
+        expect(panel).toContain("aria-label={translate('Step model')}");
+        expect(panel).toContain('list="prompt-panel-pipeline-models"');
+        expect(script).toContain('getOpenAIModelList()');
+        expect(script).toContain("step.model = String(patch.model ?? '')");
+        expect(script).toContain("model: typeof step?.model === 'string' ? step.model : ''");
+    });
     test('left nav drawer host lives in the top-settings holder with fillLeft', () => {
         const indexHtml = read('public/index.html');
         expect(indexHtml).toContain('id="left-nav-panel" class="drawer-content closedDrawer fillLeft"');

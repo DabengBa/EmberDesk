@@ -33,6 +33,7 @@
 | `result_field` | 可选点路径：final 步 result 能 JSON.parse 时从中取正文（默认要求 action 直接 return 字符串） |
 | `steps[].tool` | 全局绑定名；未注册/未启用/stealth → 跳过该步 |
 | `steps[].prompt` | 该轮注入的步指令文本 |
+| `steps[].model` | 可选模型名，空白继承预设；恢复 provider 模型优先，收尾轮使用预设模型 |
 | `steps[].display` | 卡片显示策略：`summary`（默认折叠）/ `full`（展开）/ `hidden`；final 步默认 `hidden`（显式 display 优先） |
 | `steps[].max_tokens` | 可选：覆盖该轮 `max_tokens`（或 `max_completion_tokens`，按模型路径） |
 | `steps[].reasoning_effort` | 可选：覆盖该轮 `reasoning_effort`（`auto|low|medium|high|min|max`，经 provider 映射同预设级） |
@@ -41,6 +42,10 @@
 持久化：`reply_pipeline` 是 `settingsToUpdate` 字段——随预设保存/应用、随 canonical 设置文档（SQLite `settings_documents`）重载保留；**应用无此键的预设会清除当前管线**（预设权威语义，同 `extensions`）。
 
 ## 执行模型
+
+每次请求构造前解析实际模型，stream 消费与请求体采用同一模型。首个可执行步骤的模型决定历史媒体装配；之后固定前缀不重建，因此混合模型及恢复模型的媒体能力差异不会改变该前缀。检查器使用同样规则且不修改运行态。明确不支持工具的模型报错，未知模型不因缺乏元数据被拒绝。
+
+步骤专属提示在该步骤首次尝试时以当时实际模型正常展开一次并保存快照；重试即使改用备用模型，请求模型会改变，提示中的 `{{model}}` 仍是首次模型，其他宏及副作用也不重新执行。已完成步骤和共享前缀保持不变。
 
 ```
 用户消息 → GENERATION_STARTED(depth 0) → beginPipelineRun

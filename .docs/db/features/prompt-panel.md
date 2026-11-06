@@ -11,6 +11,8 @@ related: [page.chat_workspace, feature.next_workspace_shell, feature.character_l
 
 `feature.prompt_panel` represents the user-visible left-side AI response configuration drawer: chat-completion preset selection and actions, sampling and template settings, and prompt ordering, toggling, and per-prompt field editing. It restores the retired legacy AI configuration markup with stable IDs so existing `openai.js` bindings keep working, and embeds a React prompt list inside the legacy `#completion_prompt_manager` mount point. It does not cover provider or model selection, which lives in [Settings](page.settings).
 
+Pipeline step editors accept a free-form model name with available provider model suggestions; an empty field inherits the preset model. This is a per-step override within the existing provider, not a provider or credential switch.
+
 ## Purpose
 
 Give power users direct in-workspace control over what is sent to the LLM: which preset is active, which prompt entries are enabled, in what order, and with what custom content — without editing preset JSON on disk.

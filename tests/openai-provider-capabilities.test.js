@@ -12,6 +12,7 @@ import {
     resolveChatCompletionModel,
     resolveReasoningEffort,
     resolveVerbosity,
+    isChatCompletionStreaming,
 } from '../public/scripts/openai-provider-capabilities.js';
 import { getFallbackProviderStatus } from '../public/scripts/provider-secret-field-state.js';
 
@@ -22,6 +23,13 @@ const repoRoot = path.resolve(__dirname, '..');
 const SOURCES = {
     OPENAI: 'openai',
 };
+
+test('stream mode follows the actual attempt model, not the preset model', () => {
+    const preset = settings({ openai_model: 'o1', stream_openai: true });
+    expect(isChatCompletionStreaming(preset, 'gpt-4o-mini', 'normal')).toBe(true);
+    expect(isChatCompletionStreaming(preset, 'o1', 'normal')).toBe(false);
+    expect(isChatCompletionStreaming(preset, 'gpt-4o-mini', 'quiet')).toBe(false);
+});
 
 function settings(overrides = {}) {
     return {

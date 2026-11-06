@@ -14,6 +14,8 @@ import { oai_settings } from './openai.js';
 import { resolveReasoningEffort } from './openai-provider-capabilities.js';
 import {
     applyFallbackRequestShape,
+    applyPipelineModelMessageRoles,
+    createPipelineToolCompatibilityError,
     applyStepRequestOverrides,
     buildStepPrompt,
     extractFinalStepText,
@@ -21,6 +23,7 @@ import {
     normalizeReplyPipeline,
     PIPELINE_FALLBACK_PROMPT,
     pipelineTriggerTag,
+    pipelineModelRemovesTools,
     resolvePipelineSteps,
     setActivePipelineRunIdProvider,
     setPipelineRunStateProvider,
@@ -95,6 +98,18 @@ export function endPipelineRun() {
  */
 export function isReplyPipelineRunActive() {
     return runState !== null;
+}
+
+/** Resolve a model before constructing an attempt; provider recovery wins. */
+export function resolvePipelineModel(presetModel, { fallbackModel = null } = {}) {
+    return fallbackModel || (!runState?.fallbackRound && runState?.steps?.[runState.index]?.model) || presetModel;
+}
+
+/** Resolve a preview round without touching the live run. */
+export function resolvePreviewPipelineModel(presetModel, round = 0) {
+    const steps = getRunnablePipeline()?.steps;
+    const index = Math.max(0, Math.floor(Number(round)));
+    return steps?.[index]?.model || presetModel;
 }
 
 /**
@@ -235,6 +250,7 @@ export function applyPipelineRequestShaping(data) {
     if (!runState || !data || typeof data !== 'object' || data.type !== 'normal') {
         return;
     }
+
     if (!runState.messages) {
         runState.messages = structuredClone(data.messages);
         runState.tools = structuredClone(data.tools);
@@ -247,9 +263,11 @@ export function applyPipelineRequestShaping(data) {
         runState.shapedRound = round;
     }
     data.messages = structuredClone(runState.messages);
-    data.tools = structuredClone(runState.tools);
+    applyPipelineModelMessageRoles(data);
+    if (!pipelineModelRemovesTools(data)) data.tools = structuredClone(runState.tools);
     if (runState.fallbackRound) {
-        data.tool_choice = 'none';
+        if (data.tools?.length) data.tool_choice = 'none';
+        else delete data.tool_choice;
         return;
     }
     const step = getCurrentPipelineStep();
@@ -323,10 +341,14 @@ export function previewPipelineRequestShaping(data, { round = 0 } = {}) {
     // Out-of-range (or intentionally the closing round) → fallback shape.
     if (!Number.isFinite(index) || index >= total) {
         applyFallbackRequestShape(data, FALLBACK_PROMPT);
+        applyPipelineModelMessageRoles(data);
         return { round: total, total, fallback: true, step: null, rounds };
     }
     const clampedIndex = Math.max(0, index);
     const step = runnable.steps[clampedIndex];
+    if (pipelineModelRemovesTools(data)) {
+        throw createPipelineToolCompatibilityError(data.model);
+    }
     data.messages.push({ role: 'system', content: buildStepPrompt(step, clampedIndex, total) });
     applyStepRequestOverrides(data, step, {
         enforceMode: runnable.pipeline.enforceMode,

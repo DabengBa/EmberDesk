@@ -35,8 +35,8 @@ jest.unstable_mockModule('../public/lib.js', () => ({ DOMPurify: {} }));
 jest.unstable_mockModule('../public/script.js', () => Object.fromEntries([
     'abortStatusCheck', 'extension_prompt_roles', 'extension_prompt_types', 'getExtensionPrompt', 'getExtensionPromptMaxDepth',
     'getMediaDisplay', 'getMediaIndex', 'is_send_press', 'main_api', 'name1', 'name2', 'displayOnlineStatus',
-    'saveSettingsDebounced', 'setOnlineStatus', 'substituteParams', 'system_message_types',
-].map(key => [key, key === 'substituteParams' ? substitute : jest.fn()])));
+    'saveSettingsDebounced', 'setOnlineStatus', 'substituteParams', 'system_message_types', 'withGeneratingModel',
+].map(key => [key, key === 'substituteParams' ? substitute : key === 'withGeneratingModel' ? (_model, callback) => callback() : jest.fn()])));
 jest.unstable_mockModule('../public/scripts/PromptManager.js', () => ({ chatCompletionDefaultPrompts: [],
     INJECTION_POSITION: { ABSOLUTE: 1 }, Prompt: class { constructor(value) { Object.assign(this, value); } }, PromptManager: class { constructor() { return manager; } }, promptManagerDefaultPromptOrders: [],
     // openai.js imports this migration helper; the mock must expose it too.
@@ -65,6 +65,7 @@ const initialChatMemoryEnabled = openai.oai_settings.chat_memory_enabled;
 const runtime = await import('../public/scripts/reply-pipeline.js');
 const core = await import('../public/scripts/reply-pipeline-core.js');
 const { eventSource, event_types } = await import('../public/scripts/events.js');
+const { isRecoverableGenerationFailure } = await import('../public/scripts/chat-generation-auto-recovery.js');
 eventSource.on(event_types.CHAT_COMPLETION_SETTINGS_READY, runtime.applyPipelineRequestShaping);
 openai.setupChatCompletionPromptManager(openai.oai_settings);
 beforeEach(() => {
@@ -79,6 +80,68 @@ beforeEach(() => {
 
 test('chat memory is enabled in the initial provider settings', () => {
     expect(initialChatMemoryEnabled).toBe(true);
+});
+
+test.each(['o1', 'gpt-5-chat-latest'])('pipeline rejects a model whose request branch removes tools: %s', async model => {
+    await expect(openai.buildChatCompletionRequest({ type: 'normal', messages: [], model, emitSettingsReady: true }))
+        .rejects.toThrow(/Reply pipeline.*tools/i);
+});
+
+test('pipeline rejects explicit provider tool incompatibility', async () => {
+    toolCallingSupported = false;
+    await expect(openai.buildChatCompletionRequest({ type: 'normal', messages: [], model: 'known-model', emitSettingsReady: true }))
+        .rejects.toThrow(/Reply pipeline.*tools/i);
+});
+
+test('preview model shapes the actual body without changing the live run', async () => {
+    runtime.endPipelineRun();
+    openai.oai_settings.reply_pipeline.steps = [{ tool: 'analyze', model: 'gpt-5.4' }];
+    runtime.beginPipelineRun();
+    const before = structuredClone(core.getPipelineRunState());
+    const model = runtime.resolvePreviewPipelineModel('gpt-4o-mini', 0);
+    const { generate_data } = await openai.buildChatCompletionRequest({ type: 'normal', messages: [], model });
+    runtime.previewPipelineRequestShaping(generate_data, { round: 0 });
+    expect(generate_data.model).toBe('gpt-5.4');
+    expect(generate_data.max_completion_tokens).toBe(20);
+    expect(core.getPipelineRunState()).toEqual(before);
+});
+
+test('closing round never restores captured tools to a model that strips them', async () => {
+    await openai.buildChatCompletionRequest({ type: 'normal', messages: [], model: 'gpt-4o-mini', emitSettingsReady: true });
+    runtime.markPipelineFallbackRound();
+    const { generate_data } = await openai.buildChatCompletionRequest({ type: 'normal', messages: [], model: 'o1', emitSettingsReady: true });
+    expect(generate_data.tools).toBeUndefined();
+    expect(generate_data.tool_choice).toBeUndefined();
+});
+
+test('tool incompatibility is terminal while network failures remain recoverable', async () => {
+    let failure;
+    try {
+        await openai.buildChatCompletionRequest({ type: 'normal', messages: [], model: 'o1', emitSettingsReady: true });
+    } catch (error) { failure = error; }
+    expect(failure?.message).toMatch(/Reply pipeline.*tools/i);
+    expect(isRecoverableGenerationFailure(failure)).toBe(false);
+    expect(isRecoverableGenerationFailure(new Error('provider network failure'))).toBe(true);
+});
+
+test('o1 closing live and preview requests convert every system message without altering captured prefix', async () => {
+    await openai.buildChatCompletionRequest({ type: 'normal', messages: [{ role: 'system', content: 'base' }], model: 'gpt-4o-mini', emitSettingsReady: true });
+    runtime.markPipelineFallbackRound();
+    const before = structuredClone(core.getPipelineRunState().messages);
+    const { generate_data: live } = await openai.buildChatCompletionRequest({ type: 'normal', messages: [], model: 'o1', emitSettingsReady: true });
+    expect(live.messages.some(message => message.role === 'system')).toBe(false);
+    expect(core.getPipelineRunState().messages.slice(0, before.length)).toEqual(before);
+    const { generate_data: preview } = await openai.buildChatCompletionRequest({ type: 'normal', messages: [{ role: 'system', content: 'base' }], model: 'o1' });
+    runtime.previewPipelineRequestShaping(preview, { round: 1 });
+    expect(preview.messages.some(message => message.role === 'system')).toBe(false);
+    expect(preview.tool_choice).toBeUndefined();
+});
+
+test('closing preview omits tool_choice when the built request has no tools', async () => {
+    const { generate_data } = await openai.buildChatCompletionRequest({ type: 'normal', messages: [], model: 'o1' });
+    runtime.previewPipelineRequestShaping(generate_data, { round: 1 });
+    expect(generate_data.tools).toBeUndefined();
+    expect(generate_data.tool_choice).toBeUndefined();
 });
 
 test('first request reserves step material and instruction before trimming real history', async () => {

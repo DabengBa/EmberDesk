@@ -15,6 +15,18 @@ const call = (name = 'analyze', id = 'original-id') => ({ id, type: 'function', 
 beforeEach(() => { runtime.endPipelineRun(); runtime.beginPipelineRun(); });
 
 describe('live pipeline wire state', () => {
+    test('resolves the selected step before building, with recovery and closing taking precedence', () => {
+        runtime.endPipelineRun();
+        settings.reply_pipeline.steps = [{ tool: 'analyze', model: 'gpt-4o-mini' }, { tool: 'reply', model: 'o3' }];
+        runtime.beginPipelineRun();
+        expect(runtime.resolvePipelineModel('preset')).toBe('gpt-4o-mini');
+        expect(runtime.resolvePipelineModel('preset', { fallbackModel: 'recovery' })).toBe('recovery');
+        expect(runtime.resolvePreviewPipelineModel('preset', 1)).toBe('o3');
+        expect(runtime.resolvePreviewPipelineModel('preset', 2)).toBe('preset');
+        runtime.markPipelineFallbackRound();
+        expect(runtime.resolvePipelineModel('preset')).toBe('preset');
+        settings.reply_pipeline.steps = [{ tool: 'analyze' }, { tool: 'reply' }];
+    });
     test('captures base once, appends actual rounds and keeps tools through fallback and retries', () => {
         const first = request();
         runtime.applyPipelineRequestShaping(first);
