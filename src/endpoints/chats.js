@@ -53,6 +53,7 @@ import {
     writeCanonicalChatPayload,
 } from './canonical-chat-write-service.js';
 import { calculateCanonicalCharacterChatStats, getCanonicalChatSession } from './canonical-chat-store.js';
+import { coordinateWorkspaceWrite } from './coordinate-workspace-write.js';
 
 const isBackupEnabled = !!getConfigValue('backups.chat.enabled', true, 'boolean');
 const maxTotalChatBackups = Number(getConfigValue('backups.chat.maxTotalBackups', -1, 'number'));
@@ -608,7 +609,7 @@ export function writeChatProjection(jsonlData, filePath, handle, cardName, backu
     getBackupFunction(handle)(backupDirectory, cardName, jsonlData);
 }
 
-router.post('/save', rejectGroupChatRequest, validateAvatarUrlMiddleware, async function (request, response) {
+router.post('/save', rejectGroupChatRequest, validateAvatarUrlMiddleware, coordinateWorkspaceWrite('chat', request => JSON.stringify([request.body?.avatar_url, request.body?.file_name]), async function (request, response) {
     try {
         const handle = request.user.profile?.handle ?? null;
         const cardName = String(request.body.avatar_url).replace('.png', '');
@@ -685,7 +686,7 @@ router.post('/save', rejectGroupChatRequest, validateAvatarUrlMiddleware, async 
         console.error(error);
         return response.status(500).send({ error: 'An error has occurred, see the console logs for more information.' });
     }
-});
+}));
 
 /**
  * Gets the chat as an object.

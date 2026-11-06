@@ -63,6 +63,8 @@ Use Vite build scripts for frontend build proof:
 - `pnpm run build:react:character-library` builds the guarded character-library workspace panel bundle.
 - `pnpm run build:react:workspace-panels` builds the shared guarded workspace-panel action-island bundle for World Info and Extensions Host; the former Background Library scaffold is historical and the global gallery is retired. React owns the visible host controls and action bridges, while prompt/regex/background file/slash/extension protocol behavior remains with the relevant retained owners.
 
+For local development, `pnpm run dev:all` starts Express and Vite; `pnpm run dev:express` and `pnpm run dev` start them separately. Vite defaults to port `3001` and proxies backend routes and legacy assets to `http://127.0.0.1:8000`. Set `VITE_DEV_PORT` or `VITE_BACKEND_ORIGIN` to match a custom local setup. Vite uses multi-page mode, so unknown HTML paths do not fall back to the root page. The proxy configuration is owned by `vite-dev-server-config.mjs` and exercised by `tests/vite-dev-proxy.integration.test.js`.
+
 Docker and release install verification also use pnpm:
 
 - Image build installs the full pnpm dependency tree first (`NODE_ENV=development pnpm install --frozen-lockfile --ignore-scripts`) so Vite can prebuild React page/panel bundles, then reinstalls production-only dependencies after `build:react`, `build:react:character-library`, and `build:react:workspace-panels` succeed and `app/dist` is verified.

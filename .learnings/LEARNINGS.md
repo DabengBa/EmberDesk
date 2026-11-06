@@ -44,6 +44,8 @@ When a learning is promoted to a skill, add these fields:
 
 ---
 
+---
+
 ## [LRN-20261105-001] best_practice
 
 **Logged**: 2026-11-05T06:48:57+08:00
@@ -89,6 +91,8 @@ When a learning is promoted to a skill, add these fields:
 - **Resolved**: 2026-11-05T06:48:57+08:00
 - **Commit/PR**: 未提交（worktree `fix/mobile-sidebars` 工作树内改动）
 - **Notes**: `public/style.css:6041-6049` 改用 `100dvh`（含 `100vh` 回退）+ `@starting-style` 后，`tests/workspace-shell-panel-navigation.e2e.js:79` 的移动侧栏用例通过；右栏未修改且实测正常。
+
+---
 
 ---
 
@@ -139,6 +143,8 @@ When a learning is promoted to a skill, add these fields:
 
 ---
 
+---
+
 ## [LRN-20261105-003] knowledge_gap
 
 **Logged**: 2026-11-05T06:48:57+08:00
@@ -178,7 +184,75 @@ When a learning is promoted to a skill, add these fields:
 
 ---
 
-## [LRN-20261105-004] correction
+---
+
+## [LRN-20261105-004] best_practice
+
+**Logged**: 2026-11-05T07:12:44+08:00
+**Priority**: medium
+**Status**: pending
+**Area**: tests
+
+### Summary
+Validate frozen installs separately for the root and tests package boundaries.
+
+### Details
+The repository tracks both `pnpm-lock.yaml` and `tests/pnpm-lock.yaml`; installing only the root does not establish that the separate tests package can be installed from its own lockfile. With pnpm 12.0.0-rc.5, the documented install from `tests` failed with `ERR_PNPM_PACKAGE_MANAGER_NO_IMPORTER` because pnpm selected the root workspace lockfile, which has no `tests` importer. Installing a copy of the tests manifest and lockfile outside the workspace succeeded and supplied isolated dependencies for this task; it did not repair the documented command.
+
+### Suggested Action
+When dependency or lockfile changes affect validation, run the documented frozen install in the root and in `tests`, using the pinned Node and pnpm versions; report each result separately. Investigate the workspace boundary if the tests install fails; do not treat an existing `tests/node_modules` or the isolated workaround as proof that the documented command works.
+
+### Metadata
+- Source: conversation
+- Related Files: AGENTS.md, .docs/tech/pnpm-workflow.md, pnpm-lock.yaml, tests/package.json, tests/pnpm-lock.yaml
+- Tags: pnpm, frozen-lockfile, tests
+
+### Context Maintenance
+- Decay-Type: decision
+- Decay-Rate: slow (recheck when package boundaries or installation policy change)
+- Authority: AGENTS.md and .docs/tech/pnpm-workflow.md; Owner: unknown
+- Revalidation: inspect both package boundaries, lockfiles, and workflow before dependency validation; if sources are unavailable, treat the procedure as unverified.
+- Validation: verified; Last-Validated: 2026-11-05; Evidence: documented tests install failed with `ERR_PNPM_PACKAGE_MANAGER_NO_IMPORTER`; an isolated copy installed successfully using its own lockfile.
+- Disposition: unassessed; Application: proposed
+
+---
+
+---
+
+## [LRN-20261105-005] best_practice
+
+**Logged**: 2026-11-05T07:21:18+08:00
+**Priority**: medium
+**Status**: pending
+**Area**: tests
+
+### Summary
+Test development proxy behavior through a running Vite server, not only its configuration object.
+
+### Details
+The current integration runner starts Vite with the real project configuration and a local fixture HTTP backend. It checks CSRF cookie and token forwarding, representative legacy and React asset paths, page responses, and absence of SPA fallback for an unknown HTML path. On Node v26.12.1 the runner reported `vite-dev-proxy: ok`. This proves the checked fixture interactions, not an actual Express deployment, browser cookie policy, or every proxied route.
+
+### Suggested Action
+When changing dev proxy routes or Vite fallback behavior, run `node tests/vite-dev-proxy.integration.runner.mjs` alongside focused config tests; use a separate isolated Express/browser test when the change requires end-to-end proof.
+
+### Metadata
+- Source: conversation
+- Related Files: vite.config.ts, vite-dev-server-config.mjs, tests/vite-dev-proxy.integration.runner.mjs, tests/vite-dev-proxy.integration.test.js
+- Tags: vite, proxy, integration, csrf
+
+### Context Maintenance
+- Decay-Type: dependency
+- Decay-Rate: medium (recheck when Vite, proxy configuration, or the runner changes)
+- Authority: project Vite configuration and integration runner; Owner: unknown
+- Revalidation: run the current runner with the supported Node version and inspect its assertions at proxy-related changes; if the runner is unavailable, do not claim runtime proxy proof.
+- Validation: verified; Last-Validated: 2026-11-05; Evidence: runner passed on Node v26.12.1 against a fixture backend.
+- Disposition: unassessed; Application: proposed
+
+---
+
+---
+
+## [LRN-20261105-006] correction
 
 **Logged**: 2026-11-05T14:17:59+08:00
 **Priority**: high
@@ -202,7 +276,7 @@ When a learning is promoted to a skill, add these fields:
 - Source: user_feedback
 - Related Files: app/workspace-panels.tsx, public/script.js, tests/character-text-replace.e2e.js
 - Tags: scope-control, over-engineering, defensive-programming, race-condition, user-correction
-- See Also: LRN-20261105-005
+- See Also: LRN-20261105-006
 - Pattern-Key: process.scope.only-reproduced-failure
 - Recurrence-Count: 1
 - First-Seen: 2026-11-05
@@ -223,7 +297,9 @@ When a learning is promoted to a skill, add these fields:
 
 ---
 
-## [LRN-20261105-005] best_practice
+---
+
+## [LRN-20261105-007] best_practice
 
 **Logged**: 2026-11-05T14:17:59+08:00
 **Priority**: high
@@ -252,7 +328,7 @@ When a learning is promoted to a skill, add these fields:
 - Source: conversation
 - Related Files: app/workspace-panels.tsx, public/script.js, tests/character-text-replace.e2e.js
 - Tags: autosave, race-condition, canonical-sqlite, stale-state, inert, e2e, playwright-clock
-- See Also: LRN-20261105-004
+- See Also: LRN-20261105-006
 - Pattern-Key: frontend.deferred-autosave.stale-write
 - Recurrence-Count: 1
 - First-Seen: 2026-11-05
@@ -269,11 +345,13 @@ When a learning is promoted to a skill, add these fields:
 ### Resolution
 - **Resolved**: 2026-11-05T14:17:59+08:00
 - **Commit/PR**: 无（worktree `fix/character-replace-race` 未提交）
-- **Notes**: 单页面范围；断线重连与跨标签页并发明确不承诺，见 LRN-20261105-004。
+- **Notes**: 单页面范围；断线重连与跨标签页并发明确不承诺，见 LRN-20261105-006。
 
 ---
 
-## [LRN-20261105-006] best_practice
+---
+
+## [LRN-20261105-008] best_practice
 
 **Logged**: 2026-11-05T14:17:59+08:00
 **Priority**: medium
@@ -295,7 +373,7 @@ When a learning is promoted to a skill, add these fields:
 - Source: conversation
 - Related Files: tests/character-text-replace.e2e.js
 - Tags: playwright, serial-mode, i18n, fixtures, clock-control
-- See Also: LRN-20261105-005
+- See Also: LRN-20261105-007
 - Pattern-Key: tests.playwright.shared-fixture.serial
 - Recurrence-Count: 1
 - First-Seen: 2026-11-05

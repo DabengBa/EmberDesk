@@ -3524,6 +3524,7 @@
     "The operation failed": "操作失败",
     "The operation failed (${0})": "操作失败（${0}）",
     "The character could not be reloaded. Retry before closing.": "无法重新读取角色。请在关闭前重试。",
+    "The chat could not be reloaded. Retry before closing.": "无法重新读取聊天。请在关闭前重试。",
     "The character could not be saved. Your edits are still here.": "无法保存角色。你的修改仍保留在编辑器中。",
     "The optional <code>mode</code> argument allows to control the behavior when multiple items match the text.": "可选的 <code>mode</code> 参数允许控制多个项目匹配文本时的行为。",
     "The optional <code>threshold</code> (default is 0.4) allows control over the match strictness.": "可选的 <code>threshold</code>（默认值为 0.4）允许控制匹配的严格程度。",

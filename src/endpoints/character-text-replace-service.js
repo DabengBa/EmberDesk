@@ -726,7 +726,7 @@ export async function runCharacterTextReplace({ request, apply = false, dependen
     const cardHasChanges = cardChangedByFields || embeddedBookChanged || snapshotNeedsRefresh;
     if (cardHasChanges && cardChangedByFields === false) {
         result.areas.card.status = 'refresh';
-        result.areas.card.snapshotRefreshed = true;
+        result.areas.card.snapshotRefreshed = !apply && snapshotNeedsRefresh;
     }
     if (cardHasChanges) {
         result.totals.changedTargets += 1;
@@ -742,12 +742,32 @@ export async function runCharacterTextReplace({ request, apply = false, dependen
             characterData: JSON.stringify(cardPayload),
             dependencies: deps.getCharacterWriteDependencies(),
         });
-        if (writeResult?.ok) {
+        if (writeResult?.ok || writeResult?.authorityCommitted === true) {
             result.applied.card = true;
+            if (cardChangedByFields) {
+                result.areas.card.status = 'applied';
+            }
+            if (snapshotNeedsRefresh) {
+                result.areas.card.snapshotRefreshed = true;
+            }
+            if (embeddedBookChanged) {
+                result.applied.worldBook = true;
+            }
+            if (!writeResult.ok) {
+                result.areas.card.projectionFailed = true;
+                result.warnings.push({ code: 'card_projection_failed', repairKey: writeResult.repairKey ?? null });
+            }
         } else {
             result.areas.card.status = 'failed';
             result.areas.card.reason = writeResult?.reason ?? 'write_failed';
             result.warnings.push({ code: 'card_write_failed', reason: result.areas.card.reason });
+            if (embeddedBookChanged) {
+                result.areas.worldBook.status = 'failed';
+                result.areas.worldBook.reason = result.areas.card.reason;
+            }
+            if (result.applied.worldBook && snapshotNeedsRefresh) {
+                result.warnings.push({ code: 'world_book_snapshot_not_confirmed', name: boundWorldName });
+            }
         }
     }
 
@@ -779,8 +799,12 @@ export async function runCharacterTextReplace({ request, apply = false, dependen
                     avatarUrl,
                     payload: chatPayload,
                 });
-                if (writeResult?.ok) {
+                if (writeResult?.ok || writeResult?.authorityCommitted === true) {
                     result.applied.chat = true;
+                    if (!writeResult.ok) {
+                        result.areas.chats.projectionFailed = true;
+                        result.warnings.push({ code: 'chat_projection_failed', repairKey: writeResult.repairKey ?? null });
+                    }
                 } else {
                     result.areas.chats.status = 'failed';
                     result.areas.chats.reason = writeResult?.reason ?? 'write_failed';

@@ -77,6 +77,8 @@ import {
 import { writeCanonicalManagedMedia } from './canonical-managed-media-write-service.js';
 import { createCharacterImportCoordinator } from './character-import-service.js';
 import { runCharacterTextReplace } from './character-text-replace-service.js';
+import { coordinateWorkspaceWrite } from './coordinate-workspace-write.js';
+import { coordinateReplaceIntent } from './coordinate-workspace-write.js';
 
 import { areThumbnailsEnabled, generateThumbnail, invalidateThumbnail } from './thumbnails.js';
 import { getUserDirectories } from '../users.js';
@@ -1567,7 +1569,7 @@ router.post('/rename', validateAvatarUrlMiddleware, async function (request, res
     }
 });
 
-router.post('/edit', validateAvatarUrlMiddleware, async function (request, response) {
+router.post('/edit', validateAvatarUrlMiddleware, coordinateWorkspaceWrite('card', request => request.body?.avatar_url, async function (request, response) {
     if (!request.body) {
         console.warn('Error: no response body detected');
         response.status(400).send('Error: no response body detected');
@@ -1612,7 +1614,7 @@ router.post('/edit', validateAvatarUrlMiddleware, async function (request, respo
         console.error('An error occurred, character edit invalidated.', err);
         return response.sendStatus(500);
     }
-});
+}));
 
 router.post('/edit-avatar', validateAvatarUrlMiddleware, async function (request, response) {
     try {
@@ -1911,7 +1913,7 @@ router.post('/text-replace/preview', validateAvatarUrlMiddleware, async function
     }
 });
 
-router.post('/text-replace/apply', validateAvatarUrlMiddleware, async function (request, response) {
+router.post('/text-replace/apply', validateAvatarUrlMiddleware, coordinateReplaceIntent(async function (request, response) {
     try {
         const result = await runCharacterTextReplace({
             request,
@@ -1929,7 +1931,7 @@ router.post('/text-replace/apply', validateAvatarUrlMiddleware, async function (
         console.error('Text replace apply error:', exception);
         return response.status(500).send({ error: 'Text replace apply failed.' });
     }
-});
+}));
 
 router.post('/delete-preflight', async function (request, response) {
     try {

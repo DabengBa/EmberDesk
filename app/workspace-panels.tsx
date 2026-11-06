@@ -1,4 +1,4 @@
-import { Fragment, StrictMode, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ChangeEvent, type ReactElement, type ReactNode, type TextareaHTMLAttributes } from 'react';
+import { Component, Fragment, StrictMode, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ChangeEvent, type ReactElement, type ReactNode, type TextareaHTMLAttributes } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { createPortal, flushSync } from 'react-dom';
 import { QueryClient, QueryClientProvider, useMutation, useQuery } from '@tanstack/react-query';
@@ -43,6 +43,7 @@ import { MainChatMessageRow } from './components/main-chat/MainChatMessageRow';
 import { MainChatGreetingPicker } from './components/main-chat/MainChatGreetingPicker';
 import { TurnSummaryCard } from './components/main-chat/TurnSummaryCard';
 import { projectChatTurnCards } from '../public/scripts/chat-turn-card-projection.js';
+import { clearMainChatFailure, getMainChatFailure, showMainChatFailure } from '../public/scripts/main-chat-failure.js';
 import {
     createCharacterAuthoringSession,
     shouldApplyCharacterAuthoringSaveResult,
@@ -103,12 +104,54 @@ interface WorkspacePanelMount {
     runtime: RuntimePort;
     state?: unknown;
     commands?: WorkspacePanelBridge;
+    revision?: number;
+}
+
+class MainChatErrorBoundary extends Component<{ host: HTMLElement; revision: number; children: ReactNode }, { failed: boolean; revision: number }> {
+    state = { failed: false, revision: this.props.revision };
+
+
+    static getDerivedStateFromError() { return { failed: true }; }
+
+    static getDerivedStateFromProps(props: { revision: number }, state: { failed: boolean; revision: number }) {
+        return props.revision !== state.revision ? { failed: false, revision: props.revision } : null;
+    }
+
+    componentDidCatch(error: Error) {
+        console.error('React main chat render failed.', error);
+        showMainChatFailure(this.props.host, translate('Could not load chat data. Try reloading the page.'));
+    }
+
+    render() { return this.state.failed ? null : this.props.children; }
+}
+
+class MainChatEffectBoundary extends Component<{ host: HTMLElement; revision: number; children: ReactNode }, { failed: boolean; revision: number }> {
+    state = { failed: false, revision: this.props.revision };
+    static getDerivedStateFromError() { return { failed: true }; }
+    static getDerivedStateFromProps(props: { revision: number }, state: { failed: boolean; revision: number }) {
+        return props.revision !== state.revision ? { failed: false, revision: props.revision } : null;
+    }
+    componentDidCatch(error: Error) {
+        console.error('React main chat effect failed.', error);
+        showMainChatFailure(this.props.host, translate('Could not load chat data. Try reloading the page.'));
+    }
+    render() { return this.state.failed ? null : this.props.children; }
+}
+
+function MainChatSlashOwner({ commands, host, failure, revision }: { commands?: MainChatCommands; host: HTMLElement; failure: Element | null; revision: number }) {
+    useEffect(() => {
+        void commands?.setSlashVisibleOwner(true);
+        clearMainChatFailure(host, failure);
+        return () => { void commands?.setSlashVisibleOwner(false); };
+    }, [commands, host, failure, revision]);
+    return null;
 }
 
 interface WorkspacePanelMountOptions {
     runtime: RuntimePort;
     state?: unknown;
     commands?: WorkspacePanelBridge;
+    mainChatFailure?: Element | null;
 }
 
 type WorkspacePanelStatus = 'idle' | 'loading' | 'empty' | 'success' | 'error';
@@ -703,6 +746,7 @@ function describeTextReplaceFailure(result: TextReplaceResult | null | undefined
     }
     if (reason === 'character_save_failed') return translate('The character could not be saved. Your edits are still here.');
     if (reason === 'character_refresh_failed') return translate('The character could not be reloaded. Retry before closing.');
+    if (reason === 'chat_refresh_failed') return translate('The chat could not be reloaded. Retry before closing.');
     if (reason.startsWith('invalid_regex:')) {
         return `${TEXT_REPLACE_REASON_LABELS.invalid_regex}：${reason.slice('invalid_regex:'.length).trim()}`;
     }
@@ -804,8 +848,16 @@ function CharacterAuthoringTextReplaceDialog({
     const [applyResult, setApplyResult] = useState<TextReplaceResult | null>(null);
     const [excluded, setExcluded] = useState<Set<string>>(() => new Set());
     const appliedRef = useRef<{ card?: boolean; worldBook?: boolean; chat?: boolean } | null>(null);
+    // true when the apply response was lost/aborted and the canonical outcome is unknown
+    const unknownApplyRef = useRef(false);
+    // coordination context for a pending apply: used to poll intent status on unknown result
+    const coordinationRef = useRef<{ sessionId: string; intentId: string } | null>(null);
     const [finalizing, setFinalizing] = useState(false);
     const overlayRef = useRef<HTMLDivElement>(null);
+    // Keep a ref to commands so handleClose always reads the latest value
+    // even though commands is not in handleClose's dependency array.
+    const commandsRef = useRef(commands);
+    commandsRef.current = commands;
 
     useEffect(() => {
         const background = Array.from(document.body.children).filter((element): element is HTMLElement =>
@@ -899,14 +951,26 @@ function CharacterAuthoringTextReplaceDialog({
                     : null;
                 setApplyResult(result);
             } else {
-                setError(describeTextReplaceFailure(result));
+                if (result?.reason === 'network_error' || result?.reason === 'empty_response' || (result?.status != null && result.status >= 500)) {
+                    unknownApplyRef.current = true;
+                    // Store any coordination context so handleClose can poll the server.
+                    const coord = (result as Record<string, unknown>)?._coordination;
+                    if (coord && typeof coord === 'object' && 'sessionId' in coord && 'intentId' in coord) {
+                        coordinationRef.current = coord as { sessionId: string; intentId: string };
+                    }
+                    setError(translate('The apply result is unknown. Do not close until you can verify the canonical state.'));
+                }
+                if (!unknownApplyRef.current) {
+                    setError(describeTextReplaceFailure(result));
+                }
             }
         } catch {
-            setError(translate('Apply request failed'));
+            unknownApplyRef.current = true;
+            setError(translate('The apply result is unknown. Do not close until you can verify the canonical state.'));
         } finally {
             setBusy('');
         }
-    }, [commands, buildRequest, effectiveOccurrences]);
+    }, [commands, buildRequest, effectiveOccurrences, worldArea, chatArea]);
 
     const toggleExclude = useCallback((path: string, exclude: boolean) => {
         setExcluded(current => {
@@ -946,6 +1010,45 @@ function CharacterAuthoringTextReplaceDialog({
         if (busy || finalizing) {
             return;
         }
+        // When the apply result is unknown (network abort), force a canonical
+        // re-read of all areas that were targeted. This covers the case where
+        // the server committed but the browser got no response: the form will
+        // reload to the canonical value (LostAfter) rather than keeping the
+        // stale draft (LostBefore). If the server did not commit, the form
+        // reloads to whatever canonical currently holds.
+        if (unknownApplyRef.current) {
+            setFinalizing(true);
+            setError('');
+            try {
+                // Poll the coordination server to find out if the apply committed.
+                // If confirmed committed (or unknown_partial), force canonical reload.
+                // If not committed, reload anyway so the form reflects canonical state.
+                let outcome = 'not_committed';
+                const coord = coordinationRef.current;
+                if (coord && typeof commandsRef.current?.queryReplaceIntentOutcome === 'function') {
+                    outcome = await (commandsRef.current.queryReplaceIntentOutcome as (c: unknown) => Promise<string>)(coord);
+                }
+                if (outcome === 'committed' || outcome === 'unknown_partial') {
+                    // Server committed (or may have partially committed): force a
+                    // canonical re-read so the form shows the replaced content.
+                    const forceReload = { card: cardArea, worldBook: worldArea, chat: chatArea };
+                    const result = await onClose(forceReload);
+                    if (result && typeof result === 'object' && 'ok' in result && result.ok === false) {
+                        setError(describeTextReplaceFailure(result as TextReplaceResult));
+                    }
+                } else {
+                    // Server did not commit (request never reached the server or was
+                    // rejected before any write). Keep the dialog open so the user
+                    // can retry or discard the draft manually.
+                    setError(translate('The apply did not reach the server. Retry or discard the draft before closing.'));
+                }
+            } catch {
+                setError(translate('Character refresh failed. Retry before closing.'));
+            } finally {
+                setFinalizing(false);
+            }
+            return;
+        }
         if (!appliedRef.current) {
             onClose(false);
             return;
@@ -963,6 +1066,10 @@ function CharacterAuthoringTextReplaceDialog({
             setFinalizing(false);
         }
     }, [busy, finalizing, onClose]);
+    /* Note: handleClose also reads commands.queryReplaceIntentOutcome for intent
+       polling but commands is a stable host-injected reference — omitting it
+       here is intentional to avoid spurious rebuilds of the close handler.
+       coordinationRef captures the latest coordination context via a ref instead. */
 
     return createPortal(
         <div
@@ -1008,7 +1115,7 @@ function CharacterAuthoringTextReplaceDialog({
                             {applyResult.areas?.card?.status === 'failed' ? <div {...stylex.props(authoringStyles.replaceErrorText)}>✗ {translate('Character card write failed:')}{applyResult.areas.card.reason ?? ''}</div> : null}
                             {applyResult.areas?.worldBook?.status === 'failed' ? <div {...stylex.props(authoringStyles.replaceErrorText)}>✗ {translate('World book write failed:')}{applyResult.areas.worldBook.reason ?? ''}</div> : null}
                             {applyResult.areas?.chats?.status === 'failed' ? <div {...stylex.props(authoringStyles.replaceErrorText)}>✗ {translate('Chat write failed:')}{applyResult.areas.chats.reason ?? ''}</div> : null}
-                            {!applyResult.applied?.card && !applyResult.applied?.worldBook && !applyResult.applied?.chat
+                            {!error && !applyResult.applied?.card && !applyResult.applied?.worldBook && !applyResult.applied?.chat
                                 && applyResult.areas?.card?.status !== 'failed'
                                 && applyResult.areas?.worldBook?.status !== 'failed'
                                 && applyResult.areas?.chats?.status !== 'failed' ? (
@@ -2034,7 +2141,7 @@ function AuthoringWorkspacePanel({
 
                             const result = await commands.closeTextReplace({ applied });
                             if (!result || typeof result !== 'object' || !('ok' in result) || result.ok !== true) {
-                                return { ok: false, reason: 'character_refresh_failed' };
+                                return result && typeof result === 'object' && 'reason' in result ? result : { ok: false, reason: 'character_refresh_failed' };
                             }
 
                             const draft = (result as { draft?: unknown }).draft;
@@ -2231,13 +2338,6 @@ function MainChatMessageListWorkspacePanel({
     const shouldShowSlashAutocomplete = slash.autocompleteVisible && slash.options.length > 0;
     const shouldShowSlashDetails = slash.detailsVisible && slash.detailsHtml !== '';
     const shouldShowSlashStatus = slash.paused || slash.aborted || slash.errorLabel !== null;
-
-    useEffect(() => {
-        void commands?.setSlashVisibleOwner(true);
-        return () => {
-            void commands?.setSlashVisibleOwner(false);
-        };
-    }, [commands]);
 
     return (
         <>
@@ -2722,7 +2822,7 @@ function syncMainChatStoreSnapshot(state: unknown) {
     mainChatStore.getState().reset();
 }
 
-function renderIntoPanel(mount: WorkspacePanelMount) {
+function renderIntoPanel(mount: WorkspacePanelMount, mainChatFailure: Element | null = null) {
     if (mount.kind === 'mainChatMessageList') {
         syncMainChatStoreSnapshot(mount.state);
     }
@@ -2742,7 +2842,12 @@ function renderIntoPanel(mount: WorkspacePanelMount) {
                 // Theme creates a DOM wrapper; the legacy #chat surface requires
                 // message rows to remain its direct children. The shell chrome
                 // Theme already establishes the document theme for this app.
-                ? panel
+                ? <MainChatErrorBoundary host={mount.container} revision={mount.revision ?? 0}>
+                    {panel}
+                    <MainChatEffectBoundary host={mount.container} revision={mount.revision ?? 0}>
+                        <MainChatSlashOwner commands={mount.commands as MainChatCommands | undefined} host={mount.container} failure={mainChatFailure} revision={mount.revision ?? 0} />
+                    </MainChatEffectBoundary>
+                </MainChatErrorBoundary>
                 : <Theme theme={emberDeskTheme} mode="dark">{panel}</Theme>}
         </StrictMode>,
     );
@@ -2851,6 +2956,7 @@ export function unmountSettingsPanel() {
 
 export function mountWorkspacePanel(kind: WorkspacePanelKind, container: HTMLElement, options: WorkspacePanelMountOptions) {
     attachGlobalCompatibilityBridge();
+    const mainChatFailure = kind === 'mainChatMessageList' ? (options.mainChatFailure === undefined ? getMainChatFailure(container) : options.mainChatFailure) : null;
     const existingPanel = mountedPanels.get(kind);
     if (existingPanel) {
         if (existingPanel.container !== container) {
@@ -2858,9 +2964,10 @@ export function mountWorkspacePanel(kind: WorkspacePanelKind, container: HTMLEle
             mountedPanels.delete(kind);
         } else {
             existingPanel.state = options.state;
+            if (kind === 'mainChatMessageList') existingPanel.revision = (existingPanel.revision ?? 0) + 1;
             existingPanel.commands = options.commands;
             existingPanel.runtime = options.runtime;
-            renderIntoPanel(existingPanel);
+            renderIntoPanel(existingPanel, mainChatFailure);
             return;
         }
     }
@@ -2875,7 +2982,7 @@ export function mountWorkspacePanel(kind: WorkspacePanelKind, container: HTMLEle
     };
     mountedPanels.set(kind, mount);
     recordWorkspacePanelMount(kind, options.state ?? null, options.commands);
-    renderIntoPanel(mount);
+    renderIntoPanel(mount, mainChatFailure);
 }
 
 export function mountWorkspaceShellChrome(container: HTMLElement, options: WorkspaceShellChromeMountOptions) {

@@ -68,7 +68,8 @@ router.post('/change-avatar', async (request, response) => {
         }
 
         // Avatar is not a data URL or not an empty string
-        if (!request.body.avatar.startsWith('data:image/') && request.body.avatar !== '') {
+        if (typeof request.body.avatar !== 'string'
+            || (!request.body.avatar.startsWith('data:image/') && request.body.avatar !== '')) {
             console.warn('Change avatar failed: Invalid data URL');
             return response.status(400).json({ error: 'Invalid data URL' });
         }
