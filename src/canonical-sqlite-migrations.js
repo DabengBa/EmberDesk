@@ -446,6 +446,58 @@ export const CANONICAL_SQLITE_MIGRATIONS = Object.freeze([
             );
         `,
     }),
+    Object.freeze({
+        version: 14,
+        name: 'character_replace_write_coordination',
+        sql: `
+            CREATE TABLE workspace_write_sessions (
+                session_id TEXT PRIMARY KEY,
+                status TEXT NOT NULL CHECK (status IN ('open', 'closed')),
+                created_at_ms INTEGER NOT NULL,
+                updated_at_ms INTEGER NOT NULL
+            );
+
+            CREATE TABLE workspace_write_operations (
+                session_id TEXT NOT NULL REFERENCES workspace_write_sessions(session_id),
+                operation_id TEXT NOT NULL,
+                kind TEXT,
+                target TEXT,
+                status TEXT NOT NULL CHECK (status IN ('running', 'finished', 'cancelled', 'interrupted')),
+                outcome TEXT,
+                created_at_ms INTEGER NOT NULL,
+                updated_at_ms INTEGER NOT NULL,
+                PRIMARY KEY (session_id, operation_id)
+            );
+
+            CREATE TABLE character_replace_intents (
+                session_id TEXT NOT NULL REFERENCES workspace_write_sessions(session_id),
+                intent_id TEXT NOT NULL,
+                target_json TEXT,
+                status TEXT NOT NULL CHECK (status IN ('preparing', 'ready', 'running', 'finished', 'cancelled', 'interrupted')),
+                outcome TEXT,
+                result_json TEXT,
+                acknowledged INTEGER NOT NULL DEFAULT 0 CHECK (acknowledged IN (0, 1)),
+                created_at_ms INTEGER NOT NULL,
+                updated_at_ms INTEGER NOT NULL,
+                PRIMARY KEY (session_id, intent_id)
+            );
+
+            CREATE TABLE character_replace_intent_writes (
+                session_id TEXT NOT NULL,
+                intent_id TEXT NOT NULL,
+                operation_id TEXT NOT NULL,
+                PRIMARY KEY (session_id, intent_id, operation_id),
+                UNIQUE (session_id, operation_id),
+                FOREIGN KEY (session_id, intent_id)
+                    REFERENCES character_replace_intents(session_id, intent_id) ON DELETE CASCADE
+            );
+
+            CREATE INDEX workspace_write_operations_status_idx
+                ON workspace_write_operations (session_id, status);
+            CREATE INDEX character_replace_intents_status_idx
+                ON character_replace_intents (status, acknowledged);
+        `,
+    }),
 ]);
 
 export class CanonicalMigrationBlockedError extends Error {

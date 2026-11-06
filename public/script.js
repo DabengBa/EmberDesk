@@ -2426,6 +2426,7 @@ async function persistAuthoringDraftBeforeLegacyAction(payload) {
     if (!(payload?.fields || payload?.extensions)) {
         return false;
     }
+
     if (getCurrentCharacterAuthoringMode() !== 'edit') {
         applyCharacterAuthoringSaveModel(payload, { submit: false });
         return false;
@@ -2436,6 +2437,75 @@ async function persistAuthoringDraftBeforeLegacyAction(payload) {
     } catch {
         applyCharacterAuthoringSaveModel(payload, { submit: false });
         return false;
+    }
+}
+
+/**
+ * Create a coordination session and a replace intent for a single apply
+ * operation. Returns { sessionId, intentId } on success, or null if the
+ * coordination API is unavailable (feature not enabled, network error, etc.).
+ */
+async function createReplaceCoordinationIntent({ avatarUrl, chatFile = '', worldName = '', card = false, chatSelected = false, worldSelected = false }) {
+    try {
+        const sessionRes = await fetch('/api/character-replace-coordination/sessions/create', {
+            method: 'POST',
+            headers: getRequestHeaders(),
+            body: JSON.stringify({}),
+            cache: 'no-cache',
+        });
+        if (!sessionRes.ok) return null;
+        const sessionData = await sessionRes.json();
+        const sessionId = sessionData?.sessionId;
+        if (!sessionId) return null;
+
+        const intentId = crypto.randomUUID();
+        const intentRes = await fetch('/api/character-replace-coordination/intents/create', {
+            method: 'POST',
+            headers: getRequestHeaders(),
+            body: JSON.stringify({ sessionId, intentId, target: { avatar: avatarUrl, chat: chatFile, world: worldName, card, chatSelected, worldSelected } }),
+            cache: 'no-cache',
+        });
+        if (!intentRes.ok) return null;
+        // Mark the intent ready so the server-side fence can claim it on the
+        // next apply request. Without this, claimReplaceIntent would see
+        // status='preparing' and refuse to execute the handler.
+        const readyRes = await fetch('/api/character-replace-coordination/intents/ready', {
+            method: 'POST',
+            headers: getRequestHeaders(),
+            body: JSON.stringify({ sessionId, intentId }),
+            cache: 'no-cache',
+        });
+        if (!readyRes.ok) return null;
+        return { sessionId, intentId };
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * Query whether a replace intent was committed server-side after a lost
+ * response. Returns 'committed' | 'unknown_partial' | 'not_committed'.
+ */
+async function queryReplaceIntentOutcome({ sessionId, intentId }) {
+    try {
+        const res = await fetch('/api/character-replace-coordination/intents/status', {
+            method: 'POST',
+            headers: getRequestHeaders(),
+            body: JSON.stringify({ sessionId, intentId }),
+            cache: 'no-cache',
+        });
+        if (!res.ok) return 'not_committed';
+        const data = await res.json();
+        // intent.status is 'finished' when the intent ran to completion;
+        // the actual canonical outcome is in intent.outcome:
+        //   'completed'      → server committed all areas
+        //   'unknown_partial'→ server may have partially committed
+        const outcome = data?.intent?.outcome;
+        if (outcome === 'completed') return 'committed';
+        if (outcome === 'unknown_partial') return 'unknown_partial';
+        return 'not_committed';
+    } catch {
+        return 'not_committed';
     }
 }
 
@@ -2458,9 +2528,14 @@ async function requestCharacterTextReplace(endpoint, payload) {
         excluded: Array.isArray(payload?.excluded) ? payload.excluded : undefined,
     };
     try {
+        const headers = getRequestHeaders();
+        if (payload?.coordination?.sessionId && payload?.coordination?.intentId) {
+            headers['x-emberdesk-write-session'] = payload.coordination.sessionId;
+            headers['x-emberdesk-replace-intent'] = payload.coordination.intentId;
+        }
         const response = await fetch(endpoint, {
             method: 'POST',
-            headers: getRequestHeaders(),
+            headers,
             body: JSON.stringify(body),
             cache: 'no-cache',
         });
@@ -2651,7 +2726,9 @@ function getCharacterAuthoringReactCommands() {
             previewTextReplace: async payload => {
                 // Preview reads the saved card — persist pending edits first so the
                 // match list reflects what the user sees in the draft.
-                await persistAuthoringDraftBeforeLegacyAction(payload);
+                if (!await persistAuthoringDraftBeforeLegacyAction(payload)) {
+                    return { ok: false, reason: 'character_save_failed' };
+                }
                 return await requestCharacterTextReplace('/api/characters/text-replace/preview', payload);
             },
             applyTextReplace: async payload => {
@@ -2662,8 +2739,39 @@ function getCharacterAuthoringReactCommands() {
                     toastr.warning('Generation is in progress — wait for it to finish (or stop it) before applying replacements.');
                     return { ok: false, reason: 'generation_in_flight' };
                 }
-                await persistAuthoringDraftBeforeLegacyAction(payload);
-                return await requestCharacterTextReplace('/api/characters/text-replace/apply', payload);
+                if (!await persistAuthoringDraftBeforeLegacyAction(payload)) {
+                    return { ok: false, reason: 'character_save_failed' };
+                }
+                // Flush any pending chat and metadata debounce saves so that
+                // in-memory changes land in canonical before the replacement
+                // reads and rewrites the same areas. cancelDebouncedChatSave
+                // only cancels the timer; flush by awaiting saveChatConditional.
+                // Only flush when the chat area is actually being replaced —
+                // flushing unconditionally would hang under frozen-clock tests
+                // that don't touch the chat.
+                if (payload?.areas?.chats === 'current') {
+                    cancelDebouncedChatSave();
+                    cancelDebouncedMetadataSave();
+                    await saveChatConditional();
+                }
+                // Create a coordination intent so that a lost response can be
+                // recovered: if the browser gets a network abort but the server
+                // committed, the client can poll the intent status on close.
+                const avatarUrl = String(payload?.fields?.avatar ?? payload?.draft?.avatar ?? '');
+                const chatFile = String(getCurrentChatId() ?? '');
+                const card = !!(payload?.areas?.card);
+                const chatSelected = payload?.areas?.chats === 'current';
+                const worldSelected = !!(payload?.areas?.worldBook);
+                const worldName = '';
+                const coordination = await createReplaceCoordinationIntent({ avatarUrl, chatFile, worldName, card, chatSelected, worldSelected });
+                const payloadWithCoord = coordination ? { ...payload, coordination } : payload;
+                const result = await requestCharacterTextReplace('/api/characters/text-replace/apply', payloadWithCoord);
+                // Attach coordination context to the result so the dialog can
+                // poll intent status on an unknown response.
+                if (coordination) {
+                    result._coordination = coordination;
+                }
+                return result;
             },
             closeTextReplace: async payload => {
                 // Only remount when apply actually wrote — a remount rebuilds the
@@ -2674,27 +2782,48 @@ function getCharacterAuthoringReactCommands() {
                 if (!applied) {
                     return false;
                 }
+                if (applied.card) {
+                    const avatarUrl = characters[this_chid]?.avatar;
+                    try {
+                        if (!avatarUrl || !await getOneCharacter(avatarUrl)) return { ok: false, reason: 'character_refresh_failed' };
+                    } catch {
+                        return { ok: false, reason: 'character_refresh_failed' };
+                    }
+                }
                 if (applied.chat) {
                     // The in-memory chat is stale now; reload before the next
                     // autosave writes it back over the replaced content.
-                    await reloadCurrentChat();
-                }
-                if (applied.card || applied.worldBook) {
-                    // characters[this_chid] still holds the pre-apply card; the
-                    // authoring remount builds its draft from it. Refetch so the
-                    // panel shows (and later re-saves) the replaced card.
-                    const avatarUrl = characters[this_chid]?.avatar;
-                    if (avatarUrl) {
-                        await getOneCharacter(avatarUrl);
+                    if (reloadChatMutex.isBusy) return { ok: false, reason: 'chat_refresh_failed' };
+                    reloadChatMutex.isBusy = true;
+                    try {
+                        cancelDebouncedChatSave();
+                        cancelDebouncedMetadataSave();
+                        await getChat({ strictReload: true });
+                    } catch {
+                        return { ok: false, reason: 'chat_refresh_failed' };
+                    } finally {
+                        reloadChatMutex.isBusy = false;
                     }
                 }
                 if (applied.worldBook) {
                     queueReactWorldInfoRemount();
                 }
-                return { applied: true };
+                const character = applied.card ? characters[this_chid] : null;
+                return {
+                    ok: true,
+                    applied: true,
+                    ...(character ? { draft: createCharacterAuthoringDraft(character, { mode: 'edit' }) } : {}),
+                };
+            },
+            queryReplaceIntentOutcome: async ({ sessionId, intentId }) => {
+                return await queryReplaceIntentOutcome({ sessionId, intentId });
             },
         },
         shouldRemount(commandResult, commandName) {
+            // queryReplaceIntentOutcome does not affect the panel; never remount.
+            if (commandName === 'queryReplaceIntentOutcome') {
+                return false;
+            }
             // Edit-mode saves rebase the React session client-side; remounting on
             // every autosave would reset the draft baseline, collapse the advanced
             // section, and close the field editor mid-typing. Create-mode saves must
@@ -2703,8 +2832,13 @@ function getCharacterAuthoringReactCommands() {
                 return commandResult?.mode !== 'edit';
             }
             // Preview/apply keep the find & replace dialog open; the dialog itself
-            // triggers a remount on close via closeTextReplace when it wrote.
+            // refreshes from canonical on close and installs that draft itself.
             if (commandName === 'previewTextReplace' || commandName === 'applyTextReplace') {
+                return false;
+            }
+            // A failed close must keep the dialog and the draft it protects;
+            // remounting here would rebuild the panel from the pre-apply card.
+            if (commandName === 'closeTextReplace') {
                 return false;
             }
             return commandResult !== false;
@@ -5132,10 +5266,12 @@ export async function getOneCharacter(avatarUrl) {
 
         if (indexOf !== -1) {
             characters[indexOf] = getData;
+            return true;
         } else {
             toastr.error(t`Character ${avatarUrl} not found in the list`, t`Error`, { timeOut: 5000, preventDuplicates: true });
         }
     }
+    return false;
 }
 
 export function getCharacterSource(chId = this_chid) {
@@ -7556,7 +7692,7 @@ export async function unshallowCharacter(characterId) {
     await getOneCharacter(avatar);
 }
 
-async function getChatResult() {
+async function getChatResult({ switchMenu = true } = {}) {
     name2 = characters[this_chid].name;
     let freshChat = false;
     if (chat.length === 0) {
@@ -7569,7 +7705,7 @@ async function getChatResult() {
         await saveChatConditional();
     }
     await printMessages();
-    select_selected_character(this_chid);
+    select_selected_character(this_chid, { switchMenu });
 
     await eventSource.emit(event_types.CHAT_CHANGED, (getCurrentChatId()));
     if (freshChat) await eventSource.emit(event_types.CHAT_CREATED);

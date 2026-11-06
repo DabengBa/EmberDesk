@@ -485,7 +485,7 @@ export async function selectChatGreeting({ index, characterId, chatId }) {
 }
 
 
-export async function getChat() {
+export async function getChat({ strictReload = false } = {}) {
     try {
         await unshallowCharacter(state.this_chid);
 
@@ -521,7 +521,7 @@ export async function getChat() {
             state.chat_metadata.integrity = uuidv4();
         }
         queueMainChatMessageListScrollRestore(state.characters[state.this_chid].chat);
-        await getChatResult();
+        await getChatResult({ switchMenu: !strictReload });
         eventSource.emit(event_types.CHAT_LOADED, { detail: { id: state.this_chid, character: state.characters[state.this_chid] } });
 
         // Focus on the textarea if not already focused on a visible interactive
@@ -534,6 +534,7 @@ export async function getChat() {
             $('#send_textarea').trigger('focus');
         });
     } catch (error) {
+        if (strictReload) throw error;
         await getChatResult();
         console.log(error);
     }

@@ -16,6 +16,7 @@ import { router as thumbnailRouter } from './endpoints/thumbnails.js';
 import { router as assetsRouter } from './endpoints/assets.js';
 import { router as filesRouter } from './endpoints/files.js';
 import { router as charactersRouter } from './endpoints/characters.js';
+import { router as characterReplaceCoordinationRouter } from './endpoints/character-replace-coordination.js';
 import { router as chatsRouter } from './endpoints/chats.js';
 import { router as worldInfoRouter } from './endpoints/worldinfo.js';
 import { router as contentManagerRouter } from './endpoints/content-manager.js';
@@ -106,6 +107,7 @@ export function setupPrivateEndpoints(app) {
     app.use('/api/assets', assetsRouter);
     app.use('/api/files', filesRouter);
     app.use('/api/characters', charactersRouter);
+    app.use('/api/character-replace-coordination', characterReplaceCoordinationRouter);
     app.use('/api/chats', chatsRouter);
     app.use('/api/worldinfo', worldInfoRouter);
     app.use('/api/content', contentManagerRouter);

@@ -24,7 +24,8 @@ Let a user rename concepts, fix phrasing, or migrate terminology across the acti
 - The preview must run before apply: it lists each match with its field path, context, and before/after samples, supports per-match exclusion, warns when the bound world book is shared by other characters, and becomes stale-invalidated whenever the user changes any search parameter afterwards.
 - Apply requires an explicit confirmation of the total match count, recomputes the whole operation server-side rather than trusting the previewed diffs, and shows a per-area result summary including any failures.
 - There is no built-in rollback snapshot: the dialog states that applied replacements write straight into canonical data.
-- A character that is generating cannot apply — the apply is refused while a reply is in flight, and after a successful apply the current chat view is reloaded so the stale in-memory messages cannot overwrite the server result.
+- A character that is generating cannot apply — the apply is refused while a reply is in flight, and a chat-scoped apply reloads the current chat view when the dialog closes so the stale in-memory messages cannot overwrite the server result.
+- While the dialog is open the authoring autosave stops firing, and closing after an apply waits for the write, re-reads the authoritative card, and only then restores the editor with the replaced content. A failed re-read keeps the dialog and the unsaved draft in place so closing can be retried; cancelling keeps unsaved edits.
 
 ## Semantic Interaction IDs
 
@@ -35,10 +36,11 @@ Let a user rename concepts, fix phrasing, or migrate terminology across the acti
 
 ## Acceptance Workflows
 
-- As a character author renaming a concept, from Character Authoring open 查找替换, enter old and new text, preview, and apply; EmberDesk must update the card fields, the bound world book, and the current chat where matches were selected, remount the authoring panel with the saved content, and reload the current chat so replaced messages render, with failure signaled by unchanged canonical content, a stale in-memory chat overwriting the apply, or the card's embedded world-book snapshot disagreeing with the authoritative book.
+- As a character author renaming a concept, from Character Authoring open 查找替换, enter old and new text, preview, and apply; EmberDesk must update the card fields, the bound world book, and the current chat where matches were selected, keep the authoring panel open on the replaced content instead of rebuilding it from the pre-apply card, and reload the current chat so replaced messages render, with failure signaled by unchanged canonical content, a stale in-memory chat overwriting the apply, or the card's embedded world-book snapshot disagreeing with the authoritative book.
 - As a user protecting a shared world book, preview a replace that matches a bound book used by multiple characters; EmberDesk must show the sharing warning and bound-character count before apply, and failure is silently editing a shared book without surfacing that impact.
 - As a user being selective, from the preview list uncheck individual matches and apply; EmberDesk must leave the excluded field paths untouched while writing the rest, and failure is an excluded path still being rewritten.
 - As a user mid-generation, attempt to apply while a reply is streaming; EmberDesk must refuse the apply instead of racing the in-flight save, and failure is a chat replace that is immediately overwritten by the pending generation save.
+- As a user closing after apply, close the dialog with an autosave still pending; EmberDesk must not let that older draft overwrite the replacement, and must keep the dialog open with a retryable error if the replaced card cannot be re-read.
 
 ## Feature-Specific Evidence
 
@@ -52,6 +54,7 @@ Let a user rename concepts, fix phrasing, or migrate terminology across the acti
 - The bound world book is edited without the shared-book warning.
 - The embedded `character_book` snapshot stays stale after the authoritative book changed.
 - Chat messages are replaced but the open chat view keeps serving the pre-replace in-memory copy.
+- The editor reopens on pre-replacement text after an apply, or a failed refresh closes the dialog and leaves a stale draft behind.
 - Apply proceeds while generation is in flight.
 - The dialog appears in create mode or offers card name/world-binding replacement.
 

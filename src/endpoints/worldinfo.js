@@ -12,6 +12,7 @@ import { getPersistedCanonicalAuditStatus } from '../canonical-sqlite-shadow-imp
 import { recordImportLedgerEntry, removeImportLedgerEntry } from '../canonical-import-ledger.js';
 import { getCanonicalStorageSlice } from '../canonical-storage-slice-registry.js';
 import { ensureCanonicalSliceBackend } from '../canonical-backend.js';
+import { coordinateWorkspaceWrite } from './coordinate-workspace-write.js';
 import {
     getCanonicalWorldInfoBook,
     listCanonicalWorldInfoBooks,
@@ -350,7 +351,7 @@ router.post('/import', async (request, response) => {
     return sendCanonicalWorldInfoUnavailable(response, canonicalWriteState);
 });
 
-router.post('/edit', async (request, response) => {
+router.post('/edit', coordinateWorkspaceWrite('world', request => request.body?.name, async (request, response) => {
     if (!request.body) {
         return response.sendStatus(400);
     }
@@ -396,7 +397,7 @@ router.post('/edit', async (request, response) => {
     }
 
     return sendCanonicalWorldInfoUnavailable(response, canonicalWriteState);
-});
+}));
 
 router.post('/delete-cascade', async (request, response) => {
     try {

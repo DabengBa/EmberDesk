@@ -433,6 +433,59 @@ describe('runCharacterTextReplace orchestration', () => {
         expect(deps.writeWorldInfoProjection).toHaveBeenCalled();
     });
 
+    test('reports committed card and chat even when their compatibility projections fail', async () => {
+        const deps = makeDependencies({
+            editCharacterCard: jest.fn(async () => ({ ok: false, authorityCommitted: true, reason: 'projection_failed', repairKey: 'card:repair' })),
+            writeChatSession: jest.fn(() => ({ ok: false, authorityCommitted: true, reason: 'projection_failed', repairKey: 'chat:repair' })),
+        });
+        const result = await runCharacterTextReplace({ request: makeRequest(fullBody), apply: true, dependencies: deps });
+
+        expect(result.applied).toEqual({ card: true, worldBook: true, chat: true });
+        expect(result.areas.card.status).toBe('applied');
+        expect(result.areas.chats.status).toBe('applied');
+        expect(result.warnings).toEqual(expect.arrayContaining([
+            expect.objectContaining({ code: 'card_projection_failed', repairKey: 'card:repair' }),
+            expect.objectContaining({ code: 'chat_projection_failed', repairKey: 'chat:repair' }),
+        ]));
+        expect(result.warnings).not.toEqual(expect.arrayContaining([
+            expect.objectContaining({ code: 'card_write_failed' }),
+            expect.objectContaining({ code: 'chat_write_failed' }),
+        ]));
+    });
+
+    test('reports a changed bound book separately from an uncommitted embedded snapshot', async () => {
+        const deps = makeDependencies({
+            editCharacterCard: jest.fn(async () => ({ ok: false, authorityCommitted: false, reason: 'card_write_failed' })),
+        });
+        const result = await runCharacterTextReplace({ request: makeRequest(fullBody), apply: true, dependencies: deps });
+
+        expect(result.applied.worldBook).toBe(true);
+        expect(result.applied.card).toBe(false);
+        expect(result.areas.card.snapshotRefreshed).not.toBe(true);
+        expect(result.warnings).toEqual(expect.arrayContaining([
+            expect.objectContaining({ code: 'world_book_snapshot_not_confirmed', name: 'Eldoria' }),
+        ]));
+    });
+
+    test('embedded book success and failure follow the card canonical write', async () => {
+        const embeddedCard = JSON.stringify({
+            name: 'Seraphina',
+            data: { extensions: {}, character_book: { entries: [{ keys: [], secondary_keys: [], content: 'Seraphina lore.' }] } },
+        });
+        const body = { ...fullBody, areas: { card: false, worldBook: true, chats: 'off' } };
+        for (const committed of [false, true]) {
+            const deps = makeDependencies({
+                getCanonicalCharacterCardJson: jest.fn(async () => embeddedCard),
+                editCharacterCard: jest.fn(async () => committed
+                    ? { ok: false, authorityCommitted: true, reason: 'projection_failed', repairKey: 'card:repair' }
+                    : { ok: false, authorityCommitted: false, reason: 'card_write_failed' }),
+            });
+            const result = await runCharacterTextReplace({ request: makeRequest(body), apply: true, dependencies: deps });
+            expect(result.applied.worldBook).toBe(committed);
+            expect(result.areas.worldBook.status).toBe(committed ? 'applied' : 'failed');
+        }
+    });
+
     test('apply with no matches writes nothing', async () => {
         const deps = makeDependencies();
         const result = await runCharacterTextReplace({
