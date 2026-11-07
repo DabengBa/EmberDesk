@@ -75,9 +75,15 @@ test('loaded character chat previews greetings without writes, persists a select
     const nextGreeting = picker.getByRole('button', { name: /下一个开场白|Next greeting/ });
     await expect(trigger).toBeVisible();
     await expect(trigger).toBeEnabled();
+    await expect(trigger).toHaveText('');
+    await expect(trigger).toHaveAccessibleName('选择开场白');
+    await expect(trigger).toHaveAttribute('aria-haspopup', 'dialog');
+    await expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    await expect(picker).toContainText('1 / 3');
+    await expect(trigger).not.toContainText('1 / 3');
     const message = page.locator('#chat .mes[mesid="0"] .mes_text');
     await expect(message).toContainText(main);
-    const before = await readStoredState(page, avatar, chatName);
+    let before = await readStoredState(page, avatar, chatName);
     const writes = [];
     page.on('request', request => {
         if (/\/api\/(?:chats\/save|characters\/(?:edit|merge-attributes|edit-attribute))$/.test(new URL(request.url()).pathname)) {
@@ -93,22 +99,26 @@ test('loaded character chat previews greetings without writes, persists a select
 
     await saveGreetingWith(() => nextGreeting.click());
     await expect(message).toContainText(alternates[0]);
-    await expect(trigger).toContainText('2 / 3');
+    await expect(picker).toContainText('2 / 3');
     await saveGreetingWith(async () => {
         await trigger.focus();
         await page.keyboard.press('ArrowRight');
     });
     await expect(message).toContainText(alternates[1]);
-    await expect(trigger).toContainText('3 / 3');
+    await expect(picker).toContainText('3 / 3');
     await saveGreetingWith(async () => page.keyboard.press('ArrowLeft'));
     await expect(message).toContainText(alternates[0]);
     await saveGreetingWith(async () => page.keyboard.press('ArrowLeft'));
     await expect(message).toContainText(main);
-    await expect(trigger).toContainText('1 / 3');
-    expect(await readStoredState(page, avatar, chatName)).toEqual(before);
+    await expect(picker).toContainText('1 / 3');
+    const afterCycling = await readStoredState(page, avatar, chatName);
+    expect(afterCycling.card).toEqual(before.card);
+    expect(afterCycling.chat[1].mes).toBe(main);
+    before = afterCycling;
     writes.length = 0;
 
     await trigger.click();
+    await expect(trigger).toHaveAttribute('aria-expanded', 'true');
     const dialog = page.getByRole('dialog', { name: /选择开场白|Choose a greeting/ });
     await expect(dialog).toBeVisible();
     await expect(dialog.locator('[aria-label="开场白列表"]').getByRole('button')).toHaveCount(3);
@@ -205,7 +215,7 @@ test('loaded character chat previews greetings without writes, persists a select
         await context.openCharacterChat(fileName);
     }, { avatarUrl: avatar, fileName: chatName });
     await expect(message).toContainText(alternates[1]);
-    await expect(trigger).toContainText('3 / 3');
+    await expect(picker).toContainText('3 / 3');
     await trigger.click();
     await expect(dialog.getByRole('button', { pressed: true })).toContainText(alternates[1]);
     await page.screenshot({ path: testInfo.outputPath('greeting-restored.png') });
@@ -342,4 +352,11 @@ test('loaded character chat previews greetings without writes, persists a select
     expect(started.chat[0].chat_metadata.tainted).toBe(true);
     expect(started.card).toEqual(before.card);
     await page.screenshot({ path: testInfo.outputPath('greeting-mobile-started.png') });
+
+    // The legacy new-chat action must still find the separate dropdown trigger.
+    await page.evaluate(async () => (await import('/script.js')).doNewChat());
+    await expect(dialog).toBeVisible();
+    await expect(picker).toContainText('1 / 3');
+    await page.keyboard.press('Escape');
+    await expect(trigger).toBeFocused();
 });
