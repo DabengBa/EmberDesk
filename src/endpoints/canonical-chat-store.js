@@ -224,21 +224,20 @@ function hasMatchingAttachmentSnapshot(db, sessionId, record) {
         === JSON.stringify(getExpectedAttachmentSnapshot(record));
 }
 
-export function upsertCanonicalChatSession(db, record) {
-    const existing = getExistingSession(db, record);
-    const sourceUnchanged = existing?.source_jsonl === record.sourceJsonl;
-    const attachmentSnapshotMatches = existing
-        ? hasMatchingAttachmentSnapshot(db, existing.id, record)
-        : false;
-    if (sourceUnchanged
-        && existing.source_path === record.sourcePath
-        && attachmentSnapshotMatches) {
-        return { id: existing.id, status: 'unchanged' };
-    }
-
-    const id = existing?.id ?? record.id;
-    const existingMessageIds = existing ? getExistingMessageIds(db, id) : new Map();
-    withCanonicalTransaction(db, txnDb => {
+export function upsertCanonicalChatSession(db, record, { onPersist = null } = {}) {
+    return withCanonicalTransaction(db, txnDb => {
+        const existing = getExistingSession(txnDb, record);
+        const sourceUnchanged = existing?.source_jsonl === record.sourceJsonl;
+        const attachmentSnapshotMatches = existing
+            ? hasMatchingAttachmentSnapshot(txnDb, existing.id, record)
+            : false;
+        const id = existing?.id ?? record.id;
+        if (sourceUnchanged && existing.source_path === record.sourcePath && attachmentSnapshotMatches) {
+            const result = { id, status: 'unchanged' };
+            onPersist?.(txnDb, result);
+            return result;
+        }
+        const existingMessageIds = existing ? getExistingMessageIds(txnDb, id) : new Map();
         if (existing) {
             txnDb.prepare(`
                 UPDATE chat_sessions
@@ -298,7 +297,9 @@ export function upsertCanonicalChatSession(db, record) {
         }
 
         if (sourceUnchanged && attachmentSnapshotMatches) {
-            return;
+            const result = { id, status: existing ? 'updated' : 'imported' };
+            onPersist?.(txnDb, result);
+            return result;
         }
 
         txnDb.prepare('DELETE FROM chat_messages WHERE session_id = ?').run(id);
@@ -336,28 +337,22 @@ export function upsertCanonicalChatSession(db, record) {
                 );
             }
         }
+        const result = { id, status: existing ? 'updated' : 'imported' };
+        onPersist?.(txnDb, result);
+        return result;
     });
-
-    return {
-        id,
-        status: existing ? 'updated' : 'imported',
-    };
 }
 
 export function renameCanonicalChatSession(db, {
     locator,
     nextLocator,
     nowMs = Date.now(),
+    onPersist = null,
 }) {
-    const session = getCanonicalChatSession(db, locator);
-    if (!session) {
-        return null;
-    }
-    if (getCanonicalChatSession(db, nextLocator)) {
-        throw new Error('Canonical chat rename destination already exists.');
-    }
-
-    withCanonicalTransaction(db, txnDb => {
+    return withCanonicalTransaction(db, txnDb => {
+        const session = getCanonicalChatSession(txnDb, locator);
+        if (!session) return null;
+        if (getCanonicalChatSession(txnDb, nextLocator)) throw new Error('Canonical chat rename destination already exists.');
         txnDb.prepare(`
             UPDATE chat_sessions
             SET
@@ -373,27 +368,21 @@ export function renameCanonicalChatSession(db, {
             Number(nowMs),
             session.id,
         );
+        const result = { id: session.id, sourceJsonl: session.source_jsonl };
+        onPersist?.(txnDb, result);
+        return result;
     });
-
-    return {
-        id: session.id,
-        sourceJsonl: session.source_jsonl,
-    };
 }
 
-export function deleteCanonicalChatSession(db, locator) {
-    const session = getCanonicalChatSession(db, locator);
-    if (!session) {
-        return null;
-    }
-
-    withCanonicalTransaction(db, txnDb => {
+export function deleteCanonicalChatSession(db, locator, { onPersist = null } = {}) {
+    return withCanonicalTransaction(db, txnDb => {
+        const session = getCanonicalChatSession(txnDb, locator);
+        if (!session) return null;
         txnDb.prepare('DELETE FROM chat_sessions WHERE id = ?').run(session.id);
+        const result = { id: session.id, sourceJsonl: session.source_jsonl };
+        onPersist?.(txnDb, result);
+        return result;
     });
-    return {
-        id: session.id,
-        sourceJsonl: session.source_jsonl,
-    };
 }
 
 /**

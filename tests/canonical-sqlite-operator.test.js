@@ -5,6 +5,7 @@ import path from 'node:path';
 import { afterEach, describe, expect, test } from '@jest/globals';
 
 import { createCanonicalSqliteManager } from '../src/canonical-sqlite.js';
+import { recordWorldProjectionIntent } from '../src/canonical-world-info-projection.js';
 import { runCanonicalShadowImport, getPersistedCanonicalAuditStatus, persistCanonicalAuditStatus } from '../src/canonical-sqlite-shadow-import.js';
 import { runCanonicalChatShadowImport } from '../src/canonical-chat-shadow-import.js';
 import { recordProjectionRepair } from '../src/endpoints/character-store.js';
@@ -34,6 +35,7 @@ import {
 import { MANAGED_MEDIA_AUDIT_SCOPE } from '../src/canonical-managed-media-shadow-import.js';
 import { CANONICAL_CHAT_AUDIT_SCOPE } from '../src/canonical-chat-shadow-import.js';
 import { writeCanonicalChatPayload } from '../src/endpoints/canonical-chat-write-service.js';
+import { recordCanonicalChatProjectionRepair } from '../src/endpoints/canonical-chat-store.js';
 
 const tempRoots = [];
 const managers = [];
@@ -101,6 +103,25 @@ afterEach(() => {
 });
 
 describe('canonical sqlite operator helpers', () => {
+    test('an old chat delete repair cannot delete a path reused by a newer session', async () => {
+        const directories = createDirectories(makeRoot());
+        const db = createManager().open({ handle: 'alice', directories, featureFlags: { enabled: true, strict: false } });
+        runCanonicalMigrations(db);
+        const locator = { ownerType: 'character', ownerId: 'alice', sourcePath: 'chats/alice/first.jsonl' };
+        recordCanonicalChatProjectionRepair(db, {
+            repairKey: 'old-delete', sessionId: null, locator, operation: 'delete', reason: 'projection_failed', details: {}, nowMs: 1,
+        });
+        const target = path.join(directories.chats, 'alice', 'first.jsonl');
+        const write = writeCanonicalChatPayload({
+            db, locator, payload: [{ chat_metadata: {} }, { name: 'User', mes: 'new' }],
+            projectJsonl: jsonl => { fs.mkdirSync(path.dirname(target), { recursive: true }); fs.writeFileSync(target, jsonl); },
+            nowMs: 2,
+        });
+        expect(write.ok).toBe(true);
+        await runCanonicalSliceRepair({ sliceKey: 'chats', db, directories, repairKeys: ['old-delete'], nowMs: 3 });
+        expect(fs.readFileSync(target, 'utf8')).toContain('"mes":"new"');
+    });
+
     test('reports canonical chat authority and audits its projection without changing route payload shape', async () => {
         const root = makeRoot();
         const directories = createDirectories(root);
@@ -447,7 +468,7 @@ describe('canonical sqlite operator helpers', () => {
         }
     });
 
-    test('repairs a missing world info projection file from canonical data using a safe filename', async () => {
+    test('blocks an untrusted legacy world info edit repair', async () => {
         const root = makeRoot();
         const directories = createDirectories(root);
         const manager = createManager();
@@ -481,22 +502,20 @@ describe('canonical sqlite operator helpers', () => {
         });
 
         expect(repairResult).toEqual({
-            ok: true,
+            ok: false,
             results: [{
                 repairKey: 'world_info:..Lorebook:edit',
-                status: 'repaired',
+                status: 'blocked',
                 operation: 'edit',
+                blocker: 'legacy_world_projection_repair_blocked',
             }],
         });
-        expect(JSON.parse(fs.readFileSync(path.join(directories.worlds, '..Lorebook.json'), 'utf8'))).toEqual({
-            name: 'Canonical Lore',
-            entries: { one: { content: 'repair me' } },
-        });
+        expect(fs.existsSync(path.join(directories.worlds, '..Lorebook.json'))).toBe(false);
         expect(fs.existsSync(path.join(root, 'Lore', 'book.json'))).toBe(false);
-        expect(listCanonicalWorldInfoRepairs(db)).toEqual([]);
+        expect(listCanonicalWorldInfoRepairs(db)).toHaveLength(1);
     });
 
-    test('repairs a failed canonical world info delete projection without requiring an active row', async () => {
+    test('blocks a legacy delete repair instead of deleting a reused world path', async () => {
         const root = makeRoot();
         const directories = createDirectories(root);
         const manager = createManager();
@@ -511,11 +530,7 @@ describe('canonical sqlite operator helpers', () => {
             payload: { entries: { one: { content: 'delete me' } } },
             nowMs: 1735689600000,
         });
-        db.prepare(`
-            UPDATE world_books
-            SET deleted_at_ms = ?, updated_at_ms = ?
-            WHERE name = ?
-        `).run(1735689600500, 1735689600500, 'Lorebook');
+
         fs.writeFileSync(path.join(directories.worlds, 'Lorebook.json'), JSON.stringify({ entries: {} }), 'utf8');
         recordWorldInfoProjectionRepair(db, {
             repairKey: 'world_info:Lorebook:delete',
@@ -532,16 +547,9 @@ describe('canonical sqlite operator helpers', () => {
             nowMs: 1735689602000,
         });
 
-        expect(repairResult).toEqual({
-            ok: true,
-            results: [{
-                repairKey: 'world_info:Lorebook:delete',
-                status: 'repaired',
-                operation: 'delete',
-            }],
-        });
-        expect(fs.existsSync(path.join(directories.worlds, 'Lorebook.json'))).toBe(false);
-        expect(listCanonicalWorldInfoRepairs(db)).toEqual([]);
+        expect(repairResult.results[0].status).toBe('blocked');
+        expect(fs.existsSync(path.join(directories.worlds, 'Lorebook.json'))).toBe(true);
+        expect(listCanonicalWorldInfoRepairs(db)).toHaveLength(1);
     });
 
     test('reports repair_not_found when repair-slice targets a missing managed-media key', async () => {
@@ -1018,24 +1026,20 @@ describe('canonical sqlite operator helpers', () => {
         });
         runCanonicalMigrations(db, { nowMs: 1735689600000 });
 
-        recordWorldInfoProjectionRepair(db, {
-            repairKey: 'world_info:Lorebook:edit',
-            worldName: 'Lorebook',
-            reason: 'projection_failed',
-            details: { operation: 'edit' },
-            nowMs: 1735689601111,
-        });
         upsertCanonicalWorldInfoBook(db, {
             name: 'Lorebook',
             payload: { entries: {} },
             nowMs: 1735689601111,
         });
+        db.exec('BEGIN IMMEDIATE');
+        const repairKey = recordWorldProjectionIntent(db, { directories, name: 'Lorebook', action: 'write', mode: 'sync', nowMs: 1735689601111 });
+        db.exec('COMMIT');
 
         const repair = await runCanonicalSliceRepair({
             sliceKey: 'world_info',
             db,
             directories,
-            repairKeys: ['world_info:Lorebook:edit'],
+            repairKeys: [repairKey],
             nowMs: 1735689602222,
         });
         expect(repair.ok).toBe(true);

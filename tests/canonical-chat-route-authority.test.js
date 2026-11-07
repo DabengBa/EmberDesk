@@ -66,7 +66,8 @@ function getRouteHandler(routePath) {
     if (!layer?.route?.stack?.length) {
         throw new Error(`Missing chats route ${routePath}`);
     }
-    return layer.route.stack.at(-1).handle;
+    const handler = layer.route.stack.at(-1).handle;
+    return (request, response, next) => handler({ get: () => undefined, ...request }, response, next);
 }
 
 afterEach(() => {
@@ -461,7 +462,7 @@ describe('chats projection off', () => {
 
             expect(response.statusCode).toBe(200);
             expect(response.body).toEqual({ ok: true });
-            expect(db.prepare(`SELECT header_payload_json FROM chat_sessions WHERE owner_id = 'alice'`).get())
+            expect(db.prepare('SELECT header_payload_json FROM chat_sessions WHERE owner_id = \'alice\'').get())
                 .toEqual({ header_payload_json: JSON.stringify(nextPayload[0]) });
             // Canonical save replaces the stale projection file's authority entirely.
             expect(fs.readFileSync(path.join(directories.chats, 'alice', 'first.jsonl'), 'utf8'))
@@ -504,8 +505,26 @@ describe('chats projection off', () => {
             }, response);
 
             expect(response.statusCode).toBe(200);
-            expect(db.prepare(`SELECT COUNT(*) AS n FROM chat_sessions WHERE source_path = 'chats/alice/fresh.jsonl'`).get().n).toBe(1);
+            expect(db.prepare('SELECT COUNT(*) AS n FROM chat_sessions WHERE source_path = \'chats/alice/fresh.jsonl\'').get().n).toBe(1);
             expect(fs.existsSync(path.join(directories.chats, 'alice', 'fresh.jsonl'))).toBe(false);
+        } finally {
+            delete process.env[PROJECTION_ENV];
+        }
+    });
+
+    test('canonical /rename projects current authority rather than stale file contents', async () => {
+        process.env[PROJECTION_ENV] = 'sync';
+        try {
+            const directories = makeDirectories();
+            await seedCanonicalChat(directories, [{ chat_metadata: {} }, { name: 'User', mes: 'authority' }]);
+            fs.writeFileSync(path.join(directories.chats, 'alice', 'first.jsonl'), 'stale');
+            const response = makeResponse();
+            await getRouteHandler('/rename')({
+                body: { avatar_url: 'alice.png', original_file: 'first.jsonl', renamed_file: 'renamed.jsonl' },
+                user: { directories, profile: { handle: 'alice' } },
+            }, response);
+            expect(response.statusCode).toBe(200);
+            expect(fs.readFileSync(path.join(directories.chats, 'alice', 'renamed.jsonl'), 'utf8')).toContain('authority');
         } finally {
             delete process.env[PROJECTION_ENV];
         }
@@ -531,7 +550,7 @@ describe('chats projection off', () => {
             }, response);
 
             expect(response.statusCode).toBe(200);
-            expect(db.prepare(`SELECT source_path FROM chat_sessions WHERE owner_id = 'alice'`).get())
+            expect(db.prepare('SELECT source_path FROM chat_sessions WHERE owner_id = \'alice\'').get())
                 .toEqual({ source_path: 'chats/alice/renamed.jsonl' });
             expect(fs.existsSync(path.join(directories.chats, 'alice', 'first.jsonl'))).toBe(false);
             expect(fs.existsSync(path.join(directories.chats, 'alice', 'renamed.jsonl'))).toBe(false);
@@ -560,7 +579,7 @@ describe('chats projection off', () => {
             }, response);
 
             expect(response.statusCode).toBe(200);
-            expect(db.prepare(`SELECT COUNT(*) AS n FROM chat_sessions WHERE owner_id = 'alice'`).get().n).toBe(0);
+            expect(db.prepare('SELECT COUNT(*) AS n FROM chat_sessions WHERE owner_id = \'alice\'').get().n).toBe(0);
         } finally {
             delete process.env[PROJECTION_ENV];
         }

@@ -26,7 +26,8 @@ import { recordCanonicalChatProjectionRepair } from '../src/endpoints/canonical-
 import { recordCanonicalManagedMediaRepair } from '../src/endpoints/canonical-managed-media-store.js';
 import { MANAGED_MEDIA_AUDIT_SCOPE } from '../src/canonical-managed-media-shadow-import.js';
 import { CANONICAL_CHAT_AUDIT_SCOPE } from '../src/canonical-chat-shadow-import.js';
-import { recordWorldInfoProjectionRepair } from '../src/endpoints/world-info-store.js';
+import { recordWorldInfoProjectionRepair, upsertCanonicalWorldInfoBook } from '../src/endpoints/world-info-store.js';
+import { recordWorldProjectionIntent } from '../src/canonical-world-info-projection.js';
 import { persistCanonicalAuditStatus } from '../src/canonical-sqlite-shadow-import.js';
 
 const tempRoots = [];
@@ -588,6 +589,73 @@ describe('canonical storage slice registry', () => {
         expect(reads.ok).toBe(true);
         expect(writes.ok).toBe(false);
         expect(writes.blockers.map(b => b.code)).toContain('open_world_info_projection_repairs');
+    });
+
+    test('normal world writes tolerate a pending v1 intent but still block legacy repair rows', () => {
+        const { db, directories } = openMigratedDb();
+        const worldInfo = getDefaultCanonicalStorageSliceRegistry().get('world_info');
+        persistCanonicalAuditStatus(db, {
+            ok: true,
+            handle: 'alice',
+            hasDrift: false,
+            blocking: false,
+            entries: [],
+        }, {
+            scope: worldInfo.auditScope,
+            auditedAtMs: 1735689601111,
+        });
+        upsertCanonicalWorldInfoBook(db, {
+            name: 'Lorebook',
+            payload: { name: 'Lorebook', entries: {} },
+            nowMs: 1735689601112,
+        });
+        const pendingKey = recordWorldProjectionIntent(db, {
+            directories,
+            name: 'Lorebook',
+            action: 'write',
+            mode: 'sync',
+            nowMs: 1735689602222,
+        });
+
+        const flags = {
+            enabled: true,
+            shadowImport: true,
+            reads: true,
+            writes: true,
+            strict: false,
+        };
+        const normalWrites = worldInfo.getRollbackBlockers({
+            db,
+            featureFlags: flags,
+            phase: 'writes',
+            allowProtocolPending: true,
+        });
+        expect(normalWrites.ok).toBe(true);
+        expect(normalWrites.blockers).toEqual([]);
+
+        // Status/downgrade deliberately keep the strict view.
+        const strictWrites = worldInfo.getRollbackBlockers({ db, featureFlags: flags, phase: 'writes' });
+        expect(strictWrites.ok).toBe(false);
+        expect(strictWrites.blockers.map(b => b.code)).toContain('open_world_info_projection_repairs');
+
+        // A legacy row is never treated as expected pending state.
+        recordWorldInfoProjectionRepair(db, {
+            repairKey: 'world_info:Lorebook:edit',
+            worldName: 'Lorebook',
+            reason: 'projection_failed',
+            details: { operation: 'edit' },
+            nowMs: 1735689603333,
+        });
+        const writesWithLegacy = worldInfo.getRollbackBlockers({
+            db,
+            featureFlags: flags,
+            phase: 'writes',
+            allowProtocolPending: true,
+        });
+        expect(writesWithLegacy.ok).toBe(false);
+        expect(writesWithLegacy.blockers[0].details.repairKeys).toEqual(['world_info:Lorebook:edit']);
+        expect(writesWithLegacy.blockers[0].details.protocolPendingCount).toBe(1);
+        expect(pendingKey).toMatch(/^world-path-v1:/);
     });
 
     test('reports backup readiness blockers without mutating managed files', () => {

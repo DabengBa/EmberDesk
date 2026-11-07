@@ -8,6 +8,7 @@ import {
 import { getCanonicalMigrationStatus } from './canonical-sqlite-migrations.js';
 import { getPersistedCanonicalAuditStatus } from './canonical-sqlite-shadow-import.js';
 import { WORLD_INFO_AUDIT_SCOPE } from './canonical-world-info-shadow-import.js';
+import { WORLD_PROJECTION_INTENT_PREFIX } from './canonical-world-info-projection.js';
 import { SETTINGS_AUDIT_SCOPE } from './canonical-settings-shadow-import.js';
 import { CANONICAL_SECRETS_AUDIT_SCOPE } from './canonical-secrets-shadow-import.js';
 import { MANAGED_MEDIA_AUDIT_SCOPE } from './canonical-managed-media-shadow-import.js';
@@ -152,6 +153,7 @@ function createWorldInfoSlice() {
             featureFlags = null,
             phase = 'writes',
             persistedAuditStatus = null,
+            allowProtocolPending = false,
         } = {}) {
             return buildCanonicalSliceRollbackBlockers({
                 db,
@@ -162,6 +164,8 @@ function createWorldInfoSlice() {
                     ?? getPersistedCanonicalAuditStatus(db, { scope: WORLD_INFO_AUDIT_SCOPE }),
                 listOpenRepairs: listOpenWorldInfoProjectionRepairs,
                 openRepairCode: 'open_world_info_projection_repairs',
+                allowProtocolPending,
+                protocolRepairPrefix: WORLD_PROJECTION_INTENT_PREFIX,
                 includeChatStatsPhase: false,
             });
         },

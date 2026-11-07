@@ -9,17 +9,18 @@ import { invalidateDirectory } from './settings-cache.js';
 import { canonicalSqliteManager, withCanonicalTransaction } from '../canonical-sqlite.js';
 import { runCanonicalMigrations } from '../canonical-sqlite-migrations.js';
 import { getPersistedCanonicalAuditStatus } from '../canonical-sqlite-shadow-import.js';
-import { recordImportLedgerEntry, removeImportLedgerEntry } from '../canonical-import-ledger.js';
+import { recordImportLedgerEntry } from '../canonical-import-ledger.js';
 import { getCanonicalStorageSlice } from '../canonical-storage-slice-registry.js';
 import { ensureCanonicalSliceBackend } from '../canonical-backend.js';
 import { coordinateWorkspaceWrite } from './coordinate-workspace-write.js';
+import { recordWorldProjectionIntent, replayWorldProjection } from '../canonical-world-info-projection.js';
 import {
     getCanonicalWorldInfoBook,
     listCanonicalWorldInfoBooks,
     markCanonicalWorldInfoBookDeleted,
     normalizeCanonicalWorldInfoName,
-    recordWorldInfoProjectionRepair,
-    upsertCanonicalWorldInfoBook,
+
+    upsertCanonicalWorldInfoBookInTransaction,
 } from './world-info-store.js';
 import {
     clearCanonicalCharacterWorldBinding,
@@ -107,6 +108,10 @@ export async function getCanonicalWorldInfoWriteState(request) {
         featureFlags: readState.featureFlags,
         phase: 'writes',
         persistedAuditStatus: readState.auditStatus,
+        // A pending v1 intent is expected state for an in-flight world write.
+        // Legacy repair rows still block; operator status/downgrade callers
+        // keep the default strict view.
+        allowProtocolPending: true,
     });
     if (!writeBlockers.ok) {
         const reason = writeBlockers.blockers[0]?.code ?? 'world_info_write_blocked';
@@ -147,21 +152,6 @@ function sendCanonicalWorldInfoUnavailable(response, state) {
     });
 }
 
-function sendWorldInfoProjectionFailure({ response, db, worldName, operation, error }) {
-    const normalizedWorldName = normalizeCanonicalWorldInfoName(worldName);
-    const repairKey = `world_info:${normalizedWorldName}:${operation}`;
-    recordWorldInfoProjectionRepair(db, {
-        repairKey,
-        worldName: normalizedWorldName,
-        reason: 'projection_failed',
-        details: { operation },
-    });
-    console.warn(`Canonical World Info ${operation} projection failed for ${normalizedWorldName}:`, error);
-    return response.status(500).send({
-        error: 'Failed to project canonical World Info file.',
-        repairKey,
-    });
-}
 
 /**
  * Reads a World Info file and returns its contents
@@ -256,35 +246,23 @@ router.post('/delete', async (request, response) => {
     if (!request.body?.name) {
         return response.sendStatus(400);
     }
+    if (typeof request.body.name !== 'string' || normalizeCanonicalWorldInfoName(request.body.name) !== request.body.name) return response.sendStatus(400);
 
     const worldInfoName = normalizeCanonicalWorldInfoName(request.body.name);
-    const filename = sanitize(`${worldInfoName}.json`);
-    const pathToWorldInfo = path.join(request.user.directories.worlds, filename);
-
     const canonicalWriteState = await getCanonicalWorldInfoWriteState(request);
     if (canonicalWriteState.ok) {
-        markCanonicalWorldInfoBookDeleted(canonicalWriteState.db, {
-            name: worldInfoName,
-            deletedAtMs: Date.now(),
+        const mode = getCanonicalStorageSlice('world_info').getProjectionMode();
+        const repairKey = withCanonicalTransaction(canonicalWriteState.db, txn => {
+            markCanonicalWorldInfoBookDeleted(txn, { name: worldInfoName, deletedAtMs: Date.now() });
+            return recordWorldProjectionIntent(txn, { directories: request.user.directories, name: worldInfoName, action: 'delete', mode });
         });
 
         try {
-            if (fs.existsSync(pathToWorldInfo)) {
-                fs.unlinkSync(pathToWorldInfo);
-            }
+            replayWorldProjection(canonicalWriteState.db, { directories: request.user.directories, repairKey });
             invalidateDirectory(request.user.directories.worlds);
-            removeImportLedgerEntry(canonicalWriteState.db, {
-                sliceKey: 'world_info',
-                sourcePath: path.relative(request.user.directories.root, pathToWorldInfo),
-            });
         } catch (error) {
-            return sendWorldInfoProjectionFailure({
-                response,
-                db: canonicalWriteState.db,
-                worldName: worldInfoName,
-                operation: 'delete',
-                error,
-            });
+            console.warn('World projection failed:', error);
+            return response.status(500).send({ error: 'Failed to project canonical World Info file.', repairKey });
         }
 
         return response.sendStatus(200);
@@ -296,7 +274,13 @@ router.post('/delete', async (request, response) => {
 router.post('/import', async (request, response) => {
     if (!request.file) return response.sendStatus(400);
 
-    const filename = `${path.parse(sanitize(request.file.originalname)).name}.json`;
+    if (sanitize(request.file.originalname) !== request.file.originalname) return response.status(400).send('Unsafe world filename');
+    const parsedFilename = path.parse(request.file.originalname);
+    if (normalizeCanonicalWorldInfoName(parsedFilename.name) !== parsedFilename.name
+        || (parsedFilename.ext.toLowerCase() === '.json' && parsedFilename.ext !== '.json')) {
+        return response.status(400).send('Unsafe world filename');
+    }
+    const filename = `${parsedFilename.name}.json`;
 
     let fileContents = null;
 
@@ -327,22 +311,18 @@ router.post('/import', async (request, response) => {
     const canonicalWriteState = await getCanonicalWorldInfoWriteState(request);
     if (canonicalWriteState.ok) {
         const payload = JSON.parse(fileContents);
-        upsertCanonicalWorldInfoBook(canonicalWriteState.db, {
-            name: worldName,
-            payload,
-            nowMs: Date.now(),
+        const mode = getCanonicalStorageSlice('world_info').getProjectionMode();
+        const repairKey = withCanonicalTransaction(canonicalWriteState.db, txn => {
+            upsertCanonicalWorldInfoBookInTransaction(txn, { name: worldName, payload });
+            return recordWorldProjectionIntent(txn, { directories: request.user.directories, name: worldName, action: 'write', mode });
         });
 
         try {
-            writeWorldInfoProjectionFile(request.user.directories, worldName, payload, canonicalWriteState.db);
+            replayWorldProjection(canonicalWriteState.db, { directories: request.user.directories, repairKey });
+            invalidateDirectory(request.user.directories.worlds);
         } catch (error) {
-            return sendWorldInfoProjectionFailure({
-                response,
-                db: canonicalWriteState.db,
-                worldName,
-                operation: 'import',
-                error,
-            });
+            console.warn('World projection failed:', error);
+            return response.status(500).send({ error: 'Failed to project canonical World Info file.', repairKey });
         }
 
         return response.send({ name: worldName });
@@ -359,6 +339,7 @@ router.post('/edit', coordinateWorkspaceWrite('world', request => request.body?.
     if (!request.body.name) {
         return response.status(400).send('World file must have a name');
     }
+    if (typeof request.body.name !== 'string' || normalizeCanonicalWorldInfoName(request.body.name) !== request.body.name) return response.sendStatus(400);
 
     try {
         if (!('entries' in request.body.data)) {
@@ -375,22 +356,18 @@ router.post('/edit', coordinateWorkspaceWrite('world', request => request.body?.
 
     const canonicalWriteState = await getCanonicalWorldInfoWriteState(request);
     if (canonicalWriteState.ok) {
-        upsertCanonicalWorldInfoBook(canonicalWriteState.db, {
-            name: worldName,
-            payload: request.body.data,
-            nowMs: Date.now(),
+        const mode = getCanonicalStorageSlice('world_info').getProjectionMode();
+        const repairKey = withCanonicalTransaction(canonicalWriteState.db, txn => {
+            upsertCanonicalWorldInfoBookInTransaction(txn, { name: worldName, payload: request.body.data });
+            return recordWorldProjectionIntent(txn, { directories: request.user.directories, name: worldName, action: 'write', mode });
         });
 
         try {
-            writeWorldInfoProjectionFile(request.user.directories, worldName, request.body.data, canonicalWriteState.db);
+            replayWorldProjection(canonicalWriteState.db, { directories: request.user.directories, repairKey });
+            invalidateDirectory(request.user.directories.worlds);
         } catch (error) {
-            return sendWorldInfoProjectionFailure({
-                response,
-                db: canonicalWriteState.db,
-                worldName,
-                operation: 'edit',
-                error,
-            });
+            console.warn('World projection failed:', error);
+            return response.status(500).send({ error: 'Failed to project canonical World Info file.', repairKey });
         }
 
         return response.send({ ok: true });
@@ -424,9 +401,11 @@ router.post('/delete-cascade', async (request, response) => {
             }
             for (const worldName of worlds) {
                 if (typeof worldName !== 'string' || !worldName.trim()) continue;
+                if (normalizeCanonicalWorldInfoName(worldName) !== worldName) return response.sendStatus(400);
                 const normalizedName = normalizeCanonicalWorldInfoName(worldName);
 
-                withCanonicalTransaction(db, txnDb => {
+                const mode = getCanonicalStorageSlice('world_info').getProjectionMode();
+                const repairKey = withCanonicalTransaction(db, txnDb => {
                     if (clearReferences && canonicalCharacterWrites) {
                         for (const { avatar } of listCanonicalCharactersBoundToWorld(txnDb, normalizedName)) {
                             clearCanonicalCharacterWorldBinding(txnDb, { avatarFilename: avatar });
@@ -436,29 +415,18 @@ router.post('/delete-cascade', async (request, response) => {
                         name: normalizedName,
                         deletedAtMs: Date.now(),
                     });
+                    return recordWorldProjectionIntent(txnDb, { directories, name: normalizedName, action: 'delete', mode });
                 });
 
                 if (clearReferences && !canonicalCharacterWrites) {
                     console.warn(`Skipping world binding clear for ${normalizedName}: canonical character writes are unavailable.`);
                 }
 
-                const worldPath = path.join(directories.worlds, sanitize(`${normalizedName}.json`));
                 try {
-                    if (fs.existsSync(worldPath)) {
-                        fs.unlinkSync(worldPath);
-                    }
-                    removeImportLedgerEntry(db, {
-                        sliceKey: 'world_info',
-                        sourcePath: path.relative(directories.root, worldPath),
-                    });
+                    replayWorldProjection(db, { directories, repairKey });
                 } catch (error) {
-                    return sendWorldInfoProjectionFailure({
-                        response,
-                        db,
-                        worldName: normalizedName,
-                        operation: 'delete',
-                        error,
-                    });
+                    console.warn('World projection failed:', error);
+                    return response.status(500).send({ error: 'Failed to project canonical World Info file.', repairKey });
                 }
             }
 

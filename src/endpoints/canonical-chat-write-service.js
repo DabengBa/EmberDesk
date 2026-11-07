@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { withCanonicalTransaction } from '../canonical-sqlite.js';
 
 import {
     recordImportLedgerEntry,
@@ -10,6 +11,7 @@ import {
     listOpenCanonicalChatProjectionRepairs,
     renameCanonicalChatSession,
     recordCanonicalChatProjectionRepair,
+    resolveCanonicalChatProjectionRepair,
     upsertCanonicalChatSession,
 } from './canonical-chat-store.js';
 
@@ -101,7 +103,18 @@ export function writeCanonicalChatPayload({
     }
 
     const record = createCanonicalChatSessionRecord(db, { locator, payload, nowMs });
-    const persisted = upsertCanonicalChatSession(db, record);
+    const repairKey = buildRepairKey(locator, operation);
+    const persisted = upsertCanonicalChatSession(db, record, {
+        onPersist: projection === 'off' ? null : (txn, result) => recordCanonicalChatProjectionRepair(txn, {
+            repairKey,
+            sessionId: result.id,
+            locator,
+            operation,
+            reason: 'projection_failed',
+            details: {},
+            nowMs,
+        }),
+    });
     if (projection === 'off') {
         // The chat file is an export surface now; post-commit side effects
         // (chat backups) still run but never fail the committed write.
@@ -118,27 +131,21 @@ export function writeCanonicalChatPayload({
         };
     }
     try {
-        projectJsonl(record.sourceJsonl);
-        recordImportLedgerEntry(db, {
-            sliceKey: 'chats',
-            sourcePath: locator.sourcePath,
-            contentHash: crypto.createHash('sha256').update(record.sourceJsonl).digest('hex'),
-            origin: 'projection',
-            nowMs,
+        withCanonicalTransaction(db, txn => {
+            const session = txn.prepare('SELECT source_jsonl FROM chat_sessions WHERE owner_type = ? AND owner_id = ? AND source_path = ?')
+                .get(locator.ownerType, locator.ownerId, locator.sourcePath);
+            if (!session) throw new Error('missing_canonical_chat_session');
+            projectJsonl(session.source_jsonl);
+            recordImportLedgerEntry(txn, {
+                sliceKey: 'chats',
+                sourcePath: locator.sourcePath,
+                contentHash: crypto.createHash('sha256').update(session.source_jsonl).digest('hex'),
+                origin: 'projection',
+                nowMs,
+            });
+            resolveCanonicalChatProjectionRepair(txn, { repairKey, resolvedAtMs: nowMs });
         });
     } catch (error) {
-        const repairKey = buildRepairKey(locator, operation);
-        recordCanonicalChatProjectionRepair(db, {
-            repairKey,
-            sessionId: persisted.id,
-            locator,
-            operation,
-            reason: 'projection_failed',
-            details: {
-                message: String(error?.message ?? error ?? ''),
-            },
-            nowMs,
-        });
         onProjectionFailure?.({ repairKey, error, locator, operation });
         return {
             ok: false,
@@ -189,7 +196,14 @@ export function renameCanonicalChat({
         throw new Error('Canonical chat rename projection function is required.');
     }
 
-    const renamed = renameCanonicalChatSession(db, { locator, nextLocator, nowMs });
+    const repairKey = buildRepairKey(nextLocator, 'rename');
+    const renamed = renameCanonicalChatSession(db, {
+        locator, nextLocator, nowMs,
+        onPersist: projection === 'off' ? null : (txn, result) => recordCanonicalChatProjectionRepair(txn, {
+            repairKey, sessionId: result.id, locator: nextLocator, operation: 'rename', reason: 'projection_failed',
+            details: { previousSourcePath: locator.sourcePath }, nowMs,
+        }),
+    });
     if (!renamed) {
         return { ok: false, authorityCommitted: false, reason: 'missing_canonical_session' };
     }
@@ -203,31 +217,21 @@ export function renameCanonicalChat({
         return { ok: true, authorityCommitted: true, sessionId: renamed.id };
     }
     try {
-        projectRename();
-        recordImportLedgerEntry(db, {
-            sliceKey: 'chats',
-            sourcePath: nextLocator.sourcePath,
-            contentHash: crypto.createHash('sha256').update(renamed.sourceJsonl).digest('hex'),
-            origin: 'projection',
-            nowMs,
+        withCanonicalTransaction(db, txn => {
+            const session = txn.prepare('SELECT source_jsonl FROM chat_sessions WHERE owner_type = ? AND owner_id = ? AND source_path = ?')
+                .get(nextLocator.ownerType, nextLocator.ownerId, nextLocator.sourcePath);
+            const oldSession = txn.prepare('SELECT 1 FROM chat_sessions WHERE owner_type = ? AND owner_id = ? AND source_path = ?')
+                .get(locator.ownerType, locator.ownerId, locator.sourcePath);
+            if (!session || oldSession) throw new Error('chat_projection_path_changed');
+            projectRename(session.source_jsonl);
+            recordImportLedgerEntry(txn, {
+                sliceKey: 'chats', sourcePath: nextLocator.sourcePath,
+                contentHash: crypto.createHash('sha256').update(session.source_jsonl).digest('hex'), origin: 'projection', nowMs,
+            });
+            if (locator.sourcePath !== nextLocator.sourcePath) removeImportLedgerEntry(txn, { sliceKey: 'chats', sourcePath: locator.sourcePath });
+            resolveCanonicalChatProjectionRepair(txn, { repairKey, resolvedAtMs: nowMs });
         });
-        if (locator.sourcePath !== nextLocator.sourcePath) {
-            removeImportLedgerEntry(db, { sliceKey: 'chats', sourcePath: locator.sourcePath });
-        }
     } catch (error) {
-        const repairKey = buildRepairKey(nextLocator, 'rename');
-        recordCanonicalChatProjectionRepair(db, {
-            repairKey,
-            sessionId: renamed.id,
-            locator: nextLocator,
-            operation: 'rename',
-            reason: 'projection_failed',
-            details: {
-                previousSourcePath: locator.sourcePath,
-                message: String(error?.message ?? error ?? ''),
-            },
-            nowMs,
-        });
         onProjectionFailure?.({ repairKey, error, locator: nextLocator, operation: 'rename' });
         return {
             ok: false,
@@ -252,7 +256,12 @@ export function deleteCanonicalChat({
         throw new Error('Canonical chat delete projection function is required.');
     }
 
-    const deleted = deleteCanonicalChatSession(db, locator);
+    const repairKey = buildRepairKey(locator, 'delete');
+    const deleted = deleteCanonicalChatSession(db, locator, {
+        onPersist: projection === 'off' ? null : txn => recordCanonicalChatProjectionRepair(txn, {
+            repairKey, sessionId: null, locator, operation: 'delete', reason: 'projection_failed', details: {}, nowMs,
+        }),
+    });
     if (!deleted) {
         return { ok: false, authorityCommitted: false, reason: 'missing_canonical_session' };
     }
@@ -266,21 +275,15 @@ export function deleteCanonicalChat({
         return { ok: true, authorityCommitted: true, sessionId: deleted.id };
     }
     try {
-        projectDelete();
-        removeImportLedgerEntry(db, { sliceKey: 'chats', sourcePath: locator.sourcePath });
-    } catch (error) {
-        const repairKey = buildRepairKey(locator, 'delete');
-        recordCanonicalChatProjectionRepair(db, {
-            repairKey,
-            sessionId: null,
-            locator,
-            operation: 'delete',
-            reason: 'projection_failed',
-            details: {
-                message: String(error?.message ?? error ?? ''),
-            },
-            nowMs,
+        withCanonicalTransaction(db, txn => {
+            const session = txn.prepare('SELECT 1 FROM chat_sessions WHERE owner_type = ? AND owner_id = ? AND source_path = ?')
+                .get(locator.ownerType, locator.ownerId, locator.sourcePath);
+            if (session) throw new Error('chat_projection_path_reused');
+            projectDelete();
+            removeImportLedgerEntry(txn, { sliceKey: 'chats', sourcePath: locator.sourcePath });
+            resolveCanonicalChatProjectionRepair(txn, { repairKey, resolvedAtMs: nowMs });
         });
+    } catch (error) {
         onProjectionFailure?.({ repairKey, error, locator, operation: 'delete' });
         return {
             ok: false,

@@ -363,12 +363,11 @@ describe('runCharacterTextReplace orchestration', () => {
             getCanonicalCharacterCardJson: jest.fn(async () => cardJson),
             getCharacterWriteDependencies: jest.fn(() => ({ getCardJson: () => undefined })),
             getWorldInfoWriteState: jest.fn(async () => ({ ok: true, db: { fake: true } })),
-            writeWorldInfoProjection: jest.fn(),
             getCanonicalWorldInfoBook: jest.fn(() => structuredClone(worldBook)),
-            upsertCanonicalWorldInfoBook: jest.fn(),
+            commitWorldBookWithProjectionIntent: jest.fn(() => 'world-path-v1:test'),
+            replayWorldProjection: jest.fn(),
             listCanonicalCharactersBoundToWorld: jest.fn(() => [{ avatar: 'Seraphina.png' }, { avatar: 'Other.png' }]),
             convertWorldInfoToCharacterBook: jest.fn((name, entries) => ({ name, entries: Object.values(entries) })),
-            recordWorldInfoProjectionRepair: jest.fn(),
             getCharacterFeatureFlags: jest.fn(() => ({ enabled: true })),
             openChatSession: jest.fn(async () => ({
                 ok: true, db: { fake: true }, locator: { session_id: 's1' }, filePath: '/data/chats/Seraphina/chat.jsonl', cardName: 'Seraphina',
@@ -404,7 +403,7 @@ describe('runCharacterTextReplace orchestration', () => {
         expect(result.areas.worldBook.boundCharacterCount).toBe(2);
         expect(result.areas.chats.status).toBe('preview');
         expect(result.warnings.some(w => w.code === 'shared_world_book')).toBe(true);
-        expect(deps.upsertCanonicalWorldInfoBook).not.toHaveBeenCalled();
+        expect(deps.commitWorldBookWithProjectionIntent).not.toHaveBeenCalled();
         expect(deps.editCharacterCard).not.toHaveBeenCalled();
         expect(deps.writeChatSession).not.toHaveBeenCalled();
     });
@@ -412,7 +411,7 @@ describe('runCharacterTextReplace orchestration', () => {
     test('apply writes world book first, then card with refreshed snapshot, then chat', async () => {
         const order = [];
         const deps = makeDependencies({
-            upsertCanonicalWorldInfoBook: jest.fn(() => order.push('world')),
+            commitWorldBookWithProjectionIntent: jest.fn(() => { order.push('world'); return 'world-path-v1:test'; }),
             editCharacterCard: jest.fn(async ({ characterData }) => {
                 order.push('card');
                 const card = JSON.parse(characterData);
@@ -430,7 +429,7 @@ describe('runCharacterTextReplace orchestration', () => {
         expect(result.ok).toBe(true);
         expect(order).toEqual(['world', 'card', 'chat']);
         expect(result.applied).toEqual({ card: true, worldBook: true, chat: true });
-        expect(deps.writeWorldInfoProjection).toHaveBeenCalled();
+        expect(deps.replayWorldProjection).toHaveBeenCalled();
     });
 
     test('reports committed card and chat even when their compatibility projections fail', async () => {
@@ -494,7 +493,7 @@ describe('runCharacterTextReplace orchestration', () => {
             dependencies: deps,
         });
         expect(result.ok).toBe(true);
-        expect(deps.upsertCanonicalWorldInfoBook).not.toHaveBeenCalled();
+        expect(deps.commitWorldBookWithProjectionIntent).not.toHaveBeenCalled();
         expect(deps.editCharacterCard).not.toHaveBeenCalled();
         expect(deps.writeChatSession).not.toHaveBeenCalled();
         // Snapshot is still refreshed when the stored embedded book differs.

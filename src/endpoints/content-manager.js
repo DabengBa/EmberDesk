@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { resolveWorldProjectionPath } from '../canonical-world-info-projection.js';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import { Buffer } from 'node:buffer';
@@ -13,7 +14,11 @@ import { serverDirectory } from '../server-directory.js';
 import { Jimp, JimpMime } from '../jimp.js';
 import { DEFAULT_AVATAR_PATH } from '../constants.js';
 import { invalidateDirectory } from './settings-cache.js';
-import { canonicalSqliteManager } from '../canonical-sqlite.js';
+import {
+    canonicalSqliteManager,
+    resolveCanonicalDatabasePath,
+    withCanonicalTransaction,
+} from '../canonical-sqlite.js';
 import { runCanonicalMigrations } from '../canonical-sqlite-migrations.js';
 import { getCanonicalStorageSlice } from '../canonical-storage-slice-registry.js';
 import { ensureCanonicalPreset, PRESETS_OPENAI_API_ID } from './presets-store.js';
@@ -159,10 +164,83 @@ function readDefaultJsonFile(directory, filename) {
  * @param {string[]} [forceCategories] List of categories to force check (even if content check is skipped)
  * @returns {boolean} Whether any content was added
  */
-function seedContent(contentIndex, contentLogPath, resolveTarget, forceCategories) {
+function openSeedWorldDatabase(directories) {
+    const { dbPath } = resolveCanonicalDatabasePath(directories);
+    const missing = !fs.existsSync(dbPath);
+    const db = canonicalSqliteManager.open({
+        handle: path.basename(path.resolve(directories.root)),
+        directories,
+        featureFlags: { enabled: true, strict: false },
+    });
+    if (!db) {
+        return { state: 'unavailable', db: null };
+    }
+    if (missing && !runCanonicalMigrations(db).ok) return { state: 'unavailable', db: null };
+
+    return { state: 'open', db };
+}
+
+/**
+ * Publishes one world file under the canonical writer lock so a concurrent
+ * delete tombstone cannot be resurrected. Returns `added`, `exists`,
+ * `tombstone`, `pending`, or `blocked`; `blocked` must not consume the
+ * content log entry.
+ */
+function seedWorldContentItem({ db, dbState, contentPath, targetPath, directories }) {
+    if (dbState === 'unavailable') {
+        return 'blocked';
+    }
+
+    try {
+        return withCanonicalTransaction(db, txn => {
+            const booksTable = txn.prepare(
+                'SELECT name FROM sqlite_master WHERE type = \'table\' AND name = \'world_books\'',
+            ).get();
+            const intentsTable = txn.prepare(
+                'SELECT name FROM sqlite_master WHERE type = \'table\' AND name = \'world_info_projection_repairs\'',
+            ).get();
+            if (!booksTable || !intentsTable) {
+                return 'blocked';
+            }
+
+            const name = path.parse(targetPath).name;
+            fs.mkdirSync(directories.worlds, { recursive: true });
+            const resolved = resolveWorldProjectionPath(txn, directories, name);
+            const pathIntent = txn.prepare(`
+                SELECT repair_key FROM world_info_projection_repairs
+                WHERE repair_key = ? AND resolved_at_ms IS NULL
+            `).get(resolved.key);
+            if (pathIntent) return 'blocked';
+            const row = txn.prepare('SELECT deleted_at_ms FROM world_books WHERE name = ?').get(name);
+            if (row && row.deleted_at_ms != null) {
+                return 'tombstone';
+            }
+            if (row) return 'blocked';
+            const pending = txn.prepare(
+                'SELECT repair_key FROM world_info_projection_repairs WHERE world_name = ? AND resolved_at_ms IS NULL LIMIT 1',
+            ).get(name);
+            if (pending) {
+                return 'pending';
+            }
+            if (fs.existsSync(targetPath)) {
+                return 'exists';
+            }
+
+            fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+            fs.cpSync(contentPath, targetPath, { recursive: true, force: false });
+            setPermissionsSync(targetPath);
+            return 'added';
+        });
+    } catch {
+        return 'blocked';
+    }
+}
+
+function seedContent(contentIndex, contentLogPath, resolveTarget, forceCategories, directories = null) {
     let anyContentAdded = false;
     const contentLog = getContentLog(contentLogPath);
     const affectedTargets = new Set();
+    let worldSeedState = null;
 
     for (const contentItem of contentIndex) {
         if (contentLog.includes(contentItem.filename) && !forceCategories?.includes(contentItem.type)) {
@@ -190,6 +268,39 @@ function seedContent(contentIndex, contentLogPath, resolveTarget, forceCategorie
 
         const basePath = path.parse(contentItem.filename).base;
         const targetPath = path.join(contentTarget, basePath);
+
+        if (contentItem.type === CONTENT_TYPES.WORLD && directories) {
+            if (!worldSeedState) {
+                const opened = openSeedWorldDatabase(directories);
+                worldSeedState = { state: opened.state, db: opened.db };
+            }
+            const seedResult = seedWorldContentItem({
+                db: worldSeedState.db,
+                dbState: worldSeedState.state,
+                contentPath,
+                targetPath,
+                directories,
+            });
+            if (seedResult === 'blocked') {
+                console.warn(`Content file ${contentItem.filename} is blocked by unavailable canonical world storage`);
+                continue;
+            }
+            if (seedResult === 'tombstone' || seedResult === 'pending') {
+                contentLog.push(contentItem.filename);
+                console.warn(`Content file ${contentItem.filename} was not seeded because the world is ${seedResult}`);
+                continue;
+            }
+            contentLog.push(contentItem.filename);
+            if (seedResult === 'added') {
+                console.info(`Content file ${contentItem.filename} copied to ${contentTarget}`);
+                anyContentAdded = true;
+                affectedTargets.add(contentTarget);
+            } else {
+                console.warn(`Content file ${contentItem.filename} already exists in ${contentTarget}`);
+            }
+            continue;
+        }
+
         contentLog.push(contentItem.filename);
 
         if (fs.existsSync(targetPath)) {
@@ -237,6 +348,7 @@ function seedCanonicalPresetsForUser(contentIndex, contentLogPath, directories, 
     }
 
     const handle = path.basename(path.resolve(directories.root));
+
     const db = canonicalSqliteManager.open({
         handle,
         directories,
@@ -293,7 +405,13 @@ async function seedContentForUser(contentIndex, directories, forceCategories) {
 
     const contentLogPath = path.join(directories.root, 'content.log');
     const fileItems = contentIndex.filter(item => item.type !== CONTENT_TYPES.OPENAI_PRESET);
-    const { anyContentAdded, affectedTargets } = seedContent(fileItems, contentLogPath, (type) => getUserTargetByType(type, directories), forceCategories);
+    const { anyContentAdded, affectedTargets } = seedContent(
+        fileItems,
+        contentLogPath,
+        (type) => getUserTargetByType(type, directories),
+        forceCategories,
+        directories,
+    );
     const anyPresetsAdded = seedCanonicalPresetsForUser(contentIndex, contentLogPath, directories, forceCategories);
     for (const dir of affectedTargets) {
         invalidateDirectory(dir);

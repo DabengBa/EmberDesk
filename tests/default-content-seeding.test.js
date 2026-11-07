@@ -14,6 +14,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { spawn } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
 
 const ORIGINAL_DATA_ROOT = globalThis.DATA_ROOT;
@@ -74,7 +75,7 @@ describe('default content seeding', () => {
 
     test('new user gets active defaults but none of the retired files', async () => {
         const directories = getUserDirectories('seed-fresh-user');
-        await checkForNewContent([directories]);
+        await checkForNewContent([directories], [], { freshUser: true });
 
         // settings.json no longer seeds: canonical storage is authoritative
         // and lazily creates the defaults document on first read.
@@ -143,5 +144,138 @@ describe('default content seeding', () => {
         const secondRun = walkFiles(directories.root).sort();
 
         expect(secondRun).toEqual(firstRun);
+    });
+
+    test('seed does not resurrect a deleted world tombstone', async () => {
+        const directories = getUserDirectories('seed-tombstone-user');
+        await checkForNewContent([directories], [], { freshUser: true });
+        const target = path.join(directories.worlds, 'Eldoria.json');
+        expect(fs.existsSync(target)).toBe(true);
+
+        const { canonicalSqliteManager } = await import('../src/canonical-sqlite.js');
+        const { runCanonicalMigrations } = await import('../src/canonical-sqlite-migrations.js');
+        const { upsertCanonicalWorldInfoBook, markCanonicalWorldInfoBookDeleted } = await import('../src/endpoints/world-info-store.js');
+        const db = canonicalSqliteManager.open({
+            handle: 'seed-tombstone-user',
+            directories,
+            featureFlags: { enabled: true, strict: false },
+        });
+
+
+        runCanonicalMigrations(db);
+        upsertCanonicalWorldInfoBook(db, { name: 'Eldoria', payload: { entries: {} }, nowMs: 1 });
+        markCanonicalWorldInfoBookDeleted(db, { name: 'Eldoria', nowMs: 2 });
+        canonicalSqliteManager.close(directories);
+
+        fs.rmSync(target, { force: true });
+        fs.writeFileSync(path.join(directories.root, 'content.log'), '', 'utf8');
+        await checkForNewContent([directories]);
+
+        expect(fs.existsSync(target)).toBe(false);
+        const reopened = new DatabaseSync(path.join(directories.storage, 'emberdesk.sqlite'));
+        try {
+            const row = reopened.prepare('SELECT deleted_at_ms FROM world_books WHERE name = ?').get('Eldoria');
+            expect(row.deleted_at_ms).not.toBeNull();
+        } finally {
+            reopened.close();
+        }
+    });
+
+    test('seed does not publish over an existing canonical world without a file', async () => {
+        const directories = getUserDirectories('seed-live-authority');
+        await checkForNewContent([directories], [], { freshUser: true });
+        const { canonicalSqliteManager } = await import('../src/canonical-sqlite.js');
+        const { upsertCanonicalWorldInfoBook } = await import('../src/endpoints/world-info-store.js');
+        const db = canonicalSqliteManager.open({ handle: 'seed-live-authority', directories, featureFlags: { enabled: true, strict: false } });
+        upsertCanonicalWorldInfoBook(db, { name: 'Eldoria', payload: { entries: { one: { content: 'authority' } } } });
+        canonicalSqliteManager.close(directories);
+        fs.rmSync(path.join(directories.worlds, 'Eldoria.json'), { force: true });
+        fs.writeFileSync(path.join(directories.root, 'content.log'), '');
+        await checkForNewContent([directories]);
+        expect(fs.existsSync(path.join(directories.worlds, 'Eldoria.json'))).toBe(false);
+    });
+
+
+    test('seed blocks safely when the canonical database cannot be opened and keeps the log entry', async () => {
+        const directories = getUserDirectories('seed-unavailable-user');
+        fs.mkdirSync(directories.worlds, { recursive: true });
+        fs.mkdirSync(directories.storage, { recursive: true });
+        // A directory where the database file belongs makes SQLite open fail.
+        fs.mkdirSync(path.join(directories.storage, 'emberdesk.sqlite'), { recursive: true });
+        const contentLogPath = path.join(directories.root, 'content.log');
+
+        await checkForNewContent([directories]);
+
+        expect(fs.existsSync(path.join(directories.worlds, 'Eldoria.json'))).toBe(false);
+        const log = fs.existsSync(contentLogPath) ? fs.readFileSync(contentLogPath, 'utf8') : '';
+        expect(log).not.toContain('Eldoria.json');
+    });
+
+    test('seed waits for a concurrent delete transaction and does not publish after its tombstone commits', async () => {
+        const directories = getUserDirectories('seed-delete-race-user');
+        await checkForNewContent([directories], [], { freshUser: true });
+        const target = path.join(directories.worlds, 'Eldoria.json');
+        expect(fs.existsSync(target)).toBe(true);
+
+        // Reset the world so only this test decides whether it comes back.
+        const { canonicalSqliteManager } = await import('../src/canonical-sqlite.js');
+        const { upsertCanonicalWorldInfoBook } = await import('../src/endpoints/world-info-store.js');
+        const seededDb = canonicalSqliteManager.open({
+            handle: 'seed-delete-race-user',
+            directories,
+            featureFlags: { enabled: true, strict: false },
+        });
+        upsertCanonicalWorldInfoBook(seededDb, { name: 'Eldoria', payload: { entries: {} }, nowMs: 1 });
+        canonicalSqliteManager.close(directories);
+        fs.rmSync(target, { force: true });
+        fs.writeFileSync(path.join(directories.root, 'content.log'), '', 'utf8');
+
+        const dbPath = path.join(directories.storage, 'emberdesk.sqlite');
+        const readyPath = path.join(directories.root, 'delete-holds-lock');
+        const script = `
+            import fs from 'node:fs';
+            import { DatabaseSync } from 'node:sqlite';
+            const [dbPath, readyPath] = JSON.parse(process.argv[1]);
+            const db = new DatabaseSync(dbPath);
+            db.exec('PRAGMA busy_timeout = 5000');
+            db.exec('BEGIN IMMEDIATE');
+            db.prepare('UPDATE world_books SET deleted_at_ms = ?, updated_at_ms = ? WHERE name = ?').run(2000, 2000, 'Eldoria');
+            fs.writeFileSync(readyPath, 'ready');
+            await new Promise(resolve => setTimeout(resolve, 600));
+            db.exec('COMMIT');
+            db.close();
+        `;
+        const child = spawn(process.execPath, ['--input-type=module', '-e', script, JSON.stringify([dbPath, readyPath])], {
+            stdio: ['ignore', 'pipe', 'pipe'],
+        });
+        const exit = new Promise((resolve, reject) => {
+            let stderr = '';
+            child.stderr.on('data', chunk => { stderr += chunk; });
+            child.on('error', reject);
+            child.on('exit', code => code === 0 ? resolve() : reject(new Error(`delete child exited ${code}: ${stderr}`)));
+        });
+
+        const waitUntil = (deadline) => {
+            while (!fs.existsSync(readyPath)) {
+                if (Date.now() > deadline) {
+                    throw new Error('delete child did not take the writer lock in time');
+                }
+                Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25);
+            }
+        };
+        waitUntil(Date.now() + 5000);
+
+        // This seed must block on the writer lock and then observe the tombstone.
+        await checkForNewContent([directories]);
+        await exit;
+
+        expect(fs.existsSync(target)).toBe(false);
+        const reopened = new DatabaseSync(dbPath);
+        try {
+            const row = reopened.prepare('SELECT deleted_at_ms FROM world_books WHERE name = ?').get('Eldoria');
+            expect(row.deleted_at_ms).not.toBeNull();
+        } finally {
+            reopened.close();
+        }
     });
 });

@@ -3,9 +3,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
+import { DatabaseSync } from 'node:sqlite';
+import { pathToFileURL } from 'node:url';
 
-import { createCanonicalSqliteManager } from '../src/canonical-sqlite.js';
-import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
+import { applyCanonicalPragmas, createCanonicalSqliteManager, resolveCanonicalDatabasePath } from '../src/canonical-sqlite.js';
+import { CANONICAL_SQLITE_MIGRATIONS, runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
 import {
     explainCanonicalRolloutBlockers,
     getCanonicalStorageControlPlaneStatus,
@@ -34,6 +36,65 @@ import {
 import { getUserDirectories } from '../src/user-directories.js';
 
 const manager = createCanonicalSqliteManager({ logger: { info() {}, warn() {} } });
+let existingDatabase = null;
+
+function requiresExistingWorldDatabase(options) {
+    return options.command === 'list-world-info-repairs'
+        || options.command === 'repair-world-info-projection'
+        || (options.command === 'repair-slice' && options.slice === 'world_info')
+        || ((options.command === 'status' || options.command === 'explain-blockers')
+            && (!options.slice || options.slice === 'world_info'));
+}
+
+function validateExistingSchema(db) {
+    const applied = db.prepare('SELECT version, name FROM schema_migrations ORDER BY version').all();
+    if (applied.length !== CANONICAL_SQLITE_MIGRATIONS.length || applied.some((row, index) =>
+        Number(row.version) !== CANONICAL_SQLITE_MIGRATIONS[index].version
+        || row.name !== CANONICAL_SQLITE_MIGRATIONS[index].name)) {
+        throw new Error('Canonical SQLite schema journal is not current; run migration separately.');
+    }
+    const reference = new DatabaseSync(':memory:');
+    try {
+        runCanonicalMigrations(reference, { strict: true });
+        const tables = reference.prepare('SELECT name FROM sqlite_schema WHERE type = \'table\' AND name NOT LIKE \'sqlite_%\'').all();
+        for (const { name } of tables) {
+            if (!db.prepare('SELECT 1 FROM sqlite_schema WHERE type = \'table\' AND name = ?').get(name)) {
+                throw new Error(`Canonical SQLite schema is missing table or columns: ${name}.`);
+            }
+            const expected = reference.prepare('SELECT name FROM pragma_table_info(?)').all(name);
+            const actual = new Set(db.prepare('SELECT name FROM pragma_table_info(?)').all(name).map(row => row.name));
+            if (expected.some(column => !actual.has(column.name))) {
+                throw new Error(`Canonical SQLite schema is missing table or columns: ${name}.`);
+            }
+        }
+    } finally {
+        reference.close();
+    }
+}
+
+function openExistingWorldDatabase(directories) {
+    const { dbPath } = resolveCanonicalDatabasePath(directories);
+    const url = pathToFileURL(dbPath);
+    url.searchParams.set('mode', 'ro');
+    const readOnly = new DatabaseSync(url.href, { readOnly: true });
+    try {
+        validateExistingSchema(readOnly);
+    } finally {
+        readOnly.close();
+    }
+    // SQLite URI mode=rw is deliberately non-creating, including if the file
+    // disappears between validation and open. Revalidate the actual connection.
+    url.searchParams.set('mode', 'rw');
+    const db = new DatabaseSync(url.href);
+    try {
+        validateExistingSchema(db);
+        applyCanonicalPragmas(db);
+        return db;
+    } catch (error) {
+        db.close();
+        throw error;
+    }
+}
 
 function printUsage() {
     process.stdout.write([
@@ -74,6 +135,7 @@ function printUsage() {
         '  --phase <phase>      reads | writes | chatStats for explain-blockers/status',
         '  --slice <key>        characters | world_info | settings | secrets | managed_media | chats for status/audit/repair/blockers',
         '  --backup-file <path> Required for backup-chat and restore-chat',
+        '  --restore-id <id>    Supply a fresh restore ID, or query a specific operation',
         '  --out-dir <path>   Alternate root for export-all output',
         '  --apply              Allow gc-managed-media to delete eligible managed files',
         '  --feature <k=v>      Repeatable feature flag override for explain-blockers/status',
@@ -100,6 +162,7 @@ function parseArgs(argv) {
         featureFlags: {},
         slice: null,
         backupFile: null,
+        restoreId: null,
         apply: false,
     };
 
@@ -134,6 +197,12 @@ function parseArgs(argv) {
                 break;
             case '--backup-file':
                 options.backupFile = argv[++index] ?? null;
+                break;
+            case '--restore-id':
+                options.restoreId = argv[++index] ?? null;
+                if (!options.restoreId || options.restoreId.startsWith('--')) {
+                    throw new Error('--restore-id requires a value.');
+                }
                 break;
             case '--out-dir':
                 options.outDir = argv[++index] ?? null;
@@ -184,6 +253,10 @@ function openContext(options) {
         strict: options.strict,
         ...options.featureFlags,
     };
+    if (requiresExistingWorldDatabase(options)) {
+        existingDatabase = openExistingWorldDatabase(directories);
+        return { db: existingDatabase, directories, featureFlags };
+    }
     const db = manager.open({
         handle: options.handle,
         directories,
@@ -365,7 +438,10 @@ function formatChatRestore(result) {
         'Canonical chat restore',
         `status: ${result.status}`,
         `restore id: ${result.restoreId ?? ''}`,
+        `commit state: ${result.commitState ?? 'unknown'}`,
         ...(result.reasonCode ? [`reason: ${result.reasonCode}`] : []),
+        ...(result.guidance ? [result.guidance] : []),
+        ...(result.journalWritten === false ? ['Warning: restore journal write failed; status may be stale.'] : []),
     ].join('\n') + '\n';
 }
 
@@ -490,12 +566,13 @@ async function main() {
                 backup,
                 handle: options.handle,
                 directories,
+                ...(options.restoreId == null ? {} : { restoreId: options.restoreId }),
             });
             formatter = formatChatRestore;
             break;
         }
         case 'chat-restore-status':
-            result = getCanonicalChatRestoreStatus(db);
+            result = getCanonicalChatRestoreStatus(db, options.restoreId);
             formatter = formatChatRestore;
             break;
         case 'gc-managed-media':
@@ -557,16 +634,25 @@ async function main() {
             throw new Error(`Unknown command: ${options.command}`);
     }
 
+    if (result.reasonCode === 'restore_id_in_use') {
+        result.guidance = 'This ID belongs to an earlier operation; this restore did not run. Inspect that operation and use a new ID for any new restore.';
+    } else if ((options.command === 'restore-chat' || options.command === 'chat-restore-status')
+        && (result.ok === false || (result.status !== 'restored' && result.status !== 'none'))) {
+        result.guidance = 'Check chat-restore-status --restore-id <restore id> and list-chat-repairs; inspect authority and repair before retrying.';
+    } else if (options.command === 'restore-chat' || (options.command === 'chat-restore-status' && options.restoreId == null)) {
+        result.guidance = 'Use chat-restore-status --restore-id <restore id> to check a specific operation; the default status is ordered by wall clock.';
+    }
     process.stdout.write(options.json
         ? `${JSON.stringify(result, null, 2)}\n`
         : formatter(result));
 
     // status is a report command: blocked slice readiness is still a successful query.
-    if ((options.command === 'audit' || options.command === 'audit-world-info' || options.command === 'repair-projection' || options.command === 'repair-world-info-projection' || options.command === 'repair-secret-projection' || options.command === 'repair-managed-media-projection' || options.command === 'repair-chat-projection' || options.command === 'restore-chat' || options.command === 'gc-managed-media' || options.command === 'explain-blockers' || options.command === 'audit-slice' || options.command === 'repair-slice') && result.ok === false) {
+    if ((options.command === 'export-all' || options.command === 'audit' || options.command === 'audit-world-info' || options.command === 'repair-projection' || options.command === 'repair-world-info-projection' || options.command === 'repair-secret-projection' || options.command === 'repair-managed-media-projection' || options.command === 'repair-chat-projection' || options.command === 'restore-chat' || options.command === 'gc-managed-media' || options.command === 'explain-blockers' || options.command === 'audit-slice' || options.command === 'repair-slice') && result.ok === false) {
         process.exitCode = 1;
     }
 }
 
 await main().finally(() => {
+    existingDatabase?.close();
     manager.dispose();
 });

@@ -786,9 +786,9 @@ router.post('/rename', rejectGroupChatRequest, validateAvatarUrlMiddleware, asyn
                 locator: originalLocator,
                 nextLocator,
                 projection: getChatsProjectionMode(),
-                projectRename() {
-                    fs.copyFileSync(pathToOriginalFile, pathToRenamedFile);
-                    fs.unlinkSync(pathToOriginalFile);
+                projectRename(jsonl) {
+                    writeFileAtomicSync(pathToRenamedFile, jsonl, 'utf8');
+                    fs.rmSync(pathToOriginalFile, { force: true });
                 },
                 onAuthorityCommitted() {
                     fs.rmSync(pathToOriginalFile, { force: true });

@@ -14,6 +14,10 @@ import { upsertCanonicalSettingsDocument } from './endpoints/settings-store.js';
  */
 export async function migrateUserData() {
     const publicDirectory = path.join(process.cwd(), 'public');
+    const legacyWorlds = path.join(publicDirectory, 'worlds');
+    if (fs.existsSync(legacyWorlds)) {
+        console.warn(color.yellow(`Legacy worlds remain at ${legacyWorlds}; migrate them offline after stopping the server.`));
+    }
 
     // No need to migrate if the characters directory doesn't exists
     if (!fs.existsSync(path.join(publicDirectory, 'characters'))) {
@@ -69,11 +73,7 @@ export async function migrateUserData() {
             new: userDirectories.avatars,
             file: false,
         },
-        {
-            old: path.join(publicDirectory, 'worlds'),
-            new: userDirectories.worlds,
-            file: false,
-        },
+
         {
             old: path.join(process.cwd(), 'thumbnails'),
             new: userDirectories.thumbnails,

@@ -71,6 +71,14 @@ Compatibility remains a hard boundary:
 - Full World Info authority is delivered; JSON files remain compatibility projection/import/export surfaces.
 - Extension-visible globals and `@sillytavern/*` imports remain frozen unless a later compatibility retirement decision says otherwise.
 
+World Info, chat, and managed-media projection writes record repair intent with the
+canonical mutation. Recovery rechecks current authority under the SQLite writer lock
+before modifying a projection. This coordinates participating writers, not older
+processes or external file edits. Existing unknown World Info repairs remain blockers.
+The legacy `public/worlds` directory is not automatically migrated: stop the server
+and handle those files offline before importing them. Other legacy user directories
+retain their existing migration behavior.
+
 Comprehensive database authority does not require every byte or every low-frequency nested
 subdomain to be normalized into separate SQLite tables. A revisioned canonical JSON document
 is valid authority when it preserves one write boundary and unknown fields, as settings does
@@ -486,7 +494,26 @@ asset subdirectories (sprites, live2d) stay file-backed media, and only root-lev
       `scripts/canonical-chat-node26-benchmark.mjs` and its feature evidence artifact.
     - Operators create and restore chat bundles with
       `scripts/canonical-sqlite-repair.mjs backup-chat|restore-chat --backup-file <path>`;
-      `chat-restore-status` reports the latest durable restore result.
+      For crash recovery, create and save a fresh ID before starting the restore (a lowercase
+      UUID v4 prefixed with `chat-restore-`), for example:
+      `RESTORE_ID="chat-restore-$(node -p "require('node:crypto').randomUUID()")"`.
+      Save the ID somewhere durable outside the shell before starting, so it survives
+      a shell or host restart.
+      Pass it to `restore-chat --restore-id "$RESTORE_ID"` and later query the same operation
+      with `chat-restore-status --restore-id "$RESTORE_ID"`. Reusing an ID is rejected without
+      running a new restore; generate a new ID for each attempt. An omitted ID is generated
+      automatically, but will be unavailable to the caller if the process exits before output.
+      JSON output remains one document. A restore failure exits nonzero even if the canonical
+      replacement was committed.
+    - `commitState` is `committed`, `not_committed`, or `unknown`. Projection or audit may
+      fail after commit: inspect canonical authority and `list-chat-repairs` before retrying.
+      Old records and unreadable or missing records are unknown, not proof of no commit.
+      Journal write failures can leave a missing or stale record, so do not blindly retry.
+      Without `--restore-id`, `chat-restore-status` keeps its wall-clock-ordered default;
+      clock rollback means that result cannot identify a specific operation.
+      The repair CLI runs SQLite migrations before querying status: it is not a read-only
+      diagnostic on a database with an older schema. Do not use it on a real user database
+      without authorization for that migration.
 
 21. `extension operation safety`
     - Keeps filesystem/Git discovery authority.

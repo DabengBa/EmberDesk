@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import crypto, { randomUUID } from 'node:crypto';
 import path from 'node:path';
 
 import { sync as writeFileAtomicSync } from 'write-file-atomic';
@@ -12,14 +13,17 @@ import {
     listOpenCanonicalChatProjectionRepairs,
     listCanonicalChatSessions,
     recordCanonicalChatProjectionRepair,
+    resolveCanonicalChatProjectionRepair,
     serializeCanonicalChatSession,
 } from './canonical-chat-store.js';
 import { parseCanonicalChatJsonl } from './canonical-chat-write-service.js';
 import { resolveCanonicalChatProjectionPath } from './canonical-chat-projection-path.js';
 import { getCanonicalStorageSlice } from '../canonical-storage-slice-registry.js';
+import { recordImportLedgerEntry, removeImportLedgerEntry } from '../canonical-import-ledger.js';
 
 export const CANONICAL_CHAT_BACKUP_MANIFEST_VERSION = 1;
 export const CANONICAL_CHAT_ATTACHMENT_MANIFEST_VERSION = 1;
+const RESTORE_ID_PATTERN = /^chat-restore-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 function listAttachmentManifestEntries(db) {
     return db.prepare(`
@@ -84,11 +88,13 @@ function writeRestoreStatus(db, {
     status,
     reasonCode = null,
     details = {},
+    commitState = 'unknown',
+    claim = false,
     nowMs,
     finishedAtMs = null,
 }) {
     ensureRestoreJournalTable(db);
-    db.prepare(`
+    return db.prepare(`
         INSERT INTO chat_restore_operations (
             restore_id,
             manifest_version,
@@ -100,21 +106,21 @@ function writeRestoreStatus(db, {
             updated_at_ms,
             finished_at_ms
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(restore_id) DO UPDATE SET
+        ON CONFLICT(restore_id) ${claim ? 'DO NOTHING' : `DO UPDATE SET
             manifest_version = excluded.manifest_version,
             backup_created_at_ms = excluded.backup_created_at_ms,
             status = excluded.status,
             reason_code = excluded.reason_code,
             details_json = excluded.details_json,
             updated_at_ms = excluded.updated_at_ms,
-            finished_at_ms = excluded.finished_at_ms
+            finished_at_ms = excluded.finished_at_ms`}
     `).run(
         restoreId,
         manifestVersion,
         backupCreatedAtMs,
         status,
         reasonCode,
-        JSON.stringify(details),
+        JSON.stringify({ ...details, commitState }),
         Number(nowMs),
         Number(nowMs),
         finishedAtMs == null ? null : Number(finishedAtMs),
@@ -205,18 +211,15 @@ function stageBackupSessions(db, backup, directories, nowMs) {
 
 function recordRestoreProjectionFailure(db, {
     record,
+    restoreId,
     operation,
     error,
     nowMs,
 }) {
     recordCanonicalChatProjectionRepair(db, {
-        repairKey: [
-            'chat',
-            record.ownerType,
-            record.ownerId,
-            encodeURIComponent(record.sourcePath),
-            operation,
-        ].join(':'),
+        repairKey: operation === 'delete'
+            ? `chat-restore:${restoreId}:delete:${record.ownerType}:${record.ownerId}:${encodeURIComponent(record.sourcePath)}`
+            : `chat-restore:${restoreId}:${record.ownerType}:${record.ownerId}:${encodeURIComponent(record.sourcePath)}`,
         sessionId: operation === 'delete' ? null : record.id,
         locator: {
             ownerType: record.ownerType,
@@ -236,25 +239,39 @@ function projectRestoredSessions(db, {
     directories,
     previousSessions,
     stagedRecords,
+    restoreId,
     nowMs,
 }) {
-    const restoredPaths = new Set(stagedRecords.map(record => record.sourcePath));
+    const restoredPaths = new Set(stagedRecords.map(record => `${record.ownerType}\0${record.ownerId}\0${record.sourcePath}`));
     const failures = [];
 
     for (const record of stagedRecords) {
         try {
-            const filePath = resolveCanonicalChatProjectionPath({
-                directories,
-                ownerType: record.ownerType,
-                ownerId: record.ownerId,
-                sourcePath: record.sourcePath,
+            withCanonicalTransaction(db, txn => {
+                const current = txn.prepare(`SELECT source_jsonl FROM chat_sessions
+                    WHERE owner_type = ? AND owner_id = ? AND source_path = ?`)
+                    .get(record.ownerType, record.ownerId, record.sourcePath);
+                if (!current) throw new Error('restore_projection_authority_missing');
+                const filePath = resolveCanonicalChatProjectionPath({
+                    directories, ownerType: record.ownerType, ownerId: record.ownerId, sourcePath: record.sourcePath,
+                });
+                fs.mkdirSync(path.dirname(filePath), { recursive: true });
+                writeFileAtomicSync(filePath, current.source_jsonl, 'utf8');
+                recordImportLedgerEntry(txn, {
+                    sliceKey: 'chats', sourcePath: record.sourcePath,
+                    contentHash: crypto.createHash('sha256').update(current.source_jsonl).digest('hex'),
+                    origin: 'projection', nowMs,
+                });
+                resolveCanonicalChatProjectionRepair(txn, {
+                    repairKey: `chat-restore:${restoreId}:${record.ownerType}:${record.ownerId}:${encodeURIComponent(record.sourcePath)}`,
+                    resolvedAtMs: nowMs,
+                });
             });
-            fs.mkdirSync(path.dirname(filePath), { recursive: true });
-            writeFileAtomicSync(filePath, record.sourceJsonl, 'utf8');
         } catch (error) {
             failures.push({ operation: 'restore', sourcePath: record.sourcePath });
             recordRestoreProjectionFailure(db, {
                 record,
+                restoreId,
                 operation: 'restore',
                 error,
                 nowMs,
@@ -263,7 +280,8 @@ function projectRestoredSessions(db, {
     }
 
     for (const session of previousSessions) {
-        if (restoredPaths.has(String(session.source_path))) {
+        const identity = `${String(session.owner_type)}\0${String(session.owner_id)}\0${String(session.source_path)}`;
+        if (restoredPaths.has(identity)) {
             continue;
         }
         const record = {
@@ -273,17 +291,32 @@ function projectRestoredSessions(db, {
             sourcePath: String(session.source_path),
         };
         try {
-            const filePath = resolveCanonicalChatProjectionPath({
-                directories,
-                ownerType: record.ownerType,
-                ownerId: record.ownerId,
-                sourcePath: record.sourcePath,
+            withCanonicalTransaction(db, txn => {
+                const current = txn.prepare(`SELECT 1 FROM chat_sessions
+                    WHERE owner_type = ? AND owner_id = ? AND source_path = ?`)
+                    .get(record.ownerType, record.ownerId, record.sourcePath);
+                if (current) {
+                    resolveCanonicalChatProjectionRepair(txn, {
+                        repairKey: `chat-restore:${restoreId}:delete:${record.ownerType}:${record.ownerId}:${encodeURIComponent(record.sourcePath)}`,
+                        resolvedAtMs: nowMs,
+                    });
+                    return;
+                }
+                const filePath = resolveCanonicalChatProjectionPath({
+                    directories, ownerType: record.ownerType, ownerId: record.ownerId, sourcePath: record.sourcePath,
+                });
+                fs.rmSync(filePath, { force: true });
+                removeImportLedgerEntry(txn, { sliceKey: 'chats', sourcePath: record.sourcePath });
+                resolveCanonicalChatProjectionRepair(txn, {
+                    repairKey: `chat-restore:${restoreId}:delete:${record.ownerType}:${record.ownerId}:${encodeURIComponent(record.sourcePath)}`,
+                    resolvedAtMs: nowMs,
+                });
             });
-            fs.rmSync(filePath, { force: true });
         } catch (error) {
             failures.push({ operation: 'delete', sourcePath: record.sourcePath });
             recordRestoreProjectionFailure(db, {
                 record,
+                restoreId,
                 operation: 'delete',
                 error,
                 nowMs,
@@ -402,10 +435,10 @@ export function createCanonicalChatBackup({
     };
 }
 
-export function getCanonicalChatRestoreStatus(db) {
+export function getCanonicalChatRestoreStatus(db, restoreId = null) {
     try {
         ensureRestoreJournalTable(db);
-        const row = db.prepare(`
+        const query = `
             SELECT
                 restore_id,
                 status,
@@ -414,14 +447,17 @@ export function getCanonicalChatRestoreStatus(db) {
                 updated_at_ms,
                 finished_at_ms
             FROM chat_restore_operations
-            ORDER BY updated_at_ms DESC, restore_id DESC
-            LIMIT 1
-        `).get();
+        `;
+        const row = restoreId == null
+            ? db.prepare(`${query} ORDER BY updated_at_ms DESC, restore_id DESC LIMIT 1`).get()
+            : db.prepare(`${query} WHERE restore_id = ?`).get(String(restoreId));
         if (!row) {
             return {
+                ...(restoreId == null ? {} : { restoreId: String(restoreId) }),
                 status: 'none',
                 reasonCode: null,
                 details: {},
+                commitState: 'unknown',
                 updatedAtMs: null,
                 finishedAtMs: null,
             };
@@ -432,19 +468,24 @@ export function getCanonicalChatRestoreStatus(db) {
         } catch {
             details = {};
         }
+        const commitState = RESTORE_ID_PATTERN.test(String(row.restore_id))
+            && ['committed', 'not_committed', 'unknown'].includes(details?.commitState) ? details.commitState : 'unknown';
         return {
             restoreId: String(row.restore_id),
             status: String(row.status),
             reasonCode: row.reason_code == null ? null : String(row.reason_code),
-            details,
+            details: { ...details, commitState },
+            commitState,
             updatedAtMs: Number(row.updated_at_ms),
             finishedAtMs: row.finished_at_ms == null ? null : Number(row.finished_at_ms),
         };
     } catch {
         return {
+            ...(restoreId == null ? {} : { restoreId: String(restoreId) }),
             status: 'none',
             reasonCode: null,
             details: {},
+            commitState: 'unknown',
             updatedAtMs: null,
             finishedAtMs: null,
         };
@@ -457,96 +498,136 @@ export async function restoreCanonicalChatBackup({
     handle,
     directories,
     nowMs = Date.now(),
+    restoreId = `chat-restore-${randomUUID()}`,
 }) {
-    const restoreId = `chat-restore-${Number(nowMs)}`;
+    if (typeof restoreId !== 'string' || !RESTORE_ID_PATTERN.test(restoreId)) {
+        return { ok: false, status: 'blocked', reasonCode: 'invalid_restore_id', restoreId, commitState: 'not_committed' };
+    }
     const manifestVersion = Number(backup?.manifestVersion ?? null);
-    writeRestoreStatus(db, {
-        restoreId,
-        manifestVersion: Number.isFinite(manifestVersion) ? manifestVersion : CANONICAL_CHAT_BACKUP_MANIFEST_VERSION,
-        backupCreatedAtMs: backup?.createdAtMs ?? null,
-        status: 'validating',
-        nowMs,
-    });
-
-    const shape = validateBackupShape(backup);
-    if (!shape.ok) {
-        writeRestoreStatus(db, {
+    let commitState = 'not_committed';
+    let claimed = false;
+    try {
+        const claimResult = writeRestoreStatus(db, {
             restoreId,
-            manifestVersion: CANONICAL_CHAT_BACKUP_MANIFEST_VERSION,
+            manifestVersion: Number.isFinite(manifestVersion) ? manifestVersion : CANONICAL_CHAT_BACKUP_MANIFEST_VERSION,
             backupCreatedAtMs: backup?.createdAtMs ?? null,
-            status: 'blocked',
-            reasonCode: shape.reasonCode,
+            status: 'validating',
+            commitState,
+            claim: true,
             nowMs,
-            finishedAtMs: nowMs,
         });
-        return { ok: false, status: 'blocked', reasonCode: shape.reasonCode, restoreId };
-    }
+        if (claimResult.changes === 0) {
+            return { ok: false, status: 'blocked', reasonCode: 'restore_id_in_use', restoreId, commitState: 'unknown' };
+        }
+        claimed = true;
 
-    const attachmentValidation = validateAttachmentManifest(db, backup.attachmentManifest);
-    if (!attachmentValidation.ok) {
-        writeRestoreStatus(db, {
-            restoreId,
-            manifestVersion: backup.manifestVersion,
-            backupCreatedAtMs: backup.createdAtMs,
-            status: 'blocked',
-            reasonCode: attachmentValidation.reasonCode,
-            details: attachmentValidation.details ?? {},
-            nowMs,
-            finishedAtMs: nowMs,
-        });
-        return {
-            ok: false,
-            status: 'blocked',
-            reasonCode: attachmentValidation.reasonCode,
-            restoreId,
-        };
-    }
+        const shape = validateBackupShape(backup);
+        if (!shape.ok) {
+            writeRestoreStatus(db, {
+                restoreId,
+                manifestVersion: CANONICAL_CHAT_BACKUP_MANIFEST_VERSION,
+                backupCreatedAtMs: backup?.createdAtMs ?? null,
+                status: 'blocked',
+                commitState,
+                reasonCode: shape.reasonCode,
+                nowMs,
+                finishedAtMs: nowMs,
+            });
+            return { ok: false, status: 'blocked', reasonCode: shape.reasonCode, restoreId, commitState };
+        }
 
-    let stagedRecords;
-    try {
-        stagedRecords = stageBackupSessions(db, backup, directories, nowMs);
-    } catch (error) {
-        writeRestoreStatus(db, {
-            restoreId,
-            manifestVersion: backup.manifestVersion,
-            backupCreatedAtMs: backup.createdAtMs,
-            status: 'blocked',
-            reasonCode: 'invalid_backup_session',
-            details: {
-                message: String(error?.message ?? error ?? ''),
-            },
-            nowMs,
-            finishedAtMs: nowMs,
-        });
-        return {
-            ok: false,
-            status: 'blocked',
-            reasonCode: 'invalid_backup_session',
-            restoreId,
-        };
-    }
+        const attachmentValidation = validateAttachmentManifest(db, backup.attachmentManifest);
+        if (!attachmentValidation.ok) {
+            writeRestoreStatus(db, {
+                restoreId,
+                manifestVersion: backup.manifestVersion,
+                backupCreatedAtMs: backup.createdAtMs,
+                status: 'blocked',
+                commitState,
+                reasonCode: attachmentValidation.reasonCode,
+                details: attachmentValidation.details ?? {},
+                nowMs,
+                finishedAtMs: nowMs,
+            });
+            return {
+                ok: false,
+                status: 'blocked',
+                reasonCode: attachmentValidation.reasonCode,
+                restoreId,
+                commitState,
+            };
+        }
 
-    try {
+        let stagedRecords;
+        try {
+            stagedRecords = stageBackupSessions(db, backup, directories, nowMs);
+        } catch (error) {
+            writeRestoreStatus(db, {
+                restoreId,
+                manifestVersion: backup.manifestVersion,
+                backupCreatedAtMs: backup.createdAtMs,
+                status: 'blocked',
+                commitState,
+                reasonCode: 'invalid_backup_session',
+                details: {
+                    message: String(error?.message ?? error ?? ''),
+                },
+                nowMs,
+                finishedAtMs: nowMs,
+            });
+            return {
+                ok: false,
+                status: 'blocked',
+                reasonCode: 'invalid_backup_session',
+                restoreId,
+                commitState,
+            };
+        }
+
         const previousSessions = listCanonicalChatSessions(db);
         writeRestoreStatus(db, {
             restoreId,
             manifestVersion: backup.manifestVersion,
             backupCreatedAtMs: backup.createdAtMs,
             status: 'restoring',
+            commitState: 'unknown',
             nowMs,
         });
+        commitState = 'unknown';
         withCanonicalTransaction(db, txnDb => {
             txnDb.prepare('DELETE FROM chat_projection_repairs').run();
             txnDb.prepare('DELETE FROM chat_sessions').run();
             for (const record of stagedRecords) {
                 insertStagedChatRecord(txnDb, record);
+                recordCanonicalChatProjectionRepair(txnDb, {
+                    repairKey: `chat-restore:${restoreId}:${record.ownerType}:${record.ownerId}:${encodeURIComponent(record.sourcePath)}`,
+                    sessionId: record.id,
+                    locator: { ownerType: record.ownerType, ownerId: record.ownerId, sourcePath: record.sourcePath },
+                    operation: 'restore', reason: 'restore_projection_pending', details: {}, nowMs,
+                });
+            }
+            const restored = new Set(stagedRecords.map(record => `${record.ownerType}\0${record.ownerId}\0${record.sourcePath}`));
+            for (const session of previousSessions) {
+                const ownerType = String(session.owner_type), ownerId = String(session.owner_id), sourcePath = String(session.source_path);
+                if (restored.has(`${ownerType}\0${ownerId}\0${sourcePath}`)) continue;
+                recordCanonicalChatProjectionRepair(txnDb, {
+                    repairKey: `chat-restore:${restoreId}:delete:${ownerType}:${ownerId}:${encodeURIComponent(sourcePath)}`,
+                    sessionId: null, locator: { ownerType, ownerId, sourcePath }, operation: 'delete',
+                    reason: 'restore_projection_pending', details: {}, nowMs,
+                });
             }
             restoreProjectionRepairs(txnDb, backup.projectionRepairs, nowMs);
+            writeRestoreStatus(txnDb, {
+                restoreId, manifestVersion: backup.manifestVersion, backupCreatedAtMs: backup.createdAtMs,
+                status: 'restoring', commitState: 'committed', nowMs,
+            });
         });
+        commitState = 'committed';
         const projectionFailures = projectRestoredSessions(db, {
             directories,
             previousSessions,
             stagedRecords,
+            restoreId,
             nowMs,
         });
         if (projectionFailures.length > 0) {
@@ -561,6 +642,7 @@ export async function restoreCanonicalChatBackup({
                 manifestVersion: backup.manifestVersion,
                 backupCreatedAtMs: backup.createdAtMs,
                 status: 'failed',
+                commitState,
                 reasonCode: 'restore_projection_failed',
                 details: { projectionFailures },
                 nowMs,
@@ -571,6 +653,7 @@ export async function restoreCanonicalChatBackup({
                 status: 'failed',
                 reasonCode: 'restore_projection_failed',
                 restoreId,
+                commitState,
             };
         }
         const audit = await auditCanonicalChatShadowImport({
@@ -586,6 +669,7 @@ export async function restoreCanonicalChatBackup({
                 manifestVersion: backup.manifestVersion,
                 backupCreatedAtMs: backup.createdAtMs,
                 status: 'failed',
+                commitState,
                 reasonCode: 'restore_audit_failed',
                 details: {
                     reason: audit.reason,
@@ -599,6 +683,7 @@ export async function restoreCanonicalChatBackup({
                 status: 'failed',
                 reasonCode: 'restore_audit_failed',
                 restoreId,
+                commitState,
             };
         }
         writeRestoreStatus(db, {
@@ -606,28 +691,38 @@ export async function restoreCanonicalChatBackup({
             manifestVersion: backup.manifestVersion,
             backupCreatedAtMs: backup.createdAtMs,
             status: 'restored',
+            commitState,
             nowMs,
             finishedAtMs: nowMs,
         });
-        return { ok: true, status: 'restored', reasonCode: null, restoreId };
+        return { ok: true, status: 'restored', reasonCode: null, restoreId, commitState };
     } catch (error) {
-        writeRestoreStatus(db, {
-            restoreId,
-            manifestVersion: backup.manifestVersion,
-            backupCreatedAtMs: backup.createdAtMs,
-            status: 'failed',
-            reasonCode: 'restore_failed',
-            details: {
-                message: String(error?.message ?? error ?? ''),
-            },
-            nowMs,
-            finishedAtMs: nowMs,
-        });
+        let journalWritten = true;
+        try {
+            if (!claimed) throw error;
+            writeRestoreStatus(db, {
+                restoreId,
+                manifestVersion: backup.manifestVersion,
+                backupCreatedAtMs: backup.createdAtMs,
+                status: 'failed',
+                commitState,
+                reasonCode: 'restore_failed',
+                details: {
+                    message: String(error?.message ?? error ?? ''),
+                },
+                nowMs,
+                finishedAtMs: nowMs,
+            });
+        } catch {
+            journalWritten = false;
+        }
         return {
             ok: false,
             status: 'failed',
             reasonCode: 'restore_failed',
             restoreId,
+            commitState,
+            journalWritten,
         };
     }
 }

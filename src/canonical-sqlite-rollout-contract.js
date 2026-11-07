@@ -127,6 +127,8 @@ export function buildCanonicalSliceRollbackBlockers({
     phase = 'writes',
     listOpenRepairs = null,
     openRepairCode = null,
+    allowProtocolPending = false,
+    protocolRepairPrefix = null,
     includeChatStatsPhase = null,
     phaseOrder = null,
     registry = null,
@@ -209,13 +211,22 @@ export function buildCanonicalSliceRollbackBlockers({
 
     if (phasesRequiringRepairs.includes(phase) && typeof resolvedListOpenRepairs === 'function') {
         const openRepairs = resolvedListOpenRepairs(db) ?? [];
-        if (openRepairs.length > 0) {
+        // Protocol-managed intents (v1 path keys) are expected while a
+        // projection is pending. Normal writes may proceed with their own
+        // pending intent; audit/status/downgrade callers pass
+        // allowProtocolPending=false and still see them as blockers. Legacy
+        // repair rows are never treated as expected.
+        const blockingRepairs = allowProtocolPending && protocolRepairPrefix
+            ? openRepairs.filter(repair => !String(repair.repairKey).startsWith(protocolRepairPrefix))
+            : openRepairs;
+        if (blockingRepairs.length > 0) {
             blockers.push({
                 code: resolvedOpenRepairCode,
                 severity: 'error',
                 details: {
-                    repairCount: openRepairs.length,
-                    repairKeys: openRepairs.map(repair => repair.repairKey),
+                    repairCount: blockingRepairs.length,
+                    repairKeys: blockingRepairs.map(repair => repair.repairKey),
+                    protocolPendingCount: openRepairs.length - blockingRepairs.length,
                     sliceKey,
                 },
             });

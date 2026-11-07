@@ -6,8 +6,9 @@ import { afterEach, beforeAll, describe, expect, test } from '@jest/globals';
 
 import { canonicalSqliteManager } from '../src/canonical-sqlite.js';
 import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
+import { runCanonicalWorldInfoShadowImport } from '../src/canonical-world-info-shadow-import.js';
 import { getPersistedCanonicalAuditStatus, persistCanonicalAuditStatus } from '../src/canonical-sqlite-shadow-import.js';
-import { runCanonicalWorldInfoAudit } from '../src/canonical-sqlite-operator.js';
+import { repairCanonicalWorldInfoProjection, runCanonicalWorldInfoAudit } from '../src/canonical-sqlite-operator.js';
 import { upsertCanonicalWorldInfoBook } from '../src/endpoints/world-info-store.js';
 import { router } from '../src/endpoints/worldinfo.js';
 import { setConfigFilePath } from '../src/util.js';
@@ -54,6 +55,7 @@ async function invokeRoute(pathName, body, directories) {
     const response = createResponse();
     await layer.route.stack[0].handle({
         body,
+        get() { return undefined; },
         user: {
             profile: { handle: 'alice' },
             directories,
@@ -186,6 +188,116 @@ afterEach(() => {
 });
 
 describe('world info canonical route service', () => {
+    test('rejects imported basenames that normalize to an existing world name', async () => {
+        const directories = createDirectories(makeRoot());
+        const db = seedCanonicalWorldInfo(directories, { payload: { name: 'Old', entries: {} } });
+        setCanonicalEnv({ enabled: true, shadowImport: true, reads: true, writes: true, projection: 'off' });
+        const response = await invokeRouteWithRequest('/import', {
+            body: { convertedData: JSON.stringify({ name: 'New', entries: {} }) },
+            file: { originalname: ' Lorebook .json' },
+            user: { profile: { handle: 'alice' }, directories },
+        });
+        expect(response.statusCode).toBe(400);
+        expect(JSON.parse(db.prepare('SELECT payload_json FROM world_books WHERE name = ?').get('Lorebook').payload_json).name).toBe('Old');
+    });
+    test('rolls back an edit if recording its projection intent fails', async () => {
+        const directories = createDirectories(makeRoot());
+        const previous = { name: 'Old', entries: {} };
+        const db = seedCanonicalWorldInfo(directories, { payload: previous });
+        fs.writeFileSync(path.join(directories.worlds, 'Lorebook.json'), JSON.stringify(previous));
+        db.exec(`CREATE TRIGGER reject_world_intent BEFORE INSERT ON world_info_projection_repairs
+            BEGIN SELECT RAISE(ABORT, 'injected intent failure'); END`);
+        setCanonicalEnv({ enabled: true, shadowImport: true, reads: true, writes: true, projection: 'sync' });
+        try {
+            await invokeRoute('/edit', { name: 'Lorebook', data: { name: 'New', entries: {} } }, directories);
+        } catch (error) {
+            expect(error.message).toContain('injected intent failure');
+        }
+        expect(JSON.parse(db.prepare('SELECT payload_json FROM world_books WHERE name = ?').get('Lorebook').payload_json)).toEqual(previous);
+        expect(JSON.parse(fs.readFileSync(path.join(directories.worlds, 'Lorebook.json'), 'utf8'))).toEqual(previous);
+    });
+    test('rolls back a delete if recording its projection intent fails', async () => {
+        const directories = createDirectories(makeRoot());
+        const previous = { entries: {} };
+        const db = seedCanonicalWorldInfo(directories, { payload: previous });
+        const file = path.join(directories.worlds, 'Lorebook.json');
+        fs.writeFileSync(file, JSON.stringify(previous));
+        db.exec(`CREATE TRIGGER reject_delete_intent BEFORE INSERT ON world_info_projection_repairs
+            BEGIN SELECT RAISE(ABORT, 'injected delete intent failure'); END`);
+        setCanonicalEnv({ enabled: true, shadowImport: true, reads: true, writes: true, projection: 'off' });
+        try {
+            await invokeRoute('/delete', { name: 'Lorebook' }, directories);
+        } catch (error) {
+            expect(error.message).toContain('injected delete intent failure');
+        }
+        expect(db.prepare('SELECT deleted_at_ms FROM world_books WHERE name = ?').get('Lorebook').deleted_at_ms).toBeNull();
+        expect(fs.existsSync(file)).toBe(true);
+    });
+    test('rolls back a cascade book if recording its projection intent fails', async () => {
+        const directories = createDirectories(makeRoot());
+        const db = seedCanonicalWorldInfo(directories, { payload: { entries: {} } });
+        const file = path.join(directories.worlds, 'Lorebook.json');
+        fs.writeFileSync(file, '{}');
+        db.exec(`CREATE TRIGGER reject_cascade_intent BEFORE INSERT ON world_info_projection_repairs
+            BEGIN SELECT RAISE(ABORT, 'injected cascade intent failure'); END`);
+        setCanonicalEnv({ enabled: true, shadowImport: true, reads: true, writes: true, projection: 'off' });
+        const response = await invokeRoute('/delete-cascade', { worlds: ['Lorebook'] }, directories);
+        expect(response.statusCode).toBe(500);
+        expect(db.prepare('SELECT deleted_at_ms FROM world_books WHERE name = ?').get('Lorebook').deleted_at_ms).toBeNull();
+        expect(fs.existsSync(file)).toBe(true);
+    });
+    test('rolls back an import if recording its projection intent fails', async () => {
+        const directories = createDirectories(makeRoot());
+        const db = seedCanonicalWorldInfo(directories, { payload: { name: 'Old', entries: {} } });
+        db.exec(`CREATE TRIGGER reject_import_intent BEFORE INSERT ON world_info_projection_repairs
+            BEGIN SELECT RAISE(ABORT, 'injected import intent failure'); END`);
+        setCanonicalEnv({ enabled: true, shadowImport: true, reads: true, writes: true, projection: 'off' });
+        try {
+            await invokeRouteWithRequest('/import', {
+                body: { convertedData: JSON.stringify({ name: 'New', entries: {} }) },
+                file: { originalname: 'Lorebook.json' },
+                user: { profile: { handle: 'alice' }, directories },
+            });
+
+        } catch (error) {
+            expect(error.message).toContain('injected import intent failure');
+        }
+        expect(JSON.parse(db.prepare('SELECT payload_json FROM world_books WHERE name = ?').get('Lorebook').payload_json).name).toBe('Old');
+    });
+    test('rejects an edit whose input sanitizes to another world name', async () => {
+        const directories = createDirectories(makeRoot());
+        const db = seedCanonicalWorldInfo(directories, { payload: { name: 'Old', entries: {} } });
+        setCanonicalEnv({ enabled: true, shadowImport: true, reads: true, writes: true, projection: 'off' });
+        const response = await invokeRoute('/edit', { name: 'Lore/book', data: { name: 'New', entries: {} } }, directories);
+        expect(response.statusCode).toBe(400);
+        expect(JSON.parse(db.prepare('SELECT payload_json FROM world_books WHERE name = ?').get('Lorebook').payload_json).name).toBe('Old');
+    });
+    test('shadow import does not resurrect a deleted world from a stale projection', async () => {
+        const directories = createDirectories(makeRoot());
+        const db = seedCanonicalWorldInfo(directories, { payload: { name: 'Old', entries: {} } });
+        setCanonicalEnv({ enabled: true, shadowImport: true, reads: true, writes: true, projection: 'off' });
+        expect((await invokeRoute('/delete', { name: 'Lorebook' }, directories)).statusCode).toBe(200);
+        fs.writeFileSync(path.join(directories.worlds, 'Lorebook.json'), JSON.stringify({ name: 'Stale', entries: {} }));
+        const result = await runCanonicalWorldInfoShadowImport({ handle: 'alice', directories, manager: canonicalSqliteManager, featureFlags: { enabled: true, shadowImport: true } });
+        expect(result.ok).toBe(false);
+        expect(db.prepare('SELECT deleted_at_ms FROM world_books WHERE name = ?').get('Lorebook').deleted_at_ms).not.toBeNull();
+    });
+    test('shadow import blocks an unproven historical file over a different authority', async () => {
+        const directories = createDirectories(makeRoot());
+        const db = seedCanonicalWorldInfo(directories, { payload: { name: 'Authority', entries: {} } });
+        fs.writeFileSync(path.join(directories.worlds, 'Lorebook.json'), JSON.stringify({ name: 'Unproven', entries: {} }));
+        const result = await runCanonicalWorldInfoShadowImport({ handle: 'alice', directories, manager: canonicalSqliteManager, featureFlags: { enabled: true, shadowImport: true } });
+        expect(result.ok).toBe(false);
+        expect(JSON.parse(db.prepare('SELECT payload_json FROM world_books WHERE name = ?').get('Lorebook').payload_json).name).toBe('Authority');
+    });
+    test('bootstrap cannot overwrite an existing canonical book with an unproven file', async () => {
+        const directories = createDirectories(makeRoot());
+        const db = seedCanonicalWorldInfo(directories, { payload: { name: 'Authority', entries: {} }, auditClean: false });
+        fs.writeFileSync(path.join(directories.worlds, 'Lorebook.json'), JSON.stringify({ name: 'Historical', entries: {} }));
+        const result = await runCanonicalWorldInfoShadowImport({ handle: 'alice', directories, manager: canonicalSqliteManager, featureFlags: { enabled: true, shadowImport: true }, bootstrap: true });
+        expect(result.ok).toBe(false);
+        expect(JSON.parse(db.prepare('SELECT payload_json FROM world_books WHERE name = ?').get('Lorebook').payload_json).name).toBe('Authority');
+    });
     test('serves list and get from canonical sqlite when read flags and world_info audit are clean', async () => {
         const root = makeRoot();
         const directories = createDirectories(root);
@@ -214,7 +326,7 @@ describe('world info canonical route service', () => {
         });
     });
 
-    test('falls back to file-backed reads when world_info audit has not run', async () => {
+    test('does not replace existing canonical authority with an unproven file when audit has not run', async () => {
         const root = makeRoot();
         const directories = createDirectories(root);
         fs.writeFileSync(path.join(directories.worlds, 'Lorebook.json'), JSON.stringify({
@@ -222,7 +334,7 @@ describe('world info canonical route service', () => {
             extensions: { source: 'file' },
             entries: { one: { content: 'file' } },
         }));
-        seedCanonicalWorldInfo(directories, { auditClean: false });
+        const db = seedCanonicalWorldInfo(directories, { auditClean: false });
         setCanonicalEnv({ enabled: true, shadowImport: true, reads: true });
 
         const listResponse = await invokeRoute('/list', {}, directories);
@@ -230,14 +342,26 @@ describe('world info canonical route service', () => {
 
         expect(listResponse.body).toEqual([{
             file_id: 'Lorebook',
-            name: 'File Lore',
-            extensions: { source: 'file' },
+            name: 'Canonical Lore',
+            extensions: { source: 'db' },
         }]);
         expect(getResponse.body).toEqual({
-            name: 'File Lore',
-            extensions: { source: 'file' },
-            entries: { one: { content: 'file' } },
+            name: 'Canonical Lore',
+            extensions: { source: 'db' },
+            entries: { one: { content: 'db' } },
         });
+        expect(JSON.parse(db.prepare('SELECT payload_json FROM world_books WHERE name = ?').get('Lorebook').payload_json).name).toBe('Canonical Lore');
+    });
+
+    test('first import with no authority establishes the file in SQLite', async () => {
+        const directories = createDirectories(makeRoot());
+        fs.writeFileSync(path.join(directories.worlds, 'First.json'), JSON.stringify({ name: 'First file', entries: {} }));
+        setCanonicalEnv({ enabled: true, shadowImport: true, reads: true, projection: 'sync' });
+        const response = await invokeRoute('/get', { name: 'First' }, directories);
+        expect(response.statusCode).toBe(200);
+        expect(response.body.name).toBe('First file');
+        const db = canonicalSqliteManager.open({ handle: 'alice', directories, featureFlags: { enabled: true } });
+        expect(JSON.parse(db.prepare('SELECT payload_json FROM world_books WHERE name = ?').get('First').payload_json).name).toBe('First file');
     });
 
     test('ignores the retired reads flag and keeps serving canonical books', async () => {
@@ -326,7 +450,7 @@ describe('world info canonical route service', () => {
             }));
     });
 
-    test('commits edits to canonical sqlite even when the retired writes flag is pinned off', async () => {
+    test('commits canonical edits and removes the file projection in off mode', async () => {
         const root = makeRoot();
         const directories = createDirectories(root);
         fs.writeFileSync(path.join(directories.worlds, 'Lorebook.json'), JSON.stringify({
@@ -352,12 +476,7 @@ describe('world info canonical route service', () => {
                 name: 'Canonical Edited',
                 entries: { one: { content: 'canonical write' } },
             }));
-        // The retired flag is ignored: the write commits canonically, no file
-        // projection is written under 'off', and the audit stays clean.
-        expect(JSON.parse(fs.readFileSync(path.join(directories.worlds, 'Lorebook.json'), 'utf8'))).toEqual({
-            name: 'File Lore',
-            entries: {},
-        });
+        expect(fs.existsSync(path.join(directories.worlds, 'Lorebook.json'))).toBe(false);
         expect(getPersistedCanonicalAuditStatus(db, { scope: 'world_info' })).toEqual(expect.objectContaining({
             ok: true,
             blocking: false,
@@ -403,9 +522,7 @@ describe('world info canonical route service', () => {
     test('records a projection repair when canonical edit commits but JSON projection fails', async () => {
         const root = makeRoot();
         const directories = createDirectories(root);
-        const brokenWorldsPath = path.join(root, 'worlds-as-file');
-        fs.writeFileSync(brokenWorldsPath, 'not a directory');
-        directories.worlds = brokenWorldsPath;
+        fs.mkdirSync(path.join(directories.worlds, 'Lorebook.json'));
         const db = seedCanonicalWorldInfo(directories, {
             payload: { name: 'Old', entries: {} },
         });
@@ -422,22 +539,23 @@ describe('world info canonical route service', () => {
         expect(response.statusCode).toBe(500);
         expect(response.body).toEqual(expect.objectContaining({
             error: 'Failed to project canonical World Info file.',
-            repairKey: 'world_info:Lorebook:edit',
+            repairKey: expect.stringMatching(/^world-path-v1:/),
         }));
         expect(JSON.parse(db.prepare('SELECT payload_json FROM world_books WHERE name = ?').get('Lorebook').payload_json)).toEqual({
             name: 'Edited Lore',
             entries: { one: { content: 'db survives' } },
         });
-        expect(db.prepare(`
+        const repairs = db.prepare(`
             SELECT repair_key, world_name, reason, details_json, resolved_at_ms
             FROM world_info_projection_repairs
-        `).all()).toEqual([{
-            repair_key: 'world_info:Lorebook:edit',
-            world_name: 'Lorebook',
-            reason: 'projection_failed',
-            details_json: JSON.stringify({ operation: 'edit' }),
-            resolved_at_ms: null,
-        }]);
+        `).all();
+        expect(repairs).toHaveLength(1);
+        expect(repairs[0]).toEqual(expect.objectContaining({ repair_key: response.body.repairKey, world_name: 'Lorebook', reason: 'world_path_intent', resolved_at_ms: null }));
+        fs.rmdirSync(path.join(directories.worlds, 'Lorebook.json'));
+        const replay = await repairCanonicalWorldInfoProjection({ db, directories, repairKeys: [response.body.repairKey] });
+        expect(replay.ok).toBe(true);
+        expect(JSON.parse(fs.readFileSync(path.join(directories.worlds, 'Lorebook.json'), 'utf8')).name).toBe('Edited Lore');
+        expect(db.prepare('SELECT resolved_at_ms FROM world_info_projection_repairs WHERE repair_key = ?').get(response.body.repairKey).resolved_at_ms).not.toBeNull();
     });
 
     test('imports and deletes world info through canonical writes while preserving route responses', async () => {

@@ -117,7 +117,7 @@ function replaceWorldBookEntries(db, { worldBookId, entries, nowMs }) {
     }
 }
 
-export function upsertCanonicalWorldInfoBook(db, {
+export function upsertCanonicalWorldInfoBookInTransaction(db, {
     name,
     payload,
     sourceMtimeMs = 0,
@@ -134,15 +134,14 @@ export function upsertCanonicalWorldInfoBook(db, {
         normalizedPayload.entries = {};
     }
 
-    const existing = getExistingWorldBookRow(db, normalizedName);
-    const worldBookId = existing?.id ?? uuidv4();
     const metadata = {
         routeName: getRouteVisibleName(normalizedName, normalizedPayload),
         extensions: getExtensions(normalizedPayload),
     };
 
-    withCanonicalTransaction(db, txnDb => {
-        txnDb.prepare(`
+    const existing = getExistingWorldBookRow(db, normalizedName);
+    const worldBookId = existing?.id ?? uuidv4();
+    db.prepare(`
             INSERT INTO world_books (
                 id,
                 name,
@@ -162,24 +161,26 @@ export function upsertCanonicalWorldInfoBook(db, {
                 updated_at_ms = excluded.updated_at_ms,
                 deleted_at_ms = NULL
         `).run(
-            worldBookId,
-            normalizedName,
-            JSON.stringify(normalizedPayload),
-            JSON.stringify(metadata),
-            Number(sourceMtimeMs ?? 0),
-            Number(sourceSizeBytes ?? 0),
-            Number(nowMs),
-            Number(nowMs),
-        );
+        worldBookId,
+        normalizedName,
+        JSON.stringify(normalizedPayload),
+        JSON.stringify(metadata),
+        Number(sourceMtimeMs ?? 0),
+        Number(sourceSizeBytes ?? 0),
+        Number(nowMs),
+        Number(nowMs),
+    );
 
-        replaceWorldBookEntries(txnDb, {
-            worldBookId,
-            entries: normalizedPayload.entries,
-            nowMs,
-        });
+    replaceWorldBookEntries(db, {
+        worldBookId,
+        entries: normalizedPayload.entries,
+        nowMs,
     });
-
     return { id: worldBookId, name: normalizedName };
+}
+
+export function upsertCanonicalWorldInfoBook(db, options) {
+    return withCanonicalTransaction(db, txnDb => upsertCanonicalWorldInfoBookInTransaction(txnDb, options));
 }
 
 export function getCanonicalWorldInfoBook(db, name) {
