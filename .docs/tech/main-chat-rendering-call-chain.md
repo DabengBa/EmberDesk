@@ -13,6 +13,7 @@ code:
     - public/scripts/chat-ops-service.js
     - public/scripts/message-service.js
     - public/scripts/main-chat-store-projection.js
+    - public/scripts/main-chat-greetings.js
     - public/scripts/chat-message-render-service.js
     - public/scripts/chat-turn-card-projection.js
     - public/scripts/chat-message-render-descriptor.js
@@ -50,7 +51,7 @@ The legacy formatter and row builder still produce the row data and rich-body HT
 
 1. `selectCharacterById(id, { switchMenu })` (`public/script.js:4629`) updates active character state and calls `getChat()`.
 2. `getChat()` (`public/scripts/chat-ops-service.js:488`) calls `unshallowCharacter()`, then `POST /api/chats/get`; it splices the loaded messages into `state.chat`, normalizes media arrays, restores `chat_metadata`, clears `reactMainChatProjectionCleared`, queues the reading-position snapshot, and calls `getChatResult()`.
-3. `getChatResult()` (`public/script.js:7455`) seeds the first message for an empty chat, calls `printMessages()`, selects the character, then emits `CHAT_CHANGED` (plus `CHAT_CREATED`, and for a one-message chat `MESSAGE_RECEIVED` / `CHARACTER_MESSAGE_RENDERED`). `getChat()` emits `CHAT_LOADED` afterwards.
+3. `getChatResult()` seeds the first message for an empty chat through `getFirstMessage(undefined, { recordGreetingIdentity: true })`, calls `printMessages()`, selects the character, then emits `CHAT_CHANGED` (plus `CHAT_CREATED`, and for a one-message chat `MESSAGE_RECEIVED` / `CHARACTER_MESSAGE_RENDERED`). The recorded `extra.greeting_identity` (`{ index, text, rendered }`) keeps the authored greeting the row came from even when regex or card rendering rewrites the visible text; it is creation-time provenance, not an explicit selection. `getChat()` emits `CHAT_LOADED` afterwards.
 4. Itemized prompts are a module-level array read through `hasItemizedPromptForMessage(message, messageId)` (`public/script.js:3155`) when the bridge snapshot is built; there is no per-render lookup step.
 
 Failure modes: a failed read throws before any splice (`public/scripts/chat-ops-service.js:504`), and the caller only re-runs `getChatResult()` and `console.log`s the error (`public/scripts/chat-ops-service.js:536`), so the failure has no user-facing surface. Do not read this as a guarantee that the previous chat survives a failed load: a partial or interrupted read can still leave `state.chat` overwritten, and that overwrite risk is a known existing hazard rather than a documented, proven-safe behavior. Empty or missing chat data produces first-message or empty-chat behavior instead of a distinct error surface.
@@ -59,7 +60,7 @@ Failure modes: a failed read throws before any splice (`public/scripts/chat-ops-
 
 1. `printMessages()` (`public/scripts/chat-ops-service.js:191`) clears transient row UI state. On the React path it resets `state.reactMainChatProjectionCleared` to `false`, mounts the panel, and only scrolls to the bottom when no reading-position restore is pending; the legacy path re-appends `#show_more_messages` when the chat is longer than `CHAT_TRUNCATION` and calls `redisplayChat()`.
 2. `mountReactMainChatMessageListPanel()` (`public/script.js:3355`) mounts `kind: 'mainChatMessageList'` through `mountWorkspacePanelHost()` with `ensureContainer`, `getState`, and `commands`, then schedules the scroll restore.
-3. `getMainChatMessageListReactBridgeState()` (`public/script.js:3107`) assembles the snapshot: `buildMainChatSnapshotFromLegacyChat()` (`public/scripts/main-chat-store-projection.js:269`) over `buildMainChatMessageRecord()` (`public/scripts/main-chat-store-projection.js:55`), plus composer, generation control, streaming transport, slash UI, row UI state, visible window, turn summaries (`getChatMemoryDisplayItems()`), and greetings.
+3. `getMainChatMessageListReactBridgeState()` assembles the snapshot: `buildMainChatSnapshotFromLegacyChat()` (`public/scripts/main-chat-store-projection.js:269`) over `buildMainChatMessageRecord()` (`public/scripts/main-chat-store-projection.js:55`), plus composer, generation control, streaming transport, slash UI, row UI state, visible window, turn summaries (`getChatMemoryDisplayItems()`), and greetings. The greeting snapshot (`public/scripts/main-chat-greetings.js`) lists non-empty authored entries, resolves the current entry from `chat_metadata.greeting` and otherwise from `chat[0].extra.greeting_identity`, and reports `canSelect` only when the character is known, at least two greetings exist, metadata is not tainted, and — unless the chat is still empty — `canSwitchGreeting()` accepts the sole row as an untouched, non-streaming, non-editing assistant message.
 4. `app/workspace-panels.tsx` renders the snapshot with `useSyncExternalStore`. Each message becomes a direct `#chat` child through `MainChatMessageRow` (`app/components/main-chat/MainChatMessageRow.tsx`), which replays `messageHtml`, reasoning HTML, media, file, and bias fragments into the protected shells and renders recovery status and failure notices as `<output>` elements outside `.mes_text`.
 5. Row ownership classification lives in `public/scripts/chat-message-render-descriptor.js`: `classifyChatMessageRendererContract()` (`:113`) returns `{ rendererOwner: 'react', phase7Candidate: 'react-rich-body-owner' }` for every supported row state, differing only in `fallback` — `not-needed` for finalized rows, `preserve-editing-live-content` and `preserve-streaming-live-content` when live content must survive — and returns `unsupported-with-reason` when `.mes_text` is missing or the row is structurally unsafe. `buildMainChatRowLifecycleContract()` (`:177`) records the React message-list controller as the single lifecycle policy owner.
 
@@ -109,6 +110,7 @@ Stable binding points:
 - `#chat > .mes[mesid]`, `.mes_text`, `.mes_reasoning_details`, `.mes_media_wrapper`, `.mes_file_wrapper`
 - `#chat > .mes[data-turn-card][data-turn-card-position]`, `#chat > .turn-summary-row[data-turn-card]`
 - `#show_more_messages` with `data-main-chat-windowing-owner="react"`
+- `[data-testid="main-chat-greeting-picker"]` and its `[data-greeting-picker-trigger]` button, which `doNewChat()` clicks after the new chat renders unless a greeting is already recorded or the user touched the picker
 - `printMessages`, `showMoreMessages`, `addOneMessage`, `updateMessageElement`, `redisplayChat`
 - `GenerationStreamSession`, `scheduleMainChatMessageListPanelRefresh`
 

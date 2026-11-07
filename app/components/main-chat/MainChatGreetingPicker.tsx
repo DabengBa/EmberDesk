@@ -7,12 +7,6 @@ import type { MainChatGreetingsSnapshot } from '../../stores/main-chat-store';
 import { getAdjacentGreetingIndex } from '../../../public/scripts/main-chat-greetings.js';
 import { mainChatGreetingPickerStyles as styles } from './MainChatGreetingPicker.styles';
 
-function greetingLabel(index: number) {
-    return index === 0
-        ? translate('First message')
-        : translate('Alternate greeting ${0}').replace('${0}', String(index));
-}
-
 function greetingSummary(text: string, query: string) {
     const normalized = text.replace(/\s+/g, ' ').trim();
     const needle = query.replace(/\s+/g, ' ').trim();
@@ -36,6 +30,9 @@ export function MainChatGreetingPicker({
     const dialogRef = useRef<HTMLDialogElement>(null);
     const triggerRef = useRef<HTMLButtonElement>(null);
     const focusRestoreRef = useRef<HTMLElement | null>(null);
+    const operationRef = useRef(0);
+    const sessionRef = useRef(greetings.chatId);
+    sessionRef.current = greetings.chatId;
     const searchId = useId();
     const [open, setOpen] = useState(false);
     const [search, setSearch] = useState('');
@@ -45,6 +42,8 @@ export function MainChatGreetingPicker({
 
     const greetingSessionId = greetings.chatId;
     const selectedGreeting = greetings.options.find(option => option.index === greetings.selectedIndex) ?? null;
+    const greetingLabel = (index: number) => translate('Greeting ${0}')
+        .replace('${0}', String(greetings.options.findIndex(option => option.index === index) + 1));
 
     const filteredGreetings = useMemo(() => {
         const query = search.trim().toLocaleLowerCase();
@@ -63,12 +62,21 @@ export function MainChatGreetingPicker({
     }, [busy]);
 
     useEffect(() => {
+        operationRef.current++;
         setOpen(false);
         setSearch('');
         setPreviewIndex(greetings.selectedIndex);
         setBusy(false);
         setError('');
-    }, [greetingSessionId, greetings.selectedIndex]);
+    }, [greetingSessionId]);
+
+    useEffect(() => {
+        if (busy) return;
+        setOpen(false);
+        setSearch('');
+        setPreviewIndex(greetings.selectedIndex);
+        setError('');
+    }, [greetings.selectedIndex]);
 
     useEffect(() => {
         if (!open) return;
@@ -93,6 +101,7 @@ export function MainChatGreetingPicker({
     }, [open, busy]);
 
     const openPicker = () => {
+        if (busy || !greetings.canSelect) return;
         focusRestoreRef.current = triggerRef.current;
         setSearch('');
         setPreviewIndex(greetings.selectedIndex ?? greetings.options[0]?.index ?? null);
@@ -102,19 +111,24 @@ export function MainChatGreetingPicker({
 
     const applyGreeting = async (index: number | null) => {
         if (busy || index === null || !greetings.canSelect || !greetings.characterId || !greetings.chatId) return;
+        const operation = ++operationRef.current;
+        const session = greetingSessionId;
         setBusy(true);
         setError('');
         try {
             const selected = await commands?.selectGreeting(index, greetings.characterId, greetings.chatId);
+            if (operation !== operationRef.current || session !== sessionRef.current) return;
             if (selected === true) {
                 setOpen(false);
                 return;
             }
             setError(translate('Could not use that greeting. The chat state may have changed; try again.'));
         } catch {
-            setError(translate('Could not use that greeting. Check the connection and try again.'));
+            if (operation === operationRef.current && session === sessionRef.current) {
+                setError(translate('Could not use that greeting. Check the connection and try again.'));
+            }
         } finally {
-            setBusy(false);
+            if (operation === operationRef.current && session === sessionRef.current) setBusy(false);
         }
     };
 
@@ -132,32 +146,45 @@ export function MainChatGreetingPicker({
     };
 
     // A pending save can temporarily disable selection in a refreshed snapshot.
-    // Keep an open native dialog mounted so its modal/focus lifecycle survives.
-    if (!open && (!greetings.canSelect || greetings.options.length < 2)) return null;
+    // Keep the controls and an open dialog mounted until our selection finishes.
+    if (!open && !busy && (!greetings.canSelect || greetings.options.length < 2)) return null;
 
     return (
         <section data-testid="main-chat-greeting-picker">
             <div {...stylex.props(styles.controls)}>
                 <button
                     type="button"
-                    className={`menu_button ${stylex.props(styles.arrow).className ?? ''}`}
+                    className={`menu_button ${stylex.props(styles.arrow, (busy || !greetings.canSelect) && styles.arrowDisabled).className ?? ''}`}
                     aria-label={translate('Previous greeting')}
-                    disabled={busy || !greetings.canSelect}
+                    aria-disabled={busy || !greetings.canSelect}
                     onPointerDown={markUserInteraction}
                     onClick={() => switchGreeting(-1)}
                 >
                     <i className="fa-solid fa-chevron-left" aria-hidden="true" />
                 </button>
+                <span {...stylex.props(styles.count)} aria-live="polite">
+                    {selectedGreeting ? greetings.options.indexOf(selectedGreeting) + 1 : '—'} / {greetings.options.length}
+                </span>
+                <button
+                    type="button"
+                    className={`menu_button ${stylex.props(styles.arrow, (busy || !greetings.canSelect) && styles.arrowDisabled).className ?? ''}`}
+                    aria-label={translate('Next greeting')}
+                    aria-disabled={busy || !greetings.canSelect}
+                    onPointerDown={markUserInteraction}
+                    onClick={() => switchGreeting(1)}
+                >
+                    <i className="fa-solid fa-chevron-right" aria-hidden="true" />
+                </button>
                 <button
                     ref={triggerRef}
                     data-greeting-picker-trigger=""
                     type="button"
-                    className={`menu_button ${stylex.props(styles.trigger).className ?? ''}`}
+                    className={`menu_button ${stylex.props(styles.arrow, (busy || !greetings.canSelect) && styles.arrowDisabled).className ?? ''}`}
                     aria-haspopup="dialog"
                     aria-expanded={open}
                     aria-label={translate('Select greeting')}
                     aria-keyshortcuts="ArrowLeft ArrowRight"
-                    disabled={!greetings.canSelect}
+                    aria-disabled={busy || !greetings.canSelect}
                     onPointerDown={markUserInteraction}
                     onClick={openPicker}
                     onKeyDown={event => {
@@ -167,20 +194,7 @@ export function MainChatGreetingPicker({
                         switchGreeting(event.key === 'ArrowLeft' ? -1 : 1);
                     }}
                 >
-                    <i className="fa-solid fa-message" aria-hidden="true" />
-                    <span>{selectedGreeting ? greetingLabel(selectedGreeting.index) : translate('Select greeting')}</span>
-                    {selectedGreeting ? <span {...stylex.props(styles.count)}>{greetings.options.indexOf(selectedGreeting) + 1} / {greetings.options.length}</span> : null}
                     <i className="fa-solid fa-chevron-down" aria-hidden="true" />
-                </button>
-                <button
-                    type="button"
-                    className={`menu_button ${stylex.props(styles.arrow).className ?? ''}`}
-                    aria-label={translate('Next greeting')}
-                    disabled={busy || !greetings.canSelect}
-                    onPointerDown={markUserInteraction}
-                    onClick={() => switchGreeting(1)}
-                >
-                    <i className="fa-solid fa-chevron-right" aria-hidden="true" />
                 </button>
             </div>
             {open ? (

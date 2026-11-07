@@ -22,17 +22,18 @@ export const mainChatGreetingPickerStyles = stylex.create({
             ':focus-visible': '1px',
         },
     },
-    trigger: {
-        width: 'auto',
-        minWidth: { default: 0, [narrow]: '44px' },
-        minHeight: { default: null, [narrow]: '44px' },
-        gap: '6px',
-        whiteSpace: 'nowrap',
 
+    arrowDisabled: {
+        filter: 'brightness(75%) grayscale(1)',
+        opacity: 0.5,
+        cursor: 'default',
     },
+
     count: {
-        color: 'var(--SmartThemeFadedColor)',
-        fontSize: 'calc(var(--mainFontSize) * 0.8)',
+        alignSelf: 'center',
+        color: 'var(--SmartThemeBodyColor)',
+        whiteSpace: 'nowrap',
+        fontVariantNumeric: 'tabular-nums',
     },
     overlay: {
         position: 'fixed',

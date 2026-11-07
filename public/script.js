@@ -3415,7 +3415,9 @@ function getMainChatMessageListReactBridgeState() {
         turnSummaries: getChatMemoryDisplayItems(),
         greetings: (() => {
             const options = buildGreetingOptions(characters[this_chid]);
-            const current = chat_metadata.greeting;
+            // Only trust creation-time identity while the generated message is unchanged.
+            const identity = chat.length === 1 ? chat[0]?.extra?.greeting_identity : undefined;
+            const current = chat_metadata.greeting ?? (identity?.rendered === chat[0]?.mes ? identity : undefined);
             const selectedIndex = typeof current?.text === 'string'
                 ? (options.find(option => option.index === current.index && option.text === current.text)
                     ?? options.find(option => option.text === current.text))?.index ?? null
@@ -7711,7 +7713,7 @@ async function getChatResult({ switchMenu = true } = {}) {
     name2 = characters[this_chid].name;
     let freshChat = false;
     if (chat.length === 0) {
-        const message = getFirstMessage();
+        const message = getFirstMessage(undefined, { recordGreetingIdentity: true });
         if (message.mes) {
             chat.push(message);
             freshChat = true;
@@ -7732,7 +7734,7 @@ async function getChatResult({ switchMenu = true } = {}) {
     }
 }
 
-function getFirstMessage(selectedText) {
+function getFirstMessage(selectedText, { recordGreetingIdentity = false } = {}) {
     const firstMes = selectedText ?? characters[this_chid]?.first_mes ?? '';
     const alternateGreetings = characters[this_chid]?.data?.alternate_greetings;
 
@@ -7745,8 +7747,16 @@ function getFirstMessage(selectedText) {
         extra: {},
     };
 
+    let greetingIndex = 0;
     if (!message.mes && Array.isArray(alternateGreetings) && alternateGreetings.length > 0) {
         message.mes = getRegexedString(alternateGreetings[0], regex_placement.AI_OUTPUT);
+        greetingIndex = 1;
+    }
+
+    // Unlike explicit selection metadata, this does not suppress the new-chat picker.
+    if (recordGreetingIdentity && message.mes) {
+        const option = buildGreetingOptions(characters[this_chid]).find(item => item.index === greetingIndex);
+        if (option) message.extra.greeting_identity = { index: option.index, text: option.text, rendered: message.mes };
     }
 
     return message;
