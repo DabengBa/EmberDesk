@@ -71,6 +71,13 @@ const setTemporaryChatStatus = (...args) => shell().setTemporaryChatStatus(...ar
 const timestampToMoment = (...args) => shell().timestampToMoment(...args);
 const unshallowCharacter = (...args) => shell().unshallowCharacter(...args);
 const updateFavButtonState = (...args) => shell().updateFavButtonState(...args);
+
+function hasKnownGreetingIdentity(chat) {
+    if (chat.length !== 1 || chat[0]?.is_user || chat[0]?.is_system) return false;
+    const identity = chat[0]?.extra?.greeting_identity;
+    return Number.isInteger(identity?.index) && identity.index >= 0 && typeof identity.text === 'string'
+        && typeof identity.rendered === 'string' && identity.rendered === chat[0].mes;
+}
 /**
  * Draft fields whose change should fan out to display or prompt consumers:
  * the fav strip, chat projection, and CHARACTER_EDITED subscribers such as
@@ -230,7 +237,7 @@ export async function saveCharacterAuthoringFromPayload(saveModel = {}) {
             // Parity with the legacy edit-save: a changed first message refreshes
             // the greeting of an untouched open chat.
             if (!changedFields || changedFields.includes('firstMessage')) {
-                const message = getFirstMessage();
+                const message = getFirstMessage(undefined, { recordGreetingIdentity: hasKnownGreetingIdentity(state.chat) });
                 if (
                     message.mes &&
                 !state.chat_metadata.tainted &&
@@ -720,7 +727,7 @@ export async function createOrEditCharacter(e) {
                 await eventSource.emit(event_types.CHARACTER_EDITED, { detail: { id: state.this_chid, character: state.characters[state.this_chid] } });
 
                 // Recreate the chat if it hasn't been used at least once (i.e. with continue).
-                const message = getFirstMessage();
+                const message = getFirstMessage(undefined, { recordGreetingIdentity: hasKnownGreetingIdentity(state.chat) });
                 const shouldRegenerateMessage =
                 !isNewChat &&
                 message.mes &&

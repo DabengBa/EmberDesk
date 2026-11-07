@@ -458,3 +458,97 @@ When changing dev proxy routes or Vite fallback behavior, run `node tests/vite-d
 - Disposition: retain; Application: applied
 
 ---
+
+## [LRN-20261107-001] correction
+
+**Logged**: 2026-11-07T11:13:29+08:00
+**Priority**: medium
+**Status**: pending
+**Area**: frontend
+
+### Summary
+开场白控制条按用户要求保持紧凑的 `← 1/6 →` 加独立下拉图标，不额外显示可见标签文字。
+
+### Details
+本任务曾误加可见文字，用户纠正了界面要求；无障碍名称仍可通过 `aria-label` 提供，不应把无障碍标签理解成必须显示的文字。这是该控制条的具体设计要求，不推断为所有图标按钮的通用规则。
+
+### Suggested Action
+改动该控制条时对照用户指定的结构检查可见内容，同时测试按钮的可访问名称及键盘操作。
+
+### Metadata
+- Source: user_feedback
+- Related Files: app/components/main-chat/MainChatGreetingPicker.tsx, tests/chat-greeting-picker.e2e.js
+- Tags: greeting, compact-ui, accessibility, user-correction
+
+### Context Maintenance
+- Decay-Type: decision
+- Decay-Rate: slow（后续用户授权改变设计时复核）
+- Authority: 本任务用户提供的纠正；Owner: unknown
+- Revalidation: 修改该控制条设计时核对当前用户要求、界面及可访问名称；来源不可用时保留历史要求，不推断全局设计规则。
+- Validation: verified; Last-Validated: 2026-11-07; Evidence: 用户说明了纠正，当前 app/components/main-chat/MainChatGreetingPicker.tsx 的控制条使用计数、左右按钮和独立下拉按钮，按钮含 aria-label；本次未运行浏览器测试。
+- Disposition: retain; Application: applied
+
+---
+
+## [LRN-20261107-002] best_practice
+
+**Logged**: 2026-11-07T11:13:29+08:00
+**Priority**: high
+**Status**: pending
+**Area**: tests
+
+### Summary
+验证开场白身份时，要覆盖真实首消息 regex 改写及旧聊天身份未知的情况，不能只比较原始文字或依赖 mock。
+
+### Details
+首消息经 regex 处理后的展示文本可能不同于角色卡原文；仅以原文和消息内容匹配会丢失身份。没有可靠身份记录的旧聊天则不应从改写后的文字猜测身份。当前测试包含创建角色、配置 regex、新聊天、重载和切换，以及旧聊天未知身份场景；角色编辑重生成的分支另有 mock 单元测试，不能代替真实浏览器流程。
+
+### Suggested Action
+修改首消息、regex 或身份持久化时，运行 tests/greeting-identity-regression.e2e.js 和相关单元测试，检查新聊天、重载、切换及旧聊天；按 AGENTS.md 运行 test:compat 并单独报告基线失败。
+
+### Metadata
+- Source: conversation
+- Related Files: public/script.js, public/scripts/character-lifecycle-service.js, tests/greeting-identity-regression.e2e.js, tests/character-greeting-identity.test.js
+- Tags: greeting, regex, identity, legacy-chat, e2e
+
+### Context Maintenance
+- Decay-Type: reality
+- Decay-Rate: medium（消息处理、身份记录或测试流程改变时复核）
+- Authority: 当前工作树相关实现和测试；Owner: unknown
+- Revalidation: 改动消息生成、regex、身份模型或聊天迁移时检查实现并运行隔离浏览器回归；测试不可用时保留历史风险，不声称当前通过。
+- Validation: pending; Last-Validated: none; Evidence: 已检查测试源码及用户提供的场景；本次未运行测试。
+- Disposition: retain; Application: proposed
+
+---
+
+## [LRN-20261107-003] best_practice
+
+**Logged**: 2026-11-07T11:13:29+08:00
+**Priority**: high
+**Status**: pending
+**Area**: frontend
+
+### Summary
+异步切换开场白时，需检查保存期间刷新快照是否卸载控制条或丢失键盘焦点。
+
+### Details
+保存未完成时选择能力可能暂时变为不可用；如果据此卸载控制条或用原生禁用导致焦点丢失，键盘操作会中断。当前实现试图在 busy 期间保持挂载，并阻止不可用操作；还应检查聊天切换后的过期异步结果。不要仅验证保存结束后的最终文本。
+
+### Suggested Action
+用可控延迟的保存请求测试中途刷新、控制条存续、不可重复操作、焦点及保存完成后的状态；根据实际可访问性语义验证禁用行为。
+
+### Metadata
+- Source: conversation
+- Related Files: app/components/main-chat/MainChatGreetingPicker.tsx, tests/greeting-ux-regression.e2e.js
+- Tags: greeting, async-save, focus, lifecycle, accessibility
+- See Also: LRN-20261105-007
+
+### Context Maintenance
+- Decay-Type: reality
+- Decay-Rate: medium（组件生命周期或保存流程变更时复核）
+- Authority: 当前工作树组件及测试；Owner: unknown
+- Revalidation: 改动保存、快照或焦点管理时运行延迟保存浏览器测试并检查聊天切换；测试不可用时不声称已修复。
+- Validation: pending; Last-Validated: none; Evidence: 用户报告该风险，已检查组件及延迟保存测试源码；本次未运行测试。
+- Disposition: retain; Application: proposed
+
+---

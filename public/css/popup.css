@@ -220,6 +220,10 @@ body.no-blur .popup[open]::backdrop {
     justify-content: center;
 }
 
+.popup:has(#del_chat_checkbox) .popup-controls {
+    width: 100%;
+}
+
 .menu_button.menu_button_default {
     border-color: var(--white30a);
 }
