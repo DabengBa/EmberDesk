@@ -12,6 +12,7 @@ test('sort change reaches the handler when the right panel mounts after ready', 
     const power_user = { sort_field: 'name', sort_order: 'asc', sort_rule: 'string' };
     let prints = 0;
     let saves = 0;
+    let changes = 0;
     function $(target) {
         if (target === document || target === '#character_sort_order') {
             return { on(event, selectorOrHandler, delegatedHandler) {
@@ -21,7 +22,7 @@ test('sort change reaches the handler when the right panel mounts after ready', 
         }
         return { find() { return { data(key) { return target.selected[key]; } }; } };
     }
-    runInNewContext(binding, { $, document, power_user, printCharactersDebounced: () => prints++, saveSettingsDebounced: () => saves++ });
+    runInNewContext(binding, { $, document, power_user, markCharacterSortChanged: () => changes++, printCharactersDebounced: () => prints++, saveSettingsDebounced: () => saves++ });
     // React creates the select after the ready callback has registered handlers.
     selector = { selected: { field: 'name', order: 'desc', rule: 'string' } };
     function change() {
@@ -33,9 +34,11 @@ test('sort change reaches the handler when the right panel mounts after ready', 
     assert.deepEqual(power_user, { sort_field: 'name', sort_order: 'desc', sort_rule: 'string' });
     assert.equal(prints, 1);
     assert.equal(saves, 1);
+    assert.equal(changes, 1);
     selector.selected = { field: 'search' };
     change();
     assert.equal(power_user.sort_order, 'desc', 'temporary search sorting must not replace saved sort');
     assert.equal(prints, 2);
     assert.equal(saves, 2);
+    assert.equal(changes, 1);
 });

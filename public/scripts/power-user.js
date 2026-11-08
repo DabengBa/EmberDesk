@@ -1,4 +1,5 @@
 import { Fuse, Handlebars } from '../lib.js';
+import { markCharacterSortChanged } from './character-sort-save-guard.js';
 
 import {
     saveSettingsDebounced,
@@ -734,6 +735,7 @@ jQuery(() => {
             power_user.sort_field = field;
             power_user.sort_order = $(this).find(':selected').data('order');
             power_user.sort_rule = $(this).find(':selected').data('rule');
+            markCharacterSortChanged();
         }
         printCharactersDebounced();
         saveSettingsDebounced();

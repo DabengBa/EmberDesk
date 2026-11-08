@@ -196,6 +196,7 @@ import { createSingleFlightTask, resolvePersistedCurrentVersion, resolveStartupS
 import { ensurePanel, registerPanelHook } from './scripts/deferred-panels.js';
 import { getCharacterCardTagId } from './scripts/deferred-panel-replays.js';
 import { BulkEditOverlay } from './scripts/BulkEditOverlay.js';
+import { beginSettingsSaveSnapshot, finishSettingsSaveSnapshot } from './scripts/character-sort-save-guard.js';
 import { appendFileContent, hasPendingFileAttachment, populateFileAttachment, decodeStyleTags, encodeStyleTags, preserveNeutralChat, restoreNeutralChat, formatCreatorNotes, initChatUtilities, addDOMPurifyHooks } from './scripts/chats.js';
 import {
     getPresetManager,
@@ -7976,6 +7977,9 @@ export async function saveSettings(loopCounter = 0) {
         ...(settingsDocumentRevision != null ? { settings_revision: settingsDocumentRevision } : {}),
     };
 
+    const sortSaveSnapshot = beginSettingsSaveSnapshot(payload.settings_revision);
+    let savedRevision;
+    let sortSaveFinished = false;
     try {
         const saveSettingsRequest = await compressRequest({
             method: 'POST',
@@ -7999,7 +8003,7 @@ export async function saveSettings(loopCounter = 0) {
                     // A concurrent in-flight save landed first. Retry once with the
                     // adopted revision — the payload reserializes the live in-memory
                     // document, so the newest snapshot wins without dropping edits.
-                    return saveSettings(loopCounter + 1);
+                    return await saveSettings(loopCounter + 1);
                 }
                 toastr.warning(t`Settings were updated elsewhere. Reload to pick up the latest settings before saving again.`, t`Settings conflict`);
                 throw new Error('Failed to save settings: revision conflict');
@@ -8011,6 +8015,9 @@ export async function saveSettings(loopCounter = 0) {
             const saveResult = await result.json();
             if (Number.isFinite(Number(saveResult?.settings_revision))) {
                 settingsDocumentRevision = Number(saveResult.settings_revision);
+                if (saveResult?.result === 'ok' && Number.isSafeInteger(saveResult.settings_revision) && saveResult.settings_revision > 0) {
+                    savedRevision = saveResult.settings_revision;
+                }
             }
         } catch {
             // older file-backed responses may not be JSON objects
@@ -8020,10 +8027,16 @@ export async function saveSettings(loopCounter = 0) {
         const documentPayload = { ...payload };
         delete documentPayload.settings_revision;
         settings = documentPayload;
+        if (savedRevision !== undefined) {
+            finishSettingsSaveSnapshot(sortSaveSnapshot, savedRevision);
+            sortSaveFinished = true;
+        }
         await eventSource.emit(event_types.SETTINGS_UPDATED);
     } catch (error) {
         console.error('Error saving settings:', error);
         toastr.error(t`Check the server connection and reload the page to prevent data loss.`, t`Settings could not be saved`);
+    } finally {
+        if (!sortSaveFinished) finishSettingsSaveSnapshot(sortSaveSnapshot, savedRevision);
     }
 }
 

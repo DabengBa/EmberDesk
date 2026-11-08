@@ -471,6 +471,20 @@ describe('canonical settings route integration', () => {
         }
     });
 
+    test('save reports unexpected exceptions as HTTP 500', async () => {
+        setCanonicalEnv({ writes: true });
+        const directories = createRouteDirectories(makeRoot());
+        const router = await loadSettingsRouter();
+        const body = new Proxy({}, { ownKeys() { throw new Error('simulated settings failure'); } });
+        const log = jest.spyOn(console, 'error').mockImplementation(() => {});
+        try {
+            const response = await invokeRoute(router, '/save', { body, directories });
+            expect(response.statusCode).toBe(500);
+        } finally {
+            log.mockRestore();
+        }
+    });
+
     async function seedSettingsDocument(directories, payload, {
         handle = 'alice',
         auditClean = true,

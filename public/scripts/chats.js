@@ -605,7 +605,8 @@ export function decodeStyleTags(text, { prefix } = { prefix: '.mes_text ' }) {
             if (sheet) {
                 sanitizeRuleSet(ast.stylesheet);
             }
-            return `<style>${css.stringify(ast)}</style>`;
+            const sanitizedCss = css.stringify(ast).replace(/<\/style/gi, closingTag => closingTag.replace('/', '\\/'));
+            return `<style>${sanitizedCss}</style>`;
         } catch (error) {
             return `CSS ERROR: ${error}`;
         }

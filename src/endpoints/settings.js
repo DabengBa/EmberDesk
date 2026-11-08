@@ -362,7 +362,7 @@ router.post('/save', async function (request, response) {
         });
     } catch (err) {
         console.error(err);
-        response.send(err);
+        response.status(500).send({ error: 'settings_save_failed' });
     }
 });
 
