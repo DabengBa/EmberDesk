@@ -298,6 +298,10 @@ export function getPersistedCanonicalAuditStatus(db, { scope = 'character_metada
 }
 
 export function persistCanonicalAuditStatus(db, auditResult, { scope = 'character_metadata_and_chat_stats', auditedAtMs = Date.now() } = {}) {
+    return withCanonicalTransaction(db, txn => persistCanonicalAuditStatusInTransaction(txn, auditResult, { scope, auditedAtMs }));
+}
+
+export function persistCanonicalAuditStatusInTransaction(db, auditResult, { scope = 'character_metadata_and_chat_stats', auditedAtMs = Date.now() } = {}) {
     const driftCount = countEntriesByStatus(auditResult.entries ?? [], 'drift');
     const errorCount = countEntriesByStatus(auditResult.entries ?? [], 'error');
     const persistedState = {
@@ -316,8 +320,7 @@ export function persistCanonicalAuditStatus(db, auditResult, { scope = 'characte
         },
     };
 
-    withCanonicalTransaction(db, txnDb => {
-        txnDb.prepare(`
+    db.prepare(`
             INSERT INTO canonical_audit_state (
                 audit_scope,
                 status,
@@ -339,17 +342,16 @@ export function persistCanonicalAuditStatus(db, auditResult, { scope = 'characte
                 audited_at_ms = excluded.audited_at_ms,
                 details_json = excluded.details_json
         `).run(
-            scope,
-            persistedState.status,
-            persistedState.reason,
-            persistedState.blocking,
-            persistedState.driftCount,
-            persistedState.errorCount,
-            persistedState.entryCount,
-            persistedState.auditedAtMs,
-            JSON.stringify(persistedState.details),
-        );
-    });
+        scope,
+        persistedState.status,
+        persistedState.reason,
+        persistedState.blocking,
+        persistedState.driftCount,
+        persistedState.errorCount,
+        persistedState.entryCount,
+        persistedState.auditedAtMs,
+        JSON.stringify(persistedState.details),
+    );
 
     return {
         ok: !persistedState.blocking,

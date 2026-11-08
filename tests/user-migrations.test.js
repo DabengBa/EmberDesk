@@ -90,4 +90,30 @@ describe('migratePublicOverrides', () => {
         await migratePublicOverrides();
         await migratePublicOverrides();
     });
+
+    test('blocks startup with an offline recovery procedure even on already upgraded installations', async () => {
+        const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-mig-worlds-'));
+        const publicDir = path.join(sandbox, 'public');
+        const userRoot = path.join(dataTmpDir, 'default-user');
+        fs.rmSync(userRoot, { recursive: true, force: true });
+        fs.mkdirSync(path.join(publicDir, 'characters'), { recursive: true });
+        fs.mkdirSync(path.join(publicDir, 'worlds'), { recursive: true });
+        fs.mkdirSync(path.join(userRoot, 'worlds'), { recursive: true });
+        fs.writeFileSync(path.join(publicDir, 'characters', 'legacy.png'), 'character');
+        fs.writeFileSync(path.join(publicDir, 'worlds', 'Book.json'), 'legacy');
+        fs.writeFileSync(path.join(userRoot, 'worlds', 'Book.json'), 'current');
+        const cwd = process.cwd();
+        process.chdir(sandbox);
+        try {
+            await expect(migrateUserData()).rejects.toThrow(/stop.*move.*public.*worlds/i);
+            expect(fs.readFileSync(path.join(publicDir, 'worlds', 'Book.json'), 'utf8')).toBe('legacy');
+            expect(fs.readFileSync(path.join(userRoot, 'worlds', 'Book.json'), 'utf8')).toBe('current');
+            fs.rmSync(path.join(publicDir, 'characters'), { recursive: true });
+            await expect(migrateUserData()).rejects.toThrow(/stop.*move.*public.*worlds/i);
+        } finally {
+            process.chdir(cwd);
+            fs.rmSync(sandbox, { recursive: true, force: true });
+            fs.rmSync(userRoot, { recursive: true, force: true });
+        }
+    });
 });

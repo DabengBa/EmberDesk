@@ -40,6 +40,41 @@ afterEach(() => {
 });
 
 describe('canonical chat write service', () => {
+    test('records rename and delete intents before projecting', () => {
+        const directories = makeDirectories();
+        const manager = createCanonicalSqliteManager({ logger: { info() {}, warn() {} } });
+        const db = manager.open({ handle: 'alice', directories, featureFlags: { enabled: true, strict: false } });
+        runCanonicalMigrations(db);
+        const locator = { ownerType: 'character', ownerId: 'alice', sourcePath: 'chats/alice/a.jsonl' };
+        const nextLocator = { ...locator, sourcePath: 'chats/alice/b.jsonl' };
+        writeCanonicalChatPayload({ db, locator, payload: [{ chat_metadata: {} }], projectJsonl() {} });
+        let renamePending, deletePending;
+        expect(renameCanonicalChat({ db, locator, nextLocator, projectRename() { renamePending = listOpenCanonicalChatProjectionRepairs(db); } }).ok).toBe(true);
+        expect(renamePending).toEqual([expect.objectContaining({ operation: 'rename' })]);
+        expect(deleteCanonicalChat({ db, locator: nextLocator, projectDelete() { deletePending = listOpenCanonicalChatProjectionRepairs(db); } }).ok).toBe(true);
+        expect(deletePending).toEqual([expect.objectContaining({ operation: 'delete' })]);
+        expect(listOpenCanonicalChatProjectionRepairs(db)).toEqual([]);
+        manager.dispose();
+    });
+
+    test('records the chat projection intent before calling the file writer', () => {
+        const directories = makeDirectories();
+        const manager = createCanonicalSqliteManager({ logger: { info() {}, warn() {} } });
+        const db = manager.open({ handle: 'alice', directories, featureFlags: { enabled: true, strict: false } });
+        runCanonicalMigrations(db);
+        let pending;
+        const result = writeCanonicalChatPayload({
+            db,
+            locator: { ownerType: 'character', ownerId: 'alice', sourcePath: 'chats/alice/new.jsonl' },
+            payload: [{ chat_metadata: {} }, { mes: 'saved' }],
+            projectJsonl() { pending = listOpenCanonicalChatProjectionRepairs(db); },
+        });
+        expect(result.ok).toBe(true);
+        expect(pending).toEqual([expect.objectContaining({ sourcePath: 'chats/alice/new.jsonl' })]);
+        expect(listOpenCanonicalChatProjectionRepairs(db)).toEqual([]);
+        manager.dispose();
+    });
+
     test('keeps the canonical payload and records a repair when JSONL projection fails', async () => {
         const directories = makeDirectories();
         const sourcePath = path.join(directories.chats, 'alice', 'first.jsonl');

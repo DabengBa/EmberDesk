@@ -189,6 +189,7 @@ async function initializeSlice(slice, handle, directories, featureFlags, options
             featureFlags,
             manager: canonicalSqliteManager,
             buildSnapshotRow: options.buildSnapshotRow,
+            bootstrap: persistedAudit.status === 'missing' || persistedAudit.reason === 'audit_not_run',
         })
         : null;
     const auditResult = await runners.runAudit({
@@ -197,6 +198,7 @@ async function initializeSlice(slice, handle, directories, featureFlags, options
         db,
         buildSnapshotRow: options.buildSnapshotRow,
         projection: typeof slice.getProjectionMode === 'function' ? slice.getProjectionMode() : 'sync',
+        importResult,
     });
     const postInitResult = await runPostInit();
     return {

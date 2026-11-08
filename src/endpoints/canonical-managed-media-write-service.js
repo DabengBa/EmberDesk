@@ -14,6 +14,7 @@ import { getCanonicalStorageSlice } from '../canonical-storage-slice-registry.js
 import { uuidv4 } from '../util.js';
 import {
     getCanonicalManagedMediaReference,
+    listCanonicalManagedMediaReferences,
     listOpenCanonicalManagedMediaRepairs,
     markCanonicalManagedMediaRepairAttempt,
     recordCanonicalManagedMediaRepair,
@@ -222,70 +223,70 @@ export async function writeCanonicalManagedMedia({
     const contentHash = crypto.createHash('sha256').update(buffer).digest('hex');
     const staged = stageManagedContents({ directories, contents: buffer, contentHash });
     const previousReference = getCanonicalManagedMediaReference(state.db, target.normalized);
-    let reference = null;
-    try {
-        const result = upsertCanonicalManagedMediaReference(state.db, {
+    const repairKey = createRepairKey('project', `${target.normalized}:${contentHash}`);
+    // A hash path may already be in use by another writer, even if this call
+    // installed it. On any database failure retain it rather than unlinking.
+    const result = upsertCanonicalManagedMediaReference(state.db, {
+        compatibilityPath: target.normalized,
+        contentHash,
+        sizeBytes: buffer.length,
+        mediaType: mediaType ?? (mime.lookup(target.normalized) || 'application/octet-stream'),
+        managedRelativePath: `${MANAGED_MEDIA_ROOT}/${contentHash}`,
+        ownerType,
+        ownerId,
+        role,
+        displayName,
+        metadata,
+        nowMs,
+    }, {
+        onPersist: projectionMode === 'off' ? null : (db, saved) => saveProjectionRepair(db, {
+            repairKey,
+            reference: saved.reference,
+            operation: 'project',
             compatibilityPath: target.normalized,
-            contentHash,
-            sizeBytes: buffer.length,
-            mediaType: mediaType ?? (mime.lookup(target.normalized) || 'application/octet-stream'),
-            managedRelativePath: `${MANAGED_MEDIA_ROOT}/${contentHash}`,
-            ownerType,
-            ownerId,
-            role,
-            displayName,
-            metadata,
+            reason: 'projection_pending',
             nowMs,
+        }),
+    });
+    const reference = result.reference;
+    if (previousReference && previousReference.blobId !== reference.blobId) {
+        withCanonicalTransaction(state.db, db => {
+            const stillReferenced = db.prepare(`
+                SELECT 1 FROM media_references
+                WHERE blob_id = ? AND deleted_at_ms IS NULL
+                LIMIT 1
+            `).get(previousReference.blobId);
+            if (!stillReferenced) {
+                db.prepare(`
+                    UPDATE managed_blobs
+                    SET lifecycle_state = 'tombstoned', deleted_at_ms = ?, updated_at_ms = ?
+                    WHERE id = ?
+                `).run(Number(nowMs), Number(nowMs), previousReference.blobId);
+            }
         });
-        reference = result.reference;
-        if (previousReference && previousReference.blobId !== reference.blobId) {
-            withCanonicalTransaction(state.db, db => {
-                const stillReferenced = db.prepare(`
-                    SELECT 1 FROM media_references
-                    WHERE blob_id = ? AND deleted_at_ms IS NULL
-                    LIMIT 1
-                `).get(previousReference.blobId);
-                if (!stillReferenced) {
-                    db.prepare(`
-                        UPDATE managed_blobs
-                        SET lifecycle_state = 'tombstoned', deleted_at_ms = ?, updated_at_ms = ?
-                        WHERE id = ?
-                    `).run(Number(nowMs), Number(nowMs), previousReference.blobId);
-                }
-            });
-        }
-    } catch (error) {
-        if (staged.installed) {
-            fs.rmSync(staged.managedPath, { force: true });
-        }
-        throw error;
     }
 
     try {
         if (projectionMode !== 'off') {
-            (projectCompatibility ?? projectCompatibilityFile)({
-                managedPath: staged.managedPath,
-                compatibilityPath: target.absolute,
-            });
-            recordImportLedgerEntry(state.db, {
-                sliceKey: 'managed_media',
-                sourcePath: target.normalized,
-                contentHash,
-                origin: 'projection',
-                nowMs,
+            withCanonicalTransaction(state.db, db => {
+                const current = getCanonicalManagedMediaReference(db, target.normalized);
+                if (!current || current.deletedAtMs != null) throw new Error('managed_media_projection_path_changed');
+                const currentPath = path.resolve(directories.storage, current.managedRelativePath);
+                (projectCompatibility ?? projectCompatibilityFile)({ managedPath: currentPath, compatibilityPath: target.absolute });
+                recordImportLedgerEntry(db, {
+                    sliceKey: 'managed_media', sourcePath: target.normalized,
+                    contentHash: current.contentHash, origin: 'projection', nowMs,
+                });
+                resolveCanonicalManagedMediaRepair(db, { repairKey, resolvedAtMs: nowMs });
             });
         }
         return { ok: true, authorityCommitted: true, reference, managedPath: staged.managedPath };
     } catch (error) {
-        const repairKey = createRepairKey('project', reference.id);
-        saveProjectionRepair(state.db, {
-            repairKey,
-            reference,
-            operation: 'project',
-            compatibilityPath: target.normalized,
-            reason: String(error?.message ?? error ?? 'projection_failed'),
-            nowMs,
-        });
+        withCanonicalTransaction(state.db, db => saveProjectionRepair(db, {
+            repairKey, reference: getCanonicalManagedMediaReference(db, target.normalized),
+            operation: 'project', compatibilityPath: target.normalized,
+            reason: String(error?.message ?? error ?? 'projection_failed'), nowMs,
+        }));
         return {
             ok: false,
             authorityCommitted: true,
@@ -311,13 +312,14 @@ export async function deleteCanonicalManagedMediaReference({
     }
     const projectionMode = resolveProjectionMode(projection, dependencies);
     const target = assertCompatibilityPath(directories, compatibilityPath);
-    const { reference, managedPath } = getReferenceAndManagedPath(state.db, directories, target.normalized);
-    if (!reference) {
-        return { ok: false, reason: 'reference_not_found' };
-    }
-
+    let reference = null;
+    let managedPath = null;
     let blobTombstoned = false;
+    let repairKey = null;
     withCanonicalTransaction(state.db, db => {
+        ({ reference, managedPath } = getReferenceAndManagedPath(db, directories, target.normalized));
+        if (!reference || reference.deletedAtMs != null) return;
+        repairKey = createRepairKey('delete', reference.id);
         db.prepare(`
             UPDATE media_references
             SET deleted_at_ms = ?, updated_at_ms = ?
@@ -336,17 +338,20 @@ export async function deleteCanonicalManagedMediaReference({
                 WHERE id = ?
             `).run(Number(nowMs), Number(nowMs), reference.blobId);
         }
+        if (projectionMode !== 'off') {
+            saveProjectionRepair(db, {
+                repairKey, reference, operation: 'delete', compatibilityPath: target.normalized,
+                reason: 'projection_pending', nowMs,
+            });
+        } else {
+            fs.rmSync(target.absolute, { force: true });
+            removeImportLedgerEntry(db, { sliceKey: 'managed_media', sourcePath: target.normalized });
+        }
     });
+    if (!reference) return { ok: false, reason: 'reference_not_found' };
+
 
     if (projectionMode === 'off') {
-        // Export-surface cleanup only: a stale compatibility file is removed
-        // best-effort and never escalates to a blocking repair record.
-        try {
-            fs.rmSync(target.absolute, { force: true });
-        } catch (error) {
-            console.warn(`Managed media projection cleanup skipped for ${target.normalized}:`, error);
-        }
-        removeImportLedgerEntry(state.db, { sliceKey: 'managed_media', sourcePath: target.normalized });
         return {
             ok: true,
             authorityCommitted: true,
@@ -358,8 +363,14 @@ export async function deleteCanonicalManagedMediaReference({
     }
 
     try {
-        (projectDelete ?? (targetPath => fs.rmSync(targetPath, { force: true })))(target.absolute);
-        removeImportLedgerEntry(state.db, { sliceKey: 'managed_media', sourcePath: target.normalized });
+        withCanonicalTransaction(state.db, db => {
+            if (getCanonicalManagedMediaReference(db, target.normalized)?.deletedAtMs == null) {
+                throw new Error('managed_media_projection_path_reused');
+            }
+            (projectDelete ?? (targetPath => fs.rmSync(targetPath, { force: true })))(target.absolute);
+            removeImportLedgerEntry(db, { sliceKey: 'managed_media', sourcePath: target.normalized });
+            resolveCanonicalManagedMediaRepair(db, { repairKey, resolvedAtMs: nowMs });
+        });
         return {
             ok: true,
             authorityCommitted: true,
@@ -369,15 +380,10 @@ export async function deleteCanonicalManagedMediaReference({
             managedPath,
         };
     } catch (error) {
-        const repairKey = createRepairKey('delete', reference.id);
-        saveProjectionRepair(state.db, {
-            repairKey,
-            reference,
-            operation: 'delete',
-            compatibilityPath: target.normalized,
-            reason: String(error?.message ?? error ?? 'projection_delete_failed'),
-            nowMs,
-        });
+        withCanonicalTransaction(state.db, db => saveProjectionRepair(db, {
+            repairKey, reference, operation: 'delete', compatibilityPath: target.normalized,
+            reason: String(error?.message ?? error ?? 'projection_delete_failed'), nowMs,
+        }));
         return { ok: false, authorityCommitted: true, reason: 'projection_failed', repairKey, reference, blobTombstoned };
     }
 }
@@ -400,12 +406,12 @@ export async function renameCanonicalManagedMediaReference({
     const projectionMode = resolveProjectionMode(projection, dependencies);
     const oldTarget = assertCompatibilityPath(directories, oldCompatibilityPath);
     const newTarget = assertCompatibilityPath(directories, newCompatibilityPath);
-    const { reference, managedPath } = getReferenceAndManagedPath(state.db, directories, oldTarget.normalized);
-    if (!reference) {
-        return { ok: false, reason: 'reference_not_found' };
-    }
-
+    let reference = null;
+    let renamed = null;
+    let repairKey = null;
     withCanonicalTransaction(state.db, db => {
+        reference = getCanonicalManagedMediaReference(db, oldTarget.normalized);
+        if (!reference || reference.deletedAtMs != null) return;
         const conflict = db.prepare(`
             SELECT id FROM media_references
             WHERE compatibility_path = ? AND id != ? AND deleted_at_ms IS NULL
@@ -413,49 +419,55 @@ export async function renameCanonicalManagedMediaReference({
         if (conflict) {
             throw new Error(`Managed media compatibility path already exists: ${newTarget.normalized}`);
         }
+        repairKey = createRepairKey('rename', reference.id);
         db.prepare(`
             UPDATE media_references
             SET compatibility_path = ?, display_name = ?, updated_at_ms = ?
             WHERE id = ?
         `).run(newTarget.normalized, displayName ?? path.posix.basename(newTarget.normalized), Number(nowMs), reference.id);
+        if (projectionMode !== 'off') saveProjectionRepair(db, {
+            repairKey, reference, operation: 'rename', compatibilityPath: newTarget.normalized,
+            previousCompatibilityPath: oldTarget.normalized, reason: 'projection_pending', nowMs,
+        });
+        renamed = getCanonicalManagedMediaReference(db, newTarget.normalized);
+        if (projectionMode === 'off') {
+            const oldOwner = getCanonicalManagedMediaReference(db, oldTarget.normalized);
+            if (!oldOwner || oldOwner.deletedAtMs != null) {
+                fs.rmSync(oldTarget.absolute, { force: true });
+                removeImportLedgerEntry(db, { sliceKey: 'managed_media', sourcePath: oldTarget.normalized });
+            }
+        }
     });
-    const renamed = getCanonicalManagedMediaReference(state.db, newTarget.normalized);
+    if (!reference) return { ok: false, reason: 'reference_not_found' };
+
 
     if (projectionMode === 'off') {
-        try {
-            fs.rmSync(oldTarget.absolute, { force: true });
-        } catch (error) {
-            console.warn(`Managed media projection cleanup skipped for ${oldTarget.normalized}:`, error);
-        }
-        removeImportLedgerEntry(state.db, { sliceKey: 'managed_media', sourcePath: oldTarget.normalized });
         return { ok: true, authorityCommitted: true, reference: renamed };
     }
 
     try {
-        (projectRename ?? ((input) => {
-            projectCompatibilityFile({ managedPath: input.managedPath, compatibilityPath: input.newPath });
-            fs.rmSync(input.oldPath, { force: true });
-        }))({ managedPath, oldPath: oldTarget.absolute, newPath: newTarget.absolute });
-        recordImportLedgerEntry(state.db, {
-            sliceKey: 'managed_media',
-            sourcePath: newTarget.normalized,
-            contentHash: reference.contentHash,
-            origin: 'projection',
-            nowMs,
+        withCanonicalTransaction(state.db, db => {
+            const current = getCanonicalManagedMediaReference(db, newTarget.normalized);
+            if (!current || current.deletedAtMs != null) throw new Error('managed_media_projection_path_changed');
+            const currentManagedPath = path.resolve(directories.storage, current.managedRelativePath);
+            (projectRename ?? ((input) => {
+                projectCompatibilityFile({ managedPath: input.managedPath, compatibilityPath: input.newPath });
+                fs.rmSync(input.oldPath, { force: true });
+            }))({ managedPath: currentManagedPath, oldPath: oldTarget.absolute, newPath: newTarget.absolute });
+            recordImportLedgerEntry(db, {
+                sliceKey: 'managed_media', sourcePath: newTarget.normalized,
+                contentHash: current.contentHash, origin: 'projection', nowMs,
+            });
+            removeImportLedgerEntry(db, { sliceKey: 'managed_media', sourcePath: oldTarget.normalized });
+            resolveCanonicalManagedMediaRepair(db, { repairKey, resolvedAtMs: nowMs });
         });
-        removeImportLedgerEntry(state.db, { sliceKey: 'managed_media', sourcePath: oldTarget.normalized });
         return { ok: true, authorityCommitted: true, reference: renamed };
     } catch (error) {
-        const repairKey = createRepairKey('rename', renamed.id);
-        saveProjectionRepair(state.db, {
-            repairKey,
-            reference: renamed,
-            operation: 'rename',
-            compatibilityPath: newTarget.normalized,
+        withCanonicalTransaction(state.db, db => saveProjectionRepair(db, {
+            repairKey, reference: renamed, operation: 'rename', compatibilityPath: newTarget.normalized,
             previousCompatibilityPath: oldTarget.normalized,
-            reason: String(error?.message ?? error ?? 'projection_rename_failed'),
-            nowMs,
-        });
+            reason: String(error?.message ?? error ?? 'projection_rename_failed'), nowMs,
+        }));
         return { ok: false, authorityCommitted: true, reason: 'projection_failed', repairKey, reference: renamed };
     }
 }
@@ -492,26 +504,55 @@ export async function repairCanonicalManagedMediaProjection({
         }
         markCanonicalManagedMediaRepairAttempt(db, { repairKey: repair.repairKey, attemptedAtMs: nowMs });
         try {
-            projectRepair({ directories, repair });
-            resolveCanonicalManagedMediaRepair(db, { repairKey: repair.repairKey, resolvedAtMs: nowMs });
-            if (repair.operation !== 'delete' && repair.details?.compatibilityPath) {
-                const reference = getCanonicalManagedMediaReference(db, normalizePath(repair.details.compatibilityPath));
-                if (reference) {
-                    recordImportLedgerEntry(db, {
+            withCanonicalTransaction(db, txn => {
+                const latest = listOpenCanonicalManagedMediaRepairs(txn)
+                    .find(item => item.repairKey === repair.repairKey);
+                if (!latest) return;
+                const compatibilityPath = normalizePath(latest.details?.compatibilityPath);
+                const previousCompatibilityPath = normalizePath(latest.details?.previousCompatibilityPath);
+                const current = listCanonicalManagedMediaReferences(txn, { includeDeleted: true })
+                    .find(item => item.id === latest.mediaReferenceId) ?? null;
+                if (latest.operation === 'delete') {
+                    const pathOwner = compatibilityPath ? getCanonicalManagedMediaReference(txn, compatibilityPath) : null;
+                    if (pathOwner && pathOwner.deletedAtMs == null) {
+                        resolveCanonicalManagedMediaRepair(txn, { repairKey: latest.repairKey, resolvedAtMs: nowMs });
+                        return;
+                    }
+                    projectRepair({ directories, repair: latest });
+                    removeImportLedgerEntry(txn, { sliceKey: 'managed_media', sourcePath: compatibilityPath });
+                } else if (current && current.deletedAtMs == null) {
+                    const currentPathName = normalizePath(current.compatibilityPath);
+                    const managedPath = path.resolve(directories.storage, current.managedRelativePath);
+                    if (!managedPath.startsWith(`${path.resolve(directories.storage)}${path.sep}`) || !fs.existsSync(managedPath)) {
+                        throw new Error('missing_managed_media_content');
+                    }
+                    const target = assertCompatibilityPath(directories, currentPathName);
+                    projectCompatibilityFile({ managedPath, compatibilityPath: target.absolute });
+                    if (latest.operation === 'rename' && previousCompatibilityPath && previousCompatibilityPath !== currentPathName) {
+                        const previousOwner = getCanonicalManagedMediaReference(txn, previousCompatibilityPath);
+                        if (!previousOwner || previousOwner.deletedAtMs != null) {
+                            fs.rmSync(assertCompatibilityPath(directories, previousCompatibilityPath).absolute, { force: true });
+                            removeImportLedgerEntry(txn, { sliceKey: 'managed_media', sourcePath: previousCompatibilityPath });
+                        }
+                    }
+                    recordImportLedgerEntry(txn, {
                         sliceKey: 'managed_media',
-                        sourcePath: reference.compatibilityPath,
-                        contentHash: reference.contentHash,
+                        sourcePath: currentPathName,
+                        contentHash: current.contentHash,
                         origin: 'projection',
                         nowMs,
                     });
+                } else {
+                    const pathOwner = compatibilityPath ? getCanonicalManagedMediaReference(txn, compatibilityPath) : null;
+                    if (pathOwner && pathOwner.deletedAtMs == null) {
+                        resolveCanonicalManagedMediaRepair(txn, { repairKey: latest.repairKey, resolvedAtMs: nowMs });
+                        return;
+                    }
+                    fs.rmSync(assertCompatibilityPath(directories, compatibilityPath).absolute, { force: true });
+                    removeImportLedgerEntry(txn, { sliceKey: 'managed_media', sourcePath: compatibilityPath });
                 }
-            }
-            if (repair.operation !== 'project' && repair.details?.previousCompatibilityPath) {
-                removeImportLedgerEntry(db, {
-                    sliceKey: 'managed_media',
-                    sourcePath: normalizePath(repair.details.previousCompatibilityPath),
-                });
-            }
+                resolveCanonicalManagedMediaRepair(txn, { repairKey: latest.repairKey, resolvedAtMs: nowMs });
+            });
             results.push({ repairKey: repair.repairKey, status: 'repaired', operation: repair.operation });
         } catch (error) {
             results.push({

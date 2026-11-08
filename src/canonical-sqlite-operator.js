@@ -17,6 +17,7 @@ import {
     CANONICAL_CHAT_AUDIT_SCOPE,
 } from './canonical-chat-shadow-import.js';
 import { recordImportLedgerEntry, removeImportLedgerEntry } from './canonical-import-ledger.js';
+import { replayWorldProjection } from './canonical-world-info-projection.js';
 import { repairCanonicalManagedMediaProjection } from './endpoints/canonical-managed-media-write-service.js';
 import {
     auditCanonicalSecretsShadowImport,
@@ -38,10 +39,7 @@ import {
     resolveProjectionRepair,
 } from './endpoints/character-store.js';
 import {
-    getCanonicalWorldInfoBook,
     listOpenWorldInfoProjectionRepairs,
-    normalizeCanonicalWorldInfoName,
-    resolveWorldInfoProjectionRepair,
 } from './endpoints/world-info-store.js';
 import {
     listOpenSettingsProjectionRepairs,
@@ -56,7 +54,7 @@ import {
     calculateCanonicalCharacterChatStats,
     listOpenCanonicalChatProjectionRepairs,
     resolveCanonicalChatProjectionRepair,
-    serializeCanonicalChatSession,
+
 } from './endpoints/canonical-chat-store.js';
 import { resolveCanonicalChatProjectionPath } from './endpoints/canonical-chat-projection-path.js';
 import {
@@ -630,83 +628,16 @@ export async function repairCanonicalProjection({ db, directories, repairKeys = 
     };
 }
 
-function writeWorldInfoProjectionFile({ db, directories, worldName, payload, nowMs = Date.now() }) {
-    const normalizedWorldName = normalizeCanonicalWorldInfoName(worldName);
-    const outputPath = path.join(directories.worlds, `${normalizedWorldName}.json`);
-    const contents = JSON.stringify(payload, null, 4);
-    fs.mkdirSync(directories.worlds, { recursive: true });
-    writeFileAtomicSync(outputPath, contents);
-    if (db) {
-        recordImportLedgerEntry(db, {
-            sliceKey: 'world_info',
-            sourcePath: path.relative(directories.root, outputPath),
-            contentHash: crypto.createHash('sha256').update(contents).digest('hex'),
-            origin: 'projection',
-            nowMs,
-        });
-    }
-    return outputPath;
-}
-
-function deleteWorldInfoProjectionForRepair({ db, repair, directories }) {
-    const normalizedWorldName = normalizeCanonicalWorldInfoName(repair.worldName);
-    const outputPath = path.join(directories.worlds, `${normalizedWorldName}.json`);
-    fs.rmSync(outputPath, { force: true });
-    if (db) {
-        removeImportLedgerEntry(db, {
-            sliceKey: 'world_info',
-            sourcePath: path.relative(directories.root, outputPath),
-        });
-    }
-}
-
 async function repairSingleWorldInfoProjection({ db, directories, repair, nowMs = Date.now() }) {
-    const operation = repair.details?.operation ?? null;
-    if (operation === 'delete') {
-        deleteWorldInfoProjectionForRepair({ db, repair, directories });
-        withCanonicalTransaction(db, txnDb => {
-            resolveWorldInfoProjectionRepair(txnDb, {
-                repairKey: repair.repairKey,
-                resolvedAtMs: nowMs,
-            });
-        });
-        return {
-            repairKey: repair.repairKey,
-            status: 'repaired',
-            operation,
-        };
-    }
-
-    const payload = getCanonicalWorldInfoBook(db, repair.worldName);
-    if (!payload) {
+    if (!repair.repairKey.startsWith('world-path-v1:')) {
         return {
             repairKey: repair.repairKey,
             status: 'blocked',
-            operation,
-            blocker: 'missing_canonical_world_info_row',
+            operation: repair.details?.operation ?? null,
+            blocker: 'legacy_world_projection_repair_blocked',
         };
     }
-
-    writeWorldInfoProjectionFile({
-        db,
-        directories,
-        worldName: repair.worldName,
-        payload,
-        nowMs,
-    });
-
-    withCanonicalTransaction(db, txnDb => {
-        resolveWorldInfoProjectionRepair(txnDb, {
-            repairKey: repair.repairKey,
-            resolvedAtMs: nowMs,
-        });
-    });
-
-    return {
-        repairKey: repair.repairKey,
-        status: 'repaired',
-        operation,
-    };
+    return replayWorldProjection(db, { directories, repairKey: repair.repairKey, nowMs });
 }
 
 export async function repairCanonicalWorldInfoProjection({ db, directories, repairKeys = null, nowMs = Date.now() }) {
@@ -747,72 +678,70 @@ function getCanonicalChatProjectionPath(directories, sourcePath, ownerType, owne
 function repairSingleCanonicalChatProjection({ db, directories, repair, nowMs = Date.now() }) {
     const operation = repair.operation;
     try {
-        const filePath = getCanonicalChatProjectionPath(
-            directories,
-            repair.sourcePath,
-            repair.ownerType,
-            repair.ownerId,
-        );
-        if (operation === 'delete') {
-            fs.rmSync(filePath, { force: true });
-            removeImportLedgerEntry(db, {
-                sliceKey: 'chats',
-                sourcePath: repair.sourcePath,
-            });
-        } else {
-            if (!repair.sessionId) {
-                return {
-                    repairKey: repair.repairKey,
-                    status: 'blocked',
-                    operation,
-                    blocker: 'missing_canonical_chat_session',
-                };
+        return withCanonicalTransaction(db, txn => {
+            const current = listOpenCanonicalChatProjectionRepairs(txn).find(item => item.repairKey === repair.repairKey);
+            if (!current) return { repairKey: repair.repairKey, status: 'repaired', operation };
+            repair = current;
+            const filePath = getCanonicalChatProjectionPath(
+                directories,
+                repair.sourcePath,
+                repair.ownerType,
+                repair.ownerId,
+            );
+            const currentSession = txn.prepare('SELECT source_jsonl FROM chat_sessions WHERE owner_type = ? AND owner_id = ? AND source_path = ?')
+                .get(repair.ownerType, repair.ownerId, repair.sourcePath);
+            if (!currentSession && repair.operation !== 'delete') {
+                return { repairKey: repair.repairKey, status: 'blocked', operation: repair.operation, blocker: 'missing_canonical_chat_session' };
             }
-            const jsonl = serializeCanonicalChatSession(db, repair.sessionId);
-            if (jsonl === null) {
-                return {
-                    repairKey: repair.repairKey,
-                    status: 'blocked',
-                    operation,
-                    blocker: 'missing_canonical_chat_session',
-                };
-            }
-            fs.mkdirSync(path.dirname(filePath), { recursive: true });
-            writeFileAtomicSync(filePath, jsonl, 'utf8');
-            recordImportLedgerEntry(db, {
-                sliceKey: 'chats',
-                sourcePath: repair.sourcePath,
-                contentHash: crypto.createHash('sha256').update(jsonl).digest('hex'),
-                origin: 'projection',
-                nowMs,
-            });
+            if (!currentSession) {
+                fs.rmSync(filePath, { force: true });
+                removeImportLedgerEntry(txn, {
+                    sliceKey: 'chats',
+                    sourcePath: repair.sourcePath,
+                });
+            } else {
+                const jsonl = currentSession.source_jsonl;
+                fs.mkdirSync(path.dirname(filePath), { recursive: true });
+                writeFileAtomicSync(filePath, jsonl, 'utf8');
+                recordImportLedgerEntry(txn, {
+                    sliceKey: 'chats',
+                    sourcePath: repair.sourcePath,
+                    contentHash: crypto.createHash('sha256').update(jsonl).digest('hex'),
+                    origin: 'projection',
+                    nowMs,
+                });
 
-            if (operation === 'rename' && repair.details?.previousSourcePath) {
-                const previousPath = getCanonicalChatProjectionPath(
-                    directories,
-                    repair.details.previousSourcePath,
-                    repair.ownerType,
-                    repair.ownerId,
-                );
-                if (previousPath !== filePath) {
-                    fs.rmSync(previousPath, { force: true });
-                    removeImportLedgerEntry(db, {
-                        sliceKey: 'chats',
-                        sourcePath: repair.details.previousSourcePath,
-                    });
+                if (operation === 'rename' && repair.details?.previousSourcePath) {
+                    const previousPath = getCanonicalChatProjectionPath(
+                        directories,
+                        repair.details.previousSourcePath,
+                        repair.ownerType,
+                        repair.ownerId,
+                    );
+                    if (previousPath !== filePath) {
+                        const previous = txn.prepare('SELECT 1 FROM chat_sessions WHERE owner_type = ? AND owner_id = ? AND source_path = ?')
+                            .get(repair.ownerType, repair.ownerId, repair.details.previousSourcePath);
+                        if (!previous) {
+                            fs.rmSync(previousPath, { force: true });
+                            removeImportLedgerEntry(txn, {
+                                sliceKey: 'chats',
+                                sourcePath: repair.details.previousSourcePath,
+                            });
+                        }
+                    }
                 }
             }
-        }
 
-        resolveCanonicalChatProjectionRepair(db, {
-            repairKey: repair.repairKey,
-            resolvedAtMs: nowMs,
+            resolveCanonicalChatProjectionRepair(txn, {
+                repairKey: repair.repairKey,
+                resolvedAtMs: nowMs,
+            });
+            return {
+                repairKey: repair.repairKey,
+                status: 'repaired',
+                operation,
+            };
         });
-        return {
-            repairKey: repair.repairKey,
-            status: 'repaired',
-            operation,
-        };
     } catch (error) {
         return {
             repairKey: repair.repairKey,

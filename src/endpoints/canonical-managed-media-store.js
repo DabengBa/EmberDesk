@@ -124,7 +124,7 @@ export function getCanonicalManagedMediaReference(db, compatibilityPath) {
  * relative path intentionally remains that compatibility path until write
  * cutover establishes the managed content root.
  */
-export function upsertCanonicalManagedMediaReference(db, record) {
+export function upsertCanonicalManagedMediaReference(db, record, { onPersist = null } = {}) {
     const normalized = {
         compatibilityPath: normalizePath(record.compatibilityPath),
         contentHash: String(record.contentHash),
@@ -138,13 +138,13 @@ export function upsertCanonicalManagedMediaReference(db, record) {
         metadata: record.metadata && typeof record.metadata === 'object' ? record.metadata : {},
         nowMs: Number(record.nowMs ?? Date.now()),
     };
-    const existing = getCanonicalManagedMediaReference(db, normalized.compatibilityPath);
-    if (isSameReference(existing, normalized)) {
-        return { status: 'unchanged', reference: existing };
-    }
-
-    let saved = null;
-    withCanonicalTransaction(db, txnDb => {
+    return withCanonicalTransaction(db, txnDb => {
+        const existing = getCanonicalManagedMediaReference(txnDb, normalized.compatibilityPath);
+        if (isSameReference(existing, normalized) && existing.deletedAtMs == null) {
+            const result = { status: 'unchanged', reference: existing };
+            onPersist?.(txnDb, result);
+            return result;
+        }
         const existingBlob = getBlobByHash(txnDb, normalized.contentHash);
         const blobId = existingBlob?.id ?? uuidv4();
         txnDb.prepare(`
@@ -196,13 +196,11 @@ export function upsertCanonicalManagedMediaReference(db, record) {
             existing?.createdAtMs ?? normalized.nowMs,
             normalized.nowMs,
         );
-        saved = getCanonicalManagedMediaReference(txnDb, normalized.compatibilityPath);
+        const saved = getCanonicalManagedMediaReference(txnDb, normalized.compatibilityPath);
+        const result = { status: existing ? 'updated' : 'imported', reference: saved };
+        onPersist?.(txnDb, result);
+        return result;
     });
-
-    return {
-        status: existing ? 'updated' : 'imported',
-        reference: saved,
-    };
 }
 
 export function listOpenCanonicalManagedMediaRepairs(db) {

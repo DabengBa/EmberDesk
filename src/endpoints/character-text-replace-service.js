@@ -5,13 +5,12 @@ import { listCanonicalCharactersBoundToWorld } from './character-store.js';
 import {
     getCanonicalWorldInfoBook,
     normalizeCanonicalWorldInfoName,
-    recordWorldInfoProjectionRepair,
-    upsertCanonicalWorldInfoBook,
 } from './world-info-store.js';
 import {
-    getCanonicalWorldInfoWriteState,
-    writeWorldInfoProjectionFile,
-} from './worldinfo.js';
+    commitWorldBookWithProjectionIntent,
+    replayWorldProjection,
+} from '../canonical-world-info-projection.js';
+import { getCanonicalWorldInfoWriteState } from './worldinfo.js';
 import {
     openCanonicalChatForTextReplace,
     writeCanonicalChatForTextReplace,
@@ -535,12 +534,11 @@ export async function runCharacterTextReplace({ request, apply = false, dependen
         getCanonicalCharacterCardJson: dependencies.getCanonicalCharacterCardJson,
         getCharacterWriteDependencies: dependencies.getCharacterWriteDependencies,
         getWorldInfoWriteState: dependencies.getWorldInfoWriteState ?? getCanonicalWorldInfoWriteState,
-        writeWorldInfoProjection: dependencies.writeWorldInfoProjection ?? writeWorldInfoProjectionFile,
         getCanonicalWorldInfoBook: dependencies.getCanonicalWorldInfoBook ?? getCanonicalWorldInfoBook,
-        upsertCanonicalWorldInfoBook: dependencies.upsertCanonicalWorldInfoBook ?? upsertCanonicalWorldInfoBook,
+        commitWorldBookWithProjectionIntent: dependencies.commitWorldBookWithProjectionIntent ?? commitWorldBookWithProjectionIntent,
+        replayWorldProjection: dependencies.replayWorldProjection ?? replayWorldProjection,
         listCanonicalCharactersBoundToWorld: dependencies.listCanonicalCharactersBoundToWorld ?? listCanonicalCharactersBoundToWorld,
         convertWorldInfoToCharacterBook: dependencies.convertWorldInfoToCharacterBook ?? convertWorldInfoToCharacterBook,
-        recordWorldInfoProjectionRepair: dependencies.recordWorldInfoProjectionRepair ?? recordWorldInfoProjectionRepair,
         getCharacterFeatureFlags: dependencies.getCharacterFeatureFlags ?? (() => getCanonicalStorageSlice('characters').getFeatureFlags()),
         openChatSession: dependencies.openChatSession ?? openCanonicalChatForTextReplace,
         writeChatSession: dependencies.writeChatSession ?? writeCanonicalChatForTextReplace,
@@ -646,24 +644,21 @@ export async function runCharacterTextReplace({ request, apply = false, dependen
                 result.totals.changedTargets += 1;
             }
             if (apply && changed) {
-                deps.upsertCanonicalWorldInfoBook(worldInfoState.db, {
+                // Authority and projection intent commit together; the shared
+                // worker then applies the file projection under its own lock.
+                const repairKey = deps.commitWorldBookWithProjectionIntent(worldInfoState.db, {
+                    directories,
                     name: normalizedWorldName,
                     payload: bookPayload,
+                    mode: getCanonicalStorageSlice('world_info').getProjectionMode(),
                     nowMs: Date.now(),
                 });
-                // Canonical commit already happened — a projection failure is a
-                // durable repair, not a reason to un-apply the book.
                 result.applied.worldBook = true;
                 try {
-                    deps.writeWorldInfoProjection(directories, normalizedWorldName, bookPayload, worldInfoState.db);
+                    deps.replayWorldProjection(worldInfoState.db, { directories, repairKey });
                 } catch {
-                    const repairKey = `world_info:${normalizedWorldName}:text-replace`;
-                    deps.recordWorldInfoProjectionRepair(worldInfoState.db, {
-                        repairKey,
-                        worldName: normalizedWorldName,
-                        reason: 'projection_failed',
-                        details: { operation: 'text-replace' },
-                    });
+                    // Canonical commit already happened — a projection failure
+                    // stays a durably pending v1 intent, not an un-apply.
                     result.areas.worldBook.projectionFailed = true;
                     result.areas.worldBook.repairKey = repairKey;
                     result.warnings.push({ code: 'world_book_projection_failed', name: normalizedWorldName });

@@ -8,11 +8,17 @@ import {
     resolveAuditDriftReason,
 } from './canonical-import-ledger.js';
 import { getCanonicalMigrationStatus, runCanonicalMigrations } from './canonical-sqlite-migrations.js';
-import { persistCanonicalAuditStatus } from './canonical-sqlite-shadow-import.js';
+import { persistCanonicalAuditStatusInTransaction } from './canonical-sqlite-shadow-import.js';
+import { withCanonicalTransaction } from './canonical-sqlite.js';
+import {
+    WORLD_PROJECTION_INTENT_PREFIX,
+    moveWorldFileToLocalQuarantine,
+    resolveWorldProjectionPath,
+} from './canonical-world-info-projection.js';
 import {
     getCanonicalWorldInfoBook,
     listCanonicalWorldInfoBookRows,
-    upsertCanonicalWorldInfoBook,
+    upsertCanonicalWorldInfoBookInTransaction,
 } from './endpoints/world-info-store.js';
 
 export const WORLD_INFO_AUDIT_SCOPE = 'world_info';
@@ -92,7 +98,12 @@ function buildAuditEntry({ handle, worldName, worldBookId = null, status, driftT
 }
 
 function buildAuditSummary({ handle, migrationStatus, entries, ignoreSuppressed = false }) {
-    const active = entries.filter(entry => !(ignoreSuppressed && entry.details?.suppressed));
+    // Suppressed entries (projection off) and entries explained by a pending v1
+    // intent are expected state: the authority transaction committed and the
+    // shared worker has not settled the file yet. Legacy rows and drift without
+    // an intent stay blocking.
+    const active = entries.filter(entry => !(ignoreSuppressed && entry.details?.suppressed)
+        && entry.details?.expected_projection_pending !== true);
     const driftEntries = active.filter(entry => entry.status === 'drift');
     const errorEntries = active.filter(entry => entry.status === 'error');
     const blocking = driftEntries.length > 0 || errorEntries.length > 0;
@@ -105,6 +116,31 @@ function buildAuditSummary({ handle, migrationStatus, entries, ignoreSuppressed 
         migrationStatus,
         entries,
     };
+}
+
+function listPendingWriteIntents(db) {
+    const rows = db.prepare(`
+        SELECT repair_key, world_book_id, world_name, details_json
+        FROM world_info_projection_repairs
+        WHERE resolved_at_ms IS NULL AND repair_key LIKE ?
+    `).all(`${WORLD_PROJECTION_INTENT_PREFIX}%`);
+    const pending = [];
+    for (const row of rows) {
+        let details = null;
+        try {
+            details = row.details_json ? JSON.parse(String(row.details_json)) : null;
+        } catch {
+            details = null;
+        }
+        pending.push({
+            repairKey: String(row.repair_key),
+            worldBookId: row.world_book_id == null ? null : String(row.world_book_id),
+            worldName: String(row.world_name ?? ''),
+            action: details?.action ?? null,
+            version: details?.version ?? null,
+        });
+    }
+    return pending;
 }
 
 export async function runCanonicalWorldInfoShadowImport({
@@ -165,41 +201,78 @@ export async function runCanonicalWorldInfoShadowImport({
     for (const filename of listWorldInfoJsonFiles(directories)) {
         const worldName = getWorldNameFromFilename(filename);
         try {
-            const projection = readWorldInfoProjection(directories, filename);
-            const existing = getCanonicalWorldInfoBook(db, worldName);
-            if (existing && stableJson(existing) === stableJson(projection.payload)) {
-                recordImportLedgerEntry(db, {
+            const canonicalFilename = `${worldName}.json`;
+            const legacyFilename = filename !== canonicalFilename && path.extname(filename).toLowerCase() === '.json'
+                && filename.slice(0, -path.extname(filename).length) === worldName ? filename : null;
+            const entry = withCanonicalTransaction(db, txn => {
+                const resolved = resolveWorldProjectionPath(txn, directories, worldName, { legacyFilename });
+                if (legacyFilename && fs.readdirSync(directories.worlds).includes(canonicalFilename)) throw new Error('world_projection_filename_alias');
+                if (!legacyFilename && path.basename(resolved.target) !== filename) throw new Error('world_projection_filename_alias');
+                const projection = readWorldInfoProjection(directories, filename);
+                const sourcePath = path.relative(directories.root, resolved.target);
+
+                const existing = getCanonicalWorldInfoBook(txn, worldName);
+                const intent = txn.prepare('SELECT * FROM world_info_projection_repairs WHERE repair_key = ? OR (world_name = ? AND resolved_at_ms IS NULL)').all(resolved.key, worldName);
+                const deleted = txn.prepare('SELECT deleted_at_ms FROM world_books WHERE name = ?').get(worldName)?.deleted_at_ms != null;
+                const conflictingIntent = intent.some(row => row.resolved_at_ms == null || row.repair_key !== resolved.key);
+                if (deleted || conflictingIntent || (intent.length && !existing)) {
+                    throw new Error('world_projection_import_blocked');
+                }
+                // A missing audit or ledger entry cannot establish that a differing
+                // file predates canonical authority; fail closed even at bootstrap.
+                if (existing && stableJson(existing) !== stableJson(projection.payload)) {
+                    throw new Error('world_projection_import_blocked');
+                }
+                if (existing && stableJson(existing) === stableJson(projection.payload)) {
+                    recordImportLedgerEntry(txn, {
+                        sliceKey: 'world_info',
+                        sourcePath,
+                        contentHash: projection.sourceHash,
+                        origin: 'import',
+                        nowMs,
+                    });
+                    return { world_name: worldName, status: 'unchanged', sourceHash: projection.sourceHash };
+                }
+
+                upsertCanonicalWorldInfoBookInTransaction(txn, {
+                    name: worldName,
+                    payload: projection.payload,
+                    sourceMtimeMs: projection.sourceMtimeMs,
+                    sourceSizeBytes: projection.sourceSizeBytes,
+                    nowMs,
+                });
+                recordImportLedgerEntry(txn, {
                     sliceKey: 'world_info',
-                    sourcePath: path.relative(directories.root, path.join(directories.worlds, filename)),
+                    sourcePath,
                     contentHash: projection.sourceHash,
                     origin: 'import',
                     nowMs,
                 });
-                entries.push({
-                    world_name: worldName,
-                    status: 'unchanged',
+                return { world_name: worldName, status: existing ? 'updated' : 'imported', sourceHash: projection.sourceHash };
+            });
+            if (legacyFilename) {
+                // The authority must be committed before moving the alias. A crash
+                // before this point leaves replay blocked by the original filename.
+                withCanonicalTransaction(db, txn => {
+                    const resolved = resolveWorldProjectionPath(txn, directories, worldName, { legacyFilename });
+                    if (fs.readdirSync(directories.worlds).includes(canonicalFilename)) throw new Error('world_projection_filename_alias');
+                    const pending = txn.prepare('SELECT 1 FROM world_info_projection_repairs WHERE world_name = ? AND resolved_at_ms IS NULL').get(worldName);
+                    const projection = readWorldInfoProjection(directories, filename);
+                    const existing = getCanonicalWorldInfoBook(txn, worldName);
+                    if (pending || !existing || projection.sourceHash !== entry.sourceHash || stableJson(existing) !== stableJson(projection.payload)) {
+                        throw new Error('world_projection_import_blocked');
+                    }
+                    // First move to a unique private location, then publish with
+                    // an exclusive hard link. Neither step overwrites a racing
+                    // target, and a replaced source remains recoverable.
+                    const saved = moveWorldFileToLocalQuarantine(directories, path.join(directories.worlds, filename));
+                    const savedHash = crypto.createHash('sha256').update(fs.readFileSync(saved)).digest('hex');
+                    if (savedHash !== entry.sourceHash) throw new Error('world_projection_import_blocked');
+                    fs.linkSync(saved, resolved.target);
                 });
-                continue;
             }
-
-            upsertCanonicalWorldInfoBook(db, {
-                name: worldName,
-                payload: projection.payload,
-                sourceMtimeMs: projection.sourceMtimeMs,
-                sourceSizeBytes: projection.sourceSizeBytes,
-                nowMs,
-            });
-            recordImportLedgerEntry(db, {
-                sliceKey: 'world_info',
-                sourcePath: path.relative(directories.root, path.join(directories.worlds, filename)),
-                contentHash: projection.sourceHash,
-                origin: 'import',
-                nowMs,
-            });
-            entries.push({
-                world_name: worldName,
-                status: existing ? 'updated' : 'imported',
-            });
+            delete entry.sourceHash;
+            entries.push(entry);
         } catch (error) {
             entries.push({
                 world_name: worldName,
@@ -216,12 +289,17 @@ export async function runCanonicalWorldInfoShadowImport({
     });
 }
 
-export async function auditCanonicalWorldInfoShadowImport({
+export async function auditCanonicalWorldInfoShadowImport(options) {
+    return withCanonicalTransaction(options.db, () => auditWorldInfoInTransaction(options));
+}
+
+function auditWorldInfoInTransaction({
     handle,
     directories,
     db,
     auditedAtMs = Date.now(),
     projection = 'sync',
+    importResult = null,
 }) {
     const migrationStatus = getCanonicalMigrationStatus(db);
     if (!migrationStatus.ok) {
@@ -252,14 +330,37 @@ export async function auditCanonicalWorldInfoShadowImport({
     const suppressDetails = suppressFileSide
         ? { projection_mode: 'off', suppressed: true }
         : {};
+    const pendingIntents = listPendingWriteIntents(db);
+    const pendingWriteForBook = worldBookId => pendingIntents.some(intent =>
+        intent.version === 1
+        && intent.action === 'write'
+        && intent.worldBookId != null
+        && intent.worldBookId === String(worldBookId));
+    const pendingDeleteForName = worldName => pendingIntents.some(intent =>
+        intent.version === 1
+        && intent.action === 'delete'
+        && intent.worldName === worldName);
 
     const entries = [];
+    if (importResult && !importResult.ok) {
+        entries.push(buildAuditEntry({
+            handle,
+            worldName: '',
+            status: 'error',
+            driftTypes: ['shadow_import_failed'],
+            details: { reason: importResult.reason, failed_count: importResult.failedCount },
+            auditedAtMs,
+        }));
+    }
     const projectionNames = new Set();
     for (const filename of listWorldInfoJsonFiles(directories)) {
         const worldName = getWorldNameFromFilename(filename);
         projectionNames.add(worldName);
         const stored = getCanonicalWorldInfoBook(db, worldName);
+        const storedRow = db.prepare('SELECT id FROM world_books WHERE name = ? AND deleted_at_ms IS NULL').get(worldName);
         try {
+            const resolved = resolveWorldProjectionPath(db, directories, worldName);
+            if (path.basename(resolved.target) !== filename) throw new Error('world_projection_filename_alias');
             const projection = readWorldInfoProjection(directories, filename);
             const importClassification = classifyImportCandidate(db, {
                 sliceKey: 'world_info',
@@ -272,7 +373,11 @@ export async function auditCanonicalWorldInfoShadowImport({
                     worldName,
                     status: 'drift',
                     driftTypes: ['missing_db_world_info'],
-                    details: { import_classification: importClassification, ...suppressDetails },
+                    details: {
+                        import_classification: importClassification,
+                        ...(pendingDeleteForName(worldName) ? { expected_projection_pending: true } : {}),
+                        ...suppressDetails,
+                    },
                     auditedAtMs,
                 }));
                 continue;
@@ -288,6 +393,7 @@ export async function auditCanonicalWorldInfoShadowImport({
                         expected_payload_json: stableJson(projection.payload),
                         actual_payload_json: stableJson(stored),
                         import_classification: importClassification,
+                        ...(storedRow && pendingWriteForBook(storedRow.id) ? { expected_projection_pending: true } : {}),
                         ...suppressDetails,
                     },
                     auditedAtMs,
@@ -302,7 +408,6 @@ export async function auditCanonicalWorldInfoShadowImport({
                 driftTypes: ['audit_error'],
                 details: {
                     errorMessage: String(error?.message ?? error ?? ''),
-                    ...suppressDetails,
                 },
                 auditedAtMs,
             }));
@@ -320,7 +425,28 @@ export async function auditCanonicalWorldInfoShadowImport({
             worldBookId: row.id,
             status: 'drift',
             driftTypes: ['missing_projection_file'],
-            details: { ...suppressDetails },
+            details: {
+                ...(pendingWriteForBook(row.id) ? { expected_projection_pending: true } : {}),
+                ...suppressDetails,
+            },
+            auditedAtMs,
+        }));
+    }
+
+    // Legacy repair rows have no proven protocol/intent baseline. They are
+    // never explained by an expected pending write, so surface them as drift.
+    const legacyRepairs = db.prepare(`
+        SELECT repair_key, world_name
+        FROM world_info_projection_repairs
+        WHERE resolved_at_ms IS NULL AND repair_key NOT LIKE ?
+    `).all(`${WORLD_PROJECTION_INTENT_PREFIX}%`);
+    for (const repair of legacyRepairs) {
+        entries.push(buildAuditEntry({
+            handle,
+            worldName: String(repair.world_name ?? ''),
+            status: 'drift',
+            driftTypes: ['legacy_projection_repair_unresolved'],
+            details: { repair_key: String(repair.repair_key) },
             auditedAtMs,
         }));
     }
@@ -331,7 +457,7 @@ export async function auditCanonicalWorldInfoShadowImport({
         entries,
         ignoreSuppressed: suppressFileSide,
     });
-    persistCanonicalAuditStatus(db, result, {
+    persistCanonicalAuditStatusInTransaction(db, result, {
         scope: WORLD_INFO_AUDIT_SCOPE,
         auditedAtMs,
     });

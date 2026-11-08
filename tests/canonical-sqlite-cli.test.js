@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { DatabaseSync } from 'node:sqlite';
 
 import { afterEach, describe, expect, test } from '@jest/globals';
 
@@ -13,9 +14,10 @@ import { runCanonicalManagedMediaShadowImport } from '../src/canonical-managed-m
 import { runCanonicalChatShadowImport } from '../src/canonical-chat-shadow-import.js';
 import { recordProjectionRepair } from '../src/endpoints/character-store.js';
 import {
-    recordWorldInfoProjectionRepair,
+
     upsertCanonicalWorldInfoBook,
 } from '../src/endpoints/world-info-store.js';
+import { recordWorldProjectionIntent } from '../src/canonical-world-info-projection.js';
 import {
     recordSecretProjectionRepair,
     writeCanonicalSecret,
@@ -92,6 +94,84 @@ afterEach(() => {
 });
 
 describe('canonical sqlite CLI scripts', () => {
+    test('world repair refuses a view impersonating a required table without modifying the database', () => {
+        const dataRoot = makeRoot();
+        const directories = createDirectories(path.join(dataRoot, 'alice'));
+        const manager = createManager();
+        const db = manager.open({ handle: 'alice', directories, featureFlags: { enabled: true } });
+        runCanonicalMigrations(db);
+        db.exec('ALTER TABLE world_info_projection_repairs RENAME TO hidden_repairs; CREATE VIEW world_info_projection_repairs AS SELECT * FROM hidden_repairs');
+        manager.dispose();
+        const dbPath = path.join(directories.storage, 'emberdesk.sqlite');
+        const before = fs.readFileSync(dbPath);
+        const result = spawnSync(process.execPath, ['scripts/canonical-sqlite-repair.mjs', 'list-world-info-repairs', '--data-root', dataRoot, '--handle', 'alice', '--json'], { cwd: repoRoot, encoding: 'utf8' });
+        expect(result.status).not.toBe(0);
+        expect(fs.readFileSync(dbPath)).toEqual(before);
+    });
+    test.each([
+        ['list-world-info-repairs'],
+        ['repair-world-info-projection'],
+        ['repair-slice', '--slice', 'world_info'],
+        ['status', '--slice', 'world_info'],
+        ['explain-blockers', '--slice', 'world_info'],
+    ])('world recovery command %s does not create a missing database', (...args) => {
+        const dataRoot = makeRoot();
+        const result = spawnSync(process.execPath, [
+            'scripts/canonical-sqlite-repair.mjs', ...args,
+            '--data-root', dataRoot, '--handle', 'alice', '--json',
+        ], { cwd: repoRoot, encoding: 'utf8' });
+
+        expect(result.status).not.toBe(0);
+        expect(fs.existsSync(path.join(dataRoot, 'alice', 'storage', 'emberdesk.sqlite'))).toBe(false);
+    });
+
+    test.each([
+        ['list-world-info-repairs'],
+        ['repair-world-info-projection'],
+        ['repair-slice', '--slice', 'world_info'],
+        ['status', '--slice', 'world_info'],
+        ['explain-blockers', '--slice', 'world_info'],
+    ])('world recovery command %s does not migrate an old database', (...args) => {
+        const dataRoot = makeRoot();
+        const storage = path.join(dataRoot, 'alice', 'storage');
+        fs.mkdirSync(storage, { recursive: true });
+        const dbPath = path.join(storage, 'emberdesk.sqlite');
+        const db = new DatabaseSync(dbPath);
+        db.exec('CREATE TABLE sentinel (value TEXT); INSERT INTO sentinel VALUES (\'preserve\')');
+        db.close();
+        const before = fs.readFileSync(dbPath);
+        const result = spawnSync(process.execPath, [
+            'scripts/canonical-sqlite-repair.mjs', ...args,
+            '--data-root', dataRoot, '--handle', 'alice', '--json',
+        ], { cwd: repoRoot, encoding: 'utf8' });
+        expect(result.status).not.toBe(0);
+        expect(fs.readFileSync(dbPath)).toEqual(before);
+    });
+
+    test.each([
+        ['list-world-info-repairs'],
+        ['repair-world-info-projection'],
+        ['repair-slice', '--slice', 'world_info'],
+        ['status', '--slice', 'world_info'],
+        ['explain-blockers', '--slice', 'world_info'],
+    ])('world recovery command %s rejects a missing table without changing the database', (...args) => {
+        const dataRoot = makeRoot();
+        const directories = createDirectories(path.join(dataRoot, 'alice'));
+        const manager = createManager();
+        const db = manager.open({ handle: 'alice', directories, featureFlags: { enabled: true } });
+        runCanonicalMigrations(db);
+        db.exec('DROP TABLE world_info_projection_repairs');
+        manager.dispose();
+        const dbPath = path.join(directories.storage, 'emberdesk.sqlite');
+        const before = fs.readFileSync(dbPath);
+        const result = spawnSync(process.execPath, [
+            'scripts/canonical-sqlite-repair.mjs', ...args,
+            '--data-root', dataRoot, '--handle', 'alice', '--json',
+        ], { cwd: repoRoot, encoding: 'utf8' });
+        expect(result.status).not.toBe(0);
+        expect(fs.readFileSync(dbPath)).toEqual(before);
+    });
+
     test('print help output for audit and repair scripts', () => {
         const auditHelp = execFileSync('node', ['scripts/canonical-sqlite-audit.mjs', '--help'], {
             cwd: repoRoot,
@@ -313,13 +393,9 @@ describe('canonical sqlite CLI scripts', () => {
             payload: { name: 'Lorebook', entries: { one: { content: 'cli' } } },
             nowMs: 1735689600000,
         });
-        recordWorldInfoProjectionRepair(db, {
-            repairKey: 'world_info:Lorebook:edit',
-            worldName: 'Lorebook',
-            reason: 'projection_failed',
-            details: { operation: 'edit' },
-            nowMs: 1735689601111,
-        });
+        db.exec('BEGIN IMMEDIATE');
+        const repairKey = recordWorldProjectionIntent(db, { directories, name: 'Lorebook', action: 'write', mode: 'sync', nowMs: 1735689601111 });
+        db.exec('COMMIT');
 
         const listOutput = execFileSync('node', [
             'scripts/canonical-sqlite-repair.mjs',
@@ -334,7 +410,7 @@ describe('canonical sqlite CLI scripts', () => {
 
         expect(JSON.parse(listOutput)).toEqual([
             expect.objectContaining({
-                repairKey: 'world_info:Lorebook:edit',
+                repairKey,
                 worldName: 'Lorebook',
             }),
         ]);
@@ -344,7 +420,7 @@ describe('canonical sqlite CLI scripts', () => {
             'repair-world-info-projection',
             '--data-root', dataRoot,
             '--handle', 'alice',
-            '--repair-key', 'world_info:Lorebook:edit',
+            '--repair-key', repairKey,
             '--json',
         ], {
             cwd: repoRoot,
@@ -355,7 +431,7 @@ describe('canonical sqlite CLI scripts', () => {
             ok: true,
             results: [
                 expect.objectContaining({
-                    repairKey: 'world_info:Lorebook:edit',
+                    repairKey,
                     status: 'repaired',
                 }),
             ],
@@ -501,12 +577,14 @@ describe('canonical sqlite CLI scripts', () => {
         });
         currentManager.dispose();
 
+        const suppliedId = 'chat-restore-44444444-4444-4444-8444-444444444444';
         const restoreOutput = execFileSync('node', [
             'scripts/canonical-sqlite-repair.mjs',
             'restore-chat',
             '--data-root', dataRoot,
             '--handle', 'alice',
             '--backup-file', backupFile,
+            '--restore-id', suppliedId,
             '--json',
         ], {
             cwd: repoRoot,
@@ -515,7 +593,14 @@ describe('canonical sqlite CLI scripts', () => {
         expect(JSON.parse(restoreOutput)).toEqual(expect.objectContaining({
             ok: true,
             status: 'restored',
+            restoreId: suppliedId,
         }));
+        const reused = spawnSync('node', [
+            'scripts/canonical-sqlite-repair.mjs', 'restore-chat', '--data-root', dataRoot,
+            '--handle', 'alice', '--backup-file', backupFile, '--restore-id', suppliedId, '--json',
+        ], { cwd: repoRoot, encoding: 'utf8' });
+        expect(reused.status).toBe(1);
+        expect(JSON.parse(reused.stdout)).toEqual(expect.objectContaining({ ok: false, reasonCode: 'restore_id_in_use', restoreId: suppliedId }));
 
         const statusOutput = execFileSync('node', [
             'scripts/canonical-sqlite-repair.mjs',
@@ -529,7 +614,41 @@ describe('canonical sqlite CLI scripts', () => {
         });
         expect(JSON.parse(statusOutput)).toEqual(expect.objectContaining({
             status: 'restored',
+            commitState: 'committed',
         }));
+
+        fs.rmSync(path.join(directories.chats, 'alice', 'first.jsonl'));
+        fs.mkdirSync(path.join(directories.chats, 'alice', 'first.jsonl'));
+        const failed = spawnSync('node', [
+            'scripts/canonical-sqlite-repair.mjs', 'restore-chat', '--data-root', dataRoot,
+            '--handle', 'alice', '--backup-file', backupFile,
+        ], { cwd: repoRoot, encoding: 'utf8' });
+        expect(failed.status).toBe(1);
+        expect(failed.stdout).toContain('commit state: committed');
+        expect(failed.stdout).toMatch(/check.*repair/i);
+        const failedStatus = JSON.parse(execFileSync('node', [
+            'scripts/canonical-sqlite-repair.mjs', 'chat-restore-status', '--data-root', dataRoot,
+            '--handle', 'alice', '--json',
+        ], { cwd: repoRoot, encoding: 'utf8' }));
+        expect(failedStatus).toEqual(expect.objectContaining({ status: 'failed', commitState: 'committed' }));
+        const firstId = JSON.parse(restoreOutput).restoreId;
+        expect(failedStatus.restoreId).not.toBe(firstId);
+        const selected = JSON.parse(execFileSync('node', [
+            'scripts/canonical-sqlite-repair.mjs', 'chat-restore-status', '--data-root', dataRoot,
+            '--handle', 'alice', '--restore-id', firstId, '--json',
+        ], { cwd: repoRoot, encoding: 'utf8' }));
+        expect(selected).toEqual(expect.objectContaining({ restoreId: firstId, status: 'restored', commitState: 'committed' }));
+        const selectedFailure = JSON.parse(execFileSync('node', [
+            'scripts/canonical-sqlite-repair.mjs', 'chat-restore-status', '--data-root', dataRoot,
+            '--handle', 'alice', '--restore-id', failedStatus.restoreId, '--json',
+        ], { cwd: repoRoot, encoding: 'utf8' }));
+        expect(selectedFailure).toEqual(expect.objectContaining({ restoreId: failedStatus.restoreId, status: 'failed', commitState: 'committed' }));
+        const missing = JSON.parse(execFileSync('node', [
+            'scripts/canonical-sqlite-repair.mjs', 'chat-restore-status', '--data-root', dataRoot,
+            '--handle', 'alice', '--restore-id', 'missing-id', '--json',
+        ], { cwd: repoRoot, encoding: 'utf8' }));
+        expect(missing).toEqual(expect.objectContaining({ status: 'none', commitState: 'unknown' }));
+        expect(failed.stdout).toContain('--restore-id');
     });
 
     test('audits, lists, and repairs secrets without serializing secret values', () => {

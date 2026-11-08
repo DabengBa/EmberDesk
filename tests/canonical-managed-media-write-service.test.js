@@ -15,7 +15,10 @@ import {
     writeCanonicalManagedMedia,
 } from '../src/endpoints/canonical-managed-media-write-service.js';
 import {
+    hashCanonicalManagedMediaBuffer,
     listCanonicalManagedMediaReferences,
+    listOpenCanonicalManagedMediaRepairs,
+    upsertCanonicalManagedMediaReference,
 } from '../src/endpoints/canonical-managed-media-store.js';
 
 const tempRoots = [];
@@ -91,6 +94,62 @@ afterEach(() => {
 });
 
 describe('canonical managed media write service', () => {
+    test('records a media intent before projecting the file', async () => {
+        const directories = makeDirectories();
+        const manager = createManager();
+        const db = seedCleanAudit(manager, directories);
+        let pending;
+        const result = await writeCanonicalManagedMedia({
+            handle: 'alice', directories, dependencies: dependencies(manager), projection: 'sync',
+            compatibilityPath: 'assets/sky.png', ownerType: 'asset', ownerId: 'sky',
+            role: 'asset', displayName: 'sky.png', contents: Buffer.from('new bytes'),
+            projectCompatibility() { pending = listOpenCanonicalManagedMediaRepairs(db); },
+        });
+        expect(result.ok).toBe(true);
+        expect(pending).toEqual([expect.objectContaining({ operation: 'project' })]);
+        expect(listOpenCanonicalManagedMediaRepairs(db)).toEqual([]);
+    });
+
+    test('keeps committed replacement bytes readable when old blob tombstoning fails', async () => {
+        const directories = makeDirectories();
+        const manager = createManager();
+        const db = seedCleanAudit(manager, directories);
+        const options = {
+            handle: 'alice', directories, dependencies: dependencies(manager), projection: 'off',
+            compatibilityPath: 'assets/sky.png', ownerType: 'asset', ownerId: 'sky',
+            role: 'asset', displayName: 'sky.png', nowMs: 1735689600100,
+        };
+        await writeCanonicalManagedMedia({ ...options, contents: Buffer.from('old bytes') });
+        db.exec(`CREATE TRIGGER fail_tombstone BEFORE UPDATE OF lifecycle_state ON managed_blobs
+            WHEN NEW.lifecycle_state = 'tombstoned'
+            BEGIN SELECT RAISE(ABORT, 'injected tombstone failure'); END`);
+
+        await expect(writeCanonicalManagedMedia({ ...options, contents: Buffer.from('new bytes') }))
+            .rejects.toThrow('injected tombstone failure');
+        const { readManagedMediaContent } = await import('../src/endpoints/canonical-managed-media-read-service.js');
+        const result = readManagedMediaContent(db, directories, options.compatibilityPath);
+        expect(result.ok).toBe(true);
+        expect(result.contents.toString()).toBe('new bytes');
+    });
+
+    test('retains installed bytes after a failed reference transaction', async () => {
+        const directories = makeDirectories();
+        const manager = createManager();
+        const db = seedCleanAudit(manager, directories);
+        db.exec(`CREATE TRIGGER fail_reference BEFORE INSERT ON media_references
+            BEGIN SELECT RAISE(ABORT, 'injected reference failure'); END`);
+        const contents = Buffer.from('possibly shared bytes');
+        await expect(writeCanonicalManagedMedia({
+            handle: 'alice', directories, dependencies: dependencies(manager), projection: 'off',
+            compatibilityPath: 'assets/sky.png', ownerType: 'asset', ownerId: 'sky',
+            role: 'asset', displayName: 'sky.png', contents,
+        })).rejects.toThrow('injected reference failure');
+        const { hashCanonicalManagedMediaBuffer } = await import('../src/endpoints/canonical-managed-media-store.js');
+        const managedPath = path.join(directories.storage, 'managed-media', hashCanonicalManagedMediaBuffer(contents));
+        expect(fs.readFileSync(managedPath)).toEqual(contents);
+        expect(listCanonicalManagedMediaReferences(db)).toHaveLength(0);
+    });
+
     test('commits a staged asset blob before projection and records a replayable repair when projection fails', async () => {
         const directories = makeDirectories();
         const manager = createManager();
@@ -135,6 +194,109 @@ describe('canonical managed media write service', () => {
 
         expect(repair).toEqual(expect.objectContaining({ ok: true }));
         expect(fs.readFileSync(path.join(directories.assets, 'sky.png'), 'utf8')).toBe('sky-content');
+    });
+
+    test('replays an old media intent from the current reference after a later write wins', async () => {
+        const directories = makeDirectories();
+        const manager = createManager();
+        const db = seedCleanAudit(manager, directories);
+        const options = {
+            handle: 'alice', directories, dependencies: dependencies(manager), projection: 'sync',
+            compatibilityPath: 'assets/sky.png', ownerType: 'asset', ownerId: 'sky',
+            role: 'asset', displayName: 'sky.png',
+        };
+        const first = await writeCanonicalManagedMedia({
+            ...options,
+            contents: Buffer.from('older bytes'),
+            projectCompatibility() { throw new Error('simulated process interruption'); },
+            nowMs: 1735689600100,
+        });
+        const currentBytes = Buffer.from('current bytes');
+        const currentHash = hashCanonicalManagedMediaBuffer(currentBytes);
+        fs.mkdirSync(path.join(directories.storage, 'managed-media'), { recursive: true });
+        fs.writeFileSync(path.join(directories.storage, 'managed-media', currentHash), currentBytes);
+        upsertCanonicalManagedMediaReference(db, {
+            compatibilityPath: options.compatibilityPath, contentHash: currentHash,
+            sizeBytes: currentBytes.length, mediaType: 'image/png',
+            managedRelativePath: `managed-media/${currentHash}`, ownerType: 'asset', ownerId: 'sky',
+            role: 'asset', displayName: 'sky.png', nowMs: 1735689600200,
+        });
+        expect(first.reason).toBe('projection_failed');
+        const replay = await repairCanonicalManagedMediaProjection({
+            db, directories, repairKeys: [first.repairKey], nowMs: 1735689600300,
+        });
+        expect(replay).toEqual(expect.objectContaining({ ok: true }));
+        expect(fs.readFileSync(path.join(directories.assets, 'sky.png'), 'utf8')).toBe('current bytes');
+        expect(listOpenCanonicalManagedMediaRepairs(db)).toEqual([]);
+    });
+
+    test('does not let an old delete intent remove a later reference at the same path', async () => {
+        const directories = makeDirectories();
+        const manager = createManager();
+        const db = seedCleanAudit(manager, directories);
+        const options = { handle: 'alice', directories, dependencies: dependencies(manager), projection: 'sync' };
+        await writeCanonicalManagedMedia({
+            ...options,
+            compatibilityPath: 'assets/sky.png', ownerType: 'asset', ownerId: 'sky',
+            role: 'asset', displayName: 'sky.png', contents: Buffer.from('old bytes'),
+        });
+        const deleted = await deleteCanonicalManagedMediaReference({
+            ...options,
+            compatibilityPath: 'assets/sky.png',
+            projectDelete() { throw new Error('simulated process interruption'); },
+            nowMs: 1735689600100,
+        });
+        expect(deleted.reason).toBe('projection_failed');
+        const currentBytes = Buffer.from('new bytes');
+        const currentHash = hashCanonicalManagedMediaBuffer(currentBytes);
+        fs.mkdirSync(path.join(directories.storage, 'managed-media'), { recursive: true });
+        fs.writeFileSync(path.join(directories.storage, 'managed-media', currentHash), currentBytes);
+        upsertCanonicalManagedMediaReference(db, {
+            compatibilityPath: 'assets/sky.png', contentHash: currentHash,
+            sizeBytes: currentBytes.length, mediaType: 'image/png',
+            managedRelativePath: `managed-media/${currentHash}`, ownerType: 'asset', ownerId: 'sky',
+            role: 'asset', displayName: 'sky.png', nowMs: 1735689600200,
+        });
+        fs.writeFileSync(path.join(directories.assets, 'sky.png'), currentBytes);
+
+        const replay = await repairCanonicalManagedMediaProjection({
+            db, directories, repairKeys: [deleted.repairKey], nowMs: 1735689600300,
+        });
+        expect(replay).toEqual(expect.objectContaining({ ok: true }));
+        expect(fs.readFileSync(path.join(directories.assets, 'sky.png'), 'utf8')).toBe('new bytes');
+        expect(listOpenCanonicalManagedMediaRepairs(db)).toEqual([]);
+    });
+
+    test('removes the old path when replaying a failed rename projection', async () => {
+        const directories = makeDirectories();
+        const manager = createManager();
+        const db = seedCleanAudit(manager, directories);
+        await writeCanonicalManagedMedia({
+            handle: 'alice', directories, dependencies: dependencies(manager), projection: 'sync',
+            compatibilityPath: 'assets/old.png', ownerType: 'asset', ownerId: 'sky',
+            role: 'asset', displayName: 'old.png', contents: Buffer.from('current image'),
+        });
+
+        const { renameCanonicalManagedMediaReference } = await import('../src/endpoints/canonical-managed-media-write-service.js');
+        const renamed = await renameCanonicalManagedMediaReference({
+            handle: 'alice', directories, dependencies: dependencies(manager),
+            oldCompatibilityPath: 'assets/old.png', newCompatibilityPath: 'assets/new.png',
+            projectRename({ managedPath, newPath }) {
+                fs.copyFileSync(managedPath, newPath);
+                throw new Error('interrupted before old projection cleanup');
+            },
+        });
+        expect(renamed.reason).toBe('projection_failed');
+        expect(fs.readFileSync(path.join(directories.assets, 'new.png'), 'utf8')).toBe('current image');
+        expect(fs.existsSync(path.join(directories.assets, 'old.png'))).toBe(true);
+
+        const replay = await repairCanonicalManagedMediaProjection({
+            db, directories, repairKeys: [renamed.repairKey], nowMs: 1735689600200,
+        });
+
+        expect(replay.ok).toBe(true);
+        expect(fs.existsSync(path.join(directories.assets, 'old.png'))).toBe(false);
+        expect(listOpenCanonicalManagedMediaRepairs(db)).toEqual([]);
     });
 
     test('tombstones only the final reference and leaves managed-file removal to audited GC dry runs', async () => {
