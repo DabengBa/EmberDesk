@@ -267,6 +267,97 @@ describe('canonical world info store', () => {
         expect(db.prepare('SELECT COUNT(*) AS count FROM projection_repairs').get().count).toBe(0);
     });
 
+    test('imports an uppercase extension and blocks audit for conflicting aliases', async () => {
+        const directories = createDirectories(makeRoot());
+        const manager = createManager();
+        fs.writeFileSync(path.join(directories.worlds, 'Lore.JSON'), JSON.stringify({ entries: {} }));
+        const options = { handle: 'alice', directories, featureFlags: { enabled: true, shadowImport: true }, manager };
+        const result = await runCanonicalWorldInfoShadowImport(options);
+        expect(result).toEqual(expect.objectContaining({ ok: true, importedCount: 1 }));
+        const db = manager.open({ handle: 'alice', directories, featureFlags: { enabled: true } });
+        expect(getCanonicalWorldInfoBook(db, 'Lore')).toEqual({ entries: {} });
+        expect((await auditCanonicalWorldInfoShadowImport({ handle: 'alice', directories, db })).ok).toBe(true);
+        const upper = path.join(directories.worlds, 'Lore.JSON');
+        if (!fs.existsSync(upper)) {
+            fs.writeFileSync(upper, JSON.stringify({ entries: {} }));
+            const conflict = await runCanonicalWorldInfoShadowImport(options);
+            expect(conflict.ok).toBe(false);
+            expect((await auditCanonicalWorldInfoShadowImport({ handle: 'alice', directories, db })).blocking).toBe(true);
+        }
+    });
+
+    test('uppercase import supports case-insensitive lookup of the same file', async () => {
+        const directories = createDirectories(makeRoot());
+        const manager = createManager();
+        const source = path.join(directories.worlds, 'Lore.JSON');
+        const target = path.join(directories.worlds, 'Lore.json');
+        fs.writeFileSync(source, JSON.stringify({ entries: {} }));
+        const originalExists = fs.existsSync.bind(fs);
+        const exists = jest.spyOn(fs, 'existsSync').mockImplementation(p => p === target && originalExists(source) ? true : originalExists(p));
+        try {
+            const result = await runCanonicalWorldInfoShadowImport({ handle: 'alice', directories, manager, featureFlags: { enabled: true, shadowImport: true } });
+            expect(result.ok).toBe(true);
+            expect(fs.readFileSync(target, 'utf8')).toBe(JSON.stringify({ entries: {} }));
+        } finally { exists.mockRestore(); }
+    });
+
+    test.each(['target', 'source'])('uppercase import preserves a concurrently replaced %s', async race => {
+        const directories = createDirectories(makeRoot());
+        const manager = createManager();
+        const source = path.join(directories.worlds, 'Lore.JSON');
+        const target = path.join(directories.worlds, 'Lore.json');
+        const original = JSON.stringify({ entries: { original: {} } });
+        const replacement = JSON.stringify({ entries: { replacement: {} } });
+        fs.writeFileSync(source, original);
+        // Independent case variants cannot coexist on a case-insensitive volume.
+        if (race === 'target' && fs.existsSync(target)) return;
+        const realRename = fs.renameSync.bind(fs);
+        let injected = false;
+        const rename = jest.spyOn(fs, 'renameSync').mockImplementation((from, to) => {
+            if (!injected && from === source) {
+                injected = true;
+                if (race === 'target') fs.writeFileSync(target, replacement);
+                else { fs.unlinkSync(source); fs.writeFileSync(source, replacement); }
+            }
+            return realRename(from, to);
+        });
+        try {
+            const result = await runCanonicalWorldInfoShadowImport({ handle: 'alice', directories, manager, featureFlags: { enabled: true, shadowImport: true } });
+            expect(injected).toBe(true);
+            expect(result.ok).toBe(false);
+            const findContents = dir => fs.readdirSync(dir, { withFileTypes: true }).flatMap(e => e.isDirectory() ? findContents(path.join(dir, e.name)) : [fs.readFileSync(path.join(dir, e.name), 'utf8')]);
+            expect(findContents(directories.worlds)).toContain(replacement);
+        } finally { rename.mockRestore(); }
+    });
+
+    test('failed SQLite import cannot rename an independent uppercase file', async () => {
+        const directories = createDirectories(makeRoot());
+        const manager = createManager();
+        const db = manager.open({ handle: 'alice', directories, featureFlags: { enabled: true } });
+        runCanonicalMigrations(db);
+        db.exec("CREATE TRIGGER reject_world BEFORE INSERT ON world_books BEGIN SELECT RAISE(ABORT, 'import fault'); END");
+        const source = path.join(directories.worlds, 'Lore.JSON');
+        fs.writeFileSync(source, JSON.stringify({ entries: {} }));
+        const result = await runCanonicalWorldInfoShadowImport({ handle: 'alice', directories, manager, featureFlags: { enabled: true, shadowImport: true } });
+        expect(result.ok).toBe(false);
+        expect(fs.existsSync(source)).toBe(true);
+        expect(fs.readdirSync(directories.worlds)).not.toContain('Lore.json');
+    });
+
+    test('an import error remains blocking even when projection mode is off', async () => {
+        const directories = createDirectories(makeRoot());
+        const manager = createManager();
+        const db = manager.open({ handle: 'alice', directories, featureFlags: { enabled: true } });
+        runCanonicalMigrations(db);
+        upsertCanonicalWorldInfoBook(db, { name: 'Lore', payload: { entries: { current: {} } } });
+        fs.writeFileSync(path.join(directories.worlds, 'Lore.json'), JSON.stringify({ entries: { legacy: {} } }));
+        const importResult = await runCanonicalWorldInfoShadowImport({ handle: 'alice', directories, manager, featureFlags: { enabled: true, shadowImport: true } });
+        expect(importResult.ok).toBe(false);
+        const audit = await auditCanonicalWorldInfoShadowImport({ handle: 'alice', directories, db, projection: 'off', importResult });
+        expect(audit.blocking).toBe(true);
+        expect(getPersistedCanonicalAuditStatus(db, { scope: 'world_info' }).blocking).toBe(true);
+    });
+
     test('shadow-imports world info files idempotently without rewriting projections', async () => {
         const root = makeRoot();
         const directories = createDirectories(root);

@@ -91,7 +91,7 @@ describe('migratePublicOverrides', () => {
         await migratePublicOverrides();
     });
 
-    test('migrates characters while leaving legacy worlds for offline review', async () => {
+    test('blocks startup with an offline recovery procedure even on already upgraded installations', async () => {
         const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-mig-worlds-'));
         const publicDir = path.join(sandbox, 'public');
         const userRoot = path.join(dataTmpDir, 'default-user');
@@ -105,10 +105,11 @@ describe('migratePublicOverrides', () => {
         const cwd = process.cwd();
         process.chdir(sandbox);
         try {
-            await migrateUserData();
-            expect(fs.readFileSync(path.join(userRoot, 'characters', 'legacy.png'), 'utf8')).toBe('character');
+            await expect(migrateUserData()).rejects.toThrow(/stop.*move.*public.*worlds/i);
             expect(fs.readFileSync(path.join(publicDir, 'worlds', 'Book.json'), 'utf8')).toBe('legacy');
             expect(fs.readFileSync(path.join(userRoot, 'worlds', 'Book.json'), 'utf8')).toBe('current');
+            fs.rmSync(path.join(publicDir, 'characters'), { recursive: true });
+            await expect(migrateUserData()).rejects.toThrow(/stop.*move.*public.*worlds/i);
         } finally {
             process.chdir(cwd);
             fs.rmSync(sandbox, { recursive: true, force: true });

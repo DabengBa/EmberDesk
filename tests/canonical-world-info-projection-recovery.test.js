@@ -4,7 +4,7 @@ import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-import { afterEach, beforeEach, describe, expect, test } from '@jest/globals';
+import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globals';
 
 import { createCanonicalSqliteManager, withCanonicalTransaction } from '../src/canonical-sqlite.js';
 import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
@@ -24,6 +24,7 @@ import {
 import { explainCanonicalRolloutBlockers, getCanonicalStorageControlPlaneStatus } from '../src/canonical-sqlite-operator.js';
 import { runCanonicalWorldInfoAudit, repairCanonicalWorldInfoProjection } from '../src/canonical-sqlite-operator.js';
 import { runCharacterTextReplace } from '../src/endpoints/character-text-replace-service.js';
+import { runCanonicalWorldInfoShadowImport } from '../src/canonical-world-info-shadow-import.js';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const sqliteUrl = pathToFileURL(path.join(repoRoot, 'src/canonical-sqlite.js')).href;
@@ -111,6 +112,90 @@ afterEach(() => {
 });
 
 describe('world info projection recovery protocol', () => {
+    test('cross-device quarantine never unlinks a replacement at the original path', () => {
+        const directories = createDirectories(makeRoot());
+        const db = openDb(directories);
+        const source = worldFile(directories, 'Lore');
+        fs.writeFileSync(source, 'old bytes');
+        const key = commitWorldBookWithProjectionIntent(db, { directories, name: 'Lore', payload: payload('Lore', 'new'), mode: 'off' });
+        const realRename = fs.renameSync.bind(fs);
+        const realUnlink = fs.unlinkSync.bind(fs);
+        const rename = jest.spyOn(fs, 'renameSync').mockImplementation((from, to) => {
+            if (String(to).startsWith(directories.storage)) { const error = new Error('cross device'); error.code = 'EXDEV'; throw error; }
+            const result = realRename(from, to);
+            if (from === source) fs.writeFileSync(source, 'replacement bytes');
+            return result;
+        });
+        const unlink = jest.spyOn(fs, 'unlinkSync').mockImplementation(p => {
+            if (p === source) { realUnlink(source); fs.writeFileSync(source, 'replacement bytes'); }
+            return realUnlink(p);
+        });
+        try {
+            replayWorldProjection(db, { directories, repairKey: key });
+            expect(fs.readFileSync(source, 'utf8')).toBe('replacement bytes');
+        } finally { rename.mockRestore(); unlink.mockRestore(); }
+    });
+    test.each(['delete', 'write'])('uppercase independent file survives blocked %s intent and replay', async action => {
+        const directories = createDirectories(makeRoot());
+        const db = openDb(directories);
+        upsertCanonicalWorldInfoBook(db, { name: 'Lore', payload: payload('Lore', 'old') });
+        const key = action === 'delete'
+            ? withCanonicalTransaction(db, txn => {
+                markCanonicalWorldInfoBookDeleted(txn, { name: 'Lore' });
+                return recordWorldProjectionIntent(txn, { directories, name: 'Lore', action, mode: 'sync' });
+            })
+            : commitWorldBookWithProjectionIntent(db, { directories, name: 'Lore', payload: payload('Lore', 'new'), mode: 'sync' });
+        const legacy = path.join(directories.worlds, 'Lore.JSON');
+        const independent = JSON.stringify(payload('Lore', 'independent'));
+        fs.writeFileSync(legacy, independent);
+        const result = await runCanonicalWorldInfoShadowImport({ handle: 'alice', directories, manager: managers.at(-1), featureFlags: { enabled: true, shadowImport: true } });
+        expect(result.ok).toBe(false);
+        expect(fs.readFileSync(legacy, 'utf8')).toBe(independent);
+        expect(() => replayWorldProjection(db, { directories, repairKey: key })).toThrow('world_projection_filename_alias');
+        expect(fs.readFileSync(legacy, 'utf8')).toBe(independent);
+    });
+
+    test('off quarantine survives cross-device rename and interrupted relocation', () => {
+        const directories = createDirectories(makeRoot());
+        const db = openDb(directories);
+        const source = worldFile(directories, 'Lore');
+        fs.writeFileSync(source, 'independent bytes');
+        const key = commitWorldBookWithProjectionIntent(db, { directories, name: 'Lore', payload: payload('Lore', 'new'), mode: 'off' });
+        const realRename = fs.renameSync.bind(fs);
+        let interrupted = false;
+        const rename = jest.spyOn(fs, 'renameSync').mockImplementation((from, to) => {
+            if (String(to).startsWith(directories.storage)) { const e = new Error('cross device'); e.code = 'EXDEV'; throw e; }
+            if (!interrupted) { interrupted = true; throw new Error('interrupted'); }
+            return realRename(from, to);
+        });
+        try {
+            expect(() => replayWorldProjection(db, { directories, repairKey: key })).toThrow('interrupted');
+            expect(fs.readFileSync(source, 'utf8')).toBe('independent bytes');
+            replayWorldProjection(db, { directories, repairKey: key });
+            expect(fs.existsSync(source)).toBe(false);
+            const saved = fs.readdirSync(directories.worlds).filter(name => name.startsWith('.world-info-quarantine-')).flatMap(dir => {
+                const batch = path.join(directories.worlds, dir);
+                return fs.readdirSync(batch).map(name => fs.readFileSync(path.join(batch, name), 'utf8'));
+            });
+            expect(saved.length).toBeGreaterThanOrEqual(1);
+            expect(saved.every(bytes => bytes === 'independent bytes')).toBe(true);
+            replayWorldProjection(db, { directories, repairKey: key });
+        } finally { rename.mockRestore(); }
+    });
+    test('off write quarantines unverified bytes outside the import directory', () => {
+        const directories = createDirectories(makeRoot());
+        const db = openDb(directories);
+        fs.writeFileSync(worldFile(directories, 'Lore'), 'unverified legacy data');
+        const key = commitWorldBookWithProjectionIntent(db, { directories, name: 'Lore', payload: payload('Lore', 'new'), mode: 'off' });
+        replayWorldProjection(db, { directories, repairKey: key });
+        expect(fs.existsSync(worldFile(directories, 'Lore'))).toBe(false);
+        const quarantine = path.join(directories.storage, 'world-info-quarantine');
+        const dirs = fs.readdirSync(quarantine);
+        expect(dirs).toHaveLength(1);
+        expect(fs.readFileSync(path.join(quarantine, dirs[0], 'Lore.json'), 'utf8')).toBe('unverified legacy data');
+        replayWorldProjection(db, { directories, repairKey: key });
+        expect(fs.readdirSync(quarantine)).toHaveLength(1);
+    });
     test('an invalid projection intent mode cannot authorize a delete', () => {
         const directories = createDirectories(makeRoot());
         const db = openDb(directories);

@@ -16,7 +16,8 @@ export async function migrateUserData() {
     const publicDirectory = path.join(process.cwd(), 'public');
     const legacyWorlds = path.join(publicDirectory, 'worlds');
     if (fs.existsSync(legacyWorlds)) {
-        console.warn(color.yellow(`Legacy worlds remain at ${legacyWorlds}; migrate them offline after stopping the server.`));
+        const destination = getUserDirectories(DEFAULT_USER.handle).worlds;
+        throw new Error(`Legacy worlds require offline recovery: stop the server, move ${legacyWorlds} outside public, and preserve it as a backup. Compare with ${destination} and existing canonical books; restart only after public/worlds is removed, then import nonconflicting books through World Info. Keep conflicts outside public for manual review.`);
     }
 
     // No need to migrate if the characters directory doesn't exists

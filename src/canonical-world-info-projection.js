@@ -16,7 +16,17 @@ export const WORLD_PROJECTION_INTENT_PREFIX = 'world-path-v1:';
 const PREFIX = WORLD_PROJECTION_INTENT_PREFIX;
 const identity = name => String(name).normalize('NFC').toLowerCase();
 
-export function resolveWorldProjectionPath(db, directories, name) {
+// A private subdirectory of worlds is on the same device and is not scanned
+// as an import candidate. Keep the moved file there even after recovery.
+export function moveWorldFileToLocalQuarantine(directories, source) {
+    const batch = fs.mkdtempSync(path.join(directories.worlds, '.world-info-quarantine-'));
+    fs.chmodSync(batch, 0o700);
+    const destination = path.join(batch, path.basename(source));
+    fs.renameSync(source, destination);
+    return destination;
+}
+
+export function resolveWorldProjectionPath(db, directories, name, { legacyFilename = null } = {}) {
     const normalized = normalizeCanonicalWorldInfoName(name);
     const filename = `${normalized}.json`;
     if (!normalized || normalized !== name || sanitize(filename) !== filename) throw new Error('unsafe_world_projection_name');
@@ -27,7 +37,7 @@ export function resolveWorldProjectionPath(db, directories, name) {
         if (row.name !== normalized && identity(`${row.name}.json`) === identity(filename)) throw new Error('world_projection_ownership_conflict');
     }
     for (const entry of fs.readdirSync(root)) {
-        if (entry !== filename && identity(entry) === identity(filename)) throw new Error('world_projection_filename_alias');
+        if (entry !== filename && entry !== legacyFilename && identity(entry) === identity(filename)) throw new Error('world_projection_filename_alias');
     }
     const target = path.join(root, filename);
     try {
@@ -105,7 +115,20 @@ export function replayWorldProjection(db, { directories, repairKey, nowMs = Date
                 writeFileAtomicSync(target, contents, 'utf8');
                 recordImportLedgerEntry(txn, { sliceKey: 'world_info', sourcePath, contentHash: crypto.createHash('sha256').update(contents).digest('hex'), origin: 'projection', nowMs });
             } else {
-                fs.rmSync(target, { force: true });
+                if (fs.existsSync(target)) {
+                    const quarantine = path.join(directories.storage, 'world-info-quarantine');
+                    fs.mkdirSync(quarantine, { recursive: true, mode: 0o700 });
+                    const batch = fs.mkdtempSync(path.join(quarantine, 'world-'));
+                    const destination = path.join(batch, path.basename(target));
+                    try {
+                        fs.renameSync(target, destination);
+                    } catch (error) {
+                        if (error.code !== 'EXDEV') throw error;
+                        // Never unlink the shared path after copying: it may
+                        // already refer to an unrelated replacement file.
+                        moveWorldFileToLocalQuarantine(directories, target);
+                    }
+                }
                 removeImportLedgerEntry(txn, { sliceKey: 'world_info', sourcePath });
             }
         } else if (details.action === 'delete' && (!book || book.deleted_at_ms != null)) {

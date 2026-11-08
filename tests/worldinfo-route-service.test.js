@@ -340,16 +340,8 @@ describe('world info canonical route service', () => {
         const listResponse = await invokeRoute('/list', {}, directories);
         const getResponse = await invokeRoute('/get', { name: 'Lorebook' }, directories);
 
-        expect(listResponse.body).toEqual([{
-            file_id: 'Lorebook',
-            name: 'Canonical Lore',
-            extensions: { source: 'db' },
-        }]);
-        expect(getResponse.body).toEqual({
-            name: 'Canonical Lore',
-            extensions: { source: 'db' },
-            entries: { one: { content: 'db' } },
-        });
+        expect(listResponse.body).toEqual(expect.objectContaining({ error: 'canonical_storage_unavailable' }));
+        expect(getResponse.body).toEqual(expect.objectContaining({ error: 'canonical_storage_unavailable' }));
         expect(JSON.parse(db.prepare('SELECT payload_json FROM world_books WHERE name = ?').get('Lorebook').payload_json).name).toBe('Canonical Lore');
     });
 

@@ -12,6 +12,7 @@ import { persistCanonicalAuditStatusInTransaction } from './canonical-sqlite-sha
 import { withCanonicalTransaction } from './canonical-sqlite.js';
 import {
     WORLD_PROJECTION_INTENT_PREFIX,
+    moveWorldFileToLocalQuarantine,
     resolveWorldProjectionPath,
 } from './canonical-world-info-projection.js';
 import {
@@ -200,11 +201,15 @@ export async function runCanonicalWorldInfoShadowImport({
     for (const filename of listWorldInfoJsonFiles(directories)) {
         const worldName = getWorldNameFromFilename(filename);
         try {
+            const canonicalFilename = `${worldName}.json`;
+            const legacyFilename = filename !== canonicalFilename && path.extname(filename).toLowerCase() === '.json'
+                && filename.slice(0, -path.extname(filename).length) === worldName ? filename : null;
             const entry = withCanonicalTransaction(db, txn => {
-                const resolved = resolveWorldProjectionPath(txn, directories, worldName);
-                if (path.basename(resolved.target) !== filename) throw new Error('world_projection_filename_alias');
+                const resolved = resolveWorldProjectionPath(txn, directories, worldName, { legacyFilename });
+                if (legacyFilename && fs.readdirSync(directories.worlds).includes(canonicalFilename)) throw new Error('world_projection_filename_alias');
+                if (!legacyFilename && path.basename(resolved.target) !== filename) throw new Error('world_projection_filename_alias');
                 const projection = readWorldInfoProjection(directories, filename);
-                const sourcePath = path.relative(directories.root, path.join(directories.worlds, filename));
+                const sourcePath = path.relative(directories.root, resolved.target);
 
                 const existing = getCanonicalWorldInfoBook(txn, worldName);
                 const intent = txn.prepare('SELECT * FROM world_info_projection_repairs WHERE repair_key = ? OR (world_name = ? AND resolved_at_ms IS NULL)').all(resolved.key, worldName);
@@ -226,7 +231,7 @@ export async function runCanonicalWorldInfoShadowImport({
                         origin: 'import',
                         nowMs,
                     });
-                    return { world_name: worldName, status: 'unchanged' };
+                    return { world_name: worldName, status: 'unchanged', sourceHash: projection.sourceHash };
                 }
 
                 upsertCanonicalWorldInfoBookInTransaction(txn, {
@@ -243,8 +248,30 @@ export async function runCanonicalWorldInfoShadowImport({
                     origin: 'import',
                     nowMs,
                 });
-                return { world_name: worldName, status: existing ? 'updated' : 'imported' };
+                return { world_name: worldName, status: existing ? 'updated' : 'imported', sourceHash: projection.sourceHash };
             });
+            if (legacyFilename) {
+                // The authority must be committed before moving the alias. A crash
+                // before this point leaves replay blocked by the original filename.
+                withCanonicalTransaction(db, txn => {
+                    const resolved = resolveWorldProjectionPath(txn, directories, worldName, { legacyFilename });
+                    if (fs.readdirSync(directories.worlds).includes(canonicalFilename)) throw new Error('world_projection_filename_alias');
+                    const pending = txn.prepare('SELECT 1 FROM world_info_projection_repairs WHERE world_name = ? AND resolved_at_ms IS NULL').get(worldName);
+                    const projection = readWorldInfoProjection(directories, filename);
+                    const existing = getCanonicalWorldInfoBook(txn, worldName);
+                    if (pending || !existing || projection.sourceHash !== entry.sourceHash || stableJson(existing) !== stableJson(projection.payload)) {
+                        throw new Error('world_projection_import_blocked');
+                    }
+                    // First move to a unique private location, then publish with
+                    // an exclusive hard link. Neither step overwrites a racing
+                    // target, and a replaced source remains recoverable.
+                    const saved = moveWorldFileToLocalQuarantine(directories, path.join(directories.worlds, filename));
+                    const savedHash = crypto.createHash('sha256').update(fs.readFileSync(saved)).digest('hex');
+                    if (savedHash !== entry.sourceHash) throw new Error('world_projection_import_blocked');
+                    fs.linkSync(saved, resolved.target);
+                });
+            }
+            delete entry.sourceHash;
             entries.push(entry);
         } catch (error) {
             entries.push({
@@ -272,6 +299,7 @@ function auditWorldInfoInTransaction({
     db,
     auditedAtMs = Date.now(),
     projection = 'sync',
+    importResult = null,
 }) {
     const migrationStatus = getCanonicalMigrationStatus(db);
     if (!migrationStatus.ok) {
@@ -314,6 +342,16 @@ function auditWorldInfoInTransaction({
         && intent.worldName === worldName);
 
     const entries = [];
+    if (importResult && !importResult.ok) {
+        entries.push(buildAuditEntry({
+            handle,
+            worldName: '',
+            status: 'error',
+            driftTypes: ['shadow_import_failed'],
+            details: { reason: importResult.reason, failed_count: importResult.failedCount },
+            auditedAtMs,
+        }));
+    }
     const projectionNames = new Set();
     for (const filename of listWorldInfoJsonFiles(directories)) {
         const worldName = getWorldNameFromFilename(filename);
@@ -321,6 +359,8 @@ function auditWorldInfoInTransaction({
         const stored = getCanonicalWorldInfoBook(db, worldName);
         const storedRow = db.prepare('SELECT id FROM world_books WHERE name = ? AND deleted_at_ms IS NULL').get(worldName);
         try {
+            const resolved = resolveWorldProjectionPath(db, directories, worldName);
+            if (path.basename(resolved.target) !== filename) throw new Error('world_projection_filename_alias');
             const projection = readWorldInfoProjection(directories, filename);
             const importClassification = classifyImportCandidate(db, {
                 sliceKey: 'world_info',
@@ -368,7 +408,6 @@ function auditWorldInfoInTransaction({
                 driftTypes: ['audit_error'],
                 details: {
                     errorMessage: String(error?.message ?? error ?? ''),
-                    ...suppressDetails,
                 },
                 auditedAtMs,
             }));
