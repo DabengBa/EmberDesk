@@ -727,7 +727,7 @@ jQuery(() => {
     });
 
     // Settings that go into the settings document
-    $('#character_sort_order').on('change', function () {
+    $(document).on('change', '#character_sort_order', function () {
         const field = String($(this).find(':selected').data('field'));
         // Save sort order, but do not save search sorting, as this is a temporary sorting option
         if (field !== 'search') {
