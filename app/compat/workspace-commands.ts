@@ -96,6 +96,7 @@ export interface WorldInfoCommands {
 export type AuthoringKind = 'characterAuthoring';
 
 export interface AuthoringCommands {
+    setExternalMediaAllowed?(payload: { characterId: string; allowed: boolean }): CommandResult;
     saveCharacterAuthoring?(payload: Record<string, unknown>): CommandResult;
     cancelAuthoring?(kind: AuthoringKind): CommandResult;
     deleteAuthoring?(kind: AuthoringKind): CommandResult;

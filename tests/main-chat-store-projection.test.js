@@ -20,6 +20,15 @@ function createFormatMessage() {
 }
 
 describe('main chat store projection', () => {
+    test('invalidates cached formatted CSS when character authorization changes', () => {
+        const chat = [{ name: 'Assistant', mes: 'x', extra: {} }];
+        const formatMessage = jest.fn(createFormatMessage());
+        const options = { chatId: 'authorization-test', chat, formatMessage };
+        buildMainChatSnapshotFromLegacyChat({ ...options, allowExternalMedia: false });
+        const before = formatMessage.mock.calls.length;
+        buildMainChatSnapshotFromLegacyChat({ ...options, allowExternalMedia: true });
+        expect(formatMessage.mock.calls.length).toBeGreaterThan(before);
+    });
     test('is a DOM-free projection boundary', () => {
         const source = fs.readFileSync(projectionPath, 'utf8');
 

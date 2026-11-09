@@ -10,12 +10,13 @@ import { canonicalSqliteManager } from '../src/canonical-sqlite.js';
 import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
 import { auditCanonicalShadowImport } from '../src/canonical-sqlite-shadow-import.js';
 import { auditCanonicalChatShadowImport } from '../src/canonical-chat-shadow-import.js';
-import { upsertCanonicalCharacter } from '../src/endpoints/character-store.js';
+import { markCanonicalCharacterDeleted, upsertCanonicalCharacter } from '../src/endpoints/character-store.js';
 import {
     createCanonicalChatSessionRecord,
     upsertCanonicalChatSession,
 } from '../src/endpoints/canonical-chat-store.js';
 import { recordCharacterAvatarBlob } from '../src/canonical-avatar-blob-service.js';
+import { getCanonicalSettingsDocument, upsertCanonicalSettingsDocument } from '../src/endpoints/settings-store.js';
 import { read } from '../src/character-card-parser.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -68,6 +69,7 @@ fs.writeFileSync(configPath, [
 setConfigFilePath(configPath);
 
 const { router } = await import('../src/endpoints/characters.js');
+const { router: settingsRouter } = await import('../src/endpoints/settings.js');
 
 function makeResponse() {
     return {
@@ -166,6 +168,12 @@ async function seedCanonicalCharacter(directories, { avatarFilename = 'alice.png
         createdAtMs: 1700000000000,
         updatedAtMs: 1700000000000,
     });
+    upsertCanonicalSettingsDocument(db, {
+        userId: 'alice',
+        expectedRevision: 0,
+        payload: { power_user: {} },
+        nowMs: 1700000000000,
+    });
     // No PNG files exist: the characters audit must stay clean under 'off'.
     const audit = await auditCanonicalShadowImport({
         handle: 'alice',
@@ -203,6 +211,70 @@ afterEach(() => {
 });
 
 describe('characters projection off', () => {
+    test('renaming an unmapped legacy grant does not bind it to a canonical identity', async () => {
+        const directories = makeDirectories();
+        const { db } = await seedCanonicalCharacter(directories);
+        const doc = getCanonicalSettingsDocument(db, { userId: 'alice' });
+        doc.payload.power_user.external_media_allowed_overrides = ['alice.png'];
+        upsertCanonicalSettingsDocument(db, { userId: 'alice', expectedRevision: doc.revision, payload: doc.payload });
+        const renamed = makeResponse();
+        await getRouteHandler('/rename')({ body: { avatar_url: 'alice.png', new_name: 'AliceTwo' }, user: { directories, profile: { handle: 'alice' } } }, renamed);
+        expect(renamed.statusCode).toBe(200);
+        expect(getCanonicalSettingsDocument(db, { userId: 'alice' }).payload.power_user.external_media_authorization_canonical_ids?.['AliceTwo.png']).toBeUndefined();
+    });
+    test('a revoke submitted against the old avatar after rename persists against the same identity', async () => {
+        const original = process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_ENABLED;
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_ENABLED = 'true';
+        try {
+            const directories = makeDirectories();
+            const { db } = await seedCanonicalCharacter(directories);
+            const user = { directories, profile: { handle: 'alice' } };
+            const authorization = settingsRouter.stack.find(entry => entry.route?.path === '/character-css-authorization').route.stack.at(-1).handle;
+            const grant = makeResponse();
+            await authorization({ body: { characterId: 'alice.png', canonicalId: 'character-alice.png', allowed: true }, user }, grant);
+            expect({ status: grant.statusCode, body: grant.body }).toEqual(expect.objectContaining({ status: 200 }));
+            const renamed = makeResponse();
+            await getRouteHandler('/rename')({ body: { avatar_url: 'alice.png', new_name: 'AliceTwo' }, user }, renamed);
+            expect(renamed.statusCode).toBe(200);
+            const revoke = makeResponse();
+            await authorization({ body: { characterId: 'alice.png', canonicalId: 'character-alice.png', allowed: false }, user }, revoke);
+            expect(revoke.statusCode).toBe(200);
+            expect(getCanonicalSettingsDocument(db, { userId: 'alice' }).payload.power_user.external_media_allowed_overrides).not.toContain('AliceTwo.png');
+        } finally {
+            if (original === undefined) delete process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_ENABLED;
+            else process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_ENABLED = original;
+        }
+    });
+    test('recreating a soft-deleted avatar gets a new canonical identity', async () => {
+        const directories = makeDirectories();
+        const db = openDb(directories);
+        const firstCard = makeCard('First');
+        upsertCanonicalCharacter(db, {
+            id: 'first-identity',
+            avatarFilename: 'reused.png',
+            fullPayload: { ...firstCard, avatar: 'reused.png' },
+            shallowPayload: { name: 'First', avatar: 'reused.png' },
+            createdAtMs: 1,
+            updatedAtMs: 1,
+        });
+        expect(markCanonicalCharacterDeleted(db, { avatarFilename: 'reused.png', deletedAtMs: 2 }).changes).toBe(1);
+
+        const secondCard = makeCard('Second');
+        upsertCanonicalCharacter(db, {
+            id: 'second-identity',
+            avatarFilename: 'reused.png',
+            fullPayload: { ...secondCard, avatar: 'reused.png' },
+            shallowPayload: { name: 'Second', avatar: 'reused.png' },
+            createdAtMs: 3,
+            updatedAtMs: 3,
+        });
+
+        expect(db.prepare('SELECT id, deleted_at_ms FROM characters WHERE avatar_filename = ?').get('reused.png')).toEqual({
+            id: 'second-identity',
+            deleted_at_ms: null,
+        });
+    });
+
     test('audit suppresses fileless canonical rows and keeps the slice readable', async () => {
         const directories = makeDirectories();
         const { audit } = await seedCanonicalCharacter(directories);

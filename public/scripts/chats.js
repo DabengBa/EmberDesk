@@ -1,6 +1,7 @@
 // Move chat functions here from script.js (eventually)
 
 import { css, DOMPurify } from '../lib.js';
+import { isMessageCssDeclarationAllowed, isolateMessageAnimation } from './message-css-policy.js';
 import {
     addCopyToCodeBlocks,
     appendMediaToMessage,
@@ -524,10 +525,98 @@ export async function appendFileContent(message, messageText) {
  * @copyright https://github.com/kwaroran/risuAI
  */
 export function encodeStyleTags(text) {
-    const styleRegex = /<style>(.+?)<\/style>/gims;
-    return text.replaceAll(styleRegex, (_, match) => {
-        return `<custom-style>${encodeURIComponent(match)}</custom-style>`;
+    // Match every HTML spelling of a style element: attributes, extra whitespace,
+    // newlines and mixed case. Quoted attribute values may contain '>'.
+    // An unclosed style element also swallows the rest of the document as CSS,
+    // so it is matched to the end of the input and never reaches the browser.
+    const styleRegex = /<style(?=[\t\n\f\r />])((?:[^>"']|"[^"]*"|'[^']*')*)>([\s\S]*?)(?:<\/style(?=[\t\n\f\r />])(?:[^>"']|"[^"]*"|'[^']*')*>|$)/gi;
+    return text.replaceAll(styleRegex, (_, rawAttributes, css) => {
+        const attributes = parseStyleTagAttributes(rawAttributes);
+        const type = attributes.get('type')?.split(';')[0].trim().toLowerCase();
+        if (type && type !== 'text/css') return '';
+        const media = safeStyleMedia(attributes.get('media'));
+        return `<custom-style${media ? ` data-style-media="${escapeAttribute(media)}"` : ''}>${encodeURIComponent(css)}</custom-style>`;
     });
+}
+
+/**
+ * Replaces Markdown fenced code blocks with placeholders so their text is never
+ * rewritten. Handles backtick and tilde fences, up to three spaces of
+ * indentation, longer closing fences and unterminated fences (which run to the
+ * end of the document, per CommonMark).
+ * @param {string} text
+ * @returns {{ source: string, fences: string[] }}
+ */
+function protectFencedCode(text) {
+    const lines = text.split('\n');
+    const fences = [];
+    let output = '';
+    for (let index = 0; index < lines.length;) {
+        const opening = /^ {0,3}(`{3,}|~{3,})/.exec(lines[index]);
+        const character = opening?.[1][0];
+        const minimumLength = opening?.[1].length ?? 0;
+        let end = lines.length;
+        if (opening) {
+            const closing = new RegExp(`^ {0,3}${character === '`' ? '`' : '~'}{${minimumLength},}[ \\t]*$`);
+            for (let cursor = index + 1; cursor < lines.length; cursor++) {
+                if (closing.test(lines[cursor])) {
+                    end = cursor + 1;
+                    break;
+                }
+            }
+            fences.push(lines.slice(index, end).join('\n'));
+        }
+        if (opening) {
+            output += `\u0000${fences.length - 1}\u0000`;
+        } else {
+            output += lines[index];
+        }
+        if (index < lines.length - 1) output += '\n';
+        index = opening ? end : index + 1;
+    }
+    return { source: output, fences };
+}
+
+/**
+ * Collapses whitespace in style tag markup so Markdown keeps it as raw HTML.
+ * The CSS itself is untouched; the message CSS policy is applied by encodeStyleTags.
+ * @param {string} text
+ * @returns {string}
+ */
+export function normalizeStyleTagsForMarkdown(text) {
+    // Fenced code is display-only; its content must keep its exact spelling.
+    const { source, fences } = protectFencedCode(String(text ?? ''));
+    const spans = [];
+    const withoutSpans = source.replace(/(`+)(?!`)([\s\S]*?[^`])\1(?!`)/g, (span) => {
+        spans.push(span);
+        return `\u0001${spans.length - 1}\u0001`;
+    });
+    return withoutSpans
+        .replace(/<style(?=[\t\n\f\r />])((?:[^>"']|"[^"]*"|'[^']*')*)>/gi, (_, rawAttributes) => `<style ${rawAttributes.replace(/[\t\n\f\r ]+/g, ' ')}>`)
+        .replace(/<\/style(?=[\t\n\f\r />])(?:[^>"']|"[^"]*"|'[^']*')*>/gi, '</style>')
+        .replace(/\u0001(\d+)\u0001/g, (_, index) => spans[Number(index)])
+        .replace(/\u0000(\d+)\u0000/g, (_, index) => fences[Number(index)]);
+}
+
+function parseStyleTagAttributes(raw) {
+    const attributes = new Map();
+    const attributeRegex = /([^\s=/>]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/g;
+    for (const match of String(raw ?? '').matchAll(attributeRegex)) {
+        attributes.set(match[1].toLowerCase(), match[2] ?? match[3] ?? match[4] ?? '');
+    }
+    return attributes;
+}
+
+// A media query cannot load a resource, but it is re-emitted as an attribute, so
+// keep it free of quotes and markup that could escape the style tag.
+function safeStyleMedia(value) {
+    if (typeof value !== 'string') return '';
+    const media = value.trim();
+    return media.length <= 200 && !/["'<>\\]/.test(media) ? media : '';
+}
+
+function escapeAttribute(value) {
+    return String(value).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 /**
@@ -538,12 +627,41 @@ export function encodeStyleTags(text) {
  * @returns {string} Sanitized message text
  * @copyright https://github.com/kwaroran/risuAI
  */
-export function decodeStyleTags(text, { prefix } = { prefix: '.mes_text ' }) {
-    const styleDecodeRegex = /<custom-style>(.+?)<\/custom-style>/gms;
+export function decodeStyleTags(text, { prefix, messagePolicy = false, allowExternalMedia = false, animationScope = '', animationNames = new Map() } = { prefix: '.mes_text ' }) {
+    const styleDecodeRegex = /<custom-style((?:\s[^>]*)?)>([\s\S]*?)<\/custom-style>/gms;
+
+    if (messagePolicy && /^[a-zA-Z0-9_-]+$/.test(animationScope)) {
+        for (const match of text.matchAll(styleDecodeRegex)) {
+            try {
+                const ast = css.parse(decodeURIComponent(match[2]).replaceAll(/<br\/>/g, ''));
+                const collect = rules => {
+                    for (const rule of rules ?? []) {
+                        if (rule.type === 'keyframes' && /^[a-zA-Z_][a-zA-Z0-9_-]*$/.test(rule.name)) {
+                            animationNames.set(rule.name, `${animationScope}-${rule.name}`);
+                        }
+                        collect(rule.rules);
+                    }
+                };
+                collect(ast.stylesheet?.rules);
+            } catch { /* Invalid styles are discarded by the main parse. */ }
+        }
+    }
+
+    function isolateAnimation(declaration) {
+        const property = declaration.property.toLowerCase();
+        if (property !== 'animation' && property !== 'animation-name') return !property.startsWith('-webkit-animation');
+        const rewritten = isolateMessageAnimation(property, declaration.value, animationNames);
+        if (rewritten === null) return false;
+        declaration.value = rewritten;
+        return true;
+    }
 
 
     function sanitizeRule(rule) {
         if (Array.isArray(rule.selectors)) {
+            if (messagePolicy) {
+                rule.selectors = rule.selectors.filter(selector => selector && !/^[\s]*[+~>]/.test(selector) && !selector.includes('\\'));
+            }
             for (let i = 0; i < rule.selectors.length; i++) {
                 const selector = rule.selectors[i];
                 if (selector) {
@@ -584,20 +702,31 @@ export function decodeStyleTags(text, { prefix } = { prefix: '.mes_text ' }) {
     }
 
     function sanitizeRuleSet(ruleSet) {
+        if (messagePolicy && Array.isArray(ruleSet.declarations)) {
+            ruleSet.declarations = ruleSet.declarations.filter(declaration => declaration.type === 'declaration'
+                && isMessageCssDeclarationAllowed(declaration.property, declaration.value, allowExternalMedia)
+                && isolateAnimation(declaration));
+        }
         if (Array.isArray(ruleSet.selectors) || Array.isArray(ruleSet.declarations)) {
             sanitizeRule(ruleSet);
         }
 
         if (Array.isArray(ruleSet.rules)) {
-            ruleSet.rules = ruleSet.rules.filter(rule => rule.type !== 'import');
+            ruleSet.rules = ruleSet.rules.filter(rule => messagePolicy
+                ? ['rule', 'media', 'keyframes', 'keyframe', 'comment'].includes(rule.type) && (rule.type !== 'keyframes' || animationNames.has(rule.name))
+                : rule.type !== 'import');
 
             for (const mediaRule of ruleSet.rules) {
+                if (messagePolicy && mediaRule.type === 'keyframes') mediaRule.name = animationNames.get(mediaRule.name);
                 sanitizeRuleSet(mediaRule);
             }
         }
+        if (messagePolicy && Array.isArray(ruleSet.keyframes)) {
+            for (const keyframe of ruleSet.keyframes) sanitizeRuleSet(keyframe);
+        }
     }
 
-    return text.replaceAll(styleDecodeRegex, (_, style) => {
+    return text.replaceAll(styleDecodeRegex, (_, rawAttributes, style) => {
         try {
             let styleCleaned = decodeURIComponent(style).replaceAll(/<br\/>/g, '');
             const ast = css.parse(styleCleaned);
@@ -606,9 +735,10 @@ export function decodeStyleTags(text, { prefix } = { prefix: '.mes_text ' }) {
                 sanitizeRuleSet(ast.stylesheet);
             }
             const sanitizedCss = css.stringify(ast).replace(/<\/style/gi, closingTag => closingTag.replace('/', '\\/'));
-            return `<style>${sanitizedCss}</style>`;
+            const media = safeStyleMedia(parseStyleTagAttributes(rawAttributes).get('data-style-media'));
+            return `<style${media ? ` media="${escapeAttribute(media)}"` : ''}>${sanitizedCss}</style>`;
         } catch (error) {
-            return `CSS ERROR: ${error}`;
+            return messagePolicy ? '' : `CSS ERROR: ${error}`;
         }
     });
 }

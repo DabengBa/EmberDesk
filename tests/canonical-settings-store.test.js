@@ -5,7 +5,7 @@ import crypto from 'node:crypto';
 
 import { afterEach, describe, expect, jest, test } from '@jest/globals';
 
-import { createCanonicalSqliteManager } from '../src/canonical-sqlite.js';
+import { createCanonicalSqliteManager, withCanonicalTransaction } from '../src/canonical-sqlite.js';
 import { CANONICAL_SQLITE_MIGRATIONS, runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
 import { expectCanonicalDomainSchema } from './helpers/canonical-domain-schema.js';
 import {
@@ -15,6 +15,8 @@ import {
     recordSettingsProjectionRepair,
     resolveSettingsProjectionRepair,
     upsertCanonicalSettingsDocument,
+    updateCharacterMediaAuthorization,
+    mutateCharacterMediaAuthorizationInTransaction,
 } from '../src/endpoints/settings-store.js';
 import {
     SETTINGS_AUDIT_SCOPE,
@@ -85,6 +87,35 @@ afterEach(() => {
 });
 
 describe('canonical settings store', () => {
+    test('authorization migration rolls back with its containing transaction', () => {
+        const directories = createDirectories(makeRoot());
+        const db = createManager().open({ handle: 'alice', directories, featureFlags: { enabled: true, strict: false } });
+        runCanonicalMigrations(db);
+        upsertCanonicalSettingsDocument(db, { userId: 'alice', expectedRevision: 0, payload: { power_user: { external_media_allowed_overrides: ['old.png'] } } });
+        expect(() => withCanonicalTransaction(db, txn => {
+            mutateCharacterMediaAuthorizationInTransaction(txn, { userId: 'alice', characterId: 'old.png', newCharacterId: 'new.png' });
+            throw new Error('simulated character failure');
+        })).toThrow('simulated character failure');
+        expect(getCanonicalSettingsDocument(db, { userId: 'alice' })).toEqual(expect.objectContaining({ revision: 1, payload: { power_user: { external_media_allowed_overrides: ['old.png'] } } }));
+    });
+    test('authorization mutation preserves unrelated settings and increments revision', () => {
+        const directories = createDirectories(makeRoot());
+        const db = createManager().open({ handle: 'alice', directories, featureFlags: { enabled: true, strict: false } });
+        runCanonicalMigrations(db);
+        upsertCanonicalSettingsDocument(db, { userId: 'alice', expectedRevision: 0, payload: { power_user: { external_media_allowed_overrides: ['other.png', 'a.png'], other: 3 } } });
+        updateCharacterMediaAuthorization(db, { userId: 'alice', characterId: 'a.png', allowed: false });
+        const doc = getCanonicalSettingsDocument(db, { userId: 'alice' });
+        expect(doc.revision).toBe(2);
+        expect(doc.payload.power_user).toEqual({ external_media_allowed_overrides: ['other.png'], other: 3 });
+    });
+    test('ordinary settings saves preserve current authorization lists even from a stale client', () => {
+        const directories = createDirectories(makeRoot());
+        const db = createManager().open({ handle: 'alice', directories, featureFlags: { enabled: true, strict: false } });
+        runCanonicalMigrations(db);
+        upsertCanonicalSettingsDocument(db, { userId: 'alice', expectedRevision: 0, payload: { power_user: { external_media_allowed_overrides: [], external_media_forbidden_overrides: ['a.png'] } } });
+        upsertCanonicalSettingsDocument(db, { userId: 'alice', expectedRevision: 1, preserveMediaAuthorization: true, payload: { power_user: { external_media_allowed_overrides: ['a.png'], external_media_forbidden_overrides: [], other: 3 } } });
+        expect(getCanonicalSettingsDocument(db, { userId: 'alice' }).payload.power_user).toEqual({ external_media_allowed_overrides: [], external_media_forbidden_overrides: ['a.png'], other: 3 });
+    });
     test('migration catalog includes settings document authority tables', () => {
         const settingsMigration = CANONICAL_SQLITE_MIGRATIONS.find(x => x.name === 'settings_document_authority');
         expect(settingsMigration?.name).toBe('settings_document_authority');

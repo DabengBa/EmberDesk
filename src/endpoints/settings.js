@@ -7,7 +7,7 @@ import { getDefaultTemplateFile } from './content-manager.js';
 import { getCanonicalPresetsReadState } from './presets.js';
 import { getCanonicalWorldInfoReadState } from './worldinfo.js';
 import { listCanonicalWorldInfoBooks } from './world-info-store.js';
-import { canonicalSqliteManager } from '../canonical-sqlite.js';
+import { canonicalSqliteManager, withCanonicalTransaction } from '../canonical-sqlite.js';
 import { runCanonicalMigrations } from '../canonical-sqlite-migrations.js';
 import { getPersistedCanonicalAuditStatus } from '../canonical-sqlite-shadow-import.js';
 import { ensureCanonicalSliceBackend } from '../canonical-backend.js';
@@ -21,6 +21,8 @@ import {
     listSettingsSnapshots,
     restoreSettingsSnapshot,
     upsertCanonicalSettingsDocument,
+    mutateCharacterMediaAuthorizationInTransaction,
+
 } from './settings-store.js';
 
 
@@ -319,6 +321,31 @@ function resolveExpectedRevisionForSave({ db, handle, body }) {
 
 export const router = express.Router();
 
+router.post('/character-css-authorization', async (request, response) => {
+    const { characterId, canonicalId, allowed } = request.body ?? {};
+    if (typeof characterId !== 'string' || !characterId || typeof canonicalId !== 'string' || !canonicalId || typeof allowed !== 'boolean') return response.sendStatus(400);
+    try {
+        const state = await getCanonicalSettingsWriteState(request);
+        if (!state.ok) return response.status(503).send({ error: state.reason });
+        const result = withCanonicalTransaction(state.db, db => {
+            const character = db.prepare('SELECT avatar_filename FROM characters WHERE avatar_filename = ? AND id = ? AND deleted_at_ms IS NULL').get(characterId, canonicalId)
+                ?? (!allowed ? db.prepare('SELECT avatar_filename FROM characters WHERE id = ? AND deleted_at_ms IS NULL').get(canonicalId) : null);
+            if (!character) return null;
+            return mutateCharacterMediaAuthorizationInTransaction(db, {
+                userId: state.handle,
+                characterId: character.avatar_filename,
+                allowed,
+                canonicalId,
+            });
+        });
+        if (!result) return response.sendStatus(404);
+        return response.send({ settings_revision: result.revision, power_user: result.power_user });
+    } catch (error) {
+        console.error('CSS authorization save failed:', error);
+        return response.sendStatus(500);
+    }
+});
+
 router.post('/save', async function (request, response) {
     try {
         const writeState = await getCanonicalSettingsWriteState(request);
@@ -342,6 +369,7 @@ router.post('/save', async function (request, response) {
                 userId: handle,
                 payload,
                 expectedRevision: expected.expectedRevision,
+                preserveMediaAuthorization: true,
             });
             if (!saved.ok) {
                 return response.status(409).send({

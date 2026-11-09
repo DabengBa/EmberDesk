@@ -486,7 +486,7 @@ export async function renameCharacterCard(options) {
         }
     }
     dependencies.removeCompatibilityLedgerEntry?.(oldAvatarPath, directories, request.user.profile?.handle ?? null);
-    return okResult(newAvatarName);
+    return { ...okResult(newAvatarName), mediaAuthorization: canonicalResult.mediaAuthorization, settingsRevision: canonicalResult.settingsRevision };
 }
 
 /**

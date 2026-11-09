@@ -270,6 +270,7 @@ export function buildMainChatSnapshotFromLegacyChat({
     chat = [],
     chatId = null,
     formatMessage,
+    allowExternalMedia = false,
     avatarUrlForMessage = () => '',
     timestampTitleForMessage = () => '',
     timestampForMessage = () => '',
@@ -312,6 +313,7 @@ export function buildMainChatSnapshotFromLegacyChat({
         && lastProjection.chat === chat
         && lastProjection.length === chat.length
         && lastProjection.epoch === formatEpoch;
+    const reusePolicy = canReuse && lastProjection.allowExternalMedia === allowExternalMedia;
     const nextEntries = new Map();
 
     for (const id of visibleIds) {
@@ -320,7 +322,7 @@ export function buildMainChatSnapshotFromLegacyChat({
         const uid = getMessageUid(message);
         const sig = canReuse ? messageContentSignature(message) : null;
         const ui = messageUiById[id];
-        const reused = canReuse
+        const reused = reusePolicy
             ? tryReuseProjectedRecord({ entries: lastProjection.entries, uid, index: messageId, sig, ui })
             : null;
         if (reused) {
@@ -345,7 +347,7 @@ export function buildMainChatSnapshotFromLegacyChat({
     }
 
     lastProjection = normalizedChatId !== null
-        ? { chatId: normalizedChatId, chat, length: chat.length, epoch: formatEpoch, entries: nextEntries }
+        ? { chatId: normalizedChatId, chat, length: chat.length, epoch: formatEpoch, allowExternalMedia, entries: nextEntries }
         : null;
 
     return {

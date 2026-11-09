@@ -197,7 +197,7 @@ import { ensurePanel, registerPanelHook } from './scripts/deferred-panels.js';
 import { getCharacterCardTagId } from './scripts/deferred-panel-replays.js';
 import { BulkEditOverlay } from './scripts/BulkEditOverlay.js';
 import { beginSettingsSaveSnapshot, finishSettingsSaveSnapshot } from './scripts/character-sort-save-guard.js';
-import { appendFileContent, hasPendingFileAttachment, populateFileAttachment, decodeStyleTags, encodeStyleTags, preserveNeutralChat, restoreNeutralChat, formatCreatorNotes, initChatUtilities, addDOMPurifyHooks } from './scripts/chats.js';
+import { appendFileContent, hasPendingFileAttachment, populateFileAttachment, decodeStyleTags, encodeStyleTags, normalizeStyleTagsForMarkdown, preserveNeutralChat, restoreNeutralChat, formatCreatorNotes, initChatUtilities, addDOMPurifyHooks } from './scripts/chats.js';
 import {
     getPresetManager,
     initPresetManager,
@@ -288,6 +288,8 @@ import {
     updateMessageElement,
 } from './scripts/message-service.js';
 import { registerMessageShellContext } from './scripts/message-shell-context.js';
+import { isCharacterExternalMediaAllowed } from './scripts/external-media-policy.js';
+import { setCharacterExternalMediaAuthorization } from './scripts/character-external-media-authorization.js';
 import { registerDomHandlersShellContext } from './scripts/dom-handlers-shell-context.js';
 export {
     clearChat,
@@ -420,7 +422,16 @@ const reactRuntimePort = createReactRuntimeProvider({
                     const previousTokenizer = runtimeKey === 'powerUserSettings'
                         ? runtimeSettings.tokenizer
                         : undefined;
-                    Object.assign(runtimeSettings, savedSettings);
+                    if (runtimeKey === 'powerUserSettings') {
+                        // These lists are owned by the character editor, not the
+                        // Settings form. Its saved snapshot may predate a revoke.
+                        const otherSettings = { ...savedSettings };
+                        delete otherSettings.external_media_allowed_overrides;
+                        delete otherSettings.external_media_forbidden_overrides;
+                        Object.assign(runtimeSettings, otherSettings);
+                    } else {
+                        Object.assign(runtimeSettings, savedSettings);
+                    }
                     if (runtimeKey === 'chatCompletionSettings'
                         && previousModel !== undefined
                         && runtimeSettings.openai_model !== previousModel) {
@@ -717,6 +728,9 @@ registerChatOpsShellContext({
 
 registerCharacterLifecycleShellContext({
     state: {
+        get settingsDocumentRevision() { return settingsDocumentRevision; },
+        set settingsDocumentRevision(value) { settingsDocumentRevision = value; },
+        get power_user() { return power_user; },
         get world_info() { return world_info; },
         get world_names() { return world_names; },
         get characters() { return characters; },
@@ -838,6 +852,7 @@ registerMessageShellContext({
     decodeStyleTags: (...args) => decodeStyleTags(...args),
     delay: (...args) => delay(...args),
     encodeStyleTags: (...args) => encodeStyleTags(...args),
+    normalizeStyleTagsForMarkdown: (...args) => normalizeStyleTagsForMarkdown(...args),
     escapeHtml: (...args) => escapeHtml(...args),
     escapeRegex: (...args) => escapeRegex(...args),
     getGeneratingApi: (...args) => getGeneratingApi(...args),
@@ -2325,6 +2340,7 @@ function getCharacterAuthoringReactBridgeState(stateOverrides = {}) {
         subtitle: 'Character draft',
         dirty: getCharacterAuthoringDirtyFields(sourceDraft, draft).length > 0,
         draft,
+        externalMediaAllowed: mode === 'edit' && isCharacterExternalMediaAllowed(power_user, sourceCharacter?.avatar, sourceCharacter?.canonical_id),
         avatarUrl: draft.avatar ? getThumbnailUrl('avatar', draft.avatar) : '',
         tokenSummary: {
             total: String($('#result_info_total_tokens').text() || '').trim(),
@@ -2610,6 +2626,44 @@ function getCharacterAuthoringReactCommands() {
     return createWorkspacePanelCommandPort({
         commands: {
             saveCharacterAuthoring: payload => saveCharacterAuthoringFromPayload(payload),
+            setExternalMediaAllowed: ({ characterId, allowed }) => setCharacterExternalMediaAuthorization({
+                settings: power_user,
+                characterId,
+                canonicalId: characters[this_chid]?.canonical_id,
+                allowed,
+                getCurrentCharacterId: () => characters[this_chid]?.avatar,
+                getCurrentCharacterCanonicalId: avatar => characters.find(character => character?.avatar === avatar)?.canonical_id,
+                save: async ({ characterId, canonicalId, allowed }) => {
+                    if (!canonicalId) throw new Error('Missing canonical character identity');
+                    const warn = event => { event.preventDefault(); event.returnValue = ''; };
+                    window.addEventListener('beforeunload', warn);
+                    try {
+                        const response = await fetch('/api/settings/character-css-authorization', {
+                            method: 'POST', headers: getRequestHeaders(),
+                            body: JSON.stringify({ characterId, canonicalId, allowed }), keepalive: true,
+                        });
+                        if (!response.ok) {
+                            const error = new Error(`CSS authorization save failed: ${response.status}`);
+                            // 404 means the avatar/canonical identity is gone
+                            // (renamed or deleted in another tab); this save can
+                            // never succeed, so a rollback must not restore it.
+                            if (response.status === 404) error.retireAuthorization = true;
+                            throw error;
+                        }
+                        const data = await response.json();
+                        if (Number.isSafeInteger(data.settings_revision)) settingsDocumentRevision = Math.max(settingsDocumentRevision ?? 0, data.settings_revision);
+                    } catch (error) {
+                        toastr.error(t`Settings could not be saved.`);
+                        throw error;
+                    } finally {
+                        window.removeEventListener('beforeunload', warn);
+                    }
+                },
+                refresh: () => {
+                    invalidateMainChatRenderProjection();
+                    scheduleMainChatMessageListPanelRefresh();
+                },
+            }),
             cancelAuthoring: () => {
                 if (getCurrentCharacterAuthoringMode() === 'edit' && this_chid !== undefined) {
                     select_selected_character(this_chid, { switchMenu: false });
@@ -2825,7 +2879,7 @@ function getCharacterAuthoringReactCommands() {
         },
         shouldRemount(commandResult, commandName) {
             // queryReplaceIntentOutcome does not affect the panel; never remount.
-            if (commandName === 'queryReplaceIntentOutcome') {
+            if (commandName === 'queryReplaceIntentOutcome' || commandName === 'setExternalMediaAllowed') {
                 return false;
             }
             // Edit-mode saves rebase the React session client-side; remounting on
@@ -3340,6 +3394,7 @@ function getMainChatMessageListReactBridgeState() {
     const mainChatSnapshot = buildMainChatSnapshotFromLegacyChat({
         chatId: getCurrentChatId(),
         chat: projectedChat,
+        allowExternalMedia: isCharacterExternalMediaAllowed(power_user, characters[this_chid]?.avatar, characters[this_chid]?.canonical_id),
         formatMessage: messageFormatting,
         timestampForMessage: message => {
             const momentDate = timestampToMoment(message?.send_date);
@@ -7846,7 +7901,7 @@ async function applyStartupSettingsCore(data, _initLoaderHandle = null) {
     if (settingsPlan.hasSettings && settingsPlan.settings) {
         settings = settingsPlan.settings;
         if (Number.isFinite(Number(data?.settings_revision))) {
-            settingsDocumentRevision = Number(data.settings_revision);
+            settingsDocumentRevision = Math.max(settingsDocumentRevision ?? 0, Number(data.settings_revision));
         }
 
         accountStorage.init(settings?.accountStorage);
@@ -7994,7 +8049,7 @@ export async function saveSettings(loopCounter = 0) {
                 try {
                     const conflict = await result.json();
                     if (Number.isFinite(Number(conflict?.settings_revision))) {
-                        settingsDocumentRevision = Number(conflict.settings_revision);
+                        settingsDocumentRevision = Math.max(settingsDocumentRevision ?? 0, Number(conflict.settings_revision));
                     }
                 } catch {
                     // ignore parse failures
@@ -8014,7 +8069,7 @@ export async function saveSettings(loopCounter = 0) {
         try {
             const saveResult = await result.json();
             if (Number.isFinite(Number(saveResult?.settings_revision))) {
-                settingsDocumentRevision = Number(saveResult.settings_revision);
+                settingsDocumentRevision = Math.max(settingsDocumentRevision ?? 0, Number(saveResult.settings_revision));
                 if (saveResult?.result === 'ok' && Number.isSafeInteger(saveResult.settings_revision) && saveResult.settings_revision > 0) {
                     savedRevision = saveResult.settings_revision;
                 }

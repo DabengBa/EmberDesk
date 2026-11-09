@@ -65,6 +65,59 @@ export function getCanonicalSettingsDocument(db, { userId } = {}) {
     };
 }
 
+// Caller owns the surrounding transaction. Used by character lifecycle writes
+// so an avatar key can never be reused before its grants are moved/removed.
+export function mutateCharacterMediaAuthorizationInTransaction(db, { userId, characterId, canonicalId = null, allowed, newCharacterId = null } = {}) {
+    const doc = getCanonicalSettingsDocument(db, { userId });
+    if (!doc) throw new Error('settings_document_missing');
+    const power = doc.payload.power_user ??= {};
+    const identityMap = power.external_media_authorization_canonical_ids
+        && typeof power.external_media_authorization_canonical_ids === 'object'
+        && !Array.isArray(power.external_media_authorization_canonical_ids)
+        ? power.external_media_authorization_canonical_ids
+        : {};
+    for (const key of ['external_media_allowed_overrides', 'external_media_forbidden_overrides']) {
+        if (!Array.isArray(power[key])) continue;
+        const had = power[key].includes(characterId);
+        power[key] = power[key].filter(id => id !== characterId && (newCharacterId == null || id !== newCharacterId));
+        if (newCharacterId && had) {
+            power[key].push(newCharacterId);
+            if (identityMap[characterId]) identityMap[newCharacterId] = identityMap[characterId];
+            else delete identityMap[newCharacterId];
+        }
+    }
+    delete identityMap[characterId];
+    if (typeof allowed === 'boolean') {
+        const grants = Array.isArray(power.external_media_allowed_overrides) ? power.external_media_allowed_overrides : [];
+        power.external_media_allowed_overrides = grants.filter(id => id !== characterId);
+        if (allowed) {
+            power.external_media_allowed_overrides.push(characterId);
+            identityMap[characterId] = canonicalId ?? getLiveCharacterCanonicalId(db, characterId);
+        }
+    }
+    if (Object.keys(identityMap).length) power.external_media_authorization_canonical_ids = identityMap;
+    else delete power.external_media_authorization_canonical_ids;
+    const payloadJson = stableSettingsPayloadJson(doc.payload);
+    db.prepare('UPDATE settings_documents SET revision = ?, payload_json = ?, content_hash = ?, updated_at_ms = ? WHERE user_id = ?').run(doc.revision + 1, payloadJson, hashSettingsPayload(payloadJson), Date.now(), String(userId));
+    const mediaAuthorization = {};
+    for (const key of ['external_media_allowed_overrides', 'external_media_forbidden_overrides']) {
+        if (Object.hasOwn(power, key)) mediaAuthorization[key] = power[key];
+    }
+    if (Object.hasOwn(power, 'external_media_authorization_canonical_ids')) {
+        mediaAuthorization.external_media_authorization_canonical_ids = power.external_media_authorization_canonical_ids;
+    }
+    return { revision: doc.revision + 1, power_user: mediaAuthorization };
+}
+
+function getLiveCharacterCanonicalId(db, characterId) {
+    return db.prepare('SELECT id FROM characters WHERE avatar_filename = ? AND deleted_at_ms IS NULL').get(characterId)?.id ?? null;
+}
+
+
+export function updateCharacterMediaAuthorization(db, options) {
+    return withCanonicalTransaction(db, txn => mutateCharacterMediaAuthorizationInTransaction(txn, options));
+}
+
 /**
  * Upsert the full settings document with optimistic revision control.
  * expectedRevision = 0 means "no existing document".
@@ -78,6 +131,7 @@ export function upsertCanonicalSettingsDocument(db, {
     expectedRevision,
     nowMs = Date.now(),
     payloadJson = null,
+    preserveMediaAuthorization = false,
 } = {}) {
     if (!userId) {
         throw new Error('userId is required');
@@ -89,10 +143,10 @@ export function upsertCanonicalSettingsDocument(db, {
     const resolvedPayload = payload != null
         ? structuredClone(payload)
         : parseRequiredJson(payloadJson, 'payloadJson');
-    const resolvedPayloadJson = payloadJson != null
+    let resolvedPayloadJson = payloadJson != null
         ? String(payloadJson)
         : stableSettingsPayloadJson(resolvedPayload);
-    const contentHash = hashSettingsPayload(resolvedPayloadJson);
+    let contentHash = hashSettingsPayload(resolvedPayloadJson);
     const expected = Number(expectedRevision);
 
     return withCanonicalTransaction(db, txnDb => {
@@ -114,6 +168,18 @@ export function upsertCanonicalSettingsDocument(db, {
                     }
                     : null,
             };
+        }
+
+        if (preserveMediaAuthorization && existing) {
+            const current = parseRequiredJson(existing.payload_json, 'payload_json');
+            for (const key of ['external_media_allowed_overrides', 'external_media_forbidden_overrides', 'external_media_authorization_canonical_ids']) {
+                if (Object.hasOwn(current.power_user ?? {}, key)) {
+                    if (!resolvedPayload.power_user || typeof resolvedPayload.power_user !== 'object' || Array.isArray(resolvedPayload.power_user)) resolvedPayload.power_user = {};
+                    resolvedPayload.power_user[key] = current.power_user[key];
+                } else if (resolvedPayload.power_user && typeof resolvedPayload.power_user === 'object') delete resolvedPayload.power_user[key];
+            }
+            resolvedPayloadJson = stableSettingsPayloadJson(resolvedPayload);
+            contentHash = hashSettingsPayload(resolvedPayloadJson);
         }
 
         const nextRevision = currentRevision + 1;
