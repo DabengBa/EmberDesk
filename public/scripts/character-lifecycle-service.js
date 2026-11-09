@@ -3,6 +3,7 @@ import { buildCharacterAuthoringFormData, getCharacterAuthoringWriteUrl } from '
 import { getCharacterDeleteCandidates, shouldRefreshCharacterAfterEdit } from './character-list-state.js';
 import { getRequestHeaders } from './request-context.js';
 import { requireCharacterLifecycleShellContext } from './character-lifecycle-shell-context.js';
+import { captureCharacterAuthorizationClock, characterAuthorizationChangedSince, hasPendingCharacterAuthorizationRevoke, invalidateCharacterExternalMediaAuthorization, isCharacterAuthorizationRetired, reconcileCharacterAuthorizationBaseline } from './character-external-media-authorization.js';
 
 function shell() {
     return requireCharacterLifecycleShellContext();
@@ -307,6 +308,7 @@ export async function renameCharacter(name = null, { silent = false, renameChats
     }
 
     const body = JSON.stringify({ avatar_url: oldAvatar, new_name: newValue });
+    const authorizationClock = captureCharacterAuthorizationClock(state.power_user);
     const response = await fetch('/api/characters/rename', {
         method: 'POST',
         headers: getRequestHeaders(),
@@ -317,11 +319,85 @@ export async function renameCharacter(name = null, { silent = false, renameChats
         if (response.ok) {
             const data = await response.json();
             const newAvatar = data.avatar;
+            const revision = data.settings_revision;
+            const hasRevision = Number.isSafeInteger(revision) && revision >= 0;
+            const snapshotIsCurrent = hasRevision && (state.settingsDocumentRevision == null || revision >= state.settingsDocumentRevision);
+            if (snapshotIsCurrent) state.settingsDocumentRevision = revision;
 
             const oldName = getCharaFilename(null, { manualAvatarKey: oldAvatar });
             const newName = getCharaFilename(null, { manualAvatarKey: newAvatar });
 
-            // Replace other auxiliary fields where was referenced by avatar key
+            // Retire the old avatar key before applying the snapshot. A pending
+            // authorization request that fails after this point must not restore
+            // the old key (or a locally mapped successor grant).
+            const authorizationKeys = ['external_media_allowed_overrides', 'external_media_forbidden_overrides'];
+            const snapshot = data.mediaAuthorization && typeof data.mediaAuthorization === 'object' && state.power_user
+                ? data.mediaAuthorization
+                : null;
+            const canRenameLocalAuthorization = typeof oldAvatar === 'string' && oldAvatar
+                && typeof newAvatar === 'string' && newAvatar && newAvatar !== oldAvatar;
+            const successorChanged = characterAuthorizationChangedSince(state.power_user, newAvatar, authorizationClock);
+            const pendingOldRevoke = hasPendingCharacterAuthorizationRevoke(state.power_user, oldAvatar);
+            const oldRetired = isCharacterAuthorizationRetired(state.power_user, oldAvatar);
+            const authorizationPlan = authorizationKeys.map(key => {
+                const overrides = state.power_user?.[key];
+                const locallyHoldsOldKey = Array.isArray(overrides) && overrides.includes(oldAvatar);
+                if (snapshot && snapshotIsCurrent) return { key, mode: 'replace' };
+                // A stale snapshot only proves that the rename transaction ran
+                // before the local revision; it cannot be used to add a key the
+                // client already retired (a newer revocation). Move/retire the
+                // old key locally and keep unrelated overrides intact.
+                if (locallyHoldsOldKey) {
+                    const snapshotMovesOldKey = Boolean(snapshot && Array.isArray(snapshot[key]) && snapshot[key].includes(newAvatar));
+                    if (!oldRetired && !successorChanged && canRenameLocalAuthorization && (snapshotMovesOldKey || !snapshot)) return { key, mode: 'rename' };
+                    return { key, mode: 'retire' };
+                }
+                return { key, mode: 'keep' };
+            });
+            const mapsGrantedOldKeyToSuccessor = authorizationPlan.some(plan =>
+                plan.key === 'external_media_allowed_overrides' && plan.mode === 'rename');
+            invalidateCharacterExternalMediaAuthorization(state.power_user, oldAvatar, {
+                newCharacterId: mapsGrantedOldKeyToSuccessor ? newAvatar : null,
+            });
+            for (const { key, mode } of authorizationPlan) {
+                if (!state.power_user) break;
+                if (mode === 'replace') {
+                    // Merge each unrelated identity independently: a pending or
+                    // newer local operation owns its membership in both lists.
+                    const current = state.power_user[key];
+                    const reported = snapshot[key];
+                    if (Array.isArray(current) || Array.isArray(reported)) {
+                        const local = Array.isArray(current) ? current : [];
+                        const server = Array.isArray(reported) ? reported : [];
+                        reconcileCharacterAuthorizationBaseline(state.power_user, key, server, authorizationClock, [oldAvatar, newAvatar]);
+                        const ids = new Set([...local, ...server]);
+                        state.power_user[key] = [...ids].filter(id => {
+                            if (id === oldAvatar) return false;
+                            if (id === newAvatar) return successorChanged ? local.includes(id)
+                                : !oldRetired && !(pendingOldRevoke && key === 'external_media_allowed_overrides') && server.includes(id);
+                            return characterAuthorizationChangedSince(state.power_user, id, authorizationClock)
+                                ? local.includes(id) : server.includes(id);
+                        });
+                    } else if (!Object.hasOwn(snapshot, key)) {
+                        delete state.power_user[key];
+                    }
+                } else if (mode === 'rename') {
+                    state.power_user[key] = [...new Set(state.power_user[key].map(id => id === oldAvatar ? newAvatar : id))];
+                } else if (mode === 'retire') {
+                    state.power_user[key] = state.power_user[key].filter(id => id !== oldAvatar);
+                }
+            }
+            if (state.power_user) {
+                const identities = { ...state.power_user.external_media_authorization_canonical_ids };
+                const oldIdentity = identities[oldAvatar];
+                delete identities[oldAvatar];
+                if (!successorChanged && state.power_user.external_media_allowed_overrides?.includes(newAvatar)) {
+                    const identity = snapshot?.external_media_authorization_canonical_ids?.[newAvatar] ?? oldIdentity;
+                    if (identity) identities[newAvatar] = identity;
+                }
+                state.power_user.external_media_authorization_canonical_ids = identities;
+            }
+
             // Tag List
             renameTagKey(oldAvatar, newAvatar);
 
@@ -848,6 +924,16 @@ export async function deleteCharacter(characterKey, { deleteChats = true, delete
             state.accountStorage.removeItem(`AlertWI_${avatar}`);
             state.accountStorage.removeItem(`AlertRegex_${avatar}`);
             state.accountStorage.removeItem(`mediaWarningShown:${avatar}`);
+            // Retire in-flight authorization requests before dropping the local
+            // grant so a late failure cannot resurrect a deleted avatar's key.
+            invalidateCharacterExternalMediaAuthorization(state.power_user, avatar);
+            for (const key of ['external_media_allowed_overrides', 'external_media_forbidden_overrides']) {
+                const overrides = state.power_user?.[key];
+                if (Array.isArray(overrides) && overrides.includes(avatar)) {
+                    state.power_user[key] = overrides.filter(id => id !== avatar);
+                }
+            }
+
             delete state.tag_map[avatar];
             select_rm_info('char_delete', character?.name ?? avatar);
 

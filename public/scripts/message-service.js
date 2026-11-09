@@ -3,6 +3,8 @@ import { buildChatMessageRichBodyRender } from './chat-message-render-service.js
 import { MEDIA_DISPLAY, MEDIA_TYPE, REASONING_PREFIX, REASONING_SUFFIX, SCROLL_BEHAVIOR, debounce_timeout } from './constants.js';
 import { eventSource, event_types } from './events.js';
 import { isFrontendContent } from './frontend-frame.js';
+import { isCharacterExternalMediaAllowed } from './external-media-policy.js';
+import { filterMessageInlineStyles } from './message-css-policy.js';
 import { requireMessageShellContext } from './message-shell-context.js';
 import { uuidv4 } from './utils.js';
 
@@ -21,11 +23,30 @@ const state = new Proxy({}, {
     getOwnPropertyDescriptor: (_, key) => Object.getOwnPropertyDescriptor(shell().state, key),
 });
 
+function currentCharacterAllowsExternalMedia() {
+    const character = state.characters[state.this_chid];
+    return isCharacterExternalMediaAllowed(state.power_user, character?.avatar, character?.canonical_id);
+}
+
+const messageStyleScopes = new WeakMap();
+function getMessageStyleScope(messageId, isReasoning) {
+    const message = state.chat[messageId];
+    if (!message || typeof message !== 'object') return `message-${uuidv4()}`;
+    let scopes = messageStyleScopes.get(message);
+    if (!scopes) {
+        scopes = {};
+        messageStyleScopes.set(message, scopes);
+    }
+    const key = isReasoning ? 'reasoning' : 'message';
+    return scopes[key] ??= `message-${uuidv4()}`;
+}
+
 const applyCharacterTagsToMessageDivs = (...args) => shell().applyCharacterTagsToMessageDivs(...args);
 const copyText = (...args) => shell().copyText(...args);
 const decodeStyleTags = (...args) => shell().decodeStyleTags(...args);
 const delay = (...args) => shell().delay(...args);
 const encodeStyleTags = (...args) => shell().encodeStyleTags(...args);
+const normalizeStyleTagsForMarkdown = (...args) => shell().normalizeStyleTagsForMarkdown(...args);
 const escapeHtml = (...args) => shell().escapeHtml(...args);
 const escapeRegex = (...args) => shell().escapeRegex(...args);
 const getGeneratingApi = (...args) => shell().getGeneratingApi(...args);
@@ -129,13 +150,18 @@ export function messageFormatting(mes, ch_name, isSystem, isUser, messageId, san
     });
 
     if (!isSystem) {
+        // Markdown only treats a single-line `<style ...>` as raw HTML. Flatten
+        // whitespace inside style tags first; the post-Markdown encode step
+        // applies the message CSS policy to every spelling.
+        mes = normalizeStyleTagsForMarkdown(mes);
+
         // Save double quotes in tags as a special character to prevent them from being encoded
         mes = mes.replace(/<([^>]+)>/g, function (_, contents) {
             return '<' + contents.replace(/"/g, '\ufffe') + '>';
         });
 
         mes = mes.replace(
-            /<style>[\s\S]*?<\/style>|```[\s\S]*?```|~~~[\s\S]*?~~~|``[\s\S]*?``|`[\s\S]*?`|(".*?")|(\u201C.*?\u201D)|(\u00AB.*?\u00BB)|(\u300C.*?\u300D)|(\u300E.*?\u300F)|(\uFF02.*?\uFF02)/gim,
+            /<style(?:\s[^>]*)?>[\s\S]*?<\/style\s*>|```[\s\S]*?```|~~~[\s\S]*?~~~|``[\s\S]*?``|`[\s\S]*?`|(".*?")|(\u201C.*?\u201D)|(\u00AB.*?\u00BB)|(\u300C.*?\u300D)|(\u300E.*?\u300F)|(\uFF02.*?\uFF02)/gim,
             function (match, p1, p2, p3, p4, p5, p6) {
                 if (p1) {
                     // English double quotes
@@ -193,10 +219,18 @@ export function messageFormatting(mes, ch_name, isSystem, isUser, messageId, san
         MESSAGE_SANITIZE: true,
         ADD_TAGS: ['custom-style'],
         ...sanitizerOverrides,
+        // Only decoded custom-style elements may become active message CSS.
+        // HTML's error recovery accepts malformed tags that the encoder cannot parse.
+        FORBID_TAGS: [...(sanitizerOverrides?.FORBID_TAGS || []), 'style'],
     };
     mes = encodeStyleTags(mes);
     mes = state.DOMPurify.sanitize(mes, config);
-    mes = decodeStyleTags(mes, { prefix: '.mes_text ' });
+    const allowExternalMedia = currentCharacterAllowsExternalMedia();
+    const animationScope = getMessageStyleScope(messageId, isReasoning);
+    const animationNames = new Map();
+    mes = decodeStyleTags(mes, { prefix: `.mes_text [data-message-style-scope="${animationScope}"] `, messagePolicy: true, allowExternalMedia, animationScope, animationNames });
+    mes = filterMessageInlineStyles(mes, allowExternalMedia, animationNames);
+    mes = `<div data-message-style-scope="${animationScope}">${mes}</div>`;
 
     return mes;
 }

@@ -12,7 +12,7 @@ topic: third-party-extension-compatibility
 
 - **Regex** is a fixed product feature under `public/scripts/extensions/regex/` (the directory name is retained; it is a directly imported module, not a plugin system). It initializes via `initCoreFeatures()` in `public/scripts/feature-settings.js`.
 - **`feature_settings` data bag**: owns `regex`/`regex_presets`, `note`, `variables.global`, `character_allowed_regex`, `preset_allowed_regex`. New writes use `feature_settings`; legacy `extension_settings` data is preserved through lazy migration and on-disk keys are never purged.
-- **Message cards**: first-party frontend frames (`frontend-frame.js` / `frontend-frame-controller.js` / `EmberDeskFrame`) render fenced complete HTML documents as same-origin iframes.
+- **Message cards**: first-party frontend frames (`frontend-frame.js` / `frontend-frame-controller.js` / `EmberDeskFrame`) render fenced complete HTML documents as same-origin iframes. `createFrameIframe()` (`public/scripts/frontend-frame.js:704`) sets no `sandbox` attribute, and `buildFrontendFrameDocument()` (`public/scripts/frontend-frame.js:396`) injects host globals into the frame, so frame markup, CSS, and media bypass the message CSS policy and the per-character CSS-resource authorization entirely and run with the page's privileges. Treat a mounted frame as trusted page code, not as a restricted message body.
 - **Character-card metadata**: `data.extensions.*` fields (`regex_scripts`, `world`, etc.) are feature data and must not be deleted.
 
 ## Internal Contracts
@@ -36,6 +36,8 @@ The main chat message list is a shared surface for first-party message actions, 
 - `.extraMesButtonsHint` before `.extraMesButtons`; the hidden `data-main-chat-message-actions-owner="react"` marker stays appended after protected controls.
 
 Generation-recovery status (`.generation_auto_recovery_status`) stays outside `.mes_text`. Frontend-frame iframe hosts (`data-frontend-frame`) are owned by the frame controller.
+
+Message-body text is additionally wrapped by `<div data-message-style-scope="message-…">` directly inside `.mes_text` (`public/scripts/message-service.js:223`). That scope is not cosmetic: `<custom-style>` rules are rewritten with a scoped prefix, `url()`/`image-set()` targets and SVG presentation resources are admitted only from the page origin, `data:`, or an authorized origin, selectors escaping the row (`+`, `~`, `>`) are dropped, and `@keyframes` names are renamed per message, so a message's own styles can no longer reach sibling rows or other messages. The images, video, and audio elements a message body renders are not filtered by that scope — only its styles are. Code that injected CSS through a message body and relied on it leaking to the page, or on fetching external CSS resources without a character authorization, now needs its own stylesheet.
 
 ### Character list DOM contract
 
@@ -86,6 +88,7 @@ Internal read-service envelopes (`result.mode`, `latencyHint`, `interactionPath`
 pnpm run test:compat          # internal-contract gate
 pnpm --dir tests run test:unit -- chat-workspace-structure.test.js --runInBand
 pnpm --dir tests run test:e2e -- chat-message-frontend-frames.e2e.js --workers=1
+pnpm --dir tests run test:e2e -- message-resource-policy.e2e.js --workers=1
 ```
 
 `tests/helpers/frontend-compatibility-contract.js` is the internal contract manifest.

@@ -45,6 +45,7 @@ function mapCanonicalRowToPayload(row, useShallowPayload, options = {}) {
     const payload = cloneCanonicalPayload(rawPayload);
 
     payload.avatar = row.avatar_filename;
+    payload.canonical_id = row.id;
     return options.includeChatStats === false
         ? clearCanonicalChatStats(payload)
         : applyCanonicalChatStats(payload, row);
@@ -53,6 +54,7 @@ function mapCanonicalRowToPayload(row, useShallowPayload, options = {}) {
 export function listCanonicalCharacters(db, { useShallowPayload, includeChatStats = true }) {
     const rows = db.prepare(`
         SELECT
+            characters.id,
             characters.avatar_filename,
             characters.card_json,
             characters.shallow_json,
@@ -71,6 +73,7 @@ export function listCanonicalCharacters(db, { useShallowPayload, includeChatStat
 export function getCanonicalCharacter(db, avatarFilename, { includeChatStats = true } = {}) {
     const row = db.prepare(`
         SELECT
+            characters.id,
             characters.avatar_filename,
             characters.card_json,
             characters.shallow_json,
@@ -187,6 +190,18 @@ export function upsertCanonicalCharacter(db, {
 }) {
     const normalizedFullPayload = normalizeCanonicalCharacterPayload(fullPayload);
     const normalizedShallowPayload = normalizeCanonicalCharacterPayload(shallowPayload);
+
+    // A soft-deleted avatar may be recreated, but its old canonical identity
+    // must not be revived. Drop stats before changing the referenced primary
+    // key; no other canonical table uses characters.id as a foreign key.
+    const deletedExisting = db.prepare(`
+        SELECT id FROM characters
+        WHERE avatar_filename = ? AND deleted_at_ms IS NOT NULL
+    `).get(avatarFilename);
+    if (deletedExisting && deletedExisting.id !== id) {
+        db.prepare('DELETE FROM character_chat_stats WHERE character_id = ?').run(deletedExisting.id);
+        db.prepare('UPDATE characters SET id = ? WHERE id = ? AND deleted_at_ms IS NOT NULL').run(id, deletedExisting.id);
+    }
 
     return db.prepare(`
         INSERT INTO characters (

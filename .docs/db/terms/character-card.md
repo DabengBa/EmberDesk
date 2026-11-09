@@ -23,6 +23,7 @@ A character card is the reusable persona package a user browses, selects, edits,
 - **Chat context role**: the card becomes the active persona when selected in the workspace.
 - **Authoring fields**: the card exposes editable identity and descriptive fields through the workspace authoring surface while persisting into per-user canonical SQLite underneath, with the PNG card kept as a compatibility projection.
 - **Text maintenance**: the card's editable text fields, its bound or embedded world book, and its current chat can be batch-updated through [Character Text Replace](feature.character_text_replace); the card name and the world-book binding reference are deliberately excluded from that replacement surface.
+- **External media permission**: whether this card's message CSS may load external resources. It is a per-user authorization keyed by the card's avatar image file name and edited from the card's authoring surface, not a stored card field, so it does not change the card content itself. Denied by default; it does not gate the images, video, or audio the card's messages render directly. See [Chat Message Rendering](feature.chat_message_rendering) for what the permission actually admits.
 
 ## Lifecycle And States
 

@@ -877,6 +877,7 @@
     "Character Created: ${0}": "角色已创建：${0}",
     "Character Deleted: ${0}": "角色已删除：${0}",
     "Character Description": "角色描述",
+    "Allow external CSS resources for this character": "允许此角色的消息 CSS 加载外部资源",
     "Character Dialogue Settings": "角色对话设置",
     "Character Duplicated": "角色已复制",
     "Character Exclusion": "角色排除",

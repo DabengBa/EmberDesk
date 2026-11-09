@@ -259,6 +259,7 @@ const panelShellStyles = stylex.create({
 });
 
 interface AuthoringWorkspacePanelState {
+    externalMediaAllowed?: boolean;
     mode?: 'create' | 'edit';
     title?: string;
     subtitle?: string;
@@ -1335,6 +1336,8 @@ function AuthoringWorkspacePanel({
     const [textReplaceOpen, setTextReplaceOpen] = useState(false);
     const [tagManagerOpen, setTagManagerOpen] = useState(false);
     const [avatarPreviewOverride, setAvatarPreviewOverride] = useState<string | null>(null);
+    const [externalMediaAllowed, setExternalMediaAllowed] = useState(bridgeState.externalMediaAllowed === true);
+    const [externalMediaSaving, setExternalMediaSaving] = useState(false);
     const [liveManagementActions, setLiveManagementActions] = useState<AuthoringManagementAction[] | null>(null);
     const saveGenerationRef = useRef(0);
     const saveInFlightRef = useRef<Promise<boolean> | null>(null);
@@ -1359,6 +1362,7 @@ function AuthoringWorkspacePanel({
         setTextReplaceOpen(false);
         setTagManagerOpen(false);
         setAvatarPreviewOverride(null);
+        setExternalMediaAllowed(bridgeState.externalMediaAllowed === true);
     }
 
     useEffect(() => {
@@ -1808,6 +1812,20 @@ function AuthoringWorkspacePanel({
                     </div>
                     <div {...stylex.props(authoringStyles.section)} data-react-authoring-section="content">
                         <h4 {...stylex.props(authoringStyles.subsectionLabel)}>{translate("Card content")}</h4>
+                        {!isCreateMode && typeof draft.avatar === 'string' && draft.avatar ? (
+                            <label>
+                                <input type="checkbox" checked={externalMediaAllowed} disabled={externalMediaSaving} onChange={event => {
+                                    const allowed = event.target.checked;
+                                    const characterId = draft.avatar as string;
+                                    setExternalMediaAllowed(allowed);
+                                    setExternalMediaSaving(true);
+                                    void Promise.resolve(commands?.setExternalMediaAllowed?.({ characterId, allowed })).then(result => {
+                                        if (result === false) setExternalMediaAllowed(!allowed);
+                                    }).catch(() => setExternalMediaAllowed(!allowed)).finally(() => setExternalMediaSaving(false));
+                                }} />{' '}
+                                {translate('Allow external CSS resources for this character')}
+                            </label>
+                        ) : null}
                         <label {...stylex.props(authoringStyles.field)} htmlFor="authoring-description" data-react-authoring-field="description">
                             <AuthoringFieldLabel
                                 text="Description"

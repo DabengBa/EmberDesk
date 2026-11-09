@@ -24,6 +24,22 @@ function createFormatMessage() {
 }
 
 describe('chat message render service', () => {
+    test('external image, video and audio attachments load without character authorization', async () => {
+        const { buildChatMessageRichBodyRender } = await importFreshRenderService();
+        const message = createMessage({ extra: { inline_image: false, media: [
+            { type: 'image', url: 'https://external.example/a.png' },
+            { type: 'video', url: 'https://external.example/b.mp4' },
+            { type: 'audio', url: 'https://external.example/c.mp3' },
+        ] } });
+        const options = { messageId: 1, formatMessage: createFormatMessage() };
+        const list = buildChatMessageRichBodyRender(message, { ...options, mediaDisplay: 'list' });
+        for (const url of ['/a.png', '/b.mp4', '/c.mp3']) expect(list.mediaHtml).toContain(`https://external.example${url}`);
+        expect(list.flags.hideMessageText).toBe(true);
+        const gallery = buildChatMessageRichBodyRender(message, { ...options, mediaDisplay: 'gallery', mediaIndex: 1 });
+        expect(gallery.mediaHtml).toContain('https://external.example/b.mp4');
+        expect(gallery.mediaHtml).toContain('mes_img_swipe_right');
+    });
+
     test('builds rich-body HTML for stored character messages without touching DOM', async () => {
         const {
             buildChatMessageRichBodyRender,

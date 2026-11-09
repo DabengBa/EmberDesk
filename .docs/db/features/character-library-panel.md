@@ -28,11 +28,13 @@ Let users browse, search, filter, sort, bulk-select, and choose [character cards
 - Character Authoring opens the card's existing editing fields without a technical warning about extensions and without greeting previews. The World Info field is a dual-lane section: a closed primary-binding selector (no-binding option, create-new-book entry, dangling-reference warning, and a direct open-book action), plus an `附属书（仅本机）` lane of removable chips and an add selector backed by `world_info.charLore`. The primary binding's `随卡导出` semantics are labeled in the field meta. Edit-mode autosaves stay invisible for pure content edits: the save model carries `changedFields`, and only display- or prompt-facing changes (name, avatar, favorite, tags, first message, prompt fields) trigger the favorite-strip rebuild and `CHARACTER_EDITED` fan-out. The established create and edit fields, save behavior, and surrounding editing flow remain unchanged.
 - Character tags are summarized in the authoring form and open a card-scoped manager. The manager supports searching, adding, individual removal, and batch removal; all changes update only the current card draft and continue through normal authoring autosave. This is separate from global tag-library management.
 - In edit mode, Character Authoring also exposes a `查找替换` footer action that opens [Character Text Replace](feature.character_text_replace) for the active card, its bound or embedded world book, and the current chat.
+- In edit mode, Character Authoring's card-content section carries an `Allow external CSS resources for this character` checkbox. It is absent while creating a card, which has no canonical identity until saved. Toggling it applies immediately to the open chat and persists through a dedicated authorization request; a rejected write reverts the checkbox. The switch governs resources loaded by message CSS, not images, video, or audio rendered directly in the message body.
 - When the Character Management lock is enabled, the character-library panel remains open while users open supporting drawers such as World Info; when it is not locked, opening another drawer may close it to keep the workspace uncluttered.
 - The panel remains usable for large libraries by keeping pagination, virtualized visible rows for very large page sizes, lazy avatar behavior, and steady-state reopen performance focused on the current browsing task.
 - Character rows show current card metadata, avatars, tags, favorite state, last-chat summaries, and character/folder identity without changing the user's list definition during search, sort, filtering, or pagination.
 - The visible library contract stays the same during normal browsing and maintenance recovery; users should not have to rebuild or understand hidden cache/index state to browse current cards.
 - Search, sort, tag filters, page size changes, and pagination should update the visible list without unnecessary clear-and-rebuild churn when the next page is unambiguous; ambiguous states may fall back to a full refresh for correctness.
+- After changing a saved sort order, leaving or refreshing while that change is still unsaved may trigger the browser's standard confirmation; after successful saving the sort-specific warning is removed. Temporary search sorting does not itself add this warning. Browser support and wording vary, and leaving remains the user's choice.
 - Character row identity remains stable for browsing, active-card state, bulk selection, and protected row-identity selectors.
 - Character rows allocate enough vertical space for wrapped descriptions and tag content; each row's visible content stays within its own row boundary and does not overlap the following character or folder row.
 - Bulk-select mode provides visible selection hints, synchronized selected styling and checked state, selected count, select-all controls, and disabled-until-selection destructive actions.
@@ -48,6 +50,7 @@ The React library is the sole runtime owner for browsing, filters, tags, bulk, s
 - `feature.character_library_panel`: the full character-library browsing surface.
 - `feature.character_library_panel.primary_entry`: the action that brings the character list into focus.
 - `feature.character_library_panel.select_card`: choosing one [character card](term.character_card) as the active workspace context.
+- `feature.character_library_panel.external_media_authorization`: the edit-mode checkbox that grants or revokes external resource loading in the active card's message CSS for its rendered rows.
 
 ## Acceptance Workflows
 
@@ -73,6 +76,7 @@ The React library is the sole runtime owner for browsing, filters, tags, bulk, s
 - Search, sort, pagination, or filtering leaves selected rows, counts, or active-card identity out of sync.
 - Card-scoped tag edits affect other cards or global tag-library management, fail to persist, or become unusable on a narrow screen.
 - Bulk delete is enabled with no selected character.
+- The external media checkbox shows a stored grant that the open chat does not honor, changes another character's rows, needs a reload, or reverts without an error while the chat keeps loading the message CSS resources it should deny.
 - Deleted cards reappear after delayed edit responses, late `/api/characters/all` snapshots, or page refresh.
 - Large page sizes render every row at once and make the panel visibly unusable.
 
@@ -82,3 +86,4 @@ The React library is the sole runtime owner for browsing, filters, tags, bulk, s
 - Exporting the active card belongs to [Character Export](feature.character_export).
 - The card concept belongs to [Character Card](term.character_card).
 - Workspace shell placement belongs to [Chat Workspace](page.chat_workspace).
+- What the external media grant changes inside a rendered message row — and which message resources it deliberately leaves ungated — belongs to [Chat Message Rendering](feature.chat_message_rendering).

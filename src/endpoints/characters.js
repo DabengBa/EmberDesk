@@ -58,6 +58,7 @@ import {
     upsertCanonicalCharacter,
 } from './character-store.js';
 import { getCanonicalWorldInfoBook, normalizeCanonicalWorldInfoName } from './world-info-store.js';
+import { mutateCharacterMediaAuthorizationInTransaction } from './settings-store.js';
 import {
     createCharacterCard,
     deleteCharacterCard,
@@ -1031,6 +1032,8 @@ function createCharacterWriteDependencies({ bustCache = null } = {}) {
             const nowMs = Date.now();
             const repairKey = `${operation}:${payload.avatarName ?? payload.newAvatarName}:${nowMs}`;
             const payloadAvatar = payload.newAvatarName ?? payload.avatarName;
+            let mediaAuthorization;
+            let settingsRevision;
 
             try {
                 if (operation === 'rename') {
@@ -1051,6 +1054,9 @@ function createCharacterWriteDependencies({ bustCache = null } = {}) {
                         if ((renameResult?.changes ?? 0) === 0) {
                             throw new Error(`Canonical rename target not found: ${payload.oldAvatarName}`);
                         }
+                        const authorization = mutateCharacterMediaAuthorizationInTransaction(txnDb, { userId: handle, characterId: payload.oldAvatarName, newCharacterId: payload.newAvatarName });
+                        mediaAuthorization = authorization.power_user;
+                        settingsRevision = authorization.revision;
                         renameCharacterAvatarBlobReference(txnDb, payload.oldAvatarName, payload.newAvatarName);
                         retargetCanonicalChatSessionsOwner(txnDb, {
                             oldOwnerId: payload.oldInternalName,
@@ -1068,6 +1074,7 @@ function createCharacterWriteDependencies({ bustCache = null } = {}) {
                         if ((deleteResult?.changes ?? 0) === 0) {
                             throw new Error(`Canonical delete target not found: ${payload.avatarName}`);
                         }
+                        mutateCharacterMediaAuthorizationInTransaction(txnDb, { userId: handle, characterId: payload.avatarName });
                         retireCharacterAvatarBlobReference(txnDb, payload.avatarName);
                         if (payload.deleteChats) {
                             deleteCanonicalChatSessionsForOwner(
@@ -1083,7 +1090,10 @@ function createCharacterWriteDependencies({ bustCache = null } = {}) {
                     const shallowPayload = toShallow(fullPayload);
 
                     withCanonicalTransaction(db, txnDb => {
-                        const existing = txnDb.prepare('SELECT id, created_at_ms FROM characters WHERE avatar_filename = ?').get(payloadAvatar);
+                        const existing = txnDb.prepare(`
+                            SELECT id, created_at_ms FROM characters
+                            WHERE avatar_filename = ? AND deleted_at_ms IS NULL
+                        `).get(payloadAvatar);
                         upsertCanonicalCharacter(txnDb, {
                             id: existing?.id ?? randomUUID(),
                             avatarFilename: payloadAvatar,
@@ -1103,6 +1113,8 @@ function createCharacterWriteDependencies({ bustCache = null } = {}) {
             return {
                 enabled: true,
                 authorityCommitted: true,
+                mediaAuthorization,
+                settingsRevision,
                 repairKey,
                 projection: typeof characterSlice.getProjectionMode === 'function'
                     ? characterSlice.getProjectionMode()
@@ -1562,7 +1574,7 @@ router.post('/rename', validateAvatarUrlMiddleware, async function (request, res
         }
 
         // Return new avatar name to ST
-        return response.send({ avatar: result.avatarName });
+        return response.send({ avatar: result.avatarName, mediaAuthorization: result.mediaAuthorization, settings_revision: result.settingsRevision });
     } catch (err) {
         console.error(err);
         return response.sendStatus(500);
