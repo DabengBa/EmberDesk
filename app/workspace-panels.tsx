@@ -1557,31 +1557,6 @@ function AuthoringWorkspacePanel({
                     }
                 }}
             >
-                <header {...stylex.props(authoringStyles.panelHeader)}>
-                    {!isCreateMode ? (
-                        <span {...stylex.props(authoringStyles.footerStatus, authoringStyles.headerStatus)} aria-live="polite">
-                            <i
-                                {...stylex.props(
-                                    authoringStyles.footerDot,
-                                    authoringCommandMutation.isError
-                                        ? authoringStyles.footerDotError
-                                        : (authoringCommandMutation.isPending || authoringSession.dirty)
-                                            ? authoringStyles.footerDotBusy
-                                            : null,
-                                )}
-                                aria-hidden="true"
-                            />
-                            {authoringCommandMutation.isPending
-                                ? translate('Saving…')
-                                : authoringCommandMutation.isError
-                                    ? translate('Save failed — next change retries')
-                                    : authoringSession.dirty
-                                        ? translate('${0} unsaved').replace('${0}', String(dirtyFieldSet.size))
-                                        : translate('Saved')}
-                        </span>
-                    ) : null}
-                </header>
-
                 <fieldset
                     {...stylex.props(authoringStyles.fields)}
                     style={{ border: 0, margin: 0, minWidth: 0, padding: 0 }}
@@ -1648,6 +1623,28 @@ function AuthoringWorkspacePanel({
                                     {fieldErrors.name ? <small role="alert" {...stylex.props(authoringStyles.fieldWarning)}>{fieldErrors.name}</small> : null}
                                 </label>
                                 <div {...stylex.props(authoringStyles.heroMetaRow)}>
+                                    {!isCreateMode ? (
+                                        <span {...stylex.props(authoringStyles.footerStatus)} aria-live="polite">
+                                            <i
+                                                {...stylex.props(
+                                                    authoringStyles.footerDot,
+                                                    authoringCommandMutation.isError
+                                                        ? authoringStyles.footerDotError
+                                                        : (authoringCommandMutation.isPending || authoringSession.dirty)
+                                                            ? authoringStyles.footerDotBusy
+                                                            : null,
+                                                )}
+                                                aria-hidden="true"
+                                            />
+                                            {authoringCommandMutation.isPending
+                                                ? translate('Saving…')
+                                                : authoringCommandMutation.isError
+                                                    ? translate('Save failed — next change retries')
+                                                    : authoringSession.dirty
+                                                        ? translate('${0} unsaved').replace('${0}', String(dirtyFieldSet.size))
+                                                        : translate('Saved')}
+                                        </span>
+                                    ) : null}
                                     <button
                                         type="button"
                                         {...stylex.props(authoringStyles.favToggle, draft.favorite ? authoringStyles.favToggleActive : null)}
@@ -1688,7 +1685,7 @@ function AuthoringWorkspacePanel({
                                             {tagsList.slice(0, 4).map(tag => (
                                                 <span key={tag} {...stylex.props(authoringStyles.tagManagerPreviewChip)} title={tag}>{tag}</span>
                                             ))}
-                                            {tagsList.length === 0 ? <span {...stylex.props(authoringStyles.fieldMeta)}>{translate('No tags')}</span> : null}
+                                            {tagsList.length === 0 ? <span {...stylex.props(authoringStyles.tagManagerPreviewEmpty)}>{translate('No tags')}</span> : null}
                                         </span>
                                         <span {...stylex.props(authoringStyles.tagManagerPreviewCount)}>
                                             {translate('Manage tags')} · {tagsList.length}
@@ -1697,7 +1694,7 @@ function AuthoringWorkspacePanel({
                                 </div>
                             </div>
                             <div {...stylex.props(authoringStyles.fieldRowItem)}>
-                                <label {...stylex.props(authoringStyles.field)} data-react-authoring-field="characterWorld">
+                                <div {...stylex.props(authoringStyles.field)} data-react-authoring-field="characterWorld">
                                     <AuthoringFieldLabel text="World Info" dirty={isFieldDirty('characterWorld')} meta={translate('Travels with card')} />
                                     <div {...stylex.props(authoringStyles.fieldInputRow)}>
                                         <select
@@ -1806,15 +1803,15 @@ function AuthoringWorkspacePanel({
                                     {stringDraft('characterWorld').trim() && worldNames.length > 0 && !worldNames.includes(stringDraft('characterWorld').trim()) ? (
                                         <small {...stylex.props(authoringStyles.fieldWarning)}>{translate("No world file with this name — the link will be ignored.")}</small>
                                     ) : null}
-                                </label>
+                                </div>
                             </div>
                         </div>
                     </div>
                     <div {...stylex.props(authoringStyles.section)} data-react-authoring-section="content">
                         <h4 {...stylex.props(authoringStyles.subsectionLabel)}>{translate("Card content")}</h4>
                         {!isCreateMode && typeof draft.avatar === 'string' && draft.avatar ? (
-                            <label>
-                                <input type="checkbox" checked={externalMediaAllowed} disabled={externalMediaSaving} onChange={event => {
+                            <label {...stylex.props(authoringStyles.checkboxLabel)}>
+                                <input {...stylex.props(authoringStyles.checkbox)} type="checkbox" checked={externalMediaAllowed} disabled={externalMediaSaving} onChange={event => {
                                     const allowed = event.target.checked;
                                     const characterId = draft.avatar as string;
                                     setExternalMediaAllowed(allowed);
@@ -1822,7 +1819,7 @@ function AuthoringWorkspacePanel({
                                     void Promise.resolve(commands?.setExternalMediaAllowed?.({ characterId, allowed })).then(result => {
                                         if (result === false) setExternalMediaAllowed(!allowed);
                                     }).catch(() => setExternalMediaAllowed(!allowed)).finally(() => setExternalMediaSaving(false));
-                                }} />{' '}
+                                }} />
                                 {translate('Allow external CSS resources for this character')}
                             </label>
                         ) : null}

@@ -185,12 +185,7 @@ export const authoringStyles = stylex.create({
         backgroundImage: 'linear-gradient(color-mix(in srgb, var(--SmartThemeBlurTintColor) 86%, transparent), color-mix(in srgb, var(--SmartThemeBlurTintColor) 86%, transparent))',
         backgroundColor: 'color-mix(in srgb, black 88%, var(--SmartThemeBodyColor) 12%)',
     },
-    panelHeader: {
-        display: 'flex',
-        alignItems: 'flex-start',
-        justifyContent: 'space-between',
-        gap: '8px',
-    },
+
     panelKicker: {
         margin: 0,
         color: 'color-mix(in srgb, var(--SmartThemeBodyColor) 72%, transparent)',
@@ -231,6 +226,15 @@ export const authoringStyles = stylex.create({
         color: 'color-mix(in srgb, var(--SmartThemeBodyColor) 66%, transparent)',
         fontSize: 'calc(var(--mainFontSize) * 0.76)',
         whiteSpace: 'nowrap',
+    },
+    checkboxLabel: {
+        display: 'flex',
+        alignItems: 'flex-start',
+        gap: '6px',
+    },
+    checkbox: {
+        flexShrink: 0,
+        margin: '2px 0 0',
     },
     fieldWarning: {
         color: 'var(--warning)',
@@ -529,6 +533,11 @@ export const authoringStyles = stylex.create({
         minWidth: 0,
         maxHeight: 'calc(var(--mainFontSize) * 2.3)',
         overflow: 'hidden',
+    },
+    tagManagerPreviewEmpty: {
+        color: 'color-mix(in srgb, var(--SmartThemeBodyColor) 66%, transparent)',
+        fontSize: 'calc(var(--mainFontSize) * 0.76)',
+        fontWeight: 400,
     },
     tagManagerPreviewChip: {
         maxWidth: '100%',
@@ -998,10 +1007,7 @@ export const authoringStyles = stylex.create({
         opacity: 0.55,
         borderStyle: 'dashed',
     },
-    headerStatus: {
-        marginLeft: 'auto',
-        flexShrink: 0,
-    },
+
     greetingPreview: {
         display: '-webkit-box',
         WebkitLineClamp: 2,

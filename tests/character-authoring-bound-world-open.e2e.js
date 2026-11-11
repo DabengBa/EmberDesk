@@ -22,26 +22,22 @@ test('character authoring opens the bound world book directly and disables the a
         },
     };
 
+    // The optional world import dialog can appear after the success toast.
+    await page.addLocatorHandler(page.locator('dialog[open]').filter({ has: page.locator('#import_opt_world') }), async dialog => {
+        await dialog.getByRole('button', { name: '全部跳过' }).click();
+    });
     await page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: '角色库' }).click();
     await page.setInputFiles('#character_import_file', {
         name: 'bound-world.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(card)),
     });
-    // The card links an existing book, so the import options dialog offers to
-    // overwrite it. Skip that side import — only the card binding matters here.
-    await Promise.race([
-        page.locator('.toast-success').filter({ hasText: name }).waitFor({ timeout: 20_000 }).catch(() => null),
-        page.locator('#import_opt_world').waitFor({ timeout: 20_000 }).catch(() => null),
-    ]);
-    if (await page.locator('#import_opt_world').isVisible().catch(() => false)) {
-        await page.locator('.popup-button-cancel').filter({ hasText: '全部跳过' }).click();
-    }
+
     await expect(page.locator('.toast-success')).toContainText(name, { timeout: 20_000 });
     await page.locator('.character_select').filter({ hasText: name }).first().click();
     const authoring = page.locator('[data-react-authoring-owner="characterAuthoring"]');
     await expect(authoring).toBeVisible();
 
     const worldField = authoring.locator('[data-react-authoring-field="characterWorld"]');
-    const worldSelect = worldField.locator('select');
+    const worldSelect = worldField.getByRole('combobox', { name: /Bound World Info file|绑定的世界书文件/ });
     await expect(worldSelect).toHaveValue(book);
     const openBound = worldField.locator('[data-react-authoring-action="openBoundWorldInfo"]');
     await expect(openBound).toBeEnabled();
