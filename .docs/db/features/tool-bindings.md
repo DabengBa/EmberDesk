@@ -25,7 +25,7 @@ Let users register real OpenAI-style function tools without writing an extension
 - The tool-binding settings include a keyboard-accessible `强制调用` switch. Its visible label is also exposed as the switch's accessible name, and the switch can be focused and toggled with the keyboard.
 - Bindings persist globally in `feature_settings.tool_bindings` inside the user settings document — not inside preset files and not per character.
 - Each binding carries: name (API tool name, 1-64 chars of letters/digits/`_`/`-`), optional display name, model-facing description, parameters JSON Schema, action body, optional format-message body, enabled flag, and stealth flag.
-- There is no master switch: at least one enabled binding means tool calling is on for OpenAI-compatible sources; zero enabled bindings means no `tools` payload is sent.
+- The Reply Pipeline toggle controls tool calling: when it is off, subsequent generations send no `tools` payload even if bindings remain enabled. Enabling it again restores eligible bindings; an already-running pipeline finishes with its captured tools. At least one enabled binding and a compatible source are also required.
 - The action body executes as `async (args) => result` and receives exactly one parameter — the parsed tool-call arguments. Runtime and syntax errors are returned to the model as an `{ok:false,error}` payload rather than breaking the generation loop.
 - A non-streaming reply that contains only tool calls (no text content) is valid and must not be treated as an empty reply.
 - Stealth bindings hide the invocation from chat and skip the follow-up generation.

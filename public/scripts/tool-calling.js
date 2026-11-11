@@ -594,7 +594,8 @@ export class ToolManager {
         settings = settings ?? oai_settings;
         model = model ?? getChatCompletionModel(settings);
 
-        if (main_api !== 'openai' || !hasEnabledToolBindings(feature_settings.tool_bindings)) {
+        if (main_api !== 'openai' || (!settings.reply_pipeline?.enabled && !getPipelineRunState())
+            || !hasEnabledToolBindings(feature_settings.tool_bindings)) {
             return false;
         }
 

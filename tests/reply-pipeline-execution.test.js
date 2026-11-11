@@ -1,11 +1,11 @@
 import { beforeEach, expect, jest, test } from '@jest/globals';
 
 jest.unstable_mockModule('../public/lib.js', () => ({ DOMPurify: {} }));
-jest.unstable_mockModule('../public/script.js', () => Object.fromEntries(['addOneMessage', 'chat', 'getGeneratingApi', 'getGeneratingModel', 'main_api', 'saveChatConditional', 'system_avatar', 'systemUserName'].map(key => [key, jest.fn()])));
+jest.unstable_mockModule('../public/script.js', () => Object.fromEntries(['addOneMessage', 'chat', 'getGeneratingApi', 'getGeneratingModel', 'main_api', 'saveChatConditional', 'system_avatar', 'systemUserName'].map(key => [key, key === 'main_api' ? 'openai' : jest.fn()])));
 jest.unstable_mockModule('../public/scripts/feature-settings.js', () => ({ feature_settings: { tool_bindings: [{ name: 'analyze', enabled: true }, { name: 'later', enabled: true }] } }));
 jest.unstable_mockModule('../public/scripts/extensions/regex/engine.js', () => ({ getRegexedString: jest.fn(), regex_placement: {} }));
 jest.unstable_mockModule('../public/scripts/message-service.js', () => ({ updateMessageBlock: jest.fn() }));
-jest.unstable_mockModule('../public/scripts/openai.js', () => ({ chat_completion_sources: {}, getChatCompletionModel: jest.fn(), model_list: [], oai_settings: { reply_pipeline: { enabled: true, steps: [{ tool: 'analyze' }, { tool: 'later' }] } } }));
+jest.unstable_mockModule('../public/scripts/openai.js', () => ({ chat_completion_sources: { OPENAI: 'openai' }, getChatCompletionModel: () => 'model', model_list: [], oai_settings: { chat_completion_source: 'openai', reply_pipeline: { enabled: true, steps: [{ tool: 'analyze' }, { tool: 'later' }] } } }));
 jest.unstable_mockModule('../public/scripts/tool-bindings.js', () => ({ syncPipelineToolBindings: jest.fn() }));
 jest.unstable_mockModule('../public/scripts/popup.js', () => ({ Popup: {} }));
 jest.unstable_mockModule('../public/scripts/slash-commands/SlashCommand.js', () => ({ SlashCommand: {} }));
@@ -17,6 +17,7 @@ jest.unstable_mockModule('../public/scripts/slash-commands/SlashCommandParser.js
 jest.unstable_mockModule('../public/scripts/slash-commands/SlashCommandReturnHelper.js', () => ({ slashCommandReturnHelper: jest.fn() }));
 jest.unstable_mockModule('../public/scripts/utils.js', () => ({ isTrueBoolean: jest.fn() }));
 const { ToolManager } = await import('../public/scripts/tool-calling.js');
+const { oai_settings } = await import('../public/scripts/openai.js');
 const { setPipelineRunStateProvider } = await import('../public/scripts/reply-pipeline-core.js');
 const runtime = await import('../public/scripts/reply-pipeline.js');
 let run;
@@ -26,6 +27,7 @@ const call = (name, id = 'id') => ({ id, type: 'function', function: { name, arg
 globalThis.toastr = { info: jest.fn(), clear: jest.fn() };
 beforeEach(() => {
     action.mockClear(); formatter.mockClear();
+    oai_settings.reply_pipeline.enabled = true;
     run = { steps: [{ tool: 'analyze' }], index: 0 };
     setPipelineRunStateProvider(() => run);
     for (const name of ['analyze', 'later', 'outside']) {
@@ -34,6 +36,22 @@ beforeEach(() => {
     }
 });
 
+test('disabled pipeline suppresses tools on the next generation without changing bindings', () => {
+    run = null;
+    expect(ToolManager.canPerformToolCalls('normal')).toBe(true);
+    oai_settings.reply_pipeline.enabled = false;
+    const restoredSettings = JSON.parse(JSON.stringify(oai_settings));
+    expect(ToolManager.canPerformToolCalls('normal', restoredSettings, 'model')).toBe(false);
+    oai_settings.reply_pipeline.enabled = true;
+    expect(ToolManager.canPerformToolCalls('normal')).toBe(true);
+});
+
+test('disabling during an active pipeline leaves its current run intact', () => {
+    oai_settings.reply_pipeline.enabled = false;
+    expect(ToolManager.canPerformToolCalls('normal')).toBe(true);
+    run = null;
+    expect(ToolManager.canPerformToolCalls('normal')).toBe(false);
+});
 test.each([[call('later')], [call('outside')], [call('analyze'), call('analyze', 'id2')], [call('analyze'), call('later', 'id2')]].map(calls => [calls]))('rejects entire invalid batch before formatter/action: %p', async calls => {
     await expect(ToolManager.invokeFunctionTools([[...calls]])).rejects.toThrow(/Reply pipeline/);
     expect(action).not.toHaveBeenCalled(); expect(formatter).not.toHaveBeenCalled();

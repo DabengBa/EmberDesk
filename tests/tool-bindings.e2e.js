@@ -227,6 +227,7 @@ test.describe('tool bindings', () => {
             const script = await import('/script.js');
             const context = window.SillyTavern.getContext();
             context.featureSettings.tool_bindings = [binding];
+            context.chatCompletionSettings.reply_pipeline = { enabled: true, steps: [] };
             await script.saveSettings();
         }, toolBinding);
         await page.reload();
@@ -350,6 +351,37 @@ test.describe('tool bindings', () => {
         await expect.poll(() => page.evaluate(() =>
             window.__emberdeskToolRequests?.some(request => request.tool_choice === 'required') ?? false,
         ), { timeout: 30_000 }).toBe(true);
+    });
+
+    test('pipeline toggle persists and controls the next request tool list', async ({ page }) => {
+        await testSetup.awaitST({ page });
+        await page.evaluate(async binding => {
+            const context = window.SillyTavern.getContext();
+            context.featureSettings.tool_bindings = [binding];
+            context.chatCompletionSettings.reply_pipeline = { enabled: true, steps: [{ tool: binding.name }] };
+            await (await import('/script.js')).saveSettings();
+        }, toolBinding);
+        await page.reload();
+        await testSetup.awaitST({ page });
+        await prepareOpenAiProvider(page);
+        const toggle = page.locator('#completion_prompt_manager .prompt-panel-pipeline-head input[type="checkbox"]');
+        await expect(toggle).toBeChecked();
+        await toggle.uncheck();
+        await page.evaluate(async () => (await import('/script.js')).saveSettings());
+        await page.reload();
+        await testSetup.awaitST({ page });
+        await prepareOpenAiProvider(page);
+        await expect(toggle).not.toBeChecked();
+        const buildRequest = () => page.evaluate(async () => {
+            const { buildChatCompletionRequest } = await import('/scripts/openai.js');
+            return (await buildChatCompletionRequest({ type: 'normal', messages: [], model: 'gpt-4o-mini' })).generate_data;
+        });
+        const disabled = await buildRequest();
+        expect(disabled.tools).toBeUndefined();
+        expect(disabled.tool_choice).toBeUndefined();
+        await toggle.check();
+        const enabled = await buildRequest();
+        expect(enabled.tools.some(tool => tool.function.name === 'game_content')).toBe(true);
     });
 
     test('disabled binding is stored but not registered', async ({ page }) => {

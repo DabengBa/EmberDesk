@@ -1255,7 +1255,7 @@ test.describe('chat message streaming', () => {
         await enableFallbackProvider(page);
         await page.evaluate(async () => {
             const context = window.SillyTavern.getContext();
-            context.chatCompletionSettings.reply_pipeline = { enabled: false, steps: [] };
+            context.chatCompletionSettings.reply_pipeline = { enabled: true, steps: [] };
             context.featureSettings.tool_bindings = [{ id: 'ordinary_tool', name: 'analyze', enabled: true, description: 'analyze', parameters: { type: 'object', properties: {} }, actionBody: 'return "ordinary tool result";' }];
             const { syncPipelineToolBindings } = await import('/scripts/tool-bindings.js');
             syncPipelineToolBindings(['analyze'], { activate: true });
