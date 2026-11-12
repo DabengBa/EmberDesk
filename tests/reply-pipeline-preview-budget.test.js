@@ -5,7 +5,7 @@ import { expect, jest, test } from '@jest/globals';
 // module under test is the real one, only the shell/provider edges are stubbed.
 globalThis.localStorage = { getItem: () => null };
 jest.unstable_mockModule('../public/scripts/world-info-service.js', () => ({ getWorldInfoPrompt: jest.fn() }));
-jest.unstable_mockModule('../public/scripts/main-chat-composer-service.js', () => ({ getComposerValue: jest.fn(), clearComposerValue: jest.fn() }));
+jest.unstable_mockModule('../public/scripts/main-chat-composer-service.js', () => ({ getComposerValue: jest.fn(), getComposerSnapshot: jest.fn(() => ({ value: '', contextKey: null, revision: 0 })), clearComposerValue: jest.fn() }));
 jest.unstable_mockModule('../public/scripts/chat-memory-service.js', () => ({ applyChatMemoryToCoreChat: jest.fn() }));
 jest.unstable_mockModule('../public/scripts/i18n.js', () => ({ t: strings => strings[0] }));
 jest.unstable_mockModule('../public/scripts/openai.js', () => ({ oai_settings: { reply_pipeline: { enabled: true, steps: [{ tool: 'analyze' }] } } }));

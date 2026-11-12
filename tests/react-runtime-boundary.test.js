@@ -246,16 +246,16 @@ describe('React runtime boundary', () => {
             /function ensureMainChatMessageListReactHost\(\) \{[\s\S]*?\n\}/,
         )?.[0] ?? '';
         const bindingBlock = scriptSource.match(
-            /function bindMainChatReactComposerCommandPort\(\) \{[\s\S]*?\n\}/,
+            /async function mountChatComposer\(\) \{[\s\S]*?\n\}/,
         )?.[0] ?? '';
 
         expect(hostBlock).toContain("sendForm.dataset.mainChatComposerOwner = 'react';");
         expect(hostBlock).toContain("nonQrFormItems.dataset.mainChatComposerOwner = 'react';");
-        expect(bindingBlock).toContain('triggerVisibleGeneration');
-        expect(bindingBlock).toContain('stopVisibleGeneration');
-        expect(bindingBlock).toContain('stopImmediatePropagation');
+        expect(bindingBlock).toContain('submit: sendTextareaMessage');
+        expect(bindingBlock).toContain('stop: stopGeneration');
+        expect(bindingBlock).toContain('getComposerSnapshot, subscribeComposerState');
         expect(bindingBlock).not.toContain('replaceWith');
-        expect(bindingBlock).not.toContain('createElement');
+        expect(scriptSource).not.toContain('bindMainChatReactComposerCommandPort');
     });
 
     test('keeps React message action expansion in typed UI state', () => {

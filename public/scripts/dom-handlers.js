@@ -3,7 +3,7 @@ import { debounce_timeout } from './constants.js';
 import { eventSource, event_types } from './events.js';
 import { updateMessageElement } from './message-service.js';
 import { requireDomHandlersShellContext } from './dom-handlers-shell-context.js';
-import { initMainChatComposerService, renameComposerDraftContext, setComposerDraftContext } from './main-chat-composer-service.js';
+import { renameComposerDraftContext, setComposerDraftContext, requestComposerFocus } from './main-chat-composer-service.js';
 
 function shell() {
     return requireDomHandlersShellContext();
@@ -102,7 +102,6 @@ const selectImportedChar = (...args) => shell().selectImportedChar(...args);
 const select_rm_characters = (...args) => shell().select_rm_characters(...args);
 const select_rm_create = (...args) => shell().select_rm_create(...args);
 const select_selected_character = (...args) => shell().select_selected_character(...args);
-const sendTextareaMessage = (...args) => shell().sendTextareaMessage(...args);
 const setCharacterSettingsOverrides = (...args) => shell().setCharacterSettingsOverrides(...args);
 const setOptionsMenuRegenerateAvailability = (...args) => shell().setOptionsMenuRegenerateAvailability(...args);
 const showBranchChatButtons = (...args) => shell().showBranchChatButtons(...args);
@@ -125,7 +124,6 @@ export function initDomHandlers() {
 export async function bindLegacyShellHandlers() {
     // React-owned composer markup must exist before handlers bind below.
     await mountChatComposer();
-    initMainChatComposerService();
     // React-owned static panels must exist before the direct $(...).on()
     // bindings below; bootstrapWorkspace re-invokes these mounts later, and
     // each mount is idempotent via its dataset.react*Mounted guard.
@@ -140,34 +138,7 @@ export async function bindLegacyShellHandlers() {
         mountDialogueDelMesControls(),
     ]);
 
-    //////////INPUT BAR FOCUS-KEEPING LOGIC/////////////
-    let S_TAPreviouslyFocused = false;
-    $('#send_textarea').on('focusin focus click', () => {
-        S_TAPreviouslyFocused = true;
-    });
-    $('#send_but').on('click', () => {
-        if (S_TAPreviouslyFocused) {
-            $('#send_textarea').trigger('focus');
-        }
-    });
-    $(document).on('click', event => {
-        if ($(':focus').attr('id') !== 'send_textarea') {
-            var validIDs = ['options_button', 'send_but', 'send_textarea'];
-            if (!validIDs.includes($(event.target).attr('id'))) {
-                S_TAPreviouslyFocused = false;
-            }
-        } else {
-            S_TAPreviouslyFocused = true;
-        }
-    });
-
-
     initCharacterSearch();
-
-    const userInputGenerateMutex = new state.SimpleMutex(sendTextareaMessage);
-    $('#send_but').on('click', async function () {
-        await userInputGenerateMutex.update();
-    });
 
     //menu buttons setup
 
@@ -762,7 +733,7 @@ export async function bindLegacyShellHandlers() {
         });
         state.this_del_mes = -1;
         state.is_delete_mode = false;
-        $('#send_textarea').trigger('focus');
+        requestComposerFocus();
     });
 
     //confirms message deletion with the "ok" button
@@ -809,7 +780,7 @@ export async function bindLegacyShellHandlers() {
             $('#dialogue_del_mes').css('display', 'none').removeAttr('aria-busy');
             $('#send_form').css('display', state.css_send_form_display);
             $('#dialogue_del_mes_cancel').prop('disabled', false);
-            $('#send_textarea').trigger('focus');
+            requestComposerFocus();
             state.this_del_mes = -1;
             state.is_delete_mode = false;
         }
@@ -1131,10 +1102,6 @@ export async function bindLegacyShellHandlers() {
         await duplicateCharacter();
     });
 
-    $(document).on('click', '.mes_stop', function () {
-        stopGeneration();
-    });
-
     $(document).on('click', '#form_sheld .stscript_continue', function () {
         pauseScriptExecution();
     });
@@ -1313,7 +1280,7 @@ export async function bindLegacyShellHandlers() {
             const isEditVisible = $('#curEditTextarea').is(':visible') || $('.reasoning_edit_textarea').length > 0;
             if (isEditVisible) {
                 closeMessageEditor('all');
-                $('#send_textarea').trigger('focus');
+                requestComposerFocus();
                 return;
             }
             if (state.this_edit_mes_id === undefined && $('#mes_stop').is(':visible')) {

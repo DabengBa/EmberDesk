@@ -68,7 +68,7 @@ import { RegexImportTarget } from './components/regex/RegexImportTarget';
 import { MacroBrowserPanel, type MacroBrowserProps } from './components/macros/MacroBrowser';
 import { WorldInfoPanel } from './components/panels/WorldInfoPanel';
 import { WorkspacePanelChrome } from './components/panels/WorkspacePanelChrome';
-import { ChatComposer } from './components/composer/ChatComposer';
+import { ChatComposer, type ChatComposerProps } from './components/composer/ChatComposer';
 import { CharacterPopup } from './components/character-popup/CharacterPopup';
 import { RightNavPanel } from './components/right-nav/RightNavPanel';
 import { AiConfigPanel } from './components/ai-config/AiConfigPanel';
@@ -3227,8 +3227,8 @@ export function mountWorldInfoPanel(container: HTMLElement) {
  * Mounts the chat composer markup into #send_form. Synchronous commit:
  * script.js binds #send_but/#send_textarea handlers immediately after.
  */
-export function mountChatComposer(container: HTMLElement) {
-    mountSmallPanel(container, <ChatComposer />);
+export function mountChatComposer(container: HTMLElement, props: ChatComposerProps) {
+    mountSmallPanel(container, <ChatComposer {...props} />);
 }
 
 /**

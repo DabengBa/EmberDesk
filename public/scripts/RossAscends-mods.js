@@ -11,7 +11,6 @@ import {
     buildAvatarList,
     menu_type,
     substituteParams,
-    sendTextareaMessage,
     openWorkspaceChildSlotHost,
     closeWorkspaceChildSlotHost,
     openWorkspaceShellPromptManager,
@@ -35,7 +34,7 @@ import { debounce_timeout } from './constants.js';
 import { Popup } from './popup.js';
 import { accountStorage } from './util/AccountStorage.js';
 import { getCurrentUserHandle } from './user.js';
-import { getComposerValue, setComposerValue } from './main-chat-composer-service.js';
+import { getComposerValue, setComposerValue, getComposerSnapshot, subscribeComposerValue, requestComposerFocus } from './main-chat-composer-service.js';
 
 // Populated in initRossMods: drawer/panel markup is React-mounted after module eval.
 // The settings drawer opener is injected by script.js — importing it here would
@@ -306,7 +305,7 @@ const getUserInputKey = () => getCurrentUserHandle() + '_userInput';
 
 function restoreUserInput() {
     const userInput = localStorage.getItem(getUserInputKey());
-    if (userInput) {
+    if (userInput && !getComposerValue()) {
         setComposerValue(userInput);
     }
 }
@@ -481,33 +480,10 @@ export function dragElement($elmnt) {
     });
 }
 
-/**@type {HTMLTextAreaElement} */
-// Populated in initRossMods: the composer markup is React-mounted after module eval.
-let sendTextArea = null;
-const chatBlock = document.getElementById('chat');
-const isFirefox = navigator.userAgent.toLowerCase().indexOf('firefox') > -1;
-
-/**
- * this makes the chat input text area resize vertically to match the text size (limited by CSS at 50% window height)
- */
-function autoFitSendTextArea() {
-    const originalScrollBottom = chatBlock.scrollHeight - (chatBlock.scrollTop + chatBlock.offsetHeight);
-
-    sendTextArea.style.height = '1px'; // Reset height to 1px to force recalculation of scrollHeight
-    const newHeight = sendTextArea.scrollHeight;
-    sendTextArea.style.height = `${newHeight}px`;
-
-    if (!isFirefox) {
-        chatBlock.scrollTop = chatBlock.scrollHeight - (chatBlock.offsetHeight + originalScrollBottom);
-    }
-}
-export const autoFitSendTextAreaDebounced = debounce(autoFitSendTextArea, debounce_timeout.short);
-
 // ---------------------------------------------------
 
 export function initRossMods({ openWorkspaceShellSettings = null } = {}) {
     injectedOpenWorkspaceShellSettings = openWorkspaceShellSettings;
-    sendTextArea = document.querySelector('#send_textarea');
 
     RightNavPanel = document.getElementById('right-nav-panel');
     LNavPanel = document.getElementById('left-nav-panel');
@@ -551,15 +527,6 @@ export function initRossMods({ openWorkspaceShellSettings = null } = {}) {
     // Drawer open/closed persistence (NavOpened/WINavOpened) is written by
     // openWorkspaceChildSlotHost/closeWorkspaceChildSlotHost.
 
-    var chatbarInFocus = false;
-    $('#send_textarea').on('focus', function () {
-        chatbarInFocus = true;
-    });
-
-    $('#send_textarea').on('blur', function () {
-        chatbarInFocus = false;
-    });
-
     // Restore persisted drawers synchronously: accountStorage and drawer hosts
     // are ready by now, and landing before APP_READY removes the old 300ms
     // race window where a nav click could interleave with the restore.
@@ -577,48 +544,7 @@ export function initRossMods({ openWorkspaceShellSettings = null } = {}) {
         saveSettingsDebounced();
     });
 
-    const cssAutofit = CSS.supports('field-sizing', 'content');
-
-    if (cssAutofit) {
-        let lastHeight = chatBlock.offsetHeight;
-        const chatBlockResizeObserver = new ResizeObserver((entries) => {
-            for (const entry of entries) {
-                if (entry.target !== chatBlock) {
-                    continue;
-                }
-
-                const threshold = 1;
-                const newHeight = chatBlock.offsetHeight;
-                const deltaHeight = newHeight - lastHeight;
-                const isScrollAtBottom = Math.abs(chatBlock.scrollHeight - chatBlock.scrollTop - newHeight) <= threshold;
-
-                if (!isScrollAtBottom && Math.abs(deltaHeight) > threshold) {
-                    chatBlock.scrollTop -= deltaHeight;
-                }
-                lastHeight = newHeight;
-            }
-        });
-
-        chatBlockResizeObserver.observe(chatBlock);
-    }
-
-    sendTextArea.addEventListener('input', () => {
-        saveUserInputDebounced();
-
-        if (cssAutofit) {
-            // Unset modifications made with a manual resize
-            sendTextArea.style.height = 'auto';
-            return;
-        }
-
-        const hasContent = sendTextArea.value !== '';
-        const fitsCurrentSize = sendTextArea.scrollHeight <= sendTextArea.offsetHeight;
-        const isScrollbarShown = sendTextArea.clientWidth < sendTextArea.offsetWidth;
-        const isHalfScreenHeight = sendTextArea.offsetHeight >= window.innerHeight / 2;
-        const needsDebounce = hasContent && (fitsCurrentSize || (isScrollbarShown && isHalfScreenHeight));
-        if (needsDebounce) autoFitSendTextAreaDebounced();
-        else autoFitSendTextArea();
-    });
+    subscribeComposerValue(saveUserInputDebounced);
 
     restoreUserInput();
 
@@ -627,7 +553,6 @@ export function initRossMods({ openWorkspaceShellSettings = null } = {}) {
     });
 
     const hotkeyTargets = {
-        'send_textarea': sendTextArea,
         'dialogue_popup_input': document.querySelector('#dialogue_popup_input'),
     };
 
@@ -641,15 +566,6 @@ export function initRossMods({ openWorkspaceShellSettings = null } = {}) {
             return;
         }
 
-        //Enter to send when send_textarea in focus
-        if (document.activeElement == hotkeyTargets.send_textarea) {
-            const sendOnEnter = shouldSendOnEnter();
-            if (!event.isComposing && !event.shiftKey && !event.ctrlKey && !event.altKey && event.key == 'Enter' && sendOnEnter) {
-                event.preventDefault();
-                sendTextareaMessage();
-                return;
-            }
-        }
         if (document.activeElement == hotkeyTargets.dialogue_popup_input && !isMobile()) {
             if (!event.shiftKey && !event.ctrlKey && event.key == 'Enter') {
                 event.preventDefault();
@@ -683,12 +599,12 @@ export function initRossMods({ openWorkspaceShellSettings = null } = {}) {
             const reasoningMesDone = $('.mes_reasoning_edit_done:visible');
             if (editMesDone.length > 0) {
                 console.debug('Accepting edits with Ctrl+Enter');
-                $('#send_textarea').trigger('focus');
+                requestComposerFocus();
                 editMesDone.trigger('click');
                 return;
             } else if (reasoningMesDone.length > 0) {
                 console.debug('Accepting edits with Ctrl+Enter');
-                $('#send_textarea').trigger('focus');
+                requestComposerFocus();
                 reasoningMesDone.trigger('click');
                 return;
             }
@@ -697,7 +613,7 @@ export function initRossMods({ openWorkspaceShellSettings = null } = {}) {
         if (event.ctrlKey && event.key == 'ArrowUp') { //edits last USER message if chatbar is empty and focused
             if (
                 getComposerValue() === '' &&
-                chatbarInFocus === true &&
+                getComposerSnapshot().focused === true &&
                 $('.last_mes').attr('is_system') === 'true' &&
                 $('#character_popup').css('display') === 'none' &&
                 $('#shadow_select_chat_popup').css('display') === 'none'
@@ -716,7 +632,7 @@ export function initRossMods({ openWorkspaceShellSettings = null } = {}) {
             console.log('got uparrow input');
             if (
                 getComposerValue() === '' &&
-                chatbarInFocus === true &&
+                getComposerSnapshot().focused === true &&
                 $('.last_mes .mes_buttons').is(':visible') &&
                 $('#character_popup').css('display') === 'none' &&
                 $('#shadow_select_chat_popup').css('display') === 'none'

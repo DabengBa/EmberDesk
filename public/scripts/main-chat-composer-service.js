@@ -1,153 +1,157 @@
-/**
- * Typed owner of the main-chat composer text value.
- *
- * #send_textarea is rendered once by React as an uncontrolled element; this
- * service is the single command/state path for its value. All reads and writes
- * (submit flows, /send-style commands, macros, and injected composer text,
- * autocomplete clearing, React runtime commands) must go through this module
- * instead of touching `#send_textarea` `.val()`/`.value` directly. The DOM node
- * remains an event source for user typing (native 'input' events sync the
- * state) and a render detail only.
- */
-
-const COMPOSER_ELEMENT_ID = 'send_textarea';
-
-let composerValue = '';
-let listenerBound = false;
-const listeners = new Set();
+/** DOM-independent state for the main-chat composer. */
 
 /**
- * Per-chat draft store. Each chat context keeps its own pending text so a
- * half-written message stays with the chat it belongs to instead of leaking
- * into the next one. `null`/`undefined` contexts share the '' bucket.
+ * @typedef {object} ComposerSnapshot
+ * @property {string} value
+ * @property {string|null} contextKey
+ * @property {number} revision
+ * @property {number} contextRevision
+ * @property {number} selectionStart
+ * @property {number} selectionEnd
+ * @property {'none'|'forward'|'backward'} selectionDirection
+ * @property {boolean} focused
+ * @property {boolean} composing
+ * @property {number} focusRequest
  */
+/** @type {ComposerSnapshot} */
+let snapshot = {
+    value: '',
+    contextKey: null,
+    revision: 0,
+    contextRevision: 0,
+    selectionStart: 0,
+    selectionEnd: 0,
+    selectionDirection: 'none',
+    focused: false,
+    composing: false,
+    focusRequest: 0,
+};
+
+const stateListeners = new Set();
+const valueListeners = new Set();
 const composerDrafts = new Map();
-let draftContextKey = null;
 let draftContextReady = false;
 
-function getComposerElement() {
-    const element = document.getElementById(COMPOSER_ELEMENT_ID);
-    return element instanceof HTMLTextAreaElement ? element : null;
-}
-
-function emitChange() {
-    for (const listener of listeners) {
-        listener(composerValue);
-    }
-}
-
-function handleDocumentInput(event) {
-    const target = event.target;
-    if (!(target instanceof HTMLTextAreaElement) || target.id !== COMPOSER_ELEMENT_ID) {
+function publish(next) {
+    if (Object.keys(next).every(key => next[key] === snapshot[key])) {
         return;
     }
-    if (target.value === composerValue) {
-        return;
+    const previous = snapshot;
+    snapshot = { ...previous, ...next };
+    for (const listener of stateListeners) {
+        listener();
     }
-    composerValue = target.value;
-    emitChange();
-}
-
-/**
- * Binds the delegated input listener once. Safe to call before the composer
- * element exists and idempotent afterwards. Called eagerly at module load so
- * no keystroke is missed, and re-invoked after the React mount to reconcile
- * the freshly rendered node with existing state.
- */
-export function initMainChatComposerService() {
-    if (typeof document === 'undefined') {
-        return;
-    }
-    if (!listenerBound) {
-        document.addEventListener('input', handleDocumentInput, true);
-        listenerBound = true;
-    }
-    const element = getComposerElement();
-    if (element && composerValue && element.value !== composerValue) {
-        element.value = composerValue;
-        element.dispatchEvent(new Event('input', { bubbles: true }));
-    }
-}
-
-initMainChatComposerService();
-
-/**
- * Current composer text. Returns the canonical state value; the DOM node is
- * only a render detail for it.
- * @returns {string}
- */
-export function getComposerValue() {
-    initMainChatComposerService();
-    return composerValue;
-}
-
-/**
- * Replaces the composer text. Writes the DOM node when present and dispatches
- * a bubbling 'input' event so existing listeners (autocomplete, snapshot
- * projection, style hooks) keep working.
- * @param {string} value
- */
-export function setComposerValue(value) {
-    initMainChatComposerService();
-    const nextValue = String(value ?? '');
-    composerValue = nextValue;
-    const element = getComposerElement();
-    if (element) {
-        if (element.value !== nextValue) {
-            element.value = nextValue;
+    if (snapshot.value !== previous.value) {
+        for (const listener of valueListeners) {
+            listener(snapshot.value);
         }
-        element.dispatchEvent(new Event('input', { bubbles: true }));
     }
-    emitChange();
 }
 
-/**
- * Clears the composer text.
- */
-export function clearComposerValue() {
-    setComposerValue('');
+function selectionFor(value, start, end, direction) {
+    const clamp = position => Math.max(0, Math.min(value.length, Math.trunc(position)));
+    const selectionEnd = clamp(end);
+    return {
+        selectionStart: Math.min(clamp(start), selectionEnd),
+        selectionEnd,
+        selectionDirection: ['forward', 'backward', 'none'].includes(direction) ? direction : 'none',
+    };
 }
 
-/**
- * Subscribes to composer value changes (typing, programmatic sets, and clears).
- * @param {(value: string) => void} listener
- * @returns {() => void} unsubscribe
- */
+
+/** @returns {typeof snapshot} */
+export function getComposerSnapshot() {
+    return snapshot;
+}
+
+/** @param {() => void} listener */
+export function subscribeComposerState(listener) {
+    stateListeners.add(listener);
+    return () => stateListeners.delete(listener);
+}
+
+/** @returns {string} */
+export function getComposerValue() {
+    return snapshot.value;
+}
+
+/** @param {(value: string) => void} listener */
 export function subscribeComposerValue(listener) {
-    initMainChatComposerService();
-    listeners.add(listener);
-    return () => listeners.delete(listener);
+    valueListeners.add(listener);
+    return () => valueListeners.delete(listener);
 }
 
 /**
- * Switches the active chat draft context. The current text is stashed under
- * the outgoing context key and the incoming context's saved draft is restored
- * (empty when none exists). The first call only adopts the key so text typed
- * before any chat context is known (e.g. pre-login or neutral surface) is not
- * destroyed.
- * @param {string|number|null|undefined} contextKey Stable chat identifier (e.g. getCurrentChatId()).
+ * @param {string} value
+ * @param {{expected?: typeof snapshot, selectionStart?: number, selectionEnd?: number, selectionDirection?: 'forward'|'backward'|'none'}} [options]
+ * @returns {boolean} Whether the write was accepted.
  */
+export function setComposerValue(value, options = {}) {
+    const { expected } = options;
+    if (expected && (expected.contextKey !== snapshot.contextKey || expected.revision !== snapshot.revision)) {
+        return false;
+    }
+    const nextValue = String(value ?? '');
+    const selection = selectionFor(nextValue, options.selectionStart ?? nextValue.length, options.selectionEnd ?? nextValue.length, options.selectionDirection ?? 'none');
+    publish({
+        value: nextValue,
+        revision: snapshot.revision + Number(nextValue !== snapshot.value),
+        ...selection,
+    });
+    return true;
+}
+
+/** @param {Parameters<typeof setComposerValue>[1]} [options] */
+export function clearComposerValue(options = {}) {
+    return setComposerValue('', options);
+}
+
+/**
+ * @param {{selectionStart?: number, selectionEnd?: number, selectionDirection?: 'forward'|'backward'|'none', focused?: boolean, composing?: boolean}} patch
+ */
+export function updateComposerInteraction(patch) {
+    const selection = selectionFor(
+        snapshot.value,
+        patch.selectionStart ?? snapshot.selectionStart,
+        patch.selectionEnd ?? snapshot.selectionEnd,
+        patch.selectionDirection ?? snapshot.selectionDirection,
+    );
+    publish({
+        ...selection,
+        focused: patch.focused === undefined ? snapshot.focused : Boolean(patch.focused),
+        composing: patch.composing === undefined ? snapshot.composing : Boolean(patch.composing),
+    });
+}
+
+export function requestComposerFocus() {
+    publish({ focusRequest: snapshot.focusRequest + 1 });
+}
+
+/** @param {string|number|null|undefined} contextKey */
 export function setComposerDraftContext(contextKey) {
-    initMainChatComposerService();
     const nextKey = contextKey === null || contextKey === undefined ? '' : String(contextKey);
     if (!draftContextReady) {
         draftContextReady = true;
-        draftContextKey = nextKey;
+        publish({ contextKey: nextKey, revision: snapshot.revision + 1, contextRevision: snapshot.contextRevision + 1 });
         return;
     }
-    if (nextKey === draftContextKey) {
+    if (nextKey === snapshot.contextKey) {
         return;
     }
-    composerDrafts.set(draftContextKey, composerValue);
-    draftContextKey = nextKey;
-    setComposerValue(composerDrafts.get(nextKey) ?? '');
+    composerDrafts.set(snapshot.contextKey, snapshot.value);
+    const value = composerDrafts.get(nextKey) ?? '';
+    publish({
+        contextKey: nextKey,
+        value,
+        revision: snapshot.revision + 1,
+        contextRevision: snapshot.contextRevision + 1,
+        ...selectionFor(value, value.length, value.length, 'none'),
+    });
 }
 
 /**
- * Migrates a stashed draft when its chat is renamed. CHAT_RENAMED reports file
- * names with the .jsonl extension while draft keys are extension-less chat ids.
- * @param {string} oldFileName Previous chat file name.
- * @param {string} newFileName New chat file name.
+ * @param {string} oldFileName
+ * @param {string} newFileName
  */
 export function renameComposerDraftContext(oldFileName, newFileName) {
     const from = String(oldFileName ?? '').replace(/\.jsonl$/i, '');
@@ -159,7 +163,9 @@ export function renameComposerDraftContext(oldFileName, newFileName) {
         composerDrafts.set(to, composerDrafts.get(from));
         composerDrafts.delete(from);
     }
-    if (draftContextReady && draftContextKey === from) {
-        draftContextKey = to;
-    }
+    publish({
+        contextKey: draftContextReady && snapshot.contextKey === from ? to : snapshot.contextKey,
+        revision: snapshot.revision + 1,
+        contextRevision: snapshot.contextRevision + Number(draftContextReady && snapshot.contextKey === from),
+    });
 }
