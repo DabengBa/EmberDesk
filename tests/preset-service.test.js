@@ -32,6 +32,16 @@ function fixture() {
 }
 
 describe('typed preset service', () => {
+    test('ordinary saves retain target identity, while delete and recreate invalidate it', async () => {
+        const { service, presets, names } = fixture();
+        const captured = presets[names.A];
+        await service.save('A', { temperature: 1.2 }, { select: false });
+        expect(presets[names.A]).toBe(captured);
+        expect(captured.temperature).toBe(1.2);
+        await service.delete('A');
+        await service.save('A', { temperature: 0.8 }, { select: false });
+        expect(presets[names.A]).not.toBe(captured);
+    });
     test('save and delete failures leave authority untouched', async () => {
         const { service, port, settings, names, presets } = fixture();
         port.persist = async () => { throw Error('save failed'); };

@@ -222,11 +222,10 @@ Acceptance:
 - Existing chat export behavior remains unchanged.
 Current delivered foundation:
 
-- `src/endpoints/chats.js` now updates canonical `character_chat_stats` directly after successful character chat save, rename, delete, and import side effects when `features.storage.canonicalSqlite.chatStats=true`.
-- Group chat save/import/delete paths remain outside character chat stats authority, and chat message bodies continue to use JSONL files.
+- With chat file projection `off`, `src/endpoints/canonical-chat-write-service.js` updates the existing active character's `character_chat_stats` inside the same transaction as each ordinary canonical chat save, import, rename, delete, or text replacement. A stats write failure rolls back that session change; multi-chat imports commit each item separately. Stats derive count, total `source_size_bytes`, and maximum `source_mtime_ms` from canonical sessions; unchanged saves and renames do not invent a newer last-chat time. Shadow import, backup restoration, historical backfill, and character lifecycle operations are outside this guarantee. With projection `sync`, the existing file-statistics path remains in use.
 - `src/endpoints/character-store.js` and `src/endpoints/character-read-service.js` now treat canonical chat stats as a separate runtime boundary: canonical reads only inject `chat_size` / `date_last_chat` when `features.storage.canonicalSqlite.chatStats=true`.
 - `src/canonical-sqlite-operator.js` and `scripts/canonical-sqlite-repair.mjs` now provide an explicit `rebuild-chat-stats` operator path for the current slice.
-- Focused proof currently lives in `tests/interaction-performance-index.test.js`, `tests/character-read-service.test.js`, `tests/canonical-sqlite-operator.test.js`, `tests/canonical-sqlite-cli.test.js`, and `tests/chat-route-service.test.js`.
+- Focused proof includes `tests/canonical-chat-stats-atomicity.test.js`, `tests/canonical-chat-route-authority.test.js`, `tests/interaction-performance-index.test.js`, `tests/character-read-service.test.js`, `tests/canonical-sqlite-operator.test.js`, `tests/canonical-sqlite-cli.test.js`, and `tests/chat-route-service.test.js`.
 
 ### Phase 5: Derived Index Retirement Or Reclassification
 

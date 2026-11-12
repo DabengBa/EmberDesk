@@ -2,6 +2,86 @@
 
 Corrections, insights, and knowledge gaps captured during development.
 
+## [LRN-20261112-002] best_practice
+
+**Logged**: 2026-11-12T12:39:00+08:00
+**Priority**: medium
+**Status**: resolved
+**Area**: frontend
+
+### Summary
+计算工具调用历史的预算时，需要同时覆盖服务端补入的消息和用户角色注入。
+
+### Details
+管线历史以工具调用对发送时，服务端严格处理可能在首个助手调用前补入用户占位消息；如果客户端未计算该消息，接近上限的请求会超出预算。提前保留锚点也不能阻止更便宜的已有用户消息进入历史。
+
+### Suggested Action
+修改请求历史组装时，用真实 tokenizer 和服务端预处理验证紧预算边界、完整调用对以及用户注入能否替代锚点。
+
+### Metadata
+- Source: code review
+- Related Files: public/scripts/openai.js, src/prompt-converters.js, tests/reply-pipeline-assembly.test.js
+- Tags: token-budget, tool-calls, history
+- Pattern-Key: frontend.prompt-history.anchor-budget
+- Recurrence-Count: 1
+- First-Seen: 2026-11-12
+- Last-Seen: 2026-11-12
+
+### Context Maintenance
+- Decay-Type: reality
+- Decay-Rate: medium (recheck when prompt conversion or token counting changes)
+- Authority: current request assembly and converter; Owner: frontend generation maintainers
+- Revalidation: rerun the real-tokenizer and history-anchor regressions when either side changes; if unavailable, retain the risk without claiming verification.
+- Validation: verified; Last-Validated: 2026-11-12; Evidence: the focused regressions failed before the fixes and passed after them.
+- Disposition: retain; Application: applied
+
+### Resolution
+- **Resolved**: 2026-11-12T12:39:00+08:00
+- **Commit/PR**: pending
+- **Notes**: Anchor reservation and rollback now account for earlier native user messages.
+
+---
+
+## [LRN-20261112-001] best_practice
+
+**Logged**: 2026-11-12T11:05:00+08:00
+**Priority**: medium
+**Status**: resolved
+**Area**: tests
+
+### Summary
+多作用域顺序保存的浏览器回归应覆盖未选择角色或预设的空作用域。
+
+### Details
+Regex 调试器曾在全局顺序已经保存后，因空预设作用域无法捕获目标而报告失败。实际界面回归验证了无角色场景，修复后空且不可用的作用域被跳过；非空或其他错误仍然失败。
+
+### Suggested Action
+修改跨作用域保存时，检查空作用域、部分保存反馈及目标身份，并运行对应隔离浏览器测试。
+
+### Metadata
+- Source: error
+- Related Files: public/scripts/extensions/regex/index.js, tests/regex-rule-list.e2e.js
+- Tags: regex, persistence, empty-scope, e2e
+- Pattern-Key: frontend.multi-scope.empty-target-save
+- Recurrence-Count: 1
+- First-Seen: 2026-11-12
+- Last-Seen: 2026-11-12
+
+### Context Maintenance
+- Decay-Type: reality
+- Decay-Rate: slow (recheck when scope selection or persistence changes)
+- Authority: current implementation and browser regression; Owner: frontend feature maintainers
+- Revalidation: run the empty-scope debugger test after scope or save changes; if unavailable, retain the risk without claiming verification.
+- Validation: verified; Last-Validated: 2026-11-12; Evidence: the isolated debugger save-order regression failed before the fix and passed afterward.
+- Disposition: retain; Application: applied
+
+### Resolution
+- **Resolved**: 2026-11-12T11:05:00+08:00
+- **Commit/PR**: pending
+- **Notes**: Empty unavailable scopes are skipped; other errors remain visible.
+
+---
+
 **Categories**: correction | knowledge_gap | best_practice
 **Areas**: frontend | backend | infra | tests | docs | config
 **Statuses**: pending | in_progress | resolved | wont_fix | promoted | promoted_to_skill

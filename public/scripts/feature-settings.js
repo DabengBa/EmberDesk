@@ -104,22 +104,40 @@ export const feature_settings = {
  */
 export const UNSET_VALUE = '__@@UNSET@@__';
 
+// Track overlapping writes to the same character field, including legacy
+// writes, so an older rejection cannot undo a newer successful write.
+const extensionFieldWrites = new WeakMap();
+
 /**
  * Writes a field to the character's data extensions object.
  * @param {number|string} characterId Index in the character array
  * @param {string} key Field name
  * @param {any} value Field value
+ * @param {{strict?: boolean}} [options] Reject a failed or missing character write.
  * @returns {Promise<void>} When the field is written
  */
-export async function writeExtensionField(characterId, key, value) {
+export async function writeExtensionField(characterId, key, value, options = {}) {
     const context = getContext();
     const character = context.characters[characterId];
     if (!character) {
         console.warn('Character not found', characterId);
+        if (options.strict) throw new Error('Character not found');
         return;
     }
     const extensionPath = `data.extensions.${key}`;
     const isUnset = value === UNSET_VALUE;
+    const pathParts = extensionPath.split('.');
+    const parentAtPath = (root = character) => pathParts.slice(0, -1).reduce((object, part) => object?.[part], root);
+    const leaf = pathParts.at(-1);
+    const previousParent = parentAtPath();
+    const hadPrevious = previousParent != null && Object.hasOwn(previousParent, leaf);
+    const previousValue = previousParent?.[leaf];
+    const previousJson = character.json_data;
+    const stagedValue = options.strict && !isUnset ? JSON.stringify(value) : undefined;
+    let writes = extensionFieldWrites.get(character);
+    if (!writes) extensionFieldWrites.set(character, writes = new Map());
+    const writeToken = {};
+    writes.set(extensionPath, writeToken);
 
     if (isUnset) {
         deleteValueByPath(character, extensionPath);
@@ -127,39 +145,80 @@ export async function writeExtensionField(characterId, key, value) {
         setValueByPath(character, extensionPath, value);
     }
 
-    // Process JSON data
-    if (character.json_data) {
-        const jsonData = JSON.parse(character.json_data);
-        if (isUnset) {
-            deleteValueByPath(jsonData, extensionPath);
-        } else {
-            setValueByPath(jsonData, extensionPath, value);
-        }
-        character.json_data = JSON.stringify(jsonData);
+    const stagedParent = parentAtPath();
+    let stagedJson;
+    try {
+        // Process JSON data
+        if (character.json_data) {
+            const jsonData = JSON.parse(character.json_data);
+            if (isUnset) {
+                deleteValueByPath(jsonData, extensionPath);
+            } else {
+                setValueByPath(jsonData, extensionPath, value);
+            }
+            character.json_data = JSON.stringify(jsonData);
+            stagedJson = character.json_data;
 
-        // Make sure the data doesn't get lost when saving the current character
-        if (Number(characterId) === Number(context.characterId)) {
-            $('#character_json_data').val(character.json_data);
+            // Make sure the data doesn't get lost when saving the current character
+            if (Number(characterId) === Number(context.characterId)) {
+                $('#character_json_data').val(character.json_data);
+            }
         }
-    }
 
-    // Save data to the server
-    const saveDataRequest = {
-        avatar: character.avatar,
-        data: {
-            extensions: {
-                [key]: value,
+        // Save data to the server
+        const saveDataRequest = {
+            avatar: character.avatar,
+            data: {
+                extensions: {
+                    [key]: value,
+                },
             },
-        },
-    };
-    const mergeResponse = await fetch('/api/characters/merge-attributes', {
-        method: 'POST',
-        headers: getRequestHeaders(),
-        body: JSON.stringify(saveDataRequest),
-    });
+        };
+        const mergeResponse = await fetch('/api/characters/merge-attributes', {
+            method: 'POST',
+            headers: getRequestHeaders(),
+            body: JSON.stringify(saveDataRequest),
+        });
 
-    if (!mergeResponse.ok) {
-        console.error('Failed to save extension field', mergeResponse.statusText);
+        if (!mergeResponse.ok) {
+            console.error('Failed to save extension field', mergeResponse.statusText);
+            if (options.strict) throw new Error(`Failed to save extension field: ${mergeResponse.statusText}`);
+        }
+    } catch (error) {
+        // Only undo a value we still own, including its contents: another
+        // controller may have replaced or edited the array during the request.
+        if (options.strict && !isUnset && writes.get(extensionPath) === writeToken && parentAtPath() === stagedParent && stagedParent?.[leaf] === value && JSON.stringify(value) === stagedValue) {
+            if (hadPrevious) stagedParent[leaf] = previousValue;
+            else delete stagedParent[leaf];
+            if (stagedJson !== undefined) {
+                // Other card fields may have changed meanwhile. Undo just this
+                // field if its JSON value still matches our staged write.
+                try {
+                    const currentJson = character.json_data;
+                    const currentData = JSON.parse(currentJson);
+                    const stagedData = JSON.parse(stagedJson);
+                    const originalData = JSON.parse(previousJson);
+                    const currentParent = parentAtPath(currentData);
+                    const stagedJsonParent = parentAtPath(stagedData);
+                    const originalParent = parentAtPath(originalData);
+                    if (currentParent && stagedJsonParent && Object.hasOwn(currentParent, leaf) &&
+                        JSON.stringify(currentParent[leaf]) === JSON.stringify(stagedJsonParent[leaf])) {
+                        if (originalParent && Object.hasOwn(originalParent, leaf)) currentParent[leaf] = originalParent[leaf];
+                        else delete currentParent[leaf];
+                        character.json_data = currentJson === stagedJson ? previousJson : JSON.stringify(currentData);
+                        const currentContext = getContext();
+                        if (currentContext.characters[currentContext.characterId] === character && $('#character_json_data').val() === currentJson) {
+                            $('#character_json_data').val(character.json_data);
+                        }
+                    }
+                } catch {
+                    // Preserve any newer malformed or otherwise unreadable draft.
+                }
+            }
+        }
+        throw error;
+    } finally {
+        if (writes.get(extensionPath) === writeToken) writes.delete(extensionPath);
     }
 }
 

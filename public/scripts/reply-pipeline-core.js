@@ -114,7 +114,10 @@ export function resolvePipelineSteps(pipeline, availableToolNames) {
 export function buildStepPrompt(step, index, total) {
     const header = `[Reply pipeline ${index + 1}/${total}] This round you must call the ${step.tool} tool exactly once.`;
     const detail = typeof step?.prompt === 'string' && step.prompt.trim().length > 0 ? ` ${step.prompt.trim()}` : '';
-    return header + detail;
+    const history = index === 0
+        ? ' Historical submit_story calls and their receipts record prior conversation content, including past user messages. Do not repeat those historical calls; follow the current step instruction.'
+        : '';
+    return header + detail + history;
 }
 
 /**
@@ -180,8 +183,8 @@ export function applyFallbackRequestShape(data, fallbackPrompt = PIPELINE_FALLBA
 /**
  * Active-run lookup injection. Prompt assembly (openai.js) must replay a
  * card's tool invocations while its run is still in flight — the next round
- * reads them back as step results — but flattens cards from finished or
- * abandoned runs into plain messages. The runtime layer registers its
+ * reads them back as step results — but uses effective reply text for
+ * finished-run history. The runtime layer registers its
  * runState reader here so this module stays import-free and openai.js never
  * imports the runtime (which already imports openai.js — a cycle).
  */
