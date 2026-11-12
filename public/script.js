@@ -162,8 +162,10 @@ import {
     openCharacterTagManager,
     runCharacterTagFilterAction,
     getTagKeyForEntity,
-    printTagList,
-    createTagMapFromList,
+
+    getDraftTagIds,
+    assignTagIdsToAvatar,
+    deleteTagKey,
     renameTagKey,
     importTags,
     tag_filter_type,
@@ -771,7 +773,9 @@ registerCharacterLifecycleShellContext({
     cancelDebounce: (...args) => cancelDebounce(...args),
     clearChat: (...args) => clearChat(...args),
     closeCurrentChatForDelete: (...args) => closeCurrentChatForDelete(...args),
-    createTagMapFromList: (...args) => createTagMapFromList(...args),
+    getDraftTagIds: (...args) => getDraftTagIds(...args),
+    assignTagIdsToAvatar: (...args) => assignTagIdsToAvatar(...args),
+    deleteTagKey: (...args) => deleteTagKey(...args),
     delay: (...args) => delay(...args),
     ensureImageFormatSupported: (...args) => ensureImageFormatSupported(...args),
     formatCreatorNotes: (...args) => formatCreatorNotes(...args),
@@ -3701,12 +3705,10 @@ function getReactCharacterLibraryPanelBridge() {
             if (!(row instanceof HTMLElement) || !characterGroupOverlay) {
                 return;
             }
-            const isSelected = characterGroupOverlay.selectedCharacters?.some?.(value => String(value) === String(id))
-                || row.classList.contains('character_selected');
+            const isSelected = characterGroupOverlay.selectedCharacters?.some?.(value => String(value) === String(id));
             if (Boolean(checked) !== Boolean(isSelected)) {
                 characterGroupOverlay.toggleSingleCharacter(row);
             }
-            void syncReactCharacterLibraryToolbarState();
         },
         clickLegacyAction(actionId) {
             document.getElementById(actionId)?.click();
@@ -4868,48 +4870,17 @@ export async function selectCharacterById(id, { switchMenu = true } = {}) {
  * @returns {boolean}
  */
 export function updateCharacterRow(chid, patch) {
-    const $row = $(`#CharID${chid}`);
-    if (!$row.length) return false;
-
-    // Only patch in unfiltered main list, no bogus-folder drilldown
-    if (entitiesFilter.hasAnyFilter()) return false;
-    if (isBogusFolderOpen()) return false;
-
+    const character = characters[chid];
+    if (!character || !document.getElementById(`CharID${chid}`)) return false;
+    if (entitiesFilter.hasAnyFilter() || isBogusFolderOpen()) return false;
     if ('fav' in patch) {
-        const isFav = patch.fav || patch.fav === 'true';
-        $row.toggleClass('is_fav', isFav);
-        $row.find('.ch_fav').val(String(isFav));
+        character.fav = patch.fav === true || patch.fav === 'true';
+        if (character.data?.extensions) character.data.extensions.fav = character.fav;
     }
-    if ('avatar' in patch) {
-        let src = default_avatar;
-        if (patch.avatar !== 'none') {
-            src = getThumbnailUrl('avatar', patch.avatar);
-        }
-        $row.find('.avatar img').attr('src', src).attr('alt', patch.name || $row.find('.ch_name').text());
-        $row.find('.avatar').attr('title', patch.avatarTitle || `[Character] ${$row.find('.ch_name').text()}\nFile: ${patch.avatar}`);
-    }
-    if ('description' in patch) {
-        const $desc = $row.find('.ch_description');
-        if (patch.description) {
-            $desc.text(patch.description).show();
-        } else {
-            $desc.hide();
-        }
-    }
-    if ('tags' in patch) {
-        // Fall back to full tag re-render via printTagList for the row's tag container
-        printTagList($row.find('.tags'), { forEntityOrKey: chid, tagOptions: { isCharacterList: true } });
-    }
-    if ('auxField' in patch) {
-        const $ver = $row.find('.character_version');
-        if (patch.auxField) {
-            $ver.text(patch.auxField).show();
-        } else {
-            $ver.hide();
-        }
-    }
-
-    favsToHotswap();
+    if ('avatar' in patch) character.avatar = patch.avatar;
+    if (character.data && 'description' in patch) character.data.creator_notes = patch.description;
+    if (character.data && 'auxField' in patch) character.data.character_version = patch.auxField;
+    void syncReactCharacterLibraryToolbarState().then(() => favsToHotswap());
     return true;
 }
 

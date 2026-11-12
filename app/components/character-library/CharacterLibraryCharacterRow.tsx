@@ -38,6 +38,8 @@ export function CharacterLibraryCharacterRow({
             {...{ chid: String(model.id) }}
             id={buildCharacterRowDomId(model.id)}
             role="presentation"
+            aria-selected={selected}
+            aria-checked={selected}
             tabIndex={-1}
             onClick={(event) => {
                 event.preventDefault();

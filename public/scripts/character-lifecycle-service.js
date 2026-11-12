@@ -38,7 +38,9 @@ const t = (...args) => shell().t(...args);
 
 const clearChat = (...args) => shell().clearChat(...args);
 const closeCurrentChatForDelete = (...args) => shell().closeCurrentChatForDelete(...args);
-const createTagMapFromList = (...args) => shell().createTagMapFromList(...args);
+const getDraftTagIds = (...args) => shell().getDraftTagIds(...args);
+const assignTagIdsToAvatar = (...args) => shell().assignTagIdsToAvatar(...args);
+const deleteTagKey = (...args) => shell().deleteTagKey(...args);
 const delay = (...args) => shell().delay(...args);
 const ensureImageFormatSupported = (...args) => shell().ensureImageFormatSupported(...args);
 const formatCreatorNotes = (...args) => shell().formatCreatorNotes(...args);
@@ -123,6 +125,7 @@ export async function saveCharacterAuthoringFromPayload(saveModel = {}) {
 
     const mode = getCurrentCharacterAuthoringMode();
     const sourceCharacter = getCurrentCharacterAuthoringSource();
+    const draftTagIds = mode === 'create' ? getDraftTagIds() : [];
     const finishSave = beginCharacterSave(mode === 'edit' ? String(sourceCharacter?.avatar || saveModel?.fields?.avatar || '') : '');
     if (!finishSave) return { ok: false, mode };
     try {
@@ -180,7 +183,7 @@ export async function saveCharacterAuthoringFromPayload(saveModel = {}) {
 
         if (mode === 'create') {
             const avatarId = await fetchResult.text();
-            createTagMapFromList('#tagList', avatarId);
+            assignTagIdsToAvatar(avatarId, draftTagIds);
             await getCharacters();
             const createdIndex = state.characters.findIndex(character => character?.avatar === avatarId);
             if (createdIndex >= 0) {
@@ -647,6 +650,7 @@ export async function createOrEditCharacter(e) {
         return;
     }
 
+    const draftTagIds = getDraftTagIds();
     $('#rm_info_avatar').html('');
     const formData = new FormData(/** @type {HTMLFormElement} */($('#form_create').get(0)));
     const finishSave = beginCharacterSave($('#form_create').attr('actiontype') === 'createcharacter' ? '' : String(formData.get('avatar_url') || ''));
@@ -750,7 +754,7 @@ export async function createOrEditCharacter(e) {
                 }
 
                 console.log(`new avatar id: ${avatarId}`);
-                createTagMapFromList('#tagList', avatarId);
+                assignTagIdsToAvatar(avatarId, draftTagIds);
                 await getCharacters();
 
                 select_rm_info('char_create', avatarId, oldSelectedChar);
@@ -934,7 +938,7 @@ export async function deleteCharacter(characterKey, { deleteChats = true, delete
                 }
             }
 
-            delete state.tag_map[avatar];
+            deleteTagKey(avatar);
             select_rm_info('char_delete', character?.name ?? avatar);
 
             if (deleteChats) {

@@ -147,7 +147,7 @@ describe('character list structure', () => {
         expect(rightNavSource).toContain('data-react-tag-filters-owner="react"');
         const printTagFiltersSource = extractFunctionSource(tagsSource, 'printTagFilters');
         expect(printTagFiltersSource).toContain('removeMissingTagFilters()');
-        expect(printTagFiltersSource).toContain('data-react-tag-filters-owner="react"');
+        expect(printTagFiltersSource).not.toContain('.empty()');
 
         // Snapshot + DOM-free commands exported for the bridge.
         expect(tagsSource).toContain('export function createCharacterTagFilterViewState(');
@@ -157,7 +157,7 @@ describe('character list structure', () => {
         expect(tagsSource).toContain('export function runCharacterTagFilterAction(');
         expect(tagsSource).toContain('determineTagFilterState(filterHelper, tag, true)');
         expect(tagsSource).toContain('getOpenBogusFolders()');
-        expect(tagsSource).toContain('filterHelper.setFilterData(FILTER_TYPES.TAG, { selected, excluded })');
+        expect(tagsSource).toContain('filterHelper.setFilterData(FILTER_TYPES.TAG, characterTagsService.filterState(');
 
         // Bridge routes React chip events back into the filter pipeline.
         expect(scriptSource).toContain('tagFilters: createCharacterTagFilterViewState(entitiesFilter)');
@@ -557,19 +557,17 @@ describe('character list structure', () => {
         expect(rowSource).toContain('type="button"');
         expect(rowSource).toContain('aria-pressed={selected}');
         expect(rowSource).toContain('onBulkToggle?.(model.id, !selected)');
+        expect(rowSource).toContain('aria-selected={selected}');
         expect(rowSource).toContain('aria-checked={selected}');
         expect(scriptSource).toContain('const pageCharacterIds = currentCharacterListPageEntities');
         expect(scriptSource).toContain('.filter(entity => entity?.type === \'character\')');
         expect(scriptSource).toContain('void syncReactCharacterLibraryToolbarState();');
         expect(scriptSource).not.toContain('document.querySelectorAll(\'#rm_print_characters_block .character_select\')');
-        expect(overlaySource).toContain('character.setAttribute(\'aria-selected\', \'true\')');
-        expect(overlaySource).toContain('character.setAttribute(\'aria-selected\', \'false\')');
-        expect(overlaySource).toContain('character.setAttribute(\'aria-checked\', \'true\')');
-        expect(overlaySource).toContain('character.setAttribute(\'aria-checked\', \'false\')');
-        expect(overlaySource).toContain('legacyBulkEditCheckbox.setAttribute(\'aria-checked\', \'false\')');
-        expect(overlaySource).toContain('syncBulkSelectionDomState({');
+        expect(overlaySource).not.toContain('character.setAttribute(\'aria-selected\'');
+        expect(overlaySource).not.toContain('character.setAttribute(\'aria-checked\'');
+        expect(overlaySource).not.toContain('syncBulkSelectionDomState({');
         expect(overlaySource).toContain('this.state !== BulkEditOverlayState.select');
-        expect(overlaySource).toContain('updateBulkSelectionCountState({ selectedCount, deleteButton, fallbackFocusElement }, count)');
+        expect(overlaySource).toContain('void syncReactCharacterLibraryToolbarState();');
         expect(overlaySource).toContain('t`Delete ${count} characters?`');
         expect(overlaySource).toContain('deleteContext: { source: \'bulk\', selectedCount: count }');
         expect(overlaySource).not.toContain('${t`Delete`} ${count} ${t`characters?`}');
@@ -622,14 +620,15 @@ describe('character list structure', () => {
     test('keeps bulk destructive actions disabled until a selection exists', () => {
         const bulkEditSource = read('public/scripts/bulk-edit.js');
         const overlaySource = read('public/scripts/BulkEditOverlay.js');
+        const toolbarSource = read('app/components/character-library/CharacterLibraryToolbar.tsx');
         const deleteButtonSource = extractFunctionSource(bulkEditSource, 'onDeleteButtonClick');
         const enableBulkEditSource = extractFunctionSource(bulkEditSource, 'enableBulkEdit');
         const disableBulkEditSource = extractFunctionSource(bulkEditSource, 'disableBulkEdit');
 
         expect(overlaySource).toContain('static bulkDeleteButtonId = \'bulkDeleteButton\'');
-        expect(overlaySource).toContain('updateBulkActionStates = (countOverride = undefined) => {');
-        expect(overlaySource).toContain('updateBulkDeleteButtonState(deleteButton, hasSelection, fallbackFocusElement)');
-        expect(overlaySource).toContain('updateBulkSelectionCountState({ selectedCount, deleteButton, fallbackFocusElement }, count)');
+        expect(overlaySource).toContain('void syncReactCharacterLibraryToolbarState();');
+        expect(toolbarSource).toContain('character-library-bulk-selected-count');
+        expect(toolbarSource).toContain('disabled={state.bulkSelectedCount === 0}');
         expect(read('public/scripts/character-list-state.js')).toContain('deleteButton.setAttribute(\'tabindex\', \'0\')');
         expect(enableBulkEditSource).toContain('characterGroupOverlay.updateSelectedCount(0)');
         expect(enableBulkEditSource).not.toContain('characterGroupOverlay.updateBulkActionStates(0)');

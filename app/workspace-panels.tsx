@@ -58,6 +58,8 @@ import { SettingsSurface } from './components/settings/SettingsSurface';
 import { ChatBackupsBrowser, type ChatBackupsCommands } from './components/chat-backups/ChatBackupsBrowser';
 
 import { TagManagement } from './components/tags/TagManagement';
+import { BulkTagEditor } from './components/tags/BulkTagEditor';
+import type { BulkTagEditorRuntime, TagManagementRuntime } from './components/tags/types';
 import { CharacterTagManagerDialog } from './components/fields/CharacterTagManagerDialog';
 import { useAutosizeTextareaRef } from './lib/autosize-textarea';
 import { RegexEditor } from './components/regex/RegexEditor';
@@ -3158,12 +3160,52 @@ function mountSmallPanel(container: HTMLElement, element: ReactElement) {
 
 
 /**
- * Mounts the Tag Management popup content inside the legacy popup shell.
- * Presentation-only: tags.js keeps behavior ownership via delegated
- * .tag_view_* handlers and #tag_sort_mode_select.
+ * Mounts the Tag Management popup content inside the popup shell. React owns
+ * markup and interactions; the tag runtime owns the model and persistence.
+ * Without a runtime the host falls back to the legacy DOM rows appended by
+ * tags.js, so the two owners never coexist.
  */
-export function mountTagManagement(container: HTMLElement, options: { bogusFolders: boolean }) {
-    mountSmallPanel(container, <TagManagement bogusFolders={options.bogusFolders} />);
+export function mountTagManagement(
+    container: HTMLElement,
+    options: { runtime?: TagManagementRuntime; bogusFolders?: boolean },
+) {
+    const { runtime, bogusFolders = true } = options;
+    if (!runtime) {
+        return () => { };
+    }
+    mountSmallPanel(container, <TagManagement runtime={runtime} bogusFolders={bogusFolders} />);
+    return () => unmountSmallPanel(container);
+}
+
+/**
+ * Mounts the bulk tag editor into the legacy bulk-edit popup body. The host
+ * keeps the popup chrome; this component owns the tag editing surface.
+ */
+export function mountBulkTagEditor(
+    container: HTMLElement,
+    options: {
+        runtime: BulkTagEditorRuntime;
+        avatars?: Array<{ id: string; name: string; url: string; isFav: boolean }>;
+        onClose?: () => void;
+        onOpenTagManager?: () => void;
+    },
+) {
+    mountSmallPanel(
+        container,
+        <BulkTagEditor
+            runtime={options.runtime}
+            avatars={options.avatars}
+            onClose={options.onClose}
+            onOpenTagManager={options.onOpenTagManager}
+        />,
+    );
+    return () => unmountSmallPanel(container);
+}
+
+export function unmountSmallPanel(container: HTMLElement) {
+    const root = mountedSmallPanels.get(container);
+    mountedSmallPanels.delete(container);
+    root?.unmount();
 }
 
 /**

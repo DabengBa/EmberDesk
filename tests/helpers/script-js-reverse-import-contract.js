@@ -21,7 +21,7 @@ export const FIRST_PARTY_SCRIPT_JS_IMPORT_CONTRACT = Object.freeze([
     contractEntry('autocomplete/MacroAutoCompleteHelper.js', '/script.js', ['chat_metadata']),
     contractEntry('chat-branch.js', '../script.js', ['characters', 'saveChat', 'this_chid', 'openCharacterChat', 'chat_metadata', 'chat', 'getCurrentChatDetails', 'setOptionsMenuBranchVisibility']),
     contractEntry('bulk-edit.js', '../script.js', ['characterGroupOverlay', 'syncReactCharacterLibraryToolbarState']),
-    contractEntry('BulkEditOverlay.js', '../script.js', ['characterGroupOverlay', 'characters', 'getCharacters', 'buildAvatarList', 'characterToEntity', 'printCharactersDebounced', 'deleteCharacter', 'stopGeneration', 'is_send_press', 'this_chid', 'name2', 'neutralCharacterName', 'syncReactCharacterLibraryToolbarState']),
+    contractEntry('BulkEditOverlay.js', '../script.js', ['characterGroupOverlay', 'characters', 'getCharacters', 'default_avatar', 'getThumbnailUrl', 'deleteCharacter', 'stopGeneration', 'is_send_press', 'this_chid', 'name2', 'neutralCharacterName', 'syncReactCharacterLibraryToolbarState']),
     contractEntry('chat-backups.js', '/script.js', ['displayPastChats', 'importCharacterChat']),
     contractEntry('chats.js', '../script.js', ['addCopyToCodeBlocks', 'appendMediaToMessage', 'characters', 'chat', 'getCurrentChatId', 'name2', 'this_chid', 'saveChatConditional', 'chat_metadata', 'neutralCharacterName', 'updateChatMetadata', 'system_message_types', 'converter', 'substituteParams', 'getSystemMessageByType', 'printMessages', 'clearChat', 'getMediaIndex', 'getMediaDisplay', 'chatElement']),
     contractEntry('custom-request.js', '../script.js', ['extractJsonFromData', 'extractMessageFromData']),
