@@ -2,6 +2,46 @@
 
 Corrections, insights, and knowledge gaps captured during development.
 
+## [LRN-20261112-001] best_practice
+
+**Logged**: 2026-11-12T11:05:00+08:00
+**Priority**: medium
+**Status**: resolved
+**Area**: tests
+
+### Summary
+多作用域顺序保存的浏览器回归应覆盖未选择角色或预设的空作用域。
+
+### Details
+Regex 调试器曾在全局顺序已经保存后，因空预设作用域无法捕获目标而报告失败。实际界面回归验证了无角色场景，修复后空且不可用的作用域被跳过；非空或其他错误仍然失败。
+
+### Suggested Action
+修改跨作用域保存时，检查空作用域、部分保存反馈及目标身份，并运行对应隔离浏览器测试。
+
+### Metadata
+- Source: error
+- Related Files: public/scripts/extensions/regex/index.js, tests/regex-rule-list.e2e.js
+- Tags: regex, persistence, empty-scope, e2e
+- Pattern-Key: frontend.multi-scope.empty-target-save
+- Recurrence-Count: 1
+- First-Seen: 2026-11-12
+- Last-Seen: 2026-11-12
+
+### Context Maintenance
+- Decay-Type: reality
+- Decay-Rate: slow (recheck when scope selection or persistence changes)
+- Authority: current implementation and browser regression; Owner: frontend feature maintainers
+- Revalidation: run the empty-scope debugger test after scope or save changes; if unavailable, retain the risk without claiming verification.
+- Validation: verified; Last-Validated: 2026-11-12; Evidence: the isolated debugger save-order regression failed before the fix and passed afterward.
+- Disposition: retain; Application: applied
+
+### Resolution
+- **Resolved**: 2026-11-12T11:05:00+08:00
+- **Commit/PR**: pending
+- **Notes**: Empty unavailable scopes are skipped; other errors remain visible.
+
+---
+
 **Categories**: correction | knowledge_gap | best_practice
 **Areas**: frontend | backend | infra | tests | docs | config
 **Statuses**: pending | in_progress | resolved | wont_fix | promoted | promoted_to_skill

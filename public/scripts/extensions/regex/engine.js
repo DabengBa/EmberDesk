@@ -1,6 +1,6 @@
 import { characters, saveSettingsDebounced, substituteParams, substituteParamsExtended, this_chid } from '../../../script.js';
 import { feature_settings, writeExtensionField } from '../../feature-settings.js';
-import { getPresetManager } from '../../preset-manager.js';
+import { getPresetManager, saveSettingsStrict } from '../../preset-manager.js';
 import { regexFromString } from '../../utils.js';
 import { lodash } from '../../../lib.js';
 
@@ -133,12 +133,91 @@ export function getScriptsByType(scriptType, { allowedOnly } = DEFAULT_GET_REGEX
 }
 
 /**
+ * Capture the identity, not the current list, before any asynchronous work.
+ * @param {SCRIPT_TYPES} scriptType Scope to capture
+ * @returns {object} Opaque target, or throws when unavailable
+ */
+export function captureRegexTarget(scriptType) {
+    if (scriptType === SCRIPT_TYPES.GLOBAL) return { type: scriptType };
+    if (scriptType === SCRIPT_TYPES.SCOPED) {
+        const character = characters[this_chid];
+        if (!character?.avatar) throw new Error('Character not available');
+        return { type: scriptType, avatar: character.avatar, character };
+    }
+    if (scriptType === SCRIPT_TYPES.PRESET) {
+        const manager = getPresetManager();
+        const apiId = manager?.apiId;
+        const name = manager?.getSelectedPresetName();
+        const preset = name && manager.getCompletionPresetByName(name);
+        if (!apiId || !name || !preset) throw new Error('Preset not available');
+        return { type: scriptType, manager, apiId, name, preset };
+    }
+    throw new Error('Invalid regex script type');
+}
+
+function resolveRegexTarget(target) {
+    if (target?.type === SCRIPT_TYPES.GLOBAL) return target;
+    if (target?.type === SCRIPT_TYPES.SCOPED) {
+        const index = characters.indexOf(target.character);
+        if (index < 0 || target.character.avatar !== target.avatar) throw new Error('Character no longer exists');
+        return { ...target, index };
+    }
+    if (target?.type === SCRIPT_TYPES.PRESET) {
+        if (target.manager.apiId !== target.apiId || target.manager.getCompletionPresetByName(target.name) !== target.preset) {
+            throw new Error('Preset no longer exists');
+        }
+        return target;
+    }
+    throw new Error('Invalid regex target');
+}
+
+/** @param {object} target Captured target @returns {RegexScript[]} Current scripts */
+export function getScriptsForTarget(target) {
+    const resolved = resolveRegexTarget(target);
+    let scripts;
+    if (resolved.type === SCRIPT_TYPES.GLOBAL) scripts = feature_settings.regex;
+    if (resolved.type === SCRIPT_TYPES.SCOPED) scripts = resolved.character.data?.extensions?.regex_scripts;
+    if (resolved.type === SCRIPT_TYPES.PRESET) scripts = resolved.manager.readPresetExtensionField({ name: resolved.name, path: 'regex_scripts' });
+    return Array.isArray(scripts) ? scripts : [];
+}
+
+/** @param {object} target Captured target @returns {Promise<void>} */
+export async function authorizeRegexTarget(target) {
+    const resolved = resolveRegexTarget(target);
+    if (resolved.type === SCRIPT_TYPES.GLOBAL) return;
+    if (resolved.type === SCRIPT_TYPES.SCOPED) {
+        if (!Array.isArray(feature_settings.character_allowed_regex)) feature_settings.character_allowed_regex = [];
+        if (!feature_settings.character_allowed_regex.includes(resolved.avatar)) feature_settings.character_allowed_regex.push(resolved.avatar);
+    } else {
+        if (!Array.isArray(feature_settings?.preset_allowed_regex?.[resolved.apiId])) lodash.set(feature_settings, ['preset_allowed_regex', resolved.apiId], []);
+        if (!feature_settings.preset_allowed_regex[resolved.apiId].includes(resolved.name)) feature_settings.preset_allowed_regex[resolved.apiId].push(resolved.name);
+    }
+    await saveSettingsStrict();
+    resolveRegexTarget(target);
+}
+
+/**
  * Saves an array of regex scripts for a specific type.
  * @param {RegexScript[]} scripts An array of regex scripts to save.
  * @param {SCRIPT_TYPES} scriptType The type of regex scripts to save.
+ * @param {object} [target] Captured target; enables strict persistence.
  * @returns {Promise<void>}
  */
-export async function saveScriptsByType(scripts, scriptType) {
+export async function saveScriptsByType(scripts, scriptType, target) {
+    if (target) {
+        const resolved = resolveRegexTarget(target);
+        if (resolved.type !== scriptType) throw new Error('Regex target type mismatch');
+        if (scriptType === SCRIPT_TYPES.GLOBAL) {
+            feature_settings.regex = scripts;
+            await saveSettingsStrict();
+        } else if (scriptType === SCRIPT_TYPES.SCOPED) {
+            await writeExtensionField(resolved.index, 'regex_scripts', scripts, { strict: true });
+        } else {
+            await resolved.manager.writePresetExtensionField({ name: resolved.name, path: 'regex_scripts', value: scripts, strict: true, expectedPreset: resolved.preset });
+        }
+        resolveRegexTarget(target);
+        return;
+    }
     switch (scriptType) {
         case SCRIPT_TYPES.GLOBAL:
             feature_settings.regex = scripts;
@@ -379,7 +458,6 @@ export function getRegexedString(rawString, placement, { characterOverride, isMa
 
     return finalString;
 }
-
 /**
  * Runs the provided regex script on the given string
  * @param {RegexScript} regexScript The regex script to run

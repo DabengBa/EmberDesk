@@ -30,6 +30,8 @@ This is not a framework migration. EmberDesk still uses the existing HTML/CSS/jQ
 
 React page and panel islands are the separate modernization route used by `/login`, `/setup`, `/settings`, and the guarded workspace panels. The jQuery slice pattern remains valid for small legacy controller extractions, but it is not the owner for those React surfaces.
 
+The React route also covers feature-level slices inside legacy drawers. The shipped example is the Regex workbench (`app/components/regex/*` + the `public/scripts/extensions/regex/regex-*-controller.js`/`regex-list-bridge.js` adapters): React owns the rule list, editor form, import-target picker, preset controls, debugger, and scope-authorization toggles inside the Regex drawer, while `public/scripts/extensions/regex/index.js` keeps thin command adapters, slash-command registration, and the unchanged engine glue. The adapters capture scope + character/preset identity before each write, re-read the live list before mutating, and report a per-target saved/not-saved result; `scriptTemplate.html` plus the jQuery row handlers, sortables, toolbar bindings, and `RegexPresetManager` DOM ownership were removed in the same change. The migration pattern is: React-controlled form/state in `app/components/`, a small injected command/controller surface per feature, and strict `saveScriptsByType`/`authorizeRegexTarget` persistence on the legacy side.
+
 ## Architecture And Constraints
 
 Frontend migration slices must preserve the existing product flow unless the semantic docs and implementation already disagree and the slice explicitly resolves that drift.

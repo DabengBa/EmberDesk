@@ -75,6 +75,16 @@ export function getPresetManager(apiId = '') {
 }
 
 /**
+ * Persists user settings and rejects when the write is queued or fails.
+ * Shared by features that cannot import `saveSettings` from `script.js`
+ * without violating the composition-root reverse-import contract.
+ * @returns {Promise<void>} Resolves after the settings save commits.
+ */
+export async function saveSettingsStrict() {
+    await saveSettings(0, { strict: true });
+}
+
+/**
  * Registers preset managers for all select elements with data-preset-manager-for attribute.
  */
 function registerPresetManagers() {
@@ -480,26 +490,37 @@ class PresetManager {
      * @param {string} [options.name] Name of the preset. If not provided, uses the currently selected preset name.
      * @param {string} options.path Path to the preset extension field, e.g. 'myextension.data'. If empty, writes to the root of the extensions object.
      * @param {any} options.value Value to write to the preset extension field.
+     * @param {boolean} [options.strict] Reject failed settings and missing/replaced presets.
+     * @param {object} [options.expectedPreset] Identity to verify before saving.
      * @return {Promise<void>} Resolves when the preset is saved.
      */
-    async writePresetExtensionField({ name, path, value }) {
+    async writePresetExtensionField({ name, path, value, strict = false, expectedPreset }) {
         const { settings } = this.getPresetList();
         const selectedName = this.getSelectedPresetName();
         const presetName = name || selectedName;
+        const capturedPreset = strict ? this.getCompletionPresetByName(presetName) : undefined;
+        if (strict && (!capturedPreset || (expectedPreset && capturedPreset !== expectedPreset))) {
+            throw new Error('Preset no longer exists');
+        }
 
         // Write to settings if the selected preset is the same as the provided name
         if (settings && selectedName === presetName) {
             // Set the value at the specified path
             settings.extensions = ensurePlainObject(settings.extensions || {});
             if (path) lodash.set(settings.extensions, path, value); else settings.extensions = value;
-            await saveSettings();
+            await saveSettings(0, strict ? { strict: true } : undefined);
+            if (strict && this.getSelectedPresetName() !== presetName) {
+                throw new Error('Preset selection changed while saving settings');
+            }
         }
 
         // Also update the preset by name
         const preset = this.getCompletionPresetByName(presetName);
         if (!preset) {
+            if (strict) throw new Error('Preset no longer exists');
             return;
         }
+        if (strict && preset !== capturedPreset) throw new Error('Preset no longer exists');
 
         // Set the value at the specified path
         preset.extensions = ensurePlainObject(preset.extensions || {});

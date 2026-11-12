@@ -109,13 +109,15 @@ export const UNSET_VALUE = '__@@UNSET@@__';
  * @param {number|string} characterId Index in the character array
  * @param {string} key Field name
  * @param {any} value Field value
+ * @param {{strict?: boolean}} [options] Reject a failed or missing character write.
  * @returns {Promise<void>} When the field is written
  */
-export async function writeExtensionField(characterId, key, value) {
+export async function writeExtensionField(characterId, key, value, options = {}) {
     const context = getContext();
     const character = context.characters[characterId];
     if (!character) {
         console.warn('Character not found', characterId);
+        if (options.strict) throw new Error('Character not found');
         return;
     }
     const extensionPath = `data.extensions.${key}`;
@@ -160,6 +162,7 @@ export async function writeExtensionField(characterId, key, value) {
 
     if (!mergeResponse.ok) {
         console.error('Failed to save extension field', mergeResponse.statusText);
+        if (options.strict) throw new Error(`Failed to save extension field: ${mergeResponse.statusText}`);
     }
 }
 
