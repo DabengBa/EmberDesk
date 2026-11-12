@@ -82,9 +82,49 @@ round i: 请求组装后 (CHAT_COMPLETION_SETTINGS_READY) 注入:
 - **为什么是转义标签**：标签定界符存成 `&lt;`/`&gt;` 实体 → 消息把标签名**当字面文本显示**（裸未知元素会被 DOMPurify 吃掉、几段正文糊在一起）。没有正则时用户直接看到 `<analyze>xx</analyze>` 原始包裹文本——零 JSON、零卡片 chrome
 - **末标签即正文**：最后一步（通常是 respond/final）的 tag 里放**原生回复文本**——`<plot-options>` 这类正文内标记保持活体，markdownOnly 正则照旧渲染成 `data-respond-option` 芯片；选项芯片行（数组参数提升）也塞在末标签内。前面步的内容整体转义存字面文本
 - **正则锚点**：写入时 `getRegexedString(mes, AI_OUTPUT)` 跑在完整 markup 上；markdownOnly 规则按 `&lt;tag&gt;` 实体匹配做样式/隐藏/折叠（demo：`analyze→折叠块`、`review 加高亮边`、`隐藏 analyze 块`）；promptOnly 规则可把步骤块改写成文本摘要再发给模型
-- **prompt 侧**：运行中使用独立追加日志，不回放聚合卡；已完成的纯管线消息在后续用户轮剥掉前面步骤标签、解包末标签并剥掉芯片行，折叠成普通 assistant 正文。混有普通工具调用的消息仍保留结构化配对回放。
+- **prompt 侧**：运行中使用独立追加日志，不回放聚合卡；已完成的纯管线消息在后续用户轮剥掉前面步骤标签、解包末标签并剥掉芯片行，得到当前有效正文，再按下节规则投影。混有普通工具调用的消息仍保留结构化配对回放。
 - 兜底轮（final 不可用）走普通消息尾部：进度卡保留为错误证据 + 收口回复是独立消息
 - `[data-tool-invocation-text]` max-height 6em 滚动（运行中进度卡）
+
+## 历史输入与工具输出
+
+普通生成存在可运行管线、且首轮实际模型支持工具时，旧用户消息和旧助手正文统一投影成 `submit_story({content: 正文})` 调用，紧随 `已收到。` 的工具回执；最新一条真实用户输入保持 `user`。这与当前管线开关联动，不新增独立的输入/输出开关。
+
+以下仅展示历史片段；系统提示、当前步指令和真实工具定义仍由原有组装流程提供：
+
+```json
+[
+    {
+        "role": "assistant",
+        "tool_calls": [{
+            "id": "pipeline-history-1",
+            "type": "function",
+            "function": {"name": "submit_story", "arguments": "{\"content\":\"我推开门。\"}"}
+        }]
+    },
+    {"role": "tool", "tool_call_id": "pipeline-history-1", "content": "已收到。"},
+    {
+        "role": "assistant",
+        "tool_calls": [{
+            "id": "pipeline-history-2",
+            "type": "function",
+            "function": {"name": "submit_story", "arguments": "{\"content\":\"房间里亮着一盏灯。\"}"}
+        }]
+    },
+    {"role": "tool", "tool_call_id": "pipeline-history-2", "content": "已收到。"},
+    {"role": "user", "content": "我走近那盏灯。"}
+]
+```
+
+- **真实执行记录**：`extra.tool_invocations` 保留原始参数、结果及管线元数据；本次运行后续步骤仍读取真正的工具调用和结果。
+- **有效正文**：读取当前 `mes` 的 prompt 处理结果，不从旧 invocation 的参数/结果恢复正文。因此编辑后的回复在下一轮生效，中间分析和芯片不会作为最终正文重复发送。
+- **请求历史表示**：仅在预算组装时生成以上配对，不写回聊天、不注册或执行 `submit_story`。调用 ID 在同一历史内可重复生成且避开真实调用 ID；预算包含两条消息和回执 ID，要么整对保留，要么整对裁掉。
+
+系统/旁白、注入提示、记忆摘要、媒体、带 reasoning 的消息及真实普通/混合工具记录不转换。已结束但未成为正文的纯管线系统进度卡不作为历史正文发送。最后一条真实用户输入的识别不受 user-role 注入提示影响。
+
+本轮输出继续调用预设配置的最后一步（例如 `respond`），通过既有 final-direct 路径形成正常可见回复；不要求把自定义工具重命名为 `submit_story`。首步提示明确历史提交无需重新执行。`auto`/`forced`、普通文本提前完成及最终结果不可用时的收口轮语义不变。
+
+检查器（包括收口轮预览）与真实首轮使用相同历史投影。运行中捕获过的前缀不重新投影；重试/后续步只追加运行日志。关闭管线、没有可运行步骤、非 normal 请求或首轮模型不支持工具时，不启用历史投影。
 
 ## 代码落点
 
@@ -94,14 +134,15 @@ round i: 请求组装后 (CHAT_COMPLETION_SETTINGS_READY) 注入:
 | `public/scripts/reply-pipeline.js` | 运行态：run 状态机、`preparePipelineRound`、请求整形、事件挂钩 |
 | `public/scripts/generation-service.js` | 两个工具分支插 `preparePipelineRound` + `finalizePipelineReply`（摘卡、折叠进正文）；`GENERATION_STARTED` 补发 `depth` |
 | `public/scripts/tool-calling.js` | 进度卡格式化（`data-pipeline-run`/`data-pipeline-step` 挂钩）+ `formatPipelineTagMarkup`（终态语义标签）+ runId 归并保存 + AI_OUTPUT regex 通道 |
-| `public/scripts/openai.js` | 回放：assistant `tool_calls` + `role:tool` + 正文消息；逐步剥 `&lt;tool&gt;` 块/解包末标签/剥芯片行（旧 `data-pipeline-card` 段兼容剥离） |
+| `public/scripts/openai.js` | 有效正文清理、预算内的历史 `submit_story` 配对投影、真实工具的结构化回放；逐步剥 `&lt;tool&gt;` 块/解包末标签/剥芯片行（旧 `data-pipeline-card` 段兼容剥离） |
 | `chat-message-render-descriptor.js` / `main-chat-store-projection.js` / `message-service.js` | `replyPipelineHidden` 类通道（残留进度卡/兜底卡用） |
 
 ## 验证（已落地）
 
 - 单测 `reply-pipeline-core`：归一化（含 final 截断/缺省回落/步数钳制）、步提示、result_field 抽取（含 JSON 标量解包）、findStepCompletion 前向推进
-- e2e：`reply_pipeline` 跨重载持久（不再重注入——持久化是承重断言）；3 轮步提示 + final-direct 无第 4 请求；**融合标签**断言（一条 assistant 消息、`mes` 含 `&lt;analyze&gt;`/`&lt;review&gt;`/`&lt;respond&gt;` 转义标签块且顺序正确、无 `data-pipeline-card`、DOM 显示字面标签文本、`tool_invocations`×3、芯片可点、AI_OUTPUT regex 生效于标签 markup、无遗留 runId 卡）；**回放剥离**断言（下一用户轮请求里纯管线消息折叠成正文且不含任何标签/芯片 markup）；后续生成零残留；兜底路径（ok-object → 固定 tools + tool_choice none/无编号步提示/失败卡留作独立证据消息）
-- `test:compat`；`pnpm run lint`；docs:check
+- `reply-pipeline-assembly`：旧用户与当前正文配对投影、当前 user 保留、原始记录不变、排除边界、模型切换、ID 冲突、整对预算边界，以及真实 tokenizer 计数约定下的裁剪与发送一致性
+- e2e：`reply_pipeline` 跨重载持久（不再重注入——持久化是承重断言）；3 轮步提示 + final-direct 无第 4 请求；**融合标签**断言（一条 assistant 消息、`mes` 含 `&lt;analyze&gt;`/`&lt;review&gt;`/`&lt;respond&gt;` 转义标签块且顺序正确、无 `data-pipeline-card`、DOM 显示字面标签文本、`tool_invocations`×3、芯片可点、AI_OUTPUT regex 生效于标签 markup、无遗留 runId 卡）；**下一轮历史**断言（管线开启时旧用户与编辑后的正文各投影一次，检查器与真实请求一致，不含中间分析/旧参数正文/芯片；管线关闭后仍为普通文本）；后续生成零残留；兜底路径（ok-object → 固定 tools + tool_choice none/无编号步提示/失败卡留作独立证据消息）
+- `test:compat`；受影响文件 ESLint；`docs:check`
 
 ## 已知边界
 
