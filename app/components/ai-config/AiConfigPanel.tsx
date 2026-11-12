@@ -4,6 +4,7 @@ import type { PresetService } from '../../lib/preset-service';
 import { ContractIconButton } from '../contract/ContractIconButton';
 import { PresetActionsMenu } from './PresetActionsMenu';
 import { translate, useTranslated } from '@/compat/i18n.js';
+import { disposeLocalDialogScope } from '../local-dialogs/LocalDialog';
 
 function NumericInput({ current, scale = 1, commit, unit, ...props }: Omit<ComponentProps<'input'>, 'value' | 'onChange' | 'type'> & { current: number; scale?: number; commit: (value: number) => boolean; unit?: string }) {
     const input = useRef<HTMLInputElement>(null);
@@ -38,6 +39,7 @@ function NumericInput({ current, scale = 1, commit, unit, ...props }: Omit<Compo
  * React-owned prompt list rendered inside #completion_prompt_manager.
  */
 export function AiConfigPanel({ presetService, promptList, presetSaveButton, promptHeaderActions }: { presetService: PresetService; promptList?: ReactNode; presetSaveButton?: (onSave: () => void, busy: boolean) => ReactNode; promptHeaderActions?: ReactNode }) {
+    useEffect(() => () => disposeLocalDialogScope('presets'), []);
     useTranslated('');
     const snapshot = useSyncExternalStore(presetService.subscribe, presetService.getSnapshot, presetService.getSnapshot);
     const [fieldError, setFieldError] = useState('');

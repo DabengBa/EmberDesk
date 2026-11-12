@@ -4,7 +4,7 @@ import { convertAgnaiMemoryBook, convertNovelLorebook, convertRisuLorebook } fro
 const WORLD_INFO_IMPORT_LARGE_FILE_THRESHOLD_BYTES = 10 * 1024 * 1024;
 
 /** Import one file; shell-specific dialogs, notifications and navigation are injected. */
-export async function runWorldInfoFileImport(file, { overwriteMode = 'confirm' } = {}, deps) {
+export async function runWorldInfoFileImport(file, { overwriteMode = 'confirm', signal } = {}, deps) {
     const { parseJsonFile, getFileBuffer, extractDataFromPng, getWorldInfoImportBaseName,
         getSanitizedFilename, prepareWorldInfoImportOverwrite, getRequestHeaders, fetch, t, toastr } = deps;
     if (!file) return createWorldInfoImportResult('skipped', file);
@@ -47,8 +47,17 @@ export async function runWorldInfoFileImport(file, { overwriteMode = 'confirm' }
     }
     const worldName = getWorldInfoImportBaseName(file);
     const sanitizedWorldName = await getSanitizedFilename(worldName);
-    const allowed = await prepareWorldInfoImportOverwrite(sanitizedWorldName, metadata, overwriteMode);
+    if (signal?.aborted) return createWorldInfoImportResult('cancelled', file, sanitizedWorldName);
+    let allowed;
+    try { allowed = await prepareWorldInfoImportOverwrite(sanitizedWorldName, metadata, overwriteMode, signal); }
+    catch (error) {
+        console.error('Error preparing World Info overwrite:', error);
+        toastr.error(t`Import failed. Please check your connection and try again.`);
+        return createWorldInfoImportResult('failed', file, sanitizedWorldName);
+    }
     if (!allowed) return createWorldInfoImportResult('cancelled', file, sanitizedWorldName);
+    // Once deletion has succeeded, finish the matching import to avoid losing the original.
+    if (signal?.aborted && allowed !== 'deleted') return createWorldInfoImportResult('cancelled', file, sanitizedWorldName);
     try {
         const result = await fetch('/api/worldinfo/import', {
             method: 'POST', headers: getRequestHeaders({ omitContentType: true }), body: formData, cache: 'no-cache',
@@ -127,9 +136,9 @@ export async function runWorldInfoBatchImport(files, deps) {
             console.error('World Info batch conflict pre-scan failed:', error);
             deps.warnPrescan();
         }
-        const conflictChoice = await deps.chooseConflicts(conflicts);
+        const conflictChoice = deps.signal?.aborted ? 'cancel' : await deps.chooseConflicts(conflicts);
         results.push(...await runWorldInfoImportQueue({
-            queue, state, conflictChoice, conflicts,
+            queue, state, conflictChoice, conflicts, signal: deps.signal,
             waitForCancelPrompt: deps.waitForCancelPrompt, progress: deps.progress, importFile: deps.importFile,
         }));
         const summary = deps.summarize(results);
@@ -144,13 +153,14 @@ export async function runWorldInfoBatchImport(files, deps) {
 }
 
 /** Execute the already prepared batch; presentation and dialogs stay in the shell. */
-export async function runWorldInfoImportQueue({ queue, state, conflictChoice, conflicts, waitForCancelPrompt, progress, importFile }) {
+export async function runWorldInfoImportQueue({ queue, state, conflictChoice, conflicts, signal, waitForCancelPrompt, progress, importFile }) {
     const conflictFiles = new Set(conflicts.map(conflict => conflict.file));
     const results = [];
     state.cancelRequested = conflictChoice === 'cancel';
     for (let index = 0; index < queue.length; index++) {
         const file = queue[index];
         await waitForCancelPrompt(state);
+        if (signal?.aborted) state.cancelRequested = true;
         if (state.cancelRequested) {
             results.push(createWorldInfoImportResult('skipped', file, null, { unprocessed: true, reason: 'cancelled-remaining' }));
             continue;
@@ -162,7 +172,7 @@ export async function runWorldInfoImportQueue({ queue, state, conflictChoice, co
         const overwriteMode = conflictFiles.has(file) ? conflictChoice : 'confirm';
         progress(state, index, queue.length, file, { status: overwriteMode === 'confirm' ? 'checking-target' : 'importing' });
         try {
-            results.push(await importFile(file, { overwriteMode }) ?? createWorldInfoImportResult('skipped', file));
+            results.push(await importFile(file, { overwriteMode, signal }) ?? createWorldInfoImportResult('skipped', file));
         } catch (error) {
             console.error('Error importing world info batch file:', error);
             results.push(createWorldInfoImportResult('failed', file));

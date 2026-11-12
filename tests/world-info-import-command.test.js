@@ -65,3 +65,48 @@ test('single import cancellation never posts and 413 reports a failed result', a
     expect(post).toHaveBeenCalledTimes(1);
     expect(error).toHaveBeenCalledWith(expect.stringContaining('File is too large'));
 });
+
+test('owner cancellation stops a batch after the current file without opening the next', async () => {
+    const { runWorldInfoImportQueue } = await import('../public/scripts/world-info-import-command.js');
+    const owner = new AbortController();
+    const files = [{ name: 'one.json' }, { name: 'two.json' }];
+    const imported = [];
+    const results = await runWorldInfoImportQueue({
+        queue: files, state: { cancelRequested: false }, conflictChoice: 'confirm', conflicts: [], signal: owner.signal,
+        waitForCancelPrompt: async () => {}, progress: () => {},
+        importFile: async file => { imported.push(file.name); owner.abort(); return { status: 'cancelled', fileName: file.name }; },
+    });
+    expect(imported).toEqual(['one.json']);
+    expect(results[1]).toMatchObject({ fileName: 'two.json', unprocessed: true });
+});
+
+test.each(['confirm', 'overwrite'])('World Info %s waits for deletion and stops on deletion failure', async mode => {
+    const { createWorldInfoImportUi } = await import('../public/scripts/world-info-import-ui.js');
+    const previous = { fetch: globalThis.fetch, FormData: globalThis.FormData, toastr: globalThis.toastr };
+    const post = jest.fn();
+    let resolveDelete;
+    const deleteWorldInfo = jest.fn(() => new Promise(resolve => { resolveDelete = resolve; }));
+    globalThis.fetch = post;
+    globalThis.FormData = class { append() {} };
+    globalThis.toastr = { info: jest.fn(), warning: jest.fn(), error: jest.fn(), success: jest.fn() };
+    const t = (parts, ...values) => String.raw({ raw: parts }, ...values);
+    const ui = createWorldInfoImportUi({
+        getWorldNames: () => ['book'], deleteWorldInfo, getSanitizedFilename: async name => name,
+        equalsIgnoreCaseAndAccents: (a, b) => a === b, parseJsonFile: async () => ({ entries: {} }),
+        getRequestHeaders: () => ({}), t, translate: text => text, escapeHtml: text => text,
+        showLocalDialog: async () => ({ action: 'overwrite', values: {} }),
+        checkOverwriteExistingData: async (_type, _names, _name, options) => options.confirm({ title: 'Import', typeLabel: 'World Info', existing: 'book' }),
+    });
+    try {
+        const result = ui.importWorldInfo({ name: 'book.json', size: 1 }, { overwriteMode: mode });
+        await new Promise(resolve => setImmediate(resolve));
+        expect(deleteWorldInfo).toHaveBeenCalledWith('book');
+        expect(post).not.toHaveBeenCalled();
+        resolveDelete(false);
+        expect(await result).toMatchObject({ status: 'failed' });
+        expect(post).not.toHaveBeenCalled();
+        expect(globalThis.toastr.error).toHaveBeenCalled();
+    } finally {
+        Object.assign(globalThis, previous);
+    }
+});

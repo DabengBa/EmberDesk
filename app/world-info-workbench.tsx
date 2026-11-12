@@ -18,6 +18,7 @@ import { FieldSelect, FieldTextArea, FieldTextInput } from '@/components/fields/
 import type { WorldInfoCommands } from './compat/workspace-commands';
 import { translate, useTranslated } from './compat/i18n.js';
 import { customTokenizer } from '../public/scripts/world-info-keywords.js';
+import { disposeLocalDialogScope } from './components/local-dialogs/LocalDialog';
 
 function splitKeywordInput(input: string): string[] {
     const tokens: string[] = [];
@@ -696,6 +697,7 @@ export function WorldInfoWorkbenchPanel({
         children: ReactNode;
     }) => ReactNode;
 }) {
+    useEffect(() => () => disposeLocalDialogScope('world-info'), []);
     useTranslated('');
     const bridgeState = useMemo(
         () => (state && typeof state === 'object' ? state : {}) as WorldInfoWorkspacePanelState,
@@ -906,6 +908,7 @@ export function WorldInfoWorkbenchPanel({
                 data-world-info-react-mobile-view={mobileView}
                 data-doc-id="feature.world_info_panel"
             >
+                {worldInfoCommandMutation.isError ? <div role="alert" {...stylex.props(s.saveStateError)}>{translate('World Info action failed. Please try again.')}</div> : null}
                 <div {...stylex.props(s.global)} data-world-info-react-global="summary">
                     <span {...stylex.props(s.globalIcon)} aria-hidden="true">
                         <i className="fa-solid fa-globe" />

@@ -58,8 +58,8 @@ describe('world info card rendering', () => {
         const source = read('public/scripts/world-info-editor-ui.js');
         const sorting = source.slice(source.indexOf('async function promptApplyWorldInfoCurrentSorting()'), source.indexOf('async function bulkDeleteWorldInfoEntries('));
         const deletion = source.slice(source.indexOf('async function bulkDeleteWorldInfoEntries('), source.indexOf('async function bulkSetWorldInfoEntriesEnabled('));
-        expect(sorting).toMatch(/captureSelectionGuard\(\)[\s\S]*await Popup\.show\.input[\s\S]*!isCurrent\(\)[\s\S]*session\.applySortingAsOrder/);
-        expect(deletion).toMatch(/captureSelectionGuard\(\)[\s\S]*await Popup\.show\.confirm[\s\S]*!isCurrent\(\)[\s\S]*session\.deleteEntries/);
+        expect(sorting).toMatch(/captureSelectionGuard\(\)[\s\S]*await showLocalDialog[\s\S]*!isCurrent\(\)[\s\S]*session\.applySortingAsOrder/);
+        expect(deletion).toMatch(/captureSelectionGuard\(\)[\s\S]*await showLocalDialog[\s\S]*!isCurrent\(\)[\s\S]*session\.deleteEntries/);
     });
     test('React owns entry list rather than the retired DOM renderer', () => {
         const source = read('public/scripts/world-info.js');
@@ -222,13 +222,11 @@ describe('world info card rendering', () => {
             source.indexOf('async function deleteCurrentWorldInfo'),
         );
 
-        expect(deleteSource).toContain('defaultResult: POPUP_RESULT.NEGATIVE');
-        expect(deleteSource).toContain('cancelButton: t`Cancel`');
-        expect(deleteSource).toContain('popup.okButton.classList.add(\'popup-button-danger\');');
-        expect(deleteSource).toContain('deleteAllButton.classList.add(\'popup-button-danger\');');
-        expect(deleteSource).toContain('new Popup(');
-        expect(deleteSource).toContain('PopupUtils.BuildTextWithHeader(`Delete the World/Lorebook: "${worldName}"?`, t`This action is irreversible!`)');
-        expect(deleteSource).toContain('okButton: t`Delete`');
+        expect(deleteSource).toContain("initialFocus: 'cancel'");
+        expect(deleteSource).toContain("id: 'cancel', label: t`Cancel`");
+        expect(deleteSource).toContain("id: 'delete', label: t`Delete`, variant: 'destructive'");
+        expect(deleteSource).toContain("id: 'all', label: t`Delete ${worldInfos.length} linked world book(s)`, variant: 'destructive'");
+        expect(deleteSource).toContain('This action is irreversible!');
     });
 
     test('world info drawer stays reachable on mobile and tablet widths', () => {
