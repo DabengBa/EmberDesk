@@ -7979,9 +7979,12 @@ export async function getSettings(initLoaderHandle = null) {
 
 //MARK: saveSettings()
 export async function saveSettings(loopCounter = 0) {
+    // The opt-in caller needs an acknowledgement rather than a scheduled save.
+    const strict = arguments[1]?.strict === true;
     if (!settingsReady) {
         console.warn('Settings not ready, scheduling another save');
         saveSettingsDebounced();
+        if (strict) throw new Error('Settings save is queued: settings not ready');
         return;
     }
 
@@ -7990,6 +7993,7 @@ export async function saveSettings(loopCounter = 0) {
         if (loopCounter < MAX_RETRIES) {
             console.warn('Response length is currently being overridden, scheduling another save');
             saveSettingsDebounced(++loopCounter);
+            if (strict) throw new Error('Settings save is queued: response length is overridden');
             return;
         }
         console.error('Response length is currently being overridden, but the save loop has reached the maximum number of retries');
@@ -8052,7 +8056,7 @@ export async function saveSettings(loopCounter = 0) {
                     // A concurrent in-flight save landed first. Retry once with the
                     // adopted revision — the payload reserializes the live in-memory
                     // document, so the newest snapshot wins without dropping edits.
-                    return await saveSettings(loopCounter + 1);
+                    return await saveSettings(loopCounter + 1, strict ? { strict: true } : undefined);
                 }
                 toastr.warning(t`Settings were updated elsewhere. Reload to pick up the latest settings before saving again.`, t`Settings conflict`);
                 throw new Error('Failed to save settings: revision conflict');
@@ -8084,6 +8088,7 @@ export async function saveSettings(loopCounter = 0) {
     } catch (error) {
         console.error('Error saving settings:', error);
         toastr.error(t`Check the server connection and reload the page to prevent data loss.`, t`Settings could not be saved`);
+        if (strict && savedRevision === undefined) throw error;
     } finally {
         if (!sortSaveFinished) finishSettingsSaveSnapshot(sortSaveSnapshot, savedRevision);
     }

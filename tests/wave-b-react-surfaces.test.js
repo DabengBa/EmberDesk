@@ -11,10 +11,10 @@ describe('Wave B React surfaces', () => {
         const editor = readRepoFile('app/components/regex/RegexEditor.tsx');
         const settings = readRepoFile('app/components/regex/RegexSettingsPanel.tsx');
         const debuggerPanel = readRepoFile('app/components/regex/RegexDebugger.tsx');
-        const importTarget = readRepoFile('app/components/regex/RegexImportTarget.tsx');
+        const importTarget = readRepoFile('app/components/regex/RegexImportTargetControl.tsx');
         const indexJs = readRepoFile('public/scripts/extensions/regex/index.js');
 
-        // Editor: field classes and IDs bound by index.js.
+        // Editor: React-controlled form keeps the legacy field classes and IDs.
         for (const token of [
             'id="regex_editor_template"',
             'id="regex_test_mode_toggle"',
@@ -49,31 +49,49 @@ describe('Wave B React surfaces', () => {
         expect(debuggerPanel).toContain('id="regex_debugger_rules"');
         expect(debuggerPanel).toContain('id="regex_debugger_steps_output"');
 
-        // Import target radio group.
-        for (const id of ['regex_import_target_global', 'regex_import_target_scoped', 'regex_import_target_preset']) {
-            expect(importTarget).toContain(`id="${id}"`);
+        // Import target radio group (ids are composed from the target value).
+        expect(importTarget).toContain('regex_import_target_');
+        for (const value of ["value: 'global'", "value: 'preset'", "value: 'scoped'"]) {
+            expect(importTarget).toContain(value);
         }
 
         // Legacy adapter calls the mounts instead of fetching templates.
-        expect(indexJs).toContain('workspacePanels.mountRegexEditor(regexEditorHost)');
-        expect(indexJs).toContain('workspacePanels.mountRegexSettings(regexSettingsHost.get(0))');
-        expect(indexJs).toContain('workspacePanels.mountRegexDebugger(debuggerHost)');
-        expect(indexJs).toContain('workspacePanels.mountRegexImportTarget(template.get(0), {');
+        expect(indexJs).toContain('workspacePanels.mountRegexEditor(editorHost, {');
+        expect(indexJs).toContain('workspacePanels.mountRegexSettings(regexSettingsHost.get(0), {');
+        expect(indexJs).toContain('workspacePanels.mountRegexDebugger(debuggerHost, {');
+        expect(indexJs).toContain('workspacePanels.mountRegexImportTarget(template, {');
         expect(indexJs).toContain('characterName: characters[this_chid]?.name');
-        expect(importTarget).toContain('disabled={!characterName}');
-        expect(importTarget).toContain('disabled={!presetName}');
+        expect(importTarget).toContain('disabled: !characterName');
+        expect(importTarget).toContain('disabled: !presetName');
         expect(indexJs).not.toContain("renderFeatureTemplateAsync('regex', 'editor')");
         expect(indexJs).not.toContain("renderFeatureTemplateAsync('regex', 'dropdown')");
         expect(indexJs).not.toContain("renderFeatureTemplateAsync('regex', 'debugger')");
         expect(indexJs).not.toContain("renderFeatureTemplateAsync('regex', 'importTarget')");
 
-        // Migrated templates are deleted; dynamic row templates remain.
+        // No jQuery control bindings remain for migrated regex surfaces.
+        for (const binding of [
+            "$('#open_regex_editor')",
+            "$('#open_regex_debugger')",
+            "$('#open_scoped_editor')",
+            "$('#open_preset_editor')",
+            "$('#import_regex_file')",
+            "$('#import_regex')",
+            "$('#regex_scoped_toggle')",
+            "$('#regex_preset_toggle')",
+            "$('#regex_presets')",
+            'sortable(',
+        ]) {
+            expect(indexJs).not.toContain(binding);
+        }
+
+        // Migrated templates are deleted; embedded-script alert templates remain.
         for (const gone of ['editor.html', 'dropdown.html', 'debugger.html', 'importTarget.html']) {
             expect(fs.existsSync(path.join(repoRoot, 'public/scripts/extensions/regex', gone))).toBe(false);
         }
-        for (const kept of ['scriptTemplate.html', 'embeddedScripts.html', 'presetEmbeddedScripts.html']) {
+        for (const kept of ['embeddedScripts.html', 'presetEmbeddedScripts.html']) {
             expect(fs.existsSync(path.join(repoRoot, 'public/scripts/extensions/regex', kept))).toBe(true);
         }
+        expect(fs.existsSync(path.join(repoRoot, 'public/scripts/extensions/regex/scriptTemplate.html'))).toBe(false);
     });
 
     test('tool bindings surface lives inside the regex drawer', () => {
