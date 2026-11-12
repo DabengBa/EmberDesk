@@ -3,7 +3,7 @@ import { expect, jest, test } from '@jest/globals';
 const worldInfo = jest.fn(() => { throw new Error('WI must not be re-evaluated'); });
 const attempts = jest.fn(async () => undefined);
 jest.unstable_mockModule('../public/scripts/world-info-service.js', () => ({ getWorldInfoPrompt: worldInfo }));
-jest.unstable_mockModule('../public/scripts/main-chat-composer-service.js', () => ({ getComposerValue: jest.fn(), clearComposerValue: jest.fn() }));
+jest.unstable_mockModule('../public/scripts/main-chat-composer-service.js', () => ({ getComposerValue: jest.fn(), getComposerSnapshot: jest.fn(() => ({ value: '', contextKey: null, revision: 0 })), clearComposerValue: jest.fn() }));
 jest.unstable_mockModule('../public/scripts/chat-memory-service.js', () => ({ applyChatMemoryToCoreChat: jest.fn() }));
 jest.unstable_mockModule('../public/scripts/chat-generation-command-service.js', () => ({
     executeGenerationAttempts: attempts, createGenerationCommandPlan: () => ({ attempts: [] }), createGenerationRequestEnvelope: jest.fn(),

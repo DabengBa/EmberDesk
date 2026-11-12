@@ -6,6 +6,7 @@ import { MacroRegistry, MacroCategory, MacroValueType } from '../engine/MacroReg
 import { MACRO_VARIABLE_SHORTHAND_PATTERN } from '../engine/MacroLexer.js';
 import { MacroParser } from '../engine/MacroParser.js';
 import { MacroCstWalker } from '../engine/MacroCstWalker.js';
+import { getComposerValue } from '../../main-chat-composer-service.js';
 
 /**
  * Marker used by {{else}} to split content in {{if}} blocks.
@@ -228,7 +229,7 @@ export function registerCoreMacros() {
         category: MacroCategory.UTILITY,
         description: 'Current text from the send textarea.',
         returns: 'Current text from the send textarea.',
-        handler: () => (/** @type {HTMLTextAreaElement} */(document.querySelector('#send_textarea')))?.value ?? '',
+        handler: () => getComposerValue(),
     });
 
     // {{maxPrompt}} -> max context size (context minus response)

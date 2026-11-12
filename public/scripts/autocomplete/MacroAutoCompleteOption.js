@@ -1,4 +1,5 @@
 import { AutoCompleteOption } from './AutoCompleteOption.js';
+import { DOMPurify } from '../../lib.js';
 
 export class MacroAutoCompleteOption extends AutoCompleteOption {
     /**@type {string}*/ fullName;
@@ -36,7 +37,7 @@ export class MacroAutoCompleteOption extends AutoCompleteOption {
         }
         const help = document.createElement('span'); {
             help.classList.add('help');
-            help.innerHTML = this.description;
+            help.append(DOMPurify.sanitize(this.description ?? '', { RETURN_DOM_FRAGMENT: true }));
             frag.append(help);
         }
         return frag;

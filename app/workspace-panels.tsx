@@ -1,7 +1,8 @@
-import { Component, Fragment, StrictMode, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ChangeEvent, type ReactElement, type ReactNode, type TextareaHTMLAttributes } from 'react';
+import { Component, Fragment, StrictMode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ChangeEvent, type ReactElement, type ReactNode, type TextareaHTMLAttributes } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { createPortal, flushSync } from 'react-dom';
 import { QueryClient, QueryClientProvider, useMutation, useQuery } from '@tanstack/react-query';
+import DOMPurify from 'dompurify';
 
 import {
     attachGlobalCompatibilityBridge,
@@ -69,7 +70,7 @@ import { RegexImportTargetControl } from './components/regex/RegexImportTargetCo
 import { MacroBrowserPanel, type MacroBrowserProps } from './components/macros/MacroBrowser';
 import { WorldInfoPanel } from './components/panels/WorldInfoPanel';
 import { WorkspacePanelChrome } from './components/panels/WorkspacePanelChrome';
-import { ChatComposer } from './components/composer/ChatComposer';
+import { ChatComposer, type ChatComposerProps } from './components/composer/ChatComposer';
 import { CharacterPopup } from './components/character-popup/CharacterPopup';
 import { RightNavPanel } from './components/right-nav/RightNavPanel';
 import { AiConfigPanel } from './components/ai-config/AiConfigPanel';
@@ -2240,6 +2241,14 @@ function AuthoringWorkspacePanel({
     );
 }
 
+function SanitizedSlashDetails({ html }: { html: string }) {
+    const container = useRef<HTMLDivElement>(null);
+    useLayoutEffect(() => {
+        container.current?.replaceChildren(DOMPurify.sanitize(html, { RETURN_DOM_FRAGMENT: true }));
+    }, [html]);
+    return <div ref={container} />;
+}
+
 function MainChatMessageListWorkspacePanel({
     commands,
 }: {
@@ -2354,6 +2363,7 @@ function MainChatMessageListWorkspacePanel({
         });
     }, []);
     const slash = mainChatStoreSnapshot.slash;
+
     const shouldShowSlashAutocomplete = slash.autocompleteVisible && slash.options.length > 0;
     const shouldShowSlashDetails = slash.detailsVisible && slash.detailsHtml !== '';
     const shouldShowSlashStatus = slash.paused || slash.aborted || slash.errorLabel !== null;
@@ -2439,11 +2449,8 @@ button.menu_button {
                                             : ''}
                             </output>
                         ) : null}
-                        {/* Audited: detailsHtml is serialized DOM produced by first-party
-                            SlashCommand.renderDetails() builders (public/scripts/slash-commands.js),
-                            mirroring the legacy `.append()` path. Not raw user input. */}
                         {shouldShowSlashDetails ? (
-                            <div dangerouslySetInnerHTML={{ __html: slash.detailsHtml }} />
+                            <SanitizedSlashDetails html={slash.detailsHtml} />
                         ) : null}
                     </div>
                 </div>
@@ -3265,8 +3272,8 @@ export function mountWorldInfoPanel(container: HTMLElement) {
  * Mounts the chat composer markup into #send_form. Synchronous commit:
  * script.js binds #send_but/#send_textarea handlers immediately after.
  */
-export function mountChatComposer(container: HTMLElement) {
-    mountSmallPanel(container, <ChatComposer />);
+export function mountChatComposer(container: HTMLElement, props: ChatComposerProps) {
+    mountSmallPanel(container, <ChatComposer {...props} />);
 }
 
 /**

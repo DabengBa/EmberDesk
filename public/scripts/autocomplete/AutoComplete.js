@@ -86,9 +86,11 @@ export class AutoComplete {
      * @param {() => boolean} checkIfActivate Function should return true only if under the current conditions, autocomplete should display (e.g., for slash commands: autoComplete.text[0] == '/')
      * @param {(text: string, index: number) => Promise<AutoCompleteNameResult>} getNameAt Function should return (unfiltered, matching against input is done in AutoComplete) information about name options at index in text.
      * @param {boolean} isFloating Whether autocomplete should float at the keyboard cursor.
+     * @param {{getSnapshot:()=>{value:string, selectionStart:number, composing:boolean}, subscribe:(listener:()=>void)=>()=>void, set:(value:string, options:{selectionStart:number, selectionEnd:number})=>boolean}|null} adapter Optional state owner for the main chat composer.
      */
-    constructor(textarea, checkIfActivate, getNameAt, isFloating = false) {
+    constructor(textarea, checkIfActivate, getNameAt, isFloating = false, adapter = null) {
         this.textarea = textarea;
+        this.adapter = adapter;
         this.checkIfActivate = checkIfActivate;
         this.getNameAt = getNameAt;
         this.isFloating = isFloating;
@@ -116,13 +118,19 @@ export class AutoComplete {
         this.updateDetailsPositionDebounced = debounce(this.updateDetailsPosition.bind(this), 10);
         this.updateFloatingPositionDebounced = debounce(this.updateFloatingPosition.bind(this), 10);
 
-        textarea.addEventListener('input', () => {
-            this.selectionStart = this.textarea.selectionStart;
-            if (this.text != this.textarea.value) this.show(true, this.wasForced);
-        });
+        const onInput = () => {
+            if (this.text != this.inputValue) {
+                this.selectionStart = this.inputSelectionStart;
+                this.show(true, this.wasForced);
+            } else if (!this.adapter) {
+                this.selectionStart = this.inputSelectionStart;
+            }
+        };
+        if (adapter) adapter.subscribe(onInput);
+        else textarea.addEventListener('input', onInput);
         textarea.addEventListener('keydown', (evt) => this.handleKeyDown(evt));
         textarea.addEventListener('click', () => {
-            this.selectionStart = this.textarea.selectionStart;
+            this.selectionStart = this.inputSelectionStart;
             if (this.isActive) this.show();
         });
         textarea.addEventListener('blur', () => this.hide());
@@ -131,6 +139,9 @@ export class AutoComplete {
         }
         window.addEventListener('resize', () => this.updatePositionDebounced());
     }
+
+    get inputValue() { return this.adapter ? this.adapter.getSnapshot().value : this.textarea.value; }
+    get inputSelectionStart() { return this.adapter ? this.adapter.getSnapshot().selectionStart : this.textarea.selectionStart; }
 
     /**
      *
@@ -261,7 +272,7 @@ export class AutoComplete {
 
     basicAutoHideCheck() {
         // auto hide only if at least one char has been typed after the name + space
-        return this.textarea.selectionStart > this.parserResult.start
+        return this.inputSelectionStart > this.parserResult.start
             + this.parserResult.name.length
             + (this.startQuote ? 1 : 0)
             + (this.endQuote ? 1 : 0)
@@ -276,7 +287,9 @@ export class AutoComplete {
      */
     async show(isInput = false, isForced = false, isSelect = false) {
         //TODO check if isInput and isForced are both required
-        this.text = this.textarea.value;
+        this.text = this.inputValue;
+        const request = { text: this.text, position: this.inputSelectionStart, snapshot: this.adapter?.getSnapshot() };
+        this.completionRequest = request;
         this.isReplaceable = false;
         this.isShowForced = isForced; // Store forced state for checkIfActivate to access
 
@@ -294,7 +307,13 @@ export class AutoComplete {
 
         // request provider to get name result (potentially "incomplete", i.e. not an actual existing name) for
         // cursor position
-        this.parserResult = await this.getNameAt(this.text, this.textarea.selectionStart);
+        const parserResult = await this.getNameAt(request.text, request.position);
+        const current = this.adapter?.getSnapshot();
+        if (this.completionRequest !== request || document.activeElement !== this.textarea
+            || this.inputValue !== request.text || this.inputSelectionStart !== request.position
+            || (current && (current.contextKey !== request.snapshot.contextKey || current.revision !== request.snapshot.revision))) return;
+        this.completionSnapshot = request;
+        this.parserResult = parserResult;
         this.secondaryParserResult = null;
 
         if (!this.parserResult) {
@@ -314,13 +333,13 @@ export class AutoComplete {
         // use lowercase name for matching
         this.name = this.parserResult.name.toLowerCase() ?? '';
 
-        const isCursorInNamePart = this.textarea.selectionStart >= this.parserResult.start && this.textarea.selectionStart <= this.parserResult.start + this.parserResult.name.length + (this.startQuote ? 1 : 0);
+        const isCursorInNamePart = this.inputSelectionStart >= this.parserResult.start && this.inputSelectionStart <= this.parserResult.start + this.parserResult.name.length + (this.startQuote ? 1 : 0);
         if (isForced || isInput || isSelect) {
             // if forced (ctrl+space) or user input or just selected an option...
             if (isCursorInNamePart) {
                 // ...and cursor is somewhere in the name part (including right behind the final char)
                 // -> show autocomplete for the (partial if cursor in the middle) name
-                this.name = this.name.slice(0, this.textarea.selectionStart - (this.parserResult.start) - (this.startQuote ? 1 : 0));
+                this.name = this.name.slice(0, this.inputSelectionStart - (this.parserResult.start) - (this.startQuote ? 1 : 0));
                 this.parserResult.name = this.name;
                 this.isReplaceable = true;
                 this.isForceHidden = false;
@@ -339,7 +358,7 @@ export class AutoComplete {
             // is forced or user input or just selected autocomplete option...
             if (!isCursorInNamePart) {
                 // ...and cursor is not somwehere in the main name part -> check for secondary options (e.g., named arguments)
-                const result = this.parserResult.getSecondaryNameAt(this.text, this.textarea.selectionStart, isSelect);
+                const result = this.parserResult.getSecondaryNameAt(this.text, this.inputSelectionStart, isSelect);
                 if (result && (isForced || result.isRequired)) {
                     this.secondaryParserResult = result;
                     this.name = this.secondaryParserResult.name;
@@ -452,6 +471,8 @@ export class AutoComplete {
      * Hide autocomplete.
      */
     hide() {
+        this.completionRequest = null;
+        this.isReplaceable = false;
         this.domWrap?.remove();
         this.detailsWrap?.remove();
         this.isActive = false;
@@ -671,13 +692,13 @@ export class AutoComplete {
         this.clone.style.top = `${inputRect.top}px`;
         this.clone.style.whiteSpace = style.whiteSpace;
         this.clone.style.tabSize = style.tabSize;
-        const text = this.textarea.value;
-        const before = text.slice(0, this.textarea.selectionStart);
+        const text = this.inputValue;
+        const before = text.slice(0, this.inputSelectionStart);
         this.clone.textContent = before;
         const locator = document.createElement('span');
-        locator.textContent = text[this.textarea.selectionStart];
+        locator.textContent = text[this.inputSelectionStart];
         this.clone.append(locator);
-        this.clone.append(text.slice(this.textarea.selectionStart + 1));
+        this.clone.append(text.slice(this.inputSelectionStart + 1));
         this.clone.scrollTop = this.textarea.scrollTop;
         this.clone.scrollLeft = this.textarea.scrollLeft;
         const locatorRect = locator.getBoundingClientRect();
@@ -704,21 +725,35 @@ export class AutoComplete {
      * Select an item for autocomplete and put text into textarea.
      */
     async select() {
+        const parsed = this.completionSnapshot;
+        const current = this.adapter?.getSnapshot();
+        if (parsed && (parsed.text !== this.inputValue || parsed.position !== this.inputSelectionStart
+            || (current && (current.contextKey !== parsed.snapshot.contextKey || current.revision !== parsed.snapshot.revision)))) {
+            this.hide();
+            return;
+        }
         if (this.isReplaceable && this.selectedItem.value !== null) {
             // Apply per-option replacement offset (e.g., for closing tags that need to replace leading whitespace)
             const effectiveStart = this.effectiveParserResult.start + (this.selectedItem.replacementStartOffset ?? 0);
-            this.textarea.value = `${this.text.slice(0, effectiveStart)}${this.selectedItem.replacer}${this.text.slice(this.effectiveParserResult.start + this.effectiveParserResult.name.length + (this.startQuote ? 1 : 0) + (this.endQuote ? 1 : 0))}`;
-            this.textarea.selectionStart = effectiveStart + this.selectedItem.replacer.length;
-            this.textarea.selectionEnd = this.textarea.selectionStart;
+            const value = `${this.text.slice(0, effectiveStart)}${this.selectedItem.replacer}${this.text.slice(this.effectiveParserResult.start + this.effectiveParserResult.name.length + (this.startQuote ? 1 : 0) + (this.endQuote ? 1 : 0))}`;
+            const position = effectiveStart + this.selectedItem.replacer.length;
+            if (this.adapter) {
+                this.selectionStart = position;
+                this.adapter.set(value, { expected: current, selectionStart: position, selectionEnd: position });
+            } else {
+                this.textarea.value = value;
+                this.textarea.selectionStart = position;
+                this.textarea.selectionEnd = position;
+            }
             this.show(false, false, true);
-        } else {
+        } else if (!this.adapter) {
             const selectionStart = this.textarea.selectionStart;
             const selectionEnd = this.textarea.selectionDirection;
             this.textarea.selectionStart = selectionStart;
             this.textarea.selectionDirection = selectionEnd;
         }
         this.wasForced = false;
-        this.textarea.dispatchEvent(new Event('input', { bubbles: true }));
+        if (!this.adapter) this.textarea.dispatchEvent(new Event('input', { bubbles: true }));
         this.onSelect?.(this.selectedItem);
     }
 
@@ -762,6 +797,7 @@ export class AutoComplete {
      * @param {KeyboardEvent} evt The event.
      */
     async handleKeyDown(evt) {
+        if (evt.isComposing || evt.keyCode === 229 || this.adapter?.getSnapshot().composing) return;
         // autocomplete is shown and cursor at end of current command name (or inside name and typed or forced)
         if (this.isActive && this.isReplaceable) {
             // actions in the list
@@ -857,15 +893,15 @@ export class AutoComplete {
             return;
         }
         // await keyup to see if cursor position or text has changed
-        const oldText = this.textarea.value;
+        const oldText = this.inputValue;
         await new Promise(resolve => {
             window.addEventListener('keyup', resolve, { once: true });
         });
-        if (this.selectionStart != this.textarea.selectionStart) {
-            this.selectionStart = this.textarea.selectionStart;
-            this.show(this.isReplaceable || oldText != this.textarea.value);
+        if (this.selectionStart != this.inputSelectionStart) {
+            this.selectionStart = this.inputSelectionStart;
+            this.show(this.isReplaceable || oldText != this.inputValue);
         } else if (this.isActive) {
-            if (this.text != this.textarea.value) this.show(this.isReplaceable);
+            if (this.text != this.inputValue) this.show(this.isReplaceable);
         }
     }
 }
