@@ -786,13 +786,9 @@ describe('React workspace panels bridge helpers', () => {
         expect(scriptSource).toContain('function ensureWorldInfoReactHost()');
         expect(scriptSource).toContain('function hideLegacyWorldInfoWorkbench(hidden');
         expect(scriptSource).toContain('// Sole-owner: React host owns the workbench; legacy editor stays hidden/inert.');
-        expect(scriptSource).toContain('function getWorldInfoReactBridgeState(');
-        expect(scriptSource).toContain('globalSelectorPresent: Boolean(globalSelector)');
-        expect(scriptSource).toContain('editorSelectorPresent: Boolean(editorSelector)');
-        expect(scriptSource).toContain('selectorsSeparated: Boolean(globalSelector && editorSelector && globalSelector !== editorSelector)');
-        expect(scriptSource).toContain('importBusy: importMenuItem?.getAttribute(\'aria-disabled\') === \'true\' || importFileInput?.disabled === true');
-        expect(scriptSource).toContain('dropTargetPresent: Boolean(worldPopup)');
-        expect(scriptSource).toContain('async function mountReactWorldInfoPanel()');
+        expect(scriptSource).toContain('async function getWorldInfoReactBridgeStateAsync()');
+        expect(scriptSource).toContain('return getWorldInfoReactPanelState();');
+        expect(scriptSource).toContain('createWorldInfoMountScheduler(async () =>');
         expect(scriptSource).toContain('const result = await mountWorkspacePanelHost({');
         expect(scriptSource).toContain('kind: \'worldInfo\'');
         expect(scriptSource).toContain('getState: () => getWorldInfoReactBridgeStateAsync()');
@@ -822,11 +818,8 @@ describe('React workspace panels bridge helpers', () => {
         const worldInfoSource = read('public/scripts/world-info.js');
 
         expect(scriptSource).toContain('function getWorldInfoReactCommands()');
-        expect(scriptSource).toContain('worldNames: getWorldInfoReactWorldNames(editorSelector)');
-        expect(scriptSource).toContain('selectedWorldName: facadeSnapshot?.editorWorldName || getWorldInfoReactSelectedWorldName(editorSelector)');
-        expect(scriptSource).toContain('getWorldInfoWorkbenchFacadeSnapshot');
-        expect(scriptSource).toContain('searchQuery: worldInfoSearch?.value ?? \'\'');
-        expect(scriptSource).toContain('sortOptions: getWorldInfoReactSortOptions(worldInfoSortOrder)');
+        expect(scriptSource).toContain('getWorldInfoReactPanelState');
+        expect(scriptSource).not.toContain('getWorldInfoReactWorldNames(editorSelector)');
         expect(scriptSource).toContain('applyWorldInfoSearchQuery');
         expect(scriptSource).toContain('applyWorldInfoSortOption');
         expect(scriptSource).toContain('selectWorldInfoEditorIndex');
@@ -859,15 +852,18 @@ describe('React workspace panels bridge helpers', () => {
         expect(worldInfoSource).toContain('export async function selectWorldInfoEditorIndex(worldIndex)');
         expect(worldInfoSource).toContain('export function applyWorldInfoSearchQuery(searchQuery)');
         expect(worldInfoSource).toContain('export function applyWorldInfoSortOption(sortValue)');
-        expect(worldInfoSource).toContain('export async function createWorldInfoEntryFromEditor()');
-        expect(worldInfoSource).toContain('export async function promptToCreateWorldInfo()');
+        expect(read('public/scripts/world-info-editor-ui.js')).toContain('async function createWorldInfoEntryFromEditor()');
+        expect(worldInfoSource).toContain('export { createWorldInfoEntryFromEditor,');
+        expect(worldInfoSource).toContain('export { promptToCreateWorldInfo, exportCurrentWorldInfo, renameCurrentWorldInfo, duplicateCurrentWorldInfo, deleteCurrentWorldInfo };');
+        const bookUiSource = read('public/scripts/world-info-book-ui.js');
+        expect(bookUiSource).toContain('async function promptToCreateWorldInfo()');
         expect(worldInfoSource).toContain('export function requestWorldInfoImportSelection()');
-        expect(worldInfoSource).toContain('export async function exportCurrentWorldInfo()');
+        expect(bookUiSource).toContain('async function exportCurrentWorldInfo()');
         expect(worldInfoSource).toContain('export function refreshCurrentWorldInfoEditor()');
         expect(worldInfoSource).toContain('export async function openWorldInfoEntryByUid(uid)');
-        expect(worldInfoSource).toContain('export async function renameCurrentWorldInfo()');
-        expect(worldInfoSource).toContain('export async function duplicateCurrentWorldInfo()');
-        expect(worldInfoSource).toContain('export async function deleteCurrentWorldInfo()');
+        expect(bookUiSource).toContain('async function renameCurrentWorldInfo()');
+        expect(bookUiSource).toContain('async function duplicateCurrentWorldInfo()');
+        expect(bookUiSource).toContain('async function deleteCurrentWorldInfo()');
 
         expect(read('app/world-info-workbench.tsx')).toContain('import { useForm } from \'@tanstack/react-form\';');
         expect(read('app/world-info-workbench.tsx')).toContain('import { z } from \'zod\';');
@@ -907,13 +903,15 @@ describe('React workspace panels bridge helpers', () => {
         expect(scriptSource).toContain('bulkSetEntriesEnabled: (uids, enabled) => bulkSetWorldInfoEntriesEnabled(uids, enabled)');
         expect(scriptSource).toContain('moveOrCopyEntry: uid => promptMoveOrCopyWorldInfoEntry(uid)');
 
-        expect(worldInfoSource).toContain('export async function backfillWorldInfoMemosFromWorkbench()');
-        expect(worldInfoSource).toContain('export async function promptApplyWorldInfoCurrentSorting()');
-        expect(worldInfoSource).toContain('export async function bulkDeleteWorldInfoEntries(uids)');
-        expect(worldInfoSource).toContain('export async function bulkSetWorldInfoEntriesEnabled(uids, enabled)');
-        expect(worldInfoSource).toContain('export async function promptMoveOrCopyWorldInfoEntry(uid, sourceWorld = \'\')');
+        const editorUiSource = read('public/scripts/world-info-editor-ui.js');
+        expect(editorUiSource).toContain('async function backfillWorldInfoMemosFromWorkbench()');
+        expect(editorUiSource).toContain('async function promptApplyWorldInfoCurrentSorting()');
+        expect(editorUiSource).toContain('async function bulkDeleteWorldInfoEntries(uids)');
+        expect(editorUiSource).toContain('async function bulkSetWorldInfoEntriesEnabled(uids, enabled)');
+        expect(editorUiSource).toContain('async function promptMoveOrCopyWorldInfoEntry(uid, sourceWorld = \'\')');
+        expect(worldInfoSource).toContain('export { createWorldInfoEntryFromEditor, backfillWorldInfoMemosFromWorkbench,');
         expect(worldInfoSource).toContain('deleteOriginalDataValue: deleteWIOriginalDataValue');
-        expect(worldInfoSource).toContain('await promptMoveOrCopyWorldInfoEntry($(this).attr(\'data-uid\'), $(this).attr(\'data-current-world\'))');
+        expect(worldInfoSource).not.toContain('await promptMoveOrCopyWorldInfoEntry($(this).attr(\'data-uid\'), $(this).attr(\'data-current-world\'))');
 
         expect(serviceSource).toContain('async function backfillMemos()');
         expect(serviceSource).toContain('async function applySortingAsOrder(start)');
@@ -1107,8 +1105,8 @@ describe('React workspace panels bridge helpers', () => {
         const hostControllerSource = read('public/scripts/workspace-panel-host-controller.js');
 
         expect(worldInfoSource).toContain('export async function getWorldInfoWorkbenchFacadeSnapshot');
-        expect(worldInfoSource).toContain('getWorldInfoFilter().applyFilters(entriesArray)');
-        expect(worldInfoSource).toContain('sortWorldInfoEntries(entriesArray)');
+        expect(worldInfoSource).toContain('getWorldInfoFilter().applyFilters(entries)');
+        expect(worldInfoServiceSource).toContain('sortWorldInfoEntries(');
         // The entry-row switch remounts on disable-only payloads; other field
         // edits keep draft focus, and the scan depth input commits on blur.
         expect(scriptSource).toContain('keys.every(key => key === \'disable\')');
@@ -1119,7 +1117,7 @@ describe('React workspace panels bridge helpers', () => {
         expect(worldInfoSource).toContain('vectorized');
         expect(worldInfoServiceSource).toContain('WORLD_INFO_WORKBENCH_EDITABLE_FIELDS');
         expect(scriptSource).toContain('getWorldInfoReactBridgeStateAsync');
-        expect(scriptSource).toContain('updateEntryFields: (uid, fields) => updateWorldInfoWorkbenchEntryFields(uid, fields)');
+        expect(scriptSource).toContain('updateEntryFields: (uid, fields, worldName) => updateWorldInfoWorkbenchEntryFields(uid, fields, worldName)');
         expect(scriptSource).toContain("clearSelectedEntry: () => selectWorldInfoWorkbenchEntry('')");
         expect(scriptSource).toContain('setScanDepth: depth => updateWorldInfoScanDepth(depth)');
         expect(worldInfoSource).toContain('export function updateWorldInfoScanDepth');

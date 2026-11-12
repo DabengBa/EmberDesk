@@ -1,9 +1,9 @@
 /**
- * World Info scan service: buffer, lore loading and the
+ * World Info scan service: buffer, lore selection and the
  * checkWorldInfo evaluation engine. Framework-neutral; all shell state is
  * reached through world-info-shell-context.js and all runtime settings come
- * from world-info-state.js. No DOM or script.js imports so the module stays
- * unit-testable under node.
+ * from world-info-state.js. Documents come from the shared repository;
+ * this service neither owns an editor session nor performs persistence.
  */
 
 import {
@@ -14,7 +14,7 @@ import {
     scan_state,
     world_info_position,
     sortFn,
-    worldInfoCache,
+
     world_info,
     selected_world_info,
     world_info_depth,
@@ -24,6 +24,7 @@ import {
 import { parseRegexFromString } from './world-info-domain.js';
 import { getStringHash, escapeRegex } from './util/primitives.js';
 import { getWorldInfoShellEventSourceProperty, requireWorldInfoShellContext } from './world-info-shell-context.js';
+import { worldInfoRepository } from './world-info-repository.js';
 
 function getWorldInfoShell() {
     return requireWorldInfoShellContext();
@@ -33,9 +34,6 @@ function substituteParams(value) {
     return getWorldInfoShell().substituteParams(value);
 }
 
-function getRequestHeaders(options) {
-    return getWorldInfoShell().getRequestHeaders(options);
-}
 
 function getCurrentShellCharacterId() {
     return getWorldInfoShell().getCurrentCharacterId();
@@ -373,28 +371,7 @@ export class WorldInfoBuffer {
 
 
 export async function loadWorldInfo(name) {
-    if (!name) {
-        return;
-    }
-
-    if (worldInfoCache.has(name)) {
-        return worldInfoCache.get(name);
-    }
-
-    const response = await fetch('/api/worldinfo/get', {
-        method: 'POST',
-        headers: getRequestHeaders(),
-        body: JSON.stringify({ name: name }),
-        cache: 'no-cache',
-    });
-
-    if (response.ok) {
-        const data = await response.json();
-        worldInfoCache.set(name, data);
-        return data;
-    }
-
-    return null;
+    return worldInfoRepository.load(name);
 }
 
 async function getCharacterLore() {

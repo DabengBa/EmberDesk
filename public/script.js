@@ -43,7 +43,6 @@ import {
     selectWorldInfoWorkbenchEntry,
     openWorldInfoEditor,
     updateWorldInfoWorkbenchEntryFields,
-    getWorldInfoWorkbenchFacadeSnapshot,
     getWorldInfoReactPanelState,
     backfillWorldInfoMemosFromWorkbench,
     promptApplyWorldInfoCurrentSorting,
@@ -53,6 +52,7 @@ import {
     updateWorldInfoScanDepth,
 } from './scripts/world-info.js';
 import { openBoundWorldInfoBook } from './scripts/world-info-bound-book.js';
+import { createWorldInfoMountScheduler } from './scripts/world-info-workbench-service.js';
 import { scanImportedCharacter, showUnifiedImportConfirm, applyImportChoices, buildSkipAllChoices } from './scripts/import-confirm-dialog.js';
 
 import {
@@ -2942,116 +2942,9 @@ async function mountReactCharacterAuthoringPanel(stateOverrides = undefined) {
     return result;
 }
 
-function getWorldInfoReactWorldNames(editorSelector) {
-    if (!(editorSelector instanceof HTMLSelectElement)) {
-        return [];
-    }
-
-    return Array.from(editorSelector.options)
-        .filter(option => option.value !== '')
-        .map(option => ({
-            value: option.value,
-            label: option.textContent?.trim() || option.label || option.value,
-            selected: option.selected,
-        }));
-}
-
-function getWorldInfoReactSelectedWorldName(editorSelector) {
-    if (!(editorSelector instanceof HTMLSelectElement) || editorSelector.value === '') {
-        return '';
-    }
-
-    return editorSelector.selectedOptions[0]?.textContent?.trim() ?? '';
-}
-
-function getWorldInfoReactSortOptions(worldInfoSortOrder) {
-    if (!(worldInfoSortOrder instanceof HTMLSelectElement)) {
-        return [];
-    }
-
-    return Array.from(worldInfoSortOrder.options).map(option => ({
-        value: option.value,
-        label: option.textContent?.trim() || option.label || option.value,
-        hidden: option.hidden,
-    }));
-}
-
-function getWorldInfoReactEntrySummaries() {
-    return Array.from(document.querySelectorAll('#world_popup_entries_list .world_entry')).map((entry, index) => {
-        const titleInput = entry.querySelector('textarea[name="comment"], input[name="comment"]');
-        const title = titleInput instanceof HTMLInputElement || titleInput instanceof HTMLTextAreaElement
-            ? titleInput.value || titleInput.placeholder
-            : entry.textContent?.trim();
-
-        return {
-            uid: entry.getAttribute('uid') ?? String(index),
-            title: title?.trim() || `Entry ${index + 1}`,
-            disabled: entry.querySelector('[name="entryKillSwitch"]')?.getAttribute('aria-pressed') === 'false',
-        };
-    });
-}
-
-function getWorldInfoReactBridgeState(facadeSnapshot = null) {
-    const globalSelector = document.getElementById('world_info');
-    const editorSelector = /** @type {HTMLSelectElement|null} */ (document.getElementById('world_editor_select'));
-    const importMenuItem = document.getElementById('world_import_menu_item');
-    const importFileInput = /** @type {HTMLInputElement|null} */ (document.getElementById('world_import_file'));
-    const worldPopup = document.getElementById('world_popup');
-    const worldInfoSearch = /** @type {HTMLInputElement|null} */ (document.getElementById('world_info_search'));
-    const worldInfoSortOrder = /** @type {HTMLSelectElement|null} */ (document.getElementById('world_info_sort_order'));
-    const createEntryButton = document.getElementById('world_create_button');
-    const facadeEntrySummaries = Array.isArray(facadeSnapshot?.entrySummaries)
-        ? facadeSnapshot.entrySummaries
-        : null;
-    const entrySummaries = facadeEntrySummaries ?? getWorldInfoReactEntrySummaries();
-    const globalActiveNames = Array.isArray(facadeSnapshot?.globalActiveNames)
-        ? facadeSnapshot.globalActiveNames
-        : [];
-
-    return {
-        globalSelectorPresent: Boolean(globalSelector),
-        editorSelectorPresent: Boolean(editorSelector),
-        selectorsSeparated: Boolean(globalSelector && editorSelector && globalSelector !== editorSelector),
-        importMenuPresent: Boolean(importMenuItem),
-        importBusy: importMenuItem?.getAttribute('aria-disabled') === 'true' || importFileInput?.disabled === true,
-        dropTargetPresent: Boolean(worldPopup),
-        worldNames: getWorldInfoReactWorldNames(editorSelector),
-        // The session snapshot is canonical; the hidden select is only a mirror.
-        selectedWorldName: facadeSnapshot?.editorWorldName || getWorldInfoReactSelectedWorldName(editorSelector) || '',
-        selectedWorldIndex: editorSelector?.value ?? '',
-        entryCount: facadeSnapshot?.entryCount ?? entrySummaries.length,
-        entrySummaries,
-        searchQuery: worldInfoSearch?.value ?? '',
-        sortValue: worldInfoSortOrder?.value ?? '',
-        sortOptions: getWorldInfoReactSortOptions(worldInfoSortOrder),
-        canCreateEntry: createEntryButton?.getAttribute('aria-disabled') !== 'true',
-        exportMenuPresent: Boolean(document.getElementById('world_export_menu_item')),
-        createWorldMenuPresent: Boolean(document.getElementById('world_create_world')),
-        refreshMenuPresent: Boolean(document.getElementById('world_refresh')),
-        globalActiveNames,
-        globalActiveCount: facadeSnapshot?.globalActiveCount ?? globalActiveNames.length,
-        selectedEntryUid: facadeSnapshot?.selectedEntryUid ?? '',
-        selectedEntry: facadeSnapshot?.selectedEntry ?? null,
-        hasEditorWorld: facadeSnapshot?.hasEditorWorld ?? Boolean(editorSelector?.value),
-        renameMenuPresent: Boolean(document.getElementById('world_rename_menu_item')),
-        duplicateMenuPresent: Boolean(document.getElementById('world_duplicate_menu_item')),
-        deleteMenuPresent: Boolean(document.getElementById('world_delete_menu_item')),
-    };
-}
-
 async function getWorldInfoReactBridgeStateAsync() {
-    try {
-        if (typeof getWorldInfoReactPanelState === 'function') {
-            return await getWorldInfoReactPanelState();
-        }
-        const facadeSnapshot = await getWorldInfoWorkbenchFacadeSnapshot();
-        return getWorldInfoReactBridgeState(facadeSnapshot);
-    } catch (error) {
-        console.warn('World Info workbench service state failed; using DOM fallback.', error);
-        return getWorldInfoReactBridgeState(null);
-    }
+    return getWorldInfoReactPanelState();
 }
-
 function getWorldInfoReactCommands() {
     return createWorkspacePanelCommandPort({
         commands: {
@@ -3068,7 +2961,7 @@ function getWorldInfoReactCommands() {
             deleteWorld: () => deleteCurrentWorldInfo(),
             refreshWorld: () => refreshCurrentWorldInfoEditor(),
             openEntry: uid => selectWorldInfoWorkbenchEntry(uid),
-            updateEntryFields: (uid, fields) => updateWorldInfoWorkbenchEntryFields(uid, fields),
+            updateEntryFields: (uid, fields, worldName) => updateWorldInfoWorkbenchEntryFields(uid, fields, worldName),
             clearSelectedEntry: () => selectWorldInfoWorkbenchEntry(''),
             setScanDepth: depth => updateWorldInfoScanDepth(depth),
             backfillMemos: () => backfillWorldInfoMemosFromWorkbench(),
@@ -3095,7 +2988,7 @@ function getWorldInfoReactCommands() {
     });
 }
 
-async function mountReactWorldInfoPanel() {
+const mountReactWorldInfoPanel = createWorldInfoMountScheduler(async () => {
     const result = await mountWorkspacePanelHost({
         kind: 'worldInfo',
         ensureContainer: ensureWorldInfoReactHost,
@@ -3112,7 +3005,7 @@ async function mountReactWorldInfoPanel() {
     // Sole-owner: React host owns the workbench; legacy editor stays hidden/inert.
     hideLegacyWorldInfoWorkbench(true);
     return result;
-}
+});
 
 function ensureMainChatMessageListReactHost() {
     const chatContainer = document.getElementById('chat');

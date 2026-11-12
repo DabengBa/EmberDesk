@@ -17,6 +17,13 @@ import { SegmentedControl } from '@/components/fields/SegmentedControl';
 import { FieldSelect, FieldTextArea, FieldTextInput } from '@/components/fields/FieldInputs';
 import type { WorldInfoCommands } from './compat/workspace-commands';
 import { translate, useTranslated } from './compat/i18n.js';
+import { customTokenizer } from '../public/scripts/world-info-keywords.js';
+
+function splitKeywordInput(input: string): string[] {
+    const tokens: string[] = [];
+    const { term } = customTokenizer({ _type: 'custom_call', term: input }, undefined, item => tokens.push(item.text));
+    return [...tokens, term];
+}
 
 function parseFiniteNumber(value: string): number | undefined {
     if (value.trim() === '') {
@@ -198,6 +205,7 @@ function KeywordField({
                 inputAriaLabel={translate('${0} (press Enter or comma to add)').replace('${0}', label)}
                 removeAriaLabel={keyword => translate('Remove keyword ${0}').replace('${0}', keyword)}
                 inputProps={{ 'data-world-info-react-field': field }}
+                splitInput={splitKeywordInput}
                 onCommit={onCommit}
             />
         </div>
@@ -383,11 +391,13 @@ function EntryRowContent({
 
 function EntryEditor({
     entry,
+    worldName,
     commands,
     onBack,
     emptyMessage = translate('Select an entry to start editing'),
 }: {
     entry: WorldInfoWorkbenchEntryDetail | null;
+    worldName: string;
     commands: WorldInfoCommands;
     onBack?: () => void;
     emptyMessage?: string;
@@ -439,7 +449,7 @@ function EntryEditor({
         pendingFieldsRef.current = { ...pendingFieldsRef.current, ...fields };
         const seq = ++saveSeqRef.current;
         setSaveState('saving');
-        Promise.resolve(commands.updateEntryFields(entry.uid, { ...pendingFieldsRef.current }))
+        Promise.resolve(commands.updateEntryFields(entry.uid, { ...pendingFieldsRef.current }, worldName))
             .then(result => {
                 if (seq === saveSeqRef.current) {
                     if (result !== false) {
@@ -860,7 +870,7 @@ export function WorldInfoWorkbenchPanel({
     const toggleEntryEnabled = (uid: string, enabled: boolean) => {
         setEnabledOverrides(current => new Map(current).set(uid, enabled));
         worldInfoCommandMutation.mutate(
-            () => commands.updateEntryFields(uid, { disable: !enabled }),
+            () => commands.updateEntryFields(uid, { disable: !enabled }, selectedWorldName),
             {
                 onError: () => setEnabledOverrides(current => {
                     if (!current.has(uid)) {
@@ -1320,7 +1330,9 @@ export function WorldInfoWorkbenchPanel({
                         data-world-info-react-editor-visible={showEditorPane || undefined}
                     >
                         <EntryEditor
+                            key={JSON.stringify([selectedWorldName, bridgeState.selectedEntry?.uid ?? ''])}
                             entry={bridgeState.selectedEntry ?? null}
+                            worldName={selectedWorldName}
                             commands={commands}
                             onBack={isNarrow && mobileView === 'editor' ? backToList : undefined}
                             emptyMessage={selectedWorldName ? translate('Select an entry to start editing') : translate('Select or create a world book first')}
