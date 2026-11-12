@@ -1,7 +1,11 @@
-import { describe, expect, test } from '@jest/globals';
+import { describe, expect, jest, test } from '@jest/globals';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+jest.unstable_mockModule('../public/scripts/i18n.js', () => ({
+    translate: text => text === 'World book' ? '世界书' : text,
+}));
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -12,6 +16,19 @@ function read(relativePath) {
 }
 
 describe('world info domain and workbench services', () => {
+    test.each([
+        ['alpha,/beta/gi,gamma', ['alpha', '/beta/gi'], 'gamma'],
+        ['alpha,/beta,gamma/gi,delta', ['alpha', '/beta,gamma/gi'], 'delta'],
+        ['/alpha/gi,/beta/gi,', ['/alpha/gi', '/beta/gi'], ''],
+    ])('keyword tokenizer rescans the first character after a separator: %s', async (input, expected, pending) => {
+        const { customTokenizer, splitKeywordsAndRegexes } = await import('../public/scripts/world-info-keywords.js');
+        const tokens = [];
+        const result = customTokenizer({ _type: 'custom_call', term: input }, undefined, item => tokens.push(item.text));
+        expect(tokens).toEqual(expected);
+        expect(result.term).toBe(pending);
+        expect(splitKeywordsAndRegexes(input)).toEqual([...expected, ...(pending ? [pending] : [])]);
+    });
+
     test('domain module owns pure entry projection helpers without DOM access', async () => {
         const domain = await import(`../public/scripts/world-info-domain.js?t=${Date.now()}`);
 
@@ -279,16 +296,18 @@ describe('world info domain and workbench services', () => {
         expect(source).toContain('createWorldInfoWorkbenchSession');
         expect(source).toContain('getWorldInfoReactPanelState');
         // Session is the mutable workbench state owner used by facade APIs.
-        expect(source).toContain('function getWorldInfoWorkbenchSession()');
+        expect(source).toContain('createWorldInfoEditorComposition({');
         expect(source).toContain("initialSortValue: String(accountStorage.getItem(SORT_ORDER_KEY) || '0')");
-        expect(source).toContain('applyFilters: (entries) => getWorldInfoFilter().applyFilters(entries)');
-        expect(source).toContain('getSearchScore: (uid) => getWorldInfoFilter().getScore(FILTER_TYPES.WORLD_INFO_SEARCH, uid)');
+        expect(source).toContain('applyFilters: entries => getWorldInfoFilter().applyFilters(entries)');
+        expect(source).toContain('getSearchScore: uid => getWorldInfoFilter().getScore(FILTER_TYPES.WORLD_INFO_SEARCH, uid)');
         expect(source).toContain('export function setWorldInfoGlobalActiveNames(names)');
-        expect(source).toContain('await saveWorldInfo(worldName, data, true);');
-        expect(source).toContain('await session.selectEntry(entry.uid);');
+        const editorUi = read('public/scripts/world-info-editor-ui.js');
+        expect(editorUi).toContain('worldInfoRepository.mutate(worldName, async save =>');
+        expect(editorUi).toContain('await save(data);');
+        expect(editorUi).toContain('await session.selectEntry(entry.uid);');
         expect(source).toContain('session.getFacadeSnapshot()');
         // Shell context remains the only shell dependency seam (no script.js import).
-        expect(source).toContain("from './world-info-shell-context.js'");
+        expect(source).toContain("from './world-info-shell-adapter.js'");
         expect(source).not.toContain("from '../script.js'");
     });
 

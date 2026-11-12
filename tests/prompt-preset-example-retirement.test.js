@@ -33,7 +33,7 @@ describe('retired example-dialogue preset data', () => {
         const cache = [JSON.stringify({ prompts: [{ identifier: 'dialogueExamples' }, custom] })];
         new Function('openai_settings', 'migrateChatCompletionSettings', loadCache)(cache, normalize);
         expect(cache[0].prompts).toEqual([custom]);
-        expect(openai).toMatch(/migrateChatCompletionSettings\(presetBody\);\s+const savePresetSettings = await fetch/);
+        expect(openai).toMatch(/migrateChatCompletionSettings\(presetBody\);[\s\S]*?service\.save\(name, presetBody/);
     });
 
     test('settings saves discard the retired template without changing the new-chat template', () => {

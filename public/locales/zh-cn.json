@@ -1530,6 +1530,8 @@
     "Enter a new name:": "输入新名称:",
     "Enter a script name.": "请输入脚本名称。",
     "Enter a valid API URL": "输入一个有效的 API URL",
+    "Enter a valid HTTP or HTTPS endpoint URL.": "请输入有效的 HTTP 或 HTTPS 接口地址。",
+    "Enter a valid number within the allowed range and step.": "请输入符合范围和步长要求的有效数值。",
     "Enter a valid regular expression.": "请输入有效的正则表达式。",
     "Enter a video URL to download its transcript.": "输入视频 URL 或 ID 即可下载其字幕。",
     "Enter an API key before saving.": "请输入 API key 后再保存。",

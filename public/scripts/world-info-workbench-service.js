@@ -15,6 +15,16 @@ import {
 
 const WORKBENCH_COMMENT_MAX_LENGTH = 100;
 
+/** Serialize asynchronous World Info mounts so an older snapshot cannot mount last. */
+export function createWorldInfoMountScheduler(mount) {
+    let pending = Promise.resolve();
+    return (...args) => {
+        const result = pending.then(() => mount(...args));
+        pending = result.catch(() => {});
+        return result;
+    };
+}
+
 /** Default sort options for the React workbench (parity with legacy select). */
 export const WORLD_INFO_DEFAULT_SORT_OPTIONS = [
     { value: '14', label: 'Search', hidden: true, sortRule: 'search' },
@@ -144,6 +154,9 @@ export function createWorldInfoWorkbenchSession(deps) {
     let selectedWorldName = '';
     /** @type {string} */
     let selectedEntryUid = '';
+    // Invalidates in-flight selection and snapshots without creating another
+    // source of selection state.
+    let selectionRevision = 0;
     /** @type {string} */
     let searchQuery = typeof deps.initialSearchQuery === 'string' ? deps.initialSearchQuery : '';
     /** @type {string} */
@@ -157,9 +170,15 @@ export function createWorldInfoWorkbenchSession(deps) {
         return selectedEntryUid;
     }
 
+    function captureSelectionGuard() {
+        const revision = selectionRevision;
+        return () => revision === selectionRevision;
+    }
+
     function setWorldNames(nextNames) {
         worldNames = Array.isArray(nextNames) ? [...nextNames] : [];
         if (selectedWorldName && !worldNames.includes(selectedWorldName)) {
+            selectionRevision++;
             selectedWorldName = '';
             selectedEntryUid = '';
         }
@@ -175,6 +194,7 @@ export function createWorldInfoWorkbenchSession(deps) {
     async function selectWorldIndex(worldIndex) {
         const selectedValue = String(worldIndex ?? '');
         if (selectedValue === '') {
+            selectionRevision++;
             selectedWorldName = '';
             selectedEntryUid = '';
             searchQuery = '';
@@ -188,6 +208,7 @@ export function createWorldInfoWorkbenchSession(deps) {
         const worldName = worldNames.includes(selectedValue) ? selectedValue : indexedName;
 
         if (!worldName) {
+            selectionRevision++;
             selectedWorldName = '';
             selectedEntryUid = '';
             searchQuery = '';
@@ -198,6 +219,7 @@ export function createWorldInfoWorkbenchSession(deps) {
             return;
         }
 
+        selectionRevision++;
         selectedWorldName = worldName;
         selectedEntryUid = '';
         // Preserve legacy editor semantics: selecting another book starts with
@@ -214,6 +236,7 @@ export function createWorldInfoWorkbenchSession(deps) {
     async function selectWorldName(worldName) {
         const name = String(worldName ?? '');
         if (!name || !worldNames.includes(name)) {
+            selectionRevision++;
             selectedWorldName = '';
             selectedEntryUid = '';
             return false;
@@ -223,6 +246,7 @@ export function createWorldInfoWorkbenchSession(deps) {
         if (name === selectedWorldName) {
             return true;
         }
+        selectionRevision++;
         selectedWorldName = name;
         selectedEntryUid = '';
         await deps.loadWorldInfo(name);
@@ -233,13 +257,18 @@ export function createWorldInfoWorkbenchSession(deps) {
      * @param {string|number} uid
      */
     async function selectEntry(uid) {
+        const revision = ++selectionRevision;
+        const worldName = selectedWorldName;
         const normalizedUid = String(uid ?? '');
-        if (!normalizedUid || !selectedWorldName) {
+        if (!normalizedUid || !worldName) {
             selectedEntryUid = '';
             return false;
         }
 
-        const data = await deps.loadWorldInfo(selectedWorldName);
+        const data = await deps.loadWorldInfo(worldName);
+        if (revision !== selectionRevision) {
+            return false;
+        }
         if (!data?.entries) {
             selectedEntryUid = '';
             return false;
@@ -289,11 +318,13 @@ export function createWorldInfoWorkbenchSession(deps) {
     }
 
     function applySearchQuery(nextQuery) {
+        selectionRevision++;
         searchQuery = String(nextQuery ?? '');
         return searchQuery;
     }
 
     function applySortOption(nextSortValue) {
+        selectionRevision++;
         sortValue = String(nextSortValue ?? '0');
         return sortValue;
     }
@@ -347,10 +378,13 @@ export function createWorldInfoWorkbenchSession(deps) {
     /**
      * @param {string|number} uid
      * @param {Record<string, unknown>} fields
+     * @param {string} [sourceWorldName] book captured by the caller
      * @returns {Promise<boolean>}
      */
-    async function updateEntryFields(uid, fields = {}) {
-        if (!selectedWorldName || !fields || typeof fields !== 'object') {
+    async function updateEntryFields(uid, fields = {}, sourceWorldName = selectedWorldName) {
+        const worldName = String(sourceWorldName ?? '');
+        const revision = selectionRevision;
+        if (!worldName || worldName !== selectedWorldName || !fields || typeof fields !== 'object') {
             return false;
         }
 
@@ -358,53 +392,64 @@ export function createWorldInfoWorkbenchSession(deps) {
             throw new Error('updateEntryFields requires saveWorldInfo');
         }
 
-        const data = await deps.loadWorldInfo(selectedWorldName);
-        if (!data?.entries) {
-            return false;
-        }
-
-        const normalizedUid = String(uid ?? '');
-        const entry = data.entries[normalizedUid] ?? data.entries[Number(normalizedUid)];
-        if (!entry) {
-            return false;
-        }
-
-        let changed = false;
-        for (const [field, rawValue] of Object.entries(fields)) {
-            if (!WORLD_INFO_WORKBENCH_EDITABLE_FIELDS.has(field)) {
-                continue;
+        // Keep the complete read/modify/write operation in one callback so a
+        // repository can serialize it before reading (U002).
+        const capturedFields = structuredClone(fields);
+        const capturedUid = String(uid ?? '');
+        const mutate = async (save = data => deps.saveWorldInfo(worldName, data, true)) => {
+            const data = await deps.loadWorldInfo(worldName);
+            if (!data?.entries) {
+                return false;
             }
-            const value = field === 'position' ? normalizeWorldInfoEntryPosition(rawValue) : rawValue;
-            entry[field] = value;
-            if (field === 'position' && value !== WORLD_INFO_POSITION.atDepth) {
-                entry.role = null;
+
+            const normalizedUid = capturedUid;
+            const entry = data.entries[normalizedUid] ?? data.entries[Number(normalizedUid)];
+            if (!entry) {
+                return false;
             }
-            if (typeof deps.setOriginalDataValue === 'function') {
-                deps.setOriginalDataValue(data, entry.uid, field, value);
-                if (field === 'key') {
-                    deps.setOriginalDataValue(data, entry.uid, 'keyprimary', value);
+
+            let changed = false;
+            for (const [field, rawValue] of Object.entries(capturedFields)) {
+                if (!WORLD_INFO_WORKBENCH_EDITABLE_FIELDS.has(field)) {
+                    continue;
                 }
-                if (field === 'position') {
-                    deps.setOriginalDataValue(
-                        data,
-                        entry.uid,
-                        'position',
-                        value == WORLD_INFO_POSITION.before ? 'before_char' : 'after_char',
-                    );
-                    deps.setOriginalDataValue(data, entry.uid, 'extensions.position', value);
-                    deps.setOriginalDataValue(data, entry.uid, 'extensions.role', entry.role);
+                const value = field === 'position' ? normalizeWorldInfoEntryPosition(rawValue) : rawValue;
+                entry[field] = value;
+                if (field === 'position' && value !== WORLD_INFO_POSITION.atDepth) {
+                    entry.role = null;
                 }
+                if (typeof deps.setOriginalDataValue === 'function') {
+                    deps.setOriginalDataValue(data, entry.uid, field, value);
+                    if (field === 'key') {
+                        deps.setOriginalDataValue(data, entry.uid, 'keyprimary', value);
+                    }
+                    if (field === 'position') {
+                        deps.setOriginalDataValue(
+                            data,
+                            entry.uid,
+                            'position',
+                            value == WORLD_INFO_POSITION.before ? 'before_char' : 'after_char',
+                        );
+                        deps.setOriginalDataValue(data, entry.uid, 'extensions.position', value);
+                        deps.setOriginalDataValue(data, entry.uid, 'extensions.role', entry.role);
+                    }
+                }
+                changed = true;
             }
-            changed = true;
-        }
 
-        if (!changed) {
-            return false;
-        }
+            if (!changed) {
+                return false;
+            }
 
-        selectedEntryUid = String(entry.uid);
-        await deps.saveWorldInfo(selectedWorldName, data, true);
-        return true;
+            await save(data);
+            if (revision === selectionRevision) {
+                selectedEntryUid = String(entry.uid);
+            }
+            return true;
+        };
+        return typeof deps.runWorldInfoMutation === 'function'
+            ? deps.runWorldInfoMutation(worldName, mutate)
+            : mutate();
     }
 
     /**
@@ -412,30 +457,34 @@ export function createWorldInfoWorkbenchSession(deps) {
      * @returns {Promise<number>} count of updated entries
      */
     async function backfillMemos() {
-        if (!selectedWorldName) {
+        const worldName = selectedWorldName;
+        if (!worldName) {
             return 0;
         }
 
-        const data = await deps.loadWorldInfo(selectedWorldName);
-        if (!data?.entries) {
-            return 0;
-        }
-
-        let counter = 0;
-        for (const entry of Object.values(data.entries)) {
-            if (!entry.comment && Array.isArray(entry.key) && entry.key.length > 0) {
-                entry.comment = entry.key.join(', ').slice(0, WORKBENCH_COMMENT_MAX_LENGTH);
-                if (typeof deps.setOriginalDataValue === 'function') {
-                    deps.setOriginalDataValue(data, entry.uid, 'comment', entry.comment);
-                }
-                counter++;
+        const mutate = async (save = data => deps.saveWorldInfo(worldName, data, true)) => {
+            const data = await deps.loadWorldInfo(worldName);
+            if (!data?.entries) {
+                return 0;
             }
-        }
 
-        if (counter > 0) {
-            await deps.saveWorldInfo(selectedWorldName, data);
-        }
-        return counter;
+            let counter = 0;
+            for (const entry of Object.values(data.entries)) {
+                if (!entry.comment && Array.isArray(entry.key) && entry.key.length > 0) {
+                    entry.comment = entry.key.join(', ').slice(0, WORKBENCH_COMMENT_MAX_LENGTH);
+                    if (typeof deps.setOriginalDataValue === 'function') {
+                        deps.setOriginalDataValue(data, entry.uid, 'comment', entry.comment);
+                    }
+                    counter++;
+                }
+            }
+
+            if (counter > 0) {
+                await save(data);
+            }
+            return counter;
+        };
+        return typeof deps.runWorldInfoMutation === 'function' ? deps.runWorldInfoMutation(worldName, mutate) : mutate();
     }
 
     /**
@@ -445,39 +494,44 @@ export function createWorldInfoWorkbenchSession(deps) {
      * @returns {Promise<number>} count of updated entries
      */
     async function applySortingAsOrder(start) {
-        if (!selectedWorldName) {
+        const worldName = selectedWorldName;
+        if (!worldName) {
             return 0;
         }
 
-        const data = await deps.loadWorldInfo(selectedWorldName);
-        if (!data?.entries) {
-            return 0;
-        }
-
-        const entries = Object.values(data.entries);
-        sortWorldInfoEntries(entries, {
-            customSort: resolveSortOption(),
-            getSearchScore: typeof deps.getSearchScore === 'function' ? deps.getSearchScore : null,
-        });
-
-        let updated = 0;
-        let current = start;
-        for (const entry of entries) {
-            const newOrder = Math.max(current--, 0);
-            if (entry.order === newOrder) {
-                continue;
+        const sortOption = resolveSortOption();
+        const mutate = async (save = data => deps.saveWorldInfo(worldName, data, true)) => {
+            const data = await deps.loadWorldInfo(worldName);
+            if (!data?.entries) {
+                return 0;
             }
-            entry.order = newOrder;
-            if (typeof deps.setOriginalDataValue === 'function') {
-                deps.setOriginalDataValue(data, entry.uid, 'order', newOrder);
-            }
-            updated++;
-        }
 
-        if (updated > 0) {
-            await deps.saveWorldInfo(selectedWorldName, data, true);
-        }
-        return updated;
+            const entries = Object.values(data.entries);
+            sortWorldInfoEntries(entries, {
+                customSort: sortOption,
+                getSearchScore: typeof deps.getSearchScore === 'function' ? deps.getSearchScore : null,
+            });
+
+            let updated = 0;
+            let current = start;
+            for (const entry of entries) {
+                const newOrder = Math.max(current--, 0);
+                if (entry.order === newOrder) {
+                    continue;
+                }
+                entry.order = newOrder;
+                if (typeof deps.setOriginalDataValue === 'function') {
+                    deps.setOriginalDataValue(data, entry.uid, 'order', newOrder);
+                }
+                updated++;
+            }
+
+            if (updated > 0) {
+                await save(data);
+            }
+            return updated;
+        };
+        return typeof deps.runWorldInfoMutation === 'function' ? deps.runWorldInfoMutation(worldName, mutate) : mutate();
     }
 
     /**
@@ -486,35 +540,41 @@ export function createWorldInfoWorkbenchSession(deps) {
      * @returns {Promise<number>} count of deleted entries
      */
     async function deleteEntries(uids) {
-        if (!selectedWorldName || !Array.isArray(uids) || uids.length === 0) {
+        const worldName = selectedWorldName;
+        const revision = selectionRevision;
+        if (!worldName || !Array.isArray(uids) || uids.length === 0) {
             return 0;
         }
 
-        const data = await deps.loadWorldInfo(selectedWorldName);
-        if (!data?.entries) {
-            return 0;
-        }
+        uids = [...uids];
+        const mutate = async (save = data => deps.saveWorldInfo(worldName, data, true)) => {
+            const data = await deps.loadWorldInfo(worldName);
+            if (!data?.entries) {
+                return 0;
+            }
 
-        let deleted = 0;
-        for (const uid of uids) {
-            const key = data.entries[String(uid)] !== undefined ? String(uid) : String(Number(uid));
-            if (data.entries[key] === undefined) {
-                continue;
+            let deleted = 0;
+            for (const uid of uids) {
+                const key = data.entries[String(uid)] !== undefined ? String(uid) : String(Number(uid));
+                if (data.entries[key] === undefined) {
+                    continue;
+                }
+                delete data.entries[key];
+                if (typeof deps.deleteOriginalDataValue === 'function') {
+                    deps.deleteOriginalDataValue(data, uid);
+                }
+                deleted++;
             }
-            delete data.entries[key];
-            if (typeof deps.deleteOriginalDataValue === 'function') {
-                deps.deleteOriginalDataValue(data, uid);
-            }
-            deleted++;
-        }
 
-        if (deleted > 0) {
-            if (uids.map(String).includes(selectedEntryUid)) {
-                selectedEntryUid = '';
+            if (deleted > 0) {
+                await save(data);
+                if (revision === selectionRevision && uids.map(String).includes(selectedEntryUid)) {
+                    selectedEntryUid = '';
+                }
             }
-            await deps.saveWorldInfo(selectedWorldName, data, true);
-        }
-        return deleted;
+            return deleted;
+        };
+        return typeof deps.runWorldInfoMutation === 'function' ? deps.runWorldInfoMutation(worldName, mutate) : mutate();
     }
 
     /**
@@ -524,42 +584,51 @@ export function createWorldInfoWorkbenchSession(deps) {
      * @returns {Promise<number>} count of updated entries
      */
     async function setEntriesEnabled(uids, enabled) {
-        if (!selectedWorldName || !Array.isArray(uids) || uids.length === 0) {
+        const worldName = selectedWorldName;
+        if (!worldName || !Array.isArray(uids) || uids.length === 0) {
             return 0;
         }
 
-        const data = await deps.loadWorldInfo(selectedWorldName);
-        if (!data?.entries) {
-            return 0;
-        }
+        uids = [...uids];
+        const mutate = async (save = data => deps.saveWorldInfo(worldName, data, true)) => {
+            const data = await deps.loadWorldInfo(worldName);
+            if (!data?.entries) {
+                return 0;
+            }
 
-        let updated = 0;
-        for (const uid of uids) {
-            const key = data.entries[String(uid)] !== undefined ? String(uid) : String(Number(uid));
-            const entry = data.entries[key];
-            if (!entry) {
-                continue;
+            let updated = 0;
+            for (const uid of uids) {
+                const key = data.entries[String(uid)] !== undefined ? String(uid) : String(Number(uid));
+                const entry = data.entries[key];
+                if (!entry) {
+                    continue;
+                }
+                const nextDisable = !enabled;
+                if (entry.disable === nextDisable) {
+                    continue;
+                }
+                entry.disable = nextDisable;
+                if (typeof deps.setOriginalDataValue === 'function') {
+                    deps.setOriginalDataValue(data, entry.uid, 'disable', nextDisable);
+                }
+                updated++;
             }
-            const nextDisable = !enabled;
-            if (entry.disable === nextDisable) {
-                continue;
-            }
-            entry.disable = nextDisable;
-            if (typeof deps.setOriginalDataValue === 'function') {
-                deps.setOriginalDataValue(data, entry.uid, 'disable', nextDisable);
-            }
-            updated++;
-        }
 
-        if (updated > 0) {
-            await deps.saveWorldInfo(selectedWorldName, data, true);
-        }
-        return updated;
+            if (updated > 0) {
+                await save(data);
+            }
+            return updated;
+        };
+        return typeof deps.runWorldInfoMutation === 'function' ? deps.runWorldInfoMutation(worldName, mutate) : mutate();
     }
 
     async function getFacadeSnapshot() {
+        const revision = selectionRevision;
         const editorWorldName = selectedWorldName;
         const entrySummaries = await getEntrySummaries();
+        if (revision !== selectionRevision) {
+            return getFacadeSnapshot();
+        }
         let nextSelectedUid = selectedEntryUid;
 
         if (nextSelectedUid && !entrySummaries.some(entry => entry.uid === nextSelectedUid)) {
@@ -570,6 +639,10 @@ export function createWorldInfoWorkbenchSession(deps) {
         const selectedEntry = nextSelectedUid
             ? await getSelectedEntryDetail(nextSelectedUid)
             : null;
+
+        if (revision !== selectionRevision) {
+            return getFacadeSnapshot();
+        }
 
         return {
             globalActiveNames: [...selectedWorldInfo],
@@ -595,6 +668,7 @@ export function createWorldInfoWorkbenchSession(deps) {
 
     return {
         getSelectedWorldName,
+        captureSelectionGuard,
         getSelectedEntryUid,
         getSearchQuery,
         getSortValue,

@@ -1,3 +1,5 @@
+import type { ProviderConnectionInput, ProviderConnectionResult } from '@/lib/provider-connection-service';
+
 export interface RuntimeChatSnapshot {
     readonly id: string | null;
     readonly characterId: string | null;
@@ -27,12 +29,13 @@ export interface RuntimeCommands {
     stopGeneration(): void;
     loadEarlier(anchorId?: string): Promise<void>;
     saveSettings(settings: SettingsDocument): Promise<void>;
-    connectProvider(): Promise<void>;
-    testProviderConnection(): Promise<void>;
+    connectProvider(input: ProviderConnectionInput): Promise<ProviderConnectionResult>;
+    testProviderConnection(input: ProviderConnectionInput): Promise<ProviderConnectionResult>;
 }
 
 export interface RuntimePort {
     getSnapshot(): RuntimeSnapshot;
+    getChatCompletionSettings(): SettingsDocument;
     subscribe(listener: () => void): () => void;
     commands: RuntimeCommands;
 }
