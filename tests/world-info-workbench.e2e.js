@@ -87,6 +87,11 @@ test.describe('world info workbench', () => {
         expect((await failed).status()).toBe(503);
         await expect(page.locator('#toast-container .toast-error')).toContainText('新世界书已保存，但无法删除原世界书。');
         await expect(worldSelect.locator('option[value="Dev World 12"]')).toHaveCount(1);
+        await page.reload();
+        await testSetup.awaitST({ page });
+        await openWorldInfo(page);
+        await expect(worldSelect.locator('option[value="Dev World 12"]')).toHaveCount(1);
+        await expect(worldSelect.locator('option[value="Rename failure example"]')).toHaveCount(1);
     });
 
     test('failed book deletion leaves the selected book available', async ({ page }) => {

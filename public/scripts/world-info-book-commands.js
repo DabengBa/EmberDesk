@@ -18,7 +18,8 @@ export function createWorldInfoBookCommands({ POPUP_TYPE, showLocalDialog, t, eq
 
         const entryPreviouslySelected = selected_world_info.findIndex((e) => e === oldName);
 
-        await saveWorldInfo(newName, data, true);
+        const renamedData = 'name' in data ? { ...data, name: newName } : data;
+        await saveWorldInfo(newName, renamedData, true);
         let deleted = false;
         try {
             deleted = await deleteWorldInfo(oldName);

@@ -85,6 +85,8 @@ test.each(['http', 'network'])('rename reports the saved copy and keeps referenc
         saveWorldInfo: jest.fn(), getRequestHeaders: () => ({}), flushDeletedWorldsFromUI: jest.fn(),
         characters: [], saveSettingsDebounced,
     });
+
+
     try {
         setWorldNames(['A']);
         setWorldInfo(settings);
@@ -97,5 +99,32 @@ test.each(['http', 'network'])('rename reports the saved copy and keeps referenc
         globalThis.toastr = originalToastr;
         setWorldNames([]);
         setWorldInfo({});
+    }
+});
+
+test('renaming a named book saves the new identity without mutating the original data', async () => {
+    const { createWorldInfoBookCommands } = await import('../public/scripts/world-info-book-commands.js');
+    const { setWorldNames } = await import('../public/scripts/world-info-state.js');
+    const previousFetch = globalThis.fetch;
+    const previousToastr = globalThis.toastr;
+    const saveWorldInfo = jest.fn();
+    globalThis.fetch = jest.fn().mockResolvedValue({ ok: false });
+    globalThis.toastr = { error: jest.fn() };
+    const commands = createWorldInfoBookCommands({
+        t: (strings, ...values) => strings.reduce((text, part, index) => text + part + (values[index] ?? ''), ''),
+        showLocalDialog: async () => ({ action: 'rename', values: { name: 'B' } }),
+        equalsIgnoreCaseAndAccents: (left, right) => left === right,
+        saveWorldInfo, getRequestHeaders: () => ({}),
+    });
+    const original = { name: 'A', entries: {} };
+    try {
+        setWorldNames(['A']);
+        expect(await commands.renameWorldInfo('A', original)).toBe(false);
+        expect(saveWorldInfo).toHaveBeenCalledWith('B', { name: 'B', entries: {} }, true);
+        expect(original.name).toBe('A');
+    } finally {
+        globalThis.fetch = previousFetch;
+        globalThis.toastr = previousToastr;
+        setWorldNames([]);
     }
 });

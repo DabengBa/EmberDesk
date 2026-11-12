@@ -11,7 +11,7 @@ import { ARGUMENT_TYPE, SlashCommandArgument, SlashCommandNamedArgument } from '
 import { SlashCommandEnumValue, enumTypes } from './slash-commands/SlashCommandEnumValue.js';
 import { commonEnumProviders, enumIcons } from './slash-commands/SlashCommandCommonEnumsProvider.js';
 import { SlashCommandClosure } from './slash-commands/SlashCommandClosure.js';
-import { callGenericPopup, Popup, POPUP_RESULT, POPUP_TYPE } from './popup.js';
+import { callGenericPopup, Popup, POPUP_TYPE } from './popup.js';
 import { loadWorkspacePanelsModule } from './workspace-panels-react-bridge.js';
 import { renderTemplateAsync } from './templates.js';
 import { t, translate } from './i18n.js';

@@ -13,7 +13,7 @@ function nextTicket() {
 
 /** Cancel pending and mounted requests, optionally only for one panel scope. */
 export function disposeLocalDialogs(scope, cutoff = Infinity) {
-    for (const entry of [...pending]) if ((!scope || entry.scope === scope) && entry.ticket <= cutoff) entry.cancel();
+    for (const entry of pending) if ((!scope || entry.scope === scope) && entry.ticket <= cutoff) entry.cancel();
 }
 globalThis[disposeKey] = disposeLocalDialogs;
 
