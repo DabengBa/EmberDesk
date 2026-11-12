@@ -83,7 +83,7 @@ export interface WorldInfoCommands {
     deleteWorld(): CommandResult;
     refreshWorld(): CommandResult;
     openEntry(uid: string): CommandResult;
-    updateEntryFields(uid: string, fields: Record<string, unknown>): CommandResult;
+    updateEntryFields(uid: string, fields: Record<string, unknown>, worldName?: string): CommandResult;
     clearSelectedEntry(): CommandResult;
     setScanDepth(depth: number): CommandResult;
     backfillMemos(): CommandResult;

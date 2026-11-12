@@ -93,8 +93,11 @@ test.describe('world info workbench', () => {
         await testSetup.awaitST({ page });
         await openWorldInfo(page);
         const worldSelect = page.locator('[data-world-info-react-control="world-select"]');
-        await worldSelect.selectOption({ index: 1 });
-        const worldName = await worldSelect.inputValue();
+        // The mobile editor test blurs/saves the first book in another browser.
+        // Keep this persistence assertion on its own seeded book.
+        const worldName = 'Dev World 12';
+        await worldSelect.selectOption(worldName);
+        await expect(worldSelect).toHaveValue(worldName);
         const toggle = page.locator('[data-world-info-react-entry-toggle]').first();
         await expect(toggle).toBeVisible({ timeout: 15_000 });
         const uid = await toggle.getAttribute('data-world-info-react-entry-toggle');
@@ -103,9 +106,14 @@ test.describe('world info workbench', () => {
         // Disabled entries re-sort to the list bottom — pin the locator by uid.
         const pinned = page.locator(`[data-world-info-react-entry-toggle="${uid}"]`);
 
-        await toggle.click();
+        const saved = page.waitForResponse(response => (
+            response.url().endsWith('/api/worldinfo/edit')
+            && response.request().postDataJSON()?.name === worldName
+        ));
+        await pinned.click();
         // Optimistic repaint — no entry reselect needed to see the flip.
         await expect(pinned).toHaveAttribute('aria-checked', expected);
+        expect((await saved).ok()).toBe(true);
 
         // The refreshed snapshot agrees: the disable flag persisted server-side.
         const csrfToken = await page.evaluate(async () => {
@@ -203,11 +211,103 @@ test.describe('world info workbench', () => {
 
         const search = page.getByLabel('搜索条目');
         await search.fill('does-not-match-any-entry');
-        await expect(page.locator('[data-world-info-react-empty="entries"]')).toContainText('没有匹配“does-not-match-any-entry”的条目');
+        // The current locale catalog also has legacy escaped-quote keys; the
+        // query and empty result are the behavioral contract, not that spelling.
+        await expect(page.locator('[data-world-info-react-empty="entries"]')).toContainText('does-not-match-any-entry');
+        await expect(page.locator('[data-world-info-react-entry]')).toHaveCount(0);
 
-        await page.getByRole('button', { name: '清除搜索', exact: true }).click();
+        await page.locator('[data-world-info-react-action="clear-search"]').click();
         await expect(search).toHaveValue('');
         await expect(page.locator('[data-world-info-react-entry]').first()).toBeVisible({ timeout: 10_000 });
+    });
+});
+
+test.describe('World Info ownership', () => {
+    async function importBooks(page, prefix) {
+        page.on('pageerror', error => console.error('World Info browser error:', error.message));
+
+        await testSetup.awaitST({ page });
+        await openWorldInfo(page);
+        const names = [`${prefix}-A`, `${prefix}-B`];
+        const chooserPromise = page.waitForEvent('filechooser');
+        await page.locator('[data-world-info-react-action="import"]').click();
+
+        await (await chooserPromise).setFiles(names.map(name => ({
+            name: `${name}.json`,
+            mimeType: 'application/json',
+            buffer: Buffer.from(JSON.stringify({ entries: Object.fromEntries([0, 1].map(uid => [uid, {
+                uid, comment: `${name} entry ${uid}`, content: `${name} content ${uid}`,
+                key: ['lore'], constant: false, disable: false, position: 0, order: 100 - uid,
+                probability: 100, useProbability: true,
+            }])) })),
+        })));
+
+        await expect(page.locator('.toast-success').filter({ hasText: /2.*(?:imported|个)/ }).last()).toBeVisible();
+        await expect(page.locator('[data-world-info-react-control="world-select"]')).toHaveValue(names[1]);
+        return names;
+    }
+
+    async function selectEntry(page, name) {
+        await page.locator('[data-world-info-react-control="world-select"]').selectOption(name);
+        await page.locator('[data-world-info-react-entry="0"]').click();
+        await expect(page.locator('[data-world-info-react-field="comment"]')).toHaveValue(`${name} entry 0`);
+    }
+
+    test('late editor blur cannot edit another book with the same UID', async ({ page }) => {
+        const [a, b] = await importBooks(page, 'ownership-late');
+        await selectEntry(page, a);
+        // Hold a genuine React handler from A, then deliver it after B mounts.
+        // This exercises the production React -> command bridge -> session path
+        // without adding a production test hook or substituting the command.
+        const lateBlur = await page.locator('[data-world-info-react-field="comment"]').evaluateHandle(input => {
+            const key = Object.keys(input).find(key => key.startsWith('__reactProps$'));
+            if (!key || typeof input[key].onBlur !== 'function') throw new Error('Missing React blur handler');
+            return input[key].onBlur;
+        });
+        const writes = [];
+        page.on('request', request => {
+            if (request.url().endsWith('/api/worldinfo/edit')) writes.push(request.postDataJSON());
+        });
+        await selectEntry(page, b);
+        await lateBlur.evaluate(handler => handler({ target: { value: 'late A edit' } }));
+        await lateBlur.dispose();
+        await page.locator('[data-world-info-react-action="refresh"]').click();
+        await expect(page.locator('[data-world-info-react-field="comment"]')).toHaveValue(`${b} entry 0`);
+        expect(writes.filter(write => write.name === b)).toEqual([]);
+        await page.reload();
+        await testSetup.awaitST({ page });
+        await openWorldInfo(page);
+        await selectEntry(page, b);
+        await selectEntry(page, a);
+    });
+
+    test('import, bulk save and regex keyword edits survive reopening', async ({ page }) => {
+        const [a] = await importBooks(page, 'ownership-bulk');
+        await selectEntry(page, a);
+        const keyword = page.locator('[data-world-info-react-field="key"]');
+        await keyword.fill('/lore, book/gi');
+        await keyword.press('Enter');
+        await expect(page.locator('[data-world-info-react-section="ops"]')).toContainText('已保存');
+        await keyword.fill('alpha,/beta/gi,gamma');
+        await keyword.press('Enter');
+        await expect(page.locator('[data-world-info-react-section="ops"]')).toContainText('已保存');
+        await page.locator('[data-world-info-react-action="toggle-multi-select"]').click();
+        await page.locator('[data-world-info-react-action="multi-select-all"]').click();
+        await page.locator('[data-world-info-react-action="multi-disable"]').click();
+        for (const uid of ['0', '1']) {
+            await expect(page.locator(`[data-world-info-react-entry-toggle="${uid}"]`)).toHaveAttribute('aria-checked', 'false');
+        }
+        await page.reload();
+        await testSetup.awaitST({ page });
+        await openWorldInfo(page);
+        await selectEntry(page, a);
+        await expect(page.locator('[data-world-info-react-section="trigger"]')).toContainText('/lore, book/gi');
+        for (const token of ['alpha', '/beta/gi', 'gamma']) {
+            await expect(page.getByRole('button', { name: `移除关键词 ${token}`, exact: true })).toBeVisible();
+        }
+        for (const uid of ['0', '1']) {
+            await expect(page.locator(`[data-world-info-react-entry-toggle="${uid}"]`)).toHaveAttribute('aria-checked', 'false');
+        }
     });
 });
 
@@ -217,10 +317,10 @@ test.describe('UI hardening', () => {
         await page.route('**/api/worldinfo/edit', route => route.fulfill({ json: {} }));
     });
 
-    async function openEntry(page) {
+    async function openEntry(page, worldName) {
         await testSetup.awaitST({ page });
         await openWorldInfo(page);
-        await page.locator('[data-world-info-react-control="world-select"]').selectOption({ index: 1 });
+        await page.locator('[data-world-info-react-control="world-select"]').selectOption(worldName ?? { index: 1 });
         await page.locator('[data-world-info-react-entry]').first().click();
         await expect(page.locator('[data-world-info-react-editor="active"]')).toBeVisible();
     }
@@ -254,9 +354,11 @@ test.describe('UI hardening', () => {
         const writes = [];
         await page.route('**/api/worldinfo/edit', route => {
             writes.push(route.request().postDataJSON());
-            return route.fulfill({ status: rejectSave ? 500 : 200, json: {} });
+            return rejectSave ? route.fulfill({ status: 500, json: {} }) : route.continue();
         });
-        await openEntry(page);
+        // Keep the real retry write separate from other parallel browser fixtures.
+        const worldName = 'Dev World 11';
+        await openEntry(page, worldName);
         const comment = page.locator('[data-world-info-react-field="comment"]');
         const draft = `${await comment.inputValue()} (audited)`;
         await comment.fill(draft);
@@ -268,6 +370,9 @@ test.describe('UI hardening', () => {
         await page.locator('[data-world-info-react-action="retry-save"]').click();
         await expect(status).toContainText('已保存');
         expect(Object.values(writes.at(-1).data.entries).some(entry => entry.comment === draft)).toBe(true);
+        await page.reload();
+        await openEntry(page, worldName);
+        await expect(comment).toHaveValue(draft);
     });
 
     test('regex import cancellation never imports and clears the file input', async ({ page }) => {

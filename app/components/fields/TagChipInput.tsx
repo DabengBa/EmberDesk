@@ -16,6 +16,7 @@ export function TagChipInput({
     inputAriaLabel,
     removeAriaLabel = (tag: string) => translate('Remove tag ${0}').replace('${0}', tag),
     inputProps,
+    splitInput = (input: string) => input.split(','),
 }: {
     values: string[];
     onCommit: (values: string[]) => void;
@@ -23,6 +24,8 @@ export function TagChipInput({
     inputAriaLabel?: string;
     removeAriaLabel?: (tag: string) => string;
     inputProps?: Record<string, string>;
+    /** Complete tokens followed by the still-pending input. */
+    splitInput?: (input: string) => string[];
 }) {
     useTranslated('');
     const [pending, setPending] = useState('');
@@ -87,7 +90,7 @@ export function TagChipInput({
                         setPending(raw);
                         return;
                     }
-                    const pieces = raw.split(',');
+                    const pieces = splitInput(raw);
                     addValues(pieces.slice(0, -1));
                     setPending((pieces[pieces.length - 1] ?? '').trimStart());
                 }}
