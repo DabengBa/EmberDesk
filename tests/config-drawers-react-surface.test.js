@@ -59,8 +59,9 @@ describe('retired formatting preset managers', () => {
         ]) {
             expect(presetManager).not.toContain(helper);
         }
-        // The surviving openai preset select still uses delegated actions.
-        expect(presetManager).toContain('$(document).on(\'click\', \'[data-preset-manager-delete]\'');
+        // React owns preset actions; compatibility calls use the live service.
+        expect(presetManager).toContain('getOpenAIPresetService().delete(name)');
+        expect(presetManager).not.toContain('data-preset-manager-');
         expect(presetManager).not.toContain('af_master');
         expect(presetManager).not.toContain('performMasterImport');
         expect(presetManager).not.toContain('performMasterExport');

@@ -41,6 +41,7 @@ describe('React runtime provider', () => {
             characterId: 3,
             name2: 'Assistant',
             providerStatus: 'online',
+            chatCompletionSettings: { preset_settings_openai: 'New', temp_openai: 0.82 },
         };
         const commands = {
             submitMessage: jest.fn(),
@@ -69,6 +70,12 @@ describe('React runtime provider', () => {
         });
 
         const snapshot = runtime.getSnapshot();
+        const settings = runtime.getChatCompletionSettings();
+        expect(settings).toEqual(context.chatCompletionSettings);
+        settings.temp_openai = 1;
+        expect(context.chatCompletionSettings.temp_openai).toBe(0.82);
+        context.chatCompletionSettings.preset_settings_openai = 'Renamed';
+        expect(runtime.getChatCompletionSettings().preset_settings_openai).toBe('Renamed');
         expect(snapshot).toEqual({
             chat: {
                 id: 'chat-1',
@@ -92,8 +99,12 @@ describe('React runtime provider', () => {
         runtime.commands.stopGeneration();
         await runtime.commands.loadEarlier('2');
         await runtime.commands.saveSettings({ oai_settings: { temperature: 0.7 } });
-        await runtime.commands.connectProvider();
-        await runtime.commands.testProviderConnection();
+        const input = { customUrl: 'http://localhost:4321/v1', openaiModel: 'draft', hasSavedSecret: false };
+        const result = { status: 'online', models: [{ id: 'draft' }] };
+        commands.connectProvider.mockResolvedValue(result);
+        commands.testProviderConnection.mockResolvedValue(result);
+        expect(await runtime.commands.connectProvider(input)).toBe(result);
+        expect(await runtime.commands.testProviderConnection(input)).toBe(result);
 
         expect(commands.submitMessage).toHaveBeenCalledWith('hello');
         expect(commands.stopGeneration).toHaveBeenCalledTimes(1);
@@ -101,6 +112,8 @@ describe('React runtime provider', () => {
         expect(commands.saveSettings).toHaveBeenCalledWith({ oai_settings: { temperature: 0.7 } });
         expect(commands.connectProvider).toHaveBeenCalledTimes(1);
         expect(commands.testProviderConnection).toHaveBeenCalledTimes(1);
+        expect(commands.connectProvider).toHaveBeenCalledWith(input);
+        expect(commands.testProviderConnection).toHaveBeenCalledWith(input);
     });
 
     test('subscribes only to named lifecycle events and detaches them', () => {

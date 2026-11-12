@@ -6,6 +6,31 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { setConfigFilePath } from '../src/util.js';
+import { rebaseChatCompletionSettings } from '../app/lib/settings-helpers.js';
+
+describe('provider settings revision rebase', () => {
+    test('keeps the remote preset and unknown fields while applying only local changes', () => {
+        const base = { preset_settings_openai: 'A', temp_openai: 0.4, openai_model: 'old' };
+        const local = { ...base, openai_model: 'edited' };
+        const remote = { ...base, preset_settings_openai: 'B', temp_openai: 1.7, unknown: { kept: true } };
+        const merged = rebaseChatCompletionSettings(base, local, remote);
+        expect(merged).toEqual({ ...remote, openai_model: 'edited' });
+        merged.unknown.kept = false;
+        expect(remote.unknown.kept).toBe(true);
+        expect(local.temp_openai).toBe(0.4);
+    });
+
+    test('overlapping edits and incompatible nested prompt edits require explicit resolution', () => {
+        expect(rebaseChatCompletionSettings({ model: 'old' }, { model: 'local' }, { model: 'remote' })).toBeNull();
+        expect(rebaseChatCompletionSettings({ prompts: [{ content: 'old' }] }, { prompts: [{ content: 'local' }] }, { prompts: [{ content: 'remote' }] })).toBeNull();
+        expect(rebaseChatCompletionSettings({ model: 'old' }, { model: 'new' }, { model: 'new' })).toEqual({ model: 'new' });
+    });
+
+    test('keeps local deletions unless the remote also changed that field', () => {
+        expect(rebaseChatCompletionSettings({ removed: true }, {}, { removed: true, extra: 1 })).toEqual({ extra: 1 });
+        expect(rebaseChatCompletionSettings({ removed: true }, {}, { removed: false })).toBeNull();
+    });
+});
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -126,7 +151,7 @@ describe('settings React route flag', () => {
         expect(routeSource).toContain('<settingsForm.Subscribe');
         expect(routeSource).toContain('selector={state => state.isPristine}');
         expect(routeSource).toContain('disabled={isBusy || settingsQuery.isPending || settingsQuery.isFetching || isPristine || hasRevisionConflict}');
-        expect(routeSource).toContain("import { startTransition, useCallback, useEffect, useMemo, useReducer, useState, useSyncExternalStore } from 'react';");
+        expect(routeSource).toContain('const openSettingsTab = useCallback(');
         expect(routeSource).toContain('const [isSettingsFormLoaded, setIsSettingsFormLoaded] = useState(false);');
         expect(routeSource).toContain('const isSettingsFormReady = isSettingsFormLoaded && parsedPayload !== null;');
         expect(routeSource).toContain('const openSettingsTab = useCallback((tabId: string)');
@@ -459,14 +484,13 @@ describe('settings React route flag', () => {
     test('keeps generation-default fields out of the React surface while provider field bindings stay intact', async () => {
         const routeSource = fs.readFileSync(path.join(repoRoot, 'app', 'components', 'settings', 'SettingsSurface.tsx'), 'utf8');
         const helperModule = await import(`../app/lib/settings-helpers.js?settingsGeneralRetired=${Date.now()}-${Math.random()}`);
-        const openaiSource = fs.readFileSync(path.join(repoRoot, 'public', 'scripts', 'openai.js'), 'utf8');
+        const panelSource = fs.readFileSync(path.join(repoRoot, 'app', 'components', 'ai-config', 'AiConfigPanel.tsx'), 'utf8');
 
         expect(routeSource).not.toContain('name="general.');
         expect(routeSource).not.toContain("'Generation Defaults'");
         expect(helperModule.settingsFormFieldPaths.some(path => path.startsWith('general.'))).toBe(false);
         expect(helperModule.defaultSettingsFormValues.general).toBeUndefined();
-        // The AI Response Configuration drawer is retired; the provider runtime
-        // still owns every removed field as openai.js settings keys.
+        // Generation controls belong to the React preset drawer, not Settings.
         for (const legacyId of [
             'settings_preset_openai',
             'openai_max_context',
@@ -475,7 +499,7 @@ describe('settings React route flag', () => {
             'openai_reasoning_effort',
             'names_behavior',
         ]) {
-            expect(openaiSource).toContain(legacyId);
+            expect(panelSource).toContain(legacyId);
         }
     });
 

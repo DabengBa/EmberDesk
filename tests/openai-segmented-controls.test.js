@@ -13,14 +13,14 @@ function read(relativePath) {
 }
 
 describe('OpenAI segmented controls', () => {
-    test('startup settings can sync segmented controls before initOpenAI binds events', () => {
+    test('segmented controls read the service snapshot and write through it', () => {
+        const panel = read('app/components/ai-config/AiConfigPanel.tsx');
         const source = read('public/scripts/openai.js');
-        const helperIndex = source.indexOf('function syncSegmentedFromSelect');
-        const loadSettingsIndex = source.indexOf('function loadOpenAISettings');
-
-        expect(helperIndex).toBeGreaterThan(-1);
-        expect(loadSettingsIndex).toBeGreaterThan(-1);
-        expect(helperIndex).toBeLessThan(loadSettingsIndex);
+        expect(panel).toContain('useSyncExternalStore(presetService.subscribe');
+        expect(panel).toContain("radio('reasoning_effort', 'high')");
+        expect(panel).toContain("radio('verbosity', 'high')");
+        expect(source).not.toContain("$(document).on('change', '.segmented-control");
+        expect(source).toContain('refreshOpenAIPresetService();');
     });
 
     test('reasoning effort falls back to high for invalid or unselectable values', () => {
@@ -31,6 +31,6 @@ describe('OpenAI segmented controls', () => {
         expect(source).toContain('case reasoning_effort_types.max:');
         expect(source).toContain('return reasoning_effort_types.high;');
         expect(source).toContain('settings.reasoning_effort = normalizeReasoningEffort(settings.reasoning_effort);');
-        expect(source).toContain('oai_settings.reasoning_effort = normalizeReasoningEffort($(this).val());');
+        expect(source).not.toContain('oai_settings.reasoning_effort = normalizeReasoningEffort($(this).val());');
     });
 });
