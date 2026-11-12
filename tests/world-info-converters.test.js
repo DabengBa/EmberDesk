@@ -1,9 +1,13 @@
-import {
+import { jest } from '@jest/globals';
+
+jest.unstable_mockModule('../public/scripts/i18n.js', () => ({ translate: text => text }));
+
+const {
     convertAgnaiMemoryBook,
     convertCharacterBook,
     convertNovelLorebook,
     convertRisuLorebook,
-} from '../public/scripts/world-info-converters.js';
+} = await import('../public/scripts/world-info-converters.js');
 
 const BASE_ENTRY_KEYS = [
     'addMemo',

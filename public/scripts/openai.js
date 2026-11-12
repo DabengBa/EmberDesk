@@ -13,7 +13,7 @@ import {
     getExtensionPromptMaxDepth,
     getMediaDisplay,
     getMediaIndex,
-    is_send_press,
+
     main_api,
     name1,
     name2,
@@ -42,15 +42,16 @@ import { SECRET_KEYS, secret_state, writeSecret, deleteSecret, resolveSecretKey 
 import { getEventSourceStream } from './sse-stream.js';
 import {
     createThumbnail,
-    delay,
+
     download,
     getAudioDurationFromDataURL,
     getBase64Async,
     getFileText,
     getImageSizeFromDataURL,
+    getSanitizedFilename,
     getVideoDurationFromDataURL,
     isDataURL,
-    isValidUrl,
+
     resetScrollHeight,
     stringFormat,
 } from './utils.js';
@@ -76,11 +77,6 @@ import {
 } from './openai-provider-capabilities.js';
 import { buildStepPrompt, createPipelineToolCompatibilityError, getActivePipelineRunId, getPipelineRunState, PIPELINE_FALLBACK_PROMPT, pipelineModelRemovesTools } from './reply-pipeline-core.js';
 
-function syncSegmentedFromSelect(selectId) {
-    const value = $('#' + selectId).val();
-    $(`.segmented-control[data-sync-select="${selectId}"] input[value="${value}"]`).prop('checked', true);
-}
-
 export {
     openai_messages_count,
     oai_settings,
@@ -99,7 +95,7 @@ let openai_messages_count = 0;
 const default_wi_format = '{0}';
 const default_description_format = '{0}';
 const default_new_chat_prompt = '[Start a new Chat]';
-const API_TEST_REQUEST_TIMEOUT_MS = 15000;
+
 
 const max_64k = 65535;
 const openai_max_stop_strings = 4;
@@ -266,6 +262,91 @@ let _presetChangeGuard = false;
 
 export let openai_setting_names;
 export let openai_settings;
+
+// Installed once from the cached workspace bundle when the prompt panel mounts.
+// The state objects remain owned here and can be replaced during settings load.
+let presetService;
+export function installOpenAIPresetService(factory) {
+    if (presetService) return presetService;
+    presetService = factory({
+        read: () => ({ settings: oai_settings, presets: openai_settings ?? [], names: openai_setting_names ?? {} }),
+        fields: Object.fromEntries(Object.entries(settingsToUpdate).map(([key, [, field]]) => [key, field])),
+        secretKeys: Object.values(SECRET_KEYS),
+        defaults: default_settings,
+        sanitizeName: getSanitizedFilename,
+        persist: async (name, preset) => {
+            const response = await fetch('/api/presets/save', {
+                method: 'POST', headers: getRequestHeaders(),
+                body: JSON.stringify({ apiId: 'openai', name, preset }),
+            });
+            if (!response.ok) throw new Error('Failed to save preset');
+            return (await response.json()).name;
+        },
+        remove: async name => {
+            const response = await fetch('/api/presets/delete', {
+                method: 'POST', headers: getRequestHeaders(),
+                body: JSON.stringify({ apiId: 'openai', name }),
+            });
+            if (!response.ok) throw new Error('Failed to delete preset');
+
+        },
+        emit: async (event, payload) => {
+            if (event === 'before') {
+                await eventSource.emit(event_types.OAI_PRESET_CHANGED_BEFORE, {
+                    ...payload, settingsToUpdate, settings: oai_settings, savePreset: saveOpenAIPreset,
+                });
+            } else if (event === 'after') {
+                _presetChangeGuard = true;
+                try { await eventSource.emit(event_types.OAI_PRESET_CHANGED_AFTER); }
+                catch (error) { _presetChangeGuard = false; throw error; }
+            } else if (event === 'saveAfter') {
+                await eventSource.emit(event_types.OAI_PRESET_CHANGED_AFTER);
+            } else if (event === 'renameBefore' || event === 'renamed') {
+                await eventSource.emit(event === 'renameBefore' ? event_types.PRESET_RENAMED_BEFORE : event_types.PRESET_RENAMED, { apiId: 'openai', ...payload });
+            } else if (event === 'deleted') {
+                await eventSource.emit(event_types.PRESET_DELETED, { apiId: 'openai', name: payload });
+            } else {
+                try { await eventSource.emit(event_types.PRESET_CHANGED, { apiId: 'openai', name: payload }); }
+                finally { _presetChangeGuard = false; }
+            }
+        },
+        changed: () => { updateFeatureSupportFlags(); saveSettingsDebounced(); },
+        normalize: value => { migrateChatCompletionSettings(value); return value; },
+        afterApply: () => {
+            updateFeatureSupportFlags();
+            eventSource.emit(event_types.CHATCOMPLETION_MODEL_CHANGED, oai_settings.openai_model);
+            reconnectOpenAi();
+        },
+        confirmSwitch: async () => {
+            if (!isOpenAIPresetDirty()) return 'discard';
+            const result = await Popup.show.confirm(t`Unsaved preset changes`, t`The current preset has unsaved changes. Save before switching?`, {
+                okButton: t`Save and switch`, cancelButton: t`Switch without saving`,
+                customButtons: [{ text: t`Cancel`, result: POPUP_RESULT.CANCELLED, appendAtEnd: true }],
+            });
+            return result === POPUP_RESULT.AFFIRMATIVE ? 'save' : result === POPUP_RESULT.NEGATIVE ? 'discard' : 'cancel';
+        },
+        askName: current => Popup.show.input(t`Preset name:`, t`Hint: Use a character name to bind preset to a specific chat.`, current),
+        confirmDelete: () => callGenericPopup(t`Delete the preset? This action is irreversible and your current settings will be overwritten.`, POPUP_TYPE.CONFIRM),
+        restorePreset: async name => {
+            const response = await fetch('/api/presets/restore', { method: 'POST', headers: getRequestHeaders(), body: JSON.stringify({ name, apiId: 'openai' }) });
+            if (!response.ok) throw new Error('Failed to restore default preset');
+            return response.json();
+        },
+        confirmRestore: isDefault => Popup.show.confirm(t`Are you sure?`, isDefault ? t`Resetting a default preset will restore the default settings.` : t`Resetting a custom preset will restore to the last saved state.`),
+        importFile: file => importOpenAIPreset(file),
+        exportFile: () => onExportPresetClick(),
+    });
+    return presetService;
+}
+
+export function refreshOpenAIPresetService() {
+    presetService?.refresh();
+}
+
+export function getOpenAIPresetService() {
+    if (!presetService) throw new Error('Preset service is not installed');
+    return presetService;
+}
 
 /** @type {import('./PromptManager.js').PromptManager} */
 export let promptManager = null;
@@ -1310,18 +1391,7 @@ export function setOpenAIModel(model) {
     eventSource.emit(event_types.CHATCOMPLETION_MODEL_CHANGED, value);
 }
 
-function saveModelList(data) {
-    model_list = data.map((model) => ({ ...model }));
-    model_list.sort((a, b) => a?.id && b?.id && a.id.localeCompare(b.id));
 
-    if (oai_settings.chat_completion_source == chat_completion_sources.OPENAI) {
-        const sel = model_list.find(m => m.id === oai_settings.openai_model);
-        if (!sel && model_list.length > 0) {
-            oai_settings.openai_model = model_list[0].id;
-            eventSource.emit(event_types.CHATCOMPLETION_MODEL_CHANGED, oai_settings.openai_model);
-        }
-    }
-}
 
 function getVerbosity(settings = null) {
     settings = settings ?? oai_settings;
@@ -2609,14 +2679,9 @@ function loadOpenAISettings(data, settings) {
         migrateChatCompletionSettings(openai_settings[i]);
     });
 
-    $('#settings_preset_openai').empty();
     const settingNames = {};
     openai_setting_names.forEach(function (item, i) {
         settingNames[item] = i;
-        const option = document.createElement('option');
-        option.value = i;
-        option.text = item;
-        $('#settings_preset_openai').append(option);
     });
     openai_setting_names = settingNames;
 
@@ -2624,49 +2689,8 @@ function loadOpenAISettings(data, settings) {
 
     for (const key of Object.keys(default_settings)) {
         oai_settings[key] = settings[key] ?? default_settings[key];
-        const settingToUpdate = Object.values(settingsToUpdate).find(([_, k]) => k === key);
-        if (settingToUpdate) {
-            const [selector] = settingToUpdate;
-            const $element = $(selector);
-
-            if ($element.length === 0) {
-                continue;
-            }
-
-            if ($element.is('input[type="checkbox"]')) {
-                $element.prop('checked', oai_settings[key]);
-            } else if ($element.is('select')) {
-                $element.val(oai_settings[key]);
-                $element.find(`option[value="${CSS.escape(oai_settings[key])}"]`).prop('selected', true);
-            } else {
-                const unit = $element.data('unit');
-                const value = unit === 'k' ? oai_settings[key] / 1000 : oai_settings[key];
-                $element.val(value);
-                if ($element.is('input[type="range"]')) {
-                    const id = $element.attr('id');
-                    const $counter = $(`input[type="number"][data-for="${id}"]`);
-                    if ($counter.length > 0) {
-                        $counter.val(Number(oai_settings[key]));
-                    }
-                }
-            }
-        }
     }
 
-    $(`#settings_preset_openai option[value="${openai_setting_names[oai_settings.preset_settings_openai]}"]`).prop('selected', true);
-
-    // When the stored preset file no longer exists on disk, the browser shows
-    // the first option while nothing is applied — a silent mismatch that also
-    // makes single-option lists impossible to (re)apply through the select.
-    // Insert a placeholder so the mismatch is visible and picking a real
-    // preset still fires the change handler.
-    const presetSelect = $('#settings_preset_openai');
-    if (presetSelect.find(':selected').text() !== oai_settings.preset_settings_openai) {
-        const placeholderText = oai_settings.preset_settings_openai
-            ? t`Preset "${oai_settings.preset_settings_openai}" is not installed`
-            : t`No preset applied`;
-        presetSelect.prepend(new Option(placeholderText, '', true, true));
-    }
 
     // Protect openai_max_context from being overridden by extensions on initial load
     const loadedMaxContext = oai_settings.openai_max_context;
@@ -2675,16 +2699,9 @@ function loadOpenAISettings(data, settings) {
         _presetChangeGuard = false;
         if (oai_settings.openai_max_context !== loadedMaxContext) {
             oai_settings.openai_max_context = loadedMaxContext;
-            const unit = $('#openai_max_context').data('unit');
-            $('#openai_max_context').val(unit === 'k' ? loadedMaxContext / 1000 : loadedMaxContext);
+            refreshOpenAIPresetService();
         }
     });
-
-    setNamesBehaviorControls();
-    setToolReasoningControls();
-
-    syncSegmentedFromSelect('openai_reasoning_effort');
-    syncSegmentedFromSelect('openai_verbosity');
 
     // Provider form is React-owned; loading settings still needs the side
     // effects the retired #chat_completion_source change handler produced.
@@ -2694,64 +2711,11 @@ function loadOpenAISettings(data, settings) {
     }
     forceCharacterEditorTokenize();
     reconnectOpenAi();
+    refreshOpenAIPresetService();
 }
 
-function setNamesBehaviorControls() {
-    $('#names_behavior').val(String(oai_settings.names_behavior));
-    const selectedText = $('#names_behavior option:selected').text().trim();
-    $('#character_names_display').text(selectedText);
-}
-
-function setToolReasoningControls() {
-    const isEnabled = oai_settings.show_thoughts;
-    $('#tool_reasoning_mode').prop('disabled', !isEnabled);
-}
-
-async function getStatusOpen() {
-    if (oai_settings.chat_completion_source === chat_completion_sources.OPENAI && oai_settings.custom_url && !isValidUrl(oai_settings.custom_url)) {
-        console.debug('Invalid custom endpoint URL:', oai_settings.custom_url);
-        setOnlineStatus(t`Invalid endpoint URL. Requests may fail.`);
-        return displayOnlineStatus();
-    }
 
 
-    let data = {
-        chat_completion_source: oai_settings.chat_completion_source,
-    };
-
-    if (oai_settings.chat_completion_source === chat_completion_sources.OPENAI && oai_settings.custom_url) {
-        data.custom_url = oai_settings.custom_url;
-    }
-
-    try {
-        const response = await fetch('/api/backends/chat-completions/status', {
-            method: 'POST',
-            headers: getRequestHeaders(),
-            body: JSON.stringify(data),
-            signal: abortStatusCheck.signal,
-            cache: 'no-cache',
-        });
-
-        if (!response.ok) {
-            throw new Error(response.statusText);
-        }
-
-        const responseData = await response.json();
-
-        if ('data' in responseData && Array.isArray(responseData.data)) {
-            saveModelList(responseData.data);
-        }
-        if (!('error' in responseData)) {
-            setOnlineStatus(t`Valid`);
-        }
-    } catch (error) {
-        console.error(error);
-        setOnlineStatus('no_connection');
-    }
-
-    updateFeatureSupportFlags();
-    return displayOnlineStatus();
-}
 
 /**
  * Get OpenAI preset body from settings
@@ -2808,49 +2772,13 @@ export function isOpenAIPresetDirty() {
  * @returns {Promise<void>}
  */
 export async function saveOpenAIPreset(name, settings, triggerUi = true) {
-    const presetBody = getChatCompletionPreset(settings);
-    const savePresetSettings = await fetch('/api/presets/save', {
-        method: 'POST',
-        headers: getRequestHeaders(),
-        body: JSON.stringify({
-            apiId: 'openai',
-            name: name,
-            preset: presetBody,
-        }),
-    });
-
-    if (savePresetSettings.ok) {
-        const data = await savePresetSettings.json();
-
-        if (Object.keys(openai_setting_names).includes(data.name)) {
-            oai_settings.preset_settings_openai = data.name;
-            const value = openai_setting_names[data.name];
-            Object.assign(openai_settings[value], presetBody);
-            $(`#settings_preset_openai option[value="${value}"]`).prop('selected', true);
-            if (triggerUi) $('#settings_preset_openai').trigger('change');
-        } else {
-            openai_settings.push(presetBody);
-            openai_setting_names[data.name] = openai_settings.length - 1;
-            const option = document.createElement('option');
-            option.selected = true;
-            option.value = String(openai_settings.length - 1);
-            option.innerText = data.name;
-            $('#settings_preset_openai').append(option);
-            if (triggerUi) $('#settings_preset_openai').trigger('change');
-        }
-    } else {
-        toastr.error(t`Failed to save preset`);
-        throw new Error('Failed to save preset');
-    }
+    const service = getOpenAIPresetService();
+    const presetBody = { ...service.getPresetBody(), ...getChatCompletionPreset(settings) };
+    const saved = await service.save(name, presetBody, { select: false });
+    if (triggerUi) await service.select(saved);
 }
 
-function onImportPresetClick() {
-    $('#openai_preset_import_file').trigger('click');
-}
-
-async function onPresetImportFileChange(e) {
-    const file = e.target.files[0];
-
+async function importOpenAIPreset(file) {
     if (!file) {
         return;
     }
@@ -2858,7 +2786,7 @@ async function onPresetImportFileChange(e) {
     const name = file.name.replace(/\.[^/.]+$/, '');
     const importedFile = await getFileText(file);
     let presetBody;
-    e.target.value = '';
+
 
     try {
         presetBody = JSON.parse(importedFile);
@@ -2899,38 +2827,9 @@ async function onPresetImportFileChange(e) {
 
     migrateChatCompletionSettings(presetBody);
 
-    const savePresetSettings = await fetch('/api/presets/save', {
-        method: 'POST',
-        headers: getRequestHeaders(),
-        body: JSON.stringify({
-            apiId: 'openai',
-            name: name,
-            preset: presetBody,
-        }),
-    });
-
-    if (!savePresetSettings.ok) {
-        toastr.error(t`Failed to save preset`);
-        return;
-    }
-
-    const data = await savePresetSettings.json();
-
-    if (Object.keys(openai_setting_names).includes(data.name)) {
-        oai_settings.preset_settings_openai = data.name;
-        const value = openai_setting_names[data.name];
-        Object.assign(openai_settings[value], presetBody);
-        $(`#settings_preset_openai option[value="${value}"]`).prop('selected', true);
-        $('#settings_preset_openai').trigger('change');
-    } else {
-        openai_settings.push(presetBody);
-        openai_setting_names[data.name] = openai_settings.length - 1;
-        const option = document.createElement('option');
-        option.selected = true;
-        option.value = String(openai_settings.length - 1);
-        option.innerText = data.name;
-        $('#settings_preset_openai').append(option).trigger('change');
-    }
+    const service = getOpenAIPresetService();
+    const saved = await service.save(name, presetBody, { select: false });
+    await service.select(saved);
 }
 
 async function onExportPresetClick() {
@@ -2941,6 +2840,7 @@ async function onExportPresetClick() {
 
     const preset = structuredClone(openai_settings[openai_setting_names[oai_settings.preset_settings_openai]]);
     migrateChatCompletionSettings(preset);
+    for (const key of Object.values(SECRET_KEYS)) delete preset[key];
 
     const fieldValues = sensitiveFields.filter(field => preset[field]).map(field => `<b>${field}</b>: <code>${preset[field]}</code>`);
     if (fieldValues.length > 0) {
@@ -2985,48 +2885,9 @@ async function onExportPresetClick() {
  * @returns {Promise<void>}
  */
 export async function deleteOpenAIPreset() {
-    if (!oai_settings.preset_settings_openai) {
-        toastr.error(t`No preset selected`);
-        return;
-    }
-
-    const nameToDelete = oai_settings.preset_settings_openai;
-    const value = openai_setting_names[oai_settings.preset_settings_openai];
-    $(`#settings_preset_openai option[value="${value}"]`).remove();
-    delete openai_setting_names[oai_settings.preset_settings_openai];
-    oai_settings.preset_settings_openai = null;
-
-    if (Object.keys(openai_setting_names).length) {
-        const nextPresetName = Object.keys(openai_setting_names)[0];
-        $(`#settings_preset_openai option[value="${openai_setting_names[nextPresetName]}"]`).prop('selected', true);
-        applyOpenAIPreset(nextPresetName);
-    }
-
-    const response = await fetch('/api/presets/delete', {
-        method: 'POST',
-        headers: getRequestHeaders(),
-        body: JSON.stringify({ apiId: 'openai', name: nameToDelete }),
-    });
-
-    if (!response.ok) {
-        toastr.warning(t`Preset was not deleted from server`);
-    } else {
-        toastr.success(t`Preset deleted`);
-        await eventSource.emit(event_types.PRESET_DELETED, { apiId: 'openai', name: nameToDelete });
-    }
-
-    saveSettingsDebounced();
+    await getOpenAIPresetService().delete();
 }
 
-async function onDeletePresetClick() {
-    const confirm = await callGenericPopup(t`Delete the preset? This action is irreversible and your current settings will be overwritten.`, POPUP_TYPE.CONFIRM);
-
-    if (!confirm) {
-        return;
-    }
-
-    await deleteOpenAIPreset();
-}
 
 /**
  * Applies a saved OpenAI preset by name. UI-free entry point: the retired
@@ -3036,176 +2897,64 @@ async function onDeletePresetClick() {
  * @returns {void}
  */
 export function applyOpenAIPreset(presetName) {
-    if (!presetName || !Object.hasOwn(openai_setting_names ?? {}, presetName)) {
-        console.warn('Unknown OpenAI preset name:', presetName);
-        return;
-    }
-
-    const presetNameBefore = oai_settings.preset_settings_openai;
-
-    oai_settings.preset_settings_openai = presetName;
-
-    // Drop the "not installed" placeholder inserted when the stored preset was
-    // missing — a real preset is now applied.
-    $('#settings_preset_openai option[value=""]').remove();
-
-    const preset = structuredClone(openai_settings[openai_setting_names[oai_settings.preset_settings_openai]]);
-
-    migrateChatCompletionSettings(preset);
-
-    const updateInput = (selector, value) => $(selector).val(value).trigger('input', { source: 'preset' });
-    const updateCheckbox = (selector, value) => $(selector).prop('checked', value).trigger('input', { source: 'preset' });
-
-    // Allow subscribers to alter the preset before applying deltas
-    eventSource.emit(event_types.OAI_PRESET_CHANGED_BEFORE, {
-        preset: preset,
-        presetName: presetName,
-        settingsToUpdate: settingsToUpdate,
-        settings: oai_settings,
-        savePreset: saveOpenAIPreset,
-        presetNameBefore: presetNameBefore,
-    }).finally(async () => {
-        $('.model_custom_select').empty();
-
-        for (const [key, [selector, setting, isCheckbox]] of Object.entries(settingsToUpdate)) {
-            // Extensions don't need UI updates and shouldn't fallback to current settings
-            if (key === 'extensions') {
-                oai_settings.extensions = preset.extensions || {};
-                continue;
-            }
-
-            // The reply pipeline is preset-authoritative: a preset that does
-            // not declare one clears it rather than inheriting a stale plan.
-            if (key === 'reply_pipeline') {
-                oai_settings.reply_pipeline = preset.reply_pipeline ?? null;
-                continue;
-            }
-
-            if (preset[key] !== undefined) {
-                if (isCheckbox) {
-                    updateCheckbox(selector, preset[key]);
-                } else {
-                    updateInput(selector, preset[key]);
-                }
-                oai_settings[setting] = preset[key];
-            }
-        }
-
-        // Connection fields always follow the selected preset; the retired
-        // #chat_completion_source change handler used to apply these effects.
-        updateFeatureSupportFlags();
-        eventSource.emit(event_types.CHATCOMPLETION_MODEL_CHANGED, oai_settings.openai_model);
-        reconnectOpenAi();
-
-        // Protect openai_max_context from being overridden by extensions
-        _presetChangeGuard = true;
-        await eventSource.emit(event_types.OAI_PRESET_CHANGED_AFTER);
-        await eventSource.emit(event_types.PRESET_CHANGED, { apiId: 'openai', name: presetName });
-        _presetChangeGuard = false;
-
-        saveSettingsDebounced();
-    });
+    void getOpenAIPresetService().select(presetName).catch(error => { console.error(error); toastr.error(String(error)); });
 }
 
-// DOM binding for the preset select. User-initiated switches with unsaved
-// changes ask whether to save first; programmatic .trigger('change') calls
-// (save-as, import, delete) apply directly because they just synced state.
-async function onSettingsPresetChange(event) {
-    const presetName = $('#settings_preset_openai').find(':selected').text();
-    if (event?.isTrigger || !isOpenAIPresetDirty()) {
-        applyOpenAIPreset(presetName);
-        return;
-    }
-    const result = await Popup.show.confirm(
-        t`Unsaved preset changes`,
-        t`The current preset has unsaved changes. Save before switching?`,
-        {
-            okButton: t`Save and switch`,
-            cancelButton: t`Switch without saving`,
-            customButtons: [{ text: t`Cancel`, result: POPUP_RESULT.CANCELLED, appendAtEnd: true }],
-        },
-    );
-    if (result === POPUP_RESULT.AFFIRMATIVE) {
-        await saveOpenAIPreset(oai_settings.preset_settings_openai, oai_settings, false);
-        applyOpenAIPreset(presetName);
-    } else if (result === POPUP_RESULT.NEGATIVE) {
-        applyOpenAIPreset(presetName);
-    } else {
-        const index = openai_setting_names[oai_settings.preset_settings_openai];
-        if (index !== undefined) {
-            $('#settings_preset_openai').val(String(index));
-        }
-    }
+let providerConnectionService;
+
+// The cached Vite bundle supplies the same TS implementation used by /settings.
+export function installProviderConnectionService(service) {
+    providerConnectionService ??= service;
 }
 
-async function onNewPresetClick() {
-    const name = await Popup.show.input(t`Preset name:`, t`Hint: Use a character name to bind preset to a specific chat.`, oai_settings.preset_settings_openai);
-
-    if (!name) {
-        return;
-    }
-
-    await saveOpenAIPreset(name, oai_settings);
+function committedProviderInput() {
+    return { customUrl: oai_settings.custom_url ?? '', openaiModel: oai_settings.openai_model ?? '', hasSavedSecret: Boolean(secret_state[SECRET_KEYS.OPENAI]) };
 }
 
-function isProviderCredentialMissing() {
-    return !secret_state[SECRET_KEYS.OPENAI] && !oai_settings.custom_url;
+function matchesCommittedProvider(input) {
+    const current = committedProviderInput();
+    return input.customUrl.trim() === current.customUrl.trim()
+        && input.openaiModel.trim() === current.openaiModel.trim()
+        && input.hasSavedSecret === current.hasSavedSecret;
 }
 
-/**
- * Connects to the configured provider endpoint and refreshes the model list.
- * Callable UI-free: the React Providers surface invokes this through the
- * runtime command port; the retired API Connections drawer used to bind it.
- */
-export async function connectProviderConnection() {
-    if (!secret_state[SECRET_KEYS.OPENAI] && !oai_settings.custom_url) {
-        console.log(`No secret key saved for ${oai_settings.chat_completion_source}`);
-        toastr.warning(t`Enter or save an API key before connecting.`);
-        return;
-    }
-
-    saveSettingsDebounced();
-    await getStatusOpen();
-}
-
-export async function testProviderConnection() {
-    // Check if the previous request is still in progress
-    if (is_send_press) {
-        toastr.info(t`Please wait for the previous request to complete.`);
-        return;
-    }
-
-    if (isProviderCredentialMissing()) {
-        toastr.warning(t`Enter or save provider credentials before testing the connection.`);
-        return;
-    }
-
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort('API connection test timed out'), API_TEST_REQUEST_TIMEOUT_MS);
-
+async function runProviderAction(kind, input = committedProviderInput()) {
+    if (!providerConnectionService) throw new Error('Provider service is not installed');
+    const wasCommitted = matchesCommittedProvider(input);
     try {
-        const reply = await Promise.race([
-            sendOpenAIRequest('quiet', [{ 'role': 'user', 'content': 'Hi' }], controller.signal),
-            delay(API_TEST_REQUEST_TIMEOUT_MS).then(() => {
-                controller.abort('API connection test timed out');
-                throw new Error('API connection test timed out');
-            }),
-        ]);
-        console.log(reply);
-        toastr.success(t`API connection successful!`);
-    } catch {
-        toastr.error(t`Could not get a reply from API. Check your connection settings / API key and try again.`);
-    } finally {
-        clearTimeout(timeout);
-        displayOnlineStatus();
+        const result = await providerConnectionService[kind](input, {
+            fetch, requestHeaders: getRequestHeaders, signal: abortStatusCheck.signal,
+        });
+        if (wasCommitted && matchesCommittedProvider(input)) {
+            // Discovery must not silently replace the configured model.
+            if (result.models) model_list = result.models;
+            setOnlineStatus(result.status);
+            updateFeatureSupportFlags();
+            displayOnlineStatus();
+        }
+        return result;
+    } catch (error) {
+        if (wasCommitted && matchesCommittedProvider(input)) {
+            setOnlineStatus('no_connection');
+            displayOnlineStatus();
+        }
+        throw error;
     }
+}
+
+export function connectProviderConnection(input) {
+    return runProviderAction('connectProvider', input);
+}
+
+export function testProviderConnection(input) {
+    return runProviderAction('testProviderConnection', input);
 }
 
 function reconnectOpenAi() {
     if (main_api == 'openai') {
         setOnlineStatus('no_connection');
         displayOnlineStatus();
-        void connectProviderConnection();
+        void connectProviderConnection().catch(error => console.warn('Provider reconnect failed:', error.message));
     }
 }
 
@@ -3334,127 +3083,8 @@ export function initOpenAI() {
         helpString: 'Gets or sets the API key. Applies to both the primary and fallback model.',
     }));
 
-    $(document).on('change', '.segmented-control input[type="radio"]', function () {
-        const selectId = $(this).closest('.segmented-control').data('sync-select');
-        if (selectId) {
-            $('#' + selectId).val($(this).val()).trigger('input');
-        }
-    });
-
-    $('#temp_openai').on('input', function () {
-        oai_settings.temp_openai = Number($(this).val());
-        $('#temp_openai_counter').val($(this).val());
-        saveSettingsDebounced();
-    });
-
-    $('#freq_pen_openai').on('input', function () {
-        oai_settings.freq_pen_openai = Number($(this).val());
-        saveSettingsDebounced();
-    });
-
-    $('#pres_pen_openai').on('input', function () {
-        oai_settings.pres_pen_openai = Number($(this).val());
-        saveSettingsDebounced();
-    });
-
-    $('#top_p_openai').on('input', function () {
-        oai_settings.top_p_openai = Number($(this).val());
-        $('#top_p_openai_counter').val($(this).val());
-        saveSettingsDebounced();
-    });
 
 
-    $('#openai_max_context').on('input', function () {
-        if (_presetChangeGuard) return;
-        oai_settings.openai_max_context = Math.round(Number($(this).val()) * 1000);
-        saveSettingsDebounced();
-    });
-
-    $('#openai_max_tokens').on('input', function () {
-        oai_settings.openai_max_tokens = Math.round(Number($(this).val()) * 1000);
-        saveSettingsDebounced();
-    });
-
-    $('#stream_toggle').on('change', function () {
-        oai_settings.stream_openai = !!$('#stream_toggle').prop('checked');
-        saveSettingsDebounced();
-    });
-
-    $('#send_if_empty_textarea').on('input', function () {
-        oai_settings.send_if_empty = String($('#send_if_empty_textarea').val());
-        saveSettingsDebounced();
-    });
-
-    $('#newchat_prompt_textarea').on('input', function () {
-        oai_settings.new_chat_prompt = String($('#newchat_prompt_textarea').val());
-        saveSettingsDebounced();
-    });
-
-    $('#wi_format_textarea').on('input', function () {
-        oai_settings.wi_format = String($('#wi_format_textarea').val());
-        saveSettingsDebounced();
-    });
-
-    $('#description_format_textarea').on('input', function () {
-        oai_settings.description_format = String($('#description_format_textarea').val());
-        saveSettingsDebounced();
-    });
-
-    $('#update_oai_preset').on('click', async function () {
-        const name = oai_settings.preset_settings_openai;
-        await saveOpenAIPreset(name, oai_settings, false);
-        await eventSource.emit(event_types.OAI_PRESET_CHANGED_AFTER);
-        toastr.success(t`Preset updated`);
-    });
-
-    $('#newchat_prompt_restore').on('click', function () {
-        oai_settings.new_chat_prompt = default_new_chat_prompt;
-        $('#newchat_prompt_textarea').val(oai_settings.new_chat_prompt);
-        saveSettingsDebounced();
-    });
-
-    $('#wi_format_restore').on('click', function () {
-        oai_settings.wi_format = default_wi_format;
-        $('#wi_format_textarea').val(oai_settings.wi_format);
-        saveSettingsDebounced();
-    });
-
-    $('#description_format_restore').on('click', function () {
-        oai_settings.description_format = default_description_format;
-        $('#description_format_textarea').val(oai_settings.description_format);
-        saveSettingsDebounced();
-    });
-
-    $('#squash_system_messages').on('input', function () {
-        oai_settings.squash_system_messages = !!$(this).prop('checked');
-        saveSettingsDebounced();
-    });
-
-    $('#openai_media_inlining').on('input', function () {
-        oai_settings.media_inlining = !!$(this).prop('checked');
-        updateFeatureSupportFlags();
-        saveSettingsDebounced();
-    });
-
-    $('#openai_inline_image_quality').on('input', function () {
-        oai_settings.inline_image_quality = String($(this).val());
-        saveSettingsDebounced();
-    });
-
-    $('#tool_reasoning_mode').on('input', function () {
-        oai_settings.tool_reasoning_mode = getToolReasoningMode({
-            ...oai_settings,
-            tool_reasoning_mode: String($(this).val()),
-        });
-        saveSettingsDebounced();
-    });
-
-
-    $('#names_behavior').on('input', function () {
-        oai_settings.names_behavior = Number($(this).val());
-        setNamesBehaviorControls();
-        saveSettingsDebounced();
-    });
 
     $('#azure_base_url').on('input', function () {
         oai_settings.azure_base_url = String($(this).val());
@@ -3471,30 +3101,6 @@ export function initOpenAI() {
         saveSettingsDebounced();
     });
 
-    $('#names_behavior').on('change', function () {
-        oai_settings.names_behavior = Number($(this).val());
-        setNamesBehaviorControls();
-        saveSettingsDebounced();
-    });
-
-    $('#openai_show_thoughts').on('input', function () {
-        oai_settings.show_thoughts = !!$(this).prop('checked');
-        setToolReasoningControls();
-        saveSettingsDebounced();
-    });
-
-    $('#openai_reasoning_effort').on('input', function () {
-        oai_settings.reasoning_effort = normalizeReasoningEffort($(this).val());
-        $(this).val(oai_settings.reasoning_effort);
-        syncSegmentedFromSelect('openai_reasoning_effort');
-        saveSettingsDebounced();
-    });
-
-    $('#openai_verbosity').on('input', function () {
-        oai_settings.verbosity = String($(this).val());
-        syncSegmentedFromSelect('openai_verbosity');
-        saveSettingsDebounced();
-    });
 
     if (!CSS.supports('field-sizing', 'content')) {
         $(document).on('input', '#openai_settings .autoSetHeight', function () {
@@ -3502,15 +3108,6 @@ export function initOpenAI() {
         });
     }
 
-    $('#settings_preset_openai').on('change', onSettingsPresetChange);
-    $('#new_oai_preset').on('click', onNewPresetClick);
-    $('#delete_oai_preset').on('click', onDeletePresetClick);
-    $('#openai_preset_import_file').on('input', onPresetImportFileChange);
-    $('#export_oai_preset').on('click', onExportPresetClick);
-    $('#import_oai_preset').on('click', onImportPresetClick);
-
-    // Preset overflow popup menu open/close is React-owned (PresetActionsMenu);
-    // item action bindings below stay direct-by-ID because the items never unmount.
 
     // Retired provider contract: the fallback model reuses the primary key, so the
     // dedicated fallback secret must not linger. Lazy cleanup once per session.

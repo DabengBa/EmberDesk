@@ -96,12 +96,12 @@ describe('prompt panel + side-nav defaults', () => {
         ]) {
             expect(panel).toContain(`id="${id}"`);
         }
-        expect(panel).toContain('data-preset-manager-for="openai"');
+        expect(panel).toContain('presetService.requestSelect');
         const menu = read('app/components/ai-config/PresetActionsMenu.tsx');
         for (const id of ['delete_oai_preset', 'openai_preset_import_file', 'export_oai_preset', 'import_oai_preset']) {
             expect(menu).toContain(`id="${id}"`);
         }
-        expect(menu).toContain('data-preset-manager-rename="openai"');
+        expect(menu).toContain('onClick={onRename}');
     });
 
     test('preset section exposes save/new actions, overflow menu, and a dirty-aware save button', () => {
@@ -169,21 +169,19 @@ describe('prompt panel + side-nav defaults', () => {
 
     test('preset switching asks about unsaved changes only for user-initiated selections', () => {
         const openai = read('public/scripts/openai.js');
-        const handler = openai.slice(openai.indexOf('function onSettingsPresetChange'), openai.indexOf('async function onNewPresetClick'));
+        const handler = openai.slice(openai.indexOf('confirmSwitch: async'), openai.indexOf('askName: current'));
         expect(handler).toContain('isOpenAIPresetDirty');
-        expect(handler).toContain('isTrigger');
         expect(handler).toContain('customButtons');
         expect(handler).toContain('POPUP_RESULT.AFFIRMATIVE');
         expect(handler).toContain('POPUP_RESULT.NEGATIVE');
-        expect(handler).toContain('saveOpenAIPreset');
+        expect(read('app/lib/preset-service.ts')).toContain("if (decision === 'save') await save(");
     });
 
-    test('openai.js binds the restored preset and settings controls', () => {
+    test('React owns preset actions instead of legacy DOM bindings', () => {
         const openai = read('public/scripts/openai.js');
-        expect(openai).toContain('$(\'#settings_preset_openai\').on(\'change\'');
-        expect(openai).toContain('$(\'#update_oai_preset\').on(\'click\'');
-        expect(openai).toContain('$(\'#new_oai_preset\').on(\'click\'');
-        expect(openai).toContain('$(\'#delete_oai_preset\').on(\'click\'');
+        expect(openai).not.toContain('$(\'#settings_preset_openai\').on(\'change\'');
+        expect(openai).not.toContain('$(\'#update_oai_preset\').on(\'click\'');
+        expect(read('app/components/ai-config/AiConfigPanel.tsx')).toContain('presetService.saveCurrent()');
         expect(openai).toContain('export function applyOpenAIPreset(');
         expect(openai).toContain('export async function saveOpenAIPreset(');
         expect(openai).toContain('export async function deleteOpenAIPreset(');
