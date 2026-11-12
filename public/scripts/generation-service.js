@@ -1122,6 +1122,8 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
                     assemblyModel: isPreview ? resolvePreviewPipelineModel(getChatCompletionModelFromSettings(state.oai_settings), 0) : (type === 'normal' ? resolvePipelineModel(getChatCompletionModelFromSettings(state.oai_settings)) : null),
                     pipelineStepModel: isPreview ? resolvePreviewPipelineModel(getChatCompletionModelFromSettings(state.oai_settings), Number(preview?.round ?? 0)) : (type === 'normal' ? resolvePipelineModel(getChatCompletionModelFromSettings(state.oai_settings)) : null),
                     pipelineStepTag: isPreview ? getPreviewPipelineTriggerTag(Number(preview?.round ?? 0)) : getPipelineTriggerTag(type),
+                    // Even a closing-round preview uses the initial pipeline history.
+                    pipelineHistory: isPreview && !!getPreviewPipelineTriggerTag(0),
                 }, dryRun, { squash: isPreview ? true : null, bookkeep: !isPreview });
                 generate_data = { prompt: prompt };
                 previewChatCompletion = chatCompletion ?? null;

@@ -38,12 +38,15 @@ Let users browse, search, filter, sort, bulk-select, and choose [character cards
 - Character row identity remains stable for browsing, active-card state, bulk selection, and protected row-identity selectors.
 - Character rows allocate enough vertical space for wrapped descriptions and tag content; each row's visible content stays within its own row boundary and does not overlap the following character or folder row.
 - Bulk-select mode provides visible selection hints, synchronized selected styling and checked state, selected count, select-all controls, and disabled-until-selection destructive actions.
+- Changes made elsewhere to the same library appear automatically without a manual reload, retaining the current search, filters, and sort. A temporary background read failure leaves the existing list visible and the update is retried; automatic updates wait while bulk selection or its tag operations are active, then catch up.
 - After delete flows, the panel keeps safe pagination context, prevents late snapshots from reintroducing deleted cards, and still falls back to full refresh for complex states when that is the clearer recovery path.
 - Membership changes from data refreshes — create, import, duplicate, rename, edit, and delete fallback reprints — keep the current page and scroll offset; only the explicit navigation re-entry gesture resets the library to page one and the top of the list.
 
 ## Ownership Notes
 
 The React library is the sole runtime owner for browsing, filters, tags, bulk, selection, and stable row identity. Protected selectors are produced by React-owned rows; previous-version deploy is the rollback path.
+
+The refresh implementation and its limits belong to the [character library realtime technical owner](../../tech/character-library-realtime.md).
 
 ## Semantic Interaction IDs
 

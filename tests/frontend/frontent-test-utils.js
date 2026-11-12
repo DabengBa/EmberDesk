@@ -1,4 +1,4 @@
-const BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? 'http://127.0.0.1:8000';
+const baseUrl = () => process.env.PLAYWRIGHT_BASE_URL ?? 'http://127.0.0.1:8000';
 const FALLBACK_USER = process.env.PLAYWRIGHT_USER ?? 'playwright-e2e';
 const FALLBACK_PASSWORD = process.env.PLAYWRIGHT_PASSWORD ?? 'playwright';
 const LEGACY_TEST_PASSWORD = 'test123';
@@ -36,7 +36,7 @@ async function isOnAppOrigin(page) {
             return false;
         }
         const current = new URL(currentUrl);
-        const base = new URL(BASE_URL);
+        const base = new URL(baseUrl());
         return current.origin === base.origin && isAppShellPath(current.pathname);
     } catch {
         return false;
@@ -78,7 +78,7 @@ async function ensureSession(page) {
         }
     }
 
-    await page.goto(BASE_URL);
+    await page.goto(baseUrl());
 
     // Single-user mode (enableUserAccounts: false) serves the app shell
     // directly — no login or setup endpoints are active.
@@ -194,7 +194,7 @@ async function ensureSession(page) {
         }
     }
 
-    await page.goto(BASE_URL);
+    await page.goto(baseUrl());
     const path = new URL(page.url()).pathname;
     if (path === '/login' || path === '/setup') {
         throw new Error(`E2E authentication did not reach the app shell; current path is ${path}`);

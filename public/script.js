@@ -4638,6 +4638,7 @@ async function bootstrapWorkspace() {
     await measureStartupStage('fixViewport', () => fixViewport());
     await measureStartupStage('mountReactWorkspaceShellChrome', () => mountReactWorkspaceShellChromeHost());
     await measureStartupStage('emitAppReady', () => eventSource.emit(event_types.APP_READY));
+    startCharacterLibraryRealtime();
     startupProfile.appReadyAtMs = roundStartupTime(performance.now());
     markStartup('app:ready');
     queueMicrotask(startDeferredStartupTasks);
@@ -5099,6 +5100,7 @@ export function getEntitiesList({ doFilter = false, doSort = true } = {}) {
 }
 
 export async function getOneCharacter(avatarUrl) {
+    const requestedCharacter = characters.find(x => x.avatar === avatarUrl);
     const response = await fetch('/api/characters/get', {
         method: 'POST',
         headers: getRequestHeaders(),
@@ -5115,6 +5117,9 @@ export async function getOneCharacter(avatarUrl) {
         const indexOf = characters.findIndex(x => x.avatar === avatarUrl);
 
         if (indexOf !== -1) {
+            // A newer list snapshot replaced the target while this request was in flight.
+            if (characters[indexOf] !== requestedCharacter) return false;
+            preserveLoadedCharacterChat(getData);
             characters[indexOf] = getData;
             return true;
         } else {
@@ -5189,7 +5194,7 @@ function normalizeCharacterListPayload(payload) {
     });
 }
 
-async function fetchAllCharactersDataOnly() {
+export async function fetchAllCharactersDataOnly() {
     const response = await fetch('/api/characters/all', {
         method: 'POST',
         headers: getRequestHeaders(),
@@ -5213,46 +5218,138 @@ function projectCharacterLibraryCharactersAgainstPendingDeletes(queryCharacters)
     return projection.characters;
 }
 
-export async function getCharacters() {
-    try {
-        const previousAvatar = this_chid !== undefined ? characters[this_chid]?.avatar : null;
-        const normalizedCharacters = projectCharacterLibraryCharactersAgainstPendingDeletes(
-            await fetchAllCharactersDataOnly(),
-        );
-        if (!hasCharacterLibraryPayloadChanged(characters, normalizedCharacters)) {
-            return;
-        }
-        characters.splice(0, characters.length, ...normalizedCharacters);
+function preserveLoadedCharacterChat(character) {
+    const activeCharacter = characters[this_chid];
+    // Metadata integrity is established by getChat, including empty sessions.
+    // Initial/explicit selection clears it before loading the requested chat.
+    if (activeCharacter?.avatar === character.avatar && chat_metadata.integrity) {
+        character.chat = activeCharacter.chat;
+    }
+}
 
-        if (previousAvatar) {
-            const newCharacterId = characters.findIndex(x => x.avatar === previousAvatar);
-            if (newCharacterId >= 0) {
-                setCharacterId(newCharacterId);
-                await selectCharacterById(newCharacterId, { switchMenu: false });
-            } else {
-                await Popup.show.text(t`ERROR: The active character is no longer available.`, t`The page will be refreshed to prevent data loss. Press "OK" to continue.`);
-                return location.reload();
-            }
-        }
+export async function publishCharacterLibrarySnapshot(snapshot) {
+    const normalizedCharacters = projectCharacterLibraryCharactersAgainstPendingDeletes(snapshot);
+    normalizedCharacters.forEach(preserveLoadedCharacterChat);
+    if (!hasCharacterLibraryPayloadChanged(characters, normalizedCharacters)) {
+        return;
+    }
+    // Capture the active identity at the synchronous commit boundary, not when
+    // the request began: the user may have completed another selection since.
+    const previousAvatar = this_chid !== undefined ? characters[this_chid]?.avatar : null;
+    characters.splice(0, characters.length, ...normalizedCharacters);
 
-        // Membership changes (add/import/rename/delete fallback) reprint in
-        // place: keep the current page and scroll offset so a single edit does
-        // not yank the library back to page one. Page stays valid via the
-        // clamp in renderCharacterListPage; navigation resets only happen on
-        // the explicit select_rm_characters re-entry gesture.
-        // Membership changes (add/import/rename/delete fallback) reprint in
-        // place: keep the current page and scroll offset so a single edit does
-        // not yank the library back to page one. Page stays valid via the
-        // clamp in renderCharacterListPage; navigation resets only happen on
-        // the explicit select_rm_characters re-entry gesture.
-        await printCharacters(false);
-    } catch (error) {
-        console.error('Failed to fetch characters:', error);
-        const errorData = getCharacterLibraryFetchErrorData(error);
-        if (errorData?.overflow) {
-            await Popup.show.text(t`Character data length limit reached`, t`To resolve this, set "performance.lazyLoadCharacters" to "true" in config.yaml and restart the server.`);
+    if (previousAvatar) {
+        const newCharacterId = characters.findIndex(x => x.avatar === previousAvatar);
+        if (newCharacterId >= 0) {
+            setCharacterId(newCharacterId);
+            await selectCharacterById(newCharacterId, { switchMenu: false });
+        } else {
+            await Popup.show.text(t`ERROR: The active character is no longer available.`, t`The page will be refreshed to prevent data loss. Press "OK" to continue.`);
+            return location.reload();
         }
     }
+
+    // Membership changes (add/import/rename/delete fallback) reprint in
+    // place: keep the current page and scroll offset so a single edit does
+    // not yank the library back to page one. Page stays valid via the
+    // clamp in renderCharacterListPage; navigation resets only happen on
+    // the explicit select_rm_characters re-entry gesture.
+    await printCharacters(false);
+}
+
+let characterRefreshTail = Promise.resolve();
+
+function enqueueCharacterRefresh(reportStatus = false) {
+    const refresh = characterRefreshTail.then(async () => {
+        try {
+            if (reportStatus && characterGroupOverlay.isRealtimeRefreshBlocked) return null;
+            const snapshot = await fetchAllCharactersDataOnly();
+            // The user can enter bulk mode while the request is in flight.
+            if (reportStatus && characterGroupOverlay.isRealtimeRefreshBlocked) return null;
+            await publishCharacterLibrarySnapshot(snapshot);
+            return reportStatus ? true : undefined;
+        } catch (error) {
+            console.error('Failed to fetch characters:', error);
+            const errorData = getCharacterLibraryFetchErrorData(error);
+            if (errorData?.overflow && !reportStatus) {
+                await Popup.show.text(t`Character data length limit reached`, t`To resolve this, set "performance.lazyLoadCharacters" to "true" in config.yaml and restart the server.`);
+            }
+            return reportStatus ? false : undefined;
+        }
+    });
+    characterRefreshTail = refresh.catch(() => {});
+    return refresh;
+}
+
+export function getCharacters() {
+    return enqueueCharacterRefresh();
+}
+
+function startCharacterLibraryRealtime() {
+    let source;
+    let dirty = false;
+    let running = false;
+    let retry;
+    let reconnect;
+    let stopped = false;
+
+    async function refresh() {
+        if (running || stopped) return;
+        running = true;
+        try {
+            while (dirty && !stopped) {
+                dirty = false;
+                const ok = await enqueueCharacterRefresh(true);
+                if (ok === null) {
+                    dirty = true;
+                    break;
+                }
+                if (!ok) {
+                    dirty = true;
+                    retry = setTimeout(() => { retry = undefined; void refresh(); }, 2000);
+                    break;
+                }
+            }
+        } finally {
+            running = false;
+            if (dirty && !retry && !stopped && !characterGroupOverlay.isRealtimeRefreshBlocked) void refresh();
+        }
+    }
+
+    function invalidate() {
+        dirty = true;
+        if (!retry) void refresh();
+    }
+
+    window.addEventListener('character-library-bulk-idle', () => {
+        if (dirty && !retry && !characterGroupOverlay.isRealtimeRefreshBlocked) void refresh();
+    });
+
+    function connect() {
+        stopped = false;
+        const connection = new EventSource('/api/characters/events');
+        source = connection;
+        connection.addEventListener('ready', invalidate);
+        connection.addEventListener('invalidate', invalidate);
+        connection.addEventListener('error', () => {
+            if (stopped || source !== connection || connection.readyState !== EventSource.CLOSED || reconnect) return;
+            reconnect = setTimeout(() => {
+                reconnect = undefined;
+                if (!stopped) connect();
+            }, 2000);
+        });
+    }
+
+    window.addEventListener('pagehide', () => {
+        stopped = true;
+        source?.close();
+        clearTimeout(retry);
+        clearTimeout(reconnect);
+        retry = undefined;
+        reconnect = undefined;
+    });
+    window.addEventListener('pageshow', event => { if (event.persisted) connect(); });
+    connect();
 }
 
 async function delChat(chatfile) {

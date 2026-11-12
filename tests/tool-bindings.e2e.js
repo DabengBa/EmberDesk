@@ -657,6 +657,40 @@ test.describe('tool bindings', () => {
         await page.evaluate(() => document.querySelector('#chat [data-respond-option]').click());
         await expect(page.locator('#send_textarea')).toHaveValue('Take the tea');
 
+        // While still enabled, a later turn uses the current effective reply,
+        // not the stale content captured in its real tool invocation.
+        const storedInvocations = await page.evaluate(() => {
+            const context = window.SillyTavern.getContext();
+            context.chatCompletionSettings.chat_memory_enabled = false;
+            const reply = context.chat.at(-1);
+            reply.mes = reply.mes.replace('RESPOND_TEXT', 'EDITED_PIPELINE_REPLY');
+            return structuredClone(reply.extra.tool_invocations);
+        });
+        await page.locator('#send_textarea').fill('enabled follow-up message');
+        const enabledPreview = await page.evaluate(async () => {
+            const { previewNextGenerationRequest } = await import('/scripts/generation-service.js');
+            return await previewNextGenerationRequest();
+        });
+        await page.evaluate(() => {
+            window.__emberdeskToolRequests = [];
+            window.__emberdeskToolGeneration = window.SillyTavern.getContext().generate('normal', { automatic_trigger: false });
+        });
+        await page.evaluate(() => window.__emberdeskToolGeneration);
+        const enabledRequests = await page.evaluate(() => window.__emberdeskToolRequests);
+        expect(enabledRequests).toHaveLength(3);
+        expect(enabledRequests[0].messages).toEqual(enabledPreview.request.messages);
+        const historyCalls = enabledRequests[0].messages.flatMap(message => message.tool_calls ?? []);
+        const storyCalls = historyCalls.filter(call => call.function.name === 'submit_story');
+        const storyTexts = storyCalls.map(call => JSON.parse(call.function.arguments).content.trim());
+        expect(storyTexts.filter(text => text === 'EDITED_PIPELINE_REPLY')).toHaveLength(1);
+        expect(storyTexts.filter(text => text === 'reply pipeline e2e message')).toHaveLength(1);
+        expect(historyCalls.every(call => call.function.name === 'submit_story')).toBe(true);
+        expect(enabledRequests[0].messages.some(message => message.role === 'user' && message.content === 'enabled follow-up message')).toBe(true);
+        const enabledWire = JSON.stringify(enabledRequests[0].messages);
+        for (const text of ['ANALYZE_TEXT', 'REVIEW_TEXT', 'RESPOND_TEXT', 'data-respond-option']) expect(enabledWire).not.toContain(text);
+        expect(await page.evaluate(() => window.SillyTavern.getContext().chat.find(message => message.mes.includes('EDITED_PIPELINE_REPLY')).extra.tool_invocations)).toEqual(storedInvocations);
+        await expect(page.locator('#chat .mes').last()).toContainText('RESPOND_TEXT');
+
         // A later ordinary generation (pipeline disabled) must not carry stale
         // step prompts from the finished run.
         await page.evaluate(() => {
