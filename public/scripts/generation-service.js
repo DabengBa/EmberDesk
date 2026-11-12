@@ -1159,7 +1159,7 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
                 mergedInvocations = cardMessage.extra.tool_invocations;
                 // Only when the last invocation IS the final step does its tag
                 // carry the reply text; otherwise the reply is appended bare.
-                const replyIsTagged = mergedInvocations.at(-1)?.name === step?.tool;
+                const replyIsTagged = (mergedInvocations.at(-1)?.pipeline?.tool ?? mergedInvocations.at(-1)?.name) === step?.tool;
                 tagMarkup = state.ToolManager.formatPipelineTagMarkup(mergedInvocations, replyIsTagged ? cleaned : '');
                 if (!replyIsTagged) {
                     tagMarkup = `${tagMarkup}\n${cleaned}`;
@@ -1311,13 +1311,9 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
                 if (canPerformToolCalls && isStreamFinished && isStreamWithToolCalls) {
                     const lastMessage = state.chat[state.chat.length - 1];
                     const hasToolCalls = state.ToolManager.hasToolCalls(state.streamingProcessor.toolCalls);
-                    const shouldDeleteMessage = ['', '...'].includes(lastMessage?.mes) && !lastMessage?.extra?.reasoning && ['', '...'].includes(state.streamingProcessor?.result);
+                    const shouldDeleteMessage = Boolean(getPipelineRunState()) || (['', '...'].includes(lastMessage?.mes) && !lastMessage?.extra?.reasoning && ['', '...'].includes(state.streamingProcessor?.result));
                     if (hasToolCalls && shouldDeleteMessage) await deleteLastMessage();
                     if (hasToolCalls && !shouldDeleteMessage) {
-                        if (getPipelineRunState() && state.chat[state.streamingProcessor.messageId]) {
-                            state.chat[state.streamingProcessor.messageId].extra ??= {};
-                            state.chat[state.streamingProcessor.messageId].extra.model = attemptModel;
-                        }
                         await state.streamingProcessor.finalizeIntermediaryMessage(state.streamingProcessor.messageId, getMessage, { unlockUI: false });
                     }
                     const invocationResult = await state.ToolManager.invokeFunctionTools(state.streamingProcessor.toolCalls, {
@@ -1372,6 +1368,12 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
                         throw createEmptyReplyFailure(finishedMessageId);
                     }
 
+                    if (type === 'normal' && getPipelineRunState() && !getPipelineRunState().fallbackRound) {
+                        const error = new Error('Reply pipeline: expected exactly one current-step call (submit_story).');
+                        error.messageId = finishedMessageId;
+                        throw error;
+                    }
+
                     if (state.main_api === 'openai' && state.chat[finishedMessageId] && attemptModel) {
                         state.chat[finishedMessageId].extra ??= {};
                         state.chat[finishedMessageId].extra.model = attemptModel;
@@ -1404,6 +1406,9 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
             const carriesToolCalls = canPerformToolCalls && state.ToolManager.hasToolCalls(result);
             if (!carriesToolCalls && isEmptyGenerationResult(result)) {
                 throw createEmptyReplyFailure(activeRecoveryMessageId);
+            }
+            if (!carriesToolCalls && type === 'normal' && getPipelineRunState() && !getPipelineRunState().fallbackRound) {
+                throw new Error('Reply pipeline: expected exactly one current-step call (submit_story).');
             }
             return result;
         };
@@ -1563,7 +1568,7 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
 
         if (canPerformToolCalls) {
             const hasToolCalls = state.ToolManager.hasToolCalls(data);
-            const shouldDeleteMessage = ['', '...'].includes(getMessage) && !reasoning;
+            const shouldDeleteMessage = Boolean(getPipelineRunState()) || (['', '...'].includes(getMessage) && !reasoning);
             if (hasToolCalls && shouldDeleteMessage) await deleteLastMessage();
             const invocationResult = await state.ToolManager.invokeFunctionTools(data, { reasoningText: reasoning });
             const shouldStopGeneration = (!invocationResult.invocations.length && shouldDeleteMessage) || invocationResult.stealthCalls.length;

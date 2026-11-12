@@ -57,7 +57,7 @@ jest.unstable_mockModule('../public/scripts/tokenizers.js', () => ({ countTokens
 
 jest.unstable_mockModule('../public/scripts/templates.js', () => ({ renderTemplateAsync: jest.fn() }));
 jest.unstable_mockModule('../public/scripts/popup.js', () => ({ callGenericPopup: jest.fn(), Popup: {}, POPUP_RESULT: {}, POPUP_TYPE: {} }));
-jest.unstable_mockModule('../public/scripts/local-dialogs.js', () => ({ showLocalDialog: jest.fn() }));
+jest.unstable_mockModule('../public/scripts/local-dialogs.js', () => ({ showLocalDialog: jest.fn(), beginLocalDialogOperation: jest.fn() }));
 jest.unstable_mockModule('../public/scripts/i18n.js', () => ({ t: strings => strings[0] }));
 jest.unstable_mockModule('../public/scripts/tool-calling.js', () => ({ ToolManager: {
     canPerformToolCalls: () => toolCallingSupported,
@@ -166,7 +166,7 @@ test('first request reserves step material and instruction before trimming real 
     expect(generate_data.messages.some(m => m.content === 'history-0')).toBe(false);
     expect(generate_data.messages.some(m => m.content === 'history-7')).toBe(true);
     expect(generate_data.messages.some(m => m.content === 'STEP_TAIL')).toBe(true);
-    expect(generate_data.messages.at(-1).content).toContain('must call the analyze tool exactly once');
+    expect(generate_data.messages.at(-1).content).toContain('must call the submit_story tool exactly once for analyze');
 });
 
 test('captured run bypasses base assembly and only prepares step-only tail once', async () => {
@@ -284,6 +284,20 @@ test('pipeline history projects old users and effective replies once without cha
     expect(chat).toEqual(before);
     const { messages: preview } = await assembleHistory(chat, { preview: true });
     expect(preview).toEqual(messages);
+});
+
+test('completed same-name calls project the edited final body using logical step tags', async () => {
+    historyToolsSupported = true;
+    manager.serviceSettings.openai_max_context = 2000;
+    const record = pipelineRecord();
+    record.extra.tool_invocations.forEach(invocation => {
+        invocation.pipeline.tool = invocation.name;
+        invocation.name = 'submit_story';
+    });
+    const { messages } = await assembleHistory([record, historyRecord('CURRENT_USER', true)]);
+    expect(submissions(messages).map(call => JSON.parse(call.function.arguments).content.trim())).toEqual(['EDITED_FINAL']);
+    expect(JSON.stringify(messages)).not.toContain('PRIVATE_SCRATCH');
+    expect(JSON.stringify(messages)).not.toContain('STALE_FINAL');
 });
 
 test('history excludes instructions, summaries, media, reasoning and genuine tool records', async () => {
@@ -435,7 +449,7 @@ test.each([
         const normalized = wide.messages.map(message => Object.fromEntries(Object.entries(message).filter(([, value]) => value !== undefined)
             .map(([key, value]) => [key, typeof value === 'string' ? value : JSON.stringify(value)])));
         const messageTokens = (await Promise.all(normalized.map(message => count([message])))).reduce((a, b) => a + b, 0);
-        const toolTokens = await count([{ role: 'user', content: JSON.stringify({ tools: [{ type: 'function', function: { name: 'analyze' } }] }) }]);
+        const toolTokens = await count([{ role: 'system', content: JSON.stringify([core.PIPELINE_STORY_TOOL]) }], true);
         const run = core.getPipelineRunState();
         const instructionTokens = await count([{ role: 'system', content: core.buildStepPrompt(run.steps[run.index], run.index, run.steps.length) }], true);
         manager.serviceSettings.openai_max_context = 20 + 3 + messageTokens + toolTokens + instructionTokens;
