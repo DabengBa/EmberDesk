@@ -1,24 +1,35 @@
 import { world_info, world_names, selected_world_info } from './world-info-state.js';
 
 /** Book lifecycle and character/chat reference operations. */
-export function createWorldInfoBookCommands({ Popup, POPUP_RESULT, POPUP_TYPE, t, equalsIgnoreCaseAndAccents, saveWorldInfo, getWIElement, selectWorldInfoEditorName, saveSettingsDebounced, characters, getRequestHeaders, getOneCharacter, getCurrentShellCharacterId, select_selected_character, setWorldInfoButtonClass, flushDeletedWorldsFromUI, getSanitizedFilename, checkOverwriteExistingData, updateWorldInfoList, hideWorldEditor, chat_metadata, METADATA_KEY, openWorldInfoEditor, renderTemplateAsync, getCurrentChatId, saveMetadata, callGenericPopup, loadWorldInfo, deleteWIOriginalDataValue, getSelectedWorldInfoEditorName, reloadEditor, getCurrentShellMenuType, create_save, createOrEditCharacter, getCharaFilename, normalizeArray }) {
+export function createWorldInfoBookCommands({ POPUP_TYPE, showLocalDialog, t, equalsIgnoreCaseAndAccents, saveWorldInfo, getWIElement, selectWorldInfoEditorName, saveSettingsDebounced, characters, getRequestHeaders, getOneCharacter, getCurrentShellCharacterId, select_selected_character, setWorldInfoButtonClass, flushDeletedWorldsFromUI, getSanitizedFilename, checkOverwriteExistingData, updateWorldInfoList, hideWorldEditor, chat_metadata, METADATA_KEY, openWorldInfoEditor, renderTemplateAsync, getCurrentChatId, saveMetadata, callGenericPopup, loadWorldInfo, deleteWIOriginalDataValue, getSelectedWorldInfoEditorName, reloadEditor, getCurrentShellMenuType, create_save, createOrEditCharacter, getCharaFilename, normalizeArray }) {
     async function renameWorldInfo(name, data) {
         const oldName = name;
-        const newName = await Popup.show.input('Rename World Info', 'Enter a new name:', oldName);
+        const result = await showLocalDialog({ scope: 'world-info', title: t`Rename World Info`, fields: [{ type: 'text', name: 'name', label: t`Enter a new name:`, value: oldName }], actions: [{ id: 'rename', label: t`Rename`, variant: 'primary' }, { id: 'cancel', label: t`Cancel` }], initialFocus: 'name' });
+        const newName = result?.action === 'rename' ? result.values.name : null;
 
         if (oldName === newName || !newName) {
             console.debug('World info rename cancelled');
-            return;
+            return false;
         }
         if (equalsIgnoreCaseAndAccents(oldName, newName)) {
             toastr.warning(t`Name not accepted, as it is the same as before (ignoring case and accents).`, t`Rename World Info`);
-            return;
+            return false;
         }
 
         const entryPreviouslySelected = selected_world_info.findIndex((e) => e === oldName);
 
-        await saveWorldInfo(newName, data, true);
-        await deleteWorldInfo(oldName);
+        const renamedData = 'name' in data ? { ...data, name: newName } : data;
+        await saveWorldInfo(newName, renamedData, true);
+        let deleted = false;
+        try {
+            deleted = await deleteWorldInfo(oldName);
+        } catch (error) {
+            console.error('Failed to delete the original World Info after renaming:', error);
+        }
+        if (!deleted) {
+            toastr.error(t`The new World Info was saved, but the original could not be deleted.`);
+            return false;
+        }
 
         await updateWorldInfoLinks(oldName, newName);
 
@@ -31,6 +42,7 @@ export function createWorldInfoBookCommands({ Popup, POPUP_RESULT, POPUP_TYPE, t
         if (world_names.includes(newName)) {
             await selectWorldInfoEditorName(newName);
         }
+        return true;
     }
 
     /**
@@ -63,10 +75,7 @@ export function createWorldInfoBookCommands({ Popup, POPUP_RESULT, POPUP_TYPE, t
         }
 
         // Trigger the confirmation popup
-        const updatePastLinksConfirm = await Popup.show.confirm(
-            t`World/Lorebook renamed!`,
-            `<p>${t`Auxiliary Lorebook links have been updated. Would you like to update primary lorebook links for ${linkedChIDs.length} character(s) as well?`}</p>`,
-        ) == POPUP_RESULT.AFFIRMATIVE;
+        const updatePastLinksConfirm = (await showLocalDialog({ scope: 'world-info', title: t`World/Lorebook renamed!`, message: t`Auxiliary Lorebook links have been updated. Would you like to update primary lorebook links for ${linkedChIDs.length} character(s) as well?`, actions: [{ id: 'update', label: t`Update`, variant: 'primary' }, { id: 'cancel', label: t`Cancel` }] }))?.action === 'update';
 
         if (updatePastLinksConfirm) {
             let activeCharacterUpdated = false;
@@ -203,10 +212,23 @@ export function createWorldInfoBookCommands({ Popup, POPUP_RESULT, POPUP_TYPE, t
         }
 
         const sanitizedWorldName = await getSanitizedFilename(worldName);
+        const existingName = world_names.find(name => equalsIgnoreCaseAndAccents(name, sanitizedWorldName));
 
-        const allowed = await checkOverwriteExistingData('World Info', world_names, sanitizedWorldName, { interactive: interactive, actionName: 'Create', deleteAction: (existingName) => deleteWorldInfo(existingName) });
+        const allowed = await checkOverwriteExistingData('World Info', world_names, sanitizedWorldName, { interactive: interactive, actionName: 'Create', confirm: async ({ title, typeLabel, existing }) => (await showLocalDialog({ scope: 'world-info', title, message: `${t`A ${typeLabel} with the same name already exists:`}\n${existing}\n${t`Do you want to overwrite it?`}`, actions: [{ id: 'overwrite', label: t`Overwrite`, variant: 'destructive' }, { id: 'cancel', label: t`Cancel` }], initialFocus: 'cancel' }))?.action === 'overwrite' });
         if (!allowed) {
             return false;
+        }
+
+        if (existingName) {
+            try {
+                if (!await deleteWorldInfo(existingName)) {
+                    throw new Error(`Failed to delete existing World Info '${existingName}' before overwrite.`);
+                }
+            } catch (error) {
+                toastr.error(t`Failed to delete World Info.`);
+                console.error('Failed to delete existing World Info before overwrite:', error);
+                return false;
+            }
         }
 
         await saveWorldInfo(worldName, worldInfoTemplate, true);

@@ -31,19 +31,53 @@ describe('world info import feedback', () => {
 
     test('batch conflicts expose the full list and an explicit cancellation result', async () => {
         const source = read('public/scripts/world-info-import-ui.js');
-        const body = extractBlock(source, 'function buildWorldInfoBatchConflictHtml', 'async function prepareWorldInfoImportOverwrite');
+        const body = extractBlock(source, 'async function showWorldInfoBatchConflictPopup', 'async function prepareWorldInfoImportOverwrite');
         const choice = { CONFIRM: 'confirm', OVERWRITE: 'overwrite', SKIP: 'skip', CANCEL: 'cancel' };
-        const result = { AFFIRMATIVE: 1, NEGATIVE: 0, CUSTOM1: 2, CUSTOM2: 3 };
         const conflicts = Array.from({ length: 15 }, (_, index) => ({ file: { name: `file-${index}.json` }, existingName: `Book-${index}` }));
-        const helpers = new Function('escapeHtml', 't', 'Popup', 'POPUP_RESULT', 'WORLD_INFO_IMPORT_CONFLICT_CHOICE', `${body}; return { buildWorldInfoBatchConflictHtml, showWorldInfoBatchConflictPopup };`)(
-            value => String(value),
+        let request;
+        const helpers = new Function('t', 'showLocalDialog', 'WORLD_INFO_IMPORT_CONFLICT_CHOICE', `${body}; return { showWorldInfoBatchConflictPopup };`)(
             (strings, ...values) => strings.reduce((text, part, index) => text + part + (values[index] ?? ''), ''),
-            { show: { confirm: async () => result.NEGATIVE } },
-            result,
+            async value => { request = value; return null; },
             choice,
         );
-        expect(helpers.buildWorldInfoBatchConflictHtml(conflicts)).toContain('file-14.json');
         await expect(helpers.showWorldInfoBatchConflictPopup(conflicts)).resolves.toBe('cancel');
+        expect(request.list.items).toContain('file-14.json → Book-14');
+        expect(request.list.moreLabel).toBe('Show remaining conflicts');
+        expect(request.message).not.toContain('file-14.json → Book-14');
+        expect(request.actions.map(action => action.id)).toEqual(['overwrite', 'confirm', 'skip', 'cancel']);
+        expect(request.scope).toBe('world-info');
+    });
+
+    test.each([10, 11])('batch conflict list keeps every mapping and cancellation focus at %i items', async count => {
+        const source = read('public/scripts/world-info-import-ui.js');
+        const body = extractBlock(source, 'async function showWorldInfoBatchConflictPopup', 'async function prepareWorldInfoImportOverwrite');
+        const choice = { CONFIRM: 'confirm', OVERWRITE: 'overwrite', SKIP: 'skip', CANCEL: 'cancel' };
+        const conflicts = Array.from({ length: count }, (_, index) => ({
+            file: { name: index === 0 ? '<unsafe-file>.json' : `file-${index}.json` },
+            existingName: index === 0 ? '<unsafe-book>' : `Book-${index}`,
+        }));
+        const requests = [];
+        const helpers = new Function('t', 'showLocalDialog', 'WORLD_INFO_IMPORT_CONFLICT_CHOICE', `${body}; return { showWorldInfoBatchConflictPopup };`)(
+            (strings, ...values) => strings.reduce((text, part, index) => text + part + (values[index] ?? ''), ''),
+            async request => { requests.push(request); return null; },
+            choice,
+        );
+
+        await expect(helpers.showWorldInfoBatchConflictPopup(conflicts)).resolves.toBe('cancel');
+
+        const request = requests[0];
+        expect(request.message).toContain('Some selected files will overwrite existing World Info.');
+        expect(request.message).toContain('Choose how to handle these conflicts before the batch starts.');
+        expect(request.list).toEqual({
+            items: conflicts.map(conflict => `${conflict.file.name} → ${conflict.existingName}`),
+            moreLabel: 'Show remaining conflicts',
+        });
+        expect(request.list.items).toHaveLength(count);
+        expect(request.list.items.at(-1)).toBe(`${conflicts.at(-1).file.name} → ${conflicts.at(-1).existingName}`);
+        expect(request.list.items[0]).toBe('<unsafe-file>.json → <unsafe-book>');
+        expect(request.actions.map(action => action.id)).toEqual(['overwrite', 'confirm', 'skip', 'cancel']);
+        expect(request.initialFocus).toBe('cancel');
+        expect(request.scope).toBe('world-info');
     });
 
     test('file import change flow batches selected files and restores input state', () => {
@@ -66,6 +100,7 @@ describe('world info import feedback', () => {
         expect(ui).toContain('function setWorldImportBusy(isBusy, { showToast = true } = {})');
         expect(ui).toContain('async function importWorldInfoFiles(files)');
         expect(source).toContain('createWorldInfoImportUi({');
+        expect(source).toContain('getRequestHeaders, t, translate, showLocalDialog,');
         expect(changeHandler).toContain('const files = Array.from(e.target.files ?? []);');
         expect(changeHandler).toContain('try {');
         expect(changeHandler).toContain('await importWorldInfoFiles(files);');
@@ -147,7 +182,7 @@ describe('world info import feedback', () => {
         expect(command).toContain('deps.setBusy(true);');
         expect(command).toContain('runWorldInfoImportQueue({');
         expect(command).toContain('for (let index = 0; index < queue.length; index++) {');
-        expect(command).toContain('await importFile(file, { overwriteMode })');
+        expect(command).toContain('await importFile(file, { overwriteMode, signal })');
         expect(command).toContain('createWorldInfoImportResult(\'failed\', file)');
         expect(batchSource).toContain('showSummary: showWorldInfoBatchImportSummary');
         expect(command).toContain('deps.showSummary(summary);');
@@ -192,8 +227,8 @@ describe('world info import feedback', () => {
         expect(source).toContain('import { DragAndDropHandler } from \'./dragdrop.js\';');
         expect(panelInit).toContain('new DragAndDropHandler(\'#world_popup\'');
         expect(panelInit).toContain('await importWorldInfoFiles(files);');
-        expect(ui).toContain('function showWorldInfoBatchConflictPopup(conflicts)');
-        expect(ui).toContain('POPUP_RESULT.CUSTOM1');
+        expect(ui).toContain('function showWorldInfoBatchConflictPopup(conflicts, signal)');
+        expect(ui).toContain("id: 'skip', label: t`Skip all`");
         expect(ui).toContain('WORLD_INFO_IMPORT_CONFLICT_CHOICE');
         expect(ui).toContain('function updateWorldInfoBatchProgress(batchState, index, total, file, { status = \'importing\' } = {})');
         expect(ui).toContain('Checking import target for file ${index} of ${total}');
@@ -290,7 +325,7 @@ describe('world info import feedback', () => {
         expect(importSource).toContain('return createWorldInfoImportResult(\'cancelled\', file, sanitizedWorldName);');
         expect(importSource).toContain('return createWorldInfoImportResult(\'success\', file, data.name);');
         expect(importSource).toContain('overwriteMode = \'confirm\'');
-        expect(importSource).toContain('prepareWorldInfoImportOverwrite(sanitizedWorldName, metadata, overwriteMode)');
+        expect(importSource).toContain('prepareWorldInfoImportOverwrite(sanitizedWorldName, metadata, overwriteMode, signal)');
     });
 
     test('world import overwrite confirmation includes context and safe action labels', () => {
@@ -315,12 +350,12 @@ describe('world info import feedback', () => {
         expect(overwriteHelper).toContain('${contextHtml ?? \'\'}');
         expect(overwriteHelper).toContain('Popup.show.confirm');
         expect(overwriteHelper).toContain('confirmOptions');
-        expect(importSource).toContain('prepareWorldInfoImportOverwrite(sanitizedWorldName, metadata, overwriteMode)');
+        expect(importSource).toContain('prepareWorldInfoImportOverwrite(sanitizedWorldName, metadata, overwriteMode, signal)');
         expect(prepareOverwriteSource).toContain('contextHtml: buildWorldInfoImportContextHtml(metadata)');
-        expect(prepareOverwriteSource).toContain('okButton: buildWorldInfoOverwriteButtonLabel(metadata)');
-        expect(prepareOverwriteSource).toContain('cancelButton: t`Cancel`');
-        expect(prepareOverwriteSource).toContain('defaultResult: POPUP_RESULT.NEGATIVE');
-        expect(prepareOverwriteSource).toContain('popup.cancelButton.focus()');
+        expect(prepareOverwriteSource).toContain('label: buildWorldInfoOverwriteButtonLabel(metadata)');
+        expect(prepareOverwriteSource).toContain("id: 'cancel', label: t`Cancel`");
+        expect(prepareOverwriteSource).toContain("initialFocus: 'cancel'");
+        expect(prepareOverwriteSource).toContain('formatWorldInfoImportSummary(metadata)');
         expect(prepareOverwriteSource).toContain('buildWorldInfoOverwriteButtonLabel(metadata)');
         expect(worldInfoSource).toContain('formatWorldInfoEntryCount(metadata?.entryCount)');
     });

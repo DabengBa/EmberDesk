@@ -2,7 +2,7 @@ import { runWorldInfoFileImport, runWorldInfoBatchImport } from './world-info-im
 import { createWorldInfoImportResult, summarizeWorldInfoBatchImport } from './world-info-import-results.js';
 
 /** World Info import presentation and command adapters; editor state remains in the session. */
-export function createWorldInfoImportUi({ getWorldNames, deleteWorldInfo, updateWorldInfoList, selectWorldInfoEditorName, eventSource, event_types, getSanitizedFilename, equalsIgnoreCaseAndAccents, checkOverwriteExistingData, escapeHtml, parseJsonFile, getFileBuffer, extractDataFromPng, getRequestHeaders, t, translate, Popup, POPUP_RESULT }) {
+export function createWorldInfoImportUi({ getWorldNames, deleteWorldInfo, updateWorldInfoList, selectWorldInfoEditorName, eventSource, event_types, getSanitizedFilename, equalsIgnoreCaseAndAccents, checkOverwriteExistingData, escapeHtml, parseJsonFile, getFileBuffer, extractDataFromPng, getRequestHeaders, t, translate, showLocalDialog, beginLocalDialogOperation }) {
     let worldInfoImportBusy = false;
     let worldInfoImportToast = null;
     function setWorldImportBusy(isBusy, { showToast = true } = {}) {
@@ -217,17 +217,9 @@ export function createWorldInfoImportUi({ getWorldNames, deleteWorldInfo, update
             batchState.cancelPromptOpen = true;
 
             try {
-                const confirmed = await Popup.show.confirm(
-                    t`Cancel remaining imports?`,
-                    t`The current file will finish. Files still waiting in the batch will be skipped.`,
-                    {
-                        okButton: t`Cancel remaining`,
-                        cancelButton: t`Keep importing`,
-                        defaultResult: POPUP_RESULT.NEGATIVE,
-                    },
-                );
+                const confirmed = await showLocalDialog({ scope: 'world-info', title: t`Cancel remaining imports?`, message: t`The current file will finish. Files still waiting in the batch will be skipped.`, actions: [{ id: 'stop', label: t`Cancel remaining`, variant: 'destructive' }, { id: 'keep', label: t`Keep importing` }], initialFocus: 'keep' });
 
-                if (confirmed === POPUP_RESULT.AFFIRMATIVE) {
+                if (confirmed?.action === 'stop') {
                     batchState.cancelRequested = true;
                     button.text(t`Cancelling...`);
                 } else {
@@ -239,42 +231,18 @@ export function createWorldInfoImportUi({ getWorldNames, deleteWorldInfo, update
         });
     }
 
-    function buildWorldInfoBatchConflictHtml(conflicts) {
-        const rows = conflicts.map(conflict => `<li>${escapeHtml(conflict.file.name)} &rarr; ${escapeHtml(conflict.existingName)}</li>`);
-        const visibleConflicts = rows.slice(0, 10).join('');
-        const overflowCount = conflicts.length - 10;
-        const overflow = overflowCount > 0 ? `<details class="world-info-conflict-details"><summary>${t`Show ${overflowCount} more conflicts`}</summary><ul>${rows.slice(10).join('')}</ul></details>` : '';
 
-        return `<p>${t`Some selected files will overwrite existing World Info.`}</p><ul>${visibleConflicts}</ul>${overflow}<p>${t`Choose how to handle these conflicts before the batch starts.`}</p>`;
-    }
-
-    async function showWorldInfoBatchConflictPopup(conflicts) {
+    async function showWorldInfoBatchConflictPopup(conflicts, signal) {
         if (conflicts.length === 0) {
             return WORLD_INFO_IMPORT_CONFLICT_CHOICE.CONFIRM;
         }
 
-        const result = await Popup.show.confirm(t`World Info import conflicts`, buildWorldInfoBatchConflictHtml(conflicts), {
-            okButton: t`Overwrite all`,
-            cancelButton: t`Cancel batch`,
-            defaultResult: POPUP_RESULT.NEGATIVE,
-            customButtons: [
-                { text: t`Ask for each conflict`, result: POPUP_RESULT.CUSTOM2 },
-                { text: t`Skip all`, result: POPUP_RESULT.CUSTOM1 },
-            ],
-        });
-
-        if (result === POPUP_RESULT.AFFIRMATIVE) {
-            return WORLD_INFO_IMPORT_CONFLICT_CHOICE.OVERWRITE;
-        }
-
-        if (result === POPUP_RESULT.CUSTOM1) {
-            return WORLD_INFO_IMPORT_CONFLICT_CHOICE.SKIP;
-        }
-
-        return result === POPUP_RESULT.CUSTOM2 ? WORLD_INFO_IMPORT_CONFLICT_CHOICE.CONFIRM : WORLD_INFO_IMPORT_CONFLICT_CHOICE.CANCEL;
+        const conflictItems = conflicts.map(conflict => `${conflict.file.name} → ${conflict.existingName}`);
+        const result = await showLocalDialog({ scope: 'world-info', signal, title: t`World Info import conflicts`, message: `${t`Some selected files will overwrite existing World Info.`}\n${t`Choose how to handle these conflicts before the batch starts.`}`, list: { items: conflictItems, moreLabel: t`Show remaining conflicts` }, actions: [{ id: 'overwrite', label: t`Overwrite all`, variant: 'destructive' }, { id: 'confirm', label: t`Ask for each conflict` }, { id: 'skip', label: t`Skip all` }, { id: 'cancel', label: t`Cancel batch` }], initialFocus: 'cancel' });
+        return Object.values(WORLD_INFO_IMPORT_CONFLICT_CHOICE).includes(result?.action) ? result.action : WORLD_INFO_IMPORT_CONFLICT_CHOICE.CANCEL;
     }
 
-    async function prepareWorldInfoImportOverwrite(sanitizedWorldName, metadata, overwriteMode) {
+    async function prepareWorldInfoImportOverwrite(sanitizedWorldName, metadata, overwriteMode, signal) {
         const existingName = findExistingWorldInfoName(sanitizedWorldName);
 
         if (!existingName) {
@@ -287,28 +255,27 @@ export function createWorldInfoImportUi({ getWorldNames, deleteWorldInfo, update
 
         if (overwriteMode === WORLD_INFO_IMPORT_CONFLICT_CHOICE.OVERWRITE) {
             toastr.info(`Overwriting Existing World Info:<br />${escapeHtml(existingName)}`, t`World Info Import`, { escapeHtml: false });
-            await deleteWorldInfo(existingName);
-            return true;
+            if (signal?.aborted) return false;
+            if (!await deleteWorldInfo(existingName)) throw new Error('Failed to delete existing World Info');
+            return 'deleted';
         }
 
-        return checkOverwriteExistingData('World Info', getWorldNames(), sanitizedWorldName, {
+        const confirmed = await checkOverwriteExistingData('World Info', getWorldNames(), sanitizedWorldName, {
             interactive: true,
             actionName: 'Import',
-            deleteAction: (existingName) => deleteWorldInfo(existingName),
+
             contextHtml: buildWorldInfoImportContextHtml(metadata),
-            confirmOptions: {
-                okButton: buildWorldInfoOverwriteButtonLabel(metadata),
-                cancelButton: t`Cancel`,
-                defaultResult: POPUP_RESULT.NEGATIVE,
-                onOpen: (popup) => {
-                    popup.cancelButton.focus();
-                },
-            },
+            confirm: async ({ title, typeLabel, existing }) => (await showLocalDialog({ scope: 'world-info', signal, title, message: `${t`A ${typeLabel} with the same name already exists:`}\n${existing}\n${formatWorldInfoImportSummary(metadata)}\n${t`Do you want to overwrite it?`}`, actions: [{ id: 'overwrite', label: buildWorldInfoOverwriteButtonLabel(metadata), variant: 'destructive' }, { id: 'cancel', label: t`Cancel` }], initialFocus: 'cancel' }))?.action === 'overwrite',
         });
+        if (!confirmed || signal?.aborted) return false;
+        if (!await deleteWorldInfo(existingName)) throw new Error('Failed to delete existing World Info');
+        return 'deleted';
     }
 
     async function importWorldInfoFiles(files) {
-        return runWorldInfoBatchImport(files, {
+        const operation = beginLocalDialogOperation('world-info');
+        try { return await runWorldInfoBatchImport(files, {
+            signal: operation.signal,
             prepare: prepareWorldInfoImportQueue,
             isBusy: () => worldInfoImportBusy,
             setBusy: busy => setWorldImportBusy(busy, { showToast: false }),
@@ -316,14 +283,14 @@ export function createWorldInfoImportUi({ getWorldNames, deleteWorldInfo, update
             warnOverflow: count => toastr.warning(t`Only the first ${WORLD_INFO_IMPORT_BATCH_FILE_LIMIT} World Info files will be imported. ${count} extra file(s) were skipped.`, t`World Info Import`),
             warnPrescan: () => toastr.warning(t`Conflict pre-scan failed. EmberDesk will ask about overwrites one file at a time.`, t`World Info Import`),
             findConflicts: getWorldInfoBatchImportConflicts,
-            chooseConflicts: showWorldInfoBatchConflictPopup,
+            chooseConflicts: conflicts => showWorldInfoBatchConflictPopup(conflicts, operation.signal),
             waitForCancelPrompt: waitForWorldInfoBatchCancelPrompt,
             progress: updateWorldInfoBatchProgress,
             importFile: importWorldInfo,
             summarize: summarizeWorldInfoBatchImport,
             showSummary: showWorldInfoBatchImportSummary,
             notifySuccess: () => { void eventSource.emit(event_types.WORLDINFO_SETTINGS_UPDATED); },
-        });
+        }); } finally { operation.release(); }
     }
 
     /**

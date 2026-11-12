@@ -2393,9 +2393,10 @@ export function highlightRegex(regexStr) {
  * @param {(existingName:string)=>void} [options.deleteAction=null] - Optional action to execute wen deleting an existing data object on overwrite
  * @param {string?} [options.contextHtml=null] - Optional extra HTML to append to the confirmation body
  * @param {object} [options.confirmOptions={}] - Optional Popup.show.confirm options
+ * @param {(details: {title: string, typeLabel: string, existing: string}) => Promise<boolean>} [options.confirm] - Optional caller-owned confirmation
  * @returns {Promise<boolean>} True if the user confirmed the overwrite or there is no overwrite needed, false otherwise
  */
-export async function checkOverwriteExistingData(type, existingNames, name, { interactive = false, actionName = 'Overwrite', deleteAction = null, contextHtml = null, confirmOptions = {} } = {}) {
+export async function checkOverwriteExistingData(type, existingNames, name, { interactive = false, actionName = 'Overwrite', deleteAction = null, contextHtml = null, confirmOptions = {}, confirm = null } = {}) {
     const existing = existingNames.find(x => equalsIgnoreCaseAndAccents(x, name));
     if (!existing) {
         return true;
@@ -2407,7 +2408,7 @@ export async function checkOverwriteExistingData(type, existingNames, name, { in
     const actionTitle = `${type} ${actionName}`;
     const translatedActionTitle = translate(actionTitle);
     const title = translatedActionTitle === actionTitle ? `${typeLabel} ${actionLabel}` : translatedActionTitle;
-    const overwrite = interactive && await Popup.show.confirm(title, `<p>${t`A ${typeLabel} with the same name already exists:`}<br />${escapeHtml(existing)}</p>${contextHtml ?? ''}<p>${t`Do you want to overwrite it?`}</p>`, confirmOptions);
+    const overwrite = interactive && await (confirm ? confirm({ title, typeLabel, existing }) : Popup.show.confirm(title, `<p>${t`A ${typeLabel} with the same name already exists:`}<br />${escapeHtml(existing)}</p>${contextHtml ?? ''}<p>${t`Do you want to overwrite it?`}</p>`, confirmOptions));
     if (!overwrite) {
         toastr.warning(`${t`${typeLabel} ${actionLabelLower} cancelled. A ${typeLabel} with the same name already exists:`}<br />${escapeHtml(existing)}`, title, { escapeHtml: false });
         return false;

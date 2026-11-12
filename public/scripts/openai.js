@@ -3,7 +3,6 @@
 * By CncAnon (@CncAnon1)
 * https://github.com/CncAnon1/TavernAITurbo
 */
-import { DOMPurify } from '../lib.js';
 
 import {
     abortStatusCheck,
@@ -60,7 +59,9 @@ import { SlashCommandParser } from './slash-commands/SlashCommandParser.js';
 import { SlashCommand } from './slash-commands/SlashCommand.js';
 import { ARGUMENT_TYPE, SlashCommandArgument } from './slash-commands/SlashCommandArgument.js';
 import { renderTemplateAsync } from './templates.js';
-import { callGenericPopup, Popup, POPUP_RESULT, POPUP_TYPE } from './popup.js';
+import { Popup } from './popup.js';
+import { showLocalDialog } from './local-dialogs.js';
+import { createPresetDialogs } from './preset-dialogs.js';
 import { t } from './i18n.js';
 import { ToolManager } from './tool-calling.js';
 import { IGNORE_SYMBOL, MEDIA_DISPLAY, MEDIA_TYPE } from './constants.js';
@@ -76,6 +77,8 @@ import {
     resolveVerbosity,
 } from './openai-provider-capabilities.js';
 import { buildStepPrompt, createPipelineToolCompatibilityError, getActivePipelineRunId, getPipelineRunState, PIPELINE_FALLBACK_PROMPT, pipelineModelRemovesTools } from './reply-pipeline-core.js';
+
+const presetDialogs = createPresetDialogs({ showLocalDialog, t });
 
 export {
     openai_messages_count,
@@ -319,20 +322,16 @@ export function installOpenAIPresetService(factory) {
         },
         confirmSwitch: async () => {
             if (!isOpenAIPresetDirty()) return 'discard';
-            const result = await Popup.show.confirm(t`Unsaved preset changes`, t`The current preset has unsaved changes. Save before switching?`, {
-                okButton: t`Save and switch`, cancelButton: t`Switch without saving`,
-                customButtons: [{ text: t`Cancel`, result: POPUP_RESULT.CANCELLED, appendAtEnd: true }],
-            });
-            return result === POPUP_RESULT.AFFIRMATIVE ? 'save' : result === POPUP_RESULT.NEGATIVE ? 'discard' : 'cancel';
+            return presetDialogs.confirmSwitch();
         },
-        askName: current => Popup.show.input(t`Preset name:`, t`Hint: Use a character name to bind preset to a specific chat.`, current),
-        confirmDelete: () => callGenericPopup(t`Delete the preset? This action is irreversible and your current settings will be overwritten.`, POPUP_TYPE.CONFIRM),
+        askName: presetDialogs.askName,
+        confirmDelete: presetDialogs.confirmDelete,
         restorePreset: async name => {
             const response = await fetch('/api/presets/restore', { method: 'POST', headers: getRequestHeaders(), body: JSON.stringify({ name, apiId: 'openai' }) });
             if (!response.ok) throw new Error('Failed to restore default preset');
             return response.json();
         },
-        confirmRestore: isDefault => Popup.show.confirm(t`Are you sure?`, isDefault ? t`Resetting a default preset will restore the default settings.` : t`Resetting a custom preset will restore to the last saved state.`),
+        confirmRestore: presetDialogs.confirmRestore,
         importFile: file => importOpenAIPreset(file),
         exportFile: () => onExportPresetClick(),
     });
@@ -2851,28 +2850,19 @@ async function importOpenAIPreset(file) {
         return;
     }
 
-    const fields = sensitiveFields.filter(field => presetBody[field]).map(field => `<b>${field}</b>`);
+    const fields = sensitiveFields.filter(field => presetBody[field]);
     const shouldConfirm = fields.length > 0;
 
     if (shouldConfirm) {
-        const textHeader = 'The imported preset contains proxy and/or custom endpoint settings.';
-        const textMessage = fields.join('<br>');
-        const cancelButton = { text: 'Cancel import', result: POPUP_RESULT.CANCELLED, appendAtEnd: true };
-        const popupOptions = { customButtons: [cancelButton], okButton: 'Remove them', cancelButton: 'Import as-is' };
-        const popupResult = await Popup.show.confirm(textHeader, textMessage, popupOptions);
-
-        if (popupResult === POPUP_RESULT.CANCELLED) {
-            console.log('Import cancelled by user');
-            return;
-        }
-
-        if (popupResult === POPUP_RESULT.AFFIRMATIVE) {
+        const choice = await presetDialogs.confirmSensitiveFields('import', presetBody, fields);
+        if (choice === null) return;
+        if (choice === 'remove') {
             sensitiveFields.forEach(field => delete presetBody[field]);
         }
     }
 
     if (name in openai_setting_names) {
-        const confirm = await callGenericPopup('Preset name already exists. Overwrite?', POPUP_TYPE.CONFIRM);
+        const confirm = await presetDialogs.confirmOverwrite();
 
         if (!confirm) {
             return;
@@ -2898,29 +2888,18 @@ async function onExportPresetClick() {
     migrateChatCompletionSettings(preset);
     for (const key of Object.values(SECRET_KEYS)) delete preset[key];
 
-    const fieldValues = sensitiveFields.filter(field => preset[field]).map(field => `<b>${field}</b>: <code>${preset[field]}</code>`);
-    if (fieldValues.length > 0) {
-        const textHeader = t`Your preset contains proxy and/or custom endpoint settings.`;
-        const textMessage = '<div>' + t`Do you want to remove these fields before exporting?` + `</div><br>${DOMPurify.sanitize(fieldValues.join('<br>'))}`;
-        const cancelButton = { text: 'Cancel', result: POPUP_RESULT.CANCELLED, appendAtEnd: true };
-        const popupOptions = { customButtons: [cancelButton] };
-        const popupResult = await Popup.show.confirm(textHeader, textMessage, popupOptions);
-
-        if (popupResult === POPUP_RESULT.CANCELLED) {
-            console.log('Export cancelled by user');
-            return;
-        }
-
-        if (popupResult === POPUP_RESULT.AFFIRMATIVE) {
+    const fields = sensitiveFields.filter(field => preset[field]);
+    if (fields.length > 0) {
+        const choice = await presetDialogs.confirmSensitiveFields('export', preset, fields);
+        if (choice === null) return;
+        if (choice === 'remove') {
             sensitiveFields.forEach(field => delete preset[field]);
         }
     }
 
-    const exportConnectionTemplate = $(await renderTemplateAsync('exportPreset'));
-    await new Popup(exportConnectionTemplate, POPUP_TYPE.TEXT).show();
-
-    const removeConnectionData = exportConnectionTemplate.find('input[name="export_connection_data"]:checked').val() === 'false';
-    if (removeConnectionData) {
+    const includeConnectionData = await presetDialogs.chooseConnectionData();
+    if (includeConnectionData === null) return;
+    if (!includeConnectionData) {
         for (const [, [, settingName, , isConnection]] of Object.entries(settingsToUpdate)) {
             if (isConnection) {
                 delete preset[settingName];
