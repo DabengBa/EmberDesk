@@ -88,6 +88,9 @@ import {
     initOpenAI,
     connectProviderConnection,
     testProviderConnection,
+    installOpenAIPresetService,
+    refreshOpenAIPresetService,
+    installProviderConnectionService,
 } from './scripts/openai.js';
 
 import {
@@ -442,9 +445,10 @@ const reactRuntimePort = createReactRuntimeProvider({
                     }
                 }
             }
+            refreshOpenAIPresetService();
         },
-        connectProvider: () => connectProviderConnection(),
-        testProviderConnection: () => testProviderConnection(),
+        connectProvider: input => connectProviderConnection(input),
+        testProviderConnection: input => testProviderConnection(input),
     },
 });
 
@@ -10036,7 +10040,9 @@ async function mountPromptPanel() {
 
     try {
         const module = await loadWorkspacePanelsModule();
-        module.mountPromptPanel(host, getPromptPanelBridge());
+        const presetService = installOpenAIPresetService(module.createPresetService);
+        installProviderConnectionService(module);
+        module.mountPromptPanel(host, getPromptPanelBridge(presetService), presetService);
         panel.dataset.reactPromptPanelMounted = 'true';
     } catch (error) {
         console.error('Failed to mount prompt panel:', error);
@@ -10047,13 +10053,12 @@ async function mountPromptPanel() {
  * Runtime bridge consumed by the React prompt-manager list inside
  * #completion_prompt_manager. It exposes prompt ordering, enablement, and
  * per-prompt field editing over the live oai_settings/promptManager state.
- * Preset selection stays with the legacy settings_preset_openai binding,
- * which owns the same data.
+ * Preset selection is owned by the installed preset service over the same data.
  * getState results are cached until an invalidating event so
  * useSyncExternalStore sees stable snapshots.
  * @returns {object} Bridge object for the React prompt list
  */
-function getPromptPanelBridge() {
+function getPromptPanelBridge(presetService) {
     if (globalThis.__emberDeskPromptPanelBridge) {
         return globalThis.__emberDeskPromptPanelBridge;
     }
@@ -10249,6 +10254,7 @@ function getPromptPanelBridge() {
         subscribe(listener) {
             if (!eventsBound) {
                 eventsBound = true;
+                presetService.subscribe(() => emit(false));
                 [
                     event_types.OAI_PRESET_CHANGED_AFTER,
                     event_types.PRESET_CHANGED,
