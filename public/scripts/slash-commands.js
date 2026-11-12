@@ -1,4 +1,4 @@
-import { getComposerValue, setComposerValue, clearComposerValue } from './main-chat-composer-service.js';
+import { getComposerSnapshot, getComposerValue, setComposerValue, subscribeComposerState, subscribeComposerValue } from './main-chat-composer-service.js';
 import { Fuse, DOMPurify } from '../lib.js';
 import { canUseNegativeLookbehind, copyText, debounce, delay, findChar, flashHighlight, getCharIndex, isFalseBoolean, isTrueBoolean, onlyUnique, regexFromString, resolveAvatarData, showFontAwesomePicker, stringToRange, trimToEndSentence, trimToStartSentence, waitUntilCondition } from './utils.js';
 
@@ -129,7 +129,7 @@ function renderMainChatSlashCommandDetailsHtml(option) {
 
     const detailsContainer = document.createElement('div');
     detailsContainer.append(option.renderDetails());
-    return detailsContainer.innerHTML;
+    return DOMPurify.sanitize(detailsContainer.innerHTML);
 }
 
 export function setMainChatSlashCommandReactOwnerEnabled(enabled) {
@@ -3197,9 +3197,29 @@ export function processChatSlashCommands() {
     }
 }
 
-function setInputCallback(_, value) {
-    setComposerValue(value || '');
+function setInputCallback(args, value) {
+    writeComposerForCommand(getComposerExecution(args), value || '');
     return value;
+}
+
+// Execution credentials belong to a scope, never to the module's current script.
+const composerExecutions = new WeakMap();
+function getComposerExecution(args) {
+    for (let scope = args?._scope; scope; scope = scope.parent) {
+        const execution = composerExecutions.get(scope);
+        if (execution) return execution;
+    }
+    return null;
+}
+function writeComposerForCommand(execution, value) {
+    if (!execution) return setComposerValue(value);
+    if (!execution.valid) return false;
+    if (!setComposerValue(value, { expected: execution.expected })) {
+        execution.valid = false;
+        return false;
+    }
+    execution.expected = getComposerSnapshot();
+    return true;
 }
 
 function trimStartCallback(_, value) {
@@ -3705,7 +3725,7 @@ async function generateRawCallback(args, value) {
     }
 
     // Prevent generate recursion
-    clearComposerValue();
+    writeComposerForCommand(getComposerExecution(args), '');
     const lock = isTrueBoolean(args?.lock);
     const as = args?.as || 'system';
     const quietToLoud = as === 'char';
@@ -3752,7 +3772,7 @@ async function generateRawCallback(args, value) {
  */
 async function generateCallback(args, value) {
     // Prevent generate recursion
-    clearComposerValue();
+    writeComposerForCommand(getComposerExecution(args), '');
     const lock = isTrueBoolean(args?.lock);
     const trim = isTrueBoolean(args?.trim?.toString());
     const as = args?.as || 'system';
@@ -3878,7 +3898,7 @@ async function echoCallback(args, value) {
 
 async function askCharacter(args, text) {
     // Prevent generate recursion
-    clearComposerValue();
+    writeComposerForCommand(getComposerExecution(args), '');
 
     if (!args.name) {
         toastr.warning(t`You must specify a name of the character to ask.`);
@@ -3983,6 +4003,7 @@ async function unhideMessageCallback(args, value) {
 
 async function triggerGenerationCallback(args) {
     const shouldAwait = isTrueBoolean(args?.await);
+    const execution = getComposerExecution(args) ?? { expected: getComposerSnapshot(), valid: true };
     const outerPromise = new Promise((outerResolve) => setTimeout(async () => {
         try {
             await waitUntilCondition(() => !is_send_press, 10000, 100);
@@ -3994,8 +4015,19 @@ async function triggerGenerationCallback(args) {
         }
 
         // Prevent generate recursion
-        clearComposerValue();
-        outerResolve(new Promise(innerResolve => setTimeout(() => innerResolve(Generate('normal')), 100)));
+        if (!writeComposerForCommand(execution, '')) {
+            outerResolve('');
+            return '';
+        }
+        const composerSubmission = execution.expected;
+        outerResolve(new Promise(innerResolve => setTimeout(() => {
+            const current = getComposerSnapshot();
+            if (!execution.valid || current.contextKey !== composerSubmission.contextKey || current.revision !== composerSubmission.revision) {
+                innerResolve('');
+                return;
+            }
+            innerResolve(Generate('normal', { composerSubmission }));
+        }, 100)));
     }, 1));
 
     if (shouldAwait) {
@@ -4559,7 +4591,7 @@ async function deleteCharacterCallback(args) {
 }
 
 export async function generateSystemMessage(args, prompt) {
-    clearComposerValue();
+    writeComposerForCommand(getComposerExecution(args), '');
 
     if (!prompt) {
         console.warn('WARN: No prompt provided for /sysgen command');
@@ -5353,6 +5385,7 @@ const clearCommandProgressDebounced = debounce(clearCommandProgress);
  * @prop {SlashCommandScope} [scope] (null) The scope to be used when executing the commands.
  * @prop {import('./slash-commands/SlashCommandParser.js').ParserFlags} [parserFlags] (null) Parser flags to apply
  * @prop {boolean} [clearChatInput] (false) Whether to clear the chat input textarea
+ * @prop {ReturnType<typeof getComposerSnapshot>} [composerSubmission] Snapshot captured when the input was submitted.
  * @prop {string} [source] (null) String indicating where the code come from (e.g., QR name)
  */
 
@@ -5379,9 +5412,10 @@ export async function executeSlashCommandsOnChatInput(text, options = {}) {
     /** @type {HTMLTextAreaElement} */
     const ta = document.querySelector('#send_textarea');
     const fs = document.querySelector('#form_sheld');
+    const composerExecution = { expected: options.composerSubmission ?? getComposerSnapshot(), valid: true };
 
     if (options.clearChatInput) {
-        clearComposerValue();
+        writeComposerForCommand(composerExecution, '');
     }
 
     ta.style.setProperty('--prog', '0%');
@@ -5407,6 +5441,7 @@ export async function executeSlashCommandsOnChatInput(text, options = {}) {
             parserFlags: options.parserFlags,
             scope: options.scope,
             source: options.source,
+            composerExecution,
         });
         if (commandsFromChatInputAbortController.signal.aborted) {
             document.querySelector('#form_sheld').classList.add('script_aborted');
@@ -5471,7 +5506,9 @@ async function executeSlashCommandsWithOptions(text, options = {}) {
     let closure;
     try {
         closure = parser.parse(text, true, options.parserFlags, options.abortController ?? new SlashCommandAbortController());
-        closure.scope.parent = options.scope;
+        const composerScope = new SlashCommandScope(options.scope);
+        composerExecutions.set(composerScope, options.composerExecution ?? getComposerExecution({ _scope: options.scope }) ?? { expected: getComposerSnapshot(), valid: true });
+        closure.scope.parent = composerScope;
         closure.onProgress = options.onProgress;
         closure.debugController = options.debugController;
         closure.source = options.source;
@@ -5573,6 +5610,11 @@ export async function setSlashCommandAutoComplete(textarea, isFloating = false) 
         () => ac.text[0] == '/',
         async (text, index) => await parser.getNameAt(text, index),
         isFloating,
+        textarea?.id === 'send_textarea' ? {
+            getSnapshot: getComposerSnapshot,
+            subscribe: subscribeComposerState,
+            set: setComposerValue,
+        } : null,
     );
 
     if (textarea?.id === 'send_textarea') {
@@ -5586,11 +5628,13 @@ export async function setSlashCommandAutoComplete(textarea, isFloating = false) 
 export async function initSlashCommandAutoComplete() {
     const sendTextarea = /** @type {HTMLTextAreaElement} */ (document.querySelector('#send_textarea'));
     setSlashCommandAutoComplete(sendTextarea);
-    sendTextarea.addEventListener('input', () => {
+    const updateFont = () => {
         if (getComposerValue() && getComposerValue()[0] == '/') {
             sendTextarea.style.fontFamily = 'var(--monoFontFamily, monospace)';
         } else {
             sendTextarea.style.fontFamily = null;
         }
-    });
+    };
+    subscribeComposerValue(updateFont);
+    updateFont();
 }

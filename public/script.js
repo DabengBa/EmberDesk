@@ -11,7 +11,7 @@ import {
     lodash,
 } from './lib.js';
 
-import { humanizedDateTime, favsToHotswap, getMessageTimeStamp, dragElement, isMobile, initRossMods } from './scripts/RossAscends-mods.js';
+import { humanizedDateTime, favsToHotswap, getMessageTimeStamp, dragElement, isMobile, initRossMods, shouldSendOnEnter } from './scripts/RossAscends-mods.js';
 import { applyResetChatState } from './scripts/chat-state-reset.js';
 
 import {
@@ -227,7 +227,7 @@ import {
 } from './scripts/main-chat-store-projection.js';
 import { getStreamingControlState } from './scripts/chat-streaming-control-state.js';
 import { getMainChatComposerState } from './scripts/main-chat-composer-state.js';
-import { getComposerValue, setComposerValue } from './scripts/main-chat-composer-service.js';
+import { getComposerValue, setComposerValue, getComposerSnapshot, subscribeComposerState, updateComposerInteraction, requestComposerFocus } from './scripts/main-chat-composer-service.js';
 import { getMainChatSlashCommandState } from './scripts/main-chat-slash-command-state.js';
 import { getMainChatStreamingTransportState } from './scripts/main-chat-streaming-transport-state.js';
 import { buildGreetingOptions, canSwitchGreeting } from './scripts/main-chat-greetings.js';
@@ -390,10 +390,7 @@ const reactRuntimePort = createReactRuntimeProvider({
     eventSource,
     eventTypes: event_types,
     commands: {
-        submitMessage: async (input) => {
-            setComposerValue(input ?? '');
-            return mainChatVisibleGenerationMutex.update();
-        },
+        submitMessage: input => sendTextareaMessage({ ...getComposerSnapshot(), value: String(input ?? '') }),
         stopGeneration: () => stopGeneration(),
         loadEarlier: anchorId => {
             const numericAnchorId = Number(anchorId);
@@ -1103,11 +1100,9 @@ let mainChatMessageActionsController = null;
 let mainChatMessageListPendingRestoreChatId = null;
 let mainChatMessageListScrollRestoreScheduledChatId = null;
 let mainChatMessageRenderGeneration = 0;
-let mainChatComposerCommandBindings = null;
-let mainChatComposerFocusRestoreRequested = false;
 let reactMainChatProjectionCleared = false;
 const mainChatVisibleStartIndices = new Map();
-const mainChatVisibleGenerationMutex = new SimpleMutex(sendTextareaMessage);
+const mainChatVisibleGenerationMutex = new SimpleMutex(submitComposerMessage);
 const mainChatMessageUiState = new Map();
 
 function getReactCharacterLibraryPanelAssetPath() {
@@ -1845,7 +1840,8 @@ function getMainChatComposerBridgeState() {
     const textarea = document.getElementById('send_textarea');
     const sendButton = document.getElementById('send_but');
     const activeContext = getMainChatComposerActiveContext();
-    const valueLength = getComposerValue().length;
+    const composer = getComposerSnapshot();
+    const valueLength = composer.value.length;
     const hasBackendConnection = online_status !== 'no_connection';
     const isGenerating = document.body.dataset.generating === 'true';
     const isDisabled = textarea?.disabled === true || sendButton?.disabled === true || !hasBackendConnection;
@@ -1854,7 +1850,7 @@ function getMainChatComposerBridgeState() {
         valueLength: valueLength,
         hasValue: valueLength > 0,
         canSubmit: valueLength > 0 && hasBackendConnection && !isDisabled && !isGenerating && activeContext !== 'none',
-        isFocused: document.activeElement === textarea,
+        isFocused: composer.focused,
         isDisabled: isDisabled,
         isGenerating: isGenerating,
         activeContext: getMainChatComposerActiveContext(),
@@ -2142,20 +2138,10 @@ function bindMainChatMessageListBridgeObservers() {
         return;
     }
 
-    const sendTextarea = document.getElementById('send_textarea');
     const sendForm = document.getElementById('send_form');
     const formShell = document.getElementById('form_sheld');
 
-    if (sendTextarea instanceof HTMLTextAreaElement) {
-        sendTextarea.addEventListener('input', scheduleMainChatMessageListPanelRefresh);
-        sendTextarea.addEventListener('focus', scheduleMainChatMessageListPanelRefresh);
-        sendTextarea.addEventListener('focusin', scheduleMainChatMessageListPanelRefresh);
-        sendTextarea.addEventListener('blur', scheduleMainChatMessageListPanelRefresh);
-        sendTextarea.addEventListener('focusout', scheduleMainChatMessageListPanelRefresh);
-        sendTextarea.addEventListener('click', scheduleMainChatMessageListPanelRefresh);
-        sendTextarea.addEventListener('keydown', scheduleMainChatMessageListPanelRefresh);
-        sendTextarea.addEventListener('keyup', scheduleMainChatMessageListPanelRefresh);
-    }
+    subscribeComposerState(scheduleMainChatMessageListPanelRefresh);
 
     if (sendForm instanceof HTMLElement) {
         mainChatMessageListBridgeSendFormObserver = new MutationObserver(() => {
@@ -3031,116 +3017,10 @@ function ensureMainChatMessageListReactHost() {
     if (nonQrFormItems instanceof HTMLElement) {
         nonQrFormItems.dataset.mainChatComposerOwner = 'react';
     }
-    bindMainChatReactComposerCommandPort();
     return chatContainer;
 }
 
-function bindMainChatReactComposerCommandPort() {
-    if (mainChatComposerCommandBindings) {
-        return;
-    }
-
-    const sendTextarea = document.getElementById('send_textarea');
-    const sendButton = document.getElementById('send_but');
-    const stopButton = document.getElementById('mes_stop');
-
-    if (!(sendTextarea instanceof HTMLTextAreaElement) || !(sendButton instanceof HTMLElement)) {
-        return;
-    }
-
-    const isGenerationFocusTarget = target => {
-        return [sendButton, stopButton].some(control => (
-            control instanceof HTMLElement
-            && (target === control || control.contains(target))
-        ));
-    };
-    const restoreComposerFocusIfRequested = () => {
-        if (!mainChatComposerFocusRestoreRequested || document.activeElement === sendTextarea) {
-            return;
-        }
-
-        if (isGenerationFocusTarget(document.activeElement) || document.activeElement === document.body) {
-            sendTextarea.focus({ preventScroll: true });
-        }
-    };
-    const dispatchGeneration = (kind) => {
-        void Promise.resolve(
-            getMainChatMessageListReactCommands().triggerVisibleGeneration({ kind }),
-        ).finally(restoreComposerFocusIfRequested);
-    };
-    const stopVisibleGeneration = () => {
-        void Promise.resolve(
-            getMainChatMessageListReactCommands().stopVisibleGeneration(),
-        ).finally(restoreComposerFocusIfRequested);
-    };
-    const isSlashInputOwnedByLegacy = () => {
-        const slashState = getMainChatSlashCommandBridgeState();
-        return slashState.active || slashState.autocompleteVisible;
-    };
-    const handleTextareaKeyDown = event => {
-        if (
-            event.defaultPrevented
-            || event.isComposing
-            || event.key !== 'Enter'
-            || event.shiftKey
-            || event.ctrlKey
-            || event.altKey
-            || event.metaKey
-            || isSlashInputOwnedByLegacy()
-        ) {
-            return;
-        }
-
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        event.stopPropagation();
-        dispatchGeneration('submitComposer');
-    };
-    const handleSendButtonClick = event => {
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        event.stopPropagation();
-        dispatchGeneration('submitComposer');
-    };
-    const handleStopButtonClick = event => {
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        event.stopPropagation();
-        stopVisibleGeneration();
-    };
-    const handleComposerFocus = () => {
-        mainChatComposerFocusRestoreRequested = true;
-        scheduleMainChatMessageListPanelRefresh();
-    };
-    const handleDocumentFocusIn = event => {
-        const target = event.target;
-        if (target === sendTextarea || sendTextarea.contains(target)) {
-            mainChatComposerFocusRestoreRequested = true;
-        } else if (!isGenerationFocusTarget(target)) {
-            mainChatComposerFocusRestoreRequested = false;
-        }
-    };
-
-    sendTextarea.addEventListener('keydown', handleTextareaKeyDown, true);
-    sendTextarea.addEventListener('focus', handleComposerFocus, true);
-    sendButton.addEventListener('click', handleSendButtonClick, true);
-    stopButton?.addEventListener('click', handleStopButtonClick, true);
-    document.addEventListener('focusin', handleDocumentFocusIn, true);
-
-    mainChatComposerCommandBindings = () => {
-        sendTextarea.removeEventListener('keydown', handleTextareaKeyDown, true);
-        sendTextarea.removeEventListener('focus', handleComposerFocus, true);
-        sendButton.removeEventListener('click', handleSendButtonClick, true);
-        stopButton?.removeEventListener('click', handleStopButtonClick, true);
-        document.removeEventListener('focusin', handleDocumentFocusIn, true);
-        mainChatComposerFocusRestoreRequested = false;
-    };
-}
-
 function cleanupMainChatMessageListReactHost() {
-    mainChatComposerCommandBindings?.();
-    mainChatComposerCommandBindings = null;
-    mainChatComposerFocusRestoreRequested = false;
     setMainChatSlashCommandReactOwnerEnabled(false);
     const chatContainer = document.getElementById('chat');
     if (chatContainer) {
@@ -3498,7 +3378,7 @@ function getMainChatMessageListReactCommands() {
             triggerVisibleGeneration: command => {
                 const kind = String(command?.kind ?? '');
                 if (kind === 'submitComposer') {
-                    return mainChatVisibleGenerationMutex.update();
+                    return sendTextareaMessage(command.composerSubmission ?? getComposerSnapshot());
                 }
 
                 return executeMainChatVisibleGenerationAction({
@@ -5861,13 +5741,19 @@ function flashComposerSendBlocked() {
 /**
  * Send the message currently typed into the chat box.
  */
-export async function sendTextareaMessage() {
+export function sendTextareaMessage(composerSubmission = getComposerSnapshot()) {
+    return mainChatVisibleGenerationMutex.update(composerSubmission);
+}
+
+async function submitComposerMessage(composerSubmission) {
     if (greetingSelectionPending) return;
     if (is_send_press) return;
     if (isExecutingCommandsFromChatInput) return;
     if (regenerateRequestInFlight || generationEntryPending) return;
 
-    const textareaText = getComposerValue();
+    const textareaText = composerSubmission.value;
+    const currentComposer = getComposerSnapshot();
+    if (composerSubmission.contextKey !== currentComposer.contextKey || composerSubmission.contextRevision !== currentComposer.contextRevision) return;
 
     // Slash commands (e.g. /api to reconnect) still run while offline; a plain send cannot.
     if (online_status === 'no_connection' && !textareaText.trimStart().startsWith('/')) {
@@ -5878,9 +5764,12 @@ export async function sendTextareaMessage() {
 
     if (textareaText && this_chid === undefined && name2 !== neutralCharacterName) {
         await newAssistantChat({ temporary: false });
+        if (this_chid !== undefined || name2 !== neutralCharacterName) return;
+        const currentComposer = getComposerSnapshot();
+        composerSubmission = { ...composerSubmission, contextKey: currentComposer.contextKey, contextRevision: currentComposer.contextRevision };
     }
 
-    return await Generate('normal');
+    return await Generate('normal', { composerSubmission });
 }
 
 
@@ -6071,12 +5960,13 @@ export async function generateQuietPrompt({ quietPrompt = '', quietToLoud = fals
  * @param {string} message Text to be sent
  * @returns {Promise<boolean>} Whether the message sending was interrupted
  */
-export async function processCommands(message) {
+export async function processCommands(message, composerSubmission = getComposerSnapshot()) {
     if (!message || !message.trim().startsWith('/')) {
         return false;
     }
     await executeSlashCommandsOnChatInput(message, {
         clearChatInput: true,
+        composerSubmission,
     });
     return true;
 }
@@ -6706,6 +6596,9 @@ function removeLastMessage() {
  */
 export async function Generate(type, options = {}, dryRun = false) {
     if (greetingSelectionPending) return;
+    if (!options.composerSubmission && type !== 'quiet' && !options.depth && !options.regenerate && (!dryRun || options.preview)) {
+        options = { ...options, composerSubmission: getComposerSnapshot() };
+    }
     // The regenerate flag only means something for a real, top-level visible
     // turn — quiet/nested/preview calls must never delete the tail.
     const isRegenerateEnvelope = options?.regenerate === true && type === 'normal' && !options?.depth && !dryRun && !options?.preview;
@@ -7137,24 +7030,37 @@ export async function buildUserMessage(messageText, messageBias, { compact = fal
     return message;
 }
 
-export async function sendMessageAsUser(messageText, messageBias, insertAt = null, compact = false, name = name1) {
+export async function sendMessageAsUser(messageText, messageBias, insertAt = null, compact = false, name = name1, { signal } = {}) {
+    const submittedChat = chat;
+    const { contextKey, contextRevision } = getComposerSnapshot();
+    const isCurrent = () => {
+        const current = getComposerSnapshot();
+        return chat === submittedChat && current.contextKey === contextKey && current.contextRevision === contextRevision && !signal?.aborted;
+    };
     const message = await buildUserMessage(messageText, messageBias, { compact, name });
+    if (!isCurrent()) return;
 
-    await populateFileAttachment(message);
+    await populateFileAttachment(message, 'file_form_input', { isCurrent });
+    if (!isCurrent()) return;
 
     chat_metadata.tainted = true;
 
     if (typeof insertAt === 'number' && insertAt >= 0 && insertAt <= chat.length) {
         chat.splice(insertAt, 0, message);
         await saveChatConditional();
+        if (!isCurrent()) return message;
         await eventSource.emit(event_types.MESSAGE_SENT, insertAt);
+        if (!isCurrent()) return message;
         await reloadCurrentChat();
+        if (!isCurrent()) return message;
         await eventSource.emit(event_types.USER_MESSAGE_RENDERED, insertAt);
     } else {
         chat.push(message);
         await saveChatConditional();
+        if (!isCurrent()) return message;
         const chat_id = (chat.length - 1);
         await eventSource.emit(event_types.MESSAGE_SENT, chat_id);
+        if (!isCurrent()) return message;
         addOneMessage(message);
         await eventSource.emit(event_types.USER_MESSAGE_RENDERED, chat_id);
     }
@@ -10038,7 +9944,12 @@ async function mountChatComposer() {
 
     try {
         const module = await loadWorkspacePanelsModule();
-        module.mountChatComposer(host);
+        module.mountChatComposer(host, {
+            composer: { getComposerSnapshot, subscribeComposerState, setComposerValue, updateComposerInteraction, requestComposerFocus },
+            submit: sendTextareaMessage,
+            stop: stopGeneration,
+            shouldSendOnEnter,
+        });
         sendForm.dataset.reactComposerMounted = 'true';
     } catch (error) {
         console.error('Failed to mount chat composer:', error);

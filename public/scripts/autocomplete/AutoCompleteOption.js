@@ -1,4 +1,5 @@
 import { AutoCompleteFuzzyScore } from './AutoCompleteFuzzyScore.js';
+import { DOMPurify } from '../../lib.js';
 
 
 export class AutoCompleteOption {
@@ -176,10 +177,7 @@ export class AutoCompleteOption {
                 help.classList.add('help');
                 const content = document.createElement('span'); {
                     content.classList.add('helpContent');
-                    content.innerHTML = helpString;
-                    const text = content.textContent;
-                    content.innerHTML = '';
-                    content.textContent = text;
+                    content.textContent = DOMPurify.sanitize(helpString ?? '', { RETURN_DOM_FRAGMENT: true }).textContent;
                     help.append(content);
                 }
                 li.append(help);

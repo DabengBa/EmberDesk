@@ -8,7 +8,7 @@ import {
 } from './chat-generation-lifecycle.js';
 import { getWorldInfoPrompt } from './world-info-service.js';
 import { requireGenerationShellContext } from './generation-shell-context.js';
-import { getComposerValue, clearComposerValue } from './main-chat-composer-service.js';
+import { getComposerSnapshot, clearComposerValue } from './main-chat-composer-service.js';
 import { applyChatMemoryToCoreChat } from './chat-memory-service.js';
 import {
     endPipelineRun,
@@ -104,10 +104,8 @@ const unshallowCharacter = (...args) => shell().unshallowCharacter(...args);
 const Generate = (...args) => shell().Generate(...args);
 const addCopyToCodeBlocks = (...args) => shell().addCopyToCodeBlocks(...args);
 const appendMediaToMessage = (...args) => shell().appendMediaToMessage(...args);
-const formatGenerationTimer = (...args) => shell().formatGenerationTimer(...args);
 const getStoppingStrings = (...args) => shell().getStoppingStrings(...args);
 const isReactMainChatOwner = (...args) => shell().isReactMainChatOwner(...args);
-const messageFormatting = (...args) => shell().messageFormatting(...args);
 const mountReactMainChatMessageListPanel = (...args) => shell().mountReactMainChatMessageListPanel(...args);
 const processImageAttachment = (...args) => shell().processImageAttachment(...args);
 const scrollChatToBottom = (...args) => shell().scrollChatToBottom(...args);
@@ -250,28 +248,7 @@ export class GenerationStreamSession {
         await this.reasoningHandler.process(messageId, mesChanged, this.promptReasoning);
         processedText = state.chat[messageId].mes;
 
-        if (!isReactMainChatOwner()) {
-            const formattedText = messageFormatting(
-                processedText,
-                state.chat[messageId].name,
-                state.chat[messageId].is_system,
-                state.chat[messageId].is_user,
-                messageId,
-                {},
-                false,
-            );
-            if (this.messageTextDom instanceof HTMLElement) {
-                this.messageTextDom.innerHTML = formattedText;
-            }
-
-            const timePassed = formatGenerationTimer(this.timeStarted, currentTime, 0, this.reasoningHandler.getDuration(), this.timeToFirstToken);
-            if (this.messageTimerDom instanceof HTMLElement) {
-                this.messageTimerDom.textContent = timePassed.timerValue;
-                this.messageTimerDom.title = timePassed.timerTitle;
-            }
-        } else {
-            scheduleMainChatMessageListPanelRefresh();
-        }
+        scheduleMainChatMessageListPanelRefresh();
 
         if (!state.scrollLock) {
             scrollChatToBottom({ waitForFrame: true });
@@ -454,6 +431,25 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
     // Quiet/nested/dry-run calls must never take the destructive branch — a
     // misused flag there would delete the tail and write nothing back.
     const isRegenerate = options?.regenerate === true && type === 'normal' && !depth && !dryRun;
+    const composerSubmission = type !== 'quiet' && !depth && !isRegenerate && (!dryRun || isPreview)
+        ? options.composerSubmission ?? getComposerSnapshot()
+        : null;
+    const submittedChat = state.chat;
+    // Establish cancellation before the first await, so Stop cannot be lost
+    // while a character or GENERATION_STARTED listener is still loading.
+    if (!isPreview && !(state.abortController && signal)) {
+        state.abortController = new AbortController();
+    }
+    const submissionSignal = state.abortController?.signal;
+    const cancelStaleSubmission = () => {
+        if (!composerSubmission || dryRun) return false;
+        const current = getComposerSnapshot();
+        if (state.chat !== submittedChat || current.contextKey !== composerSubmission.contextKey || current.contextRevision !== composerSubmission.contextRevision || submissionSignal?.aborted || signal?.aborted) {
+            unblockGeneration(type);
+            return true;
+        }
+        return false;
+    };
     // Capture conversation identity before any asynchronous assembly or retries.
     const requestTrace = {
         type,
@@ -469,17 +465,14 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
 
     // Prevent generation from shallow characters
     await unshallowCharacter(state.this_chid);
+    if (cancelStaleSubmission()) return;
 
     // Occurs every time, even if the generation is aborted due to slash commands execution
     await eventSource.emit(event_types.GENERATION_STARTED, type, { automatic_trigger, force_name2, quiet_prompt, quietToLoud, skipWIAN, signal, quietImage, depth, regenerate: isRegenerate }, dryRun);
-
-    // Don't recreate abort controller if signal is passed
-    if (!isPreview && !(state.abortController && signal)) {
-        state.abortController = new AbortController();
-    }
+    if (cancelStaleSubmission()) return;
 
     if (!(dryRun || depth || type == 'quiet' || isRegenerate)) {
-        const interruptedByCommand = await processCommands(getComposerValue());
+        const interruptedByCommand = await processCommands(composerSubmission?.value ?? '', composerSubmission);
 
         if (interruptedByCommand) {
             unblockGeneration(type);
@@ -489,10 +482,12 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
 
     // Occurs only if the generation is not aborted due to slash commands execution
     await eventSource.emit(event_types.GENERATION_AFTER_COMMANDS, type, { automatic_trigger, force_name2, quiet_prompt, quietToLoud, skipWIAN, signal, quietImage, regenerate: isRegenerate }, dryRun);
+    if (cancelStaleSubmission()) return;
 
     if (!dryRun) {
         // Ping server to make sure it is still alive
         const pingResult = await pingServer();
+        if (cancelStaleSubmission()) return;
 
         if (!pingResult) {
             unblockGeneration(type);
@@ -537,9 +532,9 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
         if (!isPreview) {
             state.is_send_press = true;
         }
-        textareaText = getComposerValue();
-        if (!isPreview) {
-            clearComposerValue();
+        textareaText = composerSubmission.value;
+        if (!isPreview && getComposerSnapshot().value === textareaText) {
+            clearComposerValue({ expected: composerSubmission });
         }
     } else {
         textareaText = '';
@@ -576,12 +571,13 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
         if (messageBias && !removeMacros(textareaText)) {
             sendSystemMessage(state.system_message_types.GENERIC, ' ', { bias: messageBias });
         } else {
-            await sendMessageAsUser(textareaText, messageBias);
+            await sendMessageAsUser(textareaText, messageBias, null, false, undefined, { signal: submissionSignal });
         }
     } else if (textareaText == '' && !automatic_trigger && !dryRun && !isRegenerate && [undefined, 'normal'].includes(type) && state.main_api == 'openai' && state.oai_settings.send_if_empty.trim().length > 0 && !depth) {
         // Use send_if_empty if set and the user message is empty. Only when sending messages normally
-        await sendMessageAsUser(state.oai_settings.send_if_empty.trim(), messageBias);
+        await sendMessageAsUser(state.oai_settings.send_if_empty.trim(), messageBias, null, false, undefined, { signal: submissionSignal });
     }
+    if (cancelStaleSubmission()) return;
 
     // Preview-only mirror of the two send paths above: build the pending user
     // message without writing chat state. Attachments are reported, never

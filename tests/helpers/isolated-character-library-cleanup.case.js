@@ -3,11 +3,11 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
-import { isolatedCharacterLibraryTest } from './isolated-character-library-test.js';
+import { isolatedCharacterLibraryTest, expect } from './isolated-character-library-test.js';
 
 const test = isolatedCharacterLibraryTest({ lazy: true });
 
-test('fixture cleanup scenario', async ({ isolatedServer }) => {
+async function serverState(isolatedServer, workerIndex) {
     const roots = (await fs.readdir(os.tmpdir())).filter(name => name.startsWith('character-library-e2e-'));
     if (roots.length !== 1) throw new Error(`Expected one isolated root, got ${roots.length}`);
     const root = path.join(os.tmpdir(), roots[0]);
@@ -15,7 +15,16 @@ test('fixture cleanup scenario', async ({ isolatedServer }) => {
     const matches = processes.split('\n').filter(line => line.includes(`server.js --configPath ${root}/config.yaml`));
     if (matches.length !== 1) throw new Error(`Expected one isolated server, got ${matches.length}`);
     const pid = Number(matches[0].trim().split(/\s+/)[0]);
-    await fs.writeFile(process.env.CLEANUP_REPORT, JSON.stringify({ root, pid, isolatedServer }));
+    return { root, pid, isolatedServer, workerIndex };
+}
+
+test('fixture cleanup scenario', async ({ isolatedServer }, { workerIndex }) => {
+    const state = await serverState(isolatedServer, workerIndex);
+    const { root, pid } = state;
+    await fs.writeFile(process.env.CLEANUP_REPORT, JSON.stringify(state));
+    if (process.env.CLEANUP_SCENARIO === 'isolation') {
+        await fs.writeFile(path.join(root, 'data', 'isolation-proof.txt'), 'changed by the first test');
+    }
     if (process.env.CLEANUP_SCENARIO === 'throw') throw new Error('intentional test failure');
     if (process.env.CLEANUP_SCENARIO === 'signal') {
         process.kill(pid, 'SIGKILL');
@@ -30,3 +39,15 @@ test('fixture cleanup scenario', async ({ isolatedServer }) => {
         throw new Error('server was not reaped after SIGKILL');
     }
 });
+
+if (process.env.CLEANUP_SCENARIO === 'isolation') {
+    test('next test in the same worker receives fresh server data', async ({ isolatedServer }, { workerIndex }) => {
+        const previous = JSON.parse(await fs.readFile(process.env.CLEANUP_REPORT, 'utf8'));
+        const current = await serverState(isolatedServer, workerIndex);
+        await fs.writeFile(process.env.CLEANUP_REPORT, JSON.stringify({ ...current, previous }));
+        expect(current.workerIndex).toBe(previous.workerIndex);
+        await expect(fs.access(path.join(current.root, 'data', 'isolation-proof.txt'))).rejects.toMatchObject({ code: 'ENOENT' });
+        await expect(fs.access(previous.root)).rejects.toMatchObject({ code: 'ENOENT' });
+        expect(() => process.kill(previous.pid, 0)).toThrow(expect.objectContaining({ code: 'ESRCH' }));
+    });
+}

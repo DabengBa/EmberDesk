@@ -186,23 +186,27 @@ export async function unhideChatMessage(messageId, _messageBlock) {
  * @param {ChatMessage} message Message object
  * @returns {Promise<void>} A promise that resolves when file is uploaded.
  */
-export async function populateFileAttachment(message, inputId = 'file_form_input') {
+export async function populateFileAttachment(message, inputId = 'file_form_input', { isCurrent = () => true } = {}) {
+    const fileInput = document.getElementById(inputId);
+    const files = fileInput instanceof HTMLInputElement ? Array.from(fileInput.files ?? []) : [];
+    const characterName = name2;
     try {
         if (!message) return;
         if (!message.extra || typeof message.extra !== 'object') message.extra = {};
-        const fileInput = document.getElementById(inputId);
-        if (!(fileInput instanceof HTMLInputElement)) return;
 
-        for (const file of fileInput.files) {
+        for (const file of files) {
+            if (!isCurrent()) return;
             const slug = getStringHash(file.name);
             const fileNamePrefix = `${Date.now()}_${slug}`;
             const fileBase64 = await getBase64Async(file);
+            if (!isCurrent()) return;
             let base64Data = fileBase64.split(',')[1];
             const extension = getFileExtension(file);
 
             const mediaType = MEDIA_TYPE.getFromMime(file.type);
             if (mediaType) {
-                const imageUrl = await saveBase64AsFile(base64Data, name2, fileNamePrefix, extension);
+                const imageUrl = await saveBase64AsFile(base64Data, characterName, fileNamePrefix, extension);
+                if (!isCurrent()) return;
                 if (!Array.isArray(message.extra.media)) {
                     message.extra.media = [];
                 }
@@ -230,7 +234,9 @@ export async function populateFileAttachment(message, inputId = 'file_form_input
                     }
                 }
 
+                if (!isCurrent()) return;
                 const fileUrl = await uploadFileAttachment(uniqueFileName, base64Data);
+                if (!isCurrent()) return;
 
                 if (!fileUrl) {
                     continue;
@@ -252,7 +258,10 @@ export async function populateFileAttachment(message, inputId = 'file_form_input
         console.error('Could not upload file', error);
         toastr.error(t`Either the file is corrupted or its format is not supported.`, t`Could not upload the file`);
     } finally {
-        $('#file_form').trigger('reset');
+        const selected = Array.from(fileInput?.files ?? []);
+        if (files.length && isCurrent() && selected.length === files.length && selected.every((file, index) => file === files[index])) {
+            $('#file_form').trigger('reset');
+        }
     }
 }
 
@@ -1338,9 +1347,26 @@ export function addDOMPurifyHooks() {
             return;
         }
 
+        // Trim literal serialized boundary whitespace without reparsing the
+        // subtree DOMPurify is currently walking. NBSP serializes as &nbsp;.
+        const trimSerializedWhitespace = (value, start) => {
+            let index = start ? 0 : value.length - 1;
+            while (index >= 0 && index < value.length) {
+                const character = value[index];
+                if (!/\s/u.test(character) || character === '\u00a0') break;
+                index += start ? 1 : -1;
+            }
+            return start ? value.slice(index) : value.slice(0, index + 1);
+        };
+
         // Replace line breaks with <br> in unknown elements
         if (node instanceof HTMLUnknownElement) {
-            node.innerHTML = node.innerHTML.trim();
+            if (node.firstChild?.nodeType === Node.TEXT_NODE) {
+                node.firstChild.data = trimSerializedWhitespace(node.firstChild.data, true);
+            }
+            if (node.lastChild?.nodeType === Node.TEXT_NODE) {
+                node.lastChild.data = trimSerializedWhitespace(node.lastChild.data, false);
+            }
 
             /** @type {Text[]} */
             const candidates = [];

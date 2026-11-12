@@ -49,6 +49,10 @@ async function selectCharacterInFreshChat(page, name) {
         await script.doNewChat({ deleteCurrentChat: false });
         await script.eventSource.emit(script.event_types.CHAT_LOADED, { detail: { source: 'e2e-fresh-chat' } });
     });
+    const greetingDialog = page.getByTestId('main-chat-greeting-picker').locator('dialog[open]');
+    if (await greetingDialog.isVisible()) {
+        await greetingDialog.getByRole('button', { name: '取消并关闭' }).click();
+    }
     await resetStreamingTestGlobals(page);
 }
 
@@ -235,10 +239,8 @@ async function enableFallbackProvider(page) {
 }
 
 async function startGeneration(page, prompt) {
-    await page.evaluate((messageText) => {
-        const textarea = document.querySelector('#send_textarea');
-        textarea.value = messageText;
-        textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    await page.locator('#send_textarea').fill(prompt);
+    await page.evaluate(() => {
         const context = window.SillyTavern.getContext();
         window.__emberdeskStreamingGeneration = context.generate('normal', { automatic_trigger: false })
             .then(result => {
@@ -249,7 +251,7 @@ async function startGeneration(page, prompt) {
                 window.__emberdeskStreamingGenerationError = String(error?.message ?? error);
                 throw error;
             });
-    }, prompt);
+    });
 }
 
 async function startQuietPromptGeneration(page, options = {}) {
@@ -729,6 +731,112 @@ test.describe('chat message streaming', () => {
         expect(renderedEvents).toHaveLength(0);
     });
 
+    test('composer F7 preserves selection and ignores Enter during IME composition', async ({ page }) => {
+        await testSetup.awaitST({ page });
+        await selectCharacterInFreshChat(page, characterName);
+        await enableOpenAiStreaming(page);
+        await installStreamingFetchStub(page, { chunks: ['IME proof complete.'] });
+        const composer = page.locator('#send_textarea');
+        await composer.fill('abcdef');
+        await composer.evaluate(textarea => {
+            textarea.setSelectionRange(1, 4, 'forward');
+            textarea.dispatchEvent(new Event('select', { bubbles: true }));
+        });
+        await composer.pressSequentially('X');
+        await expect(composer).toHaveValue('aXef');
+        await expect.poll(() => page.evaluate(async () => {
+            const { getComposerSnapshot } = await import('/scripts/main-chat-composer-service.js');
+            const snapshot = getComposerSnapshot();
+            return [snapshot.selectionStart, snapshot.selectionEnd];
+        })).toEqual([2, 2]);
+
+        await composer.dispatchEvent('compositionstart', { data: '' });
+        await composer.fill('输入法确认');
+        await composer.dispatchEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 229, isComposing: true });
+        await expect(composer).toHaveValue('输入法确认');
+        expect(await page.evaluate(() => window.__emberdeskStreamingRequests.length)).toBe(0);
+        await composer.dispatchEvent('compositionend', { data: '输入法确认' });
+        await composer.press('Enter');
+        await waitForVisibleSendButtonGeneration(page);
+        await expect(page.locator('#chat .mes[is_user="true"]').filter({ hasText: '输入法确认' })).toHaveCount(1);
+        expect(await page.evaluate(() => window.__emberdeskStreamingRequests.length)).toBe(1);
+    });
+
+    test('composer F7 submits captured text and preserves typing during an awaited start', async ({ page }) => {
+        await testSetup.awaitST({ page });
+        await selectCharacterInFreshChat(page, characterName);
+        await enableOpenAiStreaming(page);
+        await installStreamingFetchStub(page, { chunks: ['Captured submission complete.'] });
+        await page.evaluate(async () => {
+            const { eventSource, event_types } = await import('/scripts/events.js');
+            const pause = () => {
+                eventSource.removeListener(event_types.GENERATION_STARTED, pause);
+                return new Promise(resolve => { window.__composerStartRelease = resolve; });
+            };
+            eventSource.on(event_types.GENERATION_STARTED, pause);
+        });
+        const composer = page.locator('#send_textarea');
+        await composer.fill('The submitted text.');
+        await page.locator('#send_but').click();
+        await expect.poll(() => page.evaluate(() => typeof window.__composerStartRelease)).toBe('function');
+        await composer.fill('The next draft.');
+        await page.evaluate(() => window.__composerStartRelease());
+        await waitForVisibleSendButtonGeneration(page);
+        await expect(page.locator('#chat .mes[is_user="true"]').filter({ hasText: 'The submitted text.' })).toHaveCount(1);
+        await expect(page.locator('#chat .mes[is_user="true"]').filter({ hasText: 'The next draft.' })).toHaveCount(0);
+        await expect(composer).toHaveValue('The next draft.');
+        expect(await page.evaluate(() => window.__emberdeskStreamingRequests.length)).toBe(1);
+    });
+
+    test('composer F7 restores separate drafts across actual chat switches', async ({ page }) => {
+        await testSetup.awaitST({ page });
+        await selectCharacterByName(page, characterName);
+        const composer = page.locator('#send_textarea');
+        await composer.fill('First chat draft.');
+        await selectCharacterByName(page, 'Dev Character 002', 'Dev Character 002 Session 01');
+        await expect(composer).toHaveValue('');
+        await composer.fill('Second chat draft.');
+        await selectCharacterByName(page, characterName);
+        await expect(composer).toHaveValue('First chat draft.');
+        await selectCharacterByName(page, 'Dev Character 002', 'Dev Character 002 Session 01');
+        await expect(composer).toHaveValue('Second chat draft.');
+    });
+
+    test('composer F7 cancels an awaited submission after switching away and back', async ({ page }) => {
+        await testSetup.awaitST({ page });
+        await selectCharacterByName(page, characterName);
+        await enableOpenAiStreaming(page);
+        await installStreamingFetchStub(page, { chunks: ['Must not be requested.'] });
+        await page.evaluate(async () => {
+            const { eventSource, event_types } = await import('/scripts/events.js');
+            const pause = () => {
+                eventSource.removeListener(event_types.GENERATION_STARTED, pause);
+                return new Promise(resolve => { window.__composerStartRelease = resolve; });
+            };
+            eventSource.on(event_types.GENERATION_STARTED, pause);
+        });
+        const composer = page.locator('#send_textarea');
+        await composer.fill('An old submission.');
+        await page.evaluate(async () => {
+            const script = await import('/script.js');
+            window.__staleComposerSubmission = script.sendTextareaMessage();
+        });
+        await expect.poll(() => page.evaluate(() => typeof window.__composerStartRelease)).toBe('function');
+        expect(await page.evaluate(() => window.__emberdeskStreamingRequests.length)).toBe(0);
+        await selectCharacterByName(page, 'Dev Character 002', 'Dev Character 002 Session 01');
+        await composer.fill('Another chat draft.');
+        await selectCharacterByName(page, characterName);
+        await expect(composer).toHaveValue('An old submission.');
+        const requestCountBeforeRelease = await page.evaluate(() => window.__emberdeskStreamingRequests.length);
+        await page.evaluate(async () => {
+            window.__composerStartRelease();
+            await window.__staleComposerSubmission;
+        });
+        await expect(composer).toHaveValue('An old submission.');
+        await expect(page.locator('#chat .mes[is_user="true"]').filter({ hasText: 'An old submission.' })).toHaveCount(0);
+        expect(await page.evaluate(() => window.__emberdeskStreamingRequests.length)).toBe(requestCountBeforeRelease);
+    });
+
     test('visible composer owner keeps newline, send, clear, and empty-submit behavior', async ({ page }) => {
         await testSetup.awaitST({ page });
         await selectCharacterInFreshChat(page, characterName);
@@ -738,7 +846,7 @@ test.describe('chat message streaming', () => {
             delayMs: 35,
         });
 
-        const composer = page.getByRole('textbox', { name: 'Chat message' });
+        const composer = page.locator('#send_textarea');
         const userRowCountBeforeSend = await page.locator('#chat .mes[is_user="true"]').count();
 
         await composer.click();
@@ -818,7 +926,7 @@ test.describe('chat message streaming', () => {
         });
 
         const lastVisibleMessageIdBeforeGeneration = await getLastVisibleMessageId(page);
-        const composer = page.getByRole('textbox', { name: 'Chat message' });
+        const composer = page.locator('#send_textarea');
         await composer.focus();
         await composer.pressSequentially('Serialized submit proof.');
         await expectMainChatComposerVisibleOwner(page, true);
@@ -861,7 +969,7 @@ test.describe('chat message streaming', () => {
         });
 
         const lastVisibleMessageIdBeforeGeneration = await getLastVisibleMessageId(page);
-        const composer = page.getByRole('textbox', { name: 'Chat message' });
+        const composer = page.locator('#send_textarea');
         await composer.focus();
         await composer.pressSequentially('Unified composer transport proof.');
         await page.locator('#send_but').click();
@@ -890,7 +998,7 @@ test.describe('chat message streaming', () => {
         await selectCharacterInFreshChat(page, characterName);
         await enableOpenAiStreaming(page);
 
-        const composer = page.getByRole('textbox', { name: 'Chat message' });
+        const composer = page.locator('#send_textarea');
         await composer.focus();
         await composer.pressSequentially('Disconnect sendability proof.');
         await expectMainChatComposerState(page, {
@@ -1021,7 +1129,7 @@ test.describe('chat message streaming', () => {
         await testSetup.awaitST({ page });
         await selectCharacterInFreshChat(page, characterName);
 
-        const composer = page.getByRole('textbox', { name: 'Chat message' });
+        const composer = page.locator('#send_textarea');
         await composer.focus();
         await composer.pressSequentially('/e');
         await expectMainChatSlashCommandState(page, {
@@ -1145,6 +1253,34 @@ test.describe('chat message streaming', () => {
             aborted: false,
             error: '',
         });
+    });
+
+    test('React slash details render dynamic help as sanitized HTML', async ({ page }) => {
+        await testSetup.awaitST({ page });
+        await selectCharacterInFreshChat(page, characterName);
+        await page.evaluate(async () => {
+            const { SlashCommandParser } = await import('/scripts/slash-commands/SlashCommandParser.js');
+            const { SlashCommand } = await import('/scripts/slash-commands/SlashCommand.js');
+            const { SlashCommandArgument } = await import('/scripts/slash-commands/SlashCommandArgument.js');
+            const attack = '<img src="data:image/png;base64,AA==" onerror="window.__reactSlashHelpXss=1"><a href="javascript:alert(1)">unsafe link</a>';
+            window.__reactSlashHelpXss = 0;
+            SlashCommandParser.addCommandObject(SlashCommand.fromProps({
+                name: 'secureproof',
+                helpString: `<strong>Safe help</strong>${attack}`,
+                unnamedArgumentList: [SlashCommandArgument.fromProps({ description: `<em>Safe argument</em>${attack}` })],
+            }));
+        });
+
+        const composer = page.locator('#send_textarea');
+        await composer.focus();
+        await composer.pressSequentially('/securep');
+        await expectMainChatSlashUiOwner(page, { visible: true });
+        await composer.pressSequentially('roof');
+        const details = page.locator('[data-main-chat-slash-ui-details="react"]');
+        await expect(details).toContainText('Safe help');
+        await expect(details).toContainText('Safe argument');
+        await expect(details.locator('[onerror], a[href^="javascript:"]')).toHaveCount(0);
+        expect(await page.evaluate(() => window.__reactSlashHelpXss)).toBe(0);
     });
 
     test('pipeline incompatible model never retries or reaches fallback provider', async ({ page }) => {
@@ -1651,6 +1787,25 @@ test.describe('chat message streaming', () => {
         expect(failedRequestCount).toBe(2);
     });
 
+    test('composer F7 keeps Enter as a newline on mobile', async ({ page }) => {
+        await page.addInitScript(() => {
+            Object.defineProperty(navigator, 'userAgent', {
+                configurable: true,
+                get: () => 'Mozilla/5.0 (Linux; Android 10; Pixel 5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36',
+            });
+        });
+        await page.setViewportSize({ width: 390, height: 844 });
+        await testSetup.awaitST({ page });
+        await selectCharacterInFreshChat(page, characterName);
+        await enableOpenAiStreaming(page);
+        await installStreamingFetchStub(page, { chunks: ['Unexpected send.'] });
+        const composer = page.locator('#send_textarea');
+        await composer.fill('mobile draft');
+        await composer.press('Enter');
+        await expect(composer).toHaveValue('mobile draft\n');
+        expect(await page.evaluate(() => window.__emberdeskStreamingRequests.length)).toBe(0);
+    });
+
     test('keeps streaming stop and failure recovery reachable on mobile viewports', async ({ page }) => {
         await testSetup.awaitST({ page });
         await selectCharacterInFreshChat(page, characterName);
@@ -1658,7 +1813,7 @@ test.describe('chat message streaming', () => {
 
         for (const viewport of mobileViewports) {
             await page.setViewportSize({ width: viewport.width, height: viewport.height });
-            const composer = page.getByRole('textbox', { name: 'Chat message' });
+            const composer = page.locator('#send_textarea');
             await expect(composer, `${viewport.name} composer`).toBeVisible();
             await expectReachableControlGeometry(page, '#send_textarea', `${viewport.name} composer`);
             await composer.focus();
@@ -1700,7 +1855,7 @@ test.describe('chat message streaming', () => {
 
             const failedRow = assistantRowForGeneration(page, lastVisibleMessageIdBeforeGeneration);
             await expect(failedRow.locator('.mes_text')).not.toContainText(`${viewport.name} failure recovery text.`);
-            await expect(failedRow.locator('.generation_failure_notice')).toContainText('Generation failed.');
+            await expect(failedRow.locator('.generation_failure_notice')).toContainText(/生成失败|Generation failed/);
             const failedRequestCount = await page.evaluate(() => window.__emberdeskStreamingRequests.length);
             expect(failedRequestCount).toBe(2);
         }

@@ -6,6 +6,7 @@ import { ensureMessageMediaIsArray, scrollChatToBottom, updateMessageElement } f
 import { runDeleteCharacterClosePreflight } from './delete-character-preflight.js';
 import { requireChatOpsShellContext } from './chat-ops-shell-context.js';
 import { buildGreetingOptions, canSwitchGreeting, replaceGreeting } from './main-chat-greetings.js';
+import { getComposerSnapshot, requestComposerFocus, subscribeComposerState } from './main-chat-composer-service.js';
 
 
 function shell() {
@@ -553,11 +554,18 @@ export async function getChat({ strictReload = false } = {}) {
         // Focus on the textarea if not already focused on a visible interactive
         // element — a button/control the user just activated (e.g. an opened
         // preview's close button) must not lose focus to this delayed refocus.
+        const focusContext = getComposerSnapshot().contextKey;
+        let focusContextChanged = false;
+        const unsubscribeFocus = subscribeComposerState(() => {
+            if (getComposerSnapshot().contextKey !== focusContext) focusContextChanged = true;
+        });
         delay(debounce_timeout.short).then(() => {
+            unsubscribeFocus();
+            if (focusContextChanged) return;
             if ($(document.activeElement).is('input:visible, textarea:visible, select:visible, button:visible, a:visible, [contenteditable]:visible')) {
                 return;
             }
-            $('#send_textarea').trigger('focus');
+            requestComposerFocus();
         });
         return true;
     } catch (error) {

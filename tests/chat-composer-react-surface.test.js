@@ -58,11 +58,10 @@ describe('chat composer React surface', () => {
         expect(styleCss).toContain('#rightSendForm>div:not(.mes_send).stscript_btn');
     });
 
-    test('send_textarea stays uncontrolled with legacy write contract intact', () => {
-        // No value/onChange props — jQuery .val() + input events are the write path.
+    test('send_textarea renders the shared service snapshot through React', () => {
         const textarea = composer.match(/<textarea id="send_textarea"[^>]*>/)?.[0] ?? '';
-        expect(textarea).not.toContain('value=');
-        expect(textarea).not.toContain('onChange');
+        expect(composer).toContain('value={snapshot.value}');
+        expect(composer).toContain('onChange={event => composer.setComposerValue');
         expect(textarea).toContain('name="text"');
         expect(textarea).toContain('no_connection_text');
         expect(textarea).toContain('connected_text');
@@ -70,15 +69,17 @@ describe('chat composer React surface', () => {
 
     test('mount runs before DOM-ready handler bindings and options popper is lazy', () => {
         expect(script).toContain('async function mountChatComposer()');
-        expect(script).toContain('module.mountChatComposer(host)');
+        expect(script).toContain('module.mountChatComposer(host, {');
         // mount must be awaited at the top of the jQuery ready callback,
-        // before the binding section that attaches send_but/send_textarea handlers.
+        // before the remaining attachment/options handlers bind.
         const domHandlersSource = readRepoFile('public/scripts/dom-handlers.js');
         const mountIdx = domHandlersSource.indexOf('await mountChatComposer();');
-        const bindIdx = domHandlersSource.indexOf("$('#send_textarea').on('focusin focus click'");
+        const bindIdx = domHandlersSource.indexOf('initCharacterSearch();');
         expect(mountIdx).toBeGreaterThan(-1);
         expect(bindIdx).toBeGreaterThan(-1);
         expect(mountIdx).toBeLessThan(bindIdx);
+        expect(domHandlersSource).not.toContain('userInputGenerateMutex');
+        expect(script).not.toContain('bindMainChatReactComposerCommandPort');
         // optionsPopper is created lazily, not at module eval time.
         expect(script).toContain('function getOptionsPopper()');
         expect(script).not.toMatch(/let optionsPopper = Popper\.createPopper/);
