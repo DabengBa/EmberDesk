@@ -1,16 +1,7 @@
-import { Fuse } from '../lib.js';
-
-import { download, debounce, parseJsonFile, extractDataFromPng, getFileBuffer, getCharaFilename, isTrueBoolean, select2ChoiceClickSubscribe, isFalseBoolean, getSanitizedFilename, checkOverwriteExistingData, parseStringArray, findChar, onlyUnique, equalsIgnoreCaseAndAccents, uuidv4, normalizeArray, getUniqueName, logSlashCommandWarn, addLongPressEvent, escapeHtml } from './utils.js';
-import { getContext } from './feature-settings.js';
+import { download, debounce, parseJsonFile, extractDataFromPng, getFileBuffer, getCharaFilename, select2ChoiceClickSubscribe, getSanitizedFilename, checkOverwriteExistingData, equalsIgnoreCaseAndAccents, normalizeArray, addLongPressEvent, escapeHtml } from './utils.js';
 import { isMobile } from './RossAscends-mods.js';
 import { FILTER_TYPES, FilterHelper } from './filters.js';
 import { debounce_timeout } from './constants.js';
-import { SlashCommandParser } from './slash-commands/SlashCommandParser.js';
-import { SlashCommand } from './slash-commands/SlashCommand.js';
-import { ARGUMENT_TYPE, SlashCommandArgument, SlashCommandNamedArgument } from './slash-commands/SlashCommandArgument.js';
-import { SlashCommandEnumValue, enumTypes } from './slash-commands/SlashCommandEnumValue.js';
-import { commonEnumProviders, enumIcons } from './slash-commands/SlashCommandCommonEnumsProvider.js';
-import { SlashCommandClosure } from './slash-commands/SlashCommandClosure.js';
 import { callGenericPopup, Popup, POPUP_TYPE } from './popup.js';
 import { loadWorkspacePanelsModule } from './workspace-panels-react-bridge.js';
 import { renderTemplateAsync } from './templates.js';
@@ -31,15 +22,12 @@ import { createWorldInfoBookSync } from './world-info-book-sync.js';
 import { createWorldInfoEditorUi } from './world-info-editor-ui.js';
 import { createWorldInfoReferenceUi } from './world-info-reference-ui.js';
 import { createWorldInfoEntryCommands } from './world-info-entry-commands.js';
-import { registerWorldInfoSlashCommands } from './world-info-slash-adapter.js';
 import { createWorldInfoEditorComposition } from './world-info-editor-composition.js';
 import { createWorldInfoRuntimeInitializer } from './world-info-runtime.js';
 import {
     getWorldInfoWorkbenchPositionLabel as domainGetWorldInfoWorkbenchPositionLabel,
     buildWorldInfoWorkbenchEntrySummary as domainBuildWorldInfoWorkbenchEntrySummary,
     buildWorldInfoWorkbenchEntryDetail as domainBuildWorldInfoWorkbenchEntryDetail,
-
-    normalizeWorldInfoEntryPosition,
     sortWorldInfoEntries as domainSortWorldInfoEntries,
     wi_anchor_position,
     originalWIDataKeyMap,
@@ -47,7 +35,6 @@ import {
     deleteWIOriginalDataValue,
     splitKeywordsAndRegexes,
     parseRegexFromString,
-
 } from './world-info-domain.js';
 
 export {
@@ -112,7 +99,7 @@ export {
 
 export { convertCharacterBook };
 
-import { getWorldInfoShell, saveSettings, substituteParams, getRequestHeaders, getCurrentShellCharacterId, getCurrentShellMenuType, saveCharacterDebounced, saveMetadata, getCurrentChatId, createOrEditCharacter, getOneCharacter, select_selected_character, eventSource, event_types, chat_metadata, characters, extension_prompt_roles, create_save } from './world-info-shell-adapter.js';
+import { getWorldInfoShell, saveSettings, getRequestHeaders, getCurrentShellCharacterId, getCurrentShellMenuType, saveCharacterDebounced, saveMetadata, getCurrentChatId, createOrEditCharacter, getOneCharacter, select_selected_character, eventSource, event_types, chat_metadata, characters, create_save } from './world-info-shell-adapter.js';
 
 const saveSettingsDebounced = debounce(() => {
     Object.assign(world_info, { globalSelect: selected_world_info });
@@ -230,7 +217,6 @@ const ensureWorldInfoRuntimeInitialized = createWorldInfoRuntimeInitializer({
     setChatWorldActive: active => $('.chat_lorebook_button').toggleClass('world_set', active),
     getSortedEntries,
     getExternalActivations: () => WorldInfoBuffer.externalActivations,
-    registerSlashCommands: () => registerWorldInfoSlashCommands({ ARGUMENT_TYPE, Fuse, SlashCommand, SlashCommandArgument, SlashCommandClosure, SlashCommandEnumValue, SlashCommandNamedArgument, SlashCommandParser, charUpdateAddAuxWorld, charUpdatePrimaryWorld, chat_metadata, commonEnumProviders, createNewWorldInfo, createWorldInfoEntry, enumIcons, enumTypes, extension_prompt_roles, findChar, getCharaFilename, getContext, getCurrentChatId, getCurrentShellCharacterId, getUniqueName, isFalseBoolean, isTrueBoolean, loadWorldInfo, logSlashCommandWarn, newWorldInfoEntryDefinition, newWorldInfoEntryTemplate, normalizeWorldInfoEntryPosition, onWorldInfoChange, onlyUnique, originalWIDataKeyMap, parseStringArray, reloadEditor, saveMetadata, saveWorldInfo, setWIOriginalDataValue, setWorldInfoButtonClass, substituteParams, t, uuidv4 }),
 });
 
 export function rehydrateWorldInfoPanel({ resetEmptyEditor = true } = {}) {
@@ -525,7 +511,7 @@ export async function showWorldEditor(name) {
     await selectWorldInfoEditorName(name);
 }
 
-const { setWorldInfoButtonClass, checkEmbeddedWorld, importEmbeddedWorldInfo, onWorldInfoChange } = createWorldInfoReferenceUi({ characters, accountStorage, callGenericPopup, POPUP_TYPE, Popup, t, convertCharacterBook, saveWorldInfo, updateWorldInfoList: (...args) => updateWorldInfoList(...args), getWorldInfoShell, selectWorldInfoEditorName, getWIElement, isTrueBoolean, saveSettingsDebounced, eventSource, event_types });
+const { setWorldInfoButtonClass, checkEmbeddedWorld, importEmbeddedWorldInfo, onWorldInfoChange } = createWorldInfoReferenceUi({ characters, accountStorage, callGenericPopup, POPUP_TYPE, Popup, t, convertCharacterBook, saveWorldInfo, updateWorldInfoList: (...args) => updateWorldInfoList(...args), getWorldInfoShell, selectWorldInfoEditorName, getWIElement, saveSettingsDebounced, eventSource, event_types });
 export { setWorldInfoButtonClass, checkEmbeddedWorld, importEmbeddedWorldInfo, onWorldInfoChange };
 const { updateWorldInfoList, flushDeletedWorldsFromUI } = createWorldInfoBookSync({ getRequestHeaders, getSelectedWorldInfoEditorName, getWorldInfoWorkbenchSession, refreshGlobalWorldInfoSelectorLabels, syncWorldInfoEditorSelectorUi, hideWorldEditor, setWorldInfoButtonClass, getCurrentShellMenuType, saveCharacterDebounced, saveSettingsDebounced });
 export { updateWorldInfoList, flushDeletedWorldsFromUI };

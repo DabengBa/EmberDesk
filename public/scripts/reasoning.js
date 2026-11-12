@@ -2,19 +2,14 @@ import {
     moment,
 } from '../lib.js';
 import { REASONING_PREFIX, REASONING_SUFFIX, REASONING_SEPARATOR } from './constants.js';
-import { chat, closeMessageEditor, main_api, messageFormatting, saveChatConditional, saveChatDebounced, substituteParams, updateMessageBlock } from '../script.js';
+import { chat, main_api, messageFormatting, saveChatConditional, saveChatDebounced, substituteParams, updateMessageBlock } from '../script.js';
 import { eventSource, event_types } from './events.js';
 import { getRegexedString, regex_placement } from './extensions/regex/engine.js';
 import { getCurrentLocale, t, translate } from './i18n.js';
 import { macros, MacroCategory } from './macros/macro-system.js';
 import { chat_completion_sources, getChatCompletionModel, oai_settings } from './openai.js';
 import { Popup } from './popup.js';
-import { SlashCommand } from './slash-commands/SlashCommand.js';
-import { ARGUMENT_TYPE, SlashCommandArgument, SlashCommandNamedArgument } from './slash-commands/SlashCommandArgument.js';
-import { commonEnumProviders, enumIcons } from './slash-commands/SlashCommandCommonEnumsProvider.js';
-import { enumTypes, SlashCommandEnumValue } from './slash-commands/SlashCommandEnumValue.js';
-import { SlashCommandParser } from './slash-commands/SlashCommandParser.js';
-import { copyText, escapeRegex, isFalseBoolean, isTrueBoolean, setDatasetProperty, stringToRange, trimSpaces } from './utils.js';
+import { copyText, escapeRegex, setDatasetProperty, trimSpaces } from './utils.js';
 
 /**
  * @typedef {object} ReasoningTemplate
@@ -683,251 +678,6 @@ export class PromptReasoning {
     }
 }
 
-function registerReasoningSlashCommands() {
-    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
-        name: 'reasoning-get',
-        aliases: ['get-reasoning'],
-        returns: ARGUMENT_TYPE.STRING,
-        helpString: t`Get the contents of a reasoning block of a message. Returns an empty string if the message does not have a reasoning block.`,
-        unnamedArgumentList: [
-            SlashCommandArgument.fromProps({
-                description: 'Message ID. If not provided, the message ID of the last message is used.',
-                typeList: ARGUMENT_TYPE.NUMBER,
-                enumProvider: commonEnumProviders.messages(),
-            }),
-        ],
-        callback: (_args, value) => {
-            const messageId = !isNaN(parseInt(value.toString())) ? parseInt(value.toString()) : chat.length - 1;
-            const message = chat[messageId];
-            const reasoning = String(message?.extra?.reasoning ?? '');
-            return reasoning;
-        },
-    }));
-
-    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
-        name: 'reasoning-set',
-        aliases: ['set-reasoning'],
-        returns: ARGUMENT_TYPE.STRING,
-        helpString: t`Set the reasoning block of a message. Returns the reasoning block content.`,
-        namedArgumentList: [
-            SlashCommandNamedArgument.fromProps({
-                name: 'at',
-                description: 'Message ID. If not provided, the message ID of the last message is used.',
-                typeList: ARGUMENT_TYPE.NUMBER,
-                enumProvider: commonEnumProviders.messages(),
-            }),
-            SlashCommandNamedArgument.fromProps({
-                name: 'collapse',
-                description: 'Whether to collapse the reasoning block. (If not provided, uses the default expand setting)',
-                typeList: [ARGUMENT_TYPE.BOOLEAN],
-                enumList: commonEnumProviders.boolean('trueFalse')(),
-            }),
-        ],
-        unnamedArgumentList: [
-            SlashCommandArgument.fromProps({
-                description: 'Reasoning block content.',
-                typeList: ARGUMENT_TYPE.STRING,
-            }),
-        ],
-        callback: async (args, value) => {
-            const messageId = !isNaN(Number(args.at)) ? Number(args.at) : chat.length - 1;
-            const message = chat[messageId];
-            if (!message) {
-                return '';
-            }
-            // Make sure the message has an extra object
-            if (!message.extra || typeof message.extra !== 'object') {
-                message.extra = {};
-            }
-
-            message.extra.reasoning = String(value ?? '');
-            message.extra.reasoning_type = ReasoningType.Manual;
-            await saveChatConditional();
-
-            closeMessageEditor('reasoning');
-            updateMessageBlock(messageId, message);
-
-            if (isTrueBoolean(String(args.collapse))) $(`#chat [mesid="${messageId}"] .mes_reasoning_details`).removeAttr('open');
-            if (isFalseBoolean(String(args.collapse))) $(`#chat [mesid="${messageId}"] .mes_reasoning_details`).attr('open', '');
-            return message.extra.reasoning;
-        },
-    }));
-
-    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
-        name: 'reasoning-parse',
-        aliases: ['parse-reasoning'],
-        returns: 'reasoning string',
-        helpString: t`Extracts the reasoning block from a string using the Reasoning Formatting settings.`,
-        namedArgumentList: [
-            SlashCommandNamedArgument.fromProps({
-                name: 'regex',
-                description: 'Whether to apply regex scripts to the reasoning content.',
-                typeList: [ARGUMENT_TYPE.BOOLEAN],
-                defaultValue: 'true',
-                isRequired: false,
-                enumList: commonEnumProviders.boolean('trueFalse')(),
-            }),
-            SlashCommandNamedArgument.fromProps({
-                name: 'return',
-                description: 'Whether to return the parsed reasoning or the content without reasoning',
-                typeList: [ARGUMENT_TYPE.STRING],
-                defaultValue: 'reasoning',
-                isRequired: false,
-                enumList: [
-                    new SlashCommandEnumValue('reasoning', null, enumTypes.enum, enumIcons.reasoning),
-                    new SlashCommandEnumValue('content', null, enumTypes.enum, enumIcons.message),
-                ],
-            }),
-            SlashCommandNamedArgument.fromProps({
-                name: 'strict',
-                description: 'Whether to require the reasoning block to be at the beginning of the string (excluding whitespaces).',
-                typeList: [ARGUMENT_TYPE.BOOLEAN],
-                defaultValue: 'true',
-                isRequired: false,
-                enumList: commonEnumProviders.boolean('trueFalse')(),
-            }),
-        ],
-        unnamedArgumentList: [
-            SlashCommandArgument.fromProps({
-                description: 'input string',
-                typeList: [ARGUMENT_TYPE.STRING],
-            }),
-        ],
-        callback: (args, value) => {
-            if (!value || typeof value !== 'string') {
-                return '';
-            }
-
-            if (typeof args.return !== 'string' || !['reasoning', 'content'].includes(args.return)) {
-                toastr.warning(t`Invalid return type '${args.return}', defaulting to 'reasoning'.`, t`Reasoning Parse`);
-            }
-
-            const returnMessage = args.return === 'content';
-
-            const parsedReasoning = parseReasoningFromString(value, { strict: !isFalseBoolean(String(args.strict ?? '')) });
-            if (!parsedReasoning) {
-                return returnMessage ? value : '';
-            }
-
-            if (returnMessage) {
-                return parsedReasoning.content;
-            }
-
-            const applyRegex = !isFalseBoolean(String(args.regex ?? ''));
-            return applyRegex
-                ? getRegexedString(parsedReasoning.reasoning, regex_placement.REASONING)
-                : parsedReasoning.reasoning;
-        },
-    }));
-    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
-        name: 'reasoning-format',
-        aliases: ['format-reasoning'],
-        returns: 'formatted string',
-        helpString: t`Formats reasoning and content into a single string using Reasoning Formatting settings. Useful for preparing text that can be parsed with /reasoning-parse.`,
-        namedArgumentList: [
-            SlashCommandNamedArgument.fromProps({
-                name: 'reasoning',
-                description: 'The reasoning/thinking text to format',
-                typeList: [ARGUMENT_TYPE.STRING],
-                isRequired: true,
-            }),
-        ],
-        unnamedArgumentList: [
-            SlashCommandArgument.fromProps({
-                description: 'The main content text',
-                typeList: [ARGUMENT_TYPE.STRING],
-                isRequired: false,
-            }),
-        ],
-        callback: (args, value) => {
-            const reasoning = String(args?.reasoning ?? '');
-            const content = String(value ?? '');
-
-            if (!reasoning) {
-                toastr.warning(t`Reasoning argument is required.`, t`Reasoning Format`);
-                return '';
-            }
-
-            const { formatted } = formatReasoning(reasoning, content);
-            return formatted;
-        },
-    }));
-
-    /**
-     * Gets the reasoning details elements for a message range.
-     * @param {string} value Unnamed argument value (message ID or range)
-     * @returns {JQuery<HTMLElement>|null} The reasoning details elements, or null if not found
-     */
-    function getReasoningDetailsElements(value) {
-        const range = value ? stringToRange(String(value), 0, chat.length - 1) : { start: chat.length - 1, end: chat.length - 1 };
-        if (!range) {
-            toastr.warning(t`Invalid message ID or range: ${value}`);
-            return null;
-        }
-        const selector = Array.from({ length: range.end - range.start + 1 }, (_, i) =>
-            `#chat [mesid="${range.start + i}"] .mes_reasoning_details`,
-        ).join(',');
-        const details = $(selector);
-        if (details.length === 0) {
-            toastr.warning(t`No reasoning blocks found for the specified messages.`);
-            return null;
-        }
-        return details;
-    }
-
-    const reasoningVisibilityArgs = [
-        SlashCommandArgument.fromProps({
-            description: 'Message ID or range (e.g. 0-10). If not provided, the last message is used.',
-            typeList: [ARGUMENT_TYPE.NUMBER, ARGUMENT_TYPE.RANGE],
-            enumProvider: commonEnumProviders.messages(),
-        }),
-    ];
-
-    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
-        name: 'reasoning-collapse',
-        aliases: ['collapse-reasoning'],
-        helpString: t`Collapse the reasoning block of a message or range of messages.`,
-        unnamedArgumentList: reasoningVisibilityArgs,
-        callback: (_args, value) => {
-            const details = getReasoningDetailsElements(value.toString());
-            if (details) details.removeAttr('open');
-            return '';
-        },
-    }));
-
-    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
-        name: 'reasoning-expand',
-        aliases: ['expand-reasoning'],
-        helpString: t`Expand the reasoning block of a message or range of messages.`,
-        unnamedArgumentList: reasoningVisibilityArgs,
-        callback: (_args, value) => {
-            const details = getReasoningDetailsElements(value.toString());
-            if (details) details.attr('open', '');
-            return '';
-        },
-    }));
-
-    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
-        name: 'reasoning-toggle',
-        aliases: ['toggle-reasoning'],
-        helpString: t`Toggle the reasoning block of a message or range of messages. Expanded blocks will be collapsed, and collapsed blocks will be expanded.`,
-        unnamedArgumentList: reasoningVisibilityArgs,
-        callback: (_args, value) => {
-            const details = getReasoningDetailsElements(value.toString());
-            if (!details) return '';
-            details.each(function () {
-                const $el = $(this);
-                if ($el.attr('open') !== undefined) {
-                    $el.removeAttr('open');
-                } else {
-                    $el.attr('open', '');
-                }
-            });
-            return '';
-        },
-    }));
-}
-
 function registerReasoningMacros() {
     macros.register('reasoningPrefix', {
         category: MacroCategory.PROMPTS,
@@ -1325,7 +1075,6 @@ function registerReasoningAppEvents() {
  */
 export function initReasoning() {
     setReasoningEventHandlers();
-    registerReasoningSlashCommands();
     registerReasoningMacros();
     registerReasoningAppEvents();
 }

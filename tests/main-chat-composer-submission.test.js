@@ -38,10 +38,20 @@ function generate() {
     return executeGenerationRequestInShell({ type: 'normal', options: { composerSubmission: submission }, dryRun: false });
 }
 
+test('slash-prefixed text is submitted as an ordinary user message', async () => {
+    composer.setComposerValue('/echo text');
+    submission = composer.getComposerSnapshot();
+    context.processCommands.mockResolvedValue(true);
+    await expect(generate()).rejects.toThrow('user-message-boundary');
+    expect(context.sendMessageAsUser.mock.calls[0][0]).toBe('/echo text');
+    expect(context.processCommands).not.toHaveBeenCalled();
+    expect(events.emit.mock.calls.slice(0, 2).map(([name]) => name)).toEqual(['started', 'commands']);
+});
+
 test('explicit submission survives an assembly await without consuming later typing', async () => {
     context.unshallowCharacter.mockImplementation(async () => composer.setComposerValue('new draft'));
     await expect(generate()).rejects.toThrow('user-message-boundary');
-    expect(context.processCommands).toHaveBeenCalledWith('submitted text', submission);
+    expect(context.processCommands).not.toHaveBeenCalled();
     expect(context.sendMessageAsUser.mock.calls[0][0]).toBe('submitted text');
     expect(composer.getComposerValue()).toBe('new draft');
 });

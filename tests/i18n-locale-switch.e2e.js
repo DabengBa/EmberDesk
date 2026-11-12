@@ -61,10 +61,10 @@ test.describe('UI locale switching', () => {
         await page.reload();
         await testSetup.awaitST({ page });
 
-        for (const [locale, regenerate, wireLog, hint] of [
-            ['zh-cn', '重新生成回复', '链路日志', '输入 /? 查看命令。'],
-            ['en', 'Regenerate reply', 'Wire Log', 'Type /? for commands.'],
-            ['zh-cn', '重新生成回复', '链路日志', '输入 /? 查看命令。'],
+        for (const [locale, regenerate, wireLog, offlineHint] of [
+            ['zh-cn', '重新生成回复', '链路日志', '发送消息需要先连接 API。'],
+            ['en', 'Regenerate reply', 'Wire Log', 'Send requires an API connection.'],
+            ['zh-cn', '重新生成回复', '链路日志', '发送消息需要先连接 API。'],
         ]) {
             await page.evaluate(language => localStorage.setItem('language', language), locale);
             await page.reload();
@@ -80,11 +80,16 @@ test.describe('UI locale switching', () => {
             await expect(page.locator('#option_regenerate')).toHaveAccessibleName(regenerate);
             await expect(page.locator('#option_wire_log')).toHaveText(wireLog);
             await expect(page.locator('#option_wire_log')).toHaveAccessibleName(wireLog);
-            await expect(page.locator('#send_textarea_hint')).toHaveText(hint);
+            await expect(page.locator('#send_textarea_hint')).toHaveText('');
+            await page.evaluate(async () => {
+                const { setOnlineStatus, displayOnlineStatus } = await import('/script.js');
+                setOnlineStatus('no_connection');
+                displayOnlineStatus();
+            });
+            await expect(page.locator('#send_textarea_hint')).toHaveText(offlineHint);
             // The English source strings only ever appear on the English surface.
             const optionsText = await page.locator('#options').innerText();
             expect(/Regenerate reply|Wire Log/.test(optionsText)).toBe(locale === 'en');
-            await page.locator('#options_button').click();
         }
     });
 

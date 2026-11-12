@@ -24,7 +24,7 @@ The global Backgrounds entry, Background Library gallery, Expressions/waifu cont
 - `app/stores/workspace-panel-store.js` owns in-memory active/open snapshots and the declared child-slot contract. State is limited to the current browser page session. Drawer pin state is the `.pinnedOpen` class on each drawer host, seeded and persisted through the legacy accountStorage lock keys; no pin or lock control is rendered in the chrome or the panels, and the chrome reads that class only to guard active-entry clicks on locked drawers.
 - `public/script.js` owns feature-local slot activation helpers. It may project React decisions to a documented legacy host, but does not read drawer classes to determine active or closed shell state.
 - `app/compat/global-compatibility-bridge.js` exposes a sanitized `workspacePanelDock` snapshot for internal diagnostics only. It does not replace `globalThis.SillyTavern`, `eventSource`, `event_types`, or `@sillytavern/*`.
-- Protected extension mounts, message and character selectors, slash commands, and regex behavior remain compatibility contracts. The shell cannot remove them as incidental cleanup.
+- Protected extension mounts, message and character selectors, and regex behavior remain compatibility contracts. Slash commands are retired; the shell cannot remove the retained contracts as incidental cleanup.
 
 ## Core Implementation
 

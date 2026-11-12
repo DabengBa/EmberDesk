@@ -9,6 +9,16 @@ let server, cache, url;
 test.beforeAll(async () => { cache = await mkdtemp(path.join(os.tmpdir(), 'regex-f2-')); server = await createServer({ configFile: false, root, publicDir: false, cacheDir: cache, resolve: { alias: { '@': path.join(root, 'app') } }, esbuild: { jsx: 'automatic' }, server: { host: '127.0.0.1', port: 0 } }); await server.listen(); url = `http://127.0.0.1:${server.httpServer.address().port}/tests/regex-editor-fixture.html`; });
 test.afterAll(async () => { await server?.close(); if (cache) await rm(cache, { recursive: true, force: true }); });
 test.beforeEach(async ({ page }) => { await page.goto(url); });
+test('retired placement cannot be selected but remains in historical rules', async ({ page }) => {
+    await expect(page.locator('[name=replace_position][value="3"]')).toHaveCount(0);
+    await page.goto(`${url}?legacy`);
+    await expect(page.locator('[name=replace_position][value="3"]')).toHaveCount(0);
+    expect(await page.evaluate(() => window.fixture.editor.current.getDraft().placement)).toEqual([1, 3]);
+    await page.locator('[name=replace_position][value="1"]').uncheck();
+    await page.locator('[name=replace_position][value="2"]').check();
+    expect(await page.evaluate(() => window.fixture.editor.current.validate())).toBe(true);
+    expect(await page.evaluate(() => window.fixture.editor.current.getDraft().placement)).toEqual([3, 2]);
+});
 test('controlled editor validates, exposes draft and runs live test', async ({ page }) => {
     expect(await page.evaluate(() => window.fixture.editor.current.validate())).toBe(false);
     await expect(page.locator('#regex_name_error')).toBeVisible();

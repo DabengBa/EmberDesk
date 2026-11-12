@@ -146,11 +146,11 @@ describe('chat workspace structure', () => {
         expect(composerSource).toMatch(/id="send_textarea"[^>]*\baria-label="Chat message"/);
         expect(composerSource).toMatch(/id="send_textarea"[^>]*\baria-describedby="send_textarea_hint"/);
         expect(composerSource).toContain('id="send_textarea_hint"');
-        expect(composerSource).toContain("translate('Type /? for commands. Send requires an API connection.')");
+        expect(composerSource).toContain("translate('Send requires an API connection.')");
         expect(indexHtml).toContain('id="send_form"');
         expect(scriptSource).toContain("const sendTextareaHint = $('#send_textarea_hint');");
-        expect(scriptSource).toContain('sendTextareaHint.text(t`Type /? for commands. Send requires an API connection.`);');
-        expect(scriptSource).toContain('sendTextareaHint.text(t`Type /? for commands.`);');
+        expect(scriptSource).toContain('sendTextareaHint.text(t`Send requires an API connection.`);');
+        expect(scriptSource).toContain("sendTextareaHint.text('');");
         expect(keyboardSource).toContain("'.mes_stop', // Stop button in the chat bar");
         expect(keyboardSource).toContain("event.key === 'Enter' || event.key === ' '");
         expect(keyboardSource).toContain("event.key === ' '");

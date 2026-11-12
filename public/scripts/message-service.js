@@ -29,6 +29,7 @@ function currentCharacterAllowsExternalMedia() {
 }
 
 const messageStyleScopes = new WeakMap();
+const COMMENT_NAME_DEFAULT = 'Note';
 function getMessageStyleScope(messageId, isReasoning) {
     const message = state.chat[messageId];
     if (!message || typeof message !== 'object') return `message-${uuidv4()}`;
@@ -99,7 +100,7 @@ export function messageFormatting(mes, ch_name, isSystem, isUser, messageId, san
     state.mesForShowdownParse = mes;
 
     // Force isSystem = false on comment messages so they get formatted properly
-    if (ch_name === state.COMMENT_NAME_DEFAULT && isSystem && !isUser) {
+    if (ch_name === COMMENT_NAME_DEFAULT && isSystem && !isUser) {
         isSystem = false;
     }
 

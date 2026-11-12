@@ -206,7 +206,7 @@ describe('mixed-language regressions', () => {
         // render time, so switching locale re-renders it without the observer
         // writing textContent over React's children.
         const composer = read('app/components/composer/ChatComposer.tsx');
-        expect(composer).toContain("translate('Type /? for commands. Send requires an API connection.')");
+        expect(composer).toContain("translate('Send requires an API connection.')");
         expect(composer).not.toContain('data-react-i18n-children=""');
 
         // Mounted before initLocales, so the menu must re-render on i18n:applied.

@@ -5,7 +5,7 @@ describe('locale remediation wiring', () => {
     test.each([
         ['Regenerate reply', '重新生成回复'],
         ['Wire Log', '链路日志'],
-        ['Type /? for commands.', '输入 /? 查看命令。'],
+        ['Send requires an API connection.', '发送消息需要先连接 API。'],
     ])('workspace copy %s has a Chinese translation', (key, translation) => {
         const zh = JSON.parse(readRepoFile('public/locales/zh-cn.json'));
         expect(zh[key]).toBe(translation);
@@ -39,7 +39,7 @@ describe('locale remediation wiring', () => {
         }
     });
     test('raw regex accessibility text is translated', () => {
-        expect(readRepoFile('app/components/regex/RegexSettingsPanel.tsx')).toContain('aria-label={translate(\'Regex presets\')}');
+        expect(readRepoFile('app/components/regex/RegexPresetControls.tsx')).toContain('aria-label={translate(\'Regex presets\')}');
         expect(readRepoFile('app/components/regex/RegexDebugger.tsx')).toContain('aria-label={translate(\'Render mode\')}');
     });
     test('wire status and counts are localized without changing protocol values', () => {

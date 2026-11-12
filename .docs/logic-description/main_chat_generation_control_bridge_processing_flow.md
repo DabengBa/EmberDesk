@@ -1,5 +1,7 @@
 # Main Chat Generation Control Bridge Processing Flow
 
+> Slash-related statements below are historical: Slash commands are retired, and Slash-prefixed submissions follow the ordinary message path. See [Chat Workspace](../db/pages/chat-workspace.md).
+
 ## Metadata
 
 - Owner: main-chat generation-control bridge documentation

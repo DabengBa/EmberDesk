@@ -12,7 +12,7 @@ const interactableSelectors = [
     '.mes_buttons .mes_button', // Small inline buttons on the chat messages
     '.extraMesButtons>div:not(.mes_button)', // The extra/extension buttons inline on the chat messages
     '.mes_stop', // Stop button in the chat bar
-    '.stscript_btn', // STscript buttons in the chat bar
+
     '.select2_choice_clickable+span.select2-container .select2-selection__choice__display', // select2 control elements if they are meant to be clickable
     '.avatar_load_preview', // Char display avatar selection
     '.select_chat_block', // The blocks to select a past chat in the past chats menu

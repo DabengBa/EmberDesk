@@ -131,7 +131,7 @@ describe('world info import feedback', () => {
         const importEmbeddedSource = extractBlock(
             source,
             'async function importEmbeddedWorldInfo(skipPopup = false)',
-            'function onWorldInfoChange(args, text)',
+            'function onWorldInfoChange()',
         );
 
         expect(importEmbeddedSource).toContain('if (chid === undefined || chid === -1) {');

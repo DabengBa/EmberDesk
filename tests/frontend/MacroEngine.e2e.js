@@ -636,6 +636,15 @@ test.describe('MacroEngine', () => {
         /** Fixed chat ID hash used across all pick tests for deterministic behavior */
         const TEST_CHAT_ID_HASH = 123456;
 
+        test('pick help does not advertise retired commands', async ({ page }) => {
+            const description = await page.evaluate(async () => {
+                const { MacroRegistry } = await import('/scripts/macros/engine/MacroRegistry.js');
+                return MacroRegistry.getMacro('pick').description;
+            });
+            expect(description).toContain('stable');
+            expect(description).not.toContain('/reroll-pick');
+        });
+
         /**
          * Registers a testable pick macro that returns the seed string instead of the picked value.
          * This allows tests to verify that different macro positions produce different seeds.

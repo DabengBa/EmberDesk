@@ -259,7 +259,7 @@ function tryReuseProjectedRecord({ entries, uid, index, sig, ui }) {
  * @param {object} [options.composer]
  * @param {object} [options.generation]
  * @param {object} [options.streaming]
- * @param {object} [options.slash]
+
  * @param {object} [options.window]
  * @param {object} [options.window.scrollRestore] One-shot anchor restore owned by the React output lifecycle
  * @param {Record<string, object>} [options.messageUiById]
@@ -281,7 +281,7 @@ export function buildMainChatSnapshotFromLegacyChat({
     composer = {},
     generation = {},
     streaming = {},
-    slash = {},
+
     window = {},
     messageUiById = {},
     turnSummaries = [],
@@ -369,27 +369,7 @@ export function buildMainChatSnapshotFromLegacyChat({
             activeMessageId: streaming.activeMessageId ?? null,
             observedTokenCount: streaming.observedTokenCount ?? 0,
         },
-        slash: {
-            active: slash.active === true,
-            query: normalizeString(slash.query),
-            autocompleteVisible: slash.autocompleteVisible === true,
-            replaceable: slash.replaceable === true,
-            detailsVisible: slash.detailsVisible === true,
-            detailsHtml: normalizeString(slash.detailsHtml),
-            options: Array.isArray(slash.options)
-                ? slash.options.map(option => ({
-                    name: normalizeString(option?.name),
-                    type: normalizeString(option?.type),
-                    typeIcon: normalizeString(option?.typeIcon),
-                    selectable: option?.selectable !== false,
-                    selected: option?.selected === true,
-                }))
-                : [],
-            executing: slash.executing === true,
-            paused: slash.paused === true,
-            aborted: slash.aborted === true,
-            errorLabel: normalizeString(slash.errorLabel).trim() || null,
-        },
+
         window: {
             visibleMessageIds: visibleIds,
             anchorMessageId: normalizeString(window.anchorMessageId).trim() || null,

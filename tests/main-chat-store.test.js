@@ -31,7 +31,7 @@ describe('main chat store', () => {
         expect(source).toContain('orderedMessageIds');
         expect(source).toContain('composer');
         expect(source).toContain('generation');
-        expect(source).toContain('slash');
+
         expect(source).toContain('window');
         expect(source).not.toMatch(/\bHTMLElement\b/);
         expect(source).not.toMatch(/\bquerySelector(?:All)?\b/);
@@ -82,11 +82,7 @@ describe('main chat store', () => {
                     activeMessageId: '1',
                     observedTokenCount: 4,
                 },
-                slash: {
-                    active: false,
-                    query: '',
-                    autocompleteVisible: false,
-                },
+
                 window: {
                     visibleMessageIds: ['0', '1'],
                     anchorMessageId: '0',
@@ -130,7 +126,7 @@ describe('main chat store', () => {
                 activeMessageId: '1',
                 observedTokenCount: 4,
             },
-            slash: expect.objectContaining({ active: false }),
+
             window: expect.objectContaining({
                 visibleMessageIds: ['0', '1'],
                 anchorMessageId: '0',
@@ -158,67 +154,6 @@ describe('main chat store', () => {
         });
     });
 
-    test('normalizes and freezes typed slash autocomplete state', () => {
-        const result = runStoreProbe(`
-            const store = createMainChatStore();
-            store.getState().replaceSnapshot({
-                slash: {
-                    active: true,
-                    query: '/ec',
-                    autocompleteVisible: true,
-                    replaceable: true,
-                    detailsVisible: false,
-                    detailsHtml: '',
-                    options: [{
-                        name: 'echo',
-                        type: 'command',
-                        typeIcon: '>',
-                        selectable: true,
-                        selected: true,
-                    }],
-                    executing: false,
-                    paused: false,
-                    aborted: false,
-                    errorLabel: null,
-                },
-            });
-
-            const slash = store.getState().getSnapshot().slash;
-            console.log(JSON.stringify({
-                slash,
-                frozen: {
-                    slash: Object.isFrozen(slash),
-                    options: Object.isFrozen(slash.options),
-                    option: Object.isFrozen(slash.options[0]),
-                },
-            }));
-        `);
-
-        expect(result.slash).toEqual({
-            active: true,
-            query: '/ec',
-            autocompleteVisible: true,
-            replaceable: true,
-            detailsVisible: false,
-            detailsHtml: '',
-            options: [{
-                name: 'echo',
-                type: 'command',
-                typeIcon: '>',
-                selectable: true,
-                selected: true,
-            }],
-            executing: false,
-            paused: false,
-            aborted: false,
-            errorLabel: null,
-        });
-        expect(result.frozen).toEqual({
-            slash: true,
-            options: true,
-            option: true,
-        });
-    });
 
     test('notifies subscribers once per replacement and can reset to an empty chat', () => {
         const result = runStoreProbe(`
