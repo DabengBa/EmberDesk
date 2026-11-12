@@ -10,7 +10,7 @@ const testsRoot = fileURLToPath(new URL('.', import.meta.url));
 const playwright = path.join(testsRoot, 'node_modules/@playwright/test/cli.js');
 
 describe('isolated character library fixture cleanup', () => {
-    test.each(['normal', 'throw', 'signal'])('%s', async scenario => {
+    test.each(['normal', 'throw', 'signal', 'isolation'])('%s', async scenario => {
         const root = await fs.mkdtemp(path.join(os.tmpdir(), 'cleanup-proof-'));
         const report = path.join(root, 'report.json');
         const tmp = path.join(root, 'tmp');
@@ -38,9 +38,12 @@ describe('isolated character library fixture cleanup', () => {
             expect({ timedOut, output }).toMatchObject({ timedOut: false });
             expect(code).toBe(scenario === 'throw' ? 1 : 0);
             if (scenario === 'throw') expect(output).toContain('intentional test failure');
-            const { root: serverRoot, pid } = JSON.parse(await fs.readFile(report, 'utf8'));
-            await expect(fs.access(serverRoot)).rejects.toMatchObject({ code: 'ENOENT' });
-            expect(() => process.kill(pid, 0)).toThrow(expect.objectContaining({ code: 'ESRCH' }));
+            const state = JSON.parse(await fs.readFile(report, 'utf8'));
+            const servers = state.previous ? [state.previous, state] : [state];
+            for (const { root: serverRoot, pid } of servers) {
+                await expect(fs.access(serverRoot)).rejects.toMatchObject({ code: 'ENOENT' });
+                expect(() => process.kill(pid, 0)).toThrow(expect.objectContaining({ code: 'ESRCH' }));
+            }
         } finally {
             await fs.rm(root, { recursive: true, force: true });
         }
