@@ -14,6 +14,7 @@ jest.unstable_mockModule('../public/scripts/feature-settings.js', () => ({ featu
 jest.unstable_mockModule('../public/scripts/tool-bindings.js', () => ({ syncPipelineToolBindings: jest.fn() }));
 const runtime = await import('../public/scripts/reply-pipeline.js');
 const { assertPipelineResponseAllowed, getPipelineRunState } = await import('../public/scripts/reply-pipeline-core.js');
+const { isRecoverableGenerationFailure } = await import('../public/scripts/chat-generation-auto-recovery.js');
 
 const source = readFileSync(new URL('../public/scripts/generation-service.js', import.meta.url), 'utf8');
 
@@ -72,6 +73,20 @@ test('clean prose-only closing round stays allowed', async () => {
         .resolves.toEqual({ content: 'closing prose' });
 });
 
+test('required nonstream step rejects prose without saving a reply', async () => {
+    runtime.endPipelineRun();
+    runtime.beginPipelineRun();
+    await expect(runFinishedBoundary('nonstream', 'normal', 'prose'))
+        .rejects.toThrow('Reply pipeline: expected exactly one current-step call (submit_story).');
+});
+
+test('required stream step rejects prose and identifies the provisional message', async () => {
+    runtime.endPipelineRun();
+    runtime.beginPipelineRun();
+    await expect(runFinishedBoundary('stream', 'normal', 'prose'))
+        .rejects.toMatchObject({ message: 'Reply pipeline: expected exactly one current-step call (submit_story).', messageId: 7 });
+});
+
 test('both response boundaries guard before their dispatch gate', () => {
     // The gate itself: depth === RECURSE_LIMIT disables dispatch, so the
     // validator path is unreachable and the boundary must reject on its own.
@@ -86,4 +101,46 @@ test('both response boundaries guard before their dispatch gate', () => {
     const nonstreamSuccess = source.indexOf('if (!carriesToolCalls && isEmptyGenerationResult(result))');
     expect(nonstreamGuard).toBeGreaterThan(-1);
     expect(nonstreamGuard).toBeLessThan(nonstreamSuccess);
+});
+
+// Run the actual finished-response boundary, including the existing empty
+// error constructor, so empty replies are checked against recovery policy.
+function runFinishedBoundary(mode, type, text) {
+    const constructorStart = source.indexOf('const createEmptyReplyFailure =');
+    const constructorEnd = source.indexOf('const isEmptyGenerationResult =', constructorStart);
+    const start = mode === 'stream'
+        ? source.indexOf('const finishedMessageId = state.streamingProcessor.messageId;')
+        : source.indexOf('const carriesToolCalls =');
+    const end = mode === 'stream'
+        ? source.indexOf("if (state.main_api === 'openai'", start)
+        : source.indexOf('return result;', start);
+    expect(constructorStart).toBeGreaterThan(-1);
+    expect(constructorEnd).toBeGreaterThan(constructorStart);
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    const state = { streamingProcessor: { messageId: 7 }, ToolManager: { hasToolCalls: () => false } };
+    const run = new Function('state', 'type', 'messageChunk', 'result', 'canPerformToolCalls', 'getPipelineRunState', 'isEmptyGenerationResult', 'activeRecoveryMessageId',
+        `return (async () => { ${source.slice(constructorStart, constructorEnd)} ${source.slice(start, end)} return 'accepted'; })();`);
+    return run(state, type, text, { content: text }, true, getPipelineRunState, result => !result.content.trim(), 7);
+}
+
+test.each(['stream', 'nonstream'])('%s active run accepts a quiet response without advancing', async mode => {
+    runtime.endPipelineRun();
+    runtime.beginPipelineRun();
+    const run = getPipelineRunState();
+    await expect(runFinishedBoundary(mode, 'quiet', 'quiet output')).resolves.toBe('accepted');
+    expect(getPipelineRunState()).toBe(run);
+    expect(run.index).toBe(0);
+});
+
+test.each(['stream', 'nonstream'])('%s empty response retains recoverable classification without advancing', async mode => {
+    runtime.endPipelineRun();
+    runtime.beginPipelineRun();
+    const run = getPipelineRunState();
+    let failure;
+    try { await runFinishedBoundary(mode, 'normal', '   '); } catch (error) { failure = error; }
+    expect(failure).toMatchObject({ message: 'empty reply', emptyReply: true, messageId: 7 });
+    expect(isRecoverableGenerationFailure(failure)).toBe(true);
+    expect(getPipelineRunState()).toBe(run);
+    expect(run.index).toBe(0);
 });

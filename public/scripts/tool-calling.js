@@ -743,6 +743,11 @@ export class ToolManager {
             const id = toolCall.id;
             const parameters = toolCall.function.arguments;
             const name = toolCall.function.name;
+            if (getPipelineRunState()) {
+                const args = typeof parameters === 'string' ? JSON.parse(parameters) : parameters;
+                result.invocations.push({ id, displayName: getPipelineRunState().steps[getPipelineRunState().index].tool, name, parameters: stringify(parameters), result: args.content, error: false, signature: toolCall.signature || null, reasoning: reasoningText || null });
+                continue;
+            }
             const displayName = ToolManager.getDisplayName(name);
             const isStealth = !getPipelineRunState() && ToolManager.isStealthTool(name);
             const message = await ToolManager.formatToolCallMessage(name, parameters);
@@ -915,7 +920,7 @@ export class ToolManager {
             item.classList.add('tool-invocation');
             item.setAttribute('data-tool-invocation', '');
             if (invocation.pipeline) {
-                item.setAttribute('data-pipeline-step', invocation.name);
+                item.setAttribute('data-pipeline-step', invocation.pipeline.tool ?? invocation.name);
                 item.setAttribute('data-pipeline-display', invocation.pipeline.display ?? 'summary');
             }
             if (invocation.error) {
@@ -1024,7 +1029,7 @@ export class ToolManager {
         const blocks = [];
         invocations.forEach((invocation, index) => {
             const isLast = index === invocations.length - 1;
-            const tag = safeTag(invocation?.name);
+            const tag = safeTag(invocation?.pipeline?.tool ?? invocation?.name);
             // Earlier steps escape their text too (literal inner content); the
             // last tag carries the reply RAW so <plot-options>-style markup
             // stays live for display-time regexes and the chip row.

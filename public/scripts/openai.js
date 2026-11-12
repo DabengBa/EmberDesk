@@ -76,7 +76,7 @@ import {
     resolveReasoningEffort,
     resolveVerbosity,
 } from './openai-provider-capabilities.js';
-import { buildStepPrompt, createPipelineToolCompatibilityError, getActivePipelineRunId, getPipelineRunState, PIPELINE_FALLBACK_PROMPT, pipelineModelRemovesTools } from './reply-pipeline-core.js';
+import { buildStepPrompt, createPipelineToolCompatibilityError, getActivePipelineRunId, getPipelineRunState, PIPELINE_FALLBACK_PROMPT, PIPELINE_STORY_TOOL, pipelineModelRemovesTools } from './reply-pipeline-core.js';
 
 const presetDialogs = createPresetDialogs({ showLocalDialog, t });
 
@@ -417,7 +417,7 @@ function setOpenAIMessages(chat, model = null) {
         // owns subsequent history projection. Mixed cards still replay real calls.
         if (Array.isArray(invocations) && typeof content === 'string') {
             invocations.forEach((invocation, index) => {
-                const name = String(invocation?.name ?? '');
+                const name = String(invocation?.pipeline?.tool ?? invocation?.name ?? '');
                 if (!/^[a-zA-Z][a-zA-Z0-9_-]*$/.test(name)) {
                     return;
                 }
@@ -1071,8 +1071,10 @@ async function populateChatCompletion(prompts, chatCompletion, { bias, quietProm
     if (ToolManager.canPerformToolCalls(type)) {
         const toolData = {};
         await ToolManager.registerFunctionToolsOpenAI(toolData);
-        const toolMessage = [{ role: 'user', content: JSON.stringify(toolData) }];
-        const toolTokens = await tokenHandler.countAsync(toolMessage);
+        const toolMessage = pipelineHistory
+            ? [{ role: 'system', content: JSON.stringify([PIPELINE_STORY_TOOL]) }]
+            : [{ role: 'user', content: JSON.stringify(toolData) }];
+        const toolTokens = await tokenHandler.countAsync(toolMessage, pipelineHistory);
         chatCompletion.reserveBudget(toolTokens);
     }
 

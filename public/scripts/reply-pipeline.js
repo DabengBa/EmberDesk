@@ -19,9 +19,9 @@ import {
     applyStepRequestOverrides,
     buildStepPrompt,
     extractFinalStepText,
-    findStepCompletion,
     normalizeReplyPipeline,
     PIPELINE_FALLBACK_PROMPT,
+    PIPELINE_STORY_TOOL,
     pipelineTriggerTag,
     pipelineModelRemovesTools,
     resolvePipelineSteps,
@@ -170,7 +170,7 @@ export function preparePipelineRound(invocations) {
     }
     if (runState.pendingAssistant && runState.messages) {
         runState.messages.push(runState.pendingAssistant, ...invocations.map(invocation => ({
-            role: 'tool', tool_call_id: invocation.id, content: invocation.result,
+            role: 'tool', tool_call_id: invocation.id, content: '已收到。',
         })));
         runState.pendingAssistant = null;
     }
@@ -180,19 +180,23 @@ export function preparePipelineRound(invocations) {
         endPipelineRun();
         return null;
     }
-    const completion = findStepCompletion(runState.steps, invocations);
+    const index = runState.index;
+    const step = runState.steps[index];
+    const completion = invocations?.length === 1 && invocations[0].name === 'submit_story' && step
+        ? { step, index, isFinal: index === runState.steps.length - 1 } : null;
     if (!completion) {
         return { action: 'continue' };
     }
     // Stamp UI metadata separately from the already captured wire round.
     for (const invocation of invocations) {
-        const stepIndex = runState.steps.findIndex(step => step.tool === invocation?.name);
+        const stepIndex = invocation?.name === 'submit_story' ? runState.index : -1;
         if (stepIndex >= 0) {
             const step = runState.steps[stepIndex];
             invocation.pipeline = {
                 runId: runState.runId,
                 stepId: step.id,
                 stepIndex,
+                tool: step.tool,
                 display: step.display,
             };
         }
@@ -207,14 +211,14 @@ export function preparePipelineRound(invocations) {
         runState.index = Math.max(runState.index, completion.index + 1);
         return { action: 'continue' };
     }
-    const text = extractFinalStepText(invocations, completion.step, runState.pipeline.resultField);
+    const text = extractFinalStepText(invocations, { tool: 'submit_story' }, runState.pipeline.resultField);
     if (text) {
         return { action: 'final', text, step: completion.step, meta };
     }
     // The failing final step must stay visible — hiding it would swallow the
     // error evidence while the fallback reply shows up unexplained.
     for (const invocation of invocations) {
-        if (invocation?.pipeline && invocation.name === completion.step.tool) {
+        if (invocation?.pipeline && invocation.name === 'submit_story') {
             invocation.pipeline = { ...invocation.pipeline, display: 'summary' };
         }
     }
@@ -253,7 +257,7 @@ export function applyPipelineRequestShaping(data) {
 
     if (!runState.messages) {
         runState.messages = structuredClone(data.messages);
-        runState.tools = structuredClone(data.tools);
+        runState.tools = [structuredClone(PIPELINE_STORY_TOOL)];
     }
     const round = runState.fallbackRound ? 'fallback' : runState.index;
     if (runState.shapedRound !== round) {
@@ -340,6 +344,7 @@ export function previewPipelineRequestShaping(data, { round = 0 } = {}) {
     const index = Math.floor(Number(round));
     // Out-of-range (or intentionally the closing round) → fallback shape.
     if (!Number.isFinite(index) || index >= total) {
+        if (!pipelineModelRemovesTools(data)) data.tools = [structuredClone(PIPELINE_STORY_TOOL)];
         applyFallbackRequestShape(data, FALLBACK_PROMPT);
         applyPipelineModelMessageRoles(data);
         return { round: total, total, fallback: true, step: null, rounds };
@@ -349,6 +354,7 @@ export function previewPipelineRequestShaping(data, { round = 0 } = {}) {
     if (pipelineModelRemovesTools(data)) {
         throw createPipelineToolCompatibilityError(data.model);
     }
+    data.tools = [structuredClone(PIPELINE_STORY_TOOL)];
     data.messages.push({ role: 'system', content: buildStepPrompt(step, clampedIndex, total) });
     applyStepRequestOverrides(data, step, {
         enforceMode: runnable.pipeline.enforceMode,
