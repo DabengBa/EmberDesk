@@ -5,7 +5,7 @@ import { runInNewContext } from 'node:vm';
 
 test('sort change reaches the handler when the right panel mounts after ready', () => {
     const source = readFileSync(new URL('../public/scripts/power-user.js', import.meta.url), 'utf8');
-    const binding = source.slice(source.indexOf('    // Settings that go into the settings document'), source.indexOf('    SlashCommandParser.addCommandObject', source.indexOf('    // Settings that go into the settings document')));
+    const binding = source.slice(source.indexOf('    // Settings that go into the settings document'), source.indexOf('\n});', source.indexOf('    // Settings that go into the settings document')));
     const document = {};
     const handlers = [];
     let selector;

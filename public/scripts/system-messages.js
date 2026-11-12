@@ -2,8 +2,7 @@ import { lodash } from '../lib.js';
 import { addOneMessage, chat, setSendButtonState, system_avatar, systemUserName } from '../script.js';
 import { t } from './i18n.js';
 import { getMessageTimeStamp } from './RossAscends-mods.js';
-import { getSlashCommandsHelp } from './slash-commands.js';
-import { SlashCommandBrowser } from './slash-commands/SlashCommandBrowser.js';
+
 import { MacroBrowser, getMacrosHelp } from './macros/engine/MacroBrowser.js';
 import { renderTemplateAsync } from './templates.js';
 import { uuidv4 } from './utils.js';
@@ -22,7 +21,7 @@ export const system_message_types = {
     GENERIC: 'generic',
     NARRATOR: 'narrator',
     COMMENT: 'comment',
-    SLASH_COMMANDS: 'slash_commands',
+
     FORMATTING: 'formatting',
     HOTKEYS: 'hotkeys',
     MACROS: 'macros',
@@ -44,10 +43,7 @@ export async function initSystemMessages() {
         help: lodash.merge(structuredClone(defaultMessage), {
             mes: await renderTemplateAsync('help'),
         }),
-        /** @type {ChatMessage} */
-        slash_commands: lodash.merge(structuredClone(defaultMessage), {
-            mes: '',
-        }),
+
         /** @type {ChatMessage} */
         hotkeys: lodash.merge(structuredClone(defaultMessage), {
             mes: await renderTemplateAsync('hotkeys'),
@@ -113,9 +109,6 @@ export function getSystemMessageByType(type, text, extra = {}) {
         newMessage.mes = text;
     }
 
-    if (type === system_message_types.SLASH_COMMANDS) {
-        newMessage.mes = getSlashCommandsHelp();
-    }
 
     if (type === system_message_types.MACROS) {
         newMessage.mes = getMacrosHelp();
@@ -144,14 +137,6 @@ export function sendSystemMessage(type, text, extra = {}) {
     chat.push(newMessage);
     addOneMessage(newMessage);
     setSendButtonState(false);
-    if (type === system_message_types.SLASH_COMMANDS) {
-        const browser = new SlashCommandBrowser();
-        const spinner = document.querySelector('#chat .last_mes .custom-slashHelp');
-        const parent = spinner.parentElement;
-        spinner.remove();
-        browser.renderInto(parent);
-        browser.search.focus();
-    }
 
     if (type === system_message_types.MACROS) {
         const browser = new MacroBrowser();
@@ -164,3 +149,31 @@ export function sendSystemMessage(type, text, extra = {}) {
         }
     }
 }
+
+$(document).on('click', '[data-displayHelp]', function (e) {
+    e.preventDefault();
+    const page = String($(this).data('displayhelp')).trim().toLowerCase();
+
+    switch (page) {
+        case 'format':
+        case 'formatting':
+        case 'formats':
+        case 'chat formatting':
+        case '2':
+            sendSystemMessage(system_message_types.FORMATTING);
+            break;
+        case 'hotkeys':
+        case 'hotkey':
+        case '3':
+            sendSystemMessage(system_message_types.HOTKEYS);
+            break;
+        case 'macros':
+        case 'macro':
+        case '4':
+            sendSystemMessage(system_message_types.MACROS);
+            break;
+        default:
+            sendSystemMessage(system_message_types.HELP);
+            break;
+    }
+});

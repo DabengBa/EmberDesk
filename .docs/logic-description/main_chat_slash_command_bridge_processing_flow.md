@@ -1,5 +1,7 @@
 # Main Chat Slash Command Bridge Processing Flow
 
+> Historical reference: Slash commands and this bridge are retired. The processing flow and code bindings below do not describe the current implementation. See [Chat Workspace](../db/pages/chat-workspace.md) for current submission behavior.
+
 ## Metadata
 
 - Owner: main-chat slash-command bridge documentation

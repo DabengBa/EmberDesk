@@ -100,25 +100,7 @@ describe('main chat store projection', () => {
                 activeMessageId: '1',
                 observedTokenCount: 3,
             },
-            slash: {
-                active: true,
-                query: '/he',
-                autocompleteVisible: true,
-                replaceable: true,
-                detailsVisible: true,
-                detailsHtml: '<p>Help</p>',
-                options: [{
-                    name: 'help',
-                    type: 'command',
-                    typeIcon: '?',
-                    selectable: true,
-                    selected: true,
-                }],
-                executing: false,
-                paused: false,
-                aborted: false,
-                errorLabel: null,
-            },
+
             window: {
                 visibleMessageIds: ['1'],
                 anchorMessageId: '1',
@@ -144,20 +126,7 @@ describe('main chat store projection', () => {
             composer: expect.objectContaining({ value: 'next', activeContext: 'character' }),
             generation: { phase: 'streaming', activeMessageId: '1' },
             streaming: { phase: 'streaming', activeMessageId: '1', observedTokenCount: 3 },
-            slash: expect.objectContaining({
-                active: true,
-                query: '/he',
-                replaceable: true,
-                detailsVisible: true,
-                detailsHtml: '<p>Help</p>',
-                options: [{
-                    name: 'help',
-                    type: 'command',
-                    typeIcon: '?',
-                    selectable: true,
-                    selected: true,
-                }],
-            }),
+
             window: expect.objectContaining({
                 visibleMessageIds: ['1'],
                 anchorMessageId: '1',

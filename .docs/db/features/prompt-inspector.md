@@ -24,7 +24,7 @@ Let users verify what the model is actually about to see — resolved prompt ord
 - Pipeline preview builds the selected round with its own model (the closing round inherits the preset), without mutating a live run. The shared history/media prefix uses the first runnable step's model, matching live assembly; later mixed-model rounds reuse that prefix.
 - When a runnable [Reply Pipeline](feature.reply_pipeline) exists, a round selector previews each step round (step-scoped material and instruction, configured enforcement, per-step token cap and reasoning effort) and the closing round. The closing preview uses `tool_choice: 'none'` when tool definitions are available; otherwise it omits tool wiring. Preview does not touch live run state.
 - `刷新` reassembles against current state; `复制 JSON` copies the full request body; Escape, the close button, or the backdrop dismisses the overlay.
-- The preview performs no network request, writes no chat or settings state, does not clear the composer, does not materialize pending attachments, does not execute slash commands, and stores nothing persistently — prompt content stays in memory only. Known divergence is surfaced as explicit warnings (pending attachment, slash-command input, bias-only input, budget overflow, assembly error) rather than silently omitted.
+- The preview performs no network request, writes no chat or settings state, does not clear the composer, does not materialize pending attachments and stores nothing persistently — prompt content stays in memory only. Known divergence is surfaced as explicit warnings (pending attachment, bias-only input, budget overflow, assembly error) rather than silently omitted.
 - When no character is active or the chat completion API is not in use, the overlay shows an explanatory empty state instead of a partial prompt.
 
 ## Semantic Interaction IDs
@@ -42,7 +42,7 @@ Let users verify what the model is actually about to see — resolved prompt ord
 - As a user checking prompt composition, toggle a prompt entry or world info content and press `刷新`; the message list and budget strip must reflect the change, and the listed messages must equal what a subsequent real send transmits. Failure is drift between the preview body and the real request body.
 - As a user inspecting a long chat, open the preview after history exceeds the context budget; entries that failed the budget check must appear in the dropped-messages section. Failure is silently truncated history.
 - As a user with a runnable reply pipeline, switch the round selector; each step round must show its step-scoped material, instruction and configured enforcement/token cap. The closing round must show `tool_choice: 'none'` when tools are available, or no tool wiring otherwise. Failure is a preview that mutates the live pipeline run or ignores per-step overrides.
-- As a user with a pending attachment or `/`-prefixed input, open the preview; the overlay must show the corresponding warning instead of pretending the attachment or command result is included.
+- As a user with a pending attachment, open the preview; the overlay must warn that the attachment is not included. A `/`-prefixed draft is ordinary message text and does not trigger a command warning.
 
 ## Feature-Specific Evidence
 

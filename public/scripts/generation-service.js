@@ -79,7 +79,6 @@ const isAssistantRecoveryMessageId = (...args) => shell().isAssistantRecoveryMes
 const isStreamingEnabled = (...args) => shell().isStreamingEnabled(...args);
 
 const pingServer = (...args) => shell().pingServer(...args);
-const processCommands = (...args) => shell().processCommands(...args);
 const rememberMainChatStreamingTransportProcessorTerminal = (...args) => shell().rememberMainChatStreamingTransportProcessorTerminal(...args);
 const removeDepthPrompts = (...args) => shell().removeDepthPrompts(...args);
 const removeMacros = (...args) => shell().removeMacros(...args);
@@ -467,20 +466,9 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
     await unshallowCharacter(state.this_chid);
     if (cancelStaleSubmission()) return;
 
-    // Occurs every time, even if the generation is aborted due to slash commands execution
     await eventSource.emit(event_types.GENERATION_STARTED, type, { automatic_trigger, force_name2, quiet_prompt, quietToLoud, skipWIAN, signal, quietImage, depth, regenerate: isRegenerate }, dryRun);
     if (cancelStaleSubmission()) return;
 
-    if (!(dryRun || depth || type == 'quiet' || isRegenerate)) {
-        const interruptedByCommand = await processCommands(composerSubmission?.value ?? '', composerSubmission);
-
-        if (interruptedByCommand) {
-            unblockGeneration(type);
-            return Promise.resolve();
-        }
-    }
-
-    // Occurs only if the generation is not aborted due to slash commands execution
     await eventSource.emit(event_types.GENERATION_AFTER_COMMANDS, type, { automatic_trigger, force_name2, quiet_prompt, quietToLoud, skipWIAN, signal, quietImage, regenerate: isRegenerate }, dryRun);
     if (cancelStaleSubmission()) return;
 
@@ -586,9 +574,7 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
     if (isPreview) {
         const wantsUserMessage = (textareaText != '' || hasPendingFileAttachment()) && !automatic_trigger && type !== 'quiet';
         const wantsEmptyReplacement = !wantsUserMessage && textareaText == '' && !automatic_trigger && type === 'normal' && state.main_api == 'openai' && state.oai_settings.send_if_empty.trim().length > 0;
-        if (textareaText.trim().startsWith('/')) {
-            previewWarnings.push('slash-command');
-        }
+
         if (hasPendingFileAttachment()) {
             previewWarnings.push('pending-attachment');
         }
@@ -1439,7 +1425,7 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
             const isIntermediateAttempt = attemptIndex < attempts.length - 1;
             const candidateRecoveryMessageId = exception?.messageId ?? state.streamingProcessor?.messageId ?? activeRecoveryMessageId;
             const failureDecision = getGenerationFailureDecision({
-                shouldAutoRecover,
+                shouldAutoRecover: shouldAutoRecover && !isUserStoppedGeneration(exception),
                 failure: exception,
                 isIntermediateAttempt,
             });

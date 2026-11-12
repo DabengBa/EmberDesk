@@ -50,7 +50,7 @@ describe('reasoning command state', () => {
         expect(f.deps.save).not.toHaveBeenCalled();
     });
 
-    test('slash-style set preserves literal macros and regex matches, marks manual and emits no edit event', async () => {
+    test('literal set preserves macros and regex matches, marks manual and emits no edit event', async () => {
         const f = fixture();
         expect(await f.commands.setMessageReasoning(0, '{{name}} match', { applyRegex: false })).toBe(true);
         expect(f.chat[0].extra.reasoning).toBe('{{name}} match');
@@ -61,7 +61,7 @@ describe('reasoning command state', () => {
         expect(f.deps.refresh).toHaveBeenCalled();
     });
 
-    test('explicit slash collapse state is retained even when reasoning is empty', async () => {
+    test('explicit disclosure state is retained even when reasoning is empty', async () => {
         const f = fixture();
         await f.commands.setMessageReasoning(0, '', { applyRegex: false });
         expect(f.commands.setMessageReasoningOpen(0, true)).toBe(true);
@@ -146,61 +146,37 @@ describe('reasoning command state', () => {
     });
 });
 
-describe('reasoning slash compatibility entry points', () => {
-    test('set keeps literal text, closes the editor and applies collapse; range toggle uses state', async () => {
+describe('reasoning row event ownership', () => {
+    test('React-owned rows do not invoke legacy reasoning edit handlers', async () => {
         const f = fixture();
-        const registered = new Map();
-        const closeEditor = jest.fn();
-        const command = { fromProps: value => value };
         const tag = (strings, ...values) => strings.reduce((s, part, i) => s + part + (values[i] ?? ''), '');
         const mock = (path, factory) => jest.unstable_mockModule(path, factory);
         mock('../public/lib.js', () => ({ moment: {} }));
-        mock('../public/script.js', () => ({ chat: f.chat, closeMessageEditor: closeEditor, main_api: '', messageFormatting: jest.fn(), saveChatDebounced: jest.fn(), substituteParams: x => x, updateMessageBlock: jest.fn() }));
+        mock('../public/script.js', () => ({ chat: f.chat, main_api: '', messageFormatting: jest.fn(), saveChatDebounced: jest.fn(), substituteParams: x => x, updateMessageBlock: jest.fn() }));
         mock('../public/scripts/message-shell-context.js', () => ({ requireMessageShellContext: () => ({ getChatMessageCommands: () => f.commands }) }));
         mock('../public/scripts/events.js', () => ({ eventSource: { on: jest.fn() }, event_types: {} }));
         mock('../public/scripts/extensions/regex/engine.js', () => ({ getRegexedString: x => x, regex_placement: {} }));
         mock('../public/scripts/i18n.js', () => ({ getCurrentLocale: jest.fn(), t: tag, translate: x => x }));
         mock('../public/scripts/macros/macro-system.js', () => ({ macros: { register: jest.fn() }, MacroCategory: {} }));
         mock('../public/scripts/openai.js', () => ({ chat_completion_sources: {}, getChatCompletionModel: jest.fn(), oai_settings: {} }));
-        mock('../public/scripts/slash-commands/SlashCommand.js', () => ({ SlashCommand: command }));
-        mock('../public/scripts/slash-commands/SlashCommandArgument.js', () => ({ ARGUMENT_TYPE: {}, SlashCommandArgument: command, SlashCommandNamedArgument: command }));
-        mock('../public/scripts/slash-commands/SlashCommandCommonEnumsProvider.js', () => ({ commonEnumProviders: { messages: () => () => [], boolean: () => () => [] }, enumIcons: {} }));
-        mock('../public/scripts/slash-commands/SlashCommandEnumValue.js', () => ({ enumTypes: {}, SlashCommandEnumValue: class {} }));
-        mock('../public/scripts/slash-commands/SlashCommandParser.js', () => ({ SlashCommandParser: { addCommandObject: value => registered.set(value.name, value.callback) } }));
-        mock('../public/scripts/utils.js', () => ({ escapeRegex: x => x, isFalseBoolean: x => x === 'false', isTrueBoolean: x => x === 'true', setDatasetProperty: jest.fn(), stringToRange: value => ({ start: Number(value), end: Number(value) }), trimSpaces: x => x }));
+        mock('../public/scripts/utils.js', () => ({ escapeRegex: x => x, setDatasetProperty: jest.fn(), trimSpaces: x => x }));
         const previousDocument = globalThis.document;
         const previousDollar = globalThis.$;
-        globalThis.document = {};
+        const previousElement = globalThis.Element;
         const handlers = new Map();
+        globalThis.Element = class { closest() { return {}; } };
+        globalThis.document = { getElementById: () => ({ dataset: { reactMainChatOwner: 'react' } }) };
         globalThis.$ = () => ({ on: (_event, selector, handler) => handlers.set(selector, handler) });
         try {
             const { initReasoning } = await import('../public/scripts/reasoning.js');
             initReasoning();
-            expect(await registered.get('reasoning-set')({ at: 0, collapse: 'false' }, '{{name}} match')).toBe('{{name}} match');
-            expect(f.chat[0].extra.reasoning_type).toBe('manual');
-            expect(f.deps.processReasoning).not.toHaveBeenCalled();
-            expect(closeEditor).toHaveBeenCalledWith('reasoning');
-            expect(f.ui.get('0').reasoningOpen).toBe(true);
-            expect(registered.get('reasoning-toggle')({}, '0')).toBe('');
-            expect(f.ui.get('0').reasoningOpen).toBe(false);
-            registered.get('reasoning-expand')({}, '0');
-            expect(f.ui.get('0').reasoningOpen).toBe(true);
-            registered.get('reasoning-collapse')({}, '0');
-            expect(f.ui.get('0').reasoningOpen).toBe(false);
             const start = jest.spyOn(f.commands, 'startMessageReasoningEdit');
-
-            const previousElement = globalThis.Element;
-            globalThis.Element = class { closest() { return {}; } };
-            globalThis.document.getElementById = () => ({ dataset: { reactMainChatOwner: 'react' } });
-            try {
-                handlers.get('.mes_reasoning_edit, .mes_edit_add_reasoning').call(new globalThis.Element(), { preventDefault: jest.fn(), stopPropagation: jest.fn() });
-                expect(start).not.toHaveBeenCalled();
-            } finally {
-                globalThis.Element = previousElement;
-            }
+            handlers.get('.mes_reasoning_edit, .mes_edit_add_reasoning').call(new globalThis.Element(), { preventDefault: jest.fn(), stopPropagation: jest.fn() });
+            expect(start).not.toHaveBeenCalled();
         } finally {
             globalThis.document = previousDocument;
             globalThis.$ = previousDollar;
+            globalThis.Element = previousElement;
         }
     });
 });

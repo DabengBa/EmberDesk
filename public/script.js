@@ -143,7 +143,7 @@ import {
     feature_settings,
     initCoreFeatures,
 } from './scripts/feature-settings.js';
-import { COMMENT_NAME_DEFAULT, CONNECT_API_MAP, executeSlashCommandsOnChatInput, getMainChatSlashCommandAutoCompleteState, initDefaultSlashCommands, initSlashCommandAutoComplete, isExecutingCommandsFromChatInput, pauseScriptExecution, selectMainChatSlashCommandOption, setMainChatSlashCommandReactOwnerEnabled, stopScriptExecution, UNIQUE_APIS } from './scripts/slash-commands.js';
+
 import { initMacroAutoComplete } from './scripts/autocomplete/MacroAutoComplete.js';
 import { initFrontendFrameController } from './scripts/frontend-frame-controller.js';
 import {
@@ -228,7 +228,6 @@ import {
 import { getStreamingControlState } from './scripts/chat-streaming-control-state.js';
 import { getMainChatComposerState } from './scripts/main-chat-composer-state.js';
 import { getComposerValue, setComposerValue, getComposerSnapshot, subscribeComposerState, updateComposerInteraction, requestComposerFocus } from './scripts/main-chat-composer-service.js';
-import { getMainChatSlashCommandState } from './scripts/main-chat-slash-command-state.js';
 import { getMainChatStreamingTransportState } from './scripts/main-chat-streaming-transport-state.js';
 import { buildGreetingOptions, canSwitchGreeting } from './scripts/main-chat-greetings.js';
 import { createChatMessageActionsController } from './scripts/chat-message-actions-controller.js';
@@ -584,7 +583,6 @@ registerGenerationShellContext({
     isStreamingEnabled: (...args) => isStreamingEnabled(...args),
     parseMesExamples: (...args) => parseMesExamples(...args),
     pingServer: (...args) => pingServer(...args),
-    processCommands: (...args) => processCommands(...args),
     rememberMainChatStreamingTransportProcessorTerminal: (...args) => rememberMainChatStreamingTransportProcessorTerminal(...args),
     removeDepthPrompts: (...args) => removeDepthPrompts(...args),
     removeLastMessage: (...args) => removeLastMessage(...args),
@@ -843,7 +841,7 @@ registerMessageShellContext({
         get this_chid() { return this_chid; },
         get itemizedPrompts() { return itemizedPrompts; },
         get power_user() { return power_user; },
-        get COMMENT_NAME_DEFAULT() { return COMMENT_NAME_DEFAULT; },
+
         get PromptReasoning() { return PromptReasoning; },
         get DOMPurify() { return DOMPurify; },
         get SVGInject() { return SVGInject; },
@@ -1032,7 +1030,7 @@ registerDomHandlersShellContext({
     openMessageDelete: (...args) => openMessageDelete(...args),
     openWireLogPanel: (...args) => openWireLogPanel(...args),
     openChatMemoryPanel: (...args) => openChatMemoryPanel(...args),
-    pauseScriptExecution: (...args) => pauseScriptExecution(...args),
+
     processDroppedFiles: (...args) => processDroppedFiles(...args),
     queueReactCharacterAuthoringRemount: (...args) => queueReactCharacterAuthoringRemount(...args),
     read_avatar_load: (...args) => read_avatar_load(...args),
@@ -1060,7 +1058,7 @@ registerDomHandlersShellContext({
     showBranchChatButtons: (...args) => showBranchChatButtons(...args),
     showDeleteConfirmWithCascade: (...args) => showDeleteConfirmWithCascade(...args),
     stopGeneration: (...args) => stopGeneration(...args),
-    stopScriptExecution: (...args) => stopScriptExecution(...args),
+
     t: (strings, ...values) => t(strings, ...values),
     toggleCharacterExportPopup: (...args) => toggleCharacterExportPopup(...args),
     getVisibleCharacterExportTrigger: (...args) => getVisibleCharacterExportTrigger(...args),
@@ -1870,43 +1868,6 @@ function getMainChatGenerationControlBridgeState() {
     };
 }
 
-function getMainChatSlashCommandBridgeState() {
-    const formShell = document.getElementById('form_sheld');
-    const hasError = formShell?.classList.contains('script_error') === true;
-    const autoCompleteState = getMainChatSlashCommandAutoCompleteState();
-
-    return getMainChatSlashCommandState({
-        text: getComposerValue(),
-        autocompleteVisible: autoCompleteState.visible === true,
-        isExecuting: Boolean(isExecutingCommandsFromChatInput || formShell?.classList.contains('isExecutingCommandsFromChatInput')),
-        isPaused: formShell?.classList.contains('script_paused') === true,
-        isAborted: formShell?.classList.contains('script_aborted') === true,
-        hasError: hasError,
-        errorLabel: hasError ? 'error' : null,
-    });
-}
-
-function getMainChatSlashUiBridgeState() {
-    const autoCompleteState = getMainChatSlashCommandAutoCompleteState();
-
-    return {
-        active: Boolean(autoCompleteState.active),
-        visible: Boolean(autoCompleteState.visible),
-        replaceable: Boolean(autoCompleteState.replaceable),
-        detailsVisible: Boolean(autoCompleteState.detailsVisible),
-        selectedIndex: Number.isInteger(autoCompleteState.selectedIndex) ? autoCompleteState.selectedIndex : -1,
-        detailsHtml: typeof autoCompleteState.detailsHtml === 'string' ? autoCompleteState.detailsHtml : '',
-        options: Array.isArray(autoCompleteState.options)
-            ? autoCompleteState.options.map(option => ({
-                name: String(option?.name ?? ''),
-                type: String(option?.type ?? ''),
-                typeIcon: String(option?.typeIcon ?? ''),
-                selectable: option?.selectable !== false,
-                selected: option?.selected === true,
-            }))
-            : [],
-    };
-}
 
 function getMainChatStreamingTransportStore() {
     if (!globalThis.__emberDeskMainChatStreamingTransportStore || typeof globalThis.__emberDeskMainChatStreamingTransportStore !== 'object') {
@@ -2998,7 +2959,6 @@ function ensureMainChatMessageListReactHost() {
 }
 
 function cleanupMainChatMessageListReactHost() {
-    setMainChatSlashCommandReactOwnerEnabled(false);
     const chatContainer = document.getElementById('chat');
     if (chatContainer) {
         delete chatContainer.dataset.reactMainChatOwner;
@@ -3015,13 +2975,6 @@ function cleanupMainChatMessageListReactHost() {
             'mainChatComposerDisabled',
             'mainChatComposerGenerating',
             'mainChatComposerContext',
-            'mainChatSlashCommandActive',
-            'mainChatSlashCommandQueryLength',
-            'mainChatSlashCommandAutocomplete',
-            'mainChatSlashCommandExecuting',
-            'mainChatSlashCommandPaused',
-            'mainChatSlashCommandAborted',
-            'mainChatSlashCommandError',
         ]) {
             delete chatContainer.dataset[key];
         }
@@ -3100,7 +3053,6 @@ function getMainChatReactVisibleWindow(projectedChat) {
 function syncMainChatRuntimeDiagnostics(chatContainer, {
     generationControl,
     composer,
-    slashCommand,
     streamingTransport,
 } = {}) {
     if (!(chatContainer instanceof HTMLElement)) {
@@ -3120,13 +3072,6 @@ function syncMainChatRuntimeDiagnostics(chatContainer, {
         mainChatComposerDisabled: composer?.isDisabled === true,
         mainChatComposerGenerating: composer?.isGenerating === true,
         mainChatComposerContext: composer?.activeContext ?? 'none',
-        mainChatSlashCommandActive: slashCommand?.active === true,
-        mainChatSlashCommandQueryLength: slashCommand?.queryLength ?? 0,
-        mainChatSlashCommandAutocomplete: slashCommand?.autocompleteVisible === true ? 'visible' : 'hidden',
-        mainChatSlashCommandExecuting: slashCommand?.executing === true,
-        mainChatSlashCommandPaused: slashCommand?.paused === true,
-        mainChatSlashCommandAborted: slashCommand?.aborted === true,
-        mainChatSlashCommandError: slashCommand?.errorLabel ?? '',
     };
 
     for (const [key, value] of Object.entries(diagnostics)) {
@@ -3138,8 +3083,6 @@ function getMainChatMessageListReactBridgeState() {
     const chatContainer = document.getElementById('chat');
     const generationControl = getMainChatGenerationControlBridgeState();
     const composer = getMainChatComposerBridgeState();
-    const slashCommand = getMainChatSlashCommandBridgeState();
-    const slashUi = getMainChatSlashUiBridgeState();
     const streamingTransport = getMainChatStreamingTransportBridgeState();
     const projectedChat = reactMainChatProjectionCleared ? [] : chat;
     const visibleWindow = getMainChatReactVisibleWindow(projectedChat);
@@ -3147,7 +3090,6 @@ function getMainChatMessageListReactBridgeState() {
     syncMainChatRuntimeDiagnostics(chatContainer, {
         generationControl,
         composer,
-        slashCommand,
         streamingTransport,
     });
     const mainChatSnapshot = buildMainChatSnapshotFromLegacyChat({
@@ -3205,18 +3147,6 @@ function getMainChatMessageListReactBridgeState() {
                 : String(streamingTransport.activeMessageId),
             observedTokenCount: streamingTransport.observedTokenCount,
         },
-        slash: {
-            active: slashCommand.active,
-            replaceable: slashUi.replaceable,
-            detailsVisible: slashUi.detailsVisible,
-            detailsHtml: slashUi.detailsHtml,
-            options: slashUi.options,
-            autocompleteVisible: slashCommand.autocompleteVisible,
-            executing: slashCommand.executing,
-            paused: slashCommand.paused,
-            aborted: slashCommand.aborted,
-            errorLabel: slashCommand.errorLabel,
-        },
         messageUiById: getMainChatMessageUiStateById(),
         window: {
             visibleMessageIds,
@@ -3271,8 +3201,6 @@ function getMainChatMessageListReactBridgeState() {
         clientHeight: chatContainer?.clientHeight ?? 0,
         generationControl,
         composer,
-        slashCommand,
-        slashUi,
         streamingTransport,
         quietTransport: getMainChatQuietTransportBridgeState(),
         windowingContract: buildMainChatWindowingContract({
@@ -3331,11 +3259,6 @@ function getMainChatMessageListReactCommands() {
                 }
                 return true;
             },
-            setSlashVisibleOwner: enabled => {
-                setMainChatSlashCommandReactOwnerEnabled(enabled);
-                return false;
-            },
-            selectSlashAutocompleteOption: index => selectMainChatSlashCommandOption(index),
             ...getChatMessageCommands(),
             ...rowCommands,
             triggerVisibleGeneration: command => {
@@ -3969,8 +3892,7 @@ export {
     countOccurrences,
     renderTemplate,
     itemizedPrompts,
-    UNIQUE_APIS,
-    CONNECT_API_MAP,
+
     system_messages,
     system_message_types,
     sendSystemMessage,
@@ -4572,11 +4494,7 @@ async function bootstrapWorkspace() {
     await measureStartupStage('mountRightNavPanel', () => mountRightNavPanel());
     await measureStartupStage('registerCoreModules', () => Promise.resolve().then(() => {
         initChatUtilities();
-        initDefaultSlashCommands();
         initOpenAI();
-    }));
-    await measureStartupStage('registerExtensionSlashCommands', () => Promise.resolve().then(() => {
-        ToolManager.initToolSlashCommands();
     }));
     await measureStartupStage('initPresetManager', () => initPresetManager());
     await measureStartupStage('initSystemMessages', () => initSystemMessages());
@@ -4591,7 +4509,6 @@ async function bootstrapWorkspace() {
     await measureStartupStage('getCharacters', () => getCharacters());
     await measureStartupStage('initTokenizers', () => initTokenizers());
     await measureStartupStage('hydrateFeatureModules', async () => {
-        await initSlashCommandAutoComplete();
         bindMainChatMessageListBridgeObservers();
         initMacroAutoComplete();
         // Register deferred panel hooks before initWorldInfo so they capture any needed state
@@ -4645,9 +4562,9 @@ export function displayOnlineStatus() {
     const sendTextareaHint = $('#send_textarea_hint');
 
     if (online_status == 'no_connection') {
-        sendTextareaHint.text(t`Type /? for commands. Send requires an API connection.`);
+        sendTextareaHint.text(t`Send requires an API connection.`);
     } else {
-        sendTextareaHint.text(t`Type /? for commands.`);
+        sendTextareaHint.text('');
     }
 }
 
@@ -5654,15 +5571,13 @@ export function sendTextareaMessage(composerSubmission = getComposerSnapshot()) 
 async function submitComposerMessage(composerSubmission) {
     if (greetingSelectionPending) return;
     if (is_send_press) return;
-    if (isExecutingCommandsFromChatInput) return;
     if (regenerateRequestInFlight || generationEntryPending) return;
 
     const textareaText = composerSubmission.value;
     const currentComposer = getComposerSnapshot();
     if (composerSubmission.contextKey !== currentComposer.contextKey || composerSubmission.contextRevision !== currentComposer.contextRevision) return;
 
-    // Slash commands (e.g. /api to reconnect) still run while offline; a plain send cannot.
-    if (online_status === 'no_connection' && !textareaText.trimStart().startsWith('/')) {
+    if (online_status === 'no_connection') {
         flashComposerSendBlocked();
         toastr.warning(t`Not connected to API!`, '', { preventDuplicates: true });
         return;
@@ -5861,21 +5776,6 @@ export async function generateQuietPrompt({ quietPrompt = '', quietToLoud = fals
     }
 }
 
-/**
- * Executes slash commands and returns the new text and whether the generation was interrupted.
- * @param {string} message Text to be sent
- * @returns {Promise<boolean>} Whether the message sending was interrupted
- */
-export async function processCommands(message, composerSubmission = getComposerSnapshot()) {
-    if (!message || !message.trim().startsWith('/')) {
-        return false;
-    }
-    await executeSlashCommandsOnChatInput(message, {
-        clearChatInput: true,
-        composerSubmission,
-    });
-    return true;
-}
 
 /**
  * Extracts the contents of bias macros from a message.
@@ -6674,7 +6574,7 @@ let greetingSelectionPending = false;
  * @returns {boolean}
  */
 export function canRegenerateLastReply() {
-    if (greetingSelectionPending || is_send_press || regenerateRequestInFlight || generationEntryPending || isExecutingCommandsFromChatInput || this_edit_mes_id !== undefined) {
+    if (greetingSelectionPending || is_send_press || regenerateRequestInFlight || generationEntryPending || this_edit_mes_id !== undefined) {
         return false;
     }
     if (online_status === 'no_connection') {
@@ -7951,9 +7851,9 @@ function applyMessageEditText(messageId, inputText) {
 }
 
 
-function openMessageDelete(fromSlashCommand) {
+function openMessageDelete() {
     closeMessageEditor();
-    if (fromSlashCommand || !is_send_press) {
+    if (!is_send_press) {
         $('#dialogue_del_mes').css('display', 'block');
         $('#dialogue_del_mes_summary').text(t`Select a message to delete it and every message after it.`);
         $('#dialogue_del_mes_ok').prop('disabled', true);

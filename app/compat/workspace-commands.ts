@@ -46,8 +46,6 @@ export interface MainChatCommands {
     openCharacterLibrary(): CommandResult;
     loadMoreMessages(messagesToLoad?: number | null): CommandResult;
     loadMoreUntilMessage(anchorMessageId: string): CommandResult;
-    setSlashVisibleOwner(enabled: boolean): CommandResult;
-    selectSlashAutocompleteOption(index: number): CommandResult;
     startMessageEdit(messageUid: string): CommandResult;
     updateMessageEdit(messageUid: string, text: string): CommandResult;
     commitMessageEdit(messageUid: string): CommandResult;

@@ -6,7 +6,7 @@ import {
     characters,
     chat,
     chat_metadata,
-    CONNECT_API_MAP,
+
     create_save,
     deactivateSendButtons,
     extension_prompts,
@@ -80,11 +80,7 @@ import { callGenericPopup, Popup, POPUP_RESULT, POPUP_TYPE } from './popup.js';
 import { power_user, registerDebugFunction } from './power-user.js';
 import { getPresetManager } from './preset-manager.js';
 import { humanizedDateTime, isMobile, shouldSendOnEnter } from './RossAscends-mods.js';
-import { executeSlashCommands, executeSlashCommandsWithOptions, registerSlashCommand } from './slash-commands.js';
-import { SlashCommand } from './slash-commands/SlashCommand.js';
-import { ARGUMENT_TYPE, SlashCommandArgument, SlashCommandNamedArgument } from './slash-commands/SlashCommandArgument.js';
-import { SlashCommandEnumValue } from './slash-commands/SlashCommandEnumValue.js';
-import { SlashCommandParser } from './slash-commands/SlashCommandParser.js';
+
 import { tag_map, tags, importTags } from './tags.js';
 import { tokenizers, getTextTokens, getTokenCount, getTokenCountAsync, getTokenizerModel } from './tokenizers.js';
 import { ToolManager } from './tool-calling.js';
@@ -143,17 +139,7 @@ export function getContext() {
         saveReply,
         substituteParams,
         substituteParamsExtended,
-        SlashCommandParser,
-        SlashCommand,
-        SlashCommandArgument,
-        SlashCommandNamedArgument,
-        SlashCommandEnumValue,
-        ARGUMENT_TYPE,
-        executeSlashCommandsWithOptions,
-        /** @deprecated Use SlashCommandParser.addCommandObject() instead */
-        registerSlashCommand,
-        /** @deprecated Use executeSlashCommandWithOptions instead */
-        executeSlashCommands,
+
         timestampToMoment,
         /** @deprecated Handlebars for extensions are no longer supported. */
         registerHelper: () => { },
@@ -251,7 +237,7 @@ export function getContext() {
         convertCharacterBook,
         getWorldInfoPrompt,
         getWorldInfoNames: () => Array.isArray(world_names) ? [...world_names] : [],
-        CONNECT_API_MAP,
+
         extractMessageFromData,
         getPresetManager,
         getChatCompletionModel,

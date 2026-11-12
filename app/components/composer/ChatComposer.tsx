@@ -7,22 +7,7 @@ import { translate, useTranslated } from '@/compat/i18n.js';
  * React owns input events and renders the shared composer service snapshot.
  * The shell passes its service instance across the bundle boundary. Existing
  * generation controls still set button visibility through the preserved IDs.
- *
- * stscript_* controls stay plain divs: their visibility chain is driven by
- * tag-qualified legacy CSS (`#rightSendForm>div.stscript_btn` under
- * .isExecutingCommandsFromChatInput/.script_paused) which a <button> tag
- * would break. Keyboard activation dispatches a real click so the delegated
- * legacy handlers in public/scripts/dom-handlers.js stay the single command path.
  */
-function activateOnEnterOrSpace(event: KeyboardEvent<HTMLElement>) {
-    if (event.key !== 'Enter' && event.key !== ' ') {
-        return;
-    }
-
-    event.preventDefault();
-    event.currentTarget.click();
-}
-
 type ComposerService = typeof import('../../../public/scripts/main-chat-composer-service.js');
 type ComposerSnapshot = ReturnType<ComposerService['getComposerSnapshot']>;
 
@@ -141,7 +126,7 @@ export function ChatComposer({ composer, submit, stop, shouldSendOnEnter }: Chat
                         />
                     </div>
                     <div className="send_textarea_wrap">
-                        <textarea id="send_textarea" name="text" data-i18n="[aria-label]Chat message;[no_connection_text]Not connected to API!;[connected_text]Type a message, or /? for help" aria-label="Chat message" aria-describedby="send_textarea_hint" placeholder="Not connected to API!" no_connection_text="Not connected to API!" connected_text="Type a message, or /? for help" autoComplete="off" enterKeyHint="send"
+                        <textarea id="send_textarea" name="text" data-i18n="[aria-label]Chat message;[no_connection_text]Not connected to API!;[connected_text]Type a message" aria-label="Chat message" aria-describedby="send_textarea_hint" placeholder="Not connected to API!" no_connection_text="Not connected to API!" connected_text="Type a message" autoComplete="off" enterKeyHint="send"
                             ref={textareaRef}
                             value={snapshot.value}
                             onChange={event => composer.setComposerValue(event.currentTarget.value, selection(event.currentTarget))}
@@ -163,19 +148,11 @@ export function ChatComposer({ composer, submit, stop, shouldSendOnEnter }: Chat
                             }}
                             onKeyDown={onKeyDown}
                         ></textarea>
-                        <small id="send_textarea_hint" className="send_textarea_hint" aria-live="polite">{translate('Type /? for commands. Send requires an API connection.')}</small>
+                        <small id="send_textarea_hint" className="send_textarea_hint" aria-live="polite">{translate('Send requires an API connection.')}</small>
                         <a id="composer_connect_link" className="send_textarea_hint" href="/settings">{translate('Open connection settings →')}</a>
                     </div>
                     <div id="rightSendForm" className="alignContentCenter">
-                        <div id="stscript_continue" title="Continue script execution" className="stscript_btn stscript_continue" role="button" aria-label="Continue script execution" tabIndex={0} onKeyDown={activateOnEnterOrSpace} data-i18n="[title]Continue script execution;[aria-label]Continue script execution">
-                            <i className="fa-solid fa-play" />
-                        </div>
-                        <div id="stscript_pause" title="Pause script execution" className="stscript_btn stscript_pause" role="button" aria-label="Pause script execution" tabIndex={0} onKeyDown={activateOnEnterOrSpace} data-i18n="[title]Pause script execution;[aria-label]Pause script execution">
-                            <i className="fa-solid fa-pause" />
-                        </div>
-                        <div id="stscript_stop" title="Abort script execution" className="stscript_btn stscript_stop" role="button" aria-label="Abort script execution" tabIndex={0} onKeyDown={activateOnEnterOrSpace} data-i18n="[title]Abort script execution;[aria-label]Abort script execution">
-                            <i className="fa-solid fa-stop" />
-                        </div>
+
                         <ContractIconButton
                             id="mes_stop"
                             onClick={() => { stop(); restoreInputFocus(); }}

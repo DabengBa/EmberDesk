@@ -282,15 +282,6 @@ async function openCharacterChat(page, chatName) {
     }, chatName);
 }
 
-async function runSlash(page, command) {
-    return page.evaluate(async text => {
-        const { executeSlashCommandsWithOptions } = await import('/scripts/slash-commands.js');
-        const result = await executeSlashCommandsWithOptions(text);
-        if (result?.isError || result?.isAborted) throw new Error(`Slash failed: ${text}: ${result.errorMessage ?? result.abortReason}`);
-        return result?.pipe;
-    }, command);
-}
-
 async function positionMessageRowNearViewportTop(page, messageId, topOffset = 120) {
     return page.evaluate(async ({ targetMessageId, viewportTopOffset }) => {
         const chatContainer = document.getElementById('chat');
@@ -714,46 +705,6 @@ test.describe('chat message rendering', () => {
             checkboxShellVisible: true,
         });
         expect(getUnexpectedConsoleErrors(consoleErrors)).toEqual([]);
-    });
-
-    test('runs real slash message commands on off-window state and persists changes', async ({ page }) => {
-        const name = 'Slash Message Operations Proof';
-        const errors = createConsoleErrorCollector(page);
-        const pageErrors = [];
-        page.on('pageerror', error => pageErrors.push(error.message));
-        await testSetup.awaitST({ page });
-        await seedLongChatFixture(page, name, buildLongChatFixture(seededChatPath, 130));
-        await selectCharacterByName(page, characterName);
-        await openCharacterChat(page, name);
-        await expect(page.locator('#chat .mes[mesid="10"]')).toHaveCount(0);
-        await runSlash(page, '/message-role at=10 assistant');
-        await runSlash(page, '/message-name at=10 SlashName');
-        await runSlash(page, '/hide 10');
-        expect(await page.evaluate(() => {
-            const m = window.SillyTavern.getContext().chat[10];
-            return { name: m.name, is_user: m.is_user, is_system: m.is_system };
-        })).toEqual({ name: 'SlashName', is_user: false, is_system: true });
-        await runSlash(page, '/unhide 10');
-        expect(await page.evaluate(() => window.SillyTavern.getContext().chat[10].is_system)).toBe(false);
-        await page.locator('#show_more_messages').evaluate(element => element.click());
-        await expect(page.locator('#chat .mes[mesid="10"]')).toHaveAttribute('is_user', 'false');
-        await expect(page.locator('#chat .mes[mesid="10"]')).toHaveAttribute('is_system', 'false');
-        await expect(page.locator('#chat .mes[mesid="10"]')).toHaveAttribute('ch_name', 'SlashName');
-        await runSlash(page, '/delname SlashName');
-        expect(await page.evaluate(() => window.SillyTavern.getContext().chat.length)).toBe(129);
-        const cut = await runSlash(page, '/cut 5-6');
-        expect(cut).toContain('Long rendering proof message 006');
-        expect(cut).toContain('Long rendering proof message 007');
-        const deleted = await runSlash(page, '/del 2');
-        expect(deleted).toContain('Long rendering proof message 130');
-        expect(await page.evaluate(() => window.SillyTavern.getContext().chat.length)).toBe(125);
-        await page.reload();
-        await testSetup.awaitST({ page });
-        await selectCharacterByName(page, characterName);
-        await openCharacterChat(page, name);
-        expect(await page.evaluate(() => window.SillyTavern.getContext().chat.length)).toBe(125);
-        expect(getUnexpectedConsoleErrors(errors)).toEqual([]);
-        expect(pageErrors).toEqual([]);
     });
 
     test('stale row callbacks target the moved message while save is pending', async ({ page }) => {

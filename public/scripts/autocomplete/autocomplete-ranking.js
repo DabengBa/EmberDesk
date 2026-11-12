@@ -1,5 +1,3 @@
-export const DEFAULT_SLASH_COMMAND_RESULT_LIMIT = 12;
-
 function getOptionName(option) {
     return String(option?.name ?? '').toLowerCase();
 }
@@ -109,17 +107,4 @@ export function sortAutocompleteResults(options, {
             return aEntry.index - bEntry.index;
         })
         .map(entry => entry.option);
-}
-
-export function limitAutocompleteResults(options, {
-    query = '',
-    isSlashCommand = false,
-    limit = DEFAULT_SLASH_COMMAND_RESULT_LIMIT,
-} = {}) {
-    const normalizedQuery = String(query ?? '').trim();
-    if (!isSlashCommand || normalizedQuery) {
-        return options;
-    }
-
-    return options.slice(0, limit);
 }

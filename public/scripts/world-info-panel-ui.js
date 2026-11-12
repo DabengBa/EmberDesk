@@ -35,7 +35,7 @@ export function createWorldInfoPanelUi({ onWorldInfoChange, characters, checkEmb
                     return;
                 }
 
-                onWorldInfoChange('__notSlashCommand__');
+                onWorldInfoChange();
             });
 
             $('#world_button').on('click', async function (event) {
