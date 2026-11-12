@@ -1,7 +1,7 @@
-import { world_names, selected_world_info, setSelectedWorldInfo } from './world-info-state.js';
+import { world_names, setSelectedWorldInfo } from './world-info-state.js';
 
 /** Character embedded-book and global-selection shell UI compatibility. */
-export function createWorldInfoReferenceUi({ characters, accountStorage, callGenericPopup, POPUP_TYPE, Popup, t, convertCharacterBook, saveWorldInfo, updateWorldInfoList, getWorldInfoShell, selectWorldInfoEditorName, getWIElement, isTrueBoolean, saveSettingsDebounced, eventSource, event_types }) {
+export function createWorldInfoReferenceUi({ characters, accountStorage, callGenericPopup, POPUP_TYPE, Popup, t, convertCharacterBook, saveWorldInfo, updateWorldInfoList, getWorldInfoShell, selectWorldInfoEditorName, getWIElement, saveSettingsDebounced, eventSource, event_types }) {
     function setWorldInfoButtonClass(chid, forceValue = undefined) {
         if (forceValue !== undefined) {
             $('#set_character_world, #world_button').toggleClass('world_set', forceValue);
@@ -92,73 +92,22 @@ export function createWorldInfoReferenceUi({ characters, accountStorage, callGen
         setWorldInfoButtonClass(chid, true);
     }
 
-    function onWorldInfoChange(args, text) {
-        if (args !== '__notSlashCommand__') { // if it's a slash command
-            const silent = isTrueBoolean(args.silent);
-            if (text.trim() !== '') { // and args are provided
-                const slashInputSplitText = text.trim().toLowerCase().split(',');
-
-                slashInputSplitText.forEach((worldName) => {
-                    const wiElement = getWIElement(worldName);
-                    if (wiElement.length > 0) {
-                        const name = wiElement.text();
-                        switch (args.state) {
-                            case 'off': {
-                                if (selected_world_info.includes(name)) {
-                                    selected_world_info.splice(selected_world_info.indexOf(name), 1);
-                                    wiElement.prop('selected', false);
-                                    if (!silent) toastr.success(t`Deactivated world: ${name}`);
-                                } else {
-                                    if (!silent) toastr.error(t`World was not active: ${name}`);
-                                }
-                                break;
-                            }
-                            case 'toggle': {
-                                if (selected_world_info.includes(name)) {
-                                    selected_world_info.splice(selected_world_info.indexOf(name), 1);
-                                    wiElement.prop('selected', false);
-                                    if (!silent) toastr.success(t`Deactivated world: ${name}`);
-                                } else {
-                                    selected_world_info.push(name);
-                                    wiElement.prop('selected', true);
-                                    if (!silent) toastr.success(t`Activated world: ${name}`);
-                                }
-                                break;
-                            }
-                            case 'on':
-                            default: {
-                                selected_world_info.push(name);
-                                wiElement.prop('selected', true);
-                                if (!silent) toastr.success(t`Activated world: ${name}`);
-                            }
-                        }
-                    } else {
-                        if (!silent) toastr.error(t`No world found named: ${worldName}`);
-                    }
-                });
-                $('#world_info').trigger('change');
-            } else { // if no args, unset all worlds
-                if (!silent) toastr.success(t`Deactivated all worlds`);
-                setSelectedWorldInfo([]);
-                $('#world_info').val(null).trigger('change');
-            }
-        } else { //if it's a pointer selection
-            const tempWorldInfo = [];
-            const val = $('#world_info').val();
-            const selectedWorlds = (Array.isArray(val) ? val : val ? [val] : []).map((e) => String(e)).filter(Boolean);
-            if (selectedWorlds.length > 0) {
-                selectedWorlds.forEach((existingWorldName) => {
-                    if (world_names.includes(existingWorldName)) {
-                        tempWorldInfo.push(existingWorldName);
-                    } else {
-                        const wiElement = getWIElement(existingWorldName);
-                        wiElement.prop('selected', false);
-                        toastr.error(t`The world with ${existingWorldName} is invalid or corrupted.`);
-                    }
-                });
-            }
-            setSelectedWorldInfo(tempWorldInfo);
+    function onWorldInfoChange() {
+        const tempWorldInfo = [];
+        const val = $('#world_info').val();
+        const selectedWorlds = (Array.isArray(val) ? val : val ? [val] : []).map((e) => String(e)).filter(Boolean);
+        if (selectedWorlds.length > 0) {
+            selectedWorlds.forEach((existingWorldName) => {
+                if (world_names.includes(existingWorldName)) {
+                    tempWorldInfo.push(existingWorldName);
+                } else {
+                    const wiElement = getWIElement(existingWorldName);
+                    wiElement.prop('selected', false);
+                    toastr.error(t`The world with ${existingWorldName} is invalid or corrupted.`);
+                }
+            });
         }
+        setSelectedWorldInfo(tempWorldInfo);
 
         saveSettingsDebounced();
         eventSource.emit(event_types.WORLDINFO_SETTINGS_UPDATED);

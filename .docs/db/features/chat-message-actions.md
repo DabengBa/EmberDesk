@@ -73,4 +73,4 @@ Visible message actions dispatch commands only. The shared generation service ow
 - Message body rendering belongs to [Chat Message Rendering](feature.chat_message_rendering).
 - Automatic generation recovery belongs to [Chat Generation Auto Recovery](feature.chat_generation_auto_recovery).
 - The chat workspace layout belongs to [Chat Workspace](page.chat_workspace).
-- Streaming token timing, slash-command parsing, event timing, feature mount points, and message storage are outside this feature.
+- Streaming token timing, composer submission, event timing, feature mount points, and message storage are outside this feature.

@@ -131,12 +131,7 @@ export const RegexEditor = forwardRef<RegexEditorHandle, Props>(function RegexEd
                         <span >{translate('AI Output')}</span>
                     </label>
                 </div>
-                <div data-i18n="[title]ext_regex_slash_desc" title="Messages sent using STscript commands.">
-                    <label className="checkbox flex-container">
-                        <input type="checkbox" name="replace_position" value="3" checked={draft.placement.includes(3)} aria-invalid={!!errors.placement} onChange={event => change({ placement: event.target.checked ? [...draft.placement, 3] : draft.placement.filter(value => value !== 3) })} />
-                        <span >{translate('Slash Commands')}</span>
-                    </label>
-                </div>
+
                 <div data-i18n="[title]ext_regex_wi_desc" title="Lorebook/World Info entry contents. Requires 'Only Format Prompt' to be checked!">
                     <label className="checkbox flex-container">
                         <input type="checkbox" name="replace_position" value="5" checked={draft.placement.includes(5)} aria-invalid={!!errors.placement} onChange={event => change({ placement: event.target.checked ? [...draft.placement, 5] : draft.placement.filter(value => value !== 5) })} />

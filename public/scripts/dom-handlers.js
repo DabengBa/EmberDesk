@@ -83,7 +83,7 @@ const openCharacterWorldPopup = (...args) => shell().openCharacterWorldPopup(...
 const openMessageDelete = (...args) => shell().openMessageDelete(...args);
 const openWireLogPanel = (...args) => shell().openWireLogPanel(...args);
 const openChatMemoryPanel = (...args) => shell().openChatMemoryPanel(...args);
-const pauseScriptExecution = (...args) => shell().pauseScriptExecution(...args);
+
 const processDroppedFiles = (...args) => shell().processDroppedFiles(...args);
 const queueReactCharacterAuthoringRemount = (...args) => shell().queueReactCharacterAuthoringRemount(...args);
 const read_avatar_load = (...args) => shell().read_avatar_load(...args);
@@ -107,7 +107,7 @@ const setOptionsMenuRegenerateAvailability = (...args) => shell().setOptionsMenu
 const showBranchChatButtons = (...args) => shell().showBranchChatButtons(...args);
 const showDeleteConfirmWithCascade = (...args) => shell().showDeleteConfirmWithCascade(...args);
 const stopGeneration = (...args) => shell().stopGeneration(...args);
-const stopScriptExecution = (...args) => shell().stopScriptExecution(...args);
+
 const t = (...args) => shell().t(...args);
 const toggleCharacterExportPopup = (...args) => shell().toggleCharacterExportPopup(...args);
 const getVisibleCharacterExportTrigger = (...args) => shell().getVisibleCharacterExportTrigger(...args);
@@ -250,7 +250,7 @@ export async function bindLegacyShellHandlers() {
     });
 
     /** Handles deletion of a character chat file. */
-    async function handleDeleteChat(chatFile, _group, fromSlashCommand = false) {
+    async function handleDeleteChat(chatFile) {
         // Close past chat popup.
         $('#select_chat_cross').trigger('click');
 
@@ -268,28 +268,19 @@ export async function bindLegacyShellHandlers() {
             throw error;
         }
 
-        if (fromSlashCommand) {  // When called from `/delchat` command, don't re-open the history view.
+        // Open the history view again after 2 seconds (delay to avoid edge cases for deleting last chat).
+        setTimeout(async function () {
+            $('#option_select_chat').trigger('click');
             $('#options').hide();  // Hide option popup menu.
             await loaderHandle.hide();
-        } else {  // Open the history view again after 2 seconds (delay to avoid edge cases for deleting last chat).
-            setTimeout(async function () {
-                $('#option_select_chat').trigger('click');
-                $('#options').hide();  // Hide option popup menu.
-                await loaderHandle.hide();
-            }, 2000);
-        }
+        }, 2000);
     }
 
-    $(document).on('click', '.PastChat_cross', async function (e, { fromSlashCommand = false } = {}) {
+    $(document).on('click', '.PastChat_cross', async function (e) {
         e.stopPropagation();
         const deleteFileName = $(this).attr('file_name');
         console.debug('detected cross click for' + deleteFileName);
 
-        // Skip confirmation if called from a slash command.
-        if (fromSlashCommand) {
-            await handleDeleteChat(deleteFileName, null, true);
-            return;
-        }
 
         const content = document.createElement('div');
         const title = document.createElement('h3');
@@ -300,7 +291,7 @@ export async function bindLegacyShellHandlers() {
         content.append(title, file);
         const result = await callGenericPopup(content, state.POPUP_TYPE.CONFIRM, '', { okButton: t`Delete chat`, cancelButton: t`Cancel`, defaultResult: state.POPUP_RESULT.NEGATIVE });
         if (result === state.POPUP_RESULT.AFFIRMATIVE) {
-            await handleDeleteChat(deleteFileName, null, false);
+            await handleDeleteChat(deleteFileName);
         }
     });
 
@@ -659,23 +650,17 @@ export async function bindLegacyShellHandlers() {
 
     ///////////// OPTIMIZED LISTENERS FOR LEFT SIDE OPTIONS POPUP MENU //////////////////////
     // Delegated binding: the menu items are React-owned inside #options and can be
-    // remounted; a document-level handler keeps jQuery-trigger compatibility
-    // (slash commands/extensions pass customData through trigger()).
-    $(document).on('click', '#options [id]', async function (event, customData) {
-        const fromSlashCommand = customData?.fromSlashCommand || false;
+    // remounted; a document-level handler keeps jQuery-trigger compatibility.
+    $(document).on('click', '#options [id]', async function () {
         var id = $(this).attr('id');
 
         if (id == 'option_select_chat') {
-            if ((state.this_chid !== undefined && !state.is_send_press) || fromSlashCommand) {
+            if (state.this_chid !== undefined && !state.is_send_press) {
                 await displayPastChats();
-                //this is just to avoid the shadow for past chat view when using /delchat
-                //however, the dialog popup still gets one..
-                if (!fromSlashCommand) {
-                    console.log('displaying shadow');
-                    const historyDialog = document.getElementById('shadow_select_chat_popup');
-                    if (!historyDialog.open) historyDialog.showModal();
-                    document.getElementById('select_chat_search').focus();
-                }
+                console.log('displaying shadow');
+                const historyDialog = document.getElementById('shadow_select_chat_popup');
+                if (!historyDialog.open) historyDialog.showModal();
+                document.getElementById('select_chat_search').focus();
             }
         } else if (id == 'option_start_new_chat') {
             if (state.this_chid !== undefined && !state.is_send_press) {
@@ -695,7 +680,7 @@ export async function bindLegacyShellHandlers() {
                 await newAssistantChat();
             }
         } else if (id == 'option_delete_mes') {
-            setTimeout(() => openMessageDelete(fromSlashCommand), state.animation_duration);
+            setTimeout(() => openMessageDelete(), state.animation_duration);
         } else if (id == 'option_regenerate') {
             if (canRegenerateLastReply()) {
                 void regenerateLastReply();
@@ -958,9 +943,8 @@ export async function bindLegacyShellHandlers() {
         await eventSource.emit(event_types.MESSAGE_UPDATED, Number(state.this_edit_mes_id) + 1);
     });
 
-    $(document).on('click', '.mes_edit_delete', async function (event, customData) {
-        const fromSlashCommand = customData?.fromSlashCommand || false;
-        await deleteMessage(Number(state.this_edit_mes_id), fromSlashCommand !== true);
+    $(document).on('click', '.mes_edit_delete', async function () {
+        await deleteMessage(Number(state.this_edit_mes_id), true);
     });
 
     $(document).on('click', '.mes_edit_done', async function () {
@@ -1102,17 +1086,6 @@ export async function bindLegacyShellHandlers() {
         await duplicateCharacter();
     });
 
-    $(document).on('click', '#form_sheld .stscript_continue', function () {
-        pauseScriptExecution();
-    });
-
-    $(document).on('click', '#form_sheld .stscript_pause', function () {
-        pauseScriptExecution();
-    });
-
-    $(document).on('click', '#form_sheld .stscript_stop', function () {
-        stopScriptExecution();
-    });
 
     $(document).on('click', '.drawer-opener', doDrawerOpenClick);
 

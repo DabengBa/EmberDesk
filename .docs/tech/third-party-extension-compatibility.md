@@ -6,7 +6,7 @@ topic: third-party-extension-compatibility
 
 # First-Party Internal Compatibility Contracts
 
-> Internal contract reference for regex, slash commands, message-row DOM, character-list DOM, events, and module surfaces that first-party EmberDesk code still depends on. There is no third-party extension system: no extension loading, discovery, install, update, serving, or `/api/extensions/*` endpoints exist.
+> Internal contract reference for regex, macros, message-row DOM, character-list DOM, events, and module surfaces that first-party EmberDesk code still depends on. There is no third-party extension system: no extension loading, discovery, install, update, serving, or `/api/extensions/*` endpoints exist.
 
 ## Current Contracts
 
@@ -21,7 +21,7 @@ The following are internal contracts consumed by EmberDesk's own modules; breaki
 
 ### Internal runtime surface
 
-- `globalThis.SillyTavern` (`public/scripts/public-api.js`, installed by `script.js`) — internal API for first-party modules and debugging; `getContext()` exposes feature settings, slash commands, variables, world info, and rendering helpers to first-party code.
+- `globalThis.SillyTavern` (`public/scripts/public-api.js`, installed by `script.js`) — internal API for first-party modules and debugging; `getContext()` exposes feature settings, variables, tools, world info, and rendering helpers to first-party code.
 - `eventSource` / `event_types` (`public/scripts/events.js`) — internal event emitter/table; also consumed by frontend frames through a whitelisted `EmberDeskFrame.on`/`off` bridge.
 - `/lib.js` (`public/lib.js`) — shared browser utility surface for first-party modules.
 - `__emberDeskReactCompatibilityBridge` — internal-only React/legacy adapter; never a public API.
@@ -49,9 +49,9 @@ Preserve these selectors and identity attributes (also mandated by `AGENTS.md`):
 
 `data-chid` is the standard row identity; the legacy `chid` attribute remains for existing selectors.
 
-### Slash command surface
+### Retired Slash and retained macros
 
-`public/scripts/slash-commands.js` exports used internally include `executeSlashCommands`, `executeSlashCommandsWithOptions`, `getSlashCommandsHelp`, `registerSlashCommand`, `parser`, `CONNECT_API_MAP`, `UNIQUE_APIS`, `initDefaultSlashCommands`, `processChatSlashCommands`, `generateSystemMessage`, `validateArrayArg*`, `sendMessageAs`, `sendNarratorMessage`, `promptQuietForLoudResponse`, `executeSlashCommandsOnChatInput`, `commandsFromChatInputAbortController`, `pauseScriptExecution`, `stopScriptExecution`, `setSlashCommandAutoComplete`, and autocomplete helpers. Do not remove, rename, or narrow these exports as incidental cleanup.
+Slash parsing, execution, registration, command autocomplete, and their context APIs are retired. A composer message beginning with `/` is ordinary chat text, not a command. `{{...}}` macros, macro autocomplete, local and global variables, and native tool calling remain supported; macro comment `{{//...}}` and closing-tag `/` syntax are not Slash commands. User scripts relying on retired Slash APIs are not supported. Historical `script_injects` metadata is preserved but not rehydrated or executed; a formerly conditional injection must not become unconditional. Historical chat messages and other stored data are not purged as part of retirement.
 
 ### Regex data contract
 
@@ -63,7 +63,7 @@ The regex feature is stateful across global settings, character cards, and prese
 - character allow-list: `feature_settings.character_allowed_regex`
 - preset allow-list: `feature_settings.preset_allowed_regex`
 
-Engine exports consumed internally: `getRegexedString`, `regex_placement.USER_INPUT` / `AI_OUTPUT` / `SLASH_COMMAND` / `WORLD_INFO` / `REASONING`. Changing `regex_placement` numeric values is a breaking change.
+Engine exports consumed internally: `getRegexedString`, `regex_placement.USER_INPUT` / `AI_OUTPUT` / `SLASH_COMMAND` / `WORLD_INFO` / `REASONING`. `SLASH_COMMAND` retains historical numeric value 3 and is still used when formatting historical narrator messages; it does not restore the command executor. Do not renumber placement values or delete stored regex data.
 
 ### Event contract
 

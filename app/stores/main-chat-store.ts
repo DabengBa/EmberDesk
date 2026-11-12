@@ -7,14 +7,6 @@ export type MainChatContext = 'character' | 'assistant' | 'none';
 export type MainChatGenerationPhase = 'idle' | 'connecting' | 'streaming' | 'recovering' | 'recoveringPrimary' | 'recoveringFallback' | 'stopped' | 'completed' | 'error';
 export type MainChatStreamingPhase = 'idle' | 'connecting' | 'streaming' | 'finalizing' | 'stopped' | 'completed' | 'error';
 
-export interface MainChatSlashOption {
-    readonly name: string;
-    readonly type: string;
-    readonly typeIcon: string;
-    readonly selectable: boolean;
-    readonly selected: boolean;
-}
-
 export interface MainChatMessageRender {
     readonly messageHtml?: string;
     readonly reasoningHtml?: string;
@@ -76,20 +68,6 @@ export interface MainChatStreamingSnapshot {
     readonly observedTokenCount: number;
 }
 
-export interface MainChatSlashSnapshot {
-    readonly active: boolean;
-    readonly query: string;
-    readonly autocompleteVisible: boolean;
-    readonly replaceable: boolean;
-    readonly detailsVisible: boolean;
-    readonly detailsHtml: string;
-    readonly options: readonly MainChatSlashOption[];
-    readonly executing: boolean;
-    readonly paused: boolean;
-    readonly aborted: boolean;
-    readonly errorLabel: string | null;
-}
-
 export interface MainChatScrollRestoreSnapshot {
     readonly anchorMessageId: string;
     readonly anchorViewportOffset: number;
@@ -142,7 +120,6 @@ export interface MainChatSnapshot {
     readonly composer: MainChatComposerSnapshot;
     readonly generation: MainChatGenerationSnapshot;
     readonly streaming: MainChatStreamingSnapshot;
-    readonly slash: MainChatSlashSnapshot;
     readonly window: MainChatWindowSnapshot;
     readonly turnSummaries: readonly MainChatTurnSummaryRecord[];
     readonly greetings: MainChatGreetingsSnapshot;
@@ -155,7 +132,6 @@ export type MainChatSnapshotInput = Partial<{
     composer: Partial<MainChatComposerSnapshot>;
     generation: Partial<MainChatGenerationSnapshot>;
     streaming: Partial<MainChatStreamingSnapshot>;
-    slash: Partial<MainChatSlashSnapshot>;
     window: MainChatWindowSnapshotInput;
     turnSummaries: readonly unknown[];
     greetings: {
@@ -315,26 +291,6 @@ function normalizeTurnSummaries(value: unknown): MainChatTurnSummaryRecord[] {
         .filter((item): item is MainChatTurnSummaryRecord => item !== null);
 }
 
-function normalizeSlashOptions(value: unknown) {
-    if (!Array.isArray(value)) {
-        return [];
-    }
-
-    return value
-        .filter(item => item && typeof item === 'object' && !Array.isArray(item))
-        .map(item => {
-            const option = item as Record<string, unknown>;
-            return {
-                name: normalizeString(option.name),
-                type: normalizeString(option.type),
-                typeIcon: normalizeString(option.typeIcon),
-                selectable: option.selectable !== false,
-                selected: option.selected === true,
-            };
-        })
-        .filter(option => option.name !== '');
-}
-
 function messageRecordsShallowEqual(a: MainChatMessageRecord, b: MainChatMessageRecord) {
     if (a === b) {
         return true;
@@ -459,7 +415,6 @@ function normalizeSnapshot(input: MainChatSnapshotInput = {}, previousMessages?:
     const composer = input.composer ?? {};
     const generation = input.generation ?? {};
     const streaming = input.streaming ?? {};
-    const slash = input.slash ?? {};
     const window = input.window ?? {};
     const scrollRestore = window.scrollRestore;
     const turnSummaries = normalizeTurnSummaries(input.turnSummaries);
@@ -482,19 +437,6 @@ function normalizeSnapshot(input: MainChatSnapshotInput = {}, previousMessages?:
             phase: normalizeStreamingPhase(streaming.phase),
             activeMessageId: normalizeNullableString(streaming.activeMessageId),
             observedTokenCount: normalizeNonNegativeNumber(streaming.observedTokenCount),
-        },
-        slash: {
-            active: slash.active === true,
-            query: normalizeString(slash.query),
-            autocompleteVisible: slash.autocompleteVisible === true,
-            replaceable: slash.replaceable === true,
-            detailsVisible: slash.detailsVisible === true,
-            detailsHtml: normalizeString(slash.detailsHtml),
-            options: normalizeSlashOptions(slash.options),
-            executing: slash.executing === true,
-            paused: slash.paused === true,
-            aborted: slash.aborted === true,
-            errorLabel: normalizeNullableString(slash.errorLabel),
         },
         window: {
             visibleMessageIds: normalizeIdList(window.visibleMessageIds, knownMessageIds),

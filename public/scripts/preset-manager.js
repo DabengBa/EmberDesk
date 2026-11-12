@@ -1,9 +1,8 @@
-import { Fuse, lodash } from '../lib.js';
+import { lodash } from '../lib.js';
 
 import {
     characters,
     main_api,
-    online_status,
     saveSettings,
     this_chid,
 } from '../script.js';
@@ -12,13 +11,8 @@ import { getRequestHeaders } from './request-context.js';
 import { t } from './i18n.js';
 import { getOpenAIPresetService, oai_settings, openai_setting_names, openai_settings } from './openai.js';
 import { Popup } from './popup.js';
-import { SlashCommand } from './slash-commands/SlashCommand.js';
-import { ARGUMENT_TYPE, SlashCommandArgument } from './slash-commands/SlashCommandArgument.js';
-import { enumIcons } from './slash-commands/SlashCommandCommonEnumsProvider.js';
-import { SlashCommandEnumValue, enumTypes } from './slash-commands/SlashCommandEnumValue.js';
-import { SlashCommandParser } from './slash-commands/SlashCommandParser.js';
 
-import { ensurePlainObject, waitUntilCondition } from './utils.js';
+import { ensurePlainObject } from './utils.js';
 
 const presetManagers = {};
 
@@ -386,117 +380,7 @@ class PresetManager {
     }
 }
 
-/**
- * Selects a preset by name for current API.
- * @param {any} _ Named arguments
- * @param {string} name Unnamed arguments
- * @returns {Promise<string>} Selected or current preset name
- */
-async function presetCommandCallback(_, name) {
-    const shouldReconnect = online_status !== 'no_connection';
-    const presetManager = getPresetManager();
-    const allPresets = presetManager.getAllPresets();
-    const currentPreset = presetManager.getSelectedPresetName();
-
-    if (!presetManager) {
-        console.debug(`Preset Manager not found for API: ${main_api}`);
-        return '';
-    }
-
-    if (!name) {
-        console.log('No name provided for /preset command, using current preset');
-        return currentPreset;
-    }
-
-    if (!Array.isArray(allPresets) || allPresets.length === 0) {
-        console.log(`No presets found for API: ${main_api}`);
-        return currentPreset;
-    }
-
-    // Find exact match
-    const exactMatch = allPresets.find(p => p.toLowerCase().trim() === name.toLowerCase().trim());
-
-    if (exactMatch) {
-        console.log('Found exact preset match', exactMatch);
-
-        if (currentPreset !== exactMatch) {
-            const presetValue = presetManager.findPreset(exactMatch);
-
-            if (presetValue) {
-                presetManager.selectPreset(presetValue);
-                if (shouldReconnect) await waitForConnection();
-            }
-        }
-
-        return exactMatch;
-    } else {
-        // Find fuzzy match
-        const fuse = new Fuse(allPresets);
-        const fuzzyMatch = fuse.search(name);
-
-        if (!fuzzyMatch.length) {
-            console.warn(`WARN: Preset found with name ${name}`);
-            return currentPreset;
-        }
-
-        const fuzzyPresetName = fuzzyMatch[0].item;
-        const fuzzyPresetValue = presetManager.findPreset(fuzzyPresetName);
-
-        if (fuzzyPresetValue) {
-            console.log('Found fuzzy preset match', fuzzyPresetName);
-
-            if (currentPreset !== fuzzyPresetName) {
-                presetManager.selectPreset(fuzzyPresetValue);
-                if (shouldReconnect) await waitForConnection();
-            }
-        }
-
-        return fuzzyPresetName;
-    }
-}
-
-/**
- * Waits for API connection to be established.
- */
-async function waitForConnection() {
-    try {
-        await waitUntilCondition(() => online_status !== 'no_connection', 10000, 100);
-    } catch {
-        console.log('Timeout waiting for API to connect');
-    }
-}
-
 export async function initPresetManager() {
     eventSource.on(event_types.CHAT_CHANGED, autoSelectPreset);
     registerPresetManagers();
-    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
-        name: 'preset',
-        callback: presetCommandCallback,
-        returns: 'current preset',
-        unnamedArgumentList: [
-            SlashCommandArgument.fromProps({
-                description: 'name',
-                typeList: [ARGUMENT_TYPE.STRING],
-                enumProvider: () => getPresetManager().getAllPresets().map(preset => new SlashCommandEnumValue(preset, null, enumTypes.enum, enumIcons.preset)),
-            }),
-        ],
-        helpString: `
-            <div>
-                Sets a preset by name for the current API. Gets the current preset if no name is provided.
-            </div>
-            <div>
-                <strong>Example:</strong>
-                <ul>
-                    <li>
-                        <pre><code>/preset myPreset</code></pre>
-                    </li>
-                    <li>
-                        <pre><code>/preset</code></pre>
-                    </li>
-                </ul>
-            </div>
-        `,
-    }));
-
-
 }

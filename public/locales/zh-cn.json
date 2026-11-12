@@ -3752,6 +3752,7 @@
     "Turn tracing on": "开启追踪",
     "Type": "类型",
     "Type / paste in the box below to see the number of tokens in the text.": "在下方框中输入或粘贴你想要统计 Token 数量的文本。",
+    "Send requires an API connection.": "发送消息需要先连接 API。",
     "Type /? for commands.": "输入 /? 查看命令。",
     "Type /? for commands. Send requires an API connection.": "输入 /? 查看命令。发送消息需要先连接 API。",
     "Type Example Messages here...": "在此输入示例消息...",

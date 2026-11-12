@@ -9,11 +9,6 @@ import {
     setOptionsMenuBranchVisibility,
 } from '../script.js';
 import { getRequestHeaders } from './request-context.js';
-import { getLastMessageId } from './macros.js';
-import { SlashCommand } from './slash-commands/SlashCommand.js';
-import { ARGUMENT_TYPE, SlashCommandArgument } from './slash-commands/SlashCommandArgument.js';
-import { commonEnumProviders } from './slash-commands/SlashCommandCommonEnumsProvider.js';
-import { SlashCommandParser } from './slash-commands/SlashCommandParser.js';
 import { getUniqueName } from './utils.js';
 import { CHAT_MEMORY_METADATA_KEY, filterMemoryForBranch, getChatMemoryMetadata } from './chat-memory-core.js';
 
@@ -167,54 +162,6 @@ export async function branchChat(mesId) {
     return fileName;
 }
 
-function registerBranchSlashCommands() {
-    /**
-     * Validates a message ID. (Is a number, exists as a message)
-     *
-     * @param {number} mesId - The message ID to validate.
-     * @param {string} context - The context of the slash command. Will be used as the title of any toasts.
-     * @returns {boolean} - Returns true if the message ID is valid, otherwise false.
-     */
-    function validateMessageId(mesId, context) {
-        if (isNaN(mesId)) {
-            toastr.warning('Invalid message ID was provided', context);
-            return false;
-        }
-        if (!chat[mesId]) {
-            toastr.warning(`Message for id ${mesId} not found`, context);
-            return false;
-        }
-        return true;
-    }
-
-    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
-        name: 'branch-create',
-        returns: 'Name of the new branch',
-        callback: async (args, text) => {
-            const mesId = Number(args.mesId ?? text ?? getLastMessageId());
-            if (!validateMessageId(mesId, 'Create Branch')) return '';
-
-            const branchName = await branchChat(mesId);
-            return branchName ?? '';
-        },
-        unnamedArgumentList: [
-            SlashCommandArgument.fromProps({
-                description: 'Message ID',
-                typeList: [ARGUMENT_TYPE.NUMBER],
-                enumProvider: commonEnumProviders.messages(),
-            }),
-        ],
-        helpString: `
-        <div>
-            Create a new branch from the selected message. If no message id is provided, will use the last message.
-        </div>
-        <div>
-            Creating a branch will automatically choose a name for the branch.<br />
-            After creating the branch, the branch chat will be automatically opened.
-        </div>`,
-    }));
-}
-
 export function initBranchUI() {
     $('#option_back_to_main').on('click', backToMainChat);
 
@@ -224,6 +171,4 @@ export function initBranchUI() {
             await branchChat(Number(mesId));
         }
     });
-
-    registerBranchSlashCommands();
 }

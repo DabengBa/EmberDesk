@@ -135,8 +135,7 @@ function sanitizeWorkspacePanelState(kind, state) {
                     activeMessageId: state.generationControl.activeMessageId,
                     failureNoticeVisible: state.generationControl.failureNoticeVisible,
                 }
-                : undefined,
-            streamingTransport: state.streamingTransport
+                : undefined,            streamingTransport: state.streamingTransport
                 ? {
                     phase: state.streamingTransport.phase,
                     activeMessageId: state.streamingTransport.activeMessageId,
@@ -154,16 +153,7 @@ function sanitizeWorkspacePanelState(kind, state) {
                     activeContext: state.composer.activeContext,
                 }
                 : undefined,
-            slashCommand: state.slashCommand
-                ? {
-                    active: state.slashCommand.active,
-                    queryLength: state.slashCommand.queryLength,
-                    autocompleteVisible: state.slashCommand.autocompleteVisible,
-                    executing: state.slashCommand.executing,
-                    paused: state.slashCommand.paused,
-                    aborted: state.slashCommand.aborted,
-                }
-                : undefined,
+
         });
     }
 

@@ -54,11 +54,10 @@ jest.unstable_mockModule('../public/scripts/secrets.js', () => Object.fromEntrie
 jest.unstable_mockModule('../public/scripts/sse-stream.js', () => ({ getEventSourceStream: jest.fn() }));
 jest.unstable_mockModule('../public/scripts/utils.js', () => Object.fromEntries(['createThumbnail', 'delay', 'download', 'getAudioDurationFromDataURL', 'getBase64Async', 'getFileText', 'getImageSizeFromDataURL', 'getSanitizedFilename', 'getVideoDurationFromDataURL', 'isDataURL', 'isValidUrl', 'resetScrollHeight', 'stringFormat'].map(k => [k, jest.fn()])));
 jest.unstable_mockModule('../public/scripts/tokenizers.js', () => ({ countTokensOpenAIAsync: count }));
-jest.unstable_mockModule('../public/scripts/slash-commands/SlashCommandParser.js', () => ({ SlashCommandParser: {} }));
-jest.unstable_mockModule('../public/scripts/slash-commands/SlashCommand.js', () => ({ SlashCommand: {} }));
-jest.unstable_mockModule('../public/scripts/slash-commands/SlashCommandArgument.js', () => ({ ARGUMENT_TYPE: {}, SlashCommandArgument: {} }));
+
 jest.unstable_mockModule('../public/scripts/templates.js', () => ({ renderTemplateAsync: jest.fn() }));
 jest.unstable_mockModule('../public/scripts/popup.js', () => ({ callGenericPopup: jest.fn(), Popup: {}, POPUP_RESULT: {}, POPUP_TYPE: {} }));
+jest.unstable_mockModule('../public/scripts/local-dialogs.js', () => ({ showLocalDialog: jest.fn() }));
 jest.unstable_mockModule('../public/scripts/i18n.js', () => ({ t: strings => strings[0] }));
 jest.unstable_mockModule('../public/scripts/tool-calling.js', () => ({ ToolManager: {
     canPerformToolCalls: () => toolCallingSupported,

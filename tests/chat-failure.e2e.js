@@ -53,27 +53,28 @@ test('main chat reports a React effect failure and clears it after a successful 
     await page.goto('/chat-failure-test');
     await page.evaluate(async () => {
         const panels = await import('/react/login/assets/workspace-panels.js');
+        const failure = await import('/scripts/main-chat-failure.js');
         window.testPanels = panels;
-        const commands = new Proxy({}, { get(_target, key) {
-            if (key === 'setSlashVisibleOwner') throw new Error('injected effect failure');
-            return () => {};
-        } });
-        panels.mountWorkspacePanel('mainChatMessageList', document.getElementById('chat'), { state: {}, commands, runtime: {} });
+        const host = document.getElementById('chat');
+        failure.showMainChatFailure(host, 'Failure to clear');
+        failure.getMainChatFailure(host).remove = () => { throw new Error('injected effect failure'); };
+        panels.mountWorkspacePanel('mainChatMessageList', host, { state: {}, commands: {}, runtime: {} });
     });
     const alert = page.locator('[data-react-main-chat-build-error]');
     await expect(alert).toBeVisible();
     await expect(alert).toHaveAttribute('role', 'alert');
+    await expect(alert).not.toHaveText('Failure to clear');
     expect(await alert.evaluate(node => node.parentElement.id)).toBe('sheld');
     await page.evaluate(() => {
         window.testPanels.mountWorkspacePanel('mainChatMessageList', document.getElementById('chat'), {
-            state: { mainChatSnapshot: { orderedMessageIds: ['0'], messagesById: { '0': { id: '0', content: 'Recovered message', render: { messageHtml: 'Recovered message' } } } } }, commands: { setSlashVisibleOwner: () => {} }, runtime: {},
+            state: { mainChatSnapshot: { orderedMessageIds: ['0'], messagesById: { '0': { id: '0', content: 'Recovered message', render: { messageHtml: 'Recovered message' } } } } }, commands: {}, runtime: {},
         });
     });
     await expect(alert).toHaveCount(0);
     await expect(page.locator('#chat > .mes[mesid="0"] .mes_text')).toContainText('Recovered message');
 });
 
-test('main chat keeps messages visible during a slash-owner effect failure', async ({ page }) => {
+test('main chat keeps messages visible during a failure-clearing effect failure', async ({ page }) => {
     await page.route('**/chat-failure-preserves-message', route => route.fulfill({
         contentType: 'text/html',
         body: '<!doctype html><html><body><div id="sheld"><div id="chat"></div><div id="form_sheld"></div></div></body></html>',
@@ -81,6 +82,7 @@ test('main chat keeps messages visible during a slash-owner effect failure', asy
     await page.goto('/chat-failure-preserves-message');
     await page.evaluate(async () => {
         const panels = await import('/react/login/assets/workspace-panels.js');
+        window.testFailure = await import('/scripts/main-chat-failure.js');
         const host = document.getElementById('chat');
         window.testPanels = panels;
         window.testPanelState = snapshot => ({ state: { mainChatSnapshot: snapshot }, runtime: {} });
@@ -89,26 +91,26 @@ test('main chat keeps messages visible during a slash-owner effect failure', asy
                 orderedMessageIds: ['0'],
                 messagesById: { '0': { id: '0', content: 'Existing message', render: { messageHtml: 'Existing message' } } },
             }),
-            commands: { setSlashVisibleOwner: () => {} },
+            commands: {},
         });
     });
     const existingMessage = page.locator('#chat > .mes[mesid="0"] .mes_text');
     await expect(existingMessage).toContainText('Existing message');
 
     await page.evaluate(() => {
-        const commands = new Proxy({}, { get(_target, key) {
-            if (key === 'setSlashVisibleOwner') throw new Error('injected effect failure');
-            return () => {};
-        } });
-        window.testPanels.mountWorkspacePanel('mainChatMessageList', document.getElementById('chat'), {
+        const host = document.getElementById('chat');
+        window.testFailure.showMainChatFailure(host, 'Failure to clear');
+        window.testFailure.getMainChatFailure(host).remove = () => { throw new Error('injected effect failure'); };
+        window.testPanels.mountWorkspacePanel('mainChatMessageList', host, {
             ...window.testPanelState({
                 orderedMessageIds: ['0'],
                 messagesById: { '0': { id: '0', content: 'Existing message', render: { messageHtml: 'Existing message' } } },
             }),
-            commands,
+            commands: {},
         });
     });
     await expect(page.locator('[data-react-main-chat-build-error]')).toBeVisible();
+    await expect(page.locator('[data-react-main-chat-build-error]')).not.toHaveText('Failure to clear');
     await expect(existingMessage).toContainText('Existing message');
 
     await page.evaluate(() => {
@@ -117,7 +119,7 @@ test('main chat keeps messages visible during a slash-owner effect failure', asy
                 orderedMessageIds: ['1'],
                 messagesById: { '1': { id: '1', content: 'Recovered message', render: { messageHtml: 'Recovered message' } } },
             }),
-            commands: { setSlashVisibleOwner: () => {} },
+            commands: {},
         });
     });
     await expect(page.locator('[data-react-main-chat-build-error]')).toHaveCount(0);
@@ -132,7 +134,7 @@ test('an earlier React commit cannot clear a later snapshot failure', async ({ p
         const failure = await import('/scripts/main-chat-failure.js');
         const host = document.getElementById('chat');
         window.testPanels = panels;
-        panels.mountWorkspacePanel('mainChatMessageList', host, { state: {}, commands: { setSlashVisibleOwner: () => {} }, runtime: {} });
+        panels.mountWorkspacePanel('mainChatMessageList', host, { state: {}, commands: {}, runtime: {} });
 
         failure.showMainChatFailure(host, 'Later snapshot failure');
     });
@@ -140,7 +142,7 @@ test('an earlier React commit cannot clear a later snapshot failure', async ({ p
     await expect(page.locator('[data-react-main-chat-build-error]')).toHaveText('Later snapshot failure');
     await page.evaluate(() => window.testPanels.mountWorkspacePanel('mainChatMessageList', document.getElementById('chat'), {
         state: { mainChatSnapshot: { orderedMessageIds: ['0'], messagesById: { '0': { id: '0', content: 'Race recovered', render: { messageHtml: 'Race recovered' } } } } },
-        commands: { setSlashVisibleOwner: () => {} }, runtime: {},
+        commands: {}, runtime: {},
     }));
     await expect(page.locator('[data-react-main-chat-build-error]')).toHaveCount(0);
     await expect(page.locator('#chat > .mes[mesid="0"] .mes_text')).toContainText('Race recovered');
@@ -155,7 +157,7 @@ test('a pending host snapshot cannot clear a newer host failure', async ({ page 
         const host = document.getElementById('chat');
         const features = { reactPanels: { mainChatMessageList: true } };
         const mount = async getState => {
-            const result = await mountWorkspacePanelHost({ kind: 'mainChatMessageList', features, ensureContainer: () => host, getState, commands: { setSlashVisibleOwner: () => {} }, runtime: {} });
+            const result = await mountWorkspacePanelHost({ kind: 'mainChatMessageList', features, ensureContainer: () => host, getState, commands: {}, runtime: {} });
             if (!result.mounted) showMainChatFailure(host, 'Snapshot B failed');
             return result;
         };
@@ -188,7 +190,7 @@ test('a pending bridge bundle cannot clear a newer host failure', async ({ page 
         const features = { reactPanels: { mainChatMessageList: true } };
         const state = { mainChatSnapshot: { orderedMessageIds: ['0'], messagesById: { '0': { id: '0', render: { messageHtml: 'Recovered C' } } } } };
         const mount = async getState => {
-            const result = await mountWorkspacePanelHost({ kind: 'mainChatMessageList', features, ensureContainer: () => host, getState, commands: { setSlashVisibleOwner: () => {} }, runtime: {} });
+            const result = await mountWorkspacePanelHost({ kind: 'mainChatMessageList', features, ensureContainer: () => host, getState, commands: {}, runtime: {} });
             if (!result.mounted) showMainChatFailure(host, 'Snapshot B failed');
             return result;
         };

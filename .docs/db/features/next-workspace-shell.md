@@ -20,7 +20,7 @@ Give users one modern, compact workspace frame for current context and primary n
 - The React shell always mounts for `/`; there is no shell product flag, strict-mode switch, inline workspace feature payload, or same-version legacy shell fallback.
 - The unified `设置` registry entry routes to React Settings. `提示词` (Prompt Preset Panel), `角色库` (Character Library), `世界书` (World Info), Main Chat, and the `正则` (Regex) drawer use declared child-slot contracts. Active chat backgrounds remain chat context rather than a shell panel.
 - A child slot declares a stable key, mount target, accessible name, content owner, and bounded feature-local capabilities. Legacy drawer classes are not shell state inputs.
-- A slot failure is recovered locally without removing shell navigation, chat rows, composer reachability, slash commands, regex support, or shared browser-library providers.
+- A slot failure is recovered locally without removing shell navigation, chat rows, composer reachability, regex support, or shared browser-library providers.
 - Release rollback is deployment of a prior application version. A missing React shell bundle is a release-gate failure, not a reason to restore legacy chrome.
 
 ## User-Visible Contract
@@ -90,5 +90,5 @@ The React shell preserves the same `/` entry, named navigation, open/close behav
 
 - Startup readiness and initial overlay behavior belong to [Workspace Startup Bootstrap](feature.startup_bootstrap).
 - `角色库`, `世界书`, `设置`, and Character Authoring retain their own feature contracts after the shell opens them. Active chat backgrounds and avatar media remain workspace capabilities.
-- Message rendering, composer behavior, slash parser, regex engine, and provider transport are not owned by this feature.
-- Main-chat shell ownership is limited to outer layout/status placement; row rendering, row actions, slash command execution, and provider transport remain governed by their feature contracts.
+- Message rendering, composer behavior, regex engine, and provider transport are not owned by this feature.
+- Main-chat shell ownership is limited to outer layout/status placement; row rendering, row actions, and provider transport remain governed by their feature contracts.
