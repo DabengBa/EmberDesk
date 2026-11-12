@@ -43,6 +43,7 @@ import { MainChatMessageRow } from './components/main-chat/MainChatMessageRow';
 import { MainChatGreetingPicker } from './components/main-chat/MainChatGreetingPicker';
 import { TurnSummaryCard } from './components/main-chat/TurnSummaryCard';
 import { projectChatTurnCards } from '../public/scripts/chat-turn-card-projection.js';
+export { mountLocalDialog } from './components/local-dialogs/LocalDialog';
 import { clearMainChatFailure, getMainChatFailure, showMainChatFailure } from '../public/scripts/main-chat-failure.js';
 import {
     createCharacterAuthoringSession,

@@ -211,6 +211,7 @@ test('actual OpenAI composition port installs one service and reads cold-loaded 
     const events = [];
     const setup = new Function('oai_settings', 'settingsToUpdate', 'SECRET_KEYS', 'default_settings', 'eventSource', 'event_types', 'saveSettingsDebounced', 'updateFeatureSupportFlags', 'migrateChatCompletionSettings', 'reconnectOpenAi', 'fetch', 'getRequestHeaders', 'saveOpenAIPreset', 'getNames', 'getPresets', 'getSanitizedFilename', `
         let _presetChangeGuard = false;
+        const presetDialogs = { askName() {}, confirmDelete() {}, confirmRestore() {} };
         const openai_setting_names = getNames(); const openai_settings = getPresets();
         ${fragment}
         return { installOpenAIPresetService, refreshOpenAIPresetService };

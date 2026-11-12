@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { readFile } from 'node:fs/promises';
 import { testSetup } from './frontend/frontent-test-utils.js';
 
 test.describe.configure({ mode: 'serial' });
@@ -31,9 +32,9 @@ async function openSettings(page) {
 }
 
 async function confirmName(page, name) {
-    const dialog = page.locator('dialog[open]');
-    await dialog.locator('.popup-input').fill(name);
-    await dialog.locator('.popup-button-ok').click();
+    const dialog = page.locator('dialog[open][data-local-dialog]');
+    await dialog.locator('[data-local-focus="name"]').fill(name);
+    await dialog.locator('[data-local-focus="save"]').click();
     await expect(dialog).toHaveCount(0);
 }
 
@@ -161,6 +162,81 @@ for (const overlapping of [false, true]) {
         }
     });
 }
+test('preset sensitive import and export preserve the selected choices', async ({ page }) => {
+    await page.route('**/api/backends/chat-completions/status', route => route.fulfill({ json: { data: [] } }));
+    await testSetup.awaitST({ page });
+    await openPrompt(page);
+    const name = 'F6 Sensitive Import';
+    await post(page, '/api/presets/delete', { apiId: 'openai', name });
+    const fixture = await page.evaluate(() => {
+        const settings = window.SillyTavern.getContext().chatCompletionSettings;
+        return { temperature: 0.63, custom_url: 'https://example.invalid/f6', prompts: settings.prompts, prompt_order: settings.prompt_order };
+    });
+    const input = page.locator('#openai_preset_import_file');
+    const file = { name: `${name}.json`, mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(fixture)) };
+    const dialog = page.locator('dialog[open][data-local-dialog]');
+    await input.setInputFiles(file);
+    await dialog.locator('[data-local-focus="remove"]').click();
+    await expect(page.locator('#settings_preset_openai')).toHaveValue(name);
+    expect((await savedPreset(page, name)).custom_url || '').toBe('');
+
+    await input.setInputFiles(file);
+    await dialog.locator('[data-local-focus="keep"]').click();
+    await dialog.locator('[data-local-focus="confirm"]').click();
+    await expect.poll(async () => (await savedPreset(page, name))?.custom_url).toBe(fixture.custom_url);
+
+    await presetMenu(page, '#export_oai_preset');
+    await dialog.locator('[data-local-focus="keep"]').click();
+    const firstDownload = page.waitForEvent('download');
+    await page.keyboard.press('Escape');
+    const withoutConnection = JSON.parse(await readFile(await (await firstDownload).path(), 'utf8'));
+    expect(withoutConnection.custom_url).toBeUndefined();
+
+    await presetMenu(page, '#export_oai_preset');
+    await dialog.locator('[data-local-focus="keep"]').click();
+    await dialog.locator('input[type="radio"][value="true"]').check();
+    const secondDownload = page.waitForEvent('download');
+    await dialog.locator('[data-local-focus="export"]').click();
+    const withConnection = JSON.parse(await readFile(await (await secondDownload).path(), 'utf8'));
+    expect(withConnection.custom_url).toBe(fixture.custom_url);
+});
+
+test('preset switching lets the user cancel, discard, or save unsaved changes', async ({ page }) => {
+    await page.route('**/api/backends/chat-completions/status', route => route.fulfill({ json: { data: [] } }));
+    await testSetup.awaitST({ page });
+    await openPrompt(page);
+    const names = ['F6 Switch First', 'F6 Switch Second'];
+    for (const name of names) await post(page, '/api/presets/delete', { apiId: 'openai', name });
+    const fixture = await page.evaluate(() => {
+        const settings = window.SillyTavern.getContext().chatCompletionSettings;
+        return { temperature: 0.71, prompts: settings.prompts, prompt_order: settings.prompt_order };
+    });
+    for (const name of names) {
+        await page.locator('#openai_preset_import_file').setInputFiles({ name: `${name}.json`, mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(fixture)) });
+        await expect(page.locator('#settings_preset_openai')).toHaveValue(name);
+    }
+    await page.locator('#ai_response_configuration > .inline-drawer > .inline-drawer-toggle').click();
+    const temperature = page.locator('#temp_openai_counter');
+    const select = page.locator('#settings_preset_openai');
+    const dialog = page.locator('dialog[open][data-local-dialog]');
+    await temperature.fill('0.81');
+    await expect(page.locator('#update_oai_preset')).toHaveClass(/is-dirty/);
+    await select.selectOption(names[0]);
+    await dialog.locator('[data-local-focus="cancel"]').click();
+    await expect(select).toHaveValue(names[1]);
+    await expect(temperature).toHaveValue('0.81');
+    await select.selectOption(names[0]);
+    await dialog.locator('[data-local-focus="discard"]').click();
+    await expect(select).toHaveValue(names[0]);
+    expect((await savedPreset(page, names[1])).temperature).toBe(0.71);
+    await temperature.fill('0.91');
+    await expect(page.locator('#update_oai_preset')).toHaveClass(/is-dirty/);
+    await select.selectOption(names[1]);
+    await dialog.locator('[data-local-focus="save"]').click();
+    await expect(select).toHaveValue(names[1]);
+    await expect.poll(async () => (await savedPreset(page, names[0]))?.temperature).toBe(0.91);
+});
+
 test('preset form CRUD, failed writes, settings handoff and reload retain the full canonical document', async ({ page }) => {
     await page.route('**/api/backends/chat-completions/status', route => route.fulfill({ json: { data: [] } }));
     await testSetup.awaitST({ page });
@@ -220,7 +296,7 @@ test('preset form CRUD, failed writes, settings handoff and reload retain the fu
 
     await page.route('**/api/presets/delete', route => route.fulfill({ status: 503, json: { error: 'unavailable' } }));
     await presetMenu(page, '#delete_oai_preset');
-    await page.locator('dialog[open] .popup-button-ok').click();
+    await page.locator('dialog[open][data-local-dialog] [data-local-focus="confirm"]').click();
     await expect(page.locator('#respective-presets-block [role="alert"]')).toContainText('Failed to delete');
     await expect(page.locator('#settings_preset_openai')).toHaveValue(renamed);
     expect(await savedPreset(page, renamed)).not.toBeNull();
@@ -237,7 +313,7 @@ test('preset form CRUD, failed writes, settings handoff and reload retain the fu
     await expect(page.locator('#temp_openai_counter')).toHaveValue('0.73');
     await page.locator('#settings_preset_openai').selectOption(renamed);
     await presetMenu(page, '#delete_oai_preset');
-    await page.locator('dialog[open] .popup-button-ok').click();
+    await page.locator('dialog[open][data-local-dialog] [data-local-focus="confirm"]').click();
     await expect.poll(async () => savedPreset(page, renamed)).toBeNull();
     await expect(page.locator('#settings_preset_openai option').filter({ hasText: renamed })).toHaveCount(0);
 });

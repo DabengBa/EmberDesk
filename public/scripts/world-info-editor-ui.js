@@ -1,7 +1,7 @@
 import { world_names } from './world-info-state.js';
 
 /** Interactive editor commands; the workbench session remains the sole editor owner. */
-export function createWorldInfoEditorUi({ getWorldInfoWorkbenchSession, worldInfoRepository, loadWorldInfo, createWorldInfoEntry, Popup, POPUP_TYPE, POPUP_RESULT, t, moveWorldInfoEntry }) {
+export function createWorldInfoEditorUi({ getWorldInfoWorkbenchSession, worldInfoRepository, loadWorldInfo, createWorldInfoEntry, showLocalDialog, t, moveWorldInfoEntry }) {
     async function createWorldInfoEntryFromEditor() {
         const session = getWorldInfoWorkbenchSession();
         const worldName = session.getSelectedWorldName();
@@ -55,12 +55,13 @@ export function createWorldInfoEditorUi({ getWorldInfoWorkbenchSession, worldInf
         const entryCount = Object.keys(data?.entries ?? {}).length;
         const moreThan100 = entryCount > 100;
 
-        let content = '<span>' + t`Apply your current sorting to the "Order" field. The Order values will go down from the chosen number.` + '</span>';
+        let content = t`Apply your current sorting to the "Order" field. The Order values will go down from the chosen number.`;
         if (moreThan100) {
-            content += '<div class="m-t-1"><i class="fa-solid fa-triangle-exclamation" style="color: var(--clay-warning);"></i> ' + t`More than 100 entries in this world. If you don't choose a number higher than that, the lower entries will default to 0.<br />(Usual default: 100)<br />Minimum: ${entryCount}` + '</div>';
+            content += '\n' + t`More than 100 entries in this world. If you don't choose a number higher than that, the lower entries will default to 0.` + `\n${t`Usual default: 100`}\n${t`Minimum: ${entryCount}`}`;
         }
 
-        const result = await Popup.show.input(t`Apply Current Sorting`, content, '100', { okButton: t`Apply`, cancelButton: 'Cancel' });
+        const response = await showLocalDialog({ scope: 'world-info', title: t`Apply Current Sorting`, message: content, fields: [{ type: 'text', name: 'start', label: t`Start number`, value: '100' }], actions: [{ id: 'apply', label: t`Apply`, variant: 'primary' }, { id: 'cancel', label: t`Cancel` }], initialFocus: 'start' });
+        const result = response?.action === 'apply' ? response.values.start : null;
         if (!result || !isCurrent()) {
             return false;
         }
@@ -95,11 +96,8 @@ export function createWorldInfoEditorUi({ getWorldInfoWorkbenchSession, worldInf
         }
 
         const isCurrent = session.captureSelectionGuard();
-        const confirmation = await Popup.show.confirm(
-            t`Delete ${uids.length} world info entries?`,
-            t`This action is irreversible!`,
-        );
-        if (!confirmation || !isCurrent()) {
+        const confirmation = await showLocalDialog({ scope: 'world-info', title: t`Delete ${uids.length} world info entries?`, message: t`This action is irreversible!`, actions: [{ id: 'delete', label: t`Delete`, variant: 'destructive' }, { id: 'cancel', label: t`Cancel` }] });
+        if (confirmation?.action !== 'delete' || !isCurrent()) {
             return false;
         }
 
@@ -149,53 +147,18 @@ export function createWorldInfoEditorUi({ getWorldInfoWorkbenchSession, worldInf
             return false;
         }
 
-        const select = document.createElement('select');
-        select.id = 'move_entry_target_select';
-        select.setAttribute('aria-label', t`Target Lorebook`);
-        select.classList.add('text_pole', 'wide100p', 'marginTop10');
-        const defaultOption = document.createElement('option');
-        defaultOption.value = '';
-        defaultOption.textContent = `-- ${t`Select Target Lorebook`} --`;
-        select.appendChild(defaultOption);
-        let selectableWorldCount = 0;
-        world_names.forEach(worldName => {
-            if (worldName !== resolvedSource) {
-                const option = document.createElement('option');
-                option.value = worldName;
-                option.textContent = worldName;
-                select.appendChild(option);
-                selectableWorldCount++;
-            }
-        });
-        if (selectableWorldCount === 0) {
+        const targets = world_names.filter(worldName => worldName !== resolvedSource);
+        if (targets.length === 0) {
             toastr.warning(t`There are no other lorebooks to move to.`);
             return false;
         }
 
-        const wrapper = document.createElement('div');
-        wrapper.textContent = t`Move/Copy '${sourceName}' to:`;
-        const container = document.createElement('div');
-        container.appendChild(wrapper);
-        container.appendChild(select);
-        let selectedTargetName = '';
-        const popup = new Popup(container, POPUP_TYPE.CONFIRM, '', {
-            cancelButton: t`Cancel`,
-            defaultResult: POPUP_RESULT.NEGATIVE,
-            customButtons: [{ text: t`Move`, result: POPUP_RESULT.CUSTOM1 }, { text: t`Copy`, result: POPUP_RESULT.CUSTOM2 }],
-            onClosing: (instance) => instance.result <= POPUP_RESULT.NEGATIVE || selectedTargetName !== '',
-        });
-        const actions = popup.dlg.querySelectorAll('.popup-button-custom');
-        actions.forEach(action => { action.disabled = true; });
-        select.addEventListener('change', function () {
-            selectedTargetName = String(this.value ?? '');
-            actions.forEach(action => { action.disabled = selectedTargetName === ''; });
-        });
-        popup.okButton.style.display = 'none';
-        const popupConfirm = await popup.show();
-        if (!popupConfirm || selectedTargetName === '') {
+        const result = await showLocalDialog({ scope: 'world-info', title: t`Move/Copy '${sourceName}' to:`, fields: [{ type: 'select', name: 'target', label: t`Target Lorebook`, value: '', options: [{ value: '', label: `-- ${t`Select Target Lorebook`} --` }, ...targets.map(name => ({ value: name, label: name }))] }], actions: [{ id: 'move', label: t`Move`, variant: 'primary', required: ['target'] }, { id: 'copy', label: t`Copy`, required: ['target'] }, { id: 'cancel', label: t`Cancel` }], initialFocus: 'target' });
+        const selectedTargetName = result?.values.target;
+        if (!['move', 'copy'].includes(result?.action) || !targets.includes(selectedTargetName)) {
             return false;
         }
-        return await moveWorldInfoEntry(resolvedSource, selectedTargetName, sourceUid, { deleteOriginal: popupConfirm === POPUP_RESULT.CUSTOM1 });
+        return await moveWorldInfoEntry(resolvedSource, selectedTargetName, sourceUid, { deleteOriginal: result.action === 'move' });
     }
     return { createWorldInfoEntryFromEditor, backfillWorldInfoMemosFromWorkbench, promptApplyWorldInfoCurrentSorting, bulkDeleteWorldInfoEntries, bulkSetWorldInfoEntriesEnabled, promptMoveOrCopyWorldInfoEntry };
 }

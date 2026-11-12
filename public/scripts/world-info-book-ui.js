@@ -1,10 +1,11 @@
 import { world_info, world_names } from './world-info-state.js';
 
 /** Interactive book management and reference cascade feedback. */
-export function createWorldInfoBookUi({ getFreeWorldName, Popup, POPUP_TYPE, POPUP_RESULT, PopupUtils, t, createNewWorldInfo, getSelectedWorldInfoEditorName, loadWorldInfo, download, renameWorldInfo, saveWorldInfo, updateWorldInfoList, selectWorldInfoEditorName, hideWorldEditor, getRequestHeaders, buildCascadeSectionHtml, captureCascadeChoices, flushDeletedWorldsFromUI, saveSettingsDebounced, deleteWorldInfo }) {
+export function createWorldInfoBookUi({ getFreeWorldName, showLocalDialog, t, createNewWorldInfo, getSelectedWorldInfoEditorName, loadWorldInfo, download, renameWorldInfo, saveWorldInfo, updateWorldInfoList, selectWorldInfoEditorName, hideWorldEditor, getRequestHeaders, flushDeletedWorldsFromUI, saveSettingsDebounced, deleteWorldInfo }) {
     async function promptToCreateWorldInfo() {
         const tempName = getFreeWorldName();
-        const finalName = await Popup.show.input(t`Create a new World Info`, t`Enter a name for the new file:`, tempName);
+        const result = await showLocalDialog({ scope: 'world-info', title: t`Create a new World Info`, fields: [{ name: 'name', type: 'text', label: t`Enter a name for the new file:`, value: tempName }], actions: [{ id: 'create', label: t`Create`, variant: 'primary' }, { id: 'cancel', label: t`Cancel` }], initialFocus: 'name' });
+        const finalName = result?.action === 'create' ? result.values.name : null;
 
         if (!finalName) {
             return false;
@@ -46,8 +47,7 @@ export function createWorldInfoBookUi({ getFreeWorldName, Popup, POPUP_TYPE, POP
             return false;
         }
 
-        await renameWorldInfo(worldName, data);
-        return true;
+        return await renameWorldInfo(worldName, data);
     }
 
     async function duplicateCurrentWorldInfo() {
@@ -57,7 +57,8 @@ export function createWorldInfoBookUi({ getFreeWorldName, Popup, POPUP_TYPE, POP
         }
 
         const tempName = getFreeWorldName(worldName);
-        const finalName = await Popup.show.input('Create a new World Info?', 'Enter a name for the new file:', tempName);
+        const result = await showLocalDialog({ scope: 'world-info', title: t`Create a new World Info?`, fields: [{ name: 'name', type: 'text', label: t`Enter a name for the new file:`, value: tempName }], actions: [{ id: 'create', label: t`Create`, variant: 'primary' }, { id: 'cancel', label: t`Cancel` }], initialFocus: 'name' });
+        const finalName = result?.action === 'create' ? result.values.name : null;
 
         if (!finalName) {
             return false;
@@ -118,80 +119,50 @@ export function createWorldInfoBookUi({ getFreeWorldName, Popup, POPUP_TYPE, POP
         const hasBoundCharacters = worldInfos.some(world => world.boundCharacters.length > 0);
 
         if (hasBoundCharacters) {
-            const cascadeHtml = buildCascadeSectionHtml(worldInfos);
-            const refId = `world-clear-refs-${Date.now()}`;
-            const refCheckboxHtml = `<div class="delete-dialog-option" style="margin-top:10px;">
-                <input type="checkbox" id="${refId}"><label for="${refId}">${t`Also clear world info references in bound characters`}</label>
-            </div>`;
-            const fullHtml = `<h3>${t`Delete the World/Lorebook: "${worldName}"?`}</h3>${cascadeHtml}${refCheckboxHtml}`;
-
-            let capturedCascade = { deleteWorlds: [], clearWorldReferences: false };
-            const popup = new Popup(fullHtml, POPUP_TYPE.CONFIRM, '', {
-                okButton: t`Delete`,
-                cancelButton: t`Cancel`,
-                wider: true,
-                leftAlign: true,
-                defaultResult: POPUP_RESULT.NEGATIVE,
-                customButtons: [{
-                    text: t`Delete ${worldInfos.length} linked world book(s)`,
-                    result: POPUP_RESULT.CUSTOM1,
-                    classes: ['popup-button-danger'],
-                }],
-                onClosing: () => {
-                    capturedCascade = captureCascadeChoices();
-                    capturedCascade.clearWorldReferences = !!document.getElementById(refId)?.checked;
-                    return true;
-                },
-                onOpen: (popupInstance) => {
-                    document.querySelectorAll('.world-cascade-checkbox').forEach((checkbox) => { checkbox.checked = true; });
-                    const deleteAllButton = popupInstance.dlg.querySelector(`[data-result="${POPUP_RESULT.CUSTOM1}"]`);
-                    if (deleteAllButton) {
-                        deleteAllButton.classList.add('popup-button-danger');
-                        deleteAllButton.addEventListener('click', () => {
-                            document.querySelectorAll('.world-cascade-checkbox').forEach((checkbox) => { checkbox.checked = true; });
-                            popupInstance.complete(POPUP_RESULT.AFFIRMATIVE);
-                        });
-                    }
-                },
+            const result = await showLocalDialog({
+                scope: 'world-info', title: t`Delete the World/Lorebook: "${worldName}"?`,
+                fields: [...worldInfos.map((world, index) => {
+                    const otherCount = world.boundCharacters.length - world.deleteCandidateAvatars.length;
+                    const warning = otherCount > 0 ? ` — ${t`${otherCount} other character(s) are still using this world info.`}` : '';
+                    return { name: `world-${index}`, type: 'checkbox', label: `${world.name} — ${world.entryCount} ${t`entries`}${warning}`, value: true };
+                }), { name: 'clearReferences', type: 'checkbox', label: t`Also clear world info references in bound characters`, value: false }],
+                actions: [{ id: 'delete', label: t`Delete`, variant: 'destructive' }, { id: 'all', label: t`Delete ${worldInfos.length} linked world book(s)`, variant: 'destructive' }, { id: 'cancel', label: t`Cancel` }], initialFocus: 'cancel',
             });
-            popup.okButton.classList.add('popup-button-danger');
-            const result = await popup.show();
-            if (!result || capturedCascade.deleteWorlds.length === 0) {
+            if (!result || result.action === 'cancel') return false;
+            const deleteWorlds = worldInfos.filter((world, index) => result.action === 'all' || result.values[`world-${index}`]).map(world => world.name);
+            if (deleteWorlds.length === 0) {
                 return false;
             }
 
-            if (capturedCascade.clearWorldReferences) {
-                await fetch('/api/worldinfo/delete-cascade', {
+            if (result.values.clearReferences) {
+                const response = await fetch('/api/worldinfo/delete-cascade', {
                     method: 'POST',
                     headers: getRequestHeaders(),
-                    body: JSON.stringify({ worlds: capturedCascade.deleteWorlds, clear_references: true }),
+                    body: JSON.stringify({ worlds: deleteWorlds, clear_references: true }),
                 });
-                await flushDeletedWorldsFromUI(capturedCascade.deleteWorlds);
+                if (!response.ok) {
+                    toastr.error(t`Failed to delete World Info.`);
+                    return false;
+                }
+                await flushDeletedWorldsFromUI(deleteWorlds);
                 return true;
             }
         } else {
-            const popup = new Popup(
-                PopupUtils.BuildTextWithHeader(`Delete the World/Lorebook: "${worldName}"?`, t`This action is irreversible!`),
-                POPUP_TYPE.CONFIRM,
-                '',
-                {
-                    okButton: t`Delete`,
-                    cancelButton: t`Cancel`,
-                    defaultResult: POPUP_RESULT.NEGATIVE,
-                },
-            );
-            popup.okButton.classList.add('popup-button-danger');
-            const confirmed = await popup.show();
-            if (!confirmed) {
+            const confirmed = await showLocalDialog({ scope: 'world-info', title: t`Delete the World/Lorebook: "${worldName}"?`, message: t`This action is irreversible!`, actions: [{ id: 'delete', label: t`Delete`, variant: 'destructive' }, { id: 'cancel', label: t`Cancel` }], initialFocus: 'cancel' });
+            if (confirmed?.action !== 'delete') {
                 return false;
             }
         }
 
+        if (!await deleteWorldInfo(worldName)) {
+            toastr.error(t`Failed to delete World Info.`);
+            return false;
+        }
         if (removeDeletedWorldInfoAuxiliaryReferences(worldName)) {
             saveSettingsDebounced();
         }
 
-        await deleteWorldInfo(worldName);
+
         return true;
     }
 

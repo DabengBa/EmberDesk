@@ -32,6 +32,144 @@ async function openWorldInfo(page) {
 }
 
 test.describe('world info workbench', () => {
+    test('new book dialog cancels with Escape without writing', async ({ page }) => {
+        await testSetup.awaitST({ page });
+        await openWorldInfo(page);
+        const writes = [];
+        page.on('request', request => {
+            if (request.method() === 'POST' && /\/api\/worldinfo\/(edit|delete)$/.test(new URL(request.url()).pathname) && request.postData()?.includes('Cancel World Info Test')) writes.push(request.url());
+        });
+        const opener = page.locator('[data-world-info-react-action="new-world"]');
+        await opener.click();
+        const dialog = page.locator('dialog[data-local-dialog]');
+        await expect(dialog).toBeVisible();
+        await expect(dialog.locator('[data-local-focus="name"]')).toBeFocused();
+        await dialog.locator('[data-local-focus="name"]').fill('Cancel World Info Test');
+        await page.keyboard.press('Escape');
+        await expect(dialog).toHaveCount(0);
+        await expect(opener).toBeFocused();
+        await expect(page.locator('[data-world-info-react-control="world-select"] option', { hasText: 'Cancel World Info Test' })).toHaveCount(0);
+        expect(writes).toEqual([]);
+    });
+
+    test('creating an existing book stops when deletion fails', async ({ page }) => {
+        await testSetup.awaitST({ page });
+        await openWorldInfo(page);
+        const writes = [];
+        page.on('request', request => {
+            if (request.method() === 'POST' && request.url().endsWith('/api/worldinfo/edit')) writes.push(request.url());
+        });
+        await page.route('**/api/worldinfo/delete', route => route.fulfill({ status: 503, body: 'unavailable' }));
+        await page.locator('[data-world-info-react-action="new-world"]').click();
+        await page.locator('dialog[data-local-dialog] [data-local-focus="name"]').fill('Dev World 12');
+        await page.locator('dialog[data-local-dialog] [data-local-focus="create"]').click();
+        const overwrite = page.locator('dialog[data-local-dialog] [data-local-focus="overwrite"]');
+        await expect(overwrite).toBeVisible();
+        const failed = page.waitForResponse(response => response.url().endsWith('/api/worldinfo/delete'));
+        await overwrite.click();
+        expect((await failed).status()).toBe(503);
+        await expect(page.locator('#toast-container .toast-error')).toBeVisible();
+        await expect(page.locator('[data-world-info-react-control="world-select"] option[value="Dev World 12"]')).toHaveCount(1);
+        expect(writes).toEqual([]);
+    });
+
+    test('rename reports an error when deleting the original fails', async ({ page }) => {
+        await testSetup.awaitST({ page });
+        await openWorldInfo(page);
+        const worldSelect = page.locator('[data-world-info-react-control="world-select"]');
+        await worldSelect.selectOption('Dev World 12');
+        await page.route('**/api/worldinfo/delete', route => route.fulfill({ status: 503, body: 'unavailable' }));
+        await page.locator('[data-world-info-react-menu-trigger="book-actions"]').click();
+        await page.locator('[data-world-info-react-action="rename"]').click();
+        await page.locator('dialog[data-local-dialog] [data-local-focus="name"]').fill('Rename failure example');
+        const failed = page.waitForResponse(response => response.url().endsWith('/api/worldinfo/delete'));
+        await page.locator('dialog[data-local-dialog] [data-local-focus="rename"]').click();
+        expect((await failed).status()).toBe(503);
+        await expect(page.locator('#toast-container .toast-error')).toContainText('新世界书已保存，但无法删除原世界书。');
+        await expect(worldSelect.locator('option[value="Dev World 12"]')).toHaveCount(1);
+    });
+
+    test('failed book deletion leaves the selected book available', async ({ page }) => {
+        await testSetup.awaitST({ page });
+        await openWorldInfo(page);
+        const worldSelect = page.locator('[data-world-info-react-control="world-select"]');
+        await worldSelect.selectOption('Dev World 12');
+        await page.route('**/api/worldinfo/delete-preflight', route => route.fulfill({ json: { worldInfos: [] } }));
+        await page.route('**/api/worldinfo/delete', route => route.fulfill({ status: 503, body: 'unavailable' }));
+        await page.locator('[data-world-info-react-action="delete"]').click();
+        const dialog = page.locator('dialog[data-local-dialog]');
+        await expect(dialog).toBeVisible();
+        const failed = page.waitForResponse(response => response.url().endsWith('/api/worldinfo/delete'));
+        await dialog.locator('[data-local-focus="delete"]').click();
+        expect((await failed).status()).toBe(503);
+        await expect(dialog).toHaveCount(0);
+        await expect(page.locator('#toast-container .toast-error')).toBeVisible();
+        await expect(worldSelect).toHaveValue('Dev World 12');
+        await expect(worldSelect.locator('option[value="Dev World 12"]')).toHaveCount(1);
+    });
+
+    test('network failure while deleting a book is visible in the workbench', async ({ page }) => {
+        await testSetup.awaitST({ page });
+        await openWorldInfo(page);
+        const worldSelect = page.locator('[data-world-info-react-control="world-select"]');
+        await worldSelect.selectOption('Dev World 12');
+        await page.route('**/api/worldinfo/delete-preflight', route => route.fulfill({ json: { worldInfos: [] } }));
+        await page.route('**/api/worldinfo/delete', route => route.abort('failed'));
+        await page.locator('[data-world-info-react-action="delete"]').click();
+        await page.locator('dialog[data-local-dialog] [data-local-focus="delete"]').click();
+        await expect(page.locator('[data-world-info-react-workflow="workbench"] [role="alert"]')).toBeVisible();
+        await expect(worldSelect).toHaveValue('Dev World 12');
+        await expect(worldSelect.locator('option[value="Dev World 12"]')).toHaveCount(1);
+    });
+
+    test('unmount during a per-file import confirmation stops the remaining batch', async ({ page }) => {
+        await testSetup.awaitST({ page });
+        await openWorldInfo(page);
+        const writes = [];
+        page.on('request', request => {
+            if (request.method() === 'POST' && /\/api\/worldinfo\/(import|edit|delete)$/.test(new URL(request.url()).pathname)) writes.push(request.url());
+        });
+        const chooser = page.waitForEvent('filechooser');
+        await page.locator('[data-world-info-react-action="import"]').click();
+        await (await chooser).setFiles(['Dev World 01', 'Dev World 02'].map(name => ({
+            name: `${name}.json`, mimeType: 'application/json', buffer: Buffer.from(JSON.stringify({ entries: {} })),
+        })));
+        await page.locator('dialog[data-local-dialog] [data-local-focus="confirm"]').click();
+        await expect(page.locator('dialog[data-local-dialog] [data-local-focus="overwrite"]')).toBeVisible();
+        await page.evaluate(async () => (await (await import('/scripts/workspace-panels-react-bridge.js')).loadWorkspacePanelsModule()).unmountWorkspacePanel('worldInfo'));
+        await expect(page.locator('#world_import_file')).toBeEnabled({ timeout: 5000 });
+        await expect(page.locator('dialog[data-local-dialog]')).toHaveCount(0);
+        expect(writes).toEqual([]);
+    });
+
+    test('batch import conflicts disclose all names and Escape cancels the batch', async ({ page }) => {
+        await testSetup.awaitST({ page });
+        await openWorldInfo(page);
+        const writes = [];
+        page.on('request', request => {
+            if (request.method() === 'POST' && /\/api\/worldinfo\/(import|edit|delete)$/.test(new URL(request.url()).pathname)) writes.push(request.url());
+        });
+
+        const chooser = page.waitForEvent('filechooser');
+        await page.locator('[data-world-info-react-action="import"]').click();
+        await (await chooser).setFiles(Array.from({ length: 11 }, (_, index) => ({
+            name: `Dev World ${String(index + 1).padStart(2, '0')}.json`,
+            mimeType: 'application/json',
+            buffer: Buffer.from(JSON.stringify({ entries: {} })),
+        })));
+
+        const dialog = page.locator('dialog[data-local-dialog]');
+        await expect(dialog).toBeVisible();
+        await expect(dialog.locator('li').filter({ hasText: 'Dev World 01.json → Dev World 01' })).toBeVisible();
+        const extra = dialog.locator('li').filter({ hasText: 'Dev World 11.json → Dev World 11' });
+        await expect(extra).toBeHidden();
+        await dialog.locator('summary').click();
+        await expect(extra).toBeVisible();
+        await page.keyboard.press('Escape');
+        await expect(dialog).toHaveCount(0);
+        expect(writes).toEqual([]);
+    });
+
     test('react host owns workbench containment without duplicate visible selectors when mounted', async ({ page }) => {
         await testSetup.awaitST({ page });
         await openWorldInfo(page);
