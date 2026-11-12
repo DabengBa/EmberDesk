@@ -99,6 +99,10 @@
     padding: 1em;
 }
 
+#bulk_tag_shadow_popup #bulk_tag_popup #dialogue_popup_controls {
+    flex-wrap: wrap;
+}
+
 #bulk_tag_shadow_popup #bulk_tag_popup #dialogue_popup_controls .menu_button {
     width: unset;
     padding: 0.25em;

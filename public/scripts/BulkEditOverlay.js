@@ -4,9 +4,8 @@ import {
     characterGroupOverlay,
     characters,
     getCharacters,
-    buildAvatarList,
-    characterToEntity,
-    printCharactersDebounced,
+    default_avatar,
+    getThumbnailUrl,
     deleteCharacter,
     stopGeneration,
     is_send_press,
@@ -24,8 +23,8 @@ import { POPUP_TYPE, POPUP_RESULT, Popup } from './popup.js';
 import { buildCascadeSectionHtml, captureCascadeChoices } from './world-cascade-dialog.js';
 import { waitUntilCondition } from './utils.js';
 import { debounce_timeout } from './constants.js';
-import { syncBulkSelectionDomState, updateBulkDeleteButtonState, updateBulkSelectionCountState } from './character-list-state.js';
-import { createTagInput, getTagKeyForEntity, getTagsList, printTagList, tag_map, compareTagsForSort, removeTagFromMap, importTags, tag_import_setting } from './tags.js';
+import { createBulkTagEditorRuntime, openCharacterTagManager } from './tags.js';
+import { loadWorkspacePanelsModule } from './workspace-panels-react-bridge.js';
 import { t } from './i18n.js';
 
 /**
@@ -149,6 +148,13 @@ class CharacterContextMenu {
 
         if (!mergeResponse.ok) {
             mergeResponse.json().then(json => toastr.error(`Character not saved. Error: ${json.message}. Field: ${json.error}`));
+            return;
+        }
+        const current = characters.find(item => item?.avatar === data.avatar);
+        if (current) {
+            current.fav = newFavState;
+            current.data.extensions.fav = newFavState;
+            void syncReactCharacterLibraryToolbarState();
         }
     };
 
@@ -227,272 +233,126 @@ class CharacterContextMenu {
  * Represents a tag control not bound to a single character
  */
 class BulkTagPopupHandler {
-    /**
-     * The characters for this popup
-     * @type {number[]}
-     */
-    characterIds;
-
-    /**
-     * A storage of the current mutual tags, as calculated by getMutualTags()
-     * @type {object[]}
-     */
-    currentMutualTags;
-
-    /**
-     * Element focused before the popup opened, for focus restoration.
-     * @type {HTMLElement?}
-     */
     #previousFocus = null;
-
-    /**
-     * Document keydown listener for Escape-to-close while the popup is open.
-     * @type {((event: KeyboardEvent) => void)?}
-     */
     #escapeListener = null;
-
-    #open = false;
-    #pendingActions = 0;
+    #popup = null;
+    #cleanup = null;
+    #generation = 0;
+    #pendingTagActions = 0;
 
     get isBusy() {
-        return this.#open || this.#pendingActions > 0;
-    }
-
-    async #runAction(action) {
-        this.#pendingActions++;
-        try {
-            await action();
-        } finally {
-            this.#pendingActions--;
-            window.dispatchEvent(new Event('character-library-bulk-idle'));
-        }
+        return this.#popup !== null || this.#pendingTagActions > 0;
     }
 
     /**
-     * Sets up the bulk popup menu handler for the given overlay.
+     * Wraps a tag command so refresh stays blocked while it runs and idle is
+     * reported when it settles. A confirmation dialog can outlive the popup,
+     * so the counter keeps refresh blocked after hide() until the command
+     * finishes.
      *
-     * Characters can be passed in with the show() call.
+     * @param {function(...any): any} command
+     * @returns {function(...any): any}
      */
-    constructor() { }
+    #trackCommand(command) {
+        return (...args) => {
+            this.#pendingTagActions++;
+            let settled = false;
+            const settle = () => {
+                if (settled) return;
+                settled = true;
+                this.#pendingTagActions = Math.max(0, this.#pendingTagActions - 1);
+                window.dispatchEvent(new Event('character-library-bulk-idle'));
+            };
+            let result;
+            try {
+                result = command(...args);
+            } catch (error) {
+                settle();
+                throw error;
+            }
+            if (result && typeof result.then === 'function') {
+                return result.finally(settle);
+            }
+            settle();
+            return result;
+        };
+    }
 
     /**
-     * Gets the HTML as a string that is going to be the popup for the bulk tag edit
+     * Keeps the runtime's snapshot/subscription but tracks every command.
      *
-     * @returns String containing the html for the popup
+     * @param {object} runtime
+     * @returns {object}
      */
-    #getHtml = () => {
-        const characterData = JSON.stringify({ characterIds: this.characterIds });
-        return `<div id="bulk_tag_shadow_popup">
-            <div id="bulk_tag_popup" class="wider_dialogue_popup" role="dialog" aria-modal="true" aria-labelledby="bulk_tag_popup_title">
-                <div id="bulk_tag_popup_holder">
-                    <h3 id="bulk_tag_popup_title" class="marginBot5">Modify tags of ${this.characterIds.length} characters</h3>
-                    <small class="bulk_tags_desc m-b-1">Add or remove the mutual tags of all selected characters. Import all or existing tags for all selected characters.</small>
-                    <div id="bulk_tags_avatars_block" class="avatars_inline avatars_inline_small tags tags_inline"></div>
-                    <br>
-                    <div id="bulk_tags_div" class="marginBot5" data-characters='${characterData}'>
-                        <div class="tag_controls">
-                            <input id="bulkTagInput" class="text_pole tag_input wide100p margin0" data-i18n="[placeholder]Search / Create Tags" placeholder="Search / Create tags" maxlength="25" />
-                            <button type="button" class="tags_view menu_button fa-solid fa-tags" title="View all tags" aria-label="View all tags" data-i18n="[title][aria-label]View all tags"></button>
-                        </div>
-                        <div id="bulkTagList" class="m-t-1 tags"></div>
-                    </div>
-                    <div id="dialogue_popup_controls" class="m-t-1">
-                        <button type="button" id="bulk_tag_popup_reset" class="menu_button" title="Remove all tags from the selected characters" data-i18n="[title]Remove all tags from the selected characters">
-                            <i class="fa-solid fa-trash-can margin-right-10px"></i>
-                            <span data-i18n="Remove all">Remove all</span>
-                        </button>
-                        <button type="button" id="bulk_tag_popup_remove_mutual" class="menu_button" title="Remove all mutual tags from the selected characters" data-i18n="[title]Remove all mutual tags from the selected characters">
-                            <i class="fa-solid fa-trash-can margin-right-10px"></i>
-                            <span data-i18n="Remove mutual">Remove mutual</span>
-                        </button>
-                        <button type="button" id="bulk_tag_popup_import_all_tags" class="menu_button" title="Import all tags from selected characters" data-i18n="[title]Import all tags from selected characters">
-                            <span data-i18n="Import All">Import All</span>
-                        </button>
-                        <button type="button" id="bulk_tag_popup_import_existing_tags" class="menu_button" title="Import existing tags from selected characters" data-i18n="[title]Import existing tags from selected characters">
-                            <span data-i18n="Import Existing">Import Existing</span>
-                        </button>
-                        <button type="button" id="bulk_tag_popup_cancel" class="menu_button" data-i18n="Cancel">Close</button>
-                    </div>
-                </div>
-            </div>
-        </div>`;
-    };
+    #trackRuntime(runtime) {
+        const commands = Object.fromEntries(Object.entries(runtime.commands).map(([key, command]) => [key, this.#trackCommand(command)]));
+        return { ...runtime, commands };
+    }
 
-    /**
-     * Append and show the tag control
-     *
-     * @param {number[]} characterIds - The characters that are shown inside the popup
-     */
-    show(characterIds) {
-        // shallow copy character ids persistently into this tooltip
-        this.characterIds = characterIds.slice();
-
-        if (this.characterIds.length == 0) {
-            console.log('No characters selected for bulk edit tags.');
-            return;
-        }
-
-        this.#open = true;
-        document.body.insertAdjacentHTML('beforeend', this.#getHtml());
-
-        const entities = this.characterIds.map(id => characterToEntity(characters[id], id)).filter(entity => entity.item !== undefined);
-        buildAvatarList($('#bulk_tags_avatars_block'), entities);
-
-        // Print the tag list with all mutuable tags, marking them as removable. That is the initial fill
-        printTagList($('#bulkTagList'), { tags: () => this.getMutualTags(), tagOptions: { removable: true } });
-
-        // Tag input with resolvable list for the mutual tags to get redrawn, so that newly added tags get sorted correctly
-        createTagInput('#bulkTagInput', '#bulkTagList', { tags: () => this.getMutualTags(), tagOptions: { removable: true } });
-
+    /** @param {number[]} characterIds */
+    async show(characterIds) {
+        const selected = characterIds.map(id => ({ id, character: characters[id] })).filter(entry => entry.character?.avatar);
+        if (!selected.length) return;
+        this.hide();
+        const generation = ++this.#generation;
+        const avatarKeys = selected.map(entry => entry.character.avatar);
+        const avatars = selected.map(({ id, character }) => ({
+            id: String(id), name: character.name, isFav: Boolean(character.data?.extensions?.fav),
+            url: character.avatar === 'none' ? default_avatar : getThumbnailUrl('avatar', character.avatar),
+        }));
         this.#previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-        this.#escapeListener = (event) => {
-            if (event.key === 'Escape') {
+        const popup = document.createElement('div');
+        popup.id = 'bulk_tag_shadow_popup';
+        const body = document.createElement('div');
+        body.id = 'bulk_tag_popup';
+        body.className = 'wider_dialogue_popup';
+        body.setAttribute('role', 'dialog');
+        body.setAttribute('aria-modal', 'true');
+        body.setAttribute('aria-labelledby', 'bulk_tag_popup_title');
+        popup.append(body);
+        document.body.append(popup);
+        this.#popup = popup;
+        this.#escapeListener = event => {
+            if (event.key === 'Escape' && !document.querySelector('dialog[open]')) {
                 event.stopPropagation();
                 this.hide();
             }
         };
         document.addEventListener('keydown', this.#escapeListener);
-        document.querySelector('#bulkTagInput')?.focus();
-
-        document.querySelector('#bulk_tag_popup_reset').addEventListener('click', () => void this.#runAction(() => this.resetTags()));
-        document.querySelector('#bulk_tag_popup_remove_mutual').addEventListener('click', () => void this.#runAction(() => this.removeMutual()));
-        document.querySelector('#bulk_tag_popup_cancel').addEventListener('click', this.hide.bind(this));
-        document.querySelector('#bulk_tag_popup_import_all_tags').addEventListener('click', () => void this.#runAction(() => this.importAllTags()));
-        document.querySelector('#bulk_tag_popup_import_existing_tags').addEventListener('click', () => void this.#runAction(() => this.importExistingTags()));
-    }
-
-    /**
-     * Redraws the mutual tag list after a tag-changing action.
-     */
-    #redrawTagList() {
-        printTagList($('#bulkTagList'), { tags: () => this.getMutualTags(), tagOptions: { removable: true } });
-    }
-
-    /**
-     * Import existing tags for all selected characters
-     */
-    async importExistingTags() {
-        for (const characterId of this.characterIds) {
-            await importTags(characters[characterId], { importSetting: tag_import_setting.ONLY_EXISTING });
+        try {
+            const panels = await loadWorkspacePanelsModule();
+            if (generation !== this.#generation || this.#popup !== popup) return;
+            this.#cleanup = panels.mountBulkTagEditor(body, {
+                runtime: this.#trackRuntime(createBulkTagEditorRuntime(avatarKeys)),
+                avatars,
+                onClose: () => this.hide(),
+                onOpenTagManager: () => void openCharacterTagManager(),
+            });
+            body.querySelector('#bulkTagInput')?.focus();
+        } catch (error) {
+            console.error('Failed to open bulk tag editor', error);
+            toastr.error(t`Could not open tag editor.`);
+            this.hide();
         }
-
-        this.#redrawTagList();
-        toastr.success(t`Existing tags imported for ${this.characterIds.length} character(s).`);
     }
 
-    /**
-     * Import all tags for all selected characters
-     */
-    async importAllTags() {
-        for (const characterId of this.characterIds) {
-            await importTags(characters[characterId], { importSetting: tag_import_setting.ALL });
-        }
-
-        this.#redrawTagList();
-        toastr.success(t`All tags imported for ${this.characterIds.length} character(s).`);
-    }
-
-    /**
-     * Builds a list of all tags that the provided characters have in common.
-     *
-     * @returns {Array<object>} A list of mutual tags
-     */
-    getMutualTags() {
-        if (this.characterIds.length == 0) {
-            return [];
-        }
-
-        if (this.characterIds.length === 1) {
-            // Just use tags of the single character
-            return getTagsList(getTagKeyForEntity(this.characterIds[0]));
-        }
-
-        // Find mutual tags for multiple characters
-        const allTags = this.characterIds.map(cid => getTagsList(getTagKeyForEntity(cid)));
-        const mutualTags = allTags.reduce((mutual, characterTags) =>
-            mutual.filter(tag => characterTags.some(cTag => cTag.id === tag.id)),
-        );
-
-        this.currentMutualTags = mutualTags.sort(compareTagsForSort);
-        return this.currentMutualTags;
-    }
-
-    /**
-     * Hide and remove the tag control
-     */
     hide() {
-        this.#open = false;
-        if (this.#escapeListener) {
-            document.removeEventListener('keydown', this.#escapeListener);
-            this.#escapeListener = null;
-        }
-
-        let popupElement = document.querySelector('#bulk_tag_shadow_popup');
-        if (popupElement) {
-            const hadFocus = popupElement.contains(document.activeElement);
-            document.body.removeChild(popupElement);
-            if (hadFocus) {
-                this.#previousFocus?.focus();
-            }
-        }
-
-        // No need to redraw here, all tags actions were redrawn when they happened
+        ++this.#generation;
+        if (this.#escapeListener) document.removeEventListener('keydown', this.#escapeListener);
+        this.#escapeListener = null;
+        const hadFocus = this.#popup?.contains(document.activeElement);
+        this.#cleanup?.();
+        this.#cleanup = null;
+        this.#popup?.remove();
+        this.#popup = null;
+        if (hadFocus) this.#previousFocus?.focus();
+        this.#previousFocus = null;
+        // Pending tag commands may still be waiting on a confirmation; the
+        // handler reports idle again when they settle.
         window.dispatchEvent(new Event('character-library-bulk-idle'));
     }
-
-    /**
-     * Empty the tag map for the given characters
-     */
-    async resetTags() {
-        const confirmed = await Popup.show.confirm(
-            t`Remove all tags from ${this.characterIds.length} character(s)?`,
-            t`Every tag will be removed from each selected character. This cannot be undone.`,
-            { defaultResult: POPUP_RESULT.NEGATIVE },
-        );
-        if (!confirmed) {
-            return;
-        }
-
-        for (const characterId of this.characterIds) {
-            const key = getTagKeyForEntity(characterId);
-            if (key) tag_map[key] = [];
-        }
-
-        this.#redrawTagList();
-
-        printCharactersDebounced();
-    }
-
-    /**
-     * Remove the mutual tags for all given characters
-     */
-    async removeMutual() {
-        const mutualTags = this.getMutualTags();
-        if (!mutualTags.length) {
-            toastr.info(t`No mutual tags to remove.`);
-            return;
-        }
-
-        const confirmed = await Popup.show.confirm(
-            t`Remove ${mutualTags.length} mutual tag(s) from ${this.characterIds.length} character(s)?`,
-            t`Only the tags shared by every selected character will be removed.`,
-            { defaultResult: POPUP_RESULT.NEGATIVE },
-        );
-        if (!confirmed) {
-            return;
-        }
-
-        for (const characterId of this.characterIds) {
-            for (const tag of mutualTags) {
-                removeTagFromMap(tag.id, characterId.toString());
-            }
-        }
-
-        this.#redrawTagList();
-
-        printCharactersDebounced();
-    }
 }
+
 
 class BulkEditOverlayState {
     /**
@@ -661,13 +521,6 @@ class BulkEditOverlay {
         elements.forEach(element => element.addEventListener('touchmove', this.handleLongPressEnd));
 
         if (this.state === BulkEditOverlayState.select) {
-            syncBulkSelectionDomState({
-                container: this.container,
-                selectedCharacterIds: this.selectedCharacters,
-                characterClass: BulkEditOverlay.characterClass,
-                selectedClass: BulkEditOverlay.selectedClass,
-                checkboxClass: BulkEditOverlay.legacySelectedClass,
-            });
             this.#disableClickEventsForCharacters();
             this.updateSelectedCount();
         }
@@ -850,25 +703,9 @@ class BulkEditOverlay {
         const characterId = Number(character.getAttribute('data-chid'));
 
         const select = !this.selectedCharacters.includes(characterId);
-        const legacyBulkEditCheckbox = /** @type {HTMLInputElement} */ (character.querySelector('.' + BulkEditOverlay.legacySelectedClass));
-
         if (select) {
-            character.classList.add(BulkEditOverlay.selectedClass);
-            character.setAttribute('aria-selected', 'true');
-            character.setAttribute('aria-checked', 'true');
-            if (legacyBulkEditCheckbox) {
-                legacyBulkEditCheckbox.checked = true;
-                legacyBulkEditCheckbox.setAttribute('aria-checked', 'true');
-            }
             this.#selectedCharacters.push(characterId);
         } else {
-            character.classList.remove(BulkEditOverlay.selectedClass);
-            character.setAttribute('aria-selected', 'false');
-            character.setAttribute('aria-checked', 'false');
-            if (legacyBulkEditCheckbox) {
-                legacyBulkEditCheckbox.checked = false;
-                legacyBulkEditCheckbox.setAttribute('aria-checked', 'false');
-            }
             this.#selectedCharacters = this.#selectedCharacters.filter(item => characterId !== item);
         }
 
@@ -885,26 +722,8 @@ class BulkEditOverlay {
      *
      * @param {number} [countOverride] - optional override for a manual number to set
      */
-    updateSelectedCount = (countOverride = undefined) => {
-        const count = countOverride ?? this.selectedCharacters.length;
-        const selectedCount = document.getElementById(BulkEditOverlay.bulkSelectedCountId);
-        const deleteButton = document.getElementById(BulkEditOverlay.bulkDeleteButtonId);
-        const fallbackFocusElement = document.getElementById('bulkEditButton');
-        updateBulkSelectionCountState({ selectedCount, deleteButton, fallbackFocusElement }, count);
+    updateSelectedCount = () => {
         void syncReactCharacterLibraryToolbarState();
-    };
-
-    /**
-     * Updates bulk action affordances that depend on the current selection.
-     *
-     * @param {number} [countOverride] - optional override for a manual number to set
-     */
-    updateBulkActionStates = (countOverride = undefined) => {
-        const count = countOverride ?? this.selectedCharacters.length;
-        const hasSelection = count > 0;
-        const deleteButton = document.getElementById(BulkEditOverlay.bulkDeleteButtonId);
-        const fallbackFocusElement = document.getElementById('bulkEditButton');
-        updateBulkDeleteButtonState(deleteButton, hasSelection, fallbackFocusElement);
     };
 
     /**
@@ -1161,18 +980,8 @@ class BulkEditOverlay {
      * removes visual highlight.
      */
     clearSelectedCharacters = () => {
-        document.querySelectorAll('#' + BulkEditOverlay.containerId + ' .' + BulkEditOverlay.selectedClass)
-            .forEach(element => {
-                element.classList.remove(BulkEditOverlay.selectedClass);
-                element.setAttribute('aria-selected', 'false');
-                element.setAttribute('aria-checked', 'false');
-                const legacyBulkEditCheckbox = element.querySelector('.bulk_select_checkbox');
-                if (legacyBulkEditCheckbox) {
-                    legacyBulkEditCheckbox.checked = false;
-                    legacyBulkEditCheckbox.setAttribute('aria-checked', 'false');
-                }
-            });
         this.selectedCharacters.length = 0;
+        void syncReactCharacterLibraryToolbarState();
     };
 }
 
