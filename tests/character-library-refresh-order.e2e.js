@@ -3,8 +3,15 @@ import { testSetup } from './frontend/frontent-test-utils.js';
 
 const test = isolatedCharacterLibraryTest({ lazy: false });
 
-test('overlapping refreshes cannot publish an older snapshot after a newer one', async ({ page }) => {
+test.beforeEach(async ({ page }) => {
+    // Count only explicit refreshes; realtime delivery has separate coverage.
+    await page.route('**/api/characters/events', route => route.fulfill({ status: 204 }));
+    const eventsResponse = page.waitForResponse('**/api/characters/events');
     await testSetup.awaitST({ page });
+    expect((await eventsResponse).status()).toBe(204);
+});
+
+test('overlapping refreshes cannot publish an older snapshot after a newer one', async ({ page }) => {
     await page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: '角色库' }).first().click();
     const result = await page.evaluate(async () => {
         const app = await import('/script.js');
@@ -17,11 +24,13 @@ test('overlapping refreshes cannot publish an older snapshot after a newer one',
         const startedA = new Promise(resolve => { signalA = resolve; });
         let requests = 0;
         const events = [];
+        const snapshots = [];
         window.fetch = (input, init) => {
             if (input !== '/api/characters/all') return originalFetch(input, init);
             const snapshot = structuredClone(state);
             requests++;
             events.push(`read-${requests}`);
+            snapshots.push(snapshot[0].name);
             if (requests === 1) {
                 signalA();
                 return new Promise(resolve => { releaseA = () => resolve(new Response(JSON.stringify(snapshot))); });
@@ -29,7 +38,8 @@ test('overlapping refreshes cannot publish an older snapshot after a newer one',
             return Promise.resolve(new Response(JSON.stringify(snapshot)));
         };
         try {
-            const a = app.getCharacters().then(() => events.push('done-a'));
+            let nameAtAReturn;
+            const a = app.getCharacters().then(() => { nameAtAReturn = characters[0].name; events.push('done-a'); });
             await startedA;
             // Simulate a completed write after A's snapshot and before B's call.
             state[0].name = 'U009 new snapshot';
@@ -38,22 +48,26 @@ test('overlapping refreshes cannot publish an older snapshot after a newer one',
             const b = app.getCharacters().then(() => { bDone = true; nameAtBReturn = characters[0].name; events.push('done-b'); });
             await Promise.race([b, new Promise(resolve => setTimeout(resolve, 500))]);
             const bCompletedBeforeRelease = bDone;
+            const requestsBeforeRelease = requests;
+            events.push('release-a');
             releaseA();
             await Promise.all([a, b]);
-            return { name: characters[0].name, nameAtBReturn, requests, bCompletedBeforeRelease, events };
+            return { name: characters[0].name, nameAtAReturn, nameAtBReturn, requests, requestsBeforeRelease, bCompletedBeforeRelease, events, snapshots };
         } finally {
             window.fetch = originalFetch;
         }
     });
     expect(result.name, JSON.stringify(result)).toBe('U009 new snapshot');
+    expect(result.nameAtAReturn).toBe('U009 old snapshot');
     expect(result.nameAtBReturn).toBe('U009 new snapshot');
+    expect(result.requestsBeforeRelease).toBe(1);
     expect(result.requests).toBe(2);
     expect(result.bCompletedBeforeRelease).toBe(false);
-    expect(result.events.indexOf('read-2')).toBeGreaterThan(result.events.indexOf('done-a'));
+    expect(result.events).toEqual(['read-1', 'release-a', 'done-a', 'read-2', 'done-b']);
+    expect(result.snapshots).toEqual(['U009 old snapshot', 'U009 new snapshot']);
 });
 
 test('a failed refresh does not poison the queued refresh', async ({ page }) => {
-    await testSetup.awaitST({ page });
     const result = await page.evaluate(async () => {
         const app = await import('/script.js');
         const characters = window.SillyTavern.getContext().characters;
@@ -91,7 +105,6 @@ test('a failed refresh does not poison the queued refresh', async ({ page }) => 
 });
 
 test('publication waits for the real page-loaded event before the next read', async ({ page }) => {
-    await testSetup.awaitST({ page });
     await page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: '角色库' }).first().click();
     const result = await page.evaluate(async () => {
         const app = await import('/script.js');
