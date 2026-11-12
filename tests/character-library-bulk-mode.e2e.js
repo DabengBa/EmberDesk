@@ -40,11 +40,13 @@ test.describe('character library bulk mode', () => {
         await testSetup.awaitST({ page });
         await openCharacterLibrary(page);
 
-        await page.getByRole('searchbox', { name: /Search characters|搜索角色/ }).fill(characterName);
+        await page.locator('#emberdesk-react-character-search').fill(characterName);
         const characterRow = page.locator('#rm_print_characters_block .character_select').filter({ hasText: characterName }).first();
         await expect(characterRow).toBeVisible({ timeout: 15_000 });
 
-        const bulkToggle = page.getByRole('button', { name: /^(Bulk edit characters|批量编辑角色)$/ });
+        const bulkToggle = page.locator('.emberdesk-react-character-library-toolbar button.character-list-action').filter({
+            has: page.locator('i.fa-list-check'),
+        });
         await bulkToggle.click();
         const bulkDelete = page.getByRole('button', { name: /^(Bulk delete characters|批量删除角色)$/ });
         await expect(bulkDelete).toBeDisabled();
@@ -65,7 +67,7 @@ test.describe('character library bulk mode', () => {
         await testSetup.awaitST({ page });
         await openCharacterLibrary(page);
 
-        await page.getByRole('searchbox', { name: /Search characters|搜索角色/ }).fill(characterName);
+        await page.locator('#emberdesk-react-character-search').fill(characterName);
         const characterRow = page.locator('#rm_print_characters_block .character_select').filter({ hasText: characterName }).first();
         await expect(characterRow).toBeVisible({ timeout: 15_000 });
         await characterRow.click();
@@ -79,7 +81,7 @@ test.describe('character library bulk mode', () => {
             await expect(authoring).toBeVisible({ timeout: 15_000 });
         }
 
-        const exportTrigger = authoring.getByRole('button', { name: /^(Export|导出)$/ });
+        const exportTrigger = authoring.locator('[data-character-export-trigger]');
         await exportTrigger.click();
         const popup = page.locator('#export_format_popup');
         await expect(popup).toBeVisible({ timeout: 10_000 });

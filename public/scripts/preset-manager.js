@@ -71,6 +71,16 @@ export function getPresetManager(apiId = '') {
     return presetManagers[apiId];
 }
 
+/**
+ * Persists user settings and rejects when the write is queued or fails.
+ * Shared by features that cannot import `saveSettings` from `script.js`
+ * without violating the composition-root reverse-import contract.
+ * @returns {Promise<void>} Resolves after the settings save commits.
+ */
+export async function saveSettingsStrict() {
+    await saveSettings(0, { strict: true });
+}
+
 /** Register the supported live preset manager. */
 function registerPresetManagers() {
     presetManagers.openai = new PresetManager(null, 'openai');
@@ -301,13 +311,58 @@ class PresetManager {
      * @param {string} [options.name] Name of the preset. If not provided, uses the currently selected preset name.
      * @param {string} options.path Path to the preset extension field, e.g. 'myextension.data'. If empty, writes to the root of the extensions object.
      * @param {any} options.value Value to write to the preset extension field.
+     * @param {boolean} [options.strict] Reject failed settings and missing/replaced presets.
+     * @param {object} [options.expectedPreset] Identity to verify before saving.
      * @return {Promise<void>} Resolves when the preset is saved.
      */
-    async writePresetExtensionField({ name, path, value }) {
+    async writePresetExtensionField({ name, path, value, strict = false, expectedPreset }) {
         const { settings } = this.getPresetList();
         const selectedName = this.getSelectedPresetName();
         const presetName = name || selectedName;
-
+        if (strict) {
+            const preset = this.getCompletionPresetByName(presetName);
+            if (!preset || (expectedPreset && preset !== expectedPreset)) throw new Error('Preset no longer exists');
+            const service = getOpenAIPresetService();
+            const revision = service.getSelectionRevision();
+            const selected = settings && selectedName === presetName;
+            const priorSettingsExtensions = settings?.extensions;
+            let stagedSettings;
+            let stagedSettingsSnapshot;
+            let settingsCommitted = false;
+            const stagedPreset = structuredClone(preset);
+            stagedPreset.extensions = ensurePlainObject(stagedPreset.extensions || {});
+            if (path) lodash.set(stagedPreset.extensions, path, value); else stagedPreset.extensions = value;
+            const priorPreset = JSON.stringify(preset);
+            const selectionChanged = () => service.getSelectionRevision() !== revision || this.getSelectedPresetName() !== selectedName;
+            try {
+                if (selected) {
+                    stagedSettings = structuredClone(ensurePlainObject(settings.extensions || {}));
+                    if (path) lodash.set(stagedSettings, path, value); else stagedSettings = value;
+                    settings.extensions = stagedSettings;
+                    stagedSettingsSnapshot = JSON.stringify(stagedSettings);
+                    await saveSettings(0, { strict: true });
+                    settingsCommitted = true;
+                    if (selectionChanged()) throw new Error('Preset selection changed while saving settings');
+                }
+                if (this.getCompletionPresetByName(presetName) !== preset || JSON.stringify(preset) !== priorPreset) throw new Error('Preset no longer exists or changed');
+                await this.savePreset(presetName, stagedPreset, { skipUpdate: true });
+                if (this.getCompletionPresetByName(presetName) !== preset || JSON.stringify(preset) !== priorPreset) throw new Error('Preset no longer exists or changed');
+                preset.extensions = stagedPreset.extensions;
+                if (selectionChanged()) throw new Error('Preset selection changed while saving settings');
+            } catch (error) {
+                // Revert only our own still-current field; never clobber a newer edit.
+                if (selected && !selectionChanged() && settings.extensions === stagedSettings
+                    && JSON.stringify(settings.extensions) === stagedSettingsSnapshot) {
+                    settings.extensions = priorSettingsExtensions;
+                    if (settingsCommitted) {
+                        try { await saveSettings(0, { strict: true }); }
+                        catch (rollbackError) { throw new AggregateError([error, rollbackError], 'Preset save failed and settings rollback failed'); }
+                    }
+                }
+                throw error;
+            }
+            return;
+        }
         // Write to settings if the selected preset is the same as the provided name
         if (settings && selectedName === presetName) {
             // Set the value at the specified path

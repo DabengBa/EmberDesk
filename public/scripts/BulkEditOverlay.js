@@ -23,7 +23,6 @@ import { POPUP_TYPE, POPUP_RESULT, Popup } from './popup.js';
 import { buildCascadeSectionHtml, captureCascadeChoices } from './world-cascade-dialog.js';
 import { waitUntilCondition } from './utils.js';
 import { debounce_timeout } from './constants.js';
-import { resolveCharacterAvatarsByIds } from './character-list-state.js';
 import { createBulkTagEditorRuntime, openCharacterTagManager } from './tags.js';
 import { loadWorkspacePanelsModule } from './workspace-panels-react-bridge.js';
 import { t } from './i18n.js';
@@ -120,8 +119,8 @@ class CharacterContextMenu {
     };
 
     /**
-     * Favorite a character
-     * and highlight it.
+     * Favorite a character. The list refresh after the bulk operation owns
+     * the visible favorite state; the original numeric row may have moved.
      *
      * @param {number} characterId
      * @returns {Promise<void>}
@@ -239,6 +238,56 @@ class BulkTagPopupHandler {
     #popup = null;
     #cleanup = null;
     #generation = 0;
+    #pendingTagActions = 0;
+
+    get isBusy() {
+        return this.#popup !== null || this.#pendingTagActions > 0;
+    }
+
+    /**
+     * Wraps a tag command so refresh stays blocked while it runs and idle is
+     * reported when it settles. A confirmation dialog can outlive the popup,
+     * so the counter keeps refresh blocked after hide() until the command
+     * finishes.
+     *
+     * @param {function(...any): any} command
+     * @returns {function(...any): any}
+     */
+    #trackCommand(command) {
+        return (...args) => {
+            this.#pendingTagActions++;
+            let settled = false;
+            const settle = () => {
+                if (settled) return;
+                settled = true;
+                this.#pendingTagActions = Math.max(0, this.#pendingTagActions - 1);
+                window.dispatchEvent(new Event('character-library-bulk-idle'));
+            };
+            let result;
+            try {
+                result = command(...args);
+            } catch (error) {
+                settle();
+                throw error;
+            }
+            if (result && typeof result.then === 'function') {
+                return result.finally(settle);
+            }
+            settle();
+            return result;
+        };
+    }
+
+    /**
+     * Keeps the runtime's snapshot/subscription but tracks every command.
+     *
+     * @param {object} runtime
+     * @returns {object}
+     */
+    #trackRuntime(runtime) {
+        const commands = Object.fromEntries(Object.entries(runtime.commands).map(([key, command]) => [key, this.#trackCommand(command)]));
+        return { ...runtime, commands };
+    }
 
     /** @param {number[]} characterIds */
     async show(characterIds) {
@@ -274,7 +323,7 @@ class BulkTagPopupHandler {
             const panels = await loadWorkspacePanelsModule();
             if (generation !== this.#generation || this.#popup !== popup) return;
             this.#cleanup = panels.mountBulkTagEditor(body, {
-                runtime: createBulkTagEditorRuntime(avatarKeys),
+                runtime: this.#trackRuntime(createBulkTagEditorRuntime(avatarKeys)),
                 avatars,
                 onClose: () => this.hide(),
                 onOpenTagManager: () => void openCharacterTagManager(),
@@ -298,6 +347,9 @@ class BulkTagPopupHandler {
         this.#popup = null;
         if (hadFocus) this.#previousFocus?.focus();
         this.#previousFocus = null;
+        // Pending tag commands may still be waiting on a confirmation; the
+        // handler reports idle again when they settle.
+        window.dispatchEvent(new Event('character-library-bulk-idle'));
     }
 }
 
@@ -338,6 +390,7 @@ class BulkEditOverlay {
     static longPressDelay = 2500;
 
     #state = BulkEditOverlayState.browse;
+    #pendingState = BulkEditOverlayState.browse;
     #longPress = false;
     #stateChangeCallbacks = [];
     #selectedCharacters = [];
@@ -382,13 +435,24 @@ class BulkEditOverlay {
     }
 
     set state(newState) {
-        if (this.#state === newState) return;
+        if (this.#pendingState === newState) return;
 
+        this.#pendingState = newState;
         eventSource.emit(event_types.CHARACTER_GROUP_OVERLAY_STATE_CHANGE_BEFORE, newState)
             .then(() => {
+                if (this.#pendingState !== newState) return;
                 this.#state = newState;
                 eventSource.emit(event_types.CHARACTER_GROUP_OVERLAY_STATE_CHANGE_AFTER, this.state);
+                if (typeof window !== 'undefined') {
+                    window.dispatchEvent(new Event('character-library-bulk-idle'));
+                }
             });
+    }
+
+    get isRealtimeRefreshBlocked() {
+        return this.#state === BulkEditOverlayState.select
+            || this.#pendingState === BulkEditOverlayState.select
+            || this.#bulkTagPopupHandler.isBusy;
     }
 
     get isLongPress() {
@@ -795,8 +859,11 @@ class BulkEditOverlay {
      * @returns {Promise<void>}
      */
     handleContextMenuDelete = async () => {
-        const characterIds = [...this.selectedCharacters];
-        const avatarList = resolveCharacterAvatarsByIds(characters, characterIds);
+        const snapshot = this.selectedCharacters
+            .map(id => characters[id])
+            .filter(character => typeof character?.avatar === 'string' && character.avatar.length > 0)
+            .map(character => ({ avatar: character.avatar, name: character.name }));
+        const avatarList = snapshot.map(character => character.avatar);
         const count = avatarList.length;
         if (count === 0) {
             return;
@@ -823,8 +890,8 @@ class BulkEditOverlay {
         }
 
         // 3. Build dialog HTML
-        const nameTagsHtml = characterIds
-            .map(id => characters[id]?.name)
+        const nameTagsHtml = snapshot
+            .map(character => character.name)
             .filter(Boolean)
             .map(name => {
                 const escaped = name.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');

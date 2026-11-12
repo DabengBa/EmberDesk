@@ -8,6 +8,7 @@ const count = jest.fn(async () => 10);
 let tailContent = 'STEP_TAIL';
 let toolCallingSupported = true;
 let includeHistory = false;
+let historyToolsSupported = false;
 // Minimal prompt collection so the real base assembly runs (and stays empty)
 // instead of being stubbed out: only the pipeline step tail is under test.
 const emptyPrompts = () => {
@@ -30,13 +31,19 @@ const manager = {
     isPromptDisabledForActiveCharacter: () => false,
     log: () => {},
     setChatCompletion: jest.fn(),
+    isValidName: () => true,
+    sanitizeName: value => value,
 };
+jest.unstable_mockModule('../src/util.js', () => ({
+    getConfigValue: (_key, fallback) => fallback,
+}));
+const { postProcessPrompt } = await import('../src/prompt-converters.js');
 jest.unstable_mockModule('../public/lib.js', () => ({ DOMPurify: {} }));
 jest.unstable_mockModule('../public/script.js', () => Object.fromEntries([
     'abortStatusCheck', 'extension_prompt_roles', 'extension_prompt_types', 'getExtensionPrompt', 'getExtensionPromptMaxDepth',
     'getMediaDisplay', 'getMediaIndex', 'is_send_press', 'main_api', 'name1', 'name2', 'displayOnlineStatus',
     'saveSettingsDebounced', 'setOnlineStatus', 'substituteParams', 'system_message_types', 'withGeneratingModel',
-].map(key => [key, key === 'substituteParams' ? substitute : key === 'withGeneratingModel' ? (_model, callback) => callback() : jest.fn()])));
+].map(key => [key, key === 'substituteParams' ? substitute : key === 'withGeneratingModel' ? (_model, callback) => callback() : key === 'system_message_types' ? { NARRATOR: 'narrator' } : jest.fn()])));
 jest.unstable_mockModule('../public/scripts/PromptManager.js', () => ({ chatCompletionDefaultPrompts: [],
     INJECTION_POSITION: { ABSOLUTE: 1 }, Prompt: class { constructor(value) { Object.assign(this, value); } }, PromptManager: class { constructor() { return manager; } }, promptManagerDefaultPromptOrders: [],
     // openai.js imports this migration helper; the mock must expose it too.
@@ -45,7 +52,7 @@ jest.unstable_mockModule('../public/scripts/request-context.js', () => ({ getReq
 jest.unstable_mockModule('../public/scripts/power-user.js', () => ({ forceCharacterEditorTokenize: jest.fn(), getCustomStoppingStrings: () => [] }));
 jest.unstable_mockModule('../public/scripts/secrets.js', () => Object.fromEntries(['SECRET_KEYS', 'secret_state', 'writeSecret', 'deleteSecret', 'resolveSecretKey'].map(k => [k, jest.fn()])));
 jest.unstable_mockModule('../public/scripts/sse-stream.js', () => ({ getEventSourceStream: jest.fn() }));
-jest.unstable_mockModule('../public/scripts/utils.js', () => Object.fromEntries(['createThumbnail', 'delay', 'download', 'getAudioDurationFromDataURL', 'getBase64Async', 'getFileText', 'getImageSizeFromDataURL', 'getVideoDurationFromDataURL', 'isDataURL', 'isValidUrl', 'resetScrollHeight', 'stringFormat'].map(k => [k, jest.fn()])));
+jest.unstable_mockModule('../public/scripts/utils.js', () => Object.fromEntries(['createThumbnail', 'delay', 'download', 'getAudioDurationFromDataURL', 'getBase64Async', 'getFileText', 'getImageSizeFromDataURL', 'getSanitizedFilename', 'getVideoDurationFromDataURL', 'isDataURL', 'isValidUrl', 'resetScrollHeight', 'stringFormat'].map(k => [k, jest.fn()])));
 jest.unstable_mockModule('../public/scripts/tokenizers.js', () => ({ countTokensOpenAIAsync: count }));
 jest.unstable_mockModule('../public/scripts/slash-commands/SlashCommandParser.js', () => ({ SlashCommandParser: {} }));
 jest.unstable_mockModule('../public/scripts/slash-commands/SlashCommand.js', () => ({ SlashCommand: {} }));
@@ -55,7 +62,7 @@ jest.unstable_mockModule('../public/scripts/popup.js', () => ({ callGenericPopup
 jest.unstable_mockModule('../public/scripts/i18n.js', () => ({ t: strings => strings[0] }));
 jest.unstable_mockModule('../public/scripts/tool-calling.js', () => ({ ToolManager: {
     canPerformToolCalls: () => toolCallingSupported,
-    isToolCallingSupported: () => false,
+    isToolCallingSupported: (_settings, model) => historyToolsSupported && model !== 'unsupported-model',
     registerFunctionToolsOpenAI: async data => { data.tools = [{ type: 'function', function: { name: 'analyze' } }]; },
 } }));
 jest.unstable_mockModule('../public/scripts/feature-settings.js', () => ({ feature_settings: { tool_bindings: [{ name: 'analyze', enabled: true }] } }));
@@ -76,6 +83,11 @@ beforeEach(() => {
     tailContent = 'STEP_TAIL';
     toolCallingSupported = true;
     includeHistory = false;
+    historyToolsSupported = false;
+    manager.serviceSettings.openai_max_context = 100;
+    manager.serviceSettings.names_behavior = 0;
+    openai.oai_settings.names_behavior = 0;
+    globalThis.toastr = { error: jest.fn(), warning: jest.fn() };
 });
 
 test('chat memory is enabled in the initial provider settings', () => {
@@ -194,6 +206,311 @@ test('completed-run display folding still projects only final content for the ne
     expect(message.content.trim()).toBe('final prose');
     expect(message.content).not.toContain('internal note');
     expect(core.getPipelineRunState()).toBeNull();
+});
+
+function historyRecord(mes, is_user = false, extra = {}) {
+    return { name: is_user ? 'User' : 'Character', is_user, is_system: false, mes, extra };
+}
+
+function pipelineRecord() {
+    return historyRecord('&lt;analyze&gt;PRIVATE_SCRATCH&lt;/analyze&gt;\n&lt;respond&gt;EDITED_FINAL&lt;/respond&gt;', false, {
+        reply_pipeline_run: 'completed',
+        tool_invocations: [
+            { id: 'old-analysis', name: 'analyze', parameters: '{"content":"PRIVATE_SCRATCH"}', result: 'PRIVATE_SCRATCH', pipeline: { runId: 'completed' } },
+            { id: 'old-final', name: 'respond', parameters: '{"content":"STALE_FINAL"}', result: 'STALE_FINAL', pipeline: { runId: 'completed' } },
+        ],
+    });
+}
+
+async function assembleHistory(chat, { type = 'normal', preview = false, model = 'gpt-4o-mini', pipelineHistory = true, raw = false } = {}) {
+    includeHistory = true;
+    const [messages, , completion] = await openai.prepareOpenAIMessages({
+        type, assemblyModel: model, pipelineHistory,
+        messages: raw ? structuredClone(chat).reverse() : openai.setOpenAIMessages(chat, model),
+    }, preview, { bookkeep: false });
+    expect(completion.error).toBeUndefined();
+    return { messages, completion };
+}
+
+function submissions(messages) {
+    return messages.flatMap(message => message.tool_calls ?? []).filter(call => call.function.name === 'submit_story');
+}
+
+test.each([1, 2])('history preserves speaker identity in name mode %i without duplicate prefixes', async namesBehavior => {
+    historyToolsSupported = true;
+    manager.serviceSettings.openai_max_context = 2000;
+    manager.serviceSettings.names_behavior = namesBehavior;
+    openai.oai_settings.names_behavior = namesBehavior;
+    const chat = [
+        { ...historyRecord('I hold the key.', true), name: 'Alex' },
+        { ...historyRecord('I hold the map.'), name: 'Morgan' },
+        { ...historyRecord('Who has the key?', true), name: 'Alex' },
+    ];
+    const { messages } = await assembleHistory(chat);
+    expect(submissions(messages).map(call => JSON.parse(call.function.arguments).content)).toEqual([
+        'Alex: I hold the key.', 'Morgan: I hold the map.',
+    ]);
+    expect((await assembleHistory(chat, { preview: true })).messages).toEqual(messages);
+    const upstream = postProcessPrompt(structuredClone(messages), { userName: 'Alex', charName: 'Morgan' });
+    expect(upstream.some(message => message.role === 'user' && message.content === 'Alex: Who has the key?')).toBe(true);
+    runtime.endPipelineRun();
+    openai.oai_settings.reply_pipeline.enabled = false;
+    const off = await assembleHistory(chat, { pipelineHistory: false });
+    expect(submissions(off.messages)).toHaveLength(0);
+    const offUpstream = postProcessPrompt(structuredClone(off.messages), { userName: 'Alex', charName: 'Morgan' });
+    expect(offUpstream.some(message => message.content === 'Alex: I hold the key.')).toBe(true);
+});
+
+test('pipeline history projects old users and effective replies once without changing stored records', async () => {
+    historyToolsSupported = true;
+    manager.serviceSettings.openai_max_context = 2000;
+    const chat = [historyRecord('OLD_USER', true), pipelineRecord(), historyRecord('CURRENT_USER', true)];
+    const before = structuredClone(chat);
+    const { messages } = await assembleHistory(chat);
+    const calls = submissions(messages);
+    expect(calls.map(call => JSON.parse(call.function.arguments).content.trim())).toEqual(['OLD_USER', 'EDITED_FINAL']);
+    for (const call of calls) {
+        const index = messages.findIndex(message => message.tool_calls?.some(item => item.id === call.id));
+        expect(messages[index].role).toBe('assistant');
+        expect(messages[index + 1]).toEqual({ role: 'tool', content: '已收到。', tool_call_id: call.id });
+    }
+    expect(messages.filter(message => message.role === 'user')).toEqual([
+        { role: 'user', content: '以下是此前已经发生的对话。' },
+        { role: 'user', content: 'CURRENT_USER' },
+    ]);
+    for (const text of ['PRIVATE_SCRATCH', 'STALE_FINAL', 'old-analysis', 'old-final', '&lt;respond&gt;']) {
+        expect(JSON.stringify(messages)).not.toContain(text);
+    }
+    expect(JSON.stringify(messages).match(/EDITED_FINAL/g)).toHaveLength(1);
+    expect(chat).toEqual(before);
+    const { messages: preview } = await assembleHistory(chat, { preview: true });
+    expect(preview).toEqual(messages);
+});
+
+test('history excludes instructions, summaries, media, reasoning and genuine tool records', async () => {
+    historyToolsSupported = true;
+    manager.serviceSettings.openai_max_context = 4000;
+    const ordinary = { id: 'real-lookup', name: 'lookup', parameters: '{}', result: 'lookup result' };
+    const messages = [
+        { role: 'system', content: 'SYSTEM' },
+        { role: 'user', content: 'OLD_USER' },
+        { role: 'assistant', content: 'INJECTED_ASSISTANT', injected: true },
+        { role: 'assistant', content: 'SUMMARY', summaryMeta: { turnIndex: 0 } },
+        { role: 'assistant', content: 'IMAGE_CAPTION', media: [{ type: 'image', url: 'unused' }] },
+        { role: 'assistant', content: 'REASONED_REPLY', reasoning: 'reasoning' },
+        { role: 'assistant', content: 'REAL_SYSTEM', isSystemRecord: true },
+        { role: 'assistant', content: 'ORDINARY_CARD', isSystemRecord: true, invocations: [ordinary] },
+        { role: 'assistant', content: 'ABANDONED_SCRATCH', isSystemRecord: true, invocations: [{ ...ordinary, id: 'abandoned', pipeline: { runId: 'old' } }] },
+        { role: 'assistant', content: 'MIXED_CARD', isSystemRecord: true, invocations: [{ ...ordinary, id: 'mixed-real' }, { ...ordinary, id: 'mixed-pipeline', pipeline: { runId: 'old' } }] },
+        { role: 'user', content: 'CURRENT_USER' },
+        { role: 'user', content: 'INJECTED_USER', injected: true },
+    ];
+    const { messages: wire } = await assembleHistory(messages, { raw: true });
+    expect(submissions(wire).map(call => JSON.parse(call.function.arguments).content)).toEqual(['OLD_USER']);
+    for (const text of ['SYSTEM', 'INJECTED_ASSISTANT', 'SUMMARY', 'IMAGE_CAPTION', 'REASONED_REPLY', 'REAL_SYSTEM', 'CURRENT_USER', 'INJECTED_USER']) {
+        expect(wire.some(message => message.content === text)).toBe(true);
+    }
+    expect(wire.filter(message => message.role === 'tool').map(message => message.tool_call_id)).toEqual(expect.arrayContaining(['real-lookup', 'mixed-real', 'mixed-pipeline']));
+    expect(JSON.stringify(wire)).not.toContain('ABANDONED_SCRATCH');
+});
+
+test('reasoning provenance survives model change and does not turn into story submissions', async () => {
+    historyToolsSupported = true;
+    manager.serviceSettings.openai_max_context = 2000;
+    const chat = [historyRecord('REASONED', false, { api: 'other', model: 'other', reasoning: 'private reasoning' }), historyRecord('NOW', true)];
+    const { messages } = await assembleHistory(chat);
+    expect(submissions(messages)).toHaveLength(0);
+    expect(messages.some(message => message.content === 'REASONED')).toBe(true);
+    expect(JSON.stringify(messages)).not.toContain('private reasoning');
+});
+
+test.each(['quiet', 'raw', 'chat_memory', 'disabled', 'no-runnable', 'unsupported-model', 'o1'])(
+    'history projection is scoped out for %s', async scope => {
+        historyToolsSupported = true;
+        manager.serviceSettings.openai_max_context = 2000;
+        if (scope === 'disabled' || scope === 'no-runnable') {
+            runtime.endPipelineRun();
+            openai.oai_settings.reply_pipeline.enabled = scope !== 'disabled';
+            openai.oai_settings.reply_pipeline.steps = [];
+        }
+        const { messages } = await assembleHistory([historyRecord('OLD', true), pipelineRecord(), historyRecord('NOW', true)], {
+            type: ['quiet', 'raw', 'chat_memory'].includes(scope) ? scope : 'normal',
+            model: ['unsupported-model', 'o1'].includes(scope) ? scope : 'gpt-4o-mini',
+            pipelineHistory: false,
+        });
+        expect(submissions(messages)).toHaveLength(0);
+        expect(messages.some(message => message.role === 'user' && message.content === 'OLD')).toBe(true);
+    },
+);
+
+test('synthetic call IDs are stable and cannot collide with real calls', async () => {
+    historyToolsSupported = true;
+    manager.serviceSettings.openai_max_context = 2000;
+    const chat = [historyRecord('OLD', true), historyRecord('OLDER_REPLY'), historyRecord('NOW', true)];
+    const first = await assembleHistory(chat);
+    const collision = submissions(first.messages)[0]?.id;
+    expect(collision).toBeDefined();
+    const real = historyRecord('lookup card', false, { tool_invocations: [{ id: collision, name: 'lookup', parameters: '{}', result: 'lookup' }] });
+    real.is_system = true;
+    chat.splice(2, 0, real);
+    const { messages } = await assembleHistory(chat);
+    const ids = messages.flatMap(message => message.tool_calls ?? []).map(call => call.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(messages.some(message => message.role === 'tool' && message.tool_call_id === collision)).toBe(true);
+    expect((await assembleHistory(chat)).messages).toEqual(messages);
+});
+
+test.each([[57, false], [58, true]])('history budget %i admits the anchor and a whole synthetic pair or neither', async (budget, admitted) => {
+    historyToolsSupported = true;
+    manager.serviceSettings.openai_max_context = budget;
+    tailContent = '';
+    count.mockImplementation(async value => (Array.isArray(value) ? value : [value]).reduce((sum, message) => {
+        if (message.tool_calls) return sum + 20;
+        if (message.role === 'tool') return sum + 7;
+        if (message.content === '以下是此前已经发生的对话。') return sum + 5;
+        if (message.content === 'NOW') return sum + 3;
+        return sum;
+    }, 0));
+    // context - output(20) - priming(3) - current input(3) - anchor(5) = pair budget.
+    const { messages, completion } = await assembleHistory([historyRecord('OLD', true), historyRecord('NOW', true)]);
+    expect(submissions(messages)).toHaveLength(admitted ? 1 : 0);
+    expect(messages.filter(message => message.role === 'tool')).toHaveLength(admitted ? 1 : 0);
+    expect(messages.some(message => message.content === '以下是此前已经发生的对话。')).toBe(admitted);
+    expect(messages.some(message => message.content === 'NOW')).toBe(true);
+    if (!admitted) expect(completion.getDroppedEntries().some(entry => entry.content === 'OLD')).toBe(true);
+});
+
+test.each([
+    [61, false, false, true],
+    [62, true, false, false],
+    [70, true, false, false],
+    [71, true, true, true],
+])('history budget %i charges a user injection and the anchor only when needed', async (budget, hasInjection, hasEarlier, hasAnchor) => {
+    historyToolsSupported = true;
+    manager.serviceSettings.openai_max_context = budget;
+    tailContent = '';
+    count.mockImplementation(async value => (Array.isArray(value) ? value : [value]).reduce((sum, message) => {
+        if (message.tool_calls) return sum + 20;
+        if (message.role === 'tool') return sum + 7;
+        if (message.content === '以下是此前已经发生的对话。') return sum + 5;
+        if (message.content === 'NOW') return sum + 3;
+        if (message.content === 'USER_INJECTION') return sum + 9;
+        if (message.content === 'EARLIER_SYSTEM') return sum + 4;
+        return sum;
+    }, 0));
+    const chat = [
+        { role: 'system', content: 'EARLIER_SYSTEM' },
+        { role: 'user', content: 'USER_INJECTION', injected: true },
+        { role: 'assistant', content: 'OLD' },
+        { role: 'user', content: 'NOW' },
+    ];
+    const { messages } = await assembleHistory(chat, { raw: true });
+    expect(submissions(messages)).toHaveLength(1);
+    expect(messages.some(message => message.content === 'USER_INJECTION')).toBe(hasInjection);
+    expect(messages.some(message => message.content === 'EARLIER_SYSTEM')).toBe(hasEarlier);
+    expect(messages.some(message => message.content === '以下是此前已经发生的对话。')).toBe(hasAnchor);
+    expect((await assembleHistory(chat, { raw: true, preview: true })).messages).toEqual(messages);
+});
+
+test.each([
+    'Short instruction',
+    'History instruction from the user: keep track of the location, the characters, and everything they have said and done so far.',
+])('a user injection fits without an unnecessary anchor at a real tokenizer boundary: %s', async instruction => {
+    const encoding = get_encoding('cl100k_base');
+    historyToolsSupported = true;
+    tailContent = '';
+    count.mockImplementation(async (value, full = false) => {
+        const messages = Array.isArray(value) ? value : [value];
+        return messages.reduce((sum, message) => sum + 6 + Object.entries(message).reduce(
+            (tokens, [key, content]) => tokens + encoding.encode(content).length + (key === 'name' ? 1 : 0), 0,
+        ), -1) - (full ? 0 : 2);
+    });
+    const chat = [
+        { role: 'user', content: instruction, injected: true },
+        { role: 'assistant', content: 'Past story' },
+        { role: 'user', content: 'Continue' },
+    ];
+    try {
+        manager.serviceSettings.openai_max_context = 2000;
+        const wide = await assembleHistory(chat, { raw: true });
+        const normalized = wide.messages.map(message => Object.fromEntries(Object.entries(message).filter(([, value]) => value !== undefined)
+            .map(([key, value]) => [key, typeof value === 'string' ? value : JSON.stringify(value)])));
+        const messageTokens = (await Promise.all(normalized.map(message => count([message])))).reduce((a, b) => a + b, 0);
+        const toolTokens = await count([{ role: 'user', content: JSON.stringify({ tools: [{ type: 'function', function: { name: 'analyze' } }] }) }]);
+        const run = core.getPipelineRunState();
+        const instructionTokens = await count([{ role: 'system', content: core.buildStepPrompt(run.steps[run.index], run.index, run.steps.length) }], true);
+        manager.serviceSettings.openai_max_context = 20 + 3 + messageTokens + toolTokens + instructionTokens;
+        const exact = await assembleHistory(chat, { raw: true });
+        expect(exact.messages).toEqual(wide.messages);
+        expect(exact.messages.some(message => message.content === instruction)).toBe(true);
+        expect(exact.messages.some(message => message.content === '以下是此前已经发生的对话。')).toBe(false);
+        const upstream = postProcessPrompt(structuredClone(exact.messages), { userName: 'User', charName: 'Character' });
+        expect(upstream.some(message => message.content === 'Let\'s get started.')).toBe(false);
+    } finally { encoding.free(); }
+});
+
+test.each([[81, false], [82, true]])('budget %i rolls back tentative real calls unless the preceding user fits', async (budget, includeRealCall) => {
+    historyToolsSupported = true;
+    manager.serviceSettings.openai_max_context = budget;
+    tailContent = '';
+    count.mockImplementation(async value => (Array.isArray(value) ? value : [value]).reduce((sum, message) => {
+        if (message.tool_calls) return sum + 20;
+        if (message.role === 'tool') return sum + 7;
+        if (message.content === '以下是此前已经发生的对话。') return sum + 5;
+        if (message.content === 'NOW') return sum + 3;
+        if (message.content === 'SHORT_USER') return sum + 2;
+        return sum;
+    }, 0));
+    const chat = [
+        { role: 'user', content: 'SHORT_USER', injected: true },
+        { role: 'assistant', content: '', isSystemRecord: true, invocations: [{ id: 'real', name: 'lookup', parameters: '{}', result: 'RESULT' }] },
+        { role: 'assistant', content: 'OLD' },
+        { role: 'user', content: 'NOW' },
+    ];
+    const { messages, completion } = await assembleHistory(chat, { raw: true });
+    expect(submissions(messages)).toHaveLength(1);
+    expect(messages.some(message => message.tool_calls?.some(call => call.id === 'real'))).toBe(includeRealCall);
+    expect(messages.some(message => message.tool_call_id === 'real')).toBe(includeRealCall);
+    expect(messages.some(message => message.content === 'SHORT_USER')).toBe(includeRealCall);
+    expect(messages.some(message => message.content === '以下是此前已经发生的对话。')).toBe(!includeRealCall);
+    if (!includeRealCall) expect(completion.getDroppedEntries().some(entry => entry.content === 'SHORT_USER')).toBe(true);
+    expect((await assembleHistory(chat, { raw: true, preview: true })).messages).toEqual(messages);
+});
+
+test('a budget-filled projected history passes the wire budget check with the real counter convention', async () => {
+    const encoding = get_encoding('cl100k_base');
+    historyToolsSupported = true;
+    tailContent = '';
+    // Client sends one message per count request. The server adds 3 tokens
+    // per message plus 3 padding; the client starts at -1 and subtracts 2
+    // unless full=true. Preserve that convention, not just text token costs.
+    count.mockImplementation(async (value, full = false) => {
+        const messages = Array.isArray(value) ? value : [value];
+        return messages.reduce((sum, message) => sum + 6 + Object.entries(message).reduce(
+            (tokens, [key, content]) => tokens + encoding.encode(content).length + (key === 'name' ? 1 : 0), 0,
+        ), -1) - (full ? 0 : 2);
+    });
+    const chat = Array.from({ length: 20 }, (_, index) => historyRecord(`PAST_${index} ${'story '.repeat(15)}`, index % 2 === 0));
+    chat.push(historyRecord('NOW', true));
+    try {
+        for (const context of [300, 350, 400]) {
+            runtime.endPipelineRun();
+            runtime.beginPipelineRun();
+            manager.serviceSettings.openai_max_context = context;
+            openai.oai_settings.openai_max_context = context;
+            const { messages, completion } = await assembleHistory(chat);
+            expect(submissions(messages).length).toBeGreaterThan(0);
+            expect(completion.getDroppedEntries().length).toBeGreaterThan(0);
+            const { generate_data } = await openai.buildChatCompletionRequest({ type: 'normal', messages, model: 'gpt-4o-mini', emitSettingsReady: true });
+            const upstream = postProcessPrompt(structuredClone(generate_data.messages), { userName: 'User', charName: 'Character' });
+            // The history anchor must prevent server-only placeholder growth.
+            expect(upstream.some(message => message.content === 'Let\'s get started.')).toBe(false);
+            const normalized = upstream.map(message => Object.fromEntries(Object.entries(message).map(([key, value]) => [key, typeof value === 'string' ? value : JSON.stringify(value)])));
+            const wireTokens = 3 + (await Promise.all(normalized.map(message => count([message])))).reduce((sum, tokens) => sum + tokens, 0);
+            const toolTokens = await count([{ role: 'system', content: JSON.stringify(generate_data.tools) }], true);
+            expect(wireTokens + toolTokens + generate_data.max_tokens).toBeLessThanOrEqual(context);
+        }
+    } finally { encoding.free(); }
 });
 
 test('budget boundary counts native null content and tool argument bytes with a real tokenizer', async () => {

@@ -182,6 +182,24 @@ export function calculateCanonicalCharacterChatStats(db, ownerId) {
     };
 }
 
+/** Updates existing active characters inside the caller's session transaction. */
+export function syncCanonicalCharacterChatStats(db, locator, nowMs) {
+    if (locator.ownerType !== 'character') return;
+    const stats = calculateCanonicalCharacterChatStats(db, locator.ownerId);
+    db.prepare(`
+        INSERT INTO character_chat_stats (
+            character_id, chat_count, chat_size_bytes, date_last_chat_ms, stats_updated_at_ms
+        )
+        SELECT id, ?, ?, ?, ? FROM characters
+        WHERE avatar_filename = ? AND deleted_at_ms IS NULL
+        ON CONFLICT(character_id) DO UPDATE SET
+            chat_count = excluded.chat_count,
+            chat_size_bytes = excluded.chat_size_bytes,
+            date_last_chat_ms = excluded.date_last_chat_ms,
+            stats_updated_at_ms = excluded.stats_updated_at_ms
+    `).run(stats.chatCount, stats.chatSize, stats.dateLastChat, nowMs, `${locator.ownerId}.png`);
+}
+
 export function serializeCanonicalChatSession(db, sessionId) {
     const session = db.prepare('SELECT source_jsonl FROM chat_sessions WHERE id = ?').get(sessionId);
     return session?.source_jsonl ?? null;
