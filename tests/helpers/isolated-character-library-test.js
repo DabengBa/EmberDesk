@@ -12,8 +12,8 @@ import { promisify } from 'node:util';
 const repoRoot = fileURLToPath(new URL('../..', import.meta.url));
 const execFileAsync = promisify(execFile);
 
-// Each worker gets a fresh seeded server, distinct from the shared E2E server
-// and from other workers. Both browser pages within a test use that server.
+// Each test gets a fresh seeded server, distinct from the shared E2E server
+// and from other tests. Both browser pages within a test use that server.
 export function isolatedCharacterLibraryTest({ lazy }) {
     return base.extend({
         // Playwright requires a destructured fixture argument even when empty.
@@ -63,7 +63,7 @@ export function isolatedCharacterLibraryTest({ lazy }) {
                 }
                 await fs.rm(root, { recursive: true, force: true });
             }
-        }, { scope: 'worker', timeout: 120_000 }],
+        }, { scope: 'test', timeout: 120_000 }],
         baseURL: async ({ isolatedServer }, use) => { await use(isolatedServer); },
     });
 }

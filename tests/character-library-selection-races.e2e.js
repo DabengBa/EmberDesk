@@ -3,6 +3,22 @@ import { testSetup } from './frontend/frontent-test-utils.js';
 
 const test = isolatedCharacterLibraryTest({ lazy: true });
 
+test.beforeEach(async ({ page }) => {
+    // Memory generation can save the chat and reject a deliberate character switch.
+    await page.route('**/api/settings/get', async route => {
+        const response = await route.fetch();
+        const payload = await response.json();
+        const settings = JSON.parse(payload.settings);
+        settings.oai_settings.chat_memory_enabled = false;
+        await route.fulfill({ response, json: { ...payload, settings: JSON.stringify(settings) } });
+    });
+    // These races control snapshot publication; real SSE has separate coverage.
+    await page.route('**/api/characters/events', route => route.fulfill({ status: 204 }));
+    const eventsResponse = page.waitForResponse('**/api/characters/events');
+    await testSetup.awaitST({ page });
+    expect((await eventsResponse).status()).toBe(204);
+});
+
 const editor = '[data-react-authoring-owner="characterAuthoring"]';
 const description = `${editor} [data-react-authoring-field="description"] textarea`;
 const authoringName = `${editor} [data-react-authoring-field="name"] input`;
@@ -91,7 +107,6 @@ async function evidence(testInfo, value) {
 }
 
 test('a refresh started on A must not undo a completed UI selection of B', async ({ page }, testInfo) => {
-    await testSetup.awaitST({ page });
     await clickCharacter(page, 1);
     await settled(page, 1);
     const gate = await hold(page, '/api/characters/all', () => true, list => list.map(c => c.avatar === avatar(3) ? { ...c, name: `${c.name} changed` } : c));
@@ -122,7 +137,6 @@ test('a refresh started on A must not undo a completed UI selection of B', async
 });
 
 test('a reordered refresh during B chat loading keeps B chat and editor aligned', async ({ page }, testInfo) => {
-    await testSetup.awaitST({ page });
     await clickCharacter(page, 1);
     await settled(page, 1);
     const gate = await hold(page, '/api/chats/get', request => request.postDataJSON().avatar_url === avatar(2));
@@ -154,7 +168,6 @@ test('a reordered refresh during B chat loading keeps B chat and editor aligned'
 });
 
 test('U013 ordinary detail loading writes the response and reports success', async ({ page }) => {
-    await testSetup.awaitST({ page });
     const result = await page.evaluate(async target => {
         const app = await import('/script.js');
         const chars = window.SillyTavern.getContext().characters;
@@ -168,7 +181,6 @@ test('U013 ordinary detail loading writes the response and reports success', asy
 });
 
 test('U013 replaced still-shallow target discards old detail and reports failure', async ({ page }) => {
-    await testSetup.awaitST({ page });
     const target = avatar(10);
     const gate = await hold(page, '/api/characters/get', request => request.postDataJSON().avatar_url === target);
     try {
@@ -201,7 +213,6 @@ test('U013 replaced still-shallow target discards old detail and reports failure
 });
 
 test('a captured shallow detail response must not overwrite a newer published detail', async ({ page }, testInfo) => {
-    await testSetup.awaitST({ page });
     const shallow = await page.evaluate(a => window.SillyTavern.getContext().characters.find(c => c.avatar === a)?.shallow, avatar(4));
     expect(shallow, 'The isolated server must serve shallow characters').toBe(true);
     const gate = await hold(page, '/api/characters/get', request => request.postDataJSON().avatar_url === avatar(4));
@@ -226,7 +237,6 @@ test('a captured shallow detail response must not overwrite a newer published de
 });
 
 async function selectAThenB(page) {
-    await testSetup.awaitST({ page });
     await clickCharacter(page, 1);
     await settled(page, 1);
 }
@@ -316,7 +326,6 @@ test('U012 missing current B still warns and reloads even when old A remains', a
 });
 
 test('U014 normal shallow selection loads real detail and chat', async ({ page }, testInfo) => {
-    await testSetup.awaitST({ page });
     const target = avatar(7);
     expect(await page.evaluate(a => window.SillyTavern.getContext().characters.find(c => c.avatar === a)?.shallow, target)).toBe(true);
     const detail = page.waitForResponse(r => r.url().endsWith('/api/characters/get') && r.request().postDataJSON()?.avatar_url === target);
@@ -342,7 +351,6 @@ test('U014 normal shallow selection loads real detail and chat', async ({ page }
 });
 
 test('U014 observe selected shallow replacement while detail responses are in flight', async ({ page }, testInfo) => {
-    await testSetup.awaitST({ page });
     const target = avatar(8);
     const pending = [];
     const handler = async route => {
@@ -408,7 +416,6 @@ test('U014 observe selected shallow replacement while detail responses are in fl
 });
 
 test('refresh while a React description autosave is held preserves draft and save target', async ({ page }, testInfo) => {
-    await testSetup.awaitST({ page });
     await clickCharacter(page, 5);
     await settled(page, 5);
     let release;
