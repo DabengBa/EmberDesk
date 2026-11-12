@@ -2,6 +2,7 @@ import { describe, expect, jest, test } from '@jest/globals';
 import { readFileSync } from 'node:fs';
 
 jest.unstable_mockModule('../public/scripts/utils.js', () => ({ debounce: fn => fn, escapeRegex: value => value }));
+jest.unstable_mockModule('../public/lib.js', () => ({ DOMPurify: { sanitize: jest.fn() } }));
 
 const { AutoComplete } = await import('../public/scripts/autocomplete/AutoComplete.js');
 

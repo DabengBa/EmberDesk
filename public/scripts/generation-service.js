@@ -250,28 +250,7 @@ export class GenerationStreamSession {
         await this.reasoningHandler.process(messageId, mesChanged, this.promptReasoning);
         processedText = state.chat[messageId].mes;
 
-        if (!isReactMainChatOwner()) {
-            const formattedText = messageFormatting(
-                processedText,
-                state.chat[messageId].name,
-                state.chat[messageId].is_system,
-                state.chat[messageId].is_user,
-                messageId,
-                {},
-                false,
-            );
-            if (this.messageTextDom instanceof HTMLElement) {
-                this.messageTextDom.innerHTML = formattedText;
-            }
-
-            const timePassed = formatGenerationTimer(this.timeStarted, currentTime, 0, this.reasoningHandler.getDuration(), this.timeToFirstToken);
-            if (this.messageTimerDom instanceof HTMLElement) {
-                this.messageTimerDom.textContent = timePassed.timerValue;
-                this.messageTimerDom.title = timePassed.timerTitle;
-            }
-        } else {
-            scheduleMainChatMessageListPanelRefresh();
-        }
+        scheduleMainChatMessageListPanelRefresh();
 
         if (!state.scrollLock) {
             scrollChatToBottom({ waitForFrame: true });

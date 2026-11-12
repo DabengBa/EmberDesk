@@ -1347,9 +1347,26 @@ export function addDOMPurifyHooks() {
             return;
         }
 
+        // Trim literal serialized boundary whitespace without reparsing the
+        // subtree DOMPurify is currently walking. NBSP serializes as &nbsp;.
+        const trimSerializedWhitespace = (value, start) => {
+            let index = start ? 0 : value.length - 1;
+            while (index >= 0 && index < value.length) {
+                const character = value[index];
+                if (!/\s/u.test(character) || character === '\u00a0') break;
+                index += start ? 1 : -1;
+            }
+            return start ? value.slice(index) : value.slice(0, index + 1);
+        };
+
         // Replace line breaks with <br> in unknown elements
         if (node instanceof HTMLUnknownElement) {
-            node.innerHTML = node.innerHTML.trim();
+            if (node.firstChild?.nodeType === Node.TEXT_NODE) {
+                node.firstChild.data = trimSerializedWhitespace(node.firstChild.data, true);
+            }
+            if (node.lastChild?.nodeType === Node.TEXT_NODE) {
+                node.lastChild.data = trimSerializedWhitespace(node.lastChild.data, false);
+            }
 
             /** @type {Text[]} */
             const candidates = [];

@@ -1255,6 +1255,34 @@ test.describe('chat message streaming', () => {
         });
     });
 
+    test('React slash details render dynamic help as sanitized HTML', async ({ page }) => {
+        await testSetup.awaitST({ page });
+        await selectCharacterInFreshChat(page, characterName);
+        await page.evaluate(async () => {
+            const { SlashCommandParser } = await import('/scripts/slash-commands/SlashCommandParser.js');
+            const { SlashCommand } = await import('/scripts/slash-commands/SlashCommand.js');
+            const { SlashCommandArgument } = await import('/scripts/slash-commands/SlashCommandArgument.js');
+            const attack = '<img src="data:image/png;base64,AA==" onerror="window.__reactSlashHelpXss=1"><a href="javascript:alert(1)">unsafe link</a>';
+            window.__reactSlashHelpXss = 0;
+            SlashCommandParser.addCommandObject(SlashCommand.fromProps({
+                name: 'secureproof',
+                helpString: `<strong>Safe help</strong>${attack}`,
+                unnamedArgumentList: [SlashCommandArgument.fromProps({ description: `<em>Safe argument</em>${attack}` })],
+            }));
+        });
+
+        const composer = page.locator('#send_textarea');
+        await composer.focus();
+        await composer.pressSequentially('/securep');
+        await expectMainChatSlashUiOwner(page, { visible: true });
+        await composer.pressSequentially('roof');
+        const details = page.locator('[data-main-chat-slash-ui-details="react"]');
+        await expect(details).toContainText('Safe help');
+        await expect(details).toContainText('Safe argument');
+        await expect(details.locator('[onerror], a[href^="javascript:"]')).toHaveCount(0);
+        expect(await page.evaluate(() => window.__reactSlashHelpXss)).toBe(0);
+    });
+
     test('pipeline incompatible model never retries or reaches fallback provider', async ({ page }) => {
         await testSetup.awaitST({ page });
         await selectCharacterInFreshChat(page, characterName);

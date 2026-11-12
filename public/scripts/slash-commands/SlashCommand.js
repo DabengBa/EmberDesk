@@ -1,4 +1,4 @@
-import { hljs } from '../../lib.js';
+import { DOMPurify, hljs } from '../../lib.js';
 import { t } from '../i18n.js';
 import { SlashCommandAbortController } from './SlashCommandAbortController.js';
 import { SlashCommandArgument, SlashCommandNamedArgument } from './SlashCommandArgument.js';
@@ -188,10 +188,7 @@ export class SlashCommand {
                     help.classList.add('help');
                     const content = document.createElement('span'); {
                         content.classList.add('helpContent');
-                        content.innerHTML = this.helpString;
-                        const text = content.textContent;
-                        content.innerHTML = '';
-                        content.textContent = text;
+                        content.textContent = DOMPurify.sanitize(this.helpString ?? '', { RETURN_DOM_FRAGMENT: true }).textContent;
                         help.append(content);
                     }
                     li.append(help);
@@ -330,7 +327,7 @@ export class SlashCommand {
                                 }
                                 const desc = document.createElement('div'); {
                                     desc.classList.add('argument-description');
-                                    desc.innerHTML = arg.description;
+                                    desc.append(DOMPurify.sanitize(arg.description ?? '', { RETURN_DOM_FRAGMENT: true }));
                                     listItem.append(desc);
                                 }
                                 args.append(listItem);
@@ -388,7 +385,7 @@ export class SlashCommand {
                                 }
                                 const desc = document.createElement('div'); {
                                     desc.classList.add('argument-description');
-                                    desc.innerHTML = arg.description;
+                                    desc.append(DOMPurify.sanitize(arg.description ?? '', { RETURN_DOM_FRAGMENT: true }));
                                     listItem.append(desc);
                                 }
                                 args.append(listItem);
@@ -408,7 +405,7 @@ export class SlashCommand {
             }
             const help = document.createElement('span'); {
                 help.classList.add('help');
-                help.innerHTML = helpString;
+                help.append(DOMPurify.sanitize(helpString, { RETURN_DOM_FRAGMENT: true }));
                 for (const code of help.querySelectorAll('pre > code')) {
                     code.classList.add('language-stscript');
                     hljs.highlightElement(/**@type {HTMLElement}*/(code));

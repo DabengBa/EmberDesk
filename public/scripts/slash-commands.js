@@ -129,7 +129,7 @@ function renderMainChatSlashCommandDetailsHtml(option) {
 
     const detailsContainer = document.createElement('div');
     detailsContainer.append(option.renderDetails());
-    return detailsContainer.innerHTML;
+    return DOMPurify.sanitize(detailsContainer.innerHTML);
 }
 
 export function setMainChatSlashCommandReactOwnerEnabled(enabled) {

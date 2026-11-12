@@ -11,7 +11,7 @@ jest.unstable_mockModule('../public/scripts/feature-settings.js', () => ({ featu
 jest.unstable_mockModule('../public/scripts/tool-bindings.js', () => ({ syncPipelineToolBindings: jest.fn() }));
 const composer = await import('../public/scripts/main-chat-composer-service.js');
 const { registerGenerationShellContext } = await import('../public/scripts/generation-shell-context.js');
-const { executeGenerationRequestInShell } = await import('../public/scripts/generation-service.js');
+const { executeGenerationRequestInShell, GenerationStreamSession } = await import('../public/scripts/generation-service.js');
 
 let context;
 let submission;
@@ -94,6 +94,41 @@ test('stop during the first await does not recreate a live request', async () =>
     expect(context.processCommands).not.toHaveBeenCalled();
     expect(context.sendMessageAsUser).not.toHaveBeenCalled();
     expect(composer.getComposerValue()).toBe('submitted text');
+});
+
+test.each([false, true])('streaming updates React state without writing legacy message HTML (owner=%s)', async owner => {
+    class Element {}
+    const previousElement = globalThis.HTMLElement;
+    const previousDocument = globalThis.document;
+    const text = Object.assign(new Element(), { innerHTML: 'original' });
+    const row = Object.assign(new Element(), { querySelector: selector => selector === '.mes_text' ? text : null });
+    globalThis.HTMLElement = Element;
+    globalThis.document = { querySelector: () => row };
+    context.state.chat = [{ mes: '', name: 'Assistant', extra: {} }];
+    context.state.scrollLock = true;
+    context.state.ReasoningHandler = class {
+        updateDom() {}
+        async process() {}
+        getDuration() { return 0; }
+    };
+    context.cleanUpMessage = ({ getMessage }) => getMessage;
+    context.countOccurrences = () => 0;
+    context.isOdd = () => false;
+    context.isReactMainChatOwner = () => owner;
+    context.messageFormatting = jest.fn(() => '<img src=x onerror=alert(1)>');
+    context.formatGenerationTimer = () => ({ timerValue: '', timerTitle: '' });
+    context.scheduleMainChatMessageListPanelRefresh = jest.fn();
+    try {
+        const session = new GenerationStreamSession('normal', false, new Date(), null);
+        await session.onProgressStreaming(0, 'streamed text', true);
+        expect(context.state.chat[0].mes).toBe('streamed text');
+        expect(text.innerHTML).toBe('original');
+        expect(context.messageFormatting).not.toHaveBeenCalled();
+        expect(context.scheduleMainChatMessageListPanelRefresh).toHaveBeenCalled();
+    } finally {
+        globalThis.HTMLElement = previousElement;
+        globalThis.document = previousDocument;
+    }
 });
 
 const chatsSource = readFileSync(new URL('../public/scripts/chats.js', import.meta.url), 'utf8');

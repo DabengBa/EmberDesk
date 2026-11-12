@@ -78,13 +78,13 @@ describe('React runtime boundary', () => {
         const generationSession = generationServiceSource.match(
             /class GenerationStreamSession \{[\s\S]*?\n\}\n\nexport async function executeGenerationRequestInShell/,
         )?.[0] ?? '';
-        expect(generationSession).toContain('if (isReactMainChatOwner())');
-        const generationGuard = generationSession.match(
-            /if \(isReactMainChatOwner\(\)\) \{[\s\S]*?return;\n        \}/,
+        const streamingMethod = generationSession.match(
+            /async onProgressStreaming\([\s\S]*?\n    \}\n\n    \/\*\*/,
         )?.[0] ?? '';
-        expect(generationGuard).toContain('return;');
-        expect(generationGuard).not.toContain('this.messageTextDom.innerHTML');
-        expect(generationGuard).not.toContain('this.messageTimerDom.textContent');
+        expect(streamingMethod).toContain('scheduleMainChatMessageListPanelRefresh();');
+        expect(streamingMethod).not.toContain('isReactMainChatOwner');
+        expect(streamingMethod).not.toContain('messageTextDom.innerHTML');
+        expect(streamingMethod).not.toContain('messageTimerDom.textContent');
 
         const messageServiceSource = fs.readFileSync(
             path.join(repoRoot, 'public', 'scripts', 'message-service.js'),
