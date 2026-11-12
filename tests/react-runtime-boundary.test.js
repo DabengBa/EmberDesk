@@ -96,6 +96,8 @@ describe('React runtime boundary', () => {
         expect(appendMediaBlock).toMatch(
             /if \(isReactMainChatOwner\(\)\) \{\s*scheduleMainChatMessageListPanelRefresh\(\);\s*return;/,
         );
+        const updateElementBlock = messageServiceSource.match(/export function updateMessageElement\([\s\S]*?\n\}/)?.[0] ?? '';
+        expect(updateElementBlock).toMatch(/closest\('\[data-main-chat-message-row-owner="react"\]'\)[\s\S]*?scheduleMainChatMessageListPanelRefresh\(\);[\s\S]*?return messageElement;/);
 
         const recoveryBlock = scriptSource.match(
             /function clearGenerationAutoRecoveryStatus[\s\S]*?export async function redisplayChat/,
@@ -106,14 +108,12 @@ describe('React runtime boundary', () => {
         expect(recoveryBlock).toContain("messageElement.find('.generation_failure_notice').length");
 
         const editorBlock = scriptSource.match(
-            /export async function messageEdit\([\s\S]*?async function messageEditDone/,
+            /export async function messageEdit\([\s\S]*?async function messageEditDone\([\s\S]*?\n\}/,
         )?.[0] ?? '';
-        expect(editorBlock).toContain('if (isReactMainChatOwner())');
-        expect(scriptSource).toContain('function startMainChatMessageEdit(');
-        expect(scriptSource).toContain('function updateMainChatMessageEdit(');
-        expect(scriptSource).toContain('async function commitMainChatMessageEdit(');
-        expect(scriptSource).toContain('async function cancelMainChatMessageEdit(');
-        expect(editorBlock.indexOf('return;')).toBeLessThan(editorBlock.indexOf('const messageElement'));
+        expect(editorBlock).toContain('getChatMessageCommands().startMessageEdit(messageId)');
+        expect(editorBlock).toContain('getChatMessageCommands().cancelMessageEdit(messageId)');
+        expect(editorBlock).toContain('getChatMessageCommands().commitMessageEdit(this_edit_mes_id)');
+        expect(editorBlock).not.toMatch(/chatElement|messageElement|querySelector|innerHTML|\.find\(/);
     });
 
     test('keeps React-owned in-context marker in the snapshot path', () => {
@@ -141,15 +141,17 @@ describe('React runtime boundary', () => {
         const moveBlock = scriptSource.match(
             /async function messageEditMove\(sourceId, targetId\) \{[\s\S]*?\n\}\n\nasync function messageEditDone/,
         )?.[0] ?? '';
-        const reactMoveBranch = moveBlock.match(
-            /if \(isReactMainChatOwner\(\)\) \{[\s\S]*?\n    \}/,
-        )?.[0] ?? '';
-
-        expect(reactMoveBranch).toContain('chat[sourceId], chat[targetId]');
-        expect(reactMoveBranch).toContain('await saveChatConditional();');
-        expect(reactMoveBranch).toContain('void mountReactMainChatMessageListPanel();');
-        expect(reactMoveBranch).not.toContain('chatElement');
-        expect(moveBlock.indexOf(reactMoveBranch)).toBeLessThan(moveBlock.indexOf('const targetMessageDiv = chatElement'));
+        const commandSource = fs.readFileSync(path.join(repoRoot, 'public', 'scripts', 'chat-message-commands.js'), 'utf8');
+        const moveCommand = commandSource.match(/async function moveMessage\([\s\S]*?\n    \}/)?.[0] ?? '';
+        expect(moveBlock).toContain('getChatMessageCommands().moveMessage(sourceId, targetId)');
+        expect(moveBlock).not.toMatch(/chatElement|querySelector|messageElement/);
+        expect(moveCommand).toContain('[chat[source], chat[target]] = [chat[target], chat[source]]');
+        expect(moveCommand).toContain('remapUi(');
+        expect(moveCommand).toContain('await deps.save()');
+        expect(moveCommand).toContain('deps.refresh()');
+        expect(moveCommand).not.toMatch(/chatElement|querySelector|messageElement|\bdocument\b/);
+        expect(scriptSource).toContain('save: () => saveChatConditional()');
+        expect(scriptSource).toContain('refresh: () => scheduleMainChatMessageListPanelRefresh()');
     });
 
     test('routes React editing actions through named data commands', () => {
@@ -166,18 +168,25 @@ describe('React runtime boundary', () => {
             'utf8',
         );
 
-        expect(commandsSource).toContain('copyMessage(messageId: number): CommandResult;');
-        expect(commandsSource).toContain('duplicateMessage(messageId: number): CommandResult;');
-        expect(commandsSource).toContain('deleteMessage(messageId: number): CommandResult;');
-        expect(commandsSource).toContain("moveMessage(messageId: number, direction: 'up' | 'down'): CommandResult;");
-        expect(rowSource).toContain('commands?.copyMessage(numericMessageId)');
-        expect(rowSource).toContain('commands?.duplicateMessage(numericMessageId)');
-        expect(rowSource).toContain('commands?.deleteMessage(numericMessageId)');
-        expect(rowSource).toContain('commands?.moveMessage(numericMessageId,');
-        expect(scriptSource).toContain('copyMessage: messageId => copyMainChatMessage(messageId)');
-        expect(scriptSource).toContain('duplicateMessage: messageId => duplicateMainChatMessage(messageId)');
-        expect(scriptSource).toContain('deleteMessage(\n                messageId,\n                true,');
-        expect(scriptSource).toContain('moveMessage: (messageId, direction) =>');
+        expect(commandsSource).toContain('copyMessage(messageUid: string): CommandResult;');
+        expect(commandsSource).toContain('duplicateMessage(messageUid: string): CommandResult;');
+        expect(commandsSource).toContain('deleteMessage(messageUid: string): CommandResult;');
+        expect(commandsSource).toContain("moveMessage(messageUid: string, direction: 'up' | 'down'): CommandResult;");
+        expect(rowSource).toContain('commands?.copyMessage(messageUid)');
+        expect(rowSource).toContain('commands?.duplicateMessage(messageUid)');
+        expect(rowSource).toContain('commands?.deleteMessage(messageUid)');
+        expect(rowSource).toContain('commands?.moveMessage(messageUid,');
+        const commandSource = fs.readFileSync(path.join(repoRoot, 'public', 'scripts', 'chat-message-commands.js'), 'utf8');
+        const portBlock = scriptSource.match(/function getMainChatMessageListReactCommands\(\) \{[\s\S]*?\n\}/)?.[0] ?? '';
+        expect(portBlock).toContain('...getChatMessageCommands()');
+        expect(portBlock).toContain('...rowCommands');
+        expect(portBlock).toContain('createChatMessageRowCommands({');
+        const rowCommandsSource = fs.readFileSync(path.join(repoRoot, 'public', 'scripts', 'chat-message-row-commands.js'), 'utf8');
+        expect(rowCommandsSource).toContain('getMessageUid(message) === uid');
+        expect(rowCommandsSource).toContain('commands.deleteMessage(index, true)');
+        expect(rowCommandsSource).toContain('commands.moveMessage(index, index +');
+        expect(commandSource).toContain('copyMessage, duplicateMessage, deleteMessage, deleteRange, moveMessage');
+        expect(commandSource).not.toMatch(/\bdocument\b|querySelector|chatElement|innerHTML/);
     });
 
     test('routes React reasoning controls through named state commands without message DOM reads', () => {
@@ -199,42 +208,41 @@ describe('React runtime boundary', () => {
         );
 
         [
-            'setMessageReasoningOpen(messageId: number, open: boolean): CommandResult;',
-            'copyMessageReasoning(messageId: number): CommandResult;',
-            'startMessageReasoningEdit(messageId: number): CommandResult;',
-            'updateMessageReasoningEdit(messageId: number, text: string): CommandResult;',
-            'commitMessageReasoningEdit(messageId: number): CommandResult;',
-            'cancelMessageReasoningEdit(messageId: number): CommandResult;',
-            'deleteMessageReasoning(messageId: number): CommandResult;',
+            'setMessageReasoningOpen(messageUid: string, open: boolean): CommandResult;',
+            'copyMessageReasoning(messageUid: string): CommandResult;',
+            'startMessageReasoningEdit(messageUid: string): CommandResult;',
+            'updateMessageReasoningEdit(messageUid: string, text: string): CommandResult;',
+            'commitMessageReasoningEdit(messageUid: string): CommandResult;',
+            'cancelMessageReasoningEdit(messageUid: string): CommandResult;',
+            'deleteMessageReasoning(messageUid: string): CommandResult;',
             'collapseAllMessageReasoning(): CommandResult;',
         ].forEach(marker => expect(commandsSource).toContain(marker));
 
         expect(projectionSource).toContain('const reasoningEditing = messageUi.reasoningEditing === true;');
         expect(projectionSource).toContain('messageUi.reasoningEditText,');
-        expect(rowSource).toContain('commands?.setMessageReasoningOpen(numericMessageId');
-        expect(rowSource).toContain('commands?.startMessageReasoningEdit(numericMessageId)');
-        expect(rowSource).toContain('commands?.updateMessageReasoningEdit(numericMessageId');
-        expect(rowSource).toContain('commands?.commitMessageReasoningEdit(numericMessageId)');
-        expect(rowSource).toContain('commands?.cancelMessageReasoningEdit(numericMessageId)');
-        expect(rowSource).toContain('commands?.copyMessageReasoning(numericMessageId)');
-        expect(rowSource).toContain('commands?.deleteMessageReasoning(numericMessageId)');
+        expect(rowSource).toContain('commands?.setMessageReasoningOpen(messageUid');
+        expect(rowSource).toContain('commands?.startMessageReasoningEdit(messageUid)');
+        expect(rowSource).toContain('commands?.updateMessageReasoningEdit(messageUid');
+        expect(rowSource).toContain('commands?.commitMessageReasoningEdit(messageUid)');
+        expect(rowSource).toContain('commands?.cancelMessageReasoningEdit(messageUid)');
+        expect(rowSource).toContain('commands?.copyMessageReasoning(messageUid)');
+        expect(rowSource).toContain('commands?.deleteMessageReasoning(messageUid)');
         expect(rowSource).toContain('commands?.collapseAllMessageReasoning()');
         expect(rowSource).toContain('event.stopPropagation();');
 
-        const reasoningCommandsStart = scriptSource.indexOf('function setMainChatMessageReasoningOpen(');
-        const reasoningCommandsEnd = scriptSource.indexOf(
-            '\n/**\n * Create the message edit UI.',
-            reasoningCommandsStart,
-        );
-        const reasoningCommandsBlock = reasoningCommandsStart >= 0 && reasoningCommandsEnd > reasoningCommandsStart
-            ? scriptSource.slice(reasoningCommandsStart, reasoningCommandsEnd)
-            : '';
-
-        expect(reasoningCommandsBlock).toContain('saveChatConditional();');
-        expect(reasoningCommandsBlock).toContain('eventSource.emit(event_types.MESSAGE_REASONING_EDITED');
-        expect(reasoningCommandsBlock).toContain('eventSource.emit(event_types.MESSAGE_REASONING_DELETED');
-        expect(reasoningCommandsBlock).not.toContain('querySelector');
-        expect(reasoningCommandsBlock).not.toContain('messageBlock');
+        const commandSource = fs.readFileSync(path.join(repoRoot, 'public', 'scripts', 'chat-message-commands.js'), 'utf8');
+        const reasoningCommandsBlock = fs.readFileSync(path.join(repoRoot, 'public', 'scripts', 'chat-message-reasoning-commands.js'), 'utf8');
+        const reasoningSource = fs.readFileSync(path.join(repoRoot, 'public', 'scripts', 'reasoning.js'), 'utf8');
+        expect(scriptSource).toContain('getChatMessageCommands: () => getChatMessageCommands()');
+        expect(scriptSource).toContain('save: () => saveChatConditional()');
+        expect(scriptSource).toContain('emit: (event, id) => eventSource.emit(event_types[event], id)');
+        expect(scriptSource).toContain('...getChatMessageCommands()');
+        expect(commandSource).toContain('...createChatMessageReasoningCommands({ ...deps, commitMessageEdit, cancelMessageEdit })');
+        expect(reasoningSource).toContain('requireMessageShellContext().getChatMessageCommands()');
+        expect(reasoningCommandsBlock).toContain('await deps.save()');
+        expect(reasoningCommandsBlock).toContain("deps.emit('MESSAGE_REASONING_EDITED', id)");
+        expect(reasoningCommandsBlock).toContain("deps.emit('MESSAGE_REASONING_DELETED', id)");
+        expect(reasoningCommandsBlock).not.toMatch(/querySelector|messageBlock|\bdocument\b|chatElement|innerHTML/);
     });
 
     test('routes visible composer controls through named commands without replacing DOM nodes', () => {
@@ -274,8 +282,8 @@ describe('React runtime boundary', () => {
         expect(rowSource).toContain('message.actionsExpanded');
         expect(rowSource).toContain("message.actionsExpanded ? 'extraMesButtons visible' : 'extraMesButtons'");
         expect(rowSource).toContain('className="mes_button mes_edit_delete');
-        expect(rowSource).toContain('commands?.copyMessage(numericMessageId)');
-        expect(rowSource).toContain('commands?.deleteMessage(numericMessageId)');
+        expect(rowSource).toContain('commands?.copyMessage(messageUid)');
+        expect(rowSource).toContain('commands?.deleteMessage(messageUid)');
         expect(scriptSource).toContain('actionsExpanded');
         expect(scriptSource).toContain('setMainChatMessageUiState(messageId, { actionsExpanded: true });');
         expect(actionBlock).not.toContain('document.querySelector');
@@ -291,14 +299,18 @@ describe('React runtime boundary', () => {
         const deleteBlock = scriptSource.match(
             /export async function deleteMessage\([\s\S]*?\n\}\n\nexport const reloadChatMutex/,
         )?.[0] ?? '';
-        const reactDeleteBranch = deleteBlock.match(
-            /if \(isReactMainChatOwner\(\)\) \{[\s\S]*?\n    \}/,
-        )?.[0] ?? '';
-
-        expect(reactDeleteBranch).toContain('saveChatDebounced();');
-        expect(reactDeleteBranch).toContain('void mountReactMainChatMessageListPanel();');
-        expect(reactDeleteBranch).not.toContain('messageElement');
-        expect(reactDeleteBranch).not.toContain('chatElement');
+        const commandSource = fs.readFileSync(path.join(repoRoot, 'public', 'scripts', 'chat-message-commands.js'), 'utf8');
+        const deleteCommand = commandSource.match(/async function deleteRange\([\s\S]*?\n    \}/)?.[0] ?? '';
+        expect(deleteBlock).toContain('getChatMessageCommands().deleteMessage(id, askConfirmation)');
+        expect(deleteBlock).not.toMatch(/messageElement|chatElement|querySelector/);
+        expect(deleteCommand).toContain('deps.getChat().splice(id, count)');
+        expect(deleteCommand).toContain('remapUi(');
+        expect(deleteCommand).toContain('deps.saveDebounced()');
+        expect(deleteCommand).toContain("deps.emit('MESSAGE_DELETED', deps.getChat().length)");
+        expect(deleteCommand).toContain('deps.refresh()');
+        expect(deleteCommand).not.toMatch(/messageElement|chatElement|querySelector|\bdocument\b/);
+        expect(scriptSource).toContain('saveDebounced: () => saveChatDebounced()');
+        expect(scriptSource).toContain('refresh: () => scheduleMainChatMessageListPanelRefresh()');
     });
 
     test('refreshes React-owned recovery replacements after updating the stored message', () => {

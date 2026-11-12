@@ -3,9 +3,8 @@
  *
  * Message objects in `chat[]` keep their object identity across splice,
  * reorder, and in-place edits (mes/extra mutation), so a WeakMap gives every
- * message a stable uid for the lifetime of the loaded chat without touching
- * the persisted data model. Indices remain the command-addressing surface;
- * uids are rendering identity only.
+ * message a stable uid for React row commands and rendering without touching
+ * the persisted data model. Compatibility commands continue to accept indices.
  */
 
 const messageUids = new WeakMap();

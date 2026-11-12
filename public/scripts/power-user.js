@@ -489,6 +489,7 @@ export function resetMovableStyles(id) {
     }
 }
 
+
 const EPHEMERAL_STOPPING_STRINGS = [];
 
 /**
