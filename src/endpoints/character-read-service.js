@@ -1,8 +1,9 @@
-class CanonicalReadBlockedError extends Error {
-    constructor(reason) {
+export class CanonicalReadBlockedError extends Error {
+    constructor(reason, safeReason) {
         super(reason);
         this.name = 'CanonicalReadBlockedError';
         this.reason = reason;
+        this.safeReason = safeReason;
     }
 }
 
@@ -120,11 +121,13 @@ async function getCanonicalReadState(handle, directories, dependencies) {
         db,
     }) ?? { ok: true, blocking: false, reason: null };
     if (auditStatus.blocking) {
+        // Persisted audit reasons are arbitrary data, not public error categories.
         return {
             enabled: false,
             strict: !!featureFlags.strict,
             readsRequested: true,
             fallbackReason: auditStatus.reason ?? 'audit_drift_blocked',
+            safeReason: 'canonical_storage_unavailable',
         };
     }
 
@@ -143,7 +146,7 @@ function maybeThrowCanonicalFallback(canonicalState) {
         return;
     }
 
-    throw new CanonicalReadBlockedError(canonicalState.fallbackReason);
+    throw new CanonicalReadBlockedError(canonicalState.fallbackReason, canonicalState.safeReason ?? canonicalState.fallbackReason);
 }
 
 /**
@@ -158,7 +161,7 @@ function maybeThrowCanonicalFallback(canonicalState) {
  * @param {CharacterReadFilter} [options.filter]
  * @param {CharacterReadPagination} [options.pagination]
  * @param {object} options.dependencies
- * @returns {Promise<{ result: { mode: 'snapshot', data: object[] }, interactionPath: string, latencyHint: CharacterReadLatencyHint }>}
+ * @returns {Promise<{ result: { mode: 'snapshot', data: object[] }, interactionPath: string, latencyHint: CharacterReadLatencyHint, canonicalUnavailable?: string }>}
  */
 export async function readCharacterListPayload({
     handle = null,
@@ -193,10 +196,13 @@ export async function readCharacterListPayload({
     // Canonical storage is the only runtime authority: files are export
     // surfaces, so an unavailable canonical backend yields an empty snapshot
     // with the blocking reason rather than a file-backed list.
-    return maybeAttachFallbackReason(wrapSnapshot([], {
-        interactionPath: 'characters_all:canonical_unavailable',
-        latencyHint: 'instant',
-    }), canonicalState.fallbackReason);
+    return {
+        ...maybeAttachFallbackReason(wrapSnapshot([], {
+            interactionPath: 'characters_all:canonical_unavailable',
+            latencyHint: 'instant',
+        }), canonicalState.fallbackReason),
+        canonicalUnavailable: canonicalState.safeReason ?? canonicalState.fallbackReason,
+    };
 }
 
 /**
@@ -210,7 +216,7 @@ export async function readCharacterListPayload({
  * @param {CharacterReadFilter} [options.filter]
  * @param {CharacterReadPagination} [options.pagination]
  * @param {object} options.dependencies
- * @returns {Promise<{ result: { mode: 'snapshot', data: object[] }, latencyHint: CharacterReadLatencyHint }>}
+ * @returns {Promise<{ result: { mode: 'snapshot', data: object[] }, latencyHint: CharacterReadLatencyHint, canonicalUnavailable?: string }>}
  */
 export async function readCharacterSummaryPayload({
     handle = null,
@@ -233,7 +239,10 @@ export async function readCharacterSummaryPayload({
 
     maybeThrowCanonicalFallback(canonicalState);
 
-    return maybeAttachFallbackReason(wrapSnapshot([], { latencyHint: 'instant' }), canonicalState.fallbackReason);
+    return {
+        ...maybeAttachFallbackReason(wrapSnapshot([], { latencyHint: 'instant' }), canonicalState.fallbackReason),
+        canonicalUnavailable: canonicalState.safeReason ?? canonicalState.fallbackReason,
+    };
 }
 
 /**
@@ -248,6 +257,7 @@ export async function readCharacterSummaryPayload({
  *   result?: { mode: 'snapshot', data: object },
  *   interactionPath: string,
  *   latencyHint: CharacterReadLatencyHint,
+ *   canonicalUnavailable?: string,
  * }>}
  */
 export async function readCharacterFullPayload({
@@ -289,5 +299,6 @@ export async function readCharacterFullPayload({
         interactionPath: 'characters_get:canonical_unavailable',
         latencyHint: 'instant',
         ...(fallbackReason ? { fallbackReason } : {}),
+        ...(!canonicalState.enabled ? { canonicalUnavailable: canonicalState.safeReason ?? canonicalState.fallbackReason } : {}),
     };
 }

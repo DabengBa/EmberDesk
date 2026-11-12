@@ -245,6 +245,10 @@ async function serializeCanonicalChatRoutePayload(request, locator) {
  * @returns {void}
  */
 function syncCanonicalChatStatsAfterCharacterChatMutation(handle, directories, avatar, operation) {
+    // All callers follow a successful ordinary canonical write. With projection
+    // off that transaction already maintains stats; never overwrite it later.
+    if (getChatsProjectionMode() === 'off') return;
+
     if (!avatar) {
         return;
     }

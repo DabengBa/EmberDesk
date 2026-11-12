@@ -6,6 +6,7 @@ import dns from 'node:dns';
 import process from 'node:process';
 import http from 'node:http';
 import https from 'node:https';
+import { characterLibraryChangeObserver } from './character-library-change-observer.js';
 
 import cors from 'cors';
 import { csrfSync } from 'csrf-sync';
@@ -501,6 +502,7 @@ function createCleanupHandler(resources) {
     return async function exitProcess() {
         if (isExiting) return;
         isExiting = true;
+        characterLibraryChangeObserver.dispose();
         if (typeof resources.cleanupPlugins === 'function') {
             await resources.cleanupPlugins();
         }

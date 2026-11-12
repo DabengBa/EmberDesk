@@ -187,6 +187,7 @@ describe('character read service', () => {
             interactionPath: 'characters_all:canonical_unavailable',
             latencyHint: 'instant',
             fallbackReason: 'canonical_reads_disabled',
+            canonicalUnavailable: 'canonical_reads_disabled',
         });
         expect(dependencies.processCharacter).not.toHaveBeenCalled();
     });
@@ -221,6 +222,7 @@ describe('character read service', () => {
             interactionPath: 'characters_all:canonical_unavailable',
             latencyHint: 'instant',
             fallbackReason: 'canonical_storage_disabled',
+            canonicalUnavailable: 'canonical_storage_disabled',
         });
         expect(dependencies.listIndexedCharacterPayloads).not.toHaveBeenCalled();
         expect(dependencies.processCharacter).not.toHaveBeenCalled();
@@ -255,6 +257,7 @@ describe('character read service', () => {
             interactionPath: 'characters_all:canonical_unavailable',
             latencyHint: 'instant',
             fallbackReason: 'canonical_storage_disabled',
+            canonicalUnavailable: 'canonical_storage_disabled',
         });
         expect(dependencies.listIndexedCharacterPayloads).not.toHaveBeenCalled();
         expect(dependencies.processCharacter).not.toHaveBeenCalled();
@@ -281,6 +284,7 @@ describe('character read service', () => {
             },
             latencyHint: 'instant',
             fallbackReason: 'canonical_storage_disabled',
+            canonicalUnavailable: 'canonical_storage_disabled',
         });
         expect(dependencies.processCharacter).not.toHaveBeenCalled();
     });
@@ -327,6 +331,7 @@ describe('character read service', () => {
             },
             latencyHint: 'instant',
             fallbackReason: 'audit_not_run',
+            canonicalUnavailable: 'canonical_storage_unavailable',
         });
         expect(dependencies.processCharacter).not.toHaveBeenCalled();
     });
@@ -359,6 +364,7 @@ describe('character read service', () => {
             },
             latencyHint: 'instant',
             fallbackReason: 'canonical_storage_disabled',
+            canonicalUnavailable: 'canonical_storage_disabled',
         });
         expect(dependencies.listIndexedCharacterPayloads).not.toHaveBeenCalled();
         expect(dependencies.processCharacter).not.toHaveBeenCalled();
@@ -391,6 +397,7 @@ describe('character read service', () => {
             },
             latencyHint: 'instant',
             fallbackReason: 'canonical_storage_disabled',
+            canonicalUnavailable: 'canonical_storage_disabled',
         });
         expect(dependencies.listIndexedCharacterPayloads).not.toHaveBeenCalled();
         expect(dependencies.processCharacter).not.toHaveBeenCalled();
@@ -418,6 +425,7 @@ describe('character read service', () => {
             interactionPath: 'characters_get:canonical_unavailable',
             latencyHint: 'instant',
             fallbackReason: 'canonical_storage_disabled',
+            canonicalUnavailable: 'canonical_storage_disabled',
         });
         expect(dependencies.getFreshIndexedCharacterFullPayload).not.toHaveBeenCalled();
         expect(dependencies.upsertCharacterIndexEntry).not.toHaveBeenCalled();
@@ -737,12 +745,14 @@ describe('character read service', () => {
             interactionPath: 'characters_all:canonical_unavailable',
             latencyHint: 'instant',
             fallbackReason: expectedFallbackReason,
+            canonicalUnavailable: expectedFallbackReason,
         });
         expect(getResult).toEqual({
             status: 'not_found',
             interactionPath: 'characters_get:canonical_unavailable',
             latencyHint: 'instant',
             fallbackReason: expectedFallbackReason,
+            canonicalUnavailable: expectedFallbackReason,
         });
         expect(dependencies.listIndexedCharacterPayloads).not.toHaveBeenCalled();
         expect(dependencies.getFreshIndexedCharacterFullPayload).not.toHaveBeenCalled();
@@ -795,6 +805,7 @@ describe('character read service', () => {
             interactionPath: 'characters_all:canonical_unavailable',
             latencyHint: 'instant',
             fallbackReason: 'audit_not_run',
+            canonicalUnavailable: 'canonical_storage_unavailable',
         });
         expect(dependencies.listIndexedCharacterPayloads).not.toHaveBeenCalled();
         expect(dependencies.processCharacter).not.toHaveBeenCalled();
@@ -849,6 +860,7 @@ describe('character read service', () => {
             interactionPath: 'characters_all:canonical_unavailable',
             latencyHint: 'instant',
             fallbackReason: 'audit_not_run',
+            canonicalUnavailable: 'canonical_storage_unavailable',
         });
         expect(dependencies.listIndexedCharacterPayloads).not.toHaveBeenCalled();
         expect(dependencies.processCharacter).not.toHaveBeenCalled();
@@ -876,6 +888,7 @@ describe('character read service', () => {
             interactionPath: 'characters_get:canonical_unavailable',
             latencyHint: 'instant',
             fallbackReason: 'canonical_storage_disabled',
+            canonicalUnavailable: 'canonical_storage_disabled',
         });
         expect(dependencies.getFreshIndexedCharacterFullPayload).not.toHaveBeenCalled();
         expect(dependencies.upsertCharacterIndexEntry).not.toHaveBeenCalled();
@@ -903,6 +916,7 @@ describe('character read service', () => {
             interactionPath: 'characters_get:canonical_unavailable',
             latencyHint: 'instant',
             fallbackReason: 'canonical_storage_disabled',
+            canonicalUnavailable: 'canonical_storage_disabled',
         });
         expect(dependencies.getFreshIndexedCharacterFullPayload).not.toHaveBeenCalled();
         expect(dependencies.upsertCharacterIndexEntry).not.toHaveBeenCalled();
@@ -929,6 +943,7 @@ describe('character read service', () => {
             interactionPath: 'characters_get:canonical_unavailable',
             latencyHint: 'instant',
             fallbackReason: 'canonical_storage_disabled',
+            canonicalUnavailable: 'canonical_storage_disabled',
         });
         expect(dependencies.statCharacterFile).not.toHaveBeenCalled();
         expect(dependencies.processCharacter).not.toHaveBeenCalled();
@@ -958,6 +973,7 @@ describe('character read service', () => {
             interactionPath: 'characters_get:canonical_unavailable',
             latencyHint: 'instant',
             fallbackReason: 'canonical_storage_disabled',
+            canonicalUnavailable: 'canonical_storage_disabled',
         });
         expect(dependencies.getFreshIndexedCharacterFullPayload).not.toHaveBeenCalled();
         expect(dependencies.upsertCharacterIndexEntry).not.toHaveBeenCalled();
@@ -980,6 +996,7 @@ describe('character read service', () => {
             interactionPath: 'characters_get:canonical_unavailable',
             latencyHint: 'instant',
             fallbackReason: 'canonical_storage_disabled',
+            canonicalUnavailable: 'canonical_storage_disabled',
         });
         expect(dependencies.processCharacter).not.toHaveBeenCalled();
     });

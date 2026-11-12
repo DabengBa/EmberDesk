@@ -32,14 +32,15 @@ import {
     readFromV2,
 } from './character-card-v2.js';
 import {
+    CanonicalReadBlockedError,
     readCharacterFullPayload,
     readCharacterListPayload,
     readCharacterSummaryPayload,
 } from './character-read-service.js';
 import { getCanonicalStorageSlice } from '../canonical-storage-slice-registry.js';
 import { ensureCanonicalSliceBackend } from '../canonical-backend.js';
-import { getCanonicalStorageStatus, openCanonicalDatabase, withCanonicalTransaction } from '../canonical-sqlite.js';
-import { runCanonicalMigrations } from '../canonical-sqlite-migrations.js';
+import { CanonicalSqliteDisabledError, getCanonicalStorageStatus, openCanonicalDatabase, withCanonicalTransaction } from '../canonical-sqlite.js';
+import { CanonicalMigrationBlockedError, runCanonicalMigrations } from '../canonical-sqlite-migrations.js';
 import { getPersistedCanonicalAuditStatus, invalidateCanonicalAuditStatus } from '../canonical-sqlite-shadow-import.js';
 import { recordImportLedgerEntry, removeImportLedgerEntry } from '../canonical-import-ledger.js';
 import {
@@ -86,6 +87,7 @@ import { getUserDirectories } from '../users.js';
 import { ByafParser } from '../byaf.js';
 import { CharXParser, persistCharXAssets } from '../charx.js';
 import cacheBuster from '../middleware/cacheBuster.js';
+import { characterLibraryEventsHandler } from './character-library-events.js';
 
 const DELETE_PREFLIGHT_AVATAR_LIMIT = 500;
 
@@ -1164,6 +1166,29 @@ const importCharacterUpload = createCharacterImportCoordinator({
     importFromByaf,
 });
 
+const SAFE_CHARACTER_READ_REASONS = new Set([
+    'canonical_storage_disabled', 'canonical_reads_disabled', 'canonical_runtime_unsupported',
+    'canonical_migration_blocked', 'canonical_db_unavailable',
+]);
+
+function sendCanonicalReadUnavailable(response, reason) {
+    return response.status(503).send({
+        error: 'canonical_storage_unavailable',
+        reason: SAFE_CHARACTER_READ_REASONS.has(reason) ? reason : 'canonical_storage_unavailable',
+    });
+}
+
+function canonicalReadErrorReason(error) {
+    if (error instanceof CanonicalMigrationBlockedError) return 'canonical_migration_blocked';
+    if (error instanceof CanonicalReadBlockedError) return error.safeReason ?? 'canonical_storage_unavailable';
+    if (error instanceof CanonicalSqliteDisabledError) {
+        if (error.reason === 'migration_blocked') return 'canonical_migration_blocked';
+        if (error.reason === 'unsupported') return 'canonical_runtime_unsupported';
+        return 'canonical_storage_unavailable';
+    }
+    return null;
+}
+
 /**
  * @param {import("express").Request} request
  * @param {import("express").Response} response
@@ -1177,8 +1202,11 @@ async function sendCharacterListResponse(request, response) {
             dependencies: createCharacterReadDependencies(),
         });
 
+        if (payload.canonicalUnavailable) return sendCanonicalReadUnavailable(response, payload.canonicalUnavailable);
         response.send(payload.result.data);
     } catch (err) {
+        const reason = canonicalReadErrorReason(err);
+        if (reason !== null) return sendCanonicalReadUnavailable(response, reason);
         console.error(err);
         const isRangeError = err instanceof RangeError;
         response.status(500).send({ overflow: isRangeError, error: true });
@@ -1533,6 +1561,7 @@ async function importFromPng(uploadPath, { request }, preservedFileName) {
 }
 
 export const router = express.Router();
+router.get('/events', characterLibraryEventsHandler);
 
 router.post('/create', getFileNameValidationFunction('file_name'), async function (request, response) {
     try {
@@ -2066,9 +2095,12 @@ router.post('/all', async function (request, response) {
             dependencies: createCharacterReadDependencies(),
         });
 
+        if (payload.canonicalUnavailable) return sendCanonicalReadUnavailable(response, payload.canonicalUnavailable);
         applyInteractionPerfHeaders(response, payload.interactionPath, startedAt, request.user.directories);
         return response.send(payload.result.data);
     } catch (err) {
+        const reason = canonicalReadErrorReason(err);
+        if (reason !== null) return sendCanonicalReadUnavailable(response, reason);
         console.error(err);
         const isRangeError = err instanceof RangeError;
         applyInteractionPerfHeaders(response, 'characters_all:error', startedAt, request.user?.directories);
@@ -2093,6 +2125,7 @@ router.post('/get', validateAvatarUrlMiddleware, async function (request, respon
             dependencies: createCharacterReadDependencies(),
         });
 
+        if (payload.canonicalUnavailable) return sendCanonicalReadUnavailable(response, payload.canonicalUnavailable);
         if (payload.status === 'not_found') {
             return response.sendStatus(404);
         }
@@ -2100,6 +2133,8 @@ router.post('/get', validateAvatarUrlMiddleware, async function (request, respon
         applyInteractionPerfHeaders(response, payload.interactionPath, startedAt, request.user.directories);
         return response.send(payload.result.data);
     } catch (err) {
+        const reason = canonicalReadErrorReason(err);
+        if (reason !== null) return sendCanonicalReadUnavailable(response, reason);
         console.error(err);
         applyInteractionPerfHeaders(response, 'characters_get:error', startedAt, request.user?.directories);
         response.sendStatus(500);
