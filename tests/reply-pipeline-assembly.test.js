@@ -31,7 +31,13 @@ const manager = {
     isPromptDisabledForActiveCharacter: () => false,
     log: () => {},
     setChatCompletion: jest.fn(),
+    isValidName: () => true,
+    sanitizeName: value => value,
 };
+jest.unstable_mockModule('../src/util.js', () => ({
+    getConfigValue: (_key, fallback) => fallback,
+}));
+const { postProcessPrompt } = await import('../src/prompt-converters.js');
 jest.unstable_mockModule('../public/lib.js', () => ({ DOMPurify: {} }));
 jest.unstable_mockModule('../public/script.js', () => Object.fromEntries([
     'abortStatusCheck', 'extension_prompt_roles', 'extension_prompt_types', 'getExtensionPrompt', 'getExtensionPromptMaxDepth',
@@ -46,7 +52,7 @@ jest.unstable_mockModule('../public/scripts/request-context.js', () => ({ getReq
 jest.unstable_mockModule('../public/scripts/power-user.js', () => ({ forceCharacterEditorTokenize: jest.fn(), getCustomStoppingStrings: () => [] }));
 jest.unstable_mockModule('../public/scripts/secrets.js', () => Object.fromEntries(['SECRET_KEYS', 'secret_state', 'writeSecret', 'deleteSecret', 'resolveSecretKey'].map(k => [k, jest.fn()])));
 jest.unstable_mockModule('../public/scripts/sse-stream.js', () => ({ getEventSourceStream: jest.fn() }));
-jest.unstable_mockModule('../public/scripts/utils.js', () => Object.fromEntries(['createThumbnail', 'delay', 'download', 'getAudioDurationFromDataURL', 'getBase64Async', 'getFileText', 'getImageSizeFromDataURL', 'getVideoDurationFromDataURL', 'isDataURL', 'isValidUrl', 'resetScrollHeight', 'stringFormat'].map(k => [k, jest.fn()])));
+jest.unstable_mockModule('../public/scripts/utils.js', () => Object.fromEntries(['createThumbnail', 'delay', 'download', 'getAudioDurationFromDataURL', 'getBase64Async', 'getFileText', 'getImageSizeFromDataURL', 'getSanitizedFilename', 'getVideoDurationFromDataURL', 'isDataURL', 'isValidUrl', 'resetScrollHeight', 'stringFormat'].map(k => [k, jest.fn()])));
 jest.unstable_mockModule('../public/scripts/tokenizers.js', () => ({ countTokensOpenAIAsync: count }));
 jest.unstable_mockModule('../public/scripts/slash-commands/SlashCommandParser.js', () => ({ SlashCommandParser: {} }));
 jest.unstable_mockModule('../public/scripts/slash-commands/SlashCommand.js', () => ({ SlashCommand: {} }));
@@ -79,6 +85,8 @@ beforeEach(() => {
     includeHistory = false;
     historyToolsSupported = false;
     manager.serviceSettings.openai_max_context = 100;
+    manager.serviceSettings.names_behavior = 0;
+    openai.oai_settings.names_behavior = 0;
     globalThis.toastr = { error: jest.fn(), warning: jest.fn() };
 });
 
@@ -228,6 +236,31 @@ function submissions(messages) {
     return messages.flatMap(message => message.tool_calls ?? []).filter(call => call.function.name === 'submit_story');
 }
 
+test.each([1, 2])('history preserves speaker identity in name mode %i without duplicate prefixes', async namesBehavior => {
+    historyToolsSupported = true;
+    manager.serviceSettings.openai_max_context = 2000;
+    manager.serviceSettings.names_behavior = namesBehavior;
+    openai.oai_settings.names_behavior = namesBehavior;
+    const chat = [
+        { ...historyRecord('I hold the key.', true), name: 'Alex' },
+        { ...historyRecord('I hold the map.'), name: 'Morgan' },
+        { ...historyRecord('Who has the key?', true), name: 'Alex' },
+    ];
+    const { messages } = await assembleHistory(chat);
+    expect(submissions(messages).map(call => JSON.parse(call.function.arguments).content)).toEqual([
+        'Alex: I hold the key.', 'Morgan: I hold the map.',
+    ]);
+    expect((await assembleHistory(chat, { preview: true })).messages).toEqual(messages);
+    const upstream = postProcessPrompt(structuredClone(messages), { userName: 'Alex', charName: 'Morgan' });
+    expect(upstream.some(message => message.role === 'user' && message.content === 'Alex: Who has the key?')).toBe(true);
+    runtime.endPipelineRun();
+    openai.oai_settings.reply_pipeline.enabled = false;
+    const off = await assembleHistory(chat, { pipelineHistory: false });
+    expect(submissions(off.messages)).toHaveLength(0);
+    const offUpstream = postProcessPrompt(structuredClone(off.messages), { userName: 'Alex', charName: 'Morgan' });
+    expect(offUpstream.some(message => message.content === 'Alex: I hold the key.')).toBe(true);
+});
+
 test('pipeline history projects old users and effective replies once without changing stored records', async () => {
     historyToolsSupported = true;
     manager.serviceSettings.openai_max_context = 2000;
@@ -241,7 +274,10 @@ test('pipeline history projects old users and effective replies once without cha
         expect(messages[index].role).toBe('assistant');
         expect(messages[index + 1]).toEqual({ role: 'tool', content: '已收到。', tool_call_id: call.id });
     }
-    expect(messages.filter(message => message.role === 'user')).toEqual([{ role: 'user', content: 'CURRENT_USER' }]);
+    expect(messages.filter(message => message.role === 'user')).toEqual([
+        { role: 'user', content: '以下是此前已经发生的对话。' },
+        { role: 'user', content: 'CURRENT_USER' },
+    ]);
     for (const text of ['PRIVATE_SCRATCH', 'STALE_FINAL', 'old-analysis', 'old-final', '&lt;respond&gt;']) {
         expect(JSON.stringify(messages)).not.toContain(text);
     }
@@ -324,22 +360,121 @@ test('synthetic call IDs are stable and cannot collide with real calls', async (
     expect((await assembleHistory(chat)).messages).toEqual(messages);
 });
 
-test.each([[52, false], [53, true]])('history budget %i admits a whole synthetic pair or neither member', async (budget, admitted) => {
+test.each([[57, false], [58, true]])('history budget %i admits the anchor and a whole synthetic pair or neither', async (budget, admitted) => {
     historyToolsSupported = true;
     manager.serviceSettings.openai_max_context = budget;
     tailContent = '';
     count.mockImplementation(async value => (Array.isArray(value) ? value : [value]).reduce((sum, message) => {
         if (message.tool_calls) return sum + 20;
         if (message.role === 'tool') return sum + 7;
+        if (message.content === '以下是此前已经发生的对话。') return sum + 5;
         if (message.content === 'NOW') return sum + 3;
         return sum;
     }, 0));
-    // context - output(20) - assistant priming(3) - newest input(3) = pair budget.
+    // context - output(20) - priming(3) - current input(3) - anchor(5) = pair budget.
     const { messages, completion } = await assembleHistory([historyRecord('OLD', true), historyRecord('NOW', true)]);
     expect(submissions(messages)).toHaveLength(admitted ? 1 : 0);
     expect(messages.filter(message => message.role === 'tool')).toHaveLength(admitted ? 1 : 0);
+    expect(messages.some(message => message.content === '以下是此前已经发生的对话。')).toBe(admitted);
     expect(messages.some(message => message.content === 'NOW')).toBe(true);
     if (!admitted) expect(completion.getDroppedEntries().some(entry => entry.content === 'OLD')).toBe(true);
+});
+
+test.each([
+    [61, false, false, true],
+    [62, true, false, false],
+    [70, true, false, false],
+    [71, true, true, true],
+])('history budget %i charges a user injection and the anchor only when needed', async (budget, hasInjection, hasEarlier, hasAnchor) => {
+    historyToolsSupported = true;
+    manager.serviceSettings.openai_max_context = budget;
+    tailContent = '';
+    count.mockImplementation(async value => (Array.isArray(value) ? value : [value]).reduce((sum, message) => {
+        if (message.tool_calls) return sum + 20;
+        if (message.role === 'tool') return sum + 7;
+        if (message.content === '以下是此前已经发生的对话。') return sum + 5;
+        if (message.content === 'NOW') return sum + 3;
+        if (message.content === 'USER_INJECTION') return sum + 9;
+        if (message.content === 'EARLIER_SYSTEM') return sum + 4;
+        return sum;
+    }, 0));
+    const chat = [
+        { role: 'system', content: 'EARLIER_SYSTEM' },
+        { role: 'user', content: 'USER_INJECTION', injected: true },
+        { role: 'assistant', content: 'OLD' },
+        { role: 'user', content: 'NOW' },
+    ];
+    const { messages } = await assembleHistory(chat, { raw: true });
+    expect(submissions(messages)).toHaveLength(1);
+    expect(messages.some(message => message.content === 'USER_INJECTION')).toBe(hasInjection);
+    expect(messages.some(message => message.content === 'EARLIER_SYSTEM')).toBe(hasEarlier);
+    expect(messages.some(message => message.content === '以下是此前已经发生的对话。')).toBe(hasAnchor);
+    expect((await assembleHistory(chat, { raw: true, preview: true })).messages).toEqual(messages);
+});
+
+test.each([
+    'Short instruction',
+    'History instruction from the user: keep track of the location, the characters, and everything they have said and done so far.',
+])('a user injection fits without an unnecessary anchor at a real tokenizer boundary: %s', async instruction => {
+    const encoding = get_encoding('cl100k_base');
+    historyToolsSupported = true;
+    tailContent = '';
+    count.mockImplementation(async (value, full = false) => {
+        const messages = Array.isArray(value) ? value : [value];
+        return messages.reduce((sum, message) => sum + 6 + Object.entries(message).reduce(
+            (tokens, [key, content]) => tokens + encoding.encode(content).length + (key === 'name' ? 1 : 0), 0,
+        ), -1) - (full ? 0 : 2);
+    });
+    const chat = [
+        { role: 'user', content: instruction, injected: true },
+        { role: 'assistant', content: 'Past story' },
+        { role: 'user', content: 'Continue' },
+    ];
+    try {
+        manager.serviceSettings.openai_max_context = 2000;
+        const wide = await assembleHistory(chat, { raw: true });
+        const normalized = wide.messages.map(message => Object.fromEntries(Object.entries(message).filter(([, value]) => value !== undefined)
+            .map(([key, value]) => [key, typeof value === 'string' ? value : JSON.stringify(value)])));
+        const messageTokens = (await Promise.all(normalized.map(message => count([message])))).reduce((a, b) => a + b, 0);
+        const toolTokens = await count([{ role: 'user', content: JSON.stringify({ tools: [{ type: 'function', function: { name: 'analyze' } }] }) }]);
+        const run = core.getPipelineRunState();
+        const instructionTokens = await count([{ role: 'system', content: core.buildStepPrompt(run.steps[run.index], run.index, run.steps.length) }], true);
+        manager.serviceSettings.openai_max_context = 20 + 3 + messageTokens + toolTokens + instructionTokens;
+        const exact = await assembleHistory(chat, { raw: true });
+        expect(exact.messages).toEqual(wide.messages);
+        expect(exact.messages.some(message => message.content === instruction)).toBe(true);
+        expect(exact.messages.some(message => message.content === '以下是此前已经发生的对话。')).toBe(false);
+        const upstream = postProcessPrompt(structuredClone(exact.messages), { userName: 'User', charName: 'Character' });
+        expect(upstream.some(message => message.content === 'Let\'s get started.')).toBe(false);
+    } finally { encoding.free(); }
+});
+
+test.each([[81, false], [82, true]])('budget %i rolls back tentative real calls unless the preceding user fits', async (budget, includeRealCall) => {
+    historyToolsSupported = true;
+    manager.serviceSettings.openai_max_context = budget;
+    tailContent = '';
+    count.mockImplementation(async value => (Array.isArray(value) ? value : [value]).reduce((sum, message) => {
+        if (message.tool_calls) return sum + 20;
+        if (message.role === 'tool') return sum + 7;
+        if (message.content === '以下是此前已经发生的对话。') return sum + 5;
+        if (message.content === 'NOW') return sum + 3;
+        if (message.content === 'SHORT_USER') return sum + 2;
+        return sum;
+    }, 0));
+    const chat = [
+        { role: 'user', content: 'SHORT_USER', injected: true },
+        { role: 'assistant', content: '', isSystemRecord: true, invocations: [{ id: 'real', name: 'lookup', parameters: '{}', result: 'RESULT' }] },
+        { role: 'assistant', content: 'OLD' },
+        { role: 'user', content: 'NOW' },
+    ];
+    const { messages, completion } = await assembleHistory(chat, { raw: true });
+    expect(submissions(messages)).toHaveLength(1);
+    expect(messages.some(message => message.tool_calls?.some(call => call.id === 'real'))).toBe(includeRealCall);
+    expect(messages.some(message => message.tool_call_id === 'real')).toBe(includeRealCall);
+    expect(messages.some(message => message.content === 'SHORT_USER')).toBe(includeRealCall);
+    expect(messages.some(message => message.content === '以下是此前已经发生的对话。')).toBe(!includeRealCall);
+    if (!includeRealCall) expect(completion.getDroppedEntries().some(entry => entry.content === 'SHORT_USER')).toBe(true);
+    expect((await assembleHistory(chat, { raw: true, preview: true })).messages).toEqual(messages);
 });
 
 test('a budget-filled projected history passes the wire budget check with the real counter convention', async () => {
@@ -366,8 +501,14 @@ test('a budget-filled projected history passes the wire budget check with the re
             const { messages, completion } = await assembleHistory(chat);
             expect(submissions(messages).length).toBeGreaterThan(0);
             expect(completion.getDroppedEntries().length).toBeGreaterThan(0);
-            await expect(openai.buildChatCompletionRequest({ type: 'normal', messages, model: 'gpt-4o-mini', emitSettingsReady: true }))
-                .resolves.toHaveProperty('generate_data.messages');
+            const { generate_data } = await openai.buildChatCompletionRequest({ type: 'normal', messages, model: 'gpt-4o-mini', emitSettingsReady: true });
+            const upstream = postProcessPrompt(structuredClone(generate_data.messages), { userName: 'User', charName: 'Character' });
+            // The history anchor must prevent server-only placeholder growth.
+            expect(upstream.some(message => message.content === 'Let\'s get started.')).toBe(false);
+            const normalized = upstream.map(message => Object.fromEntries(Object.entries(message).map(([key, value]) => [key, typeof value === 'string' ? value : JSON.stringify(value)])));
+            const wireTokens = 3 + (await Promise.all(normalized.map(message => count([message])))).reduce((sum, tokens) => sum + tokens, 0);
+            const toolTokens = await count([{ role: 'system', content: JSON.stringify(generate_data.tools) }], true);
+            expect(wireTokens + toolTokens + generate_data.max_tokens).toBeLessThanOrEqual(context);
         }
     } finally { encoding.free(); }
 });

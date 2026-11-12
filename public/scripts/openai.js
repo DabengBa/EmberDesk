@@ -638,6 +638,50 @@ async function populateChatHistory(messages, prompts, chatCompletion, assemblySe
     // Insert chat messages as long as there is budget available
     const chatPool = [...messages].reverse();
     let historyCutOffAt = null;
+    let historyAnchor = null;
+    let historyAnchorReserved = false;
+    let tentativeHistory = null;
+    const historyCollection = chatCompletion.getMessages().getCollection().find(collection => collection?.identifier === 'chatHistory').getCollection();
+    const rollbackTentativeHistory = () => {
+        if (!tentativeHistory) return;
+        while (historyCollection.length > tentativeHistory.length) {
+            chatCompletion.freeBudget(historyCollection.shift());
+        }
+        if (tentativeHistory.anchorWasReserved) {
+            chatCompletion.reserveBudget(historyAnchor);
+            historyAnchorReserved = true;
+        }
+        historyCutOffAt = tentativeHistory.index;
+        tentativeHistory = null;
+    };
+    const canAffordHistory = (items, firstRole, index) => {
+        const needsAnchor = historyAnchor && firstRole !== 'user';
+        if (historyAnchorReserved && !needsAnchor) chatCompletion.freeBudget(historyAnchor);
+        const costs = needsAnchor && !historyAnchorReserved ? [...items, historyAnchor] : items;
+        if (!chatCompletion.canAffordAll(costs)) {
+            if (historyAnchorReserved && !needsAnchor) chatCompletion.reserveBudget(historyAnchor);
+            // An earlier user message may be cheaper than the anchor. Keep
+            // this prefix tentatively; discard it if no user or anchor fits.
+            if (needsAnchor && !historyAnchorReserved && chatCompletion.canAffordAll(items)) {
+                tentativeHistory ??= { index, length: historyCollection.length, anchorWasReserved: false };
+                return true;
+            }
+            if (needsAnchor && historyAnchorReserved) {
+                chatCompletion.freeBudget(historyAnchor);
+                if (chatCompletion.canAffordAll(items)) {
+                    tentativeHistory = { index, length: historyCollection.length, anchorWasReserved: true };
+                    historyAnchorReserved = false;
+                    return true;
+                }
+                chatCompletion.reserveBudget(historyAnchor);
+            }
+            return false;
+        }
+        if (needsAnchor && !historyAnchorReserved) chatCompletion.reserveBudget(historyAnchor);
+        historyAnchorReserved = !!needsAnchor;
+        tentativeHistory = null;
+        return true;
+    };
     for (let index = 0; index < chatPool.length; index++) {
         const chatPrompt = chatPool[index];
 
@@ -725,9 +769,14 @@ async function populateChatHistory(messages, prompts, chatCompletion, assemblySe
             for (let suffix = 1; usedCallIds.has(id); suffix++) id = `${baseId}-${suffix}`;
             usedCallIds.add(id);
             const call = await Message.createAsync('assistant', undefined, 'toolCall-' + chatMessage.identifier);
-            await call.setToolCalls([{ id, name: 'submit_story', parameters: JSON.stringify({ content: chatMessage.content }) }], false);
+            const content = chatMessage.name && !chatMessage.content.startsWith(`${chatMessage.name}: `)
+                ? `${chatMessage.name}: ${chatMessage.content}` : chatMessage.content;
+            await call.setToolCalls([{ id, name: 'submit_story', parameters: JSON.stringify({ content }) }], false);
             const receipt = await Message.createAsync('tool', '已收到。', id);
-            if (!chatCompletion.canAffordAll([call, receipt])) {
+            // Strict server processing requires a leading user. Count an
+            // explicit history anchor instead of an unknown server placeholder.
+            historyAnchor ??= await Message.createAsync('user', '以下是此前已经发生的对话。', 'pipelineHistoryAnchor');
+            if (!canAffordHistory([call, receipt], 'assistant', index)) {
                 historyCutOffAt = index;
                 break;
             }
@@ -794,7 +843,7 @@ async function populateChatHistory(messages, prompts, chatCompletion, assemblySe
             const toolCallMessage = await Message.createAsync(chatMessage.role, undefined, 'toolCall-' + chatMessage.identifier);
             const toolResultMessages = await Promise.all(invocations.slice().reverse().map((invocation) => Message.createAsync('tool', invocation.result || '[No content]', invocation.id)));
             await toolCallMessage.setToolCalls(invocations, includeSignature, includeToolReasoning);
-            if (chatCompletion.canAffordAll([toolCallMessage, ...toolResultMessages])) {
+            if (canAffordHistory([toolCallMessage, ...toolResultMessages], toolCallMessage.role, index)) {
                 // A real reply message that carries its invocations (merged
                 // pipeline card) still owns its text: emit it after the tool
                 // results. Bare card records (is_system) only replay calls.
@@ -823,13 +872,15 @@ async function populateChatHistory(messages, prompts, chatCompletion, assemblySe
             chatMessage.signature = chatPrompt.signature;
         }
 
-        if (chatCompletion.canAfford(chatMessage)) {
+        if (canAffordHistory([chatMessage], chatMessage.content || chatMessage.tool_calls ? chatMessage.role : null, index)) {
             chatCompletion.insertAtStart(chatMessage, 'chatHistory');
         } else {
             historyCutOffAt = index;
             break;
         }
     }
+
+    rollbackTentativeHistory();
 
     // Everything past the cut-off index never entered the prompt. Record it so
     // callers (e.g. the prompt inspector) can show which history was trimmed.
@@ -849,6 +900,11 @@ async function populateChatHistory(messages, prompts, chatCompletion, assemblySe
                 hasMedia: Array.isArray(chatPrompt.media) && chatPrompt.media.length > 0,
             };
         }));
+    }
+
+    if (historyAnchorReserved) {
+        chatCompletion.freeBudget(historyAnchor);
+        chatCompletion.insertAtStart(historyAnchor, 'chatHistory');
     }
 
     // Insert and free new chat
