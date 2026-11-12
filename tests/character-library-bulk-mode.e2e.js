@@ -12,6 +12,30 @@ async function openCharacterLibrary(page) {
 }
 
 test.describe('character library bulk mode', () => {
+    test('opens bulk tag editing with touch on a narrow screen', async ({ browser }) => {
+        const context = await browser.newContext({ viewport: { width: 375, height: 812 }, isMobile: true, hasTouch: true });
+        const page = await context.newPage();
+        try {
+            await testSetup.awaitST({ page });
+            await openCharacterLibrary(page);
+            await page.locator('#emberdesk-react-character-search').fill(characterName);
+            await page.getByRole('button', { name: /^(Bulk edit characters|批量编辑角色)$/ }).tap();
+            const tagsButton = page.getByRole('button', { name: /^(Bulk edit tags|批量编辑标签)$/ });
+            await expect(tagsButton).toBeDisabled();
+            const row = page.locator('#rm_print_characters_block .character_select').filter({ hasText: characterName }).first();
+            await row.tap();
+            await expect(tagsButton).toBeEnabled();
+            await tagsButton.tap();
+            const popup = page.locator('#bulk_tag_shadow_popup');
+            await expect(popup).toBeVisible();
+            await expect(popup.locator('#bulk_tag_popup_cancel')).toBeInViewport();
+            await popup.locator('#bulk_tag_popup_cancel').tap();
+            await expect(popup).toHaveCount(0);
+        } finally {
+            await context.close();
+        }
+    });
+
     test('keeps consecutive character rows visually compact', async ({ page }) => {
         await testSetup.awaitST({ page });
         await openCharacterLibrary(page);

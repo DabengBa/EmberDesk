@@ -347,6 +347,7 @@ import {
     displayChats,
     getChat,
     getPastCharacterChats,
+    shouldPreserveCharacterChatTarget,
     loadEarlierChatMessages,
     openCharacterChat,
     printMessages,
@@ -2864,7 +2865,7 @@ function getCharacterAuthoringReactCommands() {
                     try {
                         cancelDebouncedChatSave();
                         cancelDebouncedMetadataSave();
-                        await getChat({ strictReload: true });
+                        if (await getChat({ strictReload: true }) === false) return { ok: false, reason: 'chat_refresh_failed' };
                     } catch {
                         return { ok: false, reason: 'chat_refresh_failed' };
                     } finally {
@@ -3785,6 +3786,11 @@ function getReactCharacterLibraryPanelBridge() {
         deleteSelectedInBulkMode() {
             if (characterGroupOverlay?.selectedCharacters?.length) {
                 void characterGroupOverlay.handleContextMenuDelete();
+            }
+        },
+        editTagsInBulkMode() {
+            if (characterGroupOverlay?.selectedCharacters?.length) {
+                characterGroupOverlay.handleContextMenuTag();
             }
         },
         setCharacterListPage(page) {
@@ -5311,9 +5317,9 @@ function projectCharacterLibraryCharactersAgainstPendingDeletes(queryCharacters)
 
 function preserveLoadedCharacterChat(character) {
     const activeCharacter = characters[this_chid];
-    // Metadata integrity is established by getChat, including empty sessions.
-    // Initial/explicit selection clears it before loading the requested chat.
-    if (activeCharacter?.avatar === character.avatar && chat_metadata.integrity) {
+    // Preserve the requested target until its metadata has loaded successfully.
+    if (activeCharacter?.avatar === character.avatar
+        && (chat_metadata.integrity || shouldPreserveCharacterChatTarget(activeCharacter.avatar, activeCharacter.chat))) {
         character.chat = activeCharacter.chat;
     }
 }

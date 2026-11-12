@@ -51,6 +51,12 @@ const renderSelectChatListReact = (...args) => shell().renderSelectChatListReact
 
 // Guards against out-of-order chat-search responses overwriting newer results.
 let selectChatListGeneration = 0;
+let activeCharacterChatLoad;
+let failedCharacterChatLoad;
+
+export function shouldPreserveCharacterChatTarget(avatar, chat) {
+    return [activeCharacterChatLoad, failedCharacterChatLoad].some(load => load && load.avatar === avatar && load.chat === chat);
+}
 const saveTokenCache = (...args) => shell().saveTokenCache(...args);
 const scrollOnMediaLoad = (...args) => shell().scrollOnMediaLoad(...args);
 const select_rm_characters = (...args) => shell().select_rm_characters(...args);
@@ -345,6 +351,14 @@ export async function saveChat({ chatName, withMetadata, mesId, force = false, c
         [chatName, withMetadata, mesId, force] = arguments;
     }
 
+    // A cleared or failed load has no reliable metadata for an integrity-safe save.
+    const current = state.characters[state.this_chid];
+    const matchesCurrent = load => Boolean(load && current && load.avatar === current.avatar && load.chat === current.chat);
+    if ((matchesCurrent(activeCharacterChatLoad) && !activeCharacterChatLoad.ready) || matchesCurrent(failedCharacterChatLoad)) {
+        console.warn('Cannot save a chat that has not been loaded successfully.');
+        return false;
+    }
+
     const metadata = { ...state.chat_metadata, ...withMetadata };
     const fileName = chatName ?? state.characters[state.this_chid]?.chat;
 
@@ -486,8 +500,16 @@ export async function selectChatGreeting({ index, characterId, chatId }) {
 
 
 export async function getChat({ strictReload = false } = {}) {
+    const character = state.characters[state.this_chid];
+    const load = { avatar: character?.avatar, chat: character?.chat };
+    activeCharacterChatLoad = load;
+    const isCurrent = () => {
+        const current = state.characters[state.this_chid];
+        return activeCharacterChatLoad === load && current?.avatar === load.avatar && current?.chat === load.chat;
+    };
     try {
         await unshallowCharacter(state.this_chid);
+        if (!isCurrent()) return false;
 
         const response = await fetch('/api/chats/get', {
             method: 'POST',
@@ -505,6 +527,7 @@ export async function getChat({ strictReload = false } = {}) {
         }
 
         const data = await response.json();
+        if (!isCurrent()) return false;
         if (Array.isArray(data) && data.length > 0) {
             /** @type {ChatHeader} */
             const chatHeader = data.shift();
@@ -520,8 +543,11 @@ export async function getChat({ strictReload = false } = {}) {
         if (!state.chat_metadata.integrity) {
             state.chat_metadata.integrity = uuidv4();
         }
+        load.ready = true;
+        failedCharacterChatLoad = undefined;
         queueMainChatMessageListScrollRestore(state.characters[state.this_chid].chat);
         await getChatResult({ switchMenu: !strictReload });
+        if (!isCurrent()) return false;
         eventSource.emit(event_types.CHAT_LOADED, { detail: { id: state.this_chid, character: state.characters[state.this_chid] } });
 
         // Focus on the textarea if not already focused on a visible interactive
@@ -533,10 +559,16 @@ export async function getChat({ strictReload = false } = {}) {
             }
             $('#send_textarea').trigger('focus');
         });
+        return true;
     } catch (error) {
+        if (!isCurrent()) return false;
+        if (!load.ready) failedCharacterChatLoad = load;
         if (strictReload) throw error;
-        await getChatResult();
         console.log(error);
+        toastr.error(t`The chat could not be reloaded. Retry before closing.`);
+        return false;
+    } finally {
+        if (activeCharacterChatLoad === load) activeCharacterChatLoad = undefined;
     }
 }
 
@@ -553,7 +585,7 @@ export async function openCharacterChat(file_name) {
     await clearChat({ clearData: true, preserveMainChatScrollSnapshot: !isReopeningCurrentChat });
     state.characters[state.this_chid].chat = file_name;
     state.chat_metadata = {};
-    await getChat();
+    if (await getChat() === false) return;
     $('#selected_chat_pole').val(file_name);
     await createOrEditCharacter(new CustomEvent('newChat'));
 }

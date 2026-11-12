@@ -21,6 +21,7 @@ export interface CharacterLibraryToolbarBridge {
     toggleBulkEdit(): void;
     selectAllInBulkMode(): void;
     deleteSelectedInBulkMode(): void;
+    editTagsInBulkMode(): void;
     cycleTagFilter?(tagId: string): void;
     setTagFilter?(tagId: string, nextState: string): void;
     clearTagFilter?(tagId: string): void;
@@ -453,6 +454,15 @@ export function CharacterLibraryToolbar({
                                 {bulkSelectedShortText}
                             </output>
                             <ToolbarActionButton label="全" labelKey="Character Toolbar All" icon="fa-check-double" compact title="Bulk select all characters" onClick={() => bridge.selectAllInBulkMode()} />
+                            <ToolbarActionButton
+                                label="签"
+                                labelKey="Character Toolbar Tags"
+                                icon="fa-tags"
+                                compact
+                                title="Bulk edit tags"
+                                onClick={() => bridge.editTagsInBulkMode()}
+                                disabled={state.bulkSelectedCount === 0}
+                            />
                             <ToolbarActionButton
                                 label="删"
                                 labelKey="Character Toolbar Delete"
