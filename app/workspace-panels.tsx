@@ -64,7 +64,7 @@ import { RegexEditor } from './components/regex/RegexEditor';
 import { RegexSettingsPanel } from './components/regex/RegexSettingsPanel';
 import { RegexDebugger } from './components/regex/RegexDebugger';
 import { ToolBindingEditor } from './components/regex/ToolBindingEditor';
-import { RegexImportTarget } from './components/regex/RegexImportTarget';
+import { RegexImportTargetControl } from './components/regex/RegexImportTargetControl';
 import { MacroBrowserPanel, type MacroBrowserProps } from './components/macros/MacroBrowser';
 import { WorldInfoPanel } from './components/panels/WorldInfoPanel';
 import { WorkspacePanelChrome } from './components/panels/WorkspacePanelChrome';
@@ -3168,19 +3168,34 @@ export function mountTagManagement(container: HTMLElement, options: { bogusFolde
 
 /**
  * Mounts the Regex Editor popup content inside the legacy popup shell.
- * Presentation-only: extensions/regex/index.js keeps behavior ownership via
- * the preserved field classes and element IDs.
+ * The form is React-controlled; index.js supplies the draft and persistence.
  */
-export function mountRegexEditor(container: HTMLElement) {
-    mountSmallPanel(container, <RegexEditor />);
+export function mountRegexEditor(
+    container: HTMLElement,
+    options: {
+        initial?: import('./components/regex/regex-types').RegexScript | null;
+        onRun?: (script: import('./components/regex/regex-types').RegexScript, input: string) => string;
+        infoFor?: (script: import('./components/regex/regex-types').RegexScript) => string;
+        onValidityChange?: (valid: boolean) => void;
+        ref?: { current: import('./components/regex/regex-types').RegexEditorHandle | null };
+    } = {},
+) {
+    mountSmallPanel(container, <RegexEditor {...options} />);
 }
 
 /**
- * Mounts the Regex extension settings drawer content. Presentation-only:
- * extensions/regex/index.js keeps behavior ownership.
+ * Mounts the Regex settings drawer. The list, toolbar, presets and
+ * authorization toggles are React-owned through the injected bridges.
  */
-export function mountRegexSettings(container: HTMLElement) {
-    mountSmallPanel(container, <RegexSettingsPanel />);
+export function mountRegexSettings(
+    container: HTMLElement,
+    options: {
+        list?: import('./components/regex/regex-list-types').RegexListBridge;
+        toolbar?: import('./components/regex/regex-types').RegexToolbar;
+        presets?: import('./components/regex/regex-types').RegexPresetController;
+    },
+) {
+    mountSmallPanel(container, <RegexSettingsPanel {...options} />);
 }
 
 /**
@@ -3192,18 +3207,40 @@ export function mountToolBindingEditor(container: HTMLElement) {
 }
 
 /**
- * Mounts the Regex Debugger popup chrome. The rule/step templates inside are
- * rendered inertly; legacy code clones them into the dynamic lists.
+ * Mounts the Regex Debugger popup. Groups, execution, ordering and step
+ * rendering are driven by the injected command surface.
  */
-export function mountRegexDebugger(container: HTMLElement) {
-    mountSmallPanel(container, <RegexDebugger />);
+export function mountRegexDebugger(
+    container: HTMLElement,
+    options: {
+        getGroups?: () => import('./components/regex/regex-types').RegexDebugGroup[];
+        reorder?: (key: string, ids: string[]) => Promise<'saved'>;
+        runForDebug?: (
+            groups: import('./components/regex/regex-types').RegexDebugGroup[],
+            input: string,
+            options: { displayMode: 'replace' | 'highlight'; renderMode: 'text' | 'message' },
+        ) => import('./components/regex/regex-types').RegexDebugResult;
+        openEditor?: (type: import('./components/regex/regex-list-types').RegexScriptType, id?: string) => void;
+        commands?: { openStepsPopup(html: string): void; openFinalPopup(result: { text: string; html?: string }): void };
+        ref?: { current: import('./components/regex/regex-types').RegexDebuggerHandle | null };
+    } = {},
+) {
+    mountSmallPanel(container, <RegexDebugger {...options} />);
 }
 
 /**
  * Mounts the regex import target picker inside the legacy popup shell.
  */
-export function mountRegexImportTarget(container: HTMLElement, options: { characterName?: string; presetName?: string }) {
-    mountSmallPanel(container, <RegexImportTarget {...options} />);
+export function mountRegexImportTarget(
+    container: HTMLElement,
+    options: {
+        characterName?: string;
+        presetName?: string;
+        onChange?: (value: import('./components/regex/RegexImportTargetControl').RegexImportTargetValue) => void;
+        ref?: { current: import('./components/regex/RegexImportTargetControl').RegexImportTargetHandle | null };
+    },
+) {
+    mountSmallPanel(container, <RegexImportTargetControl {...options} />);
 }
 
 /**
