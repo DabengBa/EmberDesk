@@ -37,7 +37,7 @@ let runState = null;
 let initialized = false;
 
 // Prompt assembly reads this to keep replaying a mid-run card's invocations;
-// cards whose run ended (or was abandoned) flatten into plain messages.
+// completed replies instead supply effective prose for history projection.
 setActivePipelineRunIdProvider(() => runState?.runId ?? null);
 setPipelineRunStateProvider(() => runState);
 
