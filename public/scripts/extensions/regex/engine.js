@@ -132,6 +132,8 @@ export function getScriptsByType(scriptType, { allowedOnly } = DEFAULT_GET_REGEX
     }
 }
 
+let globalRegexWriteRevision = 0;
+
 /**
  * Capture the identity, not the current list, before any asynchronous work.
  * @param {SCRIPT_TYPES} scriptType Scope to capture
@@ -208,8 +210,22 @@ export async function saveScriptsByType(scripts, scriptType, target) {
         const resolved = resolveRegexTarget(target);
         if (resolved.type !== scriptType) throw new Error('Regex target type mismatch');
         if (scriptType === SCRIPT_TYPES.GLOBAL) {
+            const revision = ++globalRegexWriteRevision;
+            const hadPrevious = Object.hasOwn(feature_settings, 'regex');
+            const previous = feature_settings.regex;
+            const staged = JSON.stringify(scripts);
             feature_settings.regex = scripts;
-            await saveSettingsStrict();
+            try {
+                await saveSettingsStrict();
+            } catch (error) {
+                // Do not overwrite a replacement or an in-place edit made while
+                // this save was pending.
+                if (revision === globalRegexWriteRevision && feature_settings.regex === scripts && JSON.stringify(scripts) === staged) {
+                    if (hadPrevious) feature_settings.regex = previous;
+                    else delete feature_settings.regex;
+                }
+                throw error;
+            }
         } else if (scriptType === SCRIPT_TYPES.SCOPED) {
             await writeExtensionField(resolved.index, 'regex_scripts', scripts, { strict: true });
         } else {
@@ -220,6 +236,7 @@ export async function saveScriptsByType(scripts, scriptType, target) {
     }
     switch (scriptType) {
         case SCRIPT_TYPES.GLOBAL:
+            globalRegexWriteRevision++;
             feature_settings.regex = scripts;
             saveSettingsDebounced();
             break;

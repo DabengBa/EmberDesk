@@ -116,14 +116,14 @@ test.describe('regex rule list', () => {
         // The failure line carries the bound target label ("<scope> (global)");
         // the scope word is localized, the group key is not.
         await expect(page.locator('.regex-list-status-failure')).toContainText('(global)');
-        // Failure is reported through the bound-target status line. The in-memory
-        // list already mutated, so the row follows live state rather than rolling
-        // back — the next successful write clears the failure.
-        reject = false;
-        await action(row(page, 'React list beta'), 'toggle-on').click();
+        // Strict persistence rolls back the failed in-memory change. The row
+        // remains disabled, so the same action is available for a retry.
         await expect(row(page, 'React list beta')).toHaveClass(/regex-react-disabled/);
+        reject = false;
+        await action(row(page, 'React list beta'), 'toggle-off').click();
         await expect(page.locator('.regex-list-status-saved')).toContainText('(global)');
         await expect(page.locator('.regex-list-status-failure')).toHaveCount(0);
+        await expect(row(page, 'React list beta')).not.toHaveClass(/regex-react-disabled/);
     });
 
     test('keyboard reorder saves the new live order', async ({ page }) => {

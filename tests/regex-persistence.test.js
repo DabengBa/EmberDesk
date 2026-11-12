@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import { stripTypeScriptTypes } from 'node:module';
 import { createRegexListBridge } from '../public/scripts/extensions/regex/regex-list-bridge.js';
+import { setValueByPath } from '../public/scripts/util/primitives.js';
 
 // Unit proof: production functions with controlled browser and persistence boundaries.
 // The lane creates isolated data/tmp roots; the invoking worker owns cleanup. Budget: 10s.
@@ -158,6 +159,7 @@ test('character strict non-OK rejects without reverting a later edit', async () 
     const character = { avatar: 'a', data: { extensions: {} } };
     const context = {
         getContext: () => ({ characters: [character], characterId: 0 }), UNSET_VALUE: '__unset',
+        extensionFieldWrites: new WeakMap(),
         setValueByPath: (object, path, value) => { object.data.extensions.regex_scripts = value; },
         deleteValueByPath: jest.fn(), getRequestHeaders: () => ({}), console,
         fetch: () => new Promise(resolve => { finish = resolve; }),
@@ -327,4 +329,130 @@ test('failed preset write preserves newer settings edits rather than rolling the
     await expect(pending).rejects.toThrow('offline');
     expect(s.settings.extensions.regex_scripts).toEqual([{ id: 'later' }]);
     expect(s.presets[0].extensions.regex_scripts).toEqual([]);
+});
+
+// Integration proof: production list bridge, engine, settings save and character
+// extension writer; only HTTP and browser boundaries are controlled. Each test
+// owns its in-memory state, no shared directory or temp files; budget 10 seconds.
+function integratedMoveSetup(sourceType) {
+    const settings = settingsSetup();
+    const character = { avatar: 'alice.png', data: { extensions: { regex_scripts: sourceType === 1 ? [{ id: 'r' }] : [] } } };
+    character.json_data = JSON.stringify({ data: character.data });
+    let domValue = character.json_data;
+    const featureSettings = { regex: sourceType === 0 ? [{ id: 'r' }] : [] };
+    const requests = [];
+    let failUrl;
+    const fetch = jest.fn(async (url, request) => {
+        requests.push({ url, body: JSON.parse(request.body) });
+        if (url === failUrl) { failUrl = undefined; return { ok: false, status: 500, statusText: 'offline' }; }
+        return success(2);
+    });
+    settings.context.feature_settings = featureSettings;
+    settings.context.fetch = fetch;
+    const characterContext = {
+        getContext: () => ({ characters: [character], characterId: 0 }), UNSET_VALUE: '__@@UNSET@@__',
+        extensionFieldWrites: new WeakMap(),
+        setValueByPath, deleteValueByPath: extract('public/scripts/utils.js', 'export function deleteValueByPath(', '\n/**', {}),
+        getRequestHeaders: () => ({}), fetch, console: { error: jest.fn(), warn: jest.fn() },
+        $: () => ({ val: value => value === undefined ? domValue : (domValue = value) }),
+    };
+    const writeExtensionField = extract('public/scripts/feature-settings.js', 'export async function writeExtensionField(', '\n/**', characterContext);
+    const engineContext = { SCRIPT_TYPES: { GLOBAL: 0, SCOPED: 1, PRESET: 2 }, SCRIPT_TYPE_UNKNOWN: -1,
+        DEFAULT_GET_REGEX_SCRIPTS_OPTIONS: { allowedOnly: false }, characters: [character], this_chid: 0,
+        feature_settings: featureSettings, getPresetManager: () => null,
+        saveSettingsStrict: () => settings.save(0, { strict: true }), writeExtensionField, console };
+    const engine = functions('public/scripts/extensions/regex/engine.js', 'export function getRegexScripts(', '\n/**\n * Check if character', engineContext);
+    const bridge = createRegexListBridge({ capture: engine.captureRegexTarget, read: engine.getScriptsForTarget,
+        save: engine.saveScriptsByType, authorize: async () => {}, confirm: async () => true,
+        edit: async () => {}, exportScripts: () => {}, afterChange: async () => {} });
+    bridge.refresh();
+    return { bridge, engine, character, featureSettings, requests, fetch, getDom: () => domValue, setDom: value => { domValue = value; },
+        failNext: url => { failUrl = url; } };
+}
+
+test('global destination HTTP failure then recovery allows the real move to retry', async () => {
+    const s = integratedMoveSetup(1);
+    const action = { kind: 'move', refs: [{ groupKey: 'character:alice.png', id: 'r' }], toType: 0 };
+    s.failNext('/api/settings/save');
+    await expect(s.bridge.execute(action)).rejects.toThrow('offline');
+    expect(s.character.data.extensions.regex_scripts.map(rule => rule.id)).toEqual(['r']);
+    expect(s.featureSettings.regex).toEqual([]);
+    await expect(s.bridge.execute(action)).resolves.toBe('saved');
+    expect(s.featureSettings.regex.map(rule => rule.id)).toEqual(['r']);
+    expect(s.character.data.extensions.regex_scripts).toEqual([]);
+    expect(s.requests.filter(request => request.url === '/api/settings/save')).toHaveLength(2);
+    expect(s.requests.at(-1).url).toBe('/api/characters/merge-attributes');
+});
+
+test('character destination HTTP failure then recovery allows the real move to retry', async () => {
+    const s = integratedMoveSetup(0);
+    const action = { kind: 'move', refs: [{ groupKey: 'global', id: 'r' }], toType: 1 };
+    s.failNext('/api/characters/merge-attributes');
+    await expect(s.bridge.execute(action)).rejects.toThrow('offline');
+    expect(s.featureSettings.regex.map(rule => rule.id)).toEqual(['r']);
+    expect(s.character.data.extensions.regex_scripts).toEqual([]);
+    expect(JSON.parse(s.character.json_data).data.extensions.regex_scripts).toEqual([]);
+    expect(JSON.parse(s.getDom()).data.extensions.regex_scripts).toEqual([]);
+    await expect(s.bridge.execute(action)).resolves.toBe('saved');
+    expect(s.character.data.extensions.regex_scripts.map(rule => rule.id)).toEqual(['r']);
+    expect(JSON.parse(s.character.json_data).data.extensions.regex_scripts.map(rule => rule.id)).toEqual(['r']);
+    expect(JSON.parse(s.getDom()).data.extensions.regex_scripts.map(rule => rule.id)).toEqual(['r']);
+    expect(s.featureSettings.regex).toEqual([]);
+    expect(s.requests.filter(request => request.url === '/api/characters/merge-attributes')).toHaveLength(2);
+    expect(s.requests.at(-1).url).toBe('/api/settings/save');
+});
+
+test.each([0, 1])('failed destination type %i leaves concurrent in-place edits intact', async destination => {
+    const source = destination === 0 ? 1 : 0;
+    const s = integratedMoveSetup(source);
+    const action = { kind: 'move', refs: [{ groupKey: source === 0 ? 'global' : 'character:alice.png', id: 'r' }], toType: destination };
+    let finish;
+    s.fetch.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const pending = s.bridge.execute(action);
+    await tick();
+    const live = destination === 0 ? s.featureSettings.regex : s.character.data.extensions.regex_scripts;
+    live.push({ id: 'concurrent' });
+    if (destination === 1) {
+        const newer = JSON.parse(s.character.json_data);
+        newer.data.extensions.regex_scripts.push({ id: 'concurrent' });
+        s.character.json_data = JSON.stringify(newer);
+    }
+    finish({ ok: false, status: 500, statusText: 'offline' });
+    await expect(pending).rejects.toThrow('offline');
+    expect(live.map(rule => rule.id)).toEqual(['r', 'concurrent']);
+    expect(destination === 0 ? s.featureSettings.regex : s.character.data.extensions.regex_scripts).toBe(live);
+    if (destination === 1) expect(JSON.parse(s.character.json_data).data.extensions.regex_scripts.map(rule => rule.id)).toEqual(['r', 'concurrent']);
+});
+
+test.each([0, 1])('older failed strict write cannot undo a newer successful write of the same type %i array', async type => {
+    const s = integratedMoveSetup(type === 0 ? 1 : 0);
+    const target = s.engine.captureRegexTarget(type);
+    const scripts = [{ id: 'newer' }];
+    let finish;
+    s.fetch.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const first = s.engine.saveScriptsByType(scripts, type, target);
+    await tick();
+    await s.engine.saveScriptsByType(scripts, type, target);
+    finish({ ok: false, status: 500, statusText: 'offline' });
+    await expect(first).rejects.toThrow('offline');
+    expect(type === 0 ? s.featureSettings.regex : s.character.data.extensions.regex_scripts).toBe(scripts);
+    if (type === 1) expect(JSON.parse(s.character.json_data).data.extensions.regex_scripts).toEqual([{ id: 'newer' }]);
+});
+
+test('character rollback preserves unrelated concurrent JSON and form changes', async () => {
+    const s = integratedMoveSetup(0);
+    let finish;
+    s.fetch.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const action = { kind: 'move', refs: [{ groupKey: 'global', id: 'r' }], toType: 1 };
+    const pending = s.bridge.execute(action);
+    await tick();
+    const newer = JSON.parse(s.character.json_data);
+    newer.data.extensions.world = 'new book';
+    s.character.json_data = JSON.stringify(newer);
+    s.setDom(s.character.json_data);
+    finish({ ok: false, status: 500, statusText: 'offline' });
+    await expect(pending).rejects.toThrow('offline');
+    const json = JSON.parse(s.character.json_data);
+    expect(json.data.extensions).toEqual({ regex_scripts: [], world: 'new book' });
+    expect(JSON.parse(s.getDom())).toEqual(json);
 });
