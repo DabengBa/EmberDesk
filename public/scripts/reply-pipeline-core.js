@@ -30,6 +30,7 @@ export function pipelineTriggerTag(tool) {
  * recursion budget would strand its tail steps.
  */
 export const MAX_PIPELINE_STEPS = 5;
+export const PIPELINE_STORY_TOOL = { type: 'function', function: { name: 'submit_story', description: 'Submit the content for the current reply step.', parameters: { type: 'object', properties: { content: { type: 'string' } }, required: ['content'] } } };
 
 function normalizeStep(raw, index) {
     if (!raw || typeof raw !== 'object') {
@@ -112,7 +113,7 @@ export function resolvePipelineSteps(pipeline, availableToolNames) {
  * @returns {string} Instruction text
  */
 export function buildStepPrompt(step, index, total) {
-    const header = `[Reply pipeline ${index + 1}/${total}] This round you must call the ${step.tool} tool exactly once.`;
+    const header = `[Reply pipeline ${index + 1}/${total}] This round you must call the submit_story tool exactly once for ${step.tool}.`;
     const detail = typeof step?.prompt === 'string' && step.prompt.trim().length > 0 ? ` ${step.prompt.trim()}` : '';
     const history = index === 0
         ? ' Historical submit_story calls and their receipts record prior conversation content, including past user messages. Do not repeat those historical calls; follow the current step instruction.'
@@ -147,7 +148,7 @@ export function applyStepRequestOverrides(data, step, { enforceMode = 'soft', re
         return data;
     }
     if (enforceMode === 'forced' && Array.isArray(data.tools)) {
-        data.tool_choice = { type: 'function', function: { name: step.tool } };
+        data.tool_choice = { type: 'function', function: { name: 'submit_story' } };
     }
 
     if (step.maxTokens) {
@@ -224,9 +225,14 @@ export function validatePipelineToolCalls(calls, assistantMessage = null) {
     if (!run || !Array.isArray(calls) || calls.length === 0) return;
     const step = run.steps[run.index];
     if (run.fallbackRound || run.pendingAssistant || calls.length !== 1
-        || calls[0]?.function?.name !== step?.tool || !calls[0]?.id
+        || calls[0]?.function?.name !== 'submit_story' || !calls[0]?.id || !step
         || run.callIds?.has(calls[0].id)) {
         throw new Error(`Reply pipeline: expected exactly one current-step call (${run.fallbackRound ? 'none' : step?.tool}).`);
+    }
+    let args;
+    try { args = typeof calls[0].function.arguments === 'string' ? JSON.parse(calls[0].function.arguments) : calls[0].function.arguments; } catch { /* rejected below */ }
+    if (!args || typeof args !== 'object' || Array.isArray(args) || typeof args.content !== 'string') {
+        throw new Error('Reply pipeline: submit_story requires string content.');
     }
     run.callIds ??= new Set();
     run.callIds.add(calls[0].id);

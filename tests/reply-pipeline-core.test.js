@@ -303,7 +303,7 @@ describe('applyStepRequestOverrides tool narrowing', () => {
 
         const data = applyStepRequestOverrides(makeBody(), { tool: 'analyze' }, { enforceMode: 'forced' });
 
-        expect(data.tool_choice).toEqual({ type: 'function', function: { name: 'analyze' } });
+        expect(data.tool_choice).toEqual({ type: 'function', function: { name: 'submit_story' } });
         expect(data.tools.map(tool => tool.function.name)).toEqual(['analyze', 'review', 'respond', 'options']);
     });
 
