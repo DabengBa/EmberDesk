@@ -8,14 +8,7 @@ jest.unstable_mockModule('../public/scripts/message-service.js', () => ({ update
 jest.unstable_mockModule('../public/scripts/openai.js', () => ({ chat_completion_sources: { OPENAI: 'openai' }, getChatCompletionModel: () => 'model', model_list: [], oai_settings: { chat_completion_source: 'openai', reply_pipeline: { enabled: true, steps: [{ tool: 'analyze' }, { tool: 'later' }] } } }));
 jest.unstable_mockModule('../public/scripts/tool-bindings.js', () => ({ syncPipelineToolBindings: jest.fn() }));
 jest.unstable_mockModule('../public/scripts/popup.js', () => ({ Popup: {} }));
-jest.unstable_mockModule('../public/scripts/slash-commands/SlashCommand.js', () => ({ SlashCommand: {} }));
-jest.unstable_mockModule('../public/scripts/slash-commands/SlashCommandArgument.js', () => ({ ARGUMENT_TYPE: {}, SlashCommandArgument: {}, SlashCommandNamedArgument: {} }));
-jest.unstable_mockModule('../public/scripts/slash-commands/SlashCommandClosure.js', () => ({ SlashCommandClosure: class {} }));
-jest.unstable_mockModule('../public/scripts/slash-commands/SlashCommandCommonEnumsProvider.js', () => ({ enumIcons: {} }));
-jest.unstable_mockModule('../public/scripts/slash-commands/SlashCommandEnumValue.js', () => ({ enumTypes: {}, SlashCommandEnumValue: {} }));
-jest.unstable_mockModule('../public/scripts/slash-commands/SlashCommandParser.js', () => ({ SlashCommandParser: {} }));
-jest.unstable_mockModule('../public/scripts/slash-commands/SlashCommandReturnHelper.js', () => ({ slashCommandReturnHelper: jest.fn() }));
-jest.unstable_mockModule('../public/scripts/utils.js', () => ({ isTrueBoolean: jest.fn() }));
+
 const { ToolManager } = await import('../public/scripts/tool-calling.js');
 const { oai_settings } = await import('../public/scripts/openai.js');
 const { setPipelineRunStateProvider } = await import('../public/scripts/reply-pipeline-core.js');
@@ -37,6 +30,29 @@ beforeEach(() => {
     }
 });
 
+test('native tools remain available without the retired Slash registration API', async () => {
+    expect(ToolManager.initToolSlashCommands).toBeUndefined();
+    run = null;
+    expect(await ToolManager.invokeFunctionTool('outside', '{"content":"native"}')).toBe('raw text');
+    expect(action).toHaveBeenCalledWith({ content: 'native' });
+    expect(await ToolManager.formatToolCallMessage('outside', '{}')).toBe('toast');
+});
+
+test('native registration respects shouldRegister and stealth calls stay out of chat', async () => {
+    run = null;
+    ToolManager.registerFunctionTool({ name: 'hidden-test', description: 'hidden', parameters: {}, action, stealth: true, shouldRegister: () => false });
+    try {
+        const request = {};
+        await ToolManager.registerFunctionToolsOpenAI(request);
+        expect(request.tools.some(tool => tool.function.name === 'hidden-test')).toBe(false);
+        const result = await ToolManager.invokeFunctionTools([[call('hidden-test')]]);
+        expect(result.stealthCalls).toEqual(['hidden-test']);
+        expect(result.invocations).toEqual([]);
+        expect(action).toHaveBeenCalledTimes(1);
+    } finally {
+        ToolManager.unregisterFunctionTool('hidden-test');
+    }
+});
 test('disabled pipeline suppresses tools on the next generation without changing bindings', () => {
     run = null;
     expect(ToolManager.canPerformToolCalls('normal')).toBe(true);

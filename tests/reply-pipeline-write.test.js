@@ -15,14 +15,7 @@ jest.unstable_mockModule('../public/scripts/message-service.js', () => ({ update
 jest.unstable_mockModule('../public/scripts/openai.js', () => ({ chat_completion_sources: { OPENAI: 'openai' }, getChatCompletionModel: () => 'model', model_list: [], oai_settings: { chat_completion_source: 'openai', reply_pipeline: { enabled: true, steps: [{ tool: 'analyze' }, { tool: 'respond' }] } } }));
 jest.unstable_mockModule('../public/scripts/tool-bindings.js', () => ({ syncPipelineToolBindings: jest.fn() }));
 jest.unstable_mockModule('../public/scripts/popup.js', () => ({ Popup: {} }));
-jest.unstable_mockModule('../public/scripts/slash-commands/SlashCommand.js', () => ({ SlashCommand: {} }));
-jest.unstable_mockModule('../public/scripts/slash-commands/SlashCommandArgument.js', () => ({ ARGUMENT_TYPE: {}, SlashCommandArgument: {}, SlashCommandNamedArgument: {} }));
-jest.unstable_mockModule('../public/scripts/slash-commands/SlashCommandClosure.js', () => ({ SlashCommandClosure: class {} }));
-jest.unstable_mockModule('../public/scripts/slash-commands/SlashCommandCommonEnumsProvider.js', () => ({ enumIcons: {} }));
-jest.unstable_mockModule('../public/scripts/slash-commands/SlashCommandEnumValue.js', () => ({ enumTypes: {}, SlashCommandEnumValue: {} }));
-jest.unstable_mockModule('../public/scripts/slash-commands/SlashCommandParser.js', () => ({ SlashCommandParser: {} }));
-jest.unstable_mockModule('../public/scripts/slash-commands/SlashCommandReturnHelper.js', () => ({ slashCommandReturnHelper: jest.fn() }));
-jest.unstable_mockModule('../public/scripts/utils.js', () => ({ isTrueBoolean: jest.fn() }));
+
 const { ToolManager } = await import('../public/scripts/tool-calling.js');
 const runtime = await import('../public/scripts/reply-pipeline.js');
 const { getPipelineRunState } = await import('../public/scripts/reply-pipeline-core.js');

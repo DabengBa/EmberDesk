@@ -11,7 +11,7 @@ import {
     createAliasIndicator,
     renderMacroDetails,
 } from '../macros/engine/MacroBrowser.js';
-import { enumIcons } from '../slash-commands/SlashCommandCommonEnumsProvider.js';
+
 import { ValidFlagSymbols } from '../macros/engine/MacroFlags.js';
 import { MACRO_VARIABLE_SHORTHAND_PATTERN } from '../macros/engine/MacroLexer.js';
 
@@ -93,7 +93,7 @@ export class EnhancedMacroAutoCompleteOption extends AutoCompleteOption {
      */
     constructor(macro, contextOrOptions = null) {
         // Use the macro name as the autocomplete key
-        super(macro.name, enumIcons.macro);
+        super(macro.name, '{{');
         this.#macro = macro;
 
         // Detect if second argument is context or options

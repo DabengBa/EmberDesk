@@ -20,7 +20,7 @@ const publicRoot = path.join(repoRoot, 'public');
 export const COMPAT_CONTRACT_FAMILIES = Object.freeze([
     'events',
     'aliases',
-    'slash',
+
     'regex',
     'selectors',
     'internal-bridge',
@@ -47,34 +47,6 @@ export const requiredRegexExports = Object.freeze([
     'regex_placement',
 ]);
 
-export const requiredSlashCommandExports = Object.freeze([
-    'executeSlashCommands',
-    'executeSlashCommandsWithOptions',
-    'getSlashCommandsHelp',
-    'registerSlashCommand',
-    'parser',
-    'CONNECT_API_MAP',
-    'UNIQUE_APIS',
-    'initDefaultSlashCommands',
-    'COMMENT_NAME_DEFAULT',
-    'processChatSlashCommands',
-    'generateSystemMessage',
-    'validateArrayArgString',
-    'validateArrayArg',
-    'getNameAndAvatarForMessage',
-    'sendMessageAs',
-    'sendNarratorMessage',
-    'promptQuietForLoudResponse',
-    'isExecutingCommandsFromChatInput',
-    'commandsFromChatInputAbortController',
-    'activateScriptButtons',
-    'deactivateScriptButtons',
-    'pauseScriptExecution',
-    'stopScriptExecution',
-    'executeSlashCommandsOnChatInput',
-    'setSlashCommandAutoComplete',
-    'initSlashCommandAutoComplete',
-]);
 
 export const requiredRegexPlacements = Object.freeze({
     USER_INPUT: 1,
@@ -145,15 +117,7 @@ export const compatibilityContractEntries = Object.freeze([
         proofCommand: 'pnpm run test:compat',
         deletionReadiness: 'ready-when-replacement-proven',
     },
-    {
-        id: 'slash-command-exports',
-        family: 'slash',
-        behavior: 'slash-command public exports remain callable for internal STscript automation and tests',
-        currentProvider: 'public/scripts/slash-commands.js',
-        replacementProvider: 'compatible slash registry/executor reachable from the same public exports',
-        proofCommand: 'pnpm run test:compat',
-        deletionReadiness: 'not-ready',
-    },
+
     {
         id: 'regex-exports-and-placements',
         family: 'regex',
@@ -193,7 +157,7 @@ export const frontendCompatibilityContract = Object.freeze({
     publicShape: Object.freeze({
         scriptExports: requiredScriptExports,
         regexExports: requiredRegexExports,
-        slashCommandExports: requiredSlashCommandExports,
+
         regexPlacements: requiredRegexPlacements,
         characterRowSelectors,
         messageRowMarkers,
@@ -209,7 +173,7 @@ export const frontendCompatibilityContract = Object.freeze({
         scriptPath: path.join(publicRoot, 'script.js'),
         eventsPath: path.join(publicRoot, 'scripts', 'events.js'),
         extensionsPath: path.join(publicRoot, 'scripts', 'feature-settings.js'),
-        slashCommandsPath: path.join(publicRoot, 'scripts', 'slash-commands.js'),
+
         regexEnginePath: path.join(publicRoot, 'scripts', 'extensions', 'regex', 'engine.js'),
         libJsPath: path.join(publicRoot, 'lib.js'),
         bridgePath: path.join(repoRoot, 'app', 'compat', 'global-compatibility-bridge.js'),

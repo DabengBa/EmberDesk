@@ -11,7 +11,7 @@ related: [page.chat_workspace, feature.chat_message_actions, feature.chat_genera
 
 `feature.chat_message_rendering` represents the visible message body and stable message-row DOM identity in [Chat Workspace](page.chat_workspace). It covers already-loaded stored messages and finalized generated messages after they are rendered into the conversation surface.
 
-It does not define provider generation, streaming token append, slash-command parsing, reasoning parsing/templates, or the chat JSONL storage schema.
+It does not define provider generation, streaming token append, composer submission, reasoning parsing/templates, or the chat JSONL storage schema.
 
 ## Purpose
 
@@ -43,7 +43,7 @@ Let users reliably read opened chat history and finalized generated messages as 
 
 ## Ownership Direction
 
-React owns the main-chat typed message store, visible row output, rich-body projection, row controls including reasoning expand/copy/edit/delete/collapse, ordering, long-chat windowing, and reading-position restore. Provider transport, slash parser/registry/executor, and reasoning parsing/templates remain compatibility-owned until their own typed replacements are proven; the composer text value is owned by `main-chat-composer-service` with the uncontrolled `#send_textarea` as its render detail. Documented formatting exports may remain as thin delegates to the framework-neutral render service.
+React owns the main-chat typed message store, visible row output, rich-body projection, row controls including reasoning expand/copy/edit/delete/collapse, ordering, long-chat windowing, and reading-position restore. Provider transport and reasoning parsing/templates remain compatibility-owned; the composer text value is owned by `main-chat-composer-service` with the uncontrolled `#send_textarea` as its render detail. Documented formatting exports may remain as thin delegates to the framework-neutral render service.
 
 The React Runtime Boundary is part of this feature's implementation contract: message state enters React as an immutable snapshot, and legacy capabilities are reached only through named command ports. The public `globalThis.SillyTavern`, `eventSource`, `event_types`, selector contracts remain internal surfaces and are not React state inputs.
 
@@ -91,4 +91,4 @@ The React Runtime Boundary is part of this feature's implementation contract: me
 - The chat workspace shell and navigation context belong to [Chat Workspace](page.chat_workspace).
 - The per-character authorization control itself belongs to [Character Library Panel](feature.character_library_panel); this feature owns only what the authorization changes in a rendered row.
 - Creator's Notes styling keeps its own long-standing per-card authorization and its own, older decode path; the message-CSS policy does not extend to that spoiler, and the two preferences are granted separately.
-- Provider responses, streaming token timing, slash-command semantics, chat-file migrations, and storage schema are outside this feature.
+- Provider responses, streaming token timing, composer submission, chat-file migrations, and storage schema are outside this feature.

@@ -64,4 +64,4 @@ All main-chat and automation request families use one command/lifecycle path. Th
 - Fallback endpoint configuration belongs to [Fallback Provider](feature.fallback_provider).
 - Stable message body and row identity belong to [Chat Message Rendering](feature.chat_message_rendering).
 - Manual row retry controls belong to [Chat Message Actions](feature.chat_message_actions).
-- Quiet/background generation, provider-specific routing, and slash-command pause/continue/abort behavior are outside this feature.
+- Quiet/background generation and provider-specific routing are outside this feature.

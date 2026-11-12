@@ -29,7 +29,7 @@ Current binding points:
 - `public/scripts/world-info-shell-context.js` stores, requires, clears, and reads event-source properties from the registered shell context.
 - `public/script.js` registers settings, request-header, chat metadata, character, event, extension-prompt-role, save, and selection capabilities for World Info.
 - `public/scripts/world-info.js` keeps the compatibility barrel, service composition, and thin shell bridges. It has no second selected-entry state or legacy entry renderer/form controller.
-- `public/scripts/world-info-shell-adapter.js` owns live shell proxies; `public/scripts/world-info-runtime.js` registers chat and force-activation listeners and invokes slash registration once.
+- `public/scripts/world-info-shell-adapter.js` owns live shell proxies; `public/scripts/world-info-runtime.js` registers chat and force-activation listeners once.
 - `tests/world-info-shell-context.test.js` proves the fail-closed missing-context rule, the direct-import removal from `world-info.js`, lazy `extensionPromptRoles` registration, and event-source method binding.
 
 The context deliberately does not own editor state, imports, scanning, or storage semantics.
@@ -41,7 +41,7 @@ The context deliberately does not own editor state, imports, scanning, or storag
 - `world-info-repository.js` is shared by the editor and scanner. Its per-book queue covers the complete read/modify/write operation for field and bulk commands. Only a successful HTTP save updates the shared cache and emits `WORLDINFO_UPDATED`; a rejected save preserves the confirmed scan input and lets React retain its draft for retry. The compatibility whole-book save still has whole-document replacement semantics. Queues are browser-local, not cross-client transactions.
 - `world-info-import-command.js` owns parsing/conversion, upload outcomes, and sequential batch execution; `world-info-import-ui.js` owns conflict dialogs, progress, and result feedback. Existing converters and batch result helpers are reused.
 - `world-info-book-commands.js` and `world-info-entry-commands.js` own book/reference mutations and entry defaults/commands. Book, editor, panel, and reference UI modules adapt existing dialogs and shell controls; `world-info-book-sync.js` refreshes book lists and compatibility selectors. Cross-book moves retain target-first/source-second ordering, not an invented multi-book transaction.
-- `world-info-slash-adapter.js` retains existing command registration and synchronous compatibility surfaces without bringing entry DOM controllers back.
+- World Info Slash commands and their adapter are retired; the remaining runtime listeners do not register commands.
 - `world-info-service.js` owns scan buffers, ordering, matching, and activation. It reads through the repository and does not depend on the facade or workbench. Scan rules, regex placement, awaited scan/activation events, and lossless retired fields are unchanged. `world-info-keywords.js` exposes the existing regex-aware tokenizer to both the domain and React editor without importing shell or i18n into the React bundle.
 
 Canonical server storage and HTTP payloads are unchanged. The refactor does not introduce a second state store, runtime UI fallback, or a new TypeScript loader for public browser modules.

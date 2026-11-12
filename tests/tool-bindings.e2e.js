@@ -240,10 +240,8 @@ test.describe('tool bindings', () => {
         await installGenerateStub(page);
         await prepareOpenAiProvider(page);
 
+        await page.locator('#send_textarea').fill('tool binding e2e message');
         await page.evaluate(() => {
-            const textarea = document.querySelector('#send_textarea');
-            textarea.value = 'tool binding e2e message';
-            textarea.dispatchEvent(new Event('input', { bubbles: true }));
             window.__emberdeskToolGeneration = window.SillyTavern.getContext()
                 .generate('normal', { automatic_trigger: false })
                 .catch(error => {
@@ -340,16 +338,15 @@ test.describe('tool bindings', () => {
             window.SillyTavern.getContext().featureSettings.tool_choice_required = true;
             await script.saveSettings();
         });
+        await page.locator('#send_textarea').fill('required e2e message');
         await page.evaluate(() => {
-            const textarea = document.querySelector('#send_textarea');
-            textarea.value = 'required e2e message';
-            textarea.dispatchEvent(new Event('input', { bubbles: true }));
             window.SillyTavern.getContext()
                 .generate('normal', { automatic_trigger: false })
                 .catch(() => { });
         });
         await expect.poll(() => page.evaluate(() =>
-            window.__emberdeskToolRequests?.some(request => request.tool_choice === 'required') ?? false,
+            window.__emberdeskToolRequests?.some(request => request.tool_choice === 'required'
+                && request.messages?.some(message => String(message?.content ?? '').includes('required e2e message'))) ?? false,
         ), { timeout: 30_000 }).toBe(true);
     });
 
@@ -404,10 +401,8 @@ test.describe('tool bindings', () => {
 
         await installGenerateStub(page);
         await prepareOpenAiProvider(page);
+        await page.locator('#send_textarea').fill('no tools expected');
         await page.evaluate(() => {
-            const textarea = document.querySelector('#send_textarea');
-            textarea.value = 'no tools expected';
-            textarea.dispatchEvent(new Event('input', { bubbles: true }));
             window.__emberdeskToolGeneration = window.SillyTavern.getContext()
                 .generate('normal', { automatic_trigger: false })
                 .catch(error => {
@@ -551,9 +546,6 @@ test.describe('tool bindings', () => {
         expect(previews.requests).toBe(0);
 
         await page.evaluate(() => {
-            const textarea = document.querySelector('#send_textarea');
-            textarea.value = 'reply pipeline e2e message';
-            textarea.dispatchEvent(new Event('input', { bubbles: true }));
             window.__emberdeskToolGeneration = window.SillyTavern.getContext()
                 .generate('normal', { automatic_trigger: false })
                 .catch(error => {
@@ -693,12 +685,10 @@ test.describe('tool bindings', () => {
 
         // A later ordinary generation (pipeline disabled) must not carry stale
         // step prompts from the finished run.
+        await page.locator('#send_textarea').fill('plain follow-up message');
         await page.evaluate(() => {
             window.__emberdeskToolRequests = [];
             window.SillyTavern.getContext().chatCompletionSettings.reply_pipeline.enabled = false;
-            const textarea = document.querySelector('#send_textarea');
-            textarea.value = 'plain follow-up message';
-            textarea.dispatchEvent(new Event('input', { bubbles: true }));
             window.SillyTavern.getContext()
                 .generate('normal', { automatic_trigger: false })
                 .catch(() => { });
@@ -767,10 +757,8 @@ test.describe('tool bindings', () => {
         await installPipelineStub(page, { steps: ['analyze', 'respond'], closingText: 'FALLBACK_REPLY_TEXT' });
         await prepareOpenAiProvider(page);
 
+        await page.locator('#send_textarea').fill('reply pipeline e2e message');
         await page.evaluate(() => {
-            const textarea = document.querySelector('#send_textarea');
-            textarea.value = 'reply pipeline e2e message';
-            textarea.dispatchEvent(new Event('input', { bubbles: true }));
             window.__emberdeskToolGeneration = window.SillyTavern.getContext()
                 .generate('normal', { automatic_trigger: false })
                 .catch(error => {

@@ -36,7 +36,7 @@ import {
 } from './PromptManager.js';
 
 import { forceCharacterEditorTokenize, getCustomStoppingStrings } from './power-user.js';
-import { SECRET_KEYS, secret_state, writeSecret, deleteSecret, resolveSecretKey } from './secrets.js';
+import { SECRET_KEYS, secret_state, deleteSecret } from './secrets.js';
 
 import { getEventSourceStream } from './sse-stream.js';
 import {
@@ -55,9 +55,6 @@ import {
     stringFormat,
 } from './utils.js';
 import { countTokensOpenAIAsync } from './tokenizers.js';
-import { SlashCommandParser } from './slash-commands/SlashCommandParser.js';
-import { SlashCommand } from './slash-commands/SlashCommand.js';
-import { ARGUMENT_TYPE, SlashCommandArgument } from './slash-commands/SlashCommandArgument.js';
 import { renderTemplateAsync } from './templates.js';
 import { Popup } from './popup.js';
 import { showLocalDialog } from './local-dialogs.js';
@@ -2929,7 +2926,7 @@ export async function deleteOpenAIPreset() {
 /**
  * Applies a saved OpenAI preset by name. UI-free entry point: the retired
  * preset drawer read the name from a select element, while the workspace
- * prompt panel and slash commands pass it explicitly.
+ * prompt panel passes it explicitly.
  * @param {string} presetName Preset name to apply
  * @returns {void}
  */
@@ -3055,26 +3052,6 @@ export function isReasoningSignatureSupported() {
     return false;
 }
 
-function proxyUrlCallback(_, value) {
-    if (!value) {
-        return oai_settings.custom_url ?? '';
-    }
-    oai_settings.custom_url = value;
-    reconnectOpenAi();
-    return oai_settings.custom_url;
-}
-
-function apiKeyCallback(_, value) {
-    if (!value) {
-        return '';
-    }
-    const secretKey = resolveSecretKey();
-    if (secretKey) {
-        writeSecret(secretKey, value);
-    }
-    return value;
-}
-
 function updateFeatureSupportFlags() {
     const featureFlags = {
         openai_image_inlining_supported: isImageInliningSupported(),
@@ -3091,38 +3068,6 @@ function updateFeatureSupportFlags() {
 }
 
 export function initOpenAI() {
-    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
-        name: 'proxy-url',
-        callback: proxyUrlCallback,
-        returns: 'current base URL',
-        namedArgumentList: [],
-        unnamedArgumentList: [
-            SlashCommandArgument.fromProps({
-                description: 'url',
-                typeList: [ARGUMENT_TYPE.STRING],
-                isRequired: false,
-            }),
-        ],
-        helpString: 'Gets or sets the provider endpoint Base URL. Leave empty to get the current value.',
-    }));
-    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
-        name: 'api-key',
-        callback: apiKeyCallback,
-        returns: 'current API key',
-        namedArgumentList: [],
-        unnamedArgumentList: [
-            SlashCommandArgument.fromProps({
-                description: 'key',
-                typeList: [ARGUMENT_TYPE.STRING],
-                isRequired: false,
-            }),
-        ],
-        helpString: 'Gets or sets the API key. Applies to both the primary and fallback model.',
-    }));
-
-
-
-
     $('#azure_base_url').on('input', function () {
         oai_settings.azure_base_url = String($(this).val());
         saveSettingsDebounced();

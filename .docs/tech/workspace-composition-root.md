@@ -47,10 +47,10 @@ During `public/script.js` evaluation:
 1. Fetch the CSRF token. A failure shows a persistent error and rejects initialization before the main bootstrap stages continue.
 2. Create the splash overlay and initialization loader.
 3. Register DOM/browser compatibility helpers, library shims, Markdown/DOMPurify patches, and browser fixes.
-4. Initialize secrets, locale, core chat/slash/OpenAI/system-prompt modules, extensions, extension slash commands, presets, and system messages.
+4. Initialize secrets, locale, core chat and OpenAI modules, presets, and system messages.
 5. Load settings and apply post-settings UI bindings.
 6. Load user avatars and characters, then initialize tokenizers.
-7. Hydrate feature modules, including backgrounds, personas, slash autocomplete, World Info, chat observers, and workspace helpers.
+7. Hydrate feature modules, including macro autocomplete, World Info, chat observers, and workspace helpers.
 8. Run scraper and late feature initialization.
 9. Emit `event_types.APP_INITIALIZED`.
 10. Hide the initialization loader, fix the viewport, mount the React workspace shell chrome, and emit `event_types.APP_READY`.

@@ -1,5 +1,5 @@
 /** Compose runtime event listeners exactly once, independently of editor rendering. */
-export function createWorldInfoRuntimeInitializer({ eventSource, eventTypes, getChatWorld, getWorldNames, setChatWorldActive, getSortedEntries, getExternalActivations, registerSlashCommands }) {
+export function createWorldInfoRuntimeInitializer({ eventSource, eventTypes, getChatWorld, getWorldNames, setChatWorldActive, getSortedEntries, getExternalActivations }) {
     let initialized = false;
     return function ensureWorldInfoRuntimeInitialized() {
         if (initialized) return;
@@ -18,7 +18,6 @@ export function createWorldInfoRuntimeInitializer({ eventSource, eventTypes, get
                 }
             }
         });
-        registerSlashCommands();
         initialized = true;
     };
 }

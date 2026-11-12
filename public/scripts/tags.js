@@ -9,25 +9,19 @@ import {
     printCharactersDebounced,
     buildAvatarList,
     DEFAULT_PRINT_TIMEOUT,
-    printCharacters,
 } from '../script.js';
 import { eventSource, event_types } from './events.js';
 import { FILTER_TYPES, FILTER_STATES, DEFAULT_FILTER_STATE, isFilterState, FilterHelper } from './filters.js';
 
 import { download, parseJsonFile, uuidv4, equalsIgnoreCaseAndAccents, includesIgnoreCaseAndAccents, removeFromArray, getFreeName, findChar, escapeHtml } from './utils.js';
 import { power_user } from './power-user.js';
-import { SlashCommandParser } from './slash-commands/SlashCommandParser.js';
-import { SlashCommand } from './slash-commands/SlashCommand.js';
-import { ARGUMENT_TYPE, SlashCommandArgument, SlashCommandNamedArgument } from './slash-commands/SlashCommandArgument.js';
 
 import { POPUP_RESULT, POPUP_TYPE, Popup, callGenericPopup } from './popup.js';
 
 import { INTERACTABLE_CONTROL_CLASS } from './keyboard.js';
-import { commonEnumProviders } from './slash-commands/SlashCommandCommonEnumsProvider.js';
 import { renderTemplateAsync } from './templates.js';
 import { t, translate } from './i18n.js';
 import { accountStorage } from './util/AccountStorage.js';
-import { enumTypes, SlashCommandEnumValue } from './slash-commands/SlashCommandEnumValue.js';
 import { loadWorkspacePanelsModule } from './workspace-panels-react-bridge.js';
 import { createCharacterTagsService } from './character-tags-service.js';
 
@@ -692,8 +686,7 @@ export function getTagKeyForEntityElement(element) {
 
 /**
  * Gets the key for a character by searching based on the name or avatar. If none can be found, a toastr will be shown and null returned.
- * This function is mostly used in slash commands.
- *
+
  * @param {string?} [charName] The optionally provided char name
  * @param {object} [options] - Optional arguments
  * @param {boolean} [options.suppressLogging=false] - Whether to suppress the toastr warning
@@ -1680,285 +1673,6 @@ function removeMissingTagFilters() {
     }
 }
 
-function registerTagsSlashCommands() {
-    /**
-     * Gets a tag by its name. Optionally can create the tag if it does not exist.
-     * @param {string} tagName - The name of the tag
-     * @param {object} options - Optional arguments
-     * @param {boolean} [options.allowCreate=false] - Whether a new tag should be created if no tag with the name exists
-     * @returns {Tag?} The tag, or null if not found
-     */
-    function paraGetTag(tagName, { allowCreate = false } = {}) {
-        if (!tagName) {
-            toastr.warning('Tag name must be provided.');
-            return null;
-        }
-        let tag = getTag(tagName);
-        if (allowCreate && !tag) {
-            tag = createNewTag(tagName);
-        }
-        if (!tag) {
-            toastr.warning(`Tag ${tagName} not found.`);
-            return null;
-        }
-        return tag;
-    }
-
-    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
-        name: 'tag-add',
-        returns: 'true/false - Whether the tag was added or was assigned already',
-        /** @param {{name: string}} namedArgs @param {string} tagName @returns {string} */
-        callback: ({ name }, tagName) => {
-            const key = searchCharByName(name);
-            if (!key) return 'false';
-            const tag = paraGetTag(tagName, { allowCreate: true });
-            if (!tag) return 'false';
-            const result = addTagsToEntity(tag, key);
-            printCharacters();
-            return String(result);
-        },
-        namedArgumentList: [
-            SlashCommandNamedArgument.fromProps({
-                name: 'name',
-                description: 'Character name - or unique character identifier (avatar key)',
-                typeList: [ARGUMENT_TYPE.STRING],
-                defaultValue: '{{char}}',
-                enumProvider: commonEnumProviders.characters(),
-            }),
-        ],
-        unnamedArgumentList: [
-            SlashCommandArgument.fromProps({
-                description: 'tag name',
-                typeList: [ARGUMENT_TYPE.STRING],
-                isRequired: true,
-                enumProvider: commonEnumProviders.tagsForChar('not-existing'),
-                forceEnum: false,
-            }),
-        ],
-        helpString: `
-        <div>
-            Adds a tag to the character. If no character is provided, it adds it to the current character (<code>{{char}}</code>).
-            If the tag doesn't exist, it is created.
-        </div>
-        <div>
-            <strong>Example:</strong>
-            <ul>
-                <li>
-                    <pre><code>/tag-add name="Chloe" scenario</code></pre>
-                    will add the tag "scenario" to the character named Chloe.
-                </li>
-            </ul>
-        </div>
-    `,
-    }));
-    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
-        name: 'tag-remove',
-        returns: 'true/false - Whether the tag was removed or wasn\'t assigned already',
-        /** @param {{name: string}} namedArgs @param {string} tagName @returns {string} */
-        callback: ({ name }, tagName) => {
-            const key = searchCharByName(name);
-            if (!key) return 'false';
-            const tag = paraGetTag(tagName);
-            if (!tag) return 'false';
-            const result = removeTagFromEntity(tag, key);
-            printCharacters();
-            return String(result);
-        },
-        namedArgumentList: [
-            SlashCommandNamedArgument.fromProps({
-                name: 'name',
-                description: 'Character name - or unique character identifier (avatar key)',
-                typeList: [ARGUMENT_TYPE.STRING],
-                defaultValue: '{{char}}',
-                enumProvider: commonEnumProviders.characters(),
-            }),
-        ],
-        unnamedArgumentList: [
-            SlashCommandArgument.fromProps({
-                description: 'tag name',
-                typeList: [ARGUMENT_TYPE.STRING],
-                isRequired: true,
-                /**@param {SlashCommandExecutor} executor */
-                enumProvider: commonEnumProviders.tagsForChar('existing'),
-            }),
-        ],
-        helpString: `
-        <div>
-            Removes a tag from the character. If no character is provided, it removes it from the current character (<code>{{char}}</code>).
-        </div>
-        <div>
-            <strong>Example:</strong>
-            <ul>
-                <li>
-                    <pre><code>/tag-remove name="Chloe" scenario</code></pre>
-                    will remove the tag "scenario" from the character named Chloe.
-                </li>
-            </ul>
-        </div>
-    `,
-    }));
-    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
-        name: 'tag-exists',
-        returns: 'true/false - Whether the given tag name is assigned to the character',
-        /** @param {{name: string}} namedArgs @param {string} tagName @returns {string} */
-        callback: ({ name }, tagName) => {
-            const key = searchCharByName(name);
-            if (!key) return 'false';
-            const tag = paraGetTag(tagName);
-            if (!tag) return 'false';
-            return String(tag_map[key].includes(tag.id));
-        },
-        namedArgumentList: [
-            SlashCommandNamedArgument.fromProps({
-                name: 'name',
-                description: 'Character name - or unique character identifier (avatar key)',
-                typeList: [ARGUMENT_TYPE.STRING],
-                defaultValue: '{{char}}',
-                enumProvider: commonEnumProviders.characters(),
-            }),
-        ],
-        unnamedArgumentList: [
-            SlashCommandArgument.fromProps({
-                description: 'tag name',
-                typeList: [ARGUMENT_TYPE.STRING],
-                isRequired: true,
-                /**@param {SlashCommandExecutor} executor */
-                enumProvider: commonEnumProviders.tagsForChar('all'),
-            }),
-        ],
-        helpString: `
-        <div>
-            Checks whether the given tag is assigned to the character. If no character is provided, it checks the current character (<code>{{char}}</code>).
-        </div>
-        <div>
-            <strong>Example:</strong>
-            <ul>
-                <li>
-                    <pre><code>/tag-exists name="Chloe" scenario</code></pre>
-                    will return true if the character named Chloe has the tag "scenario".
-                </li>
-            </ul>
-        </div>
-    `,
-    }));
-    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
-        name: 'tag-list',
-        returns: 'Comma-separated list of all assigned tags',
-        /** @param {{name: string}} namedArgs @returns {string} */
-        callback: ({ name }) => {
-            const key = searchCharByName(name);
-            if (!key) return '';
-            const tags = getTagsList(key);
-            return tags.map(x => x.name).join(', ');
-        },
-        namedArgumentList: [
-            SlashCommandNamedArgument.fromProps({
-                name: 'name',
-                description: 'Character name - or unique character identifier (avatar key)',
-                typeList: [ARGUMENT_TYPE.STRING],
-                defaultValue: '{{char}}',
-                enumProvider: commonEnumProviders.characters(),
-            }),
-        ],
-        helpString: `
-        <div>
-            Lists all assigned tags of the character. If no character is provided, it uses the current character (<code>{{char}}</code>).
-            <br />
-            Note that there is no special handling for tags containing commas, they will be printed as-is.
-        </div>
-        <div>
-            <strong>Example:</strong>
-            <ul>
-                <li>
-                    <pre><code>/tag-list name="Chloe"</code></pre>
-                    could return something like <code>OC, scenario, edited, funny</code>
-                </li>
-            </ul>
-        </div>
-    `,
-    }));
-
-    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
-        name: 'tag-import',
-        /** @param {{name: string, mode: 'all'|'existing'|'none'|'ask'}} namedArgs @returns {Promise<string>} */
-        callback: async ({ name, mode }) => {
-            const key = searchCharByName(name);
-            if (!key) return 'false';
-
-            // Map mode argument to tag_import_setting
-            const modeMap = {
-                'all': tag_import_setting.ALL,
-                'existing': tag_import_setting.ONLY_EXISTING,
-                'none': tag_import_setting.NONE,
-                'ask': tag_import_setting.ASK,
-            };
-            if (mode && !modeMap[mode]) {
-                toastr.warning(`Invalid tag import mode: ${mode}. Valid modes are: ${Object.keys(modeMap).join(', ')}`);
-                return 'false';
-            }
-
-            const importSetting = mode ? modeMap[mode] : null;
-            const character = findChar({ name: key });
-
-            const result = await importTags(character, { importSetting });
-            return result ? 'true' : 'false';
-        },
-        returns: t`true if any tags were imported, false otherwise`,
-        namedArgumentList: [
-            SlashCommandNamedArgument.fromProps({
-                name: 'name',
-                description: 'Character name - or unique character identifier (avatar key)',
-                typeList: [ARGUMENT_TYPE.STRING],
-                defaultValue: '{{char}}',
-                enumProvider: commonEnumProviders.characters(),
-            }),
-            SlashCommandNamedArgument.fromProps({
-                name: 'mode',
-                description: t`Import mode: "all" imports all tags, "existing" imports only existing ST tags, "none" skips import, "ask" shows the import popup (default: uses your saved setting)`,
-                typeList: [ARGUMENT_TYPE.STRING],
-                enumList: [
-                    new SlashCommandEnumValue('all', t`Import all tags (create new ones if needed)`, enumTypes.enum),
-                    new SlashCommandEnumValue('existing', t`Import only existing ST tags`, enumTypes.enum),
-                    new SlashCommandEnumValue('none', t`Skip import`, enumTypes.enum),
-                    new SlashCommandEnumValue('ask', t`Show the import popup`, enumTypes.enum),
-                ],
-            }),
-        ],
-        helpString: `
-        <div>
-            ${t`Imports character card tags as EmberDesk tags for folder/filter use.`}
-        </div>
-        <div>
-            ${t`Character cards can have embedded tags (set via <code>tags</code> argument in <code>/char-create</code> or <code>/char-update</code>). This command imports those embedded tags as ST tags that can be used for filtering and organizing characters.`}
-        </div>
-        <div>
-            ${t`If no mode is specified, uses your saved tag import setting from preferences.`}
-        </div>
-        <div>
-            <strong>${t`Example:`}</strong>
-            <ul>
-                <li>
-                    <pre><code>/tag-import</code></pre>
-                    ${t`Imports tags for the current character using your default setting.`}
-                </li>
-                <li>
-                    <pre><code>/tag-import name="Alice" mode=all</code></pre>
-                    ${t`Imports all of Alice's card tags, creating new ST tags if needed.`}
-                </li>
-            </ul>
-        </div>
-        `,
-    }));
-}
-
-/**
- * Function to apply character tags to message divs when rendering the chat
- * @param {object} options Options for applying character tags
- * @param {number|number[]} [options.mesIds=[]] An id or array of message IDs to filter by.
- * If empty, all messages will be processed.
- * @returns {void}
- * @description This function iterates through the chat messages and applies character tags
- */
 export function applyCharacterTagsToMessageDivs({ mesIds = [] } = {}) {
     try {
         const messagesFilter = buildMessagesFilter(mesIds);
@@ -2136,6 +1850,5 @@ export function initTags() {
     eventSource.on(event_types.CHARACTER_DUPLICATED, copyTags);
     eventSource.makeFirst(event_types.CHAT_CHANGED, () => applyTagsOnCharacterSelect());
 
-    registerTagsSlashCommands();
     restoreSavedTagFilters();
 }

@@ -13,7 +13,7 @@ import { isMobile } from './RossAscends-mods.js';
 import { collapseNewlines } from './power-user.js';
 import { debounce_timeout } from './constants.js';
 import { Popup, POPUP_RESULT, POPUP_TYPE } from './popup.js';
-import { SlashCommandClosure } from './slash-commands/SlashCommandClosure.js';
+
 import { getTagsList } from './tags.js';
 import { getCurrentLocale, t, translate } from './i18n.js';
 import { importWorldInfo } from './world-info.js';
@@ -203,12 +203,12 @@ export function isUuid(value) {
 
 /**
  * Converts string to a value of a given type. Includes pythonista-friendly aliases.
- * @param {string|SlashCommandClosure} value String value
+ * @param {string} value String value
  * @param {string} type Type to convert to
  * @returns {any} Converted value
  */
 export function convertValueType(value, type) {
-    if (value instanceof SlashCommandClosure || typeof type !== 'string') {
+    if (typeof type !== 'string') {
         return value;
     }
 
@@ -2499,7 +2499,7 @@ export function setDatasetProperty(element, name, value) {
 
 export async function fetchFaFile(name) {
     const style = document.createElement('style');
-    style.innerHTML = await (await fetch(`/css/${name}`)).text();
+    style.textContent = await (await fetch(`/css/${name}`)).text();
     document.head.append(style);
     const sheet = style.sheet;
     style.remove();
@@ -2655,42 +2655,6 @@ export function arraysEqual(a, b) {
         if (a[i] !== b[i]) return false;
     }
     return true;
-}
-
-/**
- * Updates the content and style of an information block
- * @param {string | HTMLElement} target - The CSS selector or the HTML element of the information block
- * @param {string | HTMLElement?} content - The message to display inside the information block (supports HTML) or an HTML element
- * @param {'hint' | 'info' | 'warning' | 'error'} [type='info'] - The type of message, which determines the styling of the information block
- */
-export function setInfoBlock(target, content, type = 'info') {
-    if (!content) {
-        clearInfoBlock(target);
-        return;
-    }
-
-    const infoBlock = typeof target === 'string' ? document.querySelector(target) : target;
-    if (infoBlock) {
-        infoBlock.className = `info-block ${type}`;
-        if (typeof content === 'string') {
-            infoBlock.innerHTML = content;
-        } else {
-            infoBlock.innerHTML = '';
-            infoBlock.appendChild(content);
-        }
-    }
-}
-
-/**
- * Clears the content and style of an information block.
- * @param {string | HTMLElement} target - The CSS selector or the HTML element of the information block
- */
-export function clearInfoBlock(target) {
-    const infoBlock = typeof target === 'string' ? document.querySelector(target) : target;
-    if (infoBlock && infoBlock.classList.contains('info-block')) {
-        infoBlock.className = '';
-        infoBlock.innerHTML = '';
-    }
 }
 
 /**

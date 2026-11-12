@@ -392,11 +392,11 @@ export function registerCoreMacros() {
     MacroRegistry.registerMacro('pick', {
         category: MacroCategory.RANDOM,
         list: true,
-        description: 'Picks a random item from a list, but keeps the choice stable for a given chat and macro position. Can be rerolled via /reroll-pick slash command.',
+        description: 'Picks a random item from a list, but keeps the choice stable for a given chat and macro position.',
         // TODO: add expanded documentation once HTML details are supported
         // descriptionDetails: `
         //     <p>Picks a random item from a list, but keeps the choice stable for a given chat and macro position.</p>
-        //     <p>The choice can be reset per chat using the <code>/reroll-pick</code> slash command.</p>
+
         // `,
         returns: 'Stable randomly selected item from the list.',
         exampleUsage: ['{{pick::blonde::brown::red::black::blue}}'],
@@ -424,7 +424,7 @@ export function registerCoreMacros() {
             // nested inside arguments or scoped content
             const offset = globalOffset;
 
-            // Reroll seed allows users to reset all picks in the chat via /reroll-pick command
+            // Preserve the historical reroll seed when computing existing choices.
             const rerollSeed = chat_metadata.pick_reroll_seed || null;
 
             const combinedSeedString = [chatIdHash, rawContentHash, offset, rerollSeed].filter(it => it !== null).join('-');
