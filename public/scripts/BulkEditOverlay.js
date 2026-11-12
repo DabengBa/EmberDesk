@@ -24,7 +24,7 @@ import { POPUP_TYPE, POPUP_RESULT, Popup } from './popup.js';
 import { buildCascadeSectionHtml, captureCascadeChoices } from './world-cascade-dialog.js';
 import { waitUntilCondition } from './utils.js';
 import { debounce_timeout } from './constants.js';
-import { resolveCharacterAvatarsByIds, syncBulkSelectionDomState, updateBulkDeleteButtonState, updateBulkSelectionCountState } from './character-list-state.js';
+import { syncBulkSelectionDomState, updateBulkDeleteButtonState, updateBulkSelectionCountState } from './character-list-state.js';
 import { createTagInput, getTagKeyForEntity, getTagsList, printTagList, tag_map, compareTagsForSort, removeTagFromMap, importTags, tag_import_setting } from './tags.js';
 import { t } from './i18n.js';
 
@@ -120,8 +120,8 @@ class CharacterContextMenu {
     };
 
     /**
-     * Favorite a character
-     * and highlight it.
+     * Favorite a character. The list refresh after the bulk operation owns
+     * the visible favorite state; the original numeric row may have moved.
      *
      * @param {number} characterId
      * @returns {Promise<void>}
@@ -150,9 +150,6 @@ class CharacterContextMenu {
         if (!mergeResponse.ok) {
             mergeResponse.json().then(json => toastr.error(`Character not saved. Error: ${json.message}. Field: ${json.error}`));
         }
-
-        const element = document.getElementById(`CharID${characterId}`);
-        element.classList.toggle('is_fav');
     };
 
     /**
@@ -254,6 +251,23 @@ class BulkTagPopupHandler {
      */
     #escapeListener = null;
 
+    #open = false;
+    #pendingActions = 0;
+
+    get isBusy() {
+        return this.#open || this.#pendingActions > 0;
+    }
+
+    async #runAction(action) {
+        this.#pendingActions++;
+        try {
+            await action();
+        } finally {
+            this.#pendingActions--;
+            window.dispatchEvent(new Event('character-library-bulk-idle'));
+        }
+    }
+
     /**
      * Sets up the bulk popup menu handler for the given overlay.
      *
@@ -318,6 +332,7 @@ class BulkTagPopupHandler {
             return;
         }
 
+        this.#open = true;
         document.body.insertAdjacentHTML('beforeend', this.#getHtml());
 
         const entities = this.characterIds.map(id => characterToEntity(characters[id], id)).filter(entity => entity.item !== undefined);
@@ -339,11 +354,11 @@ class BulkTagPopupHandler {
         document.addEventListener('keydown', this.#escapeListener);
         document.querySelector('#bulkTagInput')?.focus();
 
-        document.querySelector('#bulk_tag_popup_reset').addEventListener('click', this.resetTags.bind(this));
-        document.querySelector('#bulk_tag_popup_remove_mutual').addEventListener('click', this.removeMutual.bind(this));
+        document.querySelector('#bulk_tag_popup_reset').addEventListener('click', () => void this.#runAction(() => this.resetTags()));
+        document.querySelector('#bulk_tag_popup_remove_mutual').addEventListener('click', () => void this.#runAction(() => this.removeMutual()));
         document.querySelector('#bulk_tag_popup_cancel').addEventListener('click', this.hide.bind(this));
-        document.querySelector('#bulk_tag_popup_import_all_tags').addEventListener('click', this.importAllTags.bind(this));
-        document.querySelector('#bulk_tag_popup_import_existing_tags').addEventListener('click', this.importExistingTags.bind(this));
+        document.querySelector('#bulk_tag_popup_import_all_tags').addEventListener('click', () => void this.#runAction(() => this.importAllTags()));
+        document.querySelector('#bulk_tag_popup_import_existing_tags').addEventListener('click', () => void this.#runAction(() => this.importExistingTags()));
     }
 
     /**
@@ -406,6 +421,7 @@ class BulkTagPopupHandler {
      * Hide and remove the tag control
      */
     hide() {
+        this.#open = false;
         if (this.#escapeListener) {
             document.removeEventListener('keydown', this.#escapeListener);
             this.#escapeListener = null;
@@ -421,6 +437,7 @@ class BulkTagPopupHandler {
         }
 
         // No need to redraw here, all tags actions were redrawn when they happened
+        window.dispatchEvent(new Event('character-library-bulk-idle'));
     }
 
     /**
@@ -513,6 +530,7 @@ class BulkEditOverlay {
     static longPressDelay = 2500;
 
     #state = BulkEditOverlayState.browse;
+    #pendingState = BulkEditOverlayState.browse;
     #longPress = false;
     #stateChangeCallbacks = [];
     #selectedCharacters = [];
@@ -557,13 +575,24 @@ class BulkEditOverlay {
     }
 
     set state(newState) {
-        if (this.#state === newState) return;
+        if (this.#pendingState === newState) return;
 
+        this.#pendingState = newState;
         eventSource.emit(event_types.CHARACTER_GROUP_OVERLAY_STATE_CHANGE_BEFORE, newState)
             .then(() => {
+                if (this.#pendingState !== newState) return;
                 this.#state = newState;
                 eventSource.emit(event_types.CHARACTER_GROUP_OVERLAY_STATE_CHANGE_AFTER, this.state);
+                if (typeof window !== 'undefined') {
+                    window.dispatchEvent(new Event('character-library-bulk-idle'));
+                }
             });
+    }
+
+    get isRealtimeRefreshBlocked() {
+        return this.#state === BulkEditOverlayState.select
+            || this.#pendingState === BulkEditOverlayState.select
+            || this.#bulkTagPopupHandler.isBusy;
     }
 
     get isLongPress() {
@@ -1011,8 +1040,11 @@ class BulkEditOverlay {
      * @returns {Promise<void>}
      */
     handleContextMenuDelete = async () => {
-        const characterIds = [...this.selectedCharacters];
-        const avatarList = resolveCharacterAvatarsByIds(characters, characterIds);
+        const snapshot = this.selectedCharacters
+            .map(id => characters[id])
+            .filter(character => typeof character?.avatar === 'string' && character.avatar.length > 0)
+            .map(character => ({ avatar: character.avatar, name: character.name }));
+        const avatarList = snapshot.map(character => character.avatar);
         const count = avatarList.length;
         if (count === 0) {
             return;
@@ -1039,8 +1071,8 @@ class BulkEditOverlay {
         }
 
         // 3. Build dialog HTML
-        const nameTagsHtml = characterIds
-            .map(id => characters[id]?.name)
+        const nameTagsHtml = snapshot
+            .map(character => character.name)
             .filter(Boolean)
             .map(name => {
                 const escaped = name.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');

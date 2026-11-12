@@ -1,11 +1,17 @@
 import { describe, expect, jest, test } from '@jest/globals';
+import { readFile } from 'node:fs/promises';
 
-import {
-    getBulkSelectionShortCountText,
+// The i18n engine imports power-user's browser-wide dependency graph only to
+// register debug actions. Keep the real locale engine and data in this test.
+jest.unstable_mockModule('../public/scripts/power-user.js', () => ({ registerDebugFunction: jest.fn() }));
+const originalMutationObserver = globalThis.MutationObserver;
+globalThis.MutationObserver = class { observe() {} };
+const {
     syncBulkSelectionDomState,
     updateBulkDeleteButtonState,
-    updateBulkSelectionCountState,
-} from '../public/scripts/character-list-state.js';
+} = await import('../public/scripts/character-list-state.js');
+if (originalMutationObserver === undefined) delete globalThis.MutationObserver;
+else globalThis.MutationObserver = originalMutationObserver;
 
 /* global globalThis */
 
@@ -64,18 +70,35 @@ function createFakeCharacterRow(characterId) {
     };
 }
 
-function withDocumentLanguage(language, callback) {
-    const originalDocument = globalThis.document;
-
-    globalThis.document = { documentElement: { lang: language } };
-
+async function withDocumentLanguage(language, callback) {
+    const keys = ['document', 'Document', 'MutationObserver', 'CustomEvent', 'localStorage', 'fetch', '$'];
+    const originals = new Map(keys.map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
     try {
-        return callback();
+        globalThis.Document = class Document {};
+        globalThis.document = Object.assign(new globalThis.Document(), { documentElement: { lang: language }, dispatchEvent() {} });
+        globalThis.MutationObserver = class { observe() {} };
+        globalThis.CustomEvent = class {};
+        globalThis.localStorage = { getItem: key => key === 'language' ? language : null };
+        globalThis.fetch = async url => {
+            try {
+                const data = await readFile(new URL(`../public/${url.replace(/^\.\//, '')}`, import.meta.url), 'utf8');
+                return { ok: true, json: async () => JSON.parse(data) };
+            } catch (error) {
+                if (error.code !== 'ENOENT') throw error;
+                return { ok: false };
+            }
+        };
+        globalThis.$ = () => ({ find: () => ({ each() {} }) });
+        await jest.isolateModulesAsync(async () => {
+            const engine = await import('../public/scripts/i18n.js');
+            const state = await import('../public/scripts/character-list-state.js');
+            await engine.initLocales();
+            callback(state);
+        });
     } finally {
-        if (originalDocument === undefined) {
-            delete globalThis.document;
-        } else {
-            globalThis.document = originalDocument;
+        for (const [key, descriptor] of originals) {
+            if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+            else delete globalThis[key];
         }
     }
 }
@@ -128,11 +151,11 @@ describe('updateBulkDeleteButtonState', () => {
 });
 
 describe('updateBulkSelectionCountState', () => {
-    test('updates count text and disables delete when no characters are selected', () => {
+    test('updates count text and disables delete when no characters are selected', async () => {
         const selectedCount = createFakeButton();
         const deleteButton = createFakeButton();
 
-        withDocumentLanguage('en', () => {
+        await withDocumentLanguage('en', ({ updateBulkSelectionCountState }) => {
             updateBulkSelectionCountState({ selectedCount, deleteButton }, 0);
         });
 
@@ -144,11 +167,11 @@ describe('updateBulkSelectionCountState', () => {
         expect(readAttribute(deleteButton, 'tabindex')).toBe('-1');
     });
 
-    test('updates count text and enables delete when selection exists', () => {
+    test('updates count text and enables delete when selection exists', async () => {
         const selectedCount = createFakeButton();
         const deleteButton = createFakeButton();
 
-        withDocumentLanguage('en', () => {
+        await withDocumentLanguage('en', ({ updateBulkSelectionCountState }) => {
             updateBulkSelectionCountState({ selectedCount, deleteButton }, 2);
         });
 
@@ -160,8 +183,8 @@ describe('updateBulkSelectionCountState', () => {
         expect(readAttribute(deleteButton, 'tabindex')).toBe('0');
     });
 
-    test('uses a compact Chinese count when the document locale is Chinese', () => {
-        withDocumentLanguage('zh-cn', () => {
+    test('uses a compact Chinese count when the document locale is Chinese', async () => {
+        await withDocumentLanguage('zh-cn', ({ getBulkSelectionShortCountText }) => {
             expect(getBulkSelectionShortCountText(3)).toBe('3个');
         });
     });

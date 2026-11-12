@@ -40,7 +40,7 @@ fs.writeFileSync(configPath, [
 ].join('\n'), 'utf8');
 setConfigFilePath(configPath);
 
-const { getChatData, router } = await import('../src/endpoints/chats.js');
+const { getChatData, router, writeCanonicalChatForTextReplace } = await import('../src/endpoints/chats.js');
 
 function makeResponse() {
     return {
@@ -435,6 +435,47 @@ describe('chats projection off', () => {
         await auditCanonicalChatShadowImport({ handle: 'alice', directories, db, projection: 'off' });
         return { db, chatPath };
     }
+
+    test('save, rename, delete, import and text replacement each write statistics only in their session transaction', async () => {
+        process.env[PROJECTION_ENV] = 'off';
+        try {
+            const directories = makeDirectories();
+            const { db } = await seedCanonicalChat(directories, [{ chat_metadata: {} }, { mes: 'before' }]);
+            db.exec(`INSERT INTO characters (id, avatar_filename, internal_name, display_name, card_json, shallow_json, created_at_ms, updated_at_ms)
+                VALUES ('alice-character', 'alice.png', 'alice', 'Alice', '{}', '{}', 1, 1);
+                CREATE TABLE stats_write_probe (n INTEGER);
+                INSERT INTO stats_write_probe VALUES (0);
+                CREATE TRIGGER count_stats BEFORE INSERT ON character_chat_stats BEGIN UPDATE stats_write_probe SET n = n + 1; END;`);
+            const user = { directories, profile: { handle: 'alice' } };
+            const invoke = async (route, body, extra = {}) => {
+                const response = makeResponse();
+                await getRouteHandler(route)({ user, body: { avatar_url: 'alice.png', ...body }, ...extra }, response);
+                expect(response.statusCode).toBe(200);
+                expect(response.body.error).toBeUndefined();
+            };
+            const writes = () => db.prepare('SELECT n FROM stats_write_probe').get().n;
+            await invoke('/save', { file_name: 'first', chat: [{ chat_metadata: {} }, { mes: 'saved' }], force: true });
+            expect(writes()).toBe(1);
+            await invoke('/rename', { original_file: 'first.jsonl', renamed_file: 'renamed.jsonl' });
+            expect(writes()).toBe(2);
+            const locator = { ownerType: 'character', ownerId: 'alice', sourcePath: 'chats/alice/renamed.jsonl' };
+            expect(writeCanonicalChatForTextReplace({ user }, {
+                db, locator, filePath: path.join(directories.chats, 'alice', 'renamed.jsonl'), cardName: 'alice', avatarUrl: 'alice.png',
+                payload: [{ chat_metadata: {} }, { mes: 'replaced' }],
+            }).ok).toBe(true);
+            expect(writes()).toBe(3);
+            await invoke('/delete', { chatfile: 'renamed.jsonl' });
+            expect(writes()).toBe(4);
+            expect(db.prepare('SELECT chat_count FROM character_chat_stats').get().chat_count).toBe(0);
+            const filename = 'upload.jsonl';
+            fs.writeFileSync(path.join(directories.root, filename), '{"chat_metadata":{}}\n{"mes":"imported"}');
+            await invoke('/import', { file_type: 'jsonl', character_name: 'Alice', user_name: 'User' }, { file: { destination: directories.root, filename } });
+            expect(writes()).toBe(5);
+            expect(db.prepare('SELECT chat_count FROM character_chat_stats').get().chat_count).toBe(1);
+        } finally {
+            delete process.env[PROJECTION_ENV];
+        }
+    });
 
     test('commits /save to canonical rows without writing the JSONL compatibility file', async () => {
         process.env[PROJECTION_ENV] = 'off';

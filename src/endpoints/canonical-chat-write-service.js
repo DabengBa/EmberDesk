@@ -13,6 +13,7 @@ import {
     recordCanonicalChatProjectionRepair,
     resolveCanonicalChatProjectionRepair,
     upsertCanonicalChatSession,
+    syncCanonicalCharacterChatStats,
 } from './canonical-chat-store.js';
 
 function buildRepairKey(locator, operation) {
@@ -105,7 +106,7 @@ export function writeCanonicalChatPayload({
     const record = createCanonicalChatSessionRecord(db, { locator, payload, nowMs });
     const repairKey = buildRepairKey(locator, operation);
     const persisted = upsertCanonicalChatSession(db, record, {
-        onPersist: projection === 'off' ? null : (txn, result) => recordCanonicalChatProjectionRepair(txn, {
+        onPersist: projection === 'off' ? txn => syncCanonicalCharacterChatStats(txn, locator, nowMs) : (txn, result) => recordCanonicalChatProjectionRepair(txn, {
             repairKey,
             sessionId: result.id,
             locator,
@@ -199,7 +200,10 @@ export function renameCanonicalChat({
     const repairKey = buildRepairKey(nextLocator, 'rename');
     const renamed = renameCanonicalChatSession(db, {
         locator, nextLocator, nowMs,
-        onPersist: projection === 'off' ? null : (txn, result) => recordCanonicalChatProjectionRepair(txn, {
+        onPersist: projection === 'off' ? txn => {
+            syncCanonicalCharacterChatStats(txn, locator, nowMs);
+            if (nextLocator.ownerId !== locator.ownerId) syncCanonicalCharacterChatStats(txn, nextLocator, nowMs);
+        } : (txn, result) => recordCanonicalChatProjectionRepair(txn, {
             repairKey, sessionId: result.id, locator: nextLocator, operation: 'rename', reason: 'projection_failed',
             details: { previousSourcePath: locator.sourcePath }, nowMs,
         }),
@@ -258,7 +262,7 @@ export function deleteCanonicalChat({
 
     const repairKey = buildRepairKey(locator, 'delete');
     const deleted = deleteCanonicalChatSession(db, locator, {
-        onPersist: projection === 'off' ? null : txn => recordCanonicalChatProjectionRepair(txn, {
+        onPersist: projection === 'off' ? txn => syncCanonicalCharacterChatStats(txn, locator, nowMs) : txn => recordCanonicalChatProjectionRepair(txn, {
             repairKey, sessionId: null, locator, operation: 'delete', reason: 'projection_failed', details: {}, nowMs,
         }),
     });
