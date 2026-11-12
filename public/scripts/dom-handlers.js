@@ -1,7 +1,7 @@
-import { throttle, uuidv4 } from './utils.js';
+import { throttle } from './utils.js';
 import { debounce_timeout } from './constants.js';
 import { eventSource, event_types } from './events.js';
-import { updateMessageElement } from './message-service.js';
+
 import { requireDomHandlersShellContext } from './dom-handlers-shell-context.js';
 import { renameComposerDraftContext, setComposerDraftContext, requestComposerFocus } from './main-chat-composer-service.js';
 
@@ -114,7 +114,7 @@ const getVisibleCharacterExportTrigger = (...args) => shell().getVisibleCharacte
 const toggleDrawer = (...args) => shell().toggleDrawer(...args);
 const updateCharacterRow = (...args) => shell().updateCharacterRow(...args);
 const updateFavButtonState = (...args) => shell().updateFavButtonState(...args);
-const updateViewMessageIds = (...args) => shell().updateViewMessageIds(...args);
+
 const waitUntilCondition = (...args) => shell().waitUntilCondition(...args);
 
 export function initDomHandlers() {
@@ -754,25 +754,7 @@ export async function bindLegacyShellHandlers() {
 
         try {
             if (state.this_del_mes >= 0) {
-                const reactOwner = isReactMainChatOwner();
-                const identity = reactOwner ? shell().getMainChatIdentity() : null;
-                const deletedFrom = state.this_del_mes;
-                if (!reactOwner) {
-                    state.chatElement.find(`.mes[mesid="${state.this_del_mes}"]`).nextAll('div').remove();
-                    state.chatElement.find(`.mes[mesid="${state.this_del_mes}"]`).remove();
-                }
-                state.chat.length = state.this_del_mes;
-                if (reactOwner) shell().truncateMainChatUiState(deletedFrom);
-                state.chat_metadata.tainted = true;
-                await saveChatConditional();
-                if (!reactOwner) state.chatElement.scrollTop(state.chatElement[0].scrollHeight);
-                await eventSource.emit(event_types.MESSAGE_DELETED, deletedFrom);
-                if (reactOwner) {
-                    await shell().refreshMainChatAfterBulkDelete(identity);
-                } else {
-                    state.chatElement.find('.mes').removeClass('last_mes');
-                    state.chatElement.find('.mes').last().addClass('last_mes');
-                }
+                await shell().getChatMessageCommands().deleteFrom(state.this_del_mes);
             } else {
                 console.log('this_del_mes is not >= 0, not deleting');
             }
@@ -915,6 +897,7 @@ export async function bindLegacyShellHandlers() {
     });
 
     $(document).on('click', '.mes_edit_up', async function () {
+        if (isReactMainChatOwner()) return;
         if (state.this_edit_mes_id <= 0) {
             return;
         }
@@ -923,6 +906,7 @@ export async function bindLegacyShellHandlers() {
     });
 
     $(document).on('click', '.mes_edit_down', async function () {
+        if (isReactMainChatOwner()) return;
         if (state.this_edit_mes_id >= state.chat.length - 1) {
             return;
         }
@@ -932,33 +916,17 @@ export async function bindLegacyShellHandlers() {
     });
 
     $(document).on('click', '.mes_edit_copy', async function () {
+        if (isReactMainChatOwner()) return;
         const confirmation = await callGenericPopup(t`Create a copy of this message?`, state.POPUP_TYPE.CONFIRM);
         if (!confirmation) {
             return;
         }
 
-        const oldScroll = state.chatElement[0].scrollTop;
-        const clone = structuredClone(state.chat[state.this_edit_mes_id]);
-        clone.send_date = Date.now();
-        // A copied message is a new message — give it a fresh persistent id
-        // so chat-memory turn identity stays unique.
-        clone.extra = { ...(clone.extra ?? {}), id: uuidv4() };
-        const this_edit_mes_element = $(this).closest('.mes');
-        clone.mes = this_edit_mes_element.find('.edit_textarea').val().toString();
-
-        clone.mes = clone.mes.trim();
-
-        state.chat.splice(Number(state.this_edit_mes_id) + 1, 0, clone);
-        const newMessageElement = updateMessageElement(clone);
-        this_edit_mes_element.after(newMessageElement);
-
-        updateViewMessageIds();
-        await saveChatConditional();
-        state.chatElement[0].scrollTop = oldScroll;
-        await eventSource.emit(event_types.MESSAGE_UPDATED, Number(state.this_edit_mes_id) + 1);
+        await shell().getChatMessageCommands().duplicateMessage(state.this_edit_mes_id);
     });
 
     $(document).on('click', '.mes_edit_delete', async function (event, customData) {
+        if (isReactMainChatOwner()) return;
         const fromSlashCommand = customData?.fromSlashCommand || false;
         await deleteMessage(Number(state.this_edit_mes_id), fromSlashCommand !== true);
     });

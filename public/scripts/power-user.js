@@ -10,10 +10,10 @@ import {
     substituteParams,
     printCharactersDebounced,
     setCharacterId,
-    setEditedMessageId,
+
     chat,
     getFirstDisplayedMessageId,
-    showMoreMessages,
+
     saveChatConditional,
     setAnimationDuration,
     ANIMATION_DURATION_DEFAULT,
@@ -568,31 +568,6 @@ async function doRandomChat(_, tagName) {
     return characters[characterId]?.name;
 }
 
-/**
- * Loads the chat until the given message ID is displayed.
- * @param {number} mesId
- * @returns JQuery<HTMLElement>
- */
-async function loadUntilMesId(mesId) {
-    let target;
-
-    while (getFirstDisplayedMessageId() > mesId && getFirstDisplayedMessageId() !== 0) {
-        await showMoreMessages();
-        await delay(1);
-        target = $('#chat').find(`.mes[mesid="${mesId}"]`);
-
-        if (target.length) {
-            break;
-        }
-    }
-
-    if (!target.length) {
-        toastr.error(`Could not find message with ID: ${mesId}`);
-        return target;
-    }
-
-    return target;
-}
 
 async function doMesCut(_, text) {
     console.debug(`was asked to cut message id #${text}`);
@@ -610,18 +585,7 @@ async function doMesCut(_, text) {
 
     for (let i = 0; i < totalMesToCut; i++) {
         cutText += (chat[mesIDToCut]?.mes || '') + '\n';
-        let mesToCut = $('#chat').find(`.mes[mesid=${mesIDToCut}]`);
-
-        if (!mesToCut.length) {
-            mesToCut = await loadUntilMesId(mesIDToCut);
-
-            if (!mesToCut || !mesToCut.length) {
-                return;
-            }
-        }
-
-        setEditedMessageId(mesIDToCut);
-        await deleteMessage(mesIDToCut);
+        if (!await deleteMessage(mesIDToCut)) return cutText;
     }
 
     await saveChatConditional();

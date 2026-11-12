@@ -113,25 +113,24 @@ function MessageActionShell({
     commands?: MainChatCommands;
 }) {
     useTranslated('');
-    const messageId = message.id;
-    const numericMessageId = Number(messageId);
-    const canAddressMessage = Number.isInteger(numericMessageId) && numericMessageId >= 0;
+    const messageUid = message.uid;
+    const canAddressMessage = Boolean(messageUid);
     const hintRef = useRef<HTMLButtonElement>(null);
     const menuRef = useRef<HTMLDivElement>(null);
     const startEditing = () => {
         if (canAddressMessage) {
             void commands?.toggleMessageActionsShell({ kind: 'close' });
-            void commands?.startMessageEdit(numericMessageId);
+            void commands?.startMessageEdit(messageUid);
         }
     };
     const copyMessage = () => {
         if (canAddressMessage) {
-            void commands?.copyMessage(numericMessageId);
+            void commands?.copyMessage(messageUid);
         }
     };
     const deleteMessage = () => {
         if (canAddressMessage) {
-            void commands?.deleteMessage(numericMessageId);
+            void commands?.deleteMessage(messageUid);
         }
     };
     const closeActionsMenu = () => {
@@ -139,7 +138,7 @@ function MessageActionShell({
     };
     const openActionsMenu = () => {
         if (canAddressMessage) {
-            void commands?.toggleMessageActionsShell({ kind: 'open', messageId: numericMessageId });
+            void commands?.toggleMessageActionsShell({ kind: 'open', messageId: messageUid });
         }
     };
 
@@ -303,8 +302,8 @@ export const MainChatMessageRow = memo(function MainChatMessageRow({
     turnCard?: { turnId: string; position: 'single' | 'start' | 'middle' | 'end' };
 }) {
     const render = { ...EMPTY_RENDER, ...message.render };
-    const numericMessageId = Number(message.id);
-    const canAddressMessage = Number.isInteger(numericMessageId) && numericMessageId >= 0;
+    const messageUid = message.uid;
+    const canAddressMessage = Boolean(messageUid);
     const roleAttributes = {
         mesid: message.id,
         ch_name: message.name,
@@ -321,32 +320,32 @@ export const MainChatMessageRow = memo(function MainChatMessageRow({
     const avatarFailed = failedAvatarSrc === avatarSrc;
     const setReasoningOpen = (open: boolean) => {
         if (canAddressMessage && hasReasoning) {
-            void commands?.setMessageReasoningOpen(numericMessageId, open);
+            void commands?.setMessageReasoningOpen(messageUid, open);
         }
     };
     const startReasoningEdit = () => {
         if (canAddressMessage) {
-            void commands?.startMessageReasoningEdit(numericMessageId);
+            void commands?.startMessageReasoningEdit(messageUid);
         }
     };
     const copyReasoning = () => {
         if (canAddressMessage) {
-            void commands?.copyMessageReasoning(numericMessageId);
+            void commands?.copyMessageReasoning(messageUid);
         }
     };
     const commitReasoningEdit = () => {
         if (canAddressMessage) {
-            void commands?.commitMessageReasoningEdit(numericMessageId);
+            void commands?.commitMessageReasoningEdit(messageUid);
         }
     };
     const cancelReasoningEdit = () => {
         if (canAddressMessage) {
-            void commands?.cancelMessageReasoningEdit(numericMessageId);
+            void commands?.cancelMessageReasoningEdit(messageUid);
         }
     };
     const deleteReasoning = () => {
         if (canAddressMessage) {
-            void commands?.deleteMessageReasoning(numericMessageId);
+            void commands?.deleteMessageReasoning(messageUid);
         }
     };
 
@@ -405,7 +404,7 @@ export const MainChatMessageRow = memo(function MainChatMessageRow({
                                 tabIndex={0}
                                 onClick={event => {
                                     event.stopPropagation();
-                                    void commands?.commitMessageEdit(numericMessageId);
+                                    void commands?.commitMessageEdit(messageUid);
                                 }}
                                 onKeyDown={stopActivationKeyPropagation}
                             />
@@ -419,7 +418,7 @@ export const MainChatMessageRow = memo(function MainChatMessageRow({
                                 onClick={event => {
                                     event.stopPropagation();
                                     if (canAddressMessage) {
-                                        void commands?.duplicateMessage(numericMessageId);
+                                        void commands?.duplicateMessage(messageUid);
                                     }
                                 }}
                                 onKeyDown={stopActivationKeyPropagation}
@@ -447,7 +446,7 @@ export const MainChatMessageRow = memo(function MainChatMessageRow({
                                 onClick={event => {
                                     event.stopPropagation();
                                     if (canAddressMessage) {
-                                        void commands?.deleteMessage(numericMessageId);
+                                        void commands?.deleteMessage(messageUid);
                                     }
                                 }}
                                 onKeyDown={stopActivationKeyPropagation}
@@ -462,7 +461,7 @@ export const MainChatMessageRow = memo(function MainChatMessageRow({
                                 onClick={event => {
                                     event.stopPropagation();
                                     if (canAddressMessage) {
-                                        void commands?.moveMessage(numericMessageId, 'up');
+                                        void commands?.moveMessage(messageUid, 'up');
                                     }
                                 }}
                                 onKeyDown={stopActivationKeyPropagation}
@@ -477,7 +476,7 @@ export const MainChatMessageRow = memo(function MainChatMessageRow({
                                 onClick={event => {
                                     event.stopPropagation();
                                     if (canAddressMessage) {
-                                        void commands?.moveMessage(numericMessageId, 'down');
+                                        void commands?.moveMessage(messageUid, 'down');
                                     }
                                 }}
                                 onKeyDown={stopActivationKeyPropagation}
@@ -492,7 +491,7 @@ export const MainChatMessageRow = memo(function MainChatMessageRow({
                                 data-action="cancel-edit"
                                 onClick={event => {
                                     event.stopPropagation();
-                                    void commands?.cancelMessageEdit(numericMessageId);
+                                    void commands?.cancelMessageEdit(messageUid);
                                 }}
                                 onKeyDown={stopActivationKeyPropagation}
                             />
@@ -610,7 +609,7 @@ export const MainChatMessageRow = memo(function MainChatMessageRow({
                             initialText={message.reasoningEditText}
                             onEdit={text => {
                                 if (canAddressMessage) {
-                                    void commands?.updateMessageReasoningEdit(numericMessageId, text);
+                                    void commands?.updateMessageReasoningEdit(messageUid, text);
                                 }
                             }}
                         />
@@ -628,7 +627,7 @@ export const MainChatMessageRow = memo(function MainChatMessageRow({
                         ariaLabel="Edit message"
                         initialText={message.editText}
                         onEdit={text => {
-                            void commands?.updateMessageEdit(numericMessageId, text);
+                            void commands?.updateMessageEdit(messageUid, text);
                         }}
                     />
                 ) : (

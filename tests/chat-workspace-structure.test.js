@@ -252,13 +252,18 @@ describe('chat workspace structure', () => {
 
     test('keeps reasoning header toggle explicit for React-owned message rows', () => {
         const reasoningSource = readRepoFile('public/scripts/reasoning.js');
+        const rowSource = readRepoFile('app/components/main-chat/MainChatMessageRow.tsx');
+        const headerBlock = reasoningSource.match(/\$\(document\)\.on\('click', '\.mes_reasoning_header',[\s\S]*?\n    \}\);/)?.[0] ?? '';
 
-        expectContainsMarkers(reasoningSource, [
-            "$(document).on('click', '.mes_reasoning_header', function (e) {",
-            'e.preventDefault();',
-            "const wasOpen = details.prop('open') === true;",
-            'details.prop(\'open\', !wasOpen);',
+        expectContainsMarkers(headerBlock, [
+            'if (isReactMainChatMessageRow(this)) return;',
+            "const wasOpen = messageBlock.find('.mes_reasoning_details').prop('open') === true;",
+            'commands.setMessageReasoningOpen(messageId, !wasOpen)',
         ]);
+        expect(headerBlock).not.toMatch(/\.prop\('open',|\.attr\('open',|\.removeAttr\('open'/);
+        const summaryBlock = rowSource.match(/<summary\s+className="mes_reasoning_summary[\s\S]*?<div className="mes_reasoning_header_block/)?.[0] ?? '';
+        expectContainsMarkers(rowSource, ['open={message.reasoningOpen}', 'commands?.setMessageReasoningOpen(messageUid, open)']);
+        expectContainsMarkers(summaryBlock, ['event.preventDefault();', 'event.stopPropagation();', 'setReasoningOpen(!message.reasoningOpen);']);
     });
 
     test('keeps message row actions discoverable by role and accessible name', () => {

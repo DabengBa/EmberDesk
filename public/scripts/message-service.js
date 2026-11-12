@@ -828,6 +828,10 @@ export function addOneMessage(mes, { insertAfter = null, scroll = true, insertBe
  * @returns {JQuery<HTMLElement>} Rendered HTMLElement.
  */
 export function updateMessageElement(mes, { messageId = state.chat.length - 1, messageElement = state.messageTemplate.clone(), adjustMediaScroll = SCROLL_BEHAVIOR.NONE } = {}) {
+    if (messageElement.closest('[data-main-chat-message-row-owner="react"]').length) {
+        scheduleMainChatMessageListPanelRefresh();
+        return messageElement;
+    }
     let avatarImg = state.default_user_avatar;
 
     //for non-user messages

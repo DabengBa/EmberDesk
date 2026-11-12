@@ -2,19 +2,21 @@ import {
     moment,
 } from '../lib.js';
 import { REASONING_PREFIX, REASONING_SUFFIX, REASONING_SEPARATOR } from './constants.js';
-import { chat, closeMessageEditor, main_api, messageFormatting, saveChatConditional, saveChatDebounced, substituteParams, updateMessageBlock } from '../script.js';
+import { chat, closeMessageEditor, main_api, messageFormatting, saveChatDebounced, substituteParams, updateMessageBlock } from '../script.js';
+import { requireMessageShellContext } from './message-shell-context.js';
 import { eventSource, event_types } from './events.js';
 import { getRegexedString, regex_placement } from './extensions/regex/engine.js';
 import { getCurrentLocale, t, translate } from './i18n.js';
 import { macros, MacroCategory } from './macros/macro-system.js';
 import { chat_completion_sources, getChatCompletionModel, oai_settings } from './openai.js';
-import { Popup } from './popup.js';
 import { SlashCommand } from './slash-commands/SlashCommand.js';
 import { ARGUMENT_TYPE, SlashCommandArgument, SlashCommandNamedArgument } from './slash-commands/SlashCommandArgument.js';
 import { commonEnumProviders, enumIcons } from './slash-commands/SlashCommandCommonEnumsProvider.js';
 import { enumTypes, SlashCommandEnumValue } from './slash-commands/SlashCommandEnumValue.js';
 import { SlashCommandParser } from './slash-commands/SlashCommandParser.js';
-import { copyText, escapeRegex, isFalseBoolean, isTrueBoolean, setDatasetProperty, stringToRange, trimSpaces } from './utils.js';
+import { escapeRegex, isFalseBoolean, isTrueBoolean, setDatasetProperty, stringToRange, trimSpaces } from './utils.js';
+
+const getChatMessageCommands = () => requireMessageShellContext().getChatMessageCommands();
 
 /**
  * @typedef {object} ReasoningTemplate
@@ -735,20 +737,12 @@ function registerReasoningSlashCommands() {
             if (!message) {
                 return '';
             }
-            // Make sure the message has an extra object
-            if (!message.extra || typeof message.extra !== 'object') {
-                message.extra = {};
-            }
-
-            message.extra.reasoning = String(value ?? '');
-            message.extra.reasoning_type = ReasoningType.Manual;
-            await saveChatConditional();
-
+            const commands = getChatMessageCommands();
+            const updated = await commands.setMessageReasoning(messageId, value, { applyRegex: false });
+            if (!updated) return '';
             closeMessageEditor('reasoning');
-            updateMessageBlock(messageId, message);
-
-            if (isTrueBoolean(String(args.collapse))) $(`#chat [mesid="${messageId}"] .mes_reasoning_details`).removeAttr('open');
-            if (isFalseBoolean(String(args.collapse))) $(`#chat [mesid="${messageId}"] .mes_reasoning_details`).attr('open', '');
+            if (isTrueBoolean(String(args.collapse))) commands.setMessageReasoningOpen(messageId, false);
+            if (isFalseBoolean(String(args.collapse))) commands.setMessageReasoningOpen(messageId, true);
             return message.extra.reasoning;
         },
     }));
@@ -854,25 +848,23 @@ function registerReasoningSlashCommands() {
     }));
 
     /**
-     * Gets the reasoning details elements for a message range.
+     * Gets the message IDs for a reasoning range.
      * @param {string} value Unnamed argument value (message ID or range)
-     * @returns {JQuery<HTMLElement>|null} The reasoning details elements, or null if not found
+     * @returns {number[]|null} Message IDs, or null if not found
      */
-    function getReasoningDetailsElements(value) {
+    function getReasoningMessageIds(value) {
         const range = value ? stringToRange(String(value), 0, chat.length - 1) : { start: chat.length - 1, end: chat.length - 1 };
         if (!range) {
             toastr.warning(t`Invalid message ID or range: ${value}`);
             return null;
         }
-        const selector = Array.from({ length: range.end - range.start + 1 }, (_, i) =>
-            `#chat [mesid="${range.start + i}"] .mes_reasoning_details`,
-        ).join(',');
-        const details = $(selector);
-        if (details.length === 0) {
+        const ids = Array.from({ length: range.end - range.start + 1 }, (_, i) => range.start + i)
+            .filter(id => chat[id]);
+        if (ids.length === 0) {
             toastr.warning(t`No reasoning blocks found for the specified messages.`);
             return null;
         }
-        return details;
+        return ids;
     }
 
     const reasoningVisibilityArgs = [
@@ -889,8 +881,8 @@ function registerReasoningSlashCommands() {
         helpString: t`Collapse the reasoning block of a message or range of messages.`,
         unnamedArgumentList: reasoningVisibilityArgs,
         callback: (_args, value) => {
-            const details = getReasoningDetailsElements(value.toString());
-            if (details) details.removeAttr('open');
+            const ids = getReasoningMessageIds(value.toString());
+            ids?.forEach(id => getChatMessageCommands().setMessageReasoningOpen(id, false));
             return '';
         },
     }));
@@ -901,8 +893,8 @@ function registerReasoningSlashCommands() {
         helpString: t`Expand the reasoning block of a message or range of messages.`,
         unnamedArgumentList: reasoningVisibilityArgs,
         callback: (_args, value) => {
-            const details = getReasoningDetailsElements(value.toString());
-            if (details) details.attr('open', '');
+            const ids = getReasoningMessageIds(value.toString());
+            ids?.forEach(id => getChatMessageCommands().setMessageReasoningOpen(id, true));
             return '';
         },
     }));
@@ -913,16 +905,8 @@ function registerReasoningSlashCommands() {
         helpString: t`Toggle the reasoning block of a message or range of messages. Expanded blocks will be collapsed, and collapsed blocks will be expanded.`,
         unnamedArgumentList: reasoningVisibilityArgs,
         callback: (_args, value) => {
-            const details = getReasoningDetailsElements(value.toString());
-            if (!details) return '';
-            details.each(function () {
-                const $el = $(this);
-                if ($el.attr('open') !== undefined) {
-                    $el.removeAttr('open');
-                } else {
-                    $el.attr('open', '');
-                }
-            });
+            const ids = getReasoningMessageIds(value.toString());
+            ids?.forEach(id => getChatMessageCommands().setMessageReasoningOpen(id));
             return '';
         },
     }));
@@ -953,221 +937,74 @@ function isReactMainChatMessageRow(element) {
 }
 
 function setReasoningEventHandlers() {
-    /**
-     * Updates the reasoning block of a message from a value.
-     * @param {object} message Message object
-     * @param {string} value Reasoning value
-     */
-    function updateReasoningFromValue(message, value) {
-        const reasoning = getRegexedString(value, regex_placement.REASONING, { isEdit: true });
-        message.extra.reasoning = reasoning;
-        message.extra.reasoning_type = message.extra.reasoning_type ? ReasoningType.Edited : ReasoningType.Manual;
-    }
-
     $(document).on('click', '.mes_reasoning_details', function (e) {
-        if (isReactMainChatMessageRow(this)) {
-            return;
-        }
-        if (!e.target.closest('.mes_reasoning_actions') && !e.target.closest('.mes_reasoning_header')) {
-            e.preventDefault();
-        }
+        if (isReactMainChatMessageRow(this)) return;
+        if (!e.target.closest('.mes_reasoning_actions') && !e.target.closest('.mes_reasoning_header')) e.preventDefault();
     });
 
     $(document).on('click', '.mes_reasoning_header', function (e) {
-        if (isReactMainChatMessageRow(this)) {
-            return;
-        }
+        if (isReactMainChatMessageRow(this)) return;
         e.preventDefault();
-        const details = $(this).closest('.mes_reasoning_details');
-        // Along with the CSS rules to mark blocks not toggle-able when they are empty, prevent them from actually being toggled, or being edited
-        if (details.find('.mes_reasoning').is(':empty')) {
-            return;
-        }
-
-        const wasOpen = details.prop('open') === true;
-        details.prop('open', !wasOpen);
-
-        // If we are in message edit mode and reasoning area is closed, a click opens and edits it
-        const mes = $(this).closest('.mes');
-        const mesEditArea = mes.find('#curEditTextarea');
-        if (mesEditArea.length && !wasOpen) {
-            const summary = $(mes).find('.mes_reasoning_summary');
-            summary.find('.mes_reasoning_edit').trigger('click');
+        const { messageId, messageBlock } = getMessageFromJquery(this);
+        const wasOpen = messageBlock.find('.mes_reasoning_details').prop('open') === true;
+        const commands = getChatMessageCommands();
+        if (commands.setMessageReasoningOpen(messageId, !wasOpen) && !wasOpen && messageBlock.find('#curEditTextarea').length) {
+            commands.startMessageReasoningEdit(messageId);
         }
     });
 
-    $(document).on('click', '.mes_reasoning_copy', (e) => {
-        if (isReactMainChatMessageRow(e.currentTarget)) {
-            return;
-        }
+    $(document).on('click', '.mes_reasoning_copy', function (e) {
+        if (isReactMainChatMessageRow(this)) return;
         e.stopPropagation();
         e.preventDefault();
     });
 
-    $(document).on('click', '.mes_reasoning_edit', function (e) {
-        if (isReactMainChatMessageRow(this)) {
-            return;
-        }
+    $(document).on('click', '.mes_reasoning_edit, .mes_edit_add_reasoning', function (e) {
+        if (isReactMainChatMessageRow(this)) return;
         e.stopPropagation();
         e.preventDefault();
-        const { message, messageBlock } = getMessageFromJquery(this);
-        if (!message?.extra) {
-            return;
-        }
-
-        const reasoning = String(message?.extra?.reasoning ?? '');
-        const chatElement = document.getElementById('chat');
-        const textarea = document.createElement('textarea');
-        const reasoningBlock = messageBlock.find('.mes_reasoning');
-        textarea.classList.add('reasoning_edit_textarea');
-        textarea.value = reasoning;
-        $(textarea).insertBefore(reasoningBlock);
-
-        if (!CSS.supports('field-sizing', 'content')) {
-            const resetHeight = function () {
-                const scrollTop = chatElement.scrollTop;
-                textarea.style.height = '0px';
-                textarea.style.height = `${textarea.scrollHeight}px`;
-                chatElement.scrollTop = scrollTop;
-            };
-
-            textarea.addEventListener('input', resetHeight);
-            resetHeight();
-        }
-
-        textarea.focus();
-        textarea.setSelectionRange(textarea.value.length, textarea.value.length);
-
-        const textareaRect = textarea.getBoundingClientRect();
-        const chatRect = chatElement.getBoundingClientRect();
-
-        // Scroll if textarea bottom is below visible area
-        if (textareaRect.bottom > chatRect.bottom) {
-            const scrollOffset = textareaRect.bottom - chatRect.bottom;
-            chatElement.scrollTop += scrollOffset;
-        }
+        const { messageId } = getMessageFromJquery(this);
+        getChatMessageCommands().startMessageReasoningEdit(messageId);
     });
 
     $(document).on('click', '.mes_reasoning_close_all', function (e) {
-        if (isReactMainChatMessageRow(this)) {
-            return;
-        }
+        if (isReactMainChatMessageRow(this)) return;
         e.stopPropagation();
         e.preventDefault();
-
-        $('.mes_reasoning_details[open] .mes_reasoning_header').trigger('click');
+        getChatMessageCommands().collapseAllMessageReasoning();
     });
 
     $(document).on('click', '.mes_reasoning_edit_done', async function (e) {
-        if (isReactMainChatMessageRow(this)) {
-            return;
-        }
+        if (isReactMainChatMessageRow(this)) return;
         e.stopPropagation();
         e.preventDefault();
-        const { message, messageId, messageBlock } = getMessageFromJquery(this);
-        if (!message?.extra) {
-            return;
-        }
-
+        const { messageId, messageBlock } = getMessageFromJquery(this);
+        const commands = getChatMessageCommands();
         const textarea = messageBlock.find('.reasoning_edit_textarea');
-        let newReasoning = String(textarea.val());
-        newReasoning = substituteParams(newReasoning);
-        textarea.remove();
-        if (newReasoning === message.extra.reasoning) {
-            return;
-        }
-        updateReasoningFromValue(message, newReasoning);
-        await saveChatConditional();
-        updateMessageBlock(messageId, message);
-
-        messageBlock.find('.mes_edit_done:visible').trigger('click');
-        await eventSource.emit(event_types.MESSAGE_REASONING_EDITED, messageId);
+        if (textarea.length) commands.updateMessageReasoningEdit(messageId, textarea.val());
+        await commands.commitMessageReasoningEdit(messageId);
     });
 
-    $(document).on('click', '.mes_reasoning_edit_cancel', function (e) {
-        if (isReactMainChatMessageRow(this)) {
-            return;
-        }
+    $(document).on('click', '.mes_reasoning_edit_cancel', async function (e) {
+        if (isReactMainChatMessageRow(this)) return;
         e.stopPropagation();
         e.preventDefault();
-
-        const { messageBlock } = getMessageFromJquery(this);
-        const textarea = messageBlock.find('.reasoning_edit_textarea');
-        textarea.remove();
-
-        messageBlock.find('.mes_reasoning_edit_cancel:visible').trigger('click');
-
-        updateReasoningUI(messageBlock);
-    });
-
-    $(document).on('click', '.mes_edit_add_reasoning', async function () {
-        if (isReactMainChatMessageRow(this)) {
-            return;
-        }
-        const { message, messageBlock } = getMessageFromJquery(this);
-        if (!message?.extra) {
-            return;
-        }
-
-        if (message.extra.reasoning) {
-            toastr.info(t`Reasoning already exists.`, t`Edit Message`);
-            return;
-        }
-
-        messageBlock.addClass('reasoning');
-
-        // To make hidden reasoning blocks editable, we just set them to "Done" here already.
-        // They will be done on save anyway - and on cancel the reasoning block gets rerendered too.
-        if (messageBlock.attr('data-reasoning-state') === ReasoningState.Hidden) {
-            messageBlock.attr('data-reasoning-state', ReasoningState.Done);
-        }
-
-        // Open the reasoning area so we can actually edit it
-        messageBlock.find('.mes_reasoning_details').attr('open', '');
-        messageBlock.find('.mes_reasoning_edit').trigger('click');
-        await saveChatConditional();
+        const { messageId } = getMessageFromJquery(this);
+        await getChatMessageCommands().cancelMessageReasoningEdit(messageId);
     });
 
     $(document).on('click', '.mes_reasoning_delete', async function (e) {
-        if (isReactMainChatMessageRow(this)) {
-            return;
-        }
+        if (isReactMainChatMessageRow(this)) return;
         e.stopPropagation();
         e.preventDefault();
-
-        const confirm = await Popup.show.confirm(t`Remove Reasoning`, t`Are you sure you want to clear the reasoning?<br />Visible message contents will stay intact.`);
-
-        if (!confirm) {
-            return;
-        }
-
-        const { message, messageId, messageBlock } = getMessageFromJquery(this);
-        if (!message?.extra) {
-            return;
-        }
-        message.extra.reasoning = '';
-        delete message.extra.reasoning_type;
-        delete message.extra.reasoning_duration;
-        await saveChatConditional();
-        updateMessageBlock(messageId, message);
-        const textarea = messageBlock.find('.reasoning_edit_textarea');
-        textarea.remove();
-        await eventSource.emit(event_types.MESSAGE_REASONING_DELETED, messageId);
+        const { messageId } = getMessageFromJquery(this);
+        await getChatMessageCommands().deleteMessageReasoning(messageId);
     });
 
     $(document).on('pointerup', '.mes_reasoning_copy', async function () {
-        if (isReactMainChatMessageRow(this)) {
-            return;
-        }
-        const { message } = getMessageFromJquery(this);
-        const reasoning = String(message?.extra?.reasoning ?? '');
-
-        if (!reasoning) {
-            return;
-        }
-
-        await copyText(reasoning);
-        toastr.info(t`Copied!`, '', { timeOut: 2000 });
+        if (isReactMainChatMessageRow(this)) return;
+        const { messageId } = getMessageFromJquery(this);
+        await getChatMessageCommands().copyMessageReasoning(messageId);
     });
 }
 

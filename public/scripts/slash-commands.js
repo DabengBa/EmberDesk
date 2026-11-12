@@ -8,7 +8,7 @@ import {
     addOneMessage,
     characters,
     chat,
-    chatElement,
+
     chat_metadata,
     comment_avatar,
     deactivateSendButtons,
@@ -55,8 +55,8 @@ import {
     system_avatar,
     system_message_types,
     this_chid,
-    updateMessageElement,
 } from '../script.js';
+import { requireMessageShellContext } from './message-shell-context.js';
 import { eventSource, event_types } from './events.js';
 import { getRequestHeaders } from './request-context.js';
 import { SlashCommandParser } from './slash-commands/SlashCommandParser.js';
@@ -4084,16 +4084,7 @@ async function deleteMessagesByNameCallback(_, name) {
         return;
     }
 
-    for (const message of messagesToDelete) {
-        const index = chat.indexOf(message);
-        if (index !== -1) {
-            console.debug(`/delname: Deleting message #${index}`, message);
-            chat.splice(index, 1);
-        }
-    }
-
-    await saveChatConditional();
-    await reloadCurrentChat();
+    await requireMessageShellContext().getChatMessageCommands().deleteMatching(message => message.name === name);
 
     toastr.info(t`Deleted ${messagesToDelete.length} messages from ${name}`);
     return '';
@@ -4716,23 +4707,12 @@ async function messageRoleCallback(args, role) {
             : message.is_user ? 'user' : 'assistant';
     }
 
-    message.extra = message.extra || {};
-    if (role === 'system') {
-        message.extra.type = system_message_types.NARRATOR;
-    } else {
-        delete message.extra.type;
-    }
-    message.is_user = role === 'user';
-
-    await eventSource.emit(event_types.MESSAGE_EDITED, modifyAt);
-    const existingMessage = chatElement.find(`.mes[mesid="${modifyAt}"]`);
-    if (existingMessage.length) {
-        const newMessageElement = updateMessageElement(message, { messageId: modifyAt });
-        existingMessage.after(newMessageElement);
-        existingMessage.remove();
-    }
-    await eventSource.emit(event_types.MESSAGE_UPDATED, modifyAt);
-    await saveChatConditional();
+    await requireMessageShellContext().getChatMessageCommands().updateMessageFields(modifyAt, target => {
+        target.extra = target.extra || {};
+        if (role === 'system') target.extra.type = system_message_types.NARRATOR;
+        else delete target.extra.type;
+        target.is_user = role === 'user';
+    });
 
     return role;
 }
@@ -4765,33 +4745,25 @@ async function messageNameCallback(args, name) {
 
     let newName = '';
 
-    if (message.is_user) {
-        message.name = newName = name;
-        message.force_avatar = default_avatar;
-        message.original_avatar = default_avatar;
-    } else {
-        const character = findChar({ name: name });
-        if (character) {
-            const characterInfo = getNameAndAvatarForMessage(character, name);
-            message.name = newName = characterInfo.name;
-            message.force_avatar = characterInfo.force_avatar;
-            message.original_avatar = characterInfo.original_avatar;
+    await requireMessageShellContext().getChatMessageCommands().updateMessageFields(modifyAt, target => {
+        if (target.is_user) {
+            target.name = newName = name;
+            target.force_avatar = default_avatar;
+            target.original_avatar = default_avatar;
         } else {
-            message.name = newName = name;
-            message.force_avatar = default_avatar;
-            message.original_avatar = default_avatar;
+            const character = findChar({ name: name });
+            if (character) {
+                const characterInfo = getNameAndAvatarForMessage(character, name);
+                target.name = newName = characterInfo.name;
+                target.force_avatar = characterInfo.force_avatar;
+                target.original_avatar = characterInfo.original_avatar;
+            } else {
+                target.name = newName = name;
+                target.force_avatar = default_avatar;
+                target.original_avatar = default_avatar;
+            }
         }
-    }
-
-    await eventSource.emit(event_types.MESSAGE_EDITED, modifyAt);
-    const existingMessage = chatElement.find(`.mes[mesid="${modifyAt}"]`);
-    if (existingMessage.length) {
-        const newMessageElement = updateMessageElement(message, { messageId: modifyAt });
-        existingMessage.after(newMessageElement);
-        existingMessage.remove();
-    }
-    await eventSource.emit(event_types.MESSAGE_UPDATED, modifyAt);
-    await saveChatConditional();
+    });
 
     return newName;
 }

@@ -282,6 +282,15 @@ async function openCharacterChat(page, chatName) {
     }, chatName);
 }
 
+async function runSlash(page, command) {
+    return page.evaluate(async text => {
+        const { executeSlashCommandsWithOptions } = await import('/scripts/slash-commands.js');
+        const result = await executeSlashCommandsWithOptions(text);
+        if (result?.isError || result?.isAborted) throw new Error(`Slash failed: ${text}: ${result.errorMessage ?? result.abortReason}`);
+        return result?.pipe;
+    }, command);
+}
+
 async function positionMessageRowNearViewportTop(page, messageId, topOffset = 120) {
     return page.evaluate(async ({ targetMessageId, viewportTopOffset }) => {
         const chatContainer = document.getElementById('chat');
@@ -345,6 +354,34 @@ async function clickControlAtCenter(page, locator) {
 test.describe('chat message rendering', () => {
     // These flows mutate the same seeded character/chat files.
     test.describe.configure({ mode: 'serial' });
+
+    test.beforeEach(async ({ page }) => {
+        // Disable background summarization before application startup, including reloads.
+        // Generation is not part of these tests; never silently mock an unexpected call.
+        await page.route('**/api/settings/get', async route => {
+            const response = await route.fetch();
+            const payload = await response.json();
+            const settings = JSON.parse(payload.settings);
+            settings.oai_settings.chat_memory_enabled = false;
+            // The isolated seed has no canonical presets although its settings select
+            // Default. Supply the actual shipped preset, not an empty regex stub.
+            if (!payload.openai_setting_names.includes('Default')) {
+                payload.openai_setting_names.push('Default');
+                payload.openai_settings.push(fs.readFileSync(path.join(repoRoot, 'default/content/presets/openai/Default.json'), 'utf8'));
+            }
+            await route.fulfill({ response, json: { ...payload, settings: JSON.stringify(settings) } });
+        });
+        const unexpectedGeneration = [];
+        await page.route('**/api/backends/chat-completions/generate', async route => {
+            unexpectedGeneration.push(route.request().url());
+            await route.abort();
+        });
+        page.__unexpectedGeneration = unexpectedGeneration;
+    });
+
+    test.afterEach(async ({ page }) => {
+        expect(page.__unexpectedGeneration, 'message rendering must not invoke generation').toEqual([]);
+    });
 
     test('renders seeded stored chat messages through the real app DOM', async ({ page }, testInfo) => {
         expect(fs.existsSync(seededChatPath)).toBe(true);
@@ -637,11 +674,11 @@ test.describe('chat message rendering', () => {
         await expect(assistantRow).toBeVisible();
         await expectReactMessageRowState(page, assistantMessageIndex, true);
 
-        await page.getByRole('button', { name: 'Chat options' }).click();
+        await page.getByRole('button', { name: /^(Chat options|聊天选项)$/ }).click();
         await page.getByRole('button', { name: '删除消息' }).click();
         await expect(page.locator('#dialogue_del_mes')).toBeVisible();
         await expect(page.locator('#dialogue_del_mes_ok')).toBeDisabled();
-        await expect(page.locator('#dialogue_del_mes_summary')).toContainText('Select a message');
+        await expect(page.locator('#dialogue_del_mes_summary')).toContainText(/Select a message|选择一条消息/);
 
         const enteredDeleteModeState = await readDeleteModeRowState(page, assistantMessageIndex);
         expect(enteredDeleteModeState).toMatchObject({
@@ -654,7 +691,7 @@ test.describe('chat message rendering', () => {
 
         await assistantRow.click();
         await expect(page.locator('#dialogue_del_mes_ok')).toBeEnabled();
-        await expect(page.locator('#dialogue_del_mes_summary')).toContainText(`Delete ${seededMessages.length - assistantMessageIndex} messages`);
+        await expect(page.locator('#dialogue_del_mes_summary')).toContainText(new RegExp(`Delete ${seededMessages.length - assistantMessageIndex} messages|删除 ${seededMessages.length - assistantMessageIndex} 条消息`));
 
         const selectedDeleteModeState = await readDeleteModeRowState(page, assistantMessageIndex);
         expect(selectedDeleteModeState).toMatchObject({
@@ -679,6 +716,115 @@ test.describe('chat message rendering', () => {
         expect(getUnexpectedConsoleErrors(consoleErrors)).toEqual([]);
     });
 
+    test('runs real slash message commands on off-window state and persists changes', async ({ page }) => {
+        const name = 'Slash Message Operations Proof';
+        const errors = createConsoleErrorCollector(page);
+        const pageErrors = [];
+        page.on('pageerror', error => pageErrors.push(error.message));
+        await testSetup.awaitST({ page });
+        await seedLongChatFixture(page, name, buildLongChatFixture(seededChatPath, 130));
+        await selectCharacterByName(page, characterName);
+        await openCharacterChat(page, name);
+        await expect(page.locator('#chat .mes[mesid="10"]')).toHaveCount(0);
+        await runSlash(page, '/message-role at=10 assistant');
+        await runSlash(page, '/message-name at=10 SlashName');
+        await runSlash(page, '/hide 10');
+        expect(await page.evaluate(() => {
+            const m = window.SillyTavern.getContext().chat[10];
+            return { name: m.name, is_user: m.is_user, is_system: m.is_system };
+        })).toEqual({ name: 'SlashName', is_user: false, is_system: true });
+        await runSlash(page, '/unhide 10');
+        expect(await page.evaluate(() => window.SillyTavern.getContext().chat[10].is_system)).toBe(false);
+        await page.locator('#show_more_messages').evaluate(element => element.click());
+        await expect(page.locator('#chat .mes[mesid="10"]')).toHaveAttribute('is_user', 'false');
+        await expect(page.locator('#chat .mes[mesid="10"]')).toHaveAttribute('is_system', 'false');
+        await expect(page.locator('#chat .mes[mesid="10"]')).toHaveAttribute('ch_name', 'SlashName');
+        await runSlash(page, '/delname SlashName');
+        expect(await page.evaluate(() => window.SillyTavern.getContext().chat.length)).toBe(129);
+        const cut = await runSlash(page, '/cut 5-6');
+        expect(cut).toContain('Long rendering proof message 006');
+        expect(cut).toContain('Long rendering proof message 007');
+        const deleted = await runSlash(page, '/del 2');
+        expect(deleted).toContain('Long rendering proof message 130');
+        expect(await page.evaluate(() => window.SillyTavern.getContext().chat.length)).toBe(125);
+        await page.reload();
+        await testSetup.awaitST({ page });
+        await selectCharacterByName(page, characterName);
+        await openCharacterChat(page, name);
+        expect(await page.evaluate(() => window.SillyTavern.getContext().chat.length)).toBe(125);
+        expect(getUnexpectedConsoleErrors(errors)).toEqual([]);
+        expect(pageErrors).toEqual([]);
+    });
+
+    test('stale row callbacks target the moved message while save is pending', async ({ page }) => {
+        const name = 'Slow Move Message Proof';
+        const errors = createConsoleErrorCollector(page);
+        await testSetup.awaitST({ page });
+        await seedLongChatFixture(page, name, buildLongChatFixture(seededChatPath, 20));
+        await selectCharacterByName(page, characterName);
+        await openCharacterChat(page, name);
+        await page.evaluate(() => { window.moveOriginal = window.SillyTavern.getContext().chat[5]; });
+        const source = page.locator('#chat .mes[mesid="5"]');
+        await source.locator('.mes_edit').evaluate(element => element.click());
+        await source.locator('.edit_textarea').fill('slow move draft');
+        // A non-reset metadata update is still the same loaded chat session.
+        await page.evaluate(() => window.SillyTavern.getContext().updateChatMetadata({ uid_test_marker: true }, false));
+        let release;
+        const gate = new Promise(resolve => { release = resolve; });
+        let saveStarted;
+        const started = new Promise(resolve => { saveStarted = resolve; });
+        await page.route('**/api/chats/save', async route => { saveStarted(); await gate; await route.continue(); });
+        try {
+            await source.evaluate(row => {
+                row.querySelector('.mes_edit_up').click();
+                row.querySelector('.mes_edit_done').click();
+            });
+            await started;
+            // Both events used the same pre-refresh row while persistence was gated.
+            const result = await page.evaluate(() => {
+                const chat = window.SillyTavern.getContext().chat;
+                return { moved: chat[4] === window.moveOriginal, movedText: chat[4].mes, neighborText: chat[5].mes };
+            });
+            expect(result).toEqual({ moved: true, movedText: 'slow move draft', neighborText: 'Long rendering proof message 005 from user.' });
+        } finally {
+            release();
+            await page.unrouteAll({ behavior: 'wait' });
+        }
+        expect(getUnexpectedConsoleErrors(errors)).toEqual([]);
+    });
+
+    test('moving a message keeps its draft and object identity with the moved row', async ({ page }) => {
+        const name = 'Move Message Draft Proof';
+        const errors = createConsoleErrorCollector(page);
+        const pageErrors = [];
+        page.on('pageerror', error => pageErrors.push(error.message));
+        await testSetup.awaitST({ page });
+        await seedLongChatFixture(page, name, buildLongChatFixture(seededChatPath, 20));
+        await selectCharacterByName(page, characterName);
+        await openCharacterChat(page, name);
+        await page.evaluate(() => { window.moveOriginal = window.SillyTavern.getContext().chat[5]; });
+        const source = page.locator('#chat .mes[mesid="5"]');
+        await source.locator('.mes_edit').evaluate(element => element.click());
+        await source.locator('.edit_textarea').fill('draft follows message');
+        await source.locator('.mes_edit_up').evaluate(element => element.click());
+        const moved = page.locator('#chat .mes[mesid="4"]');
+        await expect(moved.locator('.edit_textarea')).toHaveValue('draft follows message');
+        expect(await page.evaluate(() => window.SillyTavern.getContext().chat[4] === window.moveOriginal)).toBe(true);
+        await expect(page.locator('#chat .mes[mesid="5"] .mes_text')).toContainText('message 005');
+        const saved = page.waitForResponse(response => response.url().includes('/api/chats/save') && response.request().method() === 'POST' && response.ok());
+        await moved.locator('.mes_edit_done').evaluate(element => element.click());
+        await expect(moved.locator('.mes_text')).toContainText('draft follows message');
+        await saved;
+        await page.reload();
+        await testSetup.awaitST({ page });
+        await selectCharacterByName(page, characterName);
+        await openCharacterChat(page, name);
+        await expect(page.locator('#chat .mes[mesid="4"] .mes_text')).toContainText('draft follows message');
+        await expect(page.locator('#chat .mes[mesid="5"] .mes_text')).toContainText('message 005');
+        expect(getUnexpectedConsoleErrors(errors)).toEqual([]);
+        expect(pageErrors).toEqual([]);
+    });
+
     test('deletes a message range through the React owner and persists it', async ({ page }) => {
         const chatName = 'Dev Character 001 Bulk Delete Proof';
         const fixture = buildLongChatFixture(seededChatPath, 20);
@@ -695,7 +841,7 @@ test.describe('chat message rendering', () => {
             const context = window.SillyTavern.getContext();
             window.bulkDeleteEvents = [];
             context.eventSource.on(context.eventTypes.MESSAGE_DELETED, count => {
-                window.bulkDeleteEvents.push({ count, rowStillOwned: !!document.querySelector('#chat .mes[mesid="10"]') });
+                window.bulkDeleteEvents.push({ count });
             });
         });
         await page.getByRole('button', { name: /Chat options|聊天选项/ }).click();
@@ -709,7 +855,7 @@ test.describe('chat message rendering', () => {
         await expect(page.locator('#chat .mes[mesid="9"]')).toBeVisible();
         await expect(page.locator('#chat .mes[mesid="10"]')).toHaveCount(0);
         await expect(retainedRow.locator('.edit_textarea')).toHaveValue('unsaved retained draft');
-        expect(await page.evaluate(() => window.bulkDeleteEvents)).toEqual([{ count: 10, rowStillOwned: true }]);
+        expect(await page.evaluate(() => window.bulkDeleteEvents)).toEqual([{ count: 10 }]);
         await expect.poll(() => page.evaluate(() => {
             const chat = document.querySelector('#chat');
             return chat.scrollHeight - chat.clientHeight - chat.scrollTop;
@@ -898,7 +1044,7 @@ test.describe('chat message rendering', () => {
                 await context.openCharacterChat(chatName);
             }, mobileLongChatName);
 
-            const composer = page.getByRole('textbox', { name: 'Chat message' });
+            const composer = page.getByRole('textbox', { name: /^(Chat message|聊天消息)$/ });
             await expect(composer, `${viewport.name} composer`).toBeVisible();
             await composer.focus();
             await expect(composer, `${viewport.name} composer focus`).toBeFocused();
