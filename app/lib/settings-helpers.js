@@ -320,6 +320,28 @@ function areFormValuesEqual(left, right) {
 }
 
 /**
+ * Rebase a rejected settings save on the latest canonical provider settings.
+ * Each setting (including nested prompt/extension data) is indivisible: when
+ * both sessions changed it differently, keep the draft for explicit reload.
+ * @param {import('../compat/runtime-port').SettingsDocument} base
+ * @param {import('../compat/runtime-port').SettingsDocument} local
+ * @param {import('../compat/runtime-port').SettingsDocument} remote
+ * @returns {import('../compat/runtime-port').SettingsDocument | null}
+ */
+export function rebaseChatCompletionSettings(base, local, remote) {
+    const merged = structuredClone(remote);
+    for (const key of new Set([...Object.keys(base), ...Object.keys(local)])) {
+        if (areFormValuesEqual(local[key], base[key])) continue;
+        if (!areFormValuesEqual(remote[key], base[key]) && !areFormValuesEqual(remote[key], local[key])) {
+            return null;
+        }
+        if (Object.hasOwn(local, key)) merged[key] = structuredClone(local[key]);
+        else delete merged[key];
+    }
+    return merged;
+}
+
+/**
  * @param {object} baseSettings
  * @param {object} formValues
  * @param {{ settingsRevision?: number | null, baselineFormValues?: object | null }} [options]

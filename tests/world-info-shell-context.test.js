@@ -26,6 +26,24 @@ afterEach(async () => {
 });
 
 describe('world info shell context', () => {
+    test('shell adapter observes replacement metadata and preserves bound emitter methods', async () => {
+        const context = await import('../public/scripts/world-info-shell-context.js');
+        const adapter = await import('../public/scripts/world-info-shell-adapter.js');
+        let metadata = { current: 'first' };
+        const emitter = { count: 0, emit() { this.count++; } };
+        context.registerWorldInfoShellContext({ getChatMetadata: () => metadata, eventSource: emitter });
+        try {
+            expect(adapter.chat_metadata.current).toBe('first');
+            metadata = { current: 'second' };
+            adapter.chat_metadata.extra = 1;
+            adapter.eventSource.emit();
+            expect(metadata).toEqual({ current: 'second', extra: 1 });
+            expect(emitter.count).toBe(1);
+        } finally {
+            context.clearWorldInfoShellContext();
+        }
+    });
+
     test('requires an explicit shell context before shell-owned world-info paths run', async () => {
         const module = await importContextModule();
 
@@ -83,13 +101,15 @@ describe('world info shell context', () => {
 
     test('routes world-info shell dependencies through the dedicated context seam', () => {
         const worldInfoSource = read('public/scripts/world-info.js');
+        const adapterSource = read('public/scripts/world-info-shell-adapter.js');
         const scriptSource = read('public/script.js');
 
-        expect(worldInfoSource).toContain("from './world-info-shell-context.js'");
+        expect(worldInfoSource).toContain("from './world-info-shell-adapter.js'");
         expect(worldInfoSource).not.toContain("from '../script.js'");
-        expect(worldInfoSource).toContain('requireWorldInfoShellContext');
-        expect(worldInfoSource).toContain('getWorldInfoShellEventSourceProperty');
-        expect(worldInfoSource).toContain('function getWorldInfoShell()');
+        expect(adapterSource).toContain("from './world-info-shell-context.js'");
+        expect(adapterSource).toContain('requireWorldInfoShellContext');
+        expect(adapterSource).toContain('getWorldInfoShellEventSourceProperty');
+        expect(adapterSource).toContain('function getWorldInfoShell()');
         expect(scriptSource).toContain('registerWorldInfoShellContext({');
         expect(scriptSource).toContain('getChatMetadata: () => chat_metadata');
         expect(scriptSource).toContain('getCurrentCharacterId: () => this_chid');

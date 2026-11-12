@@ -113,6 +113,9 @@ export function createReactRuntimeProvider({
         getSnapshot() {
             return refreshSnapshot();
         },
+        getChatCompletionSettings() {
+            return structuredClone(getContext().chatCompletionSettings ?? {});
+        },
         subscribe(listener) {
             if (typeof listener !== 'function') {
                 throw new TypeError('React runtime subscriber must be a function');
@@ -127,8 +130,8 @@ export function createReactRuntimeProvider({
             stopGeneration: () => commands.stopGeneration(),
             loadEarlier: anchorId => Promise.resolve(commands.loadEarlier(anchorId)),
             saveSettings: settings => Promise.resolve(commands.saveSettings(settings)),
-            connectProvider: () => Promise.resolve(commands.connectProvider()),
-            testProviderConnection: () => Promise.resolve(commands.testProviderConnection()),
+            connectProvider: input => Promise.resolve(commands.connectProvider(input)),
+            testProviderConnection: input => Promise.resolve(commands.testProviderConnection(input)),
         }),
     };
 }

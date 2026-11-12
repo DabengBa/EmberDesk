@@ -1,19 +1,16 @@
 import { Fuse, lodash } from '../lib.js';
 
 import {
-    amount_gen,
     characters,
     main_api,
-    max_context,
     online_status,
     saveSettings,
-    saveSettingsDebounced,
     this_chid,
 } from '../script.js';
 import { eventSource, event_types } from './events.js';
 import { getRequestHeaders } from './request-context.js';
 import { t } from './i18n.js';
-import { oai_settings, openai_setting_names, openai_settings } from './openai.js';
+import { getOpenAIPresetService, oai_settings, openai_setting_names, openai_settings } from './openai.js';
 import { Popup } from './popup.js';
 import { SlashCommand } from './slash-commands/SlashCommand.js';
 import { ARGUMENT_TYPE, SlashCommandArgument } from './slash-commands/SlashCommandArgument.js';
@@ -21,7 +18,7 @@ import { enumIcons } from './slash-commands/SlashCommandCommonEnumsProvider.js';
 import { SlashCommandEnumValue, enumTypes } from './slash-commands/SlashCommandEnumValue.js';
 import { SlashCommandParser } from './slash-commands/SlashCommandParser.js';
 
-import { download, ensurePlainObject, equalsIgnoreCaseAndAccents, getSanitizedFilename, parseJsonFile, waitUntilCondition } from './utils.js';
+import { ensurePlainObject, waitUntilCondition } from './utils.js';
 
 const presetManagers = {};
 
@@ -84,22 +81,13 @@ export async function saveSettingsStrict() {
     await saveSettings(0, { strict: true });
 }
 
-/**
- * Registers preset managers for all select elements with data-preset-manager-for attribute.
- */
+/** Register the supported live preset manager. */
 function registerPresetManagers() {
-    $('select[data-preset-manager-for]').each((_, e) => {
-        const forData = $(e).data('preset-manager-for');
-        for (const apiId of forData.split(',')) {
-            console.debug(`Registering preset manager for API: ${apiId}`);
-            presetManagers[apiId] = new PresetManager($(e), apiId);
-        }
-    });
+    presetManagers.openai = new PresetManager(null, 'openai');
 }
 
 class PresetManager {
-    constructor(select, apiId) {
-        this.select = select;
+    constructor(_select, apiId) {
         this.apiId = apiId;
     }
 
@@ -108,7 +96,7 @@ class PresetManager {
      * @returns {string[]} List of preset names
      */
     getAllPresets() {
-        return $(this.select).find('option').map((_, el) => el.text).toArray();
+        return getOpenAIPresetService().getAllPresets();
     }
 
     /**
@@ -117,9 +105,7 @@ class PresetManager {
      * @returns {any} Preset value
      */
     findPreset(name) {
-        return $(this.select).find('option').filter(function () {
-            return $(this).text() === name;
-        }).val();
+        return getOpenAIPresetService().findPreset(name);
     }
 
     /**
@@ -127,7 +113,7 @@ class PresetManager {
      * @returns {any} Selected preset value
      */
     getSelectedPreset() {
-        return $(this.select).find('option:selected').val();
+        return getOpenAIPresetService().getSelectedPreset();
     }
 
     /**
@@ -135,7 +121,7 @@ class PresetManager {
      * @returns {string} Selected preset name
      */
     getSelectedPresetName() {
-        return $(this.select).find('option:selected').text();
+        return getOpenAIPresetService().getSelectedPresetName();
     }
 
     /**
@@ -143,11 +129,8 @@ class PresetManager {
      * @param {string} value Preset option value
      */
     selectPreset(value) {
-        const option = $(this.select).filter(function () {
-            return $(this).val() === value;
-        });
-        option.prop('selected', true);
-        $(this.select).val(value).trigger('change');
+        const name = Object.keys(openai_setting_names).find(key => String(openai_setting_names[key]) === String(value));
+        if (name) void getOpenAIPresetService().select(name).catch(error => { console.error(error); toastr.error(String(error)); });
     }
 
     /**
@@ -156,19 +139,8 @@ class PresetManager {
      * @param {boolean} [options.skipUpdate=false] If true, skips updating the preset list after saving.
      */
     async updatePreset(option = { skipUpdate: false }) {
-        const selected = $(this.select).find('option:selected');
-        console.log(selected);
-
-        if (selected.val() == 'gui') {
-            toastr.info(t`Cannot update GUI preset`);
-            return;
-        }
-
-        const name = selected.text();
-        await this.savePreset(name, null, option);
-
-        const successToast = t`Preset updated`;
-        toastr.success(successToast);
+        await this.savePreset(this.getSelectedPresetName(), null, option);
+        toastr.success(t`Preset updated`);
     }
 
     /**
@@ -198,29 +170,10 @@ class PresetManager {
      * @param {boolean} [options.skipUpdate=false] If true, skips updating the preset list after saving.
      */
     async savePreset(name, settings, { skipUpdate = false } = {}) {
-        const preset = settings ?? this.getPresetSettings(name);
-
-        const response = await fetch('/api/presets/save', {
-            method: 'POST',
-            headers: getRequestHeaders(),
-            body: JSON.stringify({ preset, name, apiId: this.apiId }),
-        });
-
-        if (!response.ok) {
-            toastr.error(t`Check the server connection and reload the page to prevent data loss.`, t`Preset could not be saved`);
-            console.error('Preset could not be saved', response);
-            throw new Error('Preset could not be saved');
-        }
-
-        const data = await response.json();
-        name = data.name;
-
-        if (skipUpdate) {
-            console.debug(`Preset ${name} saved, but not updating the list`);
-            return;
-        }
-
-        this.updateList(name, preset);
+        const service = getOpenAIPresetService();
+        const saved = await service.save(name, settings ?? undefined, { skipUpdate, select: false });
+        if (!skipUpdate) await service.select(saved);
+        return saved;
     }
 
     /**
@@ -228,18 +181,7 @@ class PresetManager {
      * @param {string} newName New name for the preset
      */
     async renamePreset(newName) {
-        const oldName = this.getSelectedPresetName();
-        if (equalsIgnoreCaseAndAccents(oldName, newName)) {
-            throw new Error('New name must be different from old name');
-        }
-        try {
-            await this.savePreset(newName);
-            await this.deletePreset(oldName);
-        } catch (error) {
-            toastr.error(t`Check the server connection and reload the page to prevent data loss.`, t`Preset could not be renamed`);
-            console.error('Preset could not be renamed', error);
-            throw new Error('Preset could not be renamed');
-        }
+        return getOpenAIPresetService().rename(newName);
     }
 
     /**
@@ -270,102 +212,9 @@ class PresetManager {
         return { presets, preset_names, settings };
     }
 
-    /**
-     * Updates the preset list with a new or existing preset.
-     * @param {string} name Name of the preset
-     * @param {object} preset Preset object
-     */
-    updateList(name, preset) {
-        const { presets, preset_names } = this.getPresetList();
-        const presetExists = Object.keys(preset_names).includes(name);
-
-        if (presetExists) {
-            const value = preset_names[name];
-            presets[value] = preset;
-            $(this.select).find(`option[value="${value}"]`).prop('selected', true);
-            $(this.select).val(value).trigger('change');
-        } else {
-            presets.push(preset);
-            const value = presets.length - 1;
-            preset_names[name] = value;
-            const option = $('<option></option>', { value: value, text: name, selected: true });
-            $(this.select).append(option);
-            $(this.select).val(value).trigger('change');
-        }
-    }
-
-    /**
-     * Gets the preset settings for the given name.
-     * @param {string} _name Name of the preset
-     * @returns {object} Preset settings object for the given name
-     */
+    /** Gets the current preset body. */
     getPresetSettings(_name) {
-        function getSettingsByApiId(apiId) {
-            console.warn(`Unknown API ID ${apiId}`);
-            return {};
-        }
-
-        const filteredKeys = [
-            'api_server',
-            'preset',
-            'streaming',
-            'truncation_length',
-            'n',
-            'streaming_url',
-            'stopping_strings',
-            'can_use_tokenization',
-            'can_use_streaming',
-            'enabled',
-            'bind_to_context',
-            'legacy_api',
-            'mancer_model',
-            'togetherai_model',
-            'ollama_model',
-            'vllm_model',
-            'aphrodite_model',
-            'llamacpp_model',
-            'server_urls',
-            'type',
-            'custom_model',
-            'infermaticai_model',
-            'dreamgen_model',
-            'openrouter_model',
-            'featherless_model',
-            'max_tokens_second',
-            'openrouter_providers',
-            'openrouter_quantizations',
-            'openrouter_allow_fallbacks',
-            'tabby_model',
-            'derived',
-            'generic_model',
-            'include_reasoning',
-            'global_banned_tokens',
-            'send_banned_tokens',
-            'claude_model',
-            'google_model',
-            'vertexai_model',
-            'assistant_prefill',
-            'assistant_impersonation',
-            'top_k_openai',
-            'request_images',
-            'request_image_resolution',
-            'request_image_aspect_ratio',
-        ];
-        /** @type {Record<string, any>} */
-        const settings = Object.assign({}, getSettingsByApiId(this.apiId));
-
-        for (const key of filteredKeys) {
-            if (Object.hasOwn(settings, key)) {
-                delete settings[key];
-            }
-        }
-
-        if (this.apiId !== 'openai') {
-            settings.genamt = amount_gen;
-            settings.max_length = max_context;
-        }
-
-        return settings;
+        return getOpenAIPresetService().getPresetBody();
     }
 
     /**
@@ -402,36 +251,8 @@ class PresetManager {
      * @param {string} [name] Name of the preset to delete.
      */
     async deletePreset(name) {
-        const { preset_names } = this.getPresetList();
-        const value = name || this.getSelectedPreset();
-        const nameToDelete = name || this.getSelectedPresetName();
-
-        if (value == 'gui') {
-            toastr.info(t`Cannot delete GUI preset`);
-            return;
-        }
-
-        const index = preset_names[nameToDelete];
-        $(this.select).find(`option[value="${index}"]`).remove();
-        delete preset_names[nameToDelete];
-
-        // switch in UI only when deleting currently selected preset
-        const switchPresets = !name || this.getSelectedPresetName() == name;
-
-        if (Object.keys(preset_names).length && switchPresets) {
-            const nextPresetName = Object.keys(preset_names)[0];
-            const newValue = preset_names[nextPresetName];
-            $(this.select).find(`option[value="${newValue}"]`).attr('selected', 'true');
-            $(this.select).trigger('change');
-        }
-
-        const response = await fetch('/api/presets/delete', {
-            method: 'POST',
-            headers: getRequestHeaders(),
-            body: JSON.stringify({ name: nameToDelete, apiId: this.apiId }),
-        });
-
-        return response.ok;
+        await getOpenAIPresetService().delete(name);
+        return true;
     }
 
     /**
@@ -498,29 +319,63 @@ class PresetManager {
         const { settings } = this.getPresetList();
         const selectedName = this.getSelectedPresetName();
         const presetName = name || selectedName;
-        const capturedPreset = strict ? this.getCompletionPresetByName(presetName) : undefined;
-        if (strict && (!capturedPreset || (expectedPreset && capturedPreset !== expectedPreset))) {
-            throw new Error('Preset no longer exists');
+        if (strict) {
+            const preset = this.getCompletionPresetByName(presetName);
+            if (!preset || (expectedPreset && preset !== expectedPreset)) throw new Error('Preset no longer exists');
+            const service = getOpenAIPresetService();
+            const revision = service.getSelectionRevision();
+            const selected = settings && selectedName === presetName;
+            const priorSettingsExtensions = settings?.extensions;
+            let stagedSettings;
+            let stagedSettingsSnapshot;
+            let settingsCommitted = false;
+            const stagedPreset = structuredClone(preset);
+            stagedPreset.extensions = ensurePlainObject(stagedPreset.extensions || {});
+            if (path) lodash.set(stagedPreset.extensions, path, value); else stagedPreset.extensions = value;
+            const priorPreset = JSON.stringify(preset);
+            const selectionChanged = () => service.getSelectionRevision() !== revision || this.getSelectedPresetName() !== selectedName;
+            try {
+                if (selected) {
+                    stagedSettings = structuredClone(ensurePlainObject(settings.extensions || {}));
+                    if (path) lodash.set(stagedSettings, path, value); else stagedSettings = value;
+                    settings.extensions = stagedSettings;
+                    stagedSettingsSnapshot = JSON.stringify(stagedSettings);
+                    await saveSettings(0, { strict: true });
+                    settingsCommitted = true;
+                    if (selectionChanged()) throw new Error('Preset selection changed while saving settings');
+                }
+                if (this.getCompletionPresetByName(presetName) !== preset || JSON.stringify(preset) !== priorPreset) throw new Error('Preset no longer exists or changed');
+                await this.savePreset(presetName, stagedPreset, { skipUpdate: true });
+                if (this.getCompletionPresetByName(presetName) !== preset || JSON.stringify(preset) !== priorPreset) throw new Error('Preset no longer exists or changed');
+                preset.extensions = stagedPreset.extensions;
+                if (selectionChanged()) throw new Error('Preset selection changed while saving settings');
+            } catch (error) {
+                // Revert only our own still-current field; never clobber a newer edit.
+                if (selected && !selectionChanged() && settings.extensions === stagedSettings
+                    && JSON.stringify(settings.extensions) === stagedSettingsSnapshot) {
+                    settings.extensions = priorSettingsExtensions;
+                    if (settingsCommitted) {
+                        try { await saveSettings(0, { strict: true }); }
+                        catch (rollbackError) { throw new AggregateError([error, rollbackError], 'Preset save failed and settings rollback failed'); }
+                    }
+                }
+                throw error;
+            }
+            return;
         }
-
         // Write to settings if the selected preset is the same as the provided name
         if (settings && selectedName === presetName) {
             // Set the value at the specified path
             settings.extensions = ensurePlainObject(settings.extensions || {});
             if (path) lodash.set(settings.extensions, path, value); else settings.extensions = value;
-            await saveSettings(0, strict ? { strict: true } : undefined);
-            if (strict && this.getSelectedPresetName() !== presetName) {
-                throw new Error('Preset selection changed while saving settings');
-            }
+            await saveSettings();
         }
 
         // Also update the preset by name
         const preset = this.getCompletionPresetByName(presetName);
         if (!preset) {
-            if (strict) throw new Error('Preset no longer exists');
             return;
         }
-        if (strict && preset !== capturedPreset) throw new Error('Preset no longer exists');
 
         // Set the value at the specified path
         preset.extensions = ensurePlainObject(preset.extensions || {});
@@ -644,195 +499,4 @@ export async function initPresetManager() {
     }));
 
 
-    $(document).on('click', '[data-preset-manager-update]', async function () {
-        const apiId = $(this).data('preset-manager-update');
-        const presetManager = getPresetManager(apiId);
-
-        if (!presetManager) {
-            console.warn(`Preset Manager not found for API: ${apiId}`);
-            return;
-        }
-
-        await presetManager.updatePreset();
-    });
-
-    $(document).on('click', '[data-preset-manager-new]', async function () {
-        const apiId = $(this).data('preset-manager-new');
-        const presetManager = getPresetManager(apiId);
-
-        if (!presetManager) {
-            console.warn(`Preset Manager not found for API: ${apiId}`);
-            return;
-        }
-
-        await presetManager.savePresetAs();
-    });
-
-    $(document).on('click', '[data-preset-manager-rename]', async function () {
-        const apiId = $(this).data('preset-manager-rename');
-        const presetManager = getPresetManager(apiId);
-
-        if (!presetManager) {
-            console.warn(`Preset Manager not found for API: ${apiId}`);
-            return;
-        }
-
-        const popupHeader = t`Rename preset`;
-        const oldName = presetManager.getSelectedPresetName();
-        const newName = await getSanitizedFilename(await Popup.show.input(popupHeader, t`Enter a new name:`, oldName) || '');
-        if (!newName || oldName === newName) {
-            console.debug('Preset rename cancelled');
-            return;
-        }
-        if (equalsIgnoreCaseAndAccents(oldName, newName)) {
-            toastr.warning(t`Name not accepted, as it is the same as before (ignoring case and accents).`, t`Rename Preset`);
-            return;
-        }
-
-        await eventSource.emit(event_types.PRESET_RENAMED_BEFORE, { apiId: apiId, oldName: oldName, newName: newName });
-        const extensions = presetManager.readPresetExtensionField({ name: oldName, path: '' });
-        await presetManager.renamePreset(newName);
-        await presetManager.writePresetExtensionField({ name: newName, path: '', value: extensions });
-        await eventSource.emit(event_types.PRESET_RENAMED, { apiId: apiId, oldName: oldName, newName: newName });
-
-        if (apiId === 'openai') {
-            // This is a horrible mess, but prevents the renamed preset from being corrupted.
-            $('#update_oai_preset').trigger('click');
-            return;
-        }
-
-        const successToast = t`Preset renamed`;
-        toastr.success(successToast);
-    });
-
-    $(document).on('click', '[data-preset-manager-export]', async function () {
-        const apiId = $(this).data('preset-manager-export');
-        const presetManager = getPresetManager(apiId);
-
-        if (!presetManager) {
-            console.warn(`Preset Manager not found for API: ${apiId}`);
-            return;
-        }
-
-        const selected = $(presetManager.select).find('option:selected');
-        const name = selected.text();
-        const preset = presetManager.getPresetSettings(name);
-        const data = JSON.stringify(preset, null, 4);
-        download(data, `${name}.json`, 'application/json');
-    });
-
-    $(document).on('click', '[data-preset-manager-import]', async function () {
-        const apiId = $(this).data('preset-manager-import');
-        $(`[data-preset-manager-file="${apiId}"]`).trigger('click');
-    });
-
-    $(document).on('change', '[data-preset-manager-file]', async function (e) {
-        const apiId = $(this).data('preset-manager-file');
-        const presetManager = getPresetManager(apiId);
-
-        if (!presetManager) {
-            console.warn(`Preset Manager not found for API: ${apiId}`);
-            return;
-        }
-
-        const file = e.target.files[0];
-
-        if (!file) {
-            return;
-        }
-
-        const fileName = file.name.replace('.json', '').replace('.settings', '');
-        const data = await parseJsonFile(file);
-        const name = data?.name ?? fileName;
-        data.name = name;
-
-        await presetManager.savePreset(name, data);
-        const successToast = t`Preset imported`;
-        toastr.success(successToast);
-        e.target.value = null;
-    });
-
-    $(document).on('click', '[data-preset-manager-delete]', async function () {
-        const apiId = $(this).data('preset-manager-delete');
-        const presetManager = getPresetManager(apiId);
-
-        if (!presetManager) {
-            console.warn(`Preset Manager not found for API: ${apiId}`);
-            return;
-        }
-
-        const headerText = t`Delete this preset?`;
-        const confirm = await Popup.show.confirm(headerText, t`This action is irreversible and your current settings will be overwritten.`);
-        if (!confirm) {
-            return;
-        }
-
-        const name = presetManager.getSelectedPresetName();
-        const result = await presetManager.deletePreset();
-
-        if (result) {
-            const successToast = t`Preset deleted`;
-            toastr.success(successToast);
-            await eventSource.emit(event_types.PRESET_DELETED, { apiId, name });
-        } else {
-            const warningToast = t`Preset was not deleted from server`;
-            toastr.warning(warningToast);
-        }
-
-        saveSettingsDebounced();
-    });
-
-    $(document).on('click', '[data-preset-manager-restore]', async function () {
-        const apiId = $(this).data('preset-manager-restore');
-        const presetManager = getPresetManager(apiId);
-
-        if (!presetManager) {
-            console.warn(`Preset Manager not found for API: ${apiId}`);
-            return;
-        }
-
-        const name = presetManager.getSelectedPresetName();
-        const data = await presetManager.getDefaultPreset(name);
-
-        if (name == 'gui') {
-            toastr.info(t`Cannot restore GUI preset`);
-            return;
-        }
-
-        if (!data) {
-            return;
-        }
-
-        if (data.isDefault) {
-            if (Object.keys(data.preset).length === 0) {
-                const errorToast = t`Default preset cannot be restored`;
-                toastr.error(errorToast);
-                return;
-            }
-
-            const confirmText = t`Resetting a <b>default preset</b> will restore the default settings.`;
-            const confirm = await Popup.show.confirm(t`Are you sure?`, confirmText);
-            if (!confirm) {
-                return;
-            }
-
-            await presetManager.deletePreset();
-            await presetManager.savePreset(name, data.preset);
-            const option = presetManager.findPreset(name);
-            presetManager.selectPreset(option);
-            const successToast = t`Default preset restored`;
-            toastr.success(successToast);
-        } else {
-            const confirmText = t`Resetting a <b>custom preset</b> will restore to the last saved state.`;
-            const confirm = await Popup.show.confirm(t`Are you sure?`, confirmText);
-            if (!confirm) {
-                return;
-            }
-
-            const option = presetManager.findPreset(name);
-            presetManager.selectPreset(option);
-            const successToast = t`Preset restored`;
-            toastr.success(successToast);
-        }
-    });
 }

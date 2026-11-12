@@ -72,6 +72,9 @@ import { ChatComposer } from './components/composer/ChatComposer';
 import { CharacterPopup } from './components/character-popup/CharacterPopup';
 import { RightNavPanel } from './components/right-nav/RightNavPanel';
 import { AiConfigPanel } from './components/ai-config/AiConfigPanel';
+export { createPresetService } from './lib/preset-service';
+export { connectProvider, testProviderConnection } from './lib/provider-connection-service';
+import type { PresetService } from './lib/preset-service';
 import { PresetSaveButton } from './components/ai-config/PresetActionsMenu';
 import { PromptInspectorButton, PromptManagerAddButton, PromptManagerList, type PromptPanelBridge } from './components/prompt-panel/PromptPanel';
 import { PromptInspector, type PromptInspectorBridge } from './components/prompt-panel/PromptInspector';
@@ -3288,11 +3291,11 @@ export function mountRightNavPanel(container: HTMLElement) {
  * Mounts the AI response configuration drawer into #left-nav-panel.
  * The outer markup preserves legacy IDs so openai.js bindings, the preset
  * manager, and settings_map wiring reactivate unchanged; the prompt list
- * inside #completion_prompt_manager is a React view over the legacy bridge
- * (oai_settings.prompts / prompt_order).
+ * inside #completion_prompt_manager uses the prompt bridge; preset fields and
+ * actions use the typed service over the same live settings authority.
  */
-export function mountPromptPanel(container: HTMLElement, bridge: PromptPanelBridge) {
-    mountSmallPanel(container, <AiConfigPanel promptList={<PromptManagerList bridge={bridge} />} presetSaveButton={<PresetSaveButton bridge={bridge} />} promptHeaderActions={<><PromptInspectorButton bridge={bridge} /><PromptManagerAddButton bridge={bridge} /></>} />);
+export function mountPromptPanel(container: HTMLElement, bridge: PromptPanelBridge, presetService: PresetService) {
+    mountSmallPanel(container, <AiConfigPanel presetService={presetService} promptList={<PromptManagerList bridge={bridge} />} presetSaveButton={(onSave, busy) => <PresetSaveButton bridge={bridge} onSave={onSave} disabled={busy} />} promptHeaderActions={<><PromptInspectorButton bridge={bridge} /><PromptManagerAddButton bridge={bridge} /></>} />);
 }
 
 let promptInspectorContainer: HTMLElement | null = null;

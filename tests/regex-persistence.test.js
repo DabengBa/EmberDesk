@@ -1,6 +1,8 @@
 import { expect, jest, test } from '@jest/globals';
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
+import { stripTypeScriptTypes } from 'node:module';
+import { createRegexListBridge } from '../public/scripts/extensions/regex/regex-list-bridge.js';
 
 // Unit proof: production functions with controlled browser and persistence boundaries.
 // The lane creates isolated data/tmp roots; the invoking worker owns cleanup. Budget: 10s.
@@ -172,9 +174,11 @@ function presetSetup() {
     const preset = { extensions: {} };
     const settings = { extensions: {} };
     let selected = 'one';
+    let revision = 0;
     const context = {
         ensurePlainObject: value => value, lodash: { set: (obj, key, value) => { obj[key] = value; } },
-        saveSettings: jest.fn(async () => {}),
+        saveSettings: jest.fn(async () => {}), structuredClone,
+        getOpenAIPresetService: () => ({ getSelectionRevision: () => revision }),
     };
     const source = readFileSync(new URL('../public/scripts/preset-manager.js', import.meta.url), 'utf8');
     const start = source.indexOf('    async writePresetExtensionField(');
@@ -184,7 +188,7 @@ function presetSetup() {
         getCompletionPresetByName: name => name === 'one' ? preset : undefined,
         savePreset: jest.fn(async () => {}) };
     return { write: options => method.call(manager, { name: 'one', path: 'regex_scripts', value: [], strict: true, expectedPreset: preset, ...options }),
-        context, manager, preset, select: name => { selected = name; } };
+        context, manager, preset, select: name => { selected = name; revision++; } };
 }
 
 test('strict preset rejects either settings or named-preset failure', async () => {
@@ -194,7 +198,7 @@ test('strict preset rejects either settings or named-preset failure', async () =
     expect(s.manager.savePreset).not.toHaveBeenCalled();
     s.manager.savePreset.mockRejectedValueOnce(new Error('preset failed'));
     await expect(s.write()).rejects.toThrow('preset failed');
-    expect(s.context.saveSettings).toHaveBeenCalledTimes(2);
+    expect(s.context.saveSettings).toHaveBeenCalledTimes(3);
     await expect(s.write()).resolves.toBeUndefined();
 });
 
@@ -226,4 +230,101 @@ test('preset authorization uses captured API and name after selection changes', 
     expect(s.context.feature_settings.preset_allowed_regex.api).toEqual(['one']);
     await s.authorizeRegexTarget(target);
     expect(s.context.saveSettingsStrict).toHaveBeenCalledTimes(2);
+});
+
+// Unit/integration: real preset service, regex manager/engine and list bridge with
+// in-memory persistence ports. No shared data or temp files; budget 10 seconds.
+async function integratedPresetSetup() {
+    const source = readFileSync(new URL('../app/lib/preset-service.ts', import.meta.url), 'utf8');
+    const { createPresetService } = await import(`data:text/javascript;base64,${Buffer.from(stripTypeScriptTypes(source)).toString('base64')}`);
+    const settings = { preset_settings_openai: 'A', extensions: { regex_scripts: [] } };
+    const presets = [{ extensions: { regex_scripts: [] } }, { extensions: { regex_scripts: [] } }];
+    const names = { A: 0, B: 1 };
+    const port = { read: () => ({ settings, presets, names }), fields: { extensions: 'extensions' },
+        persist: jest.fn(async name => name), remove: jest.fn(async () => {}), emit: jest.fn(async () => {}),
+        changed: () => {}, normalize: x => x, afterApply: () => {} };
+    const service = createPresetService(port);
+    const context = { ensurePlainObject: x => x, lodash: { set: (o, k, v) => { o[k] = v; }, get: (o, k) => o[k] },
+        saveSettings: jest.fn(async () => {}), getOpenAIPresetService: () => service, structuredClone };
+    const sourceManager = readFileSync(new URL('../public/scripts/preset-manager.js', import.meta.url), 'utf8');
+    const start = sourceManager.indexOf('    async writePresetExtensionField(');
+    const end = sourceManager.indexOf('\n    }\n}', start) + 6;
+    const write = runInNewContext(`({${sourceManager.slice(start, end)}}).writePresetExtensionField`, context);
+    const manager = { apiId: 'openai', getPresetList: () => ({ settings }), getSelectedPresetName: service.getSelectedPresetName,
+        getCompletionPresetByName: name => presets[names[name]],
+        readPresetExtensionField: ({ name, path }) => (settings.preset_settings_openai === name ? settings : presets[names[name]])?.extensions?.[path],
+        savePreset: (name, body, options) => service.save(name, body, options), writePresetExtensionField: options => write.call(manager, options) };
+    const engineContext = { SCRIPT_TYPES: { GLOBAL: 0, SCOPED: 1, PRESET: 2 }, SCRIPT_TYPE_UNKNOWN: -1,
+        DEFAULT_GET_REGEX_SCRIPTS_OPTIONS: { allowedOnly: false }, feature_settings: { regex: [{ id: 'r' }] },
+        getPresetManager: () => manager, saveSettingsStrict: jest.fn(async () => {}), console };
+    const engine = functions('public/scripts/extensions/regex/engine.js', 'export function getRegexScripts(', '\n/**\n * Check if character', engineContext);
+    return { service, port, settings, presets, names, manager, context, engine, engineContext };
+}
+
+test('captured list target remains usable after ordinary service save', async () => {
+    const s = await integratedPresetSetup();
+    const target = s.engine.captureRegexTarget(2);
+    await s.service.save('A', undefined, { select: false });
+    await expect(s.engine.saveScriptsByType([{ id: 'new' }], 2, target)).resolves.toBeUndefined();
+    expect(s.settings.extensions.regex_scripts).toEqual([{ id: 'new' }]);
+});
+
+test('A to B to A during strict settings write is rejected and does not overwrite A', async () => {
+    const s = await integratedPresetSetup();
+    const target = s.engine.captureRegexTarget(2);
+    let finish;
+    s.context.saveSettings.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const pending = s.engine.saveScriptsByType([{ id: 'new' }], 2, target);
+    await s.service.select('B');
+    await s.service.select('A');
+    finish();
+    await expect(pending).rejects.toThrow('selection changed');
+    expect(s.port.persist).not.toHaveBeenCalled();
+    expect(s.settings.extensions.regex_scripts).toEqual([]);
+    expect(s.presets[0].extensions.regex_scripts).toEqual([]);
+});
+
+test('failed destination preset save leaves no phantom copy and moving can retry', async () => {
+    const s = await integratedPresetSetup();
+    const bridge = createRegexListBridge({ capture: type => type === 1 ? null : s.engine.captureRegexTarget(type),
+        read: s.engine.getScriptsForTarget, save: s.engine.saveScriptsByType, authorize: async () => {},
+        confirm: async () => true, edit: async () => {}, exportScripts: () => {}, afterChange: async () => {} });
+    bridge.refresh();
+    const action = { kind: 'move', refs: [{ groupKey: 'global', id: 'r' }], toType: 2 };
+    s.port.persist.mockRejectedValueOnce(new Error('offline'));
+    await expect(bridge.execute(action)).rejects.toThrow('offline');
+    expect(s.settings.extensions.regex_scripts).toEqual([]);
+    expect(s.presets[0].extensions.regex_scripts).toEqual([]);
+    expect(s.engineContext.feature_settings.regex.map(rule => rule.id)).toEqual(['r']);
+    await expect(bridge.execute(action)).resolves.toBe('saved');
+    expect(s.settings.extensions.regex_scripts.map(rule => rule.id)).toEqual(['r']);
+    expect(s.engineContext.feature_settings.regex).toEqual([]);
+});
+
+test('unselected target becoming selected while its preset write is pending reports partial save', async () => {
+    const s = await integratedPresetSetup();
+    const target = s.engine.captureRegexTarget(2);
+    await s.service.select('B');
+    let finish;
+    s.port.persist.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const pending = s.engine.saveScriptsByType([{ id: 'new' }], 2, target);
+    await s.service.select('A');
+    finish('A');
+    await expect(pending).rejects.toThrow('selection changed');
+    expect(s.presets[0].extensions.regex_scripts).toEqual([{ id: 'new' }]);
+    expect(s.settings.extensions.regex_scripts).toEqual([]);
+});
+
+test('failed preset write preserves newer settings edits rather than rolling them back', async () => {
+    const s = await integratedPresetSetup();
+    const target = s.engine.captureRegexTarget(2);
+    let reject;
+    s.port.persist.mockImplementationOnce(() => new Promise((_, fail) => { reject = fail; }));
+    const pending = s.engine.saveScriptsByType([{ id: 'new' }], 2, target);
+    await tick();
+    s.settings.extensions.regex_scripts = [{ id: 'later' }];
+    reject(new Error('offline'));
+    await expect(pending).rejects.toThrow('offline');
+    expect(s.settings.extensions.regex_scripts).toEqual([{ id: 'later' }]);
+    expect(s.presets[0].extensions.regex_scripts).toEqual([]);
 });

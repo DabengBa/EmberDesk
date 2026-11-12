@@ -49,41 +49,43 @@ function getTopSettingsDrawerIds(indexHtml) {
 }
 
 describe('world info card rendering', () => {
-    test('pagination appends card DOM nodes, not raw jQuery wrapper arrays', () => {
+    test('switching books clears search through the command that restores the saved sort', () => {
         const source = read('public/scripts/world-info.js');
-
-        expect(source).toContain('worldEntriesList.append(blocks.map(block => block[0]).filter(Boolean));');
-        expect(source).not.toContain('worldEntriesList.append(blocks);');
+        const selection = source.slice(source.indexOf('export async function selectWorldInfoEditorName('), source.indexOf('export async function selectWorldInfoEditorIndex('));
+        expect(selection).toContain("applyWorldInfoSearchQuery('')");
+    });
+    test('selection-dependent confirmation commands check their original selection after awaiting', () => {
+        const source = read('public/scripts/world-info-editor-ui.js');
+        const sorting = source.slice(source.indexOf('async function promptApplyWorldInfoCurrentSorting()'), source.indexOf('async function bulkDeleteWorldInfoEntries('));
+        const deletion = source.slice(source.indexOf('async function bulkDeleteWorldInfoEntries('), source.indexOf('async function bulkSetWorldInfoEntriesEnabled('));
+        expect(sorting).toMatch(/captureSelectionGuard\(\)[\s\S]*await Popup\.show\.input[\s\S]*!isCurrent\(\)[\s\S]*session\.applySortingAsOrder/);
+        expect(deletion).toMatch(/captureSelectionGuard\(\)[\s\S]*await Popup\.show\.confirm[\s\S]*!isCurrent\(\)[\s\S]*session\.deleteEntries/);
+    });
+    test('React owns entry list rather than the retired DOM renderer', () => {
+        const source = read('public/scripts/world-info.js');
+        const workbench = read('app/world-info-workbench.tsx');
+        expect(source).not.toContain('displayWorldEntries');
+        expect(workbench).toContain('data-world-info-react-entry={entry.uid}');
     });
 
-    test('collapsed cards can rebuild the lazy edit form after being collapsed', () => {
+    test('retired card renderer and form bindings are absent', () => {
         const source = read('public/scripts/world-info.js');
-        const createCardStart = source.indexOf('export function createWorldEntryCard');
-        const createCardEnd = source.indexOf('function setupEditFormBindings', createCardStart);
-        const createCardSource = source.slice(createCardStart, createCardEnd);
-
-        expect(createCardStart).toBeGreaterThanOrEqual(0);
-        expect(createCardEnd).toBeGreaterThan(createCardStart);
-        expect(createCardSource).not.toContain('let built = false');
-        expect(createCardSource).not.toContain('if (built) return;');
+        expect(source).not.toContain('createWorldEntryCard');
+        expect(source).not.toContain('setupEditFormBindings');
+        expect(source).not.toContain('renderCollapsedCard');
     });
 
-    test('legacy getWorldEntry export returns a populated edit form', () => {
+    test('React renders the editable entry instead of a legacy form', () => {
         const source = read('public/scripts/world-info.js');
-        const entryStart = source.indexOf('export async function getWorldEntry');
-        const entryEnd = source.indexOf('export function createWorldEntryCard', entryStart);
-        const entrySource = source.slice(entryStart, entryEnd);
-
-        expect(entryStart).toBeGreaterThanOrEqual(0);
-        expect(entryEnd).toBeGreaterThan(entryStart);
-        expect(entrySource).toContain('const editTemplate = WI_ENTRY_EDIT_TEMPLATE.clone();');
-        expect(entrySource).toContain('setupEditFormBindings(editTemplate, outlet, name, data, entry);');
-        expect(entrySource).toContain('initAccordionState(outlet);');
+        const workbench = read('app/world-info-workbench.tsx');
+        expect(source).not.toContain('export async function getWorldEntry');
+        expect(workbench).toContain('data-world-info-react-editor="active"');
+        expect(workbench).toContain('data-world-info-react-field="content"');
     });
 
     test('more menu opener and items support keyboard operation', () => {
         const panelHtml = read('public/panels/world-info-body.html');
-        const source = read('public/scripts/world-info.js');
+        const source = read('public/scripts/world-info-panel-ui.js');
 
         expect(panelHtml).toContain('id="world_more_menu" class="menu_button fa-solid fa-ellipsis" role="button" tabindex="0"');
         expect(source).toContain('keydown.worldMoreMenuToggle');
@@ -118,8 +120,8 @@ describe('world info card rendering', () => {
         expect(indexHtml).toContain('class="wi-card-position-control"');
         expect(indexHtml).toContain('name="position"');
         expect(indexHtml).toContain('class="wi-card-active-toggle');
-        expect(source).toContain('worldEntriesList.find(\'.wi-card-expand-button\')');
-        expect(source).not.toContain('worldEntriesList.find(\'.wi-card-body-wrap, .wi-card-expand-button\')');
+        expect(source).not.toContain('worldEntriesList.find(');
+        expect(read('app/world-info-workbench.tsx')).toContain('data-world-info-react-entry-toggle');
     });
 
     test('world info panel separates global activation from entry editing', () => {
@@ -128,12 +130,12 @@ describe('world info card rendering', () => {
         const css = read('public/css/world-info.css');
 
         expect(panelTsx).toContain('id="wiGlobalPanel"');
-        expect(panelTsx).toContain('data-i18n="Global World Info"');
+        expect(panelTsx).toContain("translate('Global World Info')");
         expect(panelTsx).not.toContain('data-i18n="Enabled worlds"');
         expect(panelTsx).toContain('id="wiGlobalCount"');
         expect(panelTsx).not.toContain('data-i18n="Activation Rules"');
         expect(panelTsx).toContain('id="wiEditorPanel"');
-        expect(panelTsx).toContain('data-i18n="World Info Editor"');
+        expect(panelTsx).toContain("translate('World Info Editor')");
         expect(panelTsx).toContain('id="wiTopBlock" className="wi-global-grid inline-drawer wide100p"');
         expect(panelTsx).not.toContain('wi-global-rules-content');
         expect(panelHtml).toContain('id="world_editor_select"');
@@ -153,7 +155,7 @@ describe('world info card rendering', () => {
 
     test('global world selector exposes a clear empty prompt and keeps multi-select open for consecutive choices', () => {
         const panelTsx = read('app/components/panels/WorldInfoPanel.tsx');
-        const source = read('public/scripts/world-info.js');
+        const source = read('public/scripts/world-info.js') + read('public/scripts/world-info-panel-ui.js');
 
         expect(panelTsx).toContain('aria-label="Global World Info active in all chats"');
         expect(panelTsx).toContain('data-placeholder="No global worlds active. Select one or more worlds."');
@@ -168,22 +170,17 @@ describe('world info card rendering', () => {
 
     test('empty editor state makes new-entry prerequisite visible', () => {
         const panelHtml = read('public/panels/world-info-body.html');
-        const source = read('public/scripts/world-info.js');
+        const workbench = read('app/world-info-workbench.tsx');
 
         expect(panelHtml).toContain('data-i18n="[title]Create or select a World Info file first"');
-        expect(source).toContain('function setWorldEntryCreationAvailable(available)');
-        expect(source).toContain('setWorldEntryCreationAvailable(false);');
-        expect(source).toContain('setWorldEntryCreationAvailable(true);');
-        expect(source).toContain('toastr.info(t`Create or import a new World Info file first.`, t`World Info is not set`');
+        expect(workbench).toContain('disabled={!bridgeState.canCreateEntry}');
     });
 
     test('world info editor localizes page-size and clear-selection labels', () => {
-        const source = read('public/scripts/world-info.js');
+        const source = read('public/scripts/world-info-panel-ui.js');
         const locale = read('public/locales/zh-cn.json');
 
-        expect(source).toContain('function localizeWorldInfoPagination()');
-        expect(source).toContain('afterRender: localizeWorldInfoPagination,');
-        expect(source).toContain('replaceAll(\' / page\', ` ${t`/ page`}`)');
+        expect(source).not.toContain('function localizeWorldInfoPagination()');
         expect(source).toContain('function getWorldInfoSelect2Language()');
         expect(source).toContain('language: getWorldInfoSelect2Language(),');
         expect(locale).toContain('"/ page": "/ 页"');
@@ -219,10 +216,10 @@ describe('world info card rendering', () => {
     });
 
     test('world book deletion confirmations default to cancel and mark destructive actions', () => {
-        const source = read('public/scripts/world-info.js');
+        const source = read('public/scripts/world-info-book-ui.js');
         const deleteSource = source.slice(
             source.indexOf('async function deleteWorldInfoWithCascade'),
-            source.indexOf('export async function deleteCurrentWorldInfo'),
+            source.indexOf('async function deleteCurrentWorldInfo'),
         );
 
         expect(deleteSource).toContain('defaultResult: POPUP_RESULT.NEGATIVE');
@@ -269,7 +266,7 @@ describe('world info card rendering', () => {
         const source = read('public/scripts/world-info.js');
         const css = read('public/css/world-info.css');
 
-        expect(source).toContain('light.addClass(\'wi-status-enabled\');');
+        expect(read('app/world-info-workbench.tsx')).toContain('const enabled = enabledOverride ?? !entry.disabled;');
         expect(source).not.toContain('light.addClass(\'wi-status-enabled-constant\');');
         expect(source).not.toContain('light.addClass(\'wi-status-enabled-keyword\');');
         expect(css).toContain('.wi-card-active-toggle.wi-status-enabled .wi-card-active-toggle-track');
@@ -301,24 +298,10 @@ describe('world info card rendering', () => {
         expect(css).not.toContain('.wi-accordion {\n    border: 1px solid var(--SmartThemeBorderColor);');
     });
 
-    test('content editor modal is portaled while open to avoid drawer clipping', () => {
-        const source = read('public/scripts/world-info.js');
-
-        expect(source).toContain('const contentEditorPlaceholder = $(\'<span class="wi-content-editor-placeholder" hidden></span>\');');
-        expect(source).toContain('let contentEditorReturnFocus = null;');
-        expect(source).toContain('contentEditorPlaceholder.insertBefore(contentEditor);');
-        expect(source).toContain('contentEditor.appendTo(document.body);');
-        expect(source).toContain('document.body.classList.add(\'wi-content-editor-open\');');
-        expect(source).toContain('document.body.classList.remove(\'wi-content-editor-open\');');
-        expect(source).toContain('contentEditor.insertAfter(contentEditorPlaceholder);');
-        expect(source).toContain('contentEditorPlaceholder.detach();');
-        expect(source).toContain('const contentEditorTitle = editTemplate.find(\'.wi-content-editor-title\');');
-        expect(source).toContain('contentEditorTitle.attr(\'id\', `world_entry_content_editor_title_${entry.uid}`);');
-        expect(source).toContain('contentEditor.attr(\'aria-labelledby\', `world_entry_content_editor_title_${entry.uid}`);');
-        expect(source).toContain('focusableControls[0]?.focus();');
-        expect(source).toContain('focusableControls[focusableControls.length - 1]?.focus();');
-        expect(source).toContain('$(contentEditorReturnFocus).trigger(\'focus\');');
-        expect(source).toContain('if (e.key === \'Escape\')');
+    test('content remains editable in the React workbench', () => {
+        const source = read('app/world-info-workbench.tsx');
+        expect(source).toContain('data-world-info-react-field="content"');
+        expect(source).toContain('translate(\'Injected content\')');
     });
 
     test('world info workbench keeps editor panel inside wi-holder with explicit containment', () => {

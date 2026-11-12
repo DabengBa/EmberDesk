@@ -58,17 +58,17 @@ describe('API connections drawer retirement', () => {
         const providerSource = readRepoFile('public/scripts/react-runtime-provider.js');
         const portSource = readRepoFile('app/compat/runtime-port.ts');
 
-        expect(script).toContain('connectProvider: () => connectProviderConnection()');
-        expect(script).toContain('testProviderConnection: () => testProviderConnection()');
+        expect(script).toContain('connectProvider: input => connectProviderConnection(input)');
+        expect(script).toContain('testProviderConnection: input => testProviderConnection(input)');
         expect(providerSource).toContain("'connectProvider'");
         expect(providerSource).toContain("'testProviderConnection'");
         expect(providerSource).toContain('ONLINE_STATUS_CHANGED');
-        expect(portSource).toContain('connectProvider(): Promise<void>');
-        expect(portSource).toContain('testProviderConnection(): Promise<void>');
+        expect(portSource).toContain('connectProvider(input: ProviderConnectionInput): Promise<ProviderConnectionResult>');
+        expect(portSource).toContain('testProviderConnection(input: ProviderConnectionInput): Promise<ProviderConnectionResult>');
 
         const openaiSource = readRepoFile('public/scripts/openai.js');
-        expect(openaiSource).toContain('export async function connectProviderConnection()');
-        expect(openaiSource).toContain('export async function testProviderConnection()');
+        expect(openaiSource).toContain('export function connectProviderConnection(input)');
+        expect(openaiSource).toContain('export function testProviderConnection(input)');
         // No DOM-coupled drawer triggers remain in the provider module.
         expect(openaiSource).not.toContain('api_button_openai');
         expect(openaiSource).not.toContain('test_api_button');

@@ -9,7 +9,7 @@ import { useForm } from '@tanstack/react-form';
 type SettingsFormValidator = (props: { value: typeof defaultSettingsFormValues }) => any;
 const toSettingsFormValidator = (schema: unknown): SettingsFormValidator => schema as SettingsFormValidator;
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { startTransition, useCallback, useEffect, useMemo, useReducer, useState, useSyncExternalStore } from 'react';
+import { startTransition, useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { z } from 'zod';
 import {
     clearProviderSecretField,
@@ -23,12 +23,15 @@ import { SettingsTabs } from '@/components/settings/SettingsTabs';
 import { translate, useTranslated } from '@/compat/i18n.js';
 import { readStoredUiLocale, setUiLocale, uiLocaleOptions } from '../../../public/scripts/ui-locale.js';
 import type { RuntimePort } from '@/compat/runtime-port';
+import { connectProvider, ProviderConnectionError, testProviderConnection } from '@/lib/provider-connection-service';
 import {
     buildSettingsFormDefaults,
     buildSettingsSavePayload,
     defaultSettingsFormValues,
+    getValueAtPath,
     parseSettingsPayload,
     providerSecretKeyBySource,
+    rebaseChatCompletionSettings,
     settingsCoverage,
     settingsTabDefinitions,
     saveSettingsToRuntime,
@@ -144,6 +147,9 @@ export function SettingsSurface({
     const [showDiagnostics, setShowDiagnostics] = useState(false);
     const [providerSecretInput, setProviderSecretInput] = useState('');
     const [providerActionBusy, setProviderActionBusy] = useState<'connect' | 'test' | null>(null);
+    const providerActionBusyRef = useRef(false);
+    const [providerSecretActionBusy, setProviderSecretActionBusy] = useState(false);
+    const providerSecretActionBusyRef = useRef(false);
     const [uiLocale] = useState(() => readStoredUiLocale());
 
     // Subscribe once for every string in this tree: the standalone bundle and
@@ -156,118 +162,56 @@ export function SettingsSurface({
         return () => document.removeEventListener('i18n:applied', handler);
     }, []);
 
-    const subscribeRuntime = useCallback(
-        (listener: () => void) => (runtime ? runtime.subscribe(listener) : () => {}),
-        [runtime],
-    );
-    const runtimeProviderStatus = useSyncExternalStore(
-        subscribeRuntime,
-        () => runtime?.getSnapshot().provider?.status ?? 'no_connection',
-        () => 'no_connection',
-    );
-    const [pageProviderStatus, setPageProviderStatus] = useState('no_connection');
-    const providerStatus = runtime ? runtimeProviderStatus : pageProviderStatus;
+    const [providerStatus, setProviderStatus] = useState('no_connection');
     const providerStatusLabel = providerStatus === 'no_connection' ? t('Not connected') : providerStatus;
-    const canRunProviderActions = Boolean(runtime)
-        ? Boolean(
-            runtime?.commands
-            && typeof runtime.commands.connectProvider === 'function'
-            && typeof runtime.commands.testProviderConnection === 'function',
-        )
-        : true;
-
-    async function runPageProviderAction(kind: 'connect' | 'test') {
-        const values = settingsForm.state.values;
-        const customUrl = values.providers.customUrl.trim();
-        const model = values.providers.openaiModel.trim();
-        const hasSavedSecret = Boolean(currentSecretKey && secretsData?.[currentSecretKey]);
-        if (!hasSavedSecret && !customUrl) {
-            throw new MessageError(t('Save an API key or configure a custom endpoint URL first.'));
-        }
-
-        const csrfToken = await ensureCsrfToken();
-
-        if (kind === 'connect') {
-            const response = await fetch('/api/backends/chat-completions/status', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-Token': csrfToken,
-                },
-                body: JSON.stringify({
-                    chat_completion_source: 'openai',
-                    ...(customUrl ? { custom_url: customUrl } : {}),
-                }),
-            });
-            const data = await readJsonObject(response);
-            if (!response.ok || data.error) {
-                setPageProviderStatus('no_connection');
-                throw new MessageError(t('Connection failed: the endpoint did not return a model list. Check the endpoint URL and API key.'));
-            }
-
-            setPageProviderStatus('online');
-            const modelCount = Array.isArray(data.data) ? data.data.length : null;
-            setSaveStatus({
-                kind: 'info',
-                message: modelCount === null
-                    ? t('Connected.')
-                    : translate('Connected. The endpoint returned ${0} models.', null)
-                        .replace('${0}', String(modelCount)),
-            });
-            return;
-        }
-
-        if (!model) {
-            throw new MessageError(t('Fill in the primary model before testing.'));
-        }
-
-        const response = await fetch('/api/backends/chat-completions/generate', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-Token': csrfToken,
-            },
-            body: JSON.stringify({
-                chat_completion_source: 'openai',
-                ...(customUrl ? { custom_url: customUrl } : {}),
-                model,
-                messages: [{ role: 'user', content: 'Hi' }],
-                max_tokens: 1,
-                stream: false,
-            }),
-        });
-        const data = await readJsonObject(response);
-        if (!response.ok || data.error) {
-            setPageProviderStatus('no_connection');
-            throw new MessageError(t('Test request failed: the endpoint returned no usable reply. Check the connection settings and API key.'));
-        }
-
-        setPageProviderStatus('online');
-        setSaveStatus({ kind: 'info', message: t('Received a reply from the API.') });
-    }
+    const canRunProviderActions = !runtime || Boolean(
+        runtime.commands && typeof runtime.commands.connectProvider === 'function'
+        && typeof runtime.commands.testProviderConnection === 'function',
+    );
 
     async function handleProviderAction(kind: 'connect' | 'test') {
-        const command = kind === 'connect'
-            ? runtime?.commands.connectProvider
-            : runtime?.commands.testProviderConnection;
-        if (providerActionBusy) {
-            return;
-        }
-        if (runtime && typeof command !== 'function') {
-            return;
-        }
+        if (providerActionBusyRef.current || providerSecretActionBusyRef.current) return;
+        const command = kind === 'connect' ? runtime?.commands.connectProvider : runtime?.commands.testProviderConnection;
+        if (runtime && typeof command !== 'function') return;
+        const values = settingsForm.state.values.providers;
+        const input = {
+            customUrl: values.customUrl,
+            openaiModel: values.openaiModel,
+            hasSavedSecret: Boolean(currentSecretKey && secretsData?.[currentSecretKey]),
+        };
+        const isCurrentDraft = () => {
+            const current = settingsForm.state.values.providers;
+            return current.customUrl === input.customUrl && current.openaiModel === input.openaiModel;
+        };
+        providerActionBusyRef.current = true;
         setProviderActionBusy(kind);
         setPageError('');
         setSaveStatus(null);
         try {
-            if (runtime) {
-                await command?.();
-            } else {
-                await runPageProviderAction(kind);
-            }
+            const dependencies = {
+                fetch,
+                requestHeaders: async () => ({
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': await ensureCsrfToken(),
+                }),
+            };
+            const result = runtime && command
+                ? await command(input)
+                : await (kind === 'connect' ? connectProvider(input, dependencies) : testProviderConnection(input, dependencies));
+            if (!isCurrentDraft()) return;
+            setProviderStatus(result.status);
+            setSaveStatus({
+                kind: 'info',
+                message: kind === 'test' ? t('Received a reply from the API.')
+                    : result.models === null ? t('Connected.')
+                        : translate('Connected. The endpoint returned ${0} models.', null).replace('${0}', String(result.models.length)),
+            });
         } catch (error) {
-            setPageError(error instanceof Error ? error.message : t('Provider action failed.'));
+            if (!isCurrentDraft()) return;
+            setProviderStatus('no_connection');
+            setPageError(error instanceof ProviderConnectionError ? t(error.message) : t('Provider action failed.'));
         } finally {
+            providerActionBusyRef.current = false;
             setProviderActionBusy(null);
         }
     }
@@ -435,10 +379,15 @@ export function SettingsSurface({
 
             const csrfToken = await ensureCsrfToken();
             const baselineFormValues = buildSettingsFormDefaults(parsedPayload.settings);
-            const payload = buildSettingsSavePayload(parsedPayload.settings, values, {
-                settingsRevision: parsedPayload.settingsRevision,
-                baselineFormValues,
-            });
+            // The prompt drawer may have changed the active preset since this
+            // form loaded. Overlay only dirty form fields on the live authority,
+            // not the stale settings query's copy of those generation values.
+            const buildPayload = (base: typeof parsedPayload.settings, revision: typeof parsedPayload.settingsRevision) =>
+                buildSettingsSavePayload(runtime ? { ...base, oai_settings: runtime.getChatCompletionSettings() } : base, values, {
+                    settingsRevision: revision,
+                    baselineFormValues,
+                });
+            const payload = buildPayload(parsedPayload.settings, parsedPayload.settingsRevision);
             let savedPayload = payload;
             const postSettings = (nextPayload: typeof payload) => fetch('/api/settings/save', {
                 method: 'POST',
@@ -453,12 +402,19 @@ export function SettingsSurface({
                 const refreshed = await refetchSettings();
                 if (refreshed.data) {
                     const refreshedPayload = parseSettingsPayload(refreshed.data);
-                    const rebasedPayload = buildSettingsSavePayload(refreshedPayload.settings, values, {
-                        settingsRevision: refreshedPayload.settingsRevision,
-                        baselineFormValues: buildSettingsFormDefaults(refreshedPayload.settings),
-                    });
-                    savedPayload = rebasedPayload;
-                    response = await postSettings(rebasedPayload);
+                    const rebasedProvider = rebaseChatCompletionSettings(
+                        getValueAtPath(parsedPayload.settings, 'oai_settings') ?? {},
+                        getValueAtPath(payload, 'oai_settings') ?? {},
+                        getValueAtPath(refreshedPayload.settings, 'oai_settings') ?? {},
+                    );
+                    if (rebasedProvider !== null) {
+                        const rebasedPayload = buildSettingsSavePayload(refreshedPayload.settings, values, {
+                            settingsRevision: refreshedPayload.settingsRevision,
+                            baselineFormValues,
+                        });
+                        savedPayload = { ...rebasedPayload, oai_settings: rebasedProvider };
+                        response = await postSettings(savedPayload);
+                    }
                 }
             }
 
@@ -602,7 +558,7 @@ export function SettingsSurface({
         ];
     }, [settingsData]);
 
-    const isBusy = saveMutation.isPending || secretsQuery.isPending || providerSecretMutation.isPending;
+    const isBusy = saveMutation.isPending || secretsQuery.isPending || providerSecretActionBusy;
     const hasPendingSecretInput = providerSecretInput.trim().length > 0;
     const hasUnsavedChanges = !settingsForm.state.isPristine || hasPendingSecretInput;
 
@@ -613,6 +569,7 @@ export function SettingsSurface({
 
     function clearTransientState() {
         saveMutation.reset();
+        setProviderStatus('no_connection');
         setSaveStatus(null);
         setPageError('');
     }
@@ -640,6 +597,9 @@ export function SettingsSurface({
         successMessage: string;
         clearInput: () => void;
     }) {
+        if (providerActionBusyRef.current || providerSecretActionBusyRef.current) return;
+        providerSecretActionBusyRef.current = true;
+        setProviderSecretActionBusy(true);
         setPageError('');
         setSaveStatus(null);
 
@@ -650,6 +610,7 @@ export function SettingsSurface({
                 value: options.value,
             });
 
+            setProviderStatus('no_connection');
             await refetchSecrets();
             if (result.shouldClearInput) {
                 options.clearInput();
@@ -657,6 +618,9 @@ export function SettingsSurface({
             setSaveStatus({ kind: 'info', message: options.successMessage });
         } catch (error) {
             setPageError(error instanceof Error ? error.message : String(error));
+        } finally {
+            providerSecretActionBusyRef.current = false;
+            setProviderSecretActionBusy(false);
         }
     }
 
@@ -836,7 +800,7 @@ export function SettingsSurface({
                                                 {...stylex.props(settingsStyles.input, settingsStyles.inlineActionsInput)}
                                                 placeholder={unifiedKeyFieldState.placeholder}
                                                 value={providerSecretInput}
-                                                disabled={providerSecretMutation.isPending}
+                                                disabled={providerSecretActionBusy || providerActionBusy !== null}
                                                 onChange={event => {
                                                     setProviderSecretInput(event.target.value);
                                                     setSaveStatus(null);
@@ -846,7 +810,7 @@ export function SettingsSurface({
                                             <button
                                                 type="button"
                                                 {...stylex.props(settingsStyles.button, settingsStyles.buttonPrimary)}
-                                                disabled={providerSecretMutation.isPending}
+                                                disabled={providerSecretActionBusy || providerActionBusy !== null}
                                                 onClick={() => {
                                                     void handleProviderSecretAction({
                                                         key: currentSecretKey,
@@ -862,7 +826,7 @@ export function SettingsSurface({
                                             <button
                                                 type="button"
                                                 {...stylex.props(settingsStyles.button, settingsStyles.buttonSecondary)}
-                                                disabled={providerSecretMutation.isPending}
+                                                disabled={providerSecretActionBusy || providerActionBusy !== null}
                                                 onClick={() => {
                                                     void handleProviderSecretAction({
                                                         key: currentSecretKey,
@@ -907,7 +871,7 @@ export function SettingsSurface({
                                                     type="button"
                                                     id="provider-connect-button"
                                                     {...stylex.props(settingsStyles.button, settingsStyles.buttonPrimary)}
-                                                    disabled={providerActionBusy !== null}
+                                                    disabled={providerActionBusy !== null || providerSecretActionBusy}
                                                     onClick={() => { void handleProviderAction('connect'); }}
                                                 >
                                                     {t(providerActionBusy === 'connect' ? 'Connecting…' : 'Connect')}
@@ -916,7 +880,7 @@ export function SettingsSurface({
                                                     type="button"
                                                     id="provider-test-button"
                                                     {...stylex.props(settingsStyles.button, settingsStyles.buttonSecondary)}
-                                                    disabled={providerActionBusy !== null}
+                                                    disabled={providerActionBusy !== null || providerSecretActionBusy}
                                                     onClick={() => { void handleProviderAction('test'); }}
                                                 >
                                                     {t(providerActionBusy === 'test' ? 'Testing…' : 'Test')}
