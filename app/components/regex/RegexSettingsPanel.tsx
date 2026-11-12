@@ -1,8 +1,12 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ContractButton } from '../contract/ContractButton';
-import { ContractIconButton } from '../contract/ContractIconButton';
+
 import { WorkspacePanelChrome } from '../panels/WorkspacePanelChrome';
 import { translate, useTranslated } from '@/compat/i18n.js';
+import { RegexBulkControls, RegexRuleGroup, useRegexList } from './RegexRuleList';
+import type { RegexListBridge } from './regex-list-types';
+import type { RegexPresetController, RegexToolbar } from './regex-types';
+import { RegexPresetControls } from './RegexPresetControls';
 
 /**
  * Regex drawer. Two tabs: the legacy regex workbench (markup kept mounted at
@@ -10,9 +14,22 @@ import { translate, useTranslated } from '@/compat/i18n.js';
  * these ids) and the user-level tool-bindings list managed by
  * public/scripts/tool-bindings.js.
  */
-export function RegexSettingsPanel() {
+export function RegexSettingsPanel({ list: listBridge, bridge, toolbar, presets }: { list?: RegexListBridge; bridge?: RegexListBridge; toolbar?: RegexToolbar; presets?: RegexPresetController }) {
     useTranslated('');
     const [tab, setTab] = useState<'regex' | 'tools'>('regex');
+    const list = useRegexList((listBridge ?? bridge)!);
+    const fileInput = useRef<HTMLInputElement>(null);
+    const [scopedAllowed, setScopedAllowed] = useState(toolbar?.scopedAllowed ?? false);
+    const [presetAllowed, setPresetAllowed] = useState(toolbar?.presetAllowed ?? false);
+    useEffect(() => { setScopedAllowed(toolbar?.scopedAllowed ?? false); }, [toolbar?.scopedAllowed]);
+    useEffect(() => { setPresetAllowed(toolbar?.presetAllowed ?? false); }, [toolbar?.presetAllowed]);
+    function dispatch(action: () => unknown) { Promise.resolve().then(action).catch(error => toolbar?.onError(error instanceof Error ? error.message : String(error))); }
+    function authorize(kind: 'scoped' | 'preset', value: boolean) {
+        const setter = kind === 'scoped' ? setScopedAllowed : setPresetAllowed;
+        const action = kind === 'scoped' ? toolbar?.setScopedAllowed : toolbar?.setPresetAllowed;
+        setter(value);
+        Promise.resolve().then(() => action?.(value)).catch(error => { setter(!value); toolbar?.onError(error instanceof Error ? error.message : String(error)); });
+    }
     return (
 <div className="regex_settings">
     <WorkspacePanelChrome title={translate('Regex')} icon="fa-solid fa-code" grabberId="RegexPanelheader">
@@ -23,42 +40,26 @@ export function RegexSettingsPanel() {
             </div>
             <div id="regex_tab_content" className={tab === 'regex' ? '' : 'displayNone'}>
             <div className="flex-container">
-                <ContractButton id="open_regex_editor" className="menu_button menu_button_icon" label="+ Global" labelKey="ext_regex_new_global_script" nativeTitle title={translate("New global regex script")} icon={<i className="fa-solid fa-pen-to-square" aria-hidden="true" />} />
-                <ContractButton id="open_preset_editor" className="menu_button menu_button_icon" label="+ Preset" labelKey="ext_regex_new_preset_script" nativeTitle title={translate("New preset regex script")} icon={<i className="fa-solid fa-sliders" aria-hidden="true" />} />
-                <ContractButton id="open_scoped_editor" className="menu_button menu_button_icon" label="+ Scoped" labelKey="ext_regex_new_scoped_script" nativeTitle title={translate("New scoped regex script")} icon={<i className="fa-solid fa-address-card" aria-hidden="true" />} />
-                <ContractButton id="import_regex" className="menu_button menu_button_icon" label="Import" labelKey="ext_regex_import_script" icon={<i className="fa-solid fa-file-import" aria-hidden="true" />} />
-                <input type="file" id="import_regex_file" hidden accept="*.json" multiple />
+                <ContractButton id="open_regex_editor" className="menu_button menu_button_icon" label="+ Global" labelKey="ext_regex_new_global_script" nativeTitle title={translate("New global regex script")} onClick={() => dispatch(() => toolbar?.openEditor(0))} icon={<i className="fa-solid fa-pen-to-square" aria-hidden="true" />} />
+                <ContractButton id="open_preset_editor" className="menu_button menu_button_icon" label="+ Preset" labelKey="ext_regex_new_preset_script" nativeTitle title={translate("New preset regex script")} onClick={() => dispatch(() => toolbar?.openEditor(2))} icon={<i className="fa-solid fa-sliders" aria-hidden="true" />} />
+                <ContractButton id="open_scoped_editor" className="menu_button menu_button_icon" label="+ Scoped" labelKey="ext_regex_new_scoped_script" nativeTitle title={translate("New scoped regex script")} onClick={() => dispatch(() => toolbar?.openEditor(1))} icon={<i className="fa-solid fa-address-card" aria-hidden="true" />} />
+                <ContractButton id="import_regex" className="menu_button menu_button_icon" label="Import" labelKey="ext_regex_import_script" onClick={() => fileInput.current?.click()} icon={<i className="fa-solid fa-file-import" aria-hidden="true" />} />
+                <input type="file" id="import_regex_file" hidden accept="*.json" multiple ref={fileInput} onChange={event => { const files = Array.from(event.target.files ?? []); event.target.value = ''; if (files.length) dispatch(() => toolbar?.importFiles(files)); }} />
                 <label htmlFor="regex_bulk_edit" className="menu_button menu_button_icon">
-                    <input id="regex_bulk_edit" type="checkbox" className="displayNone" />
+                    <input id="regex_bulk_edit" type="checkbox" className="sr-only" checked={list.bulk} disabled={list.pending} onChange={event => list.setBulk(event.target.checked)} />
                     <i className="fa-solid fa-edit" />
                     <small >{translate('Bulk Edit')}</small>
                 </label>
-                <ContractButton id="open_regex_debugger" className="menu_button menu_button_icon" label="Debugger" labelKey="ext_regex_debugger" nativeTitle title={translate("Advanced Regex Debugger")} icon={<i className="fa-solid fa-bug-slash" aria-hidden="true" />} />
+                <ContractButton id="open_regex_debugger" className="menu_button menu_button_icon" label="Debugger" labelKey="ext_regex_debugger" nativeTitle title={translate("Advanced Regex Debugger")} onClick={() => dispatch(() => toolbar?.openDebugger())} icon={<i className="fa-solid fa-bug-slash" aria-hidden="true" />} />
             </div>
-            <hr className="regex_bulk_operations_hr" />
-            <div className="regex_bulk_operations flex-container">
-                <ContractIconButton id="bulk_select_all_toggle" className="menu_button menu_button_icon" label="Toggle Select All" title={translate("Toggle Select All")} nativeTitle icon={<i className="fa-solid fa-check-double" aria-hidden="true" />} />
-                <ContractButton id="bulk_enable_regex" className="menu_button menu_button_icon" label="Enable" icon={<i className="fa-solid fa-toggle-on" aria-hidden="true" />} />
-                <ContractButton id="bulk_disable_regex" className="menu_button menu_button_icon" label="Disable" icon={<i className="fa-solid fa-toggle-off" aria-hidden="true" />} />
-                <ContractButton id="bulk_regex_move_to_global" style={{ "display": "none" }} className="menu_button menu_button_icon" label="Move to global scripts" labelKey="ext_regex_move_to_global" icon={<i className="fa-solid fa-globe" aria-hidden="true" />} />
-                <ContractButton id="bulk_regex_move_to_preset" style={{ "display": "none" }} className="menu_button menu_button_icon" label="Move to preset scripts" labelKey="ext_regex_move_to_preset" icon={<i className="fa-solid fa-sliders" aria-hidden="true" />} />
-                <ContractButton id="bulk_regex_move_to_scoped" style={{ "display": "none" }} className="menu_button menu_button_icon" label="Move to scoped scripts" labelKey="ext_regex_move_to_scoped" icon={<i className="fa-solid fa-address-card" aria-hidden="true" />} />
-                <ContractButton id="bulk_export_regex" className="menu_button menu_button_icon" label="Export" icon={<i className="fa-solid fa-file-export" aria-hidden="true" />} />
-                <ContractButton id="bulk_delete_regex" className="menu_button menu_button_icon" label="Delete" icon={<i className="fa-solid fa-trash" aria-hidden="true" />} />
-            </div>
+            <RegexBulkControls list={list} />
             <hr />
             <div id="regex_presets_block">
                 <div className="flex-container alignItemsBaseline">
                     <strong className="flex1" >{translate('Regex Presets')}</strong>
                 </div>
                 <small >{translate('Save and switch between groups of enabled regex scripts.')}</small>
-                <div className="flex-container marginTop5">
-                    <select id="regex_presets" className="text_pole flex1" aria-label={translate('Regex presets')}></select>
-                    <ContractIconButton id="regex_preset_create" className="menu_button" label="Create a new regex preset" nativeTitle title={translate("Create a new regex preset")} icon={<i className="fa-solid fa-file-circle-plus" aria-hidden="true" />} />
-                    <ContractIconButton id="regex_preset_update" className="menu_button" label="Update existing regex preset" nativeTitle title={translate("Update existing regex preset")} icon={<i className="fa-solid fa-save" aria-hidden="true" />} />
-                    <ContractIconButton id="regex_preset_apply" className="menu_button" label="Re-apply current preset" nativeTitle title={translate("Re-apply current preset")} icon={<i className="fa-solid fa-recycle" aria-hidden="true" />} />
-                    <ContractIconButton id="regex_preset_delete" className="menu_button" label="Delete current preset" nativeTitle title={translate("Delete current preset")} icon={<i className="fa-solid fa-trash" aria-hidden="true" />} />
-                </div>
+                <RegexPresetControls controller={presets} onError={message => toolbar?.onError(message)} />
             </div>
             <hr />
             <div id="global_scripts_block">
@@ -66,35 +67,35 @@ export function RegexSettingsPanel() {
                     <strong >{translate('Global Scripts')}</strong>
                 </div>
                 <small >{translate('Available for all characters. Saved to local settings.')}</small>
-                <div id="saved_regex_scripts" no-scripts-text="No scripts found" data-i18n="[no-scripts-text]No scripts found" className="flex-container regex-script-container flexFlowColumn"></div>
+                <div id="saved_regex_scripts" no-scripts-text="No scripts found" data-i18n="[no-scripts-text]No scripts found" className="flex-container regex-script-container flexFlowColumn"><RegexRuleGroup list={list} type={0} /></div>
             </div>
             <hr />
             <div id="preset_scripts_block">
                 <div className="flex-container alignItemsBaseline">
                     <strong className="flex1" >{translate('Preset Scripts')}</strong>
                     <label id="toggle_preset_regex" className="checkbox flex-container" htmlFor="regex_preset_toggle">
-                        <input type="checkbox" id="regex_preset_toggle" className="enable_scoped" />
+                        <input type="checkbox" id="regex_preset_toggle" className="enable_scoped" checked={presetAllowed} onChange={event => authorize('preset', event.target.checked)} />
                         <span className="sr-only">{translate("Toggle preset regex scripts")}</span>
                         <span className="regex-toggle-on fa-solid fa-toggle-on fa-lg" data-i18n="[title]ext_regex_disallow_preset" title={translate("Disallow using preset regex")}></span>
                         <span className="regex-toggle-off fa-solid fa-toggle-off fa-lg" data-i18n="[title]ext_regex_allow_preset" title={translate("Allow using preset regex")}></span>
                     </label>
                 </div>
                 <small >{translate('Only available for this preset. Saved to the preset data.')}</small>
-                <div id="saved_preset_scripts" no-scripts-text="No scripts found" data-i18n="[no-scripts-text]No scripts found" className="flex-container regex-script-container flexFlowColumn"></div>
+                <div id="saved_preset_scripts" no-scripts-text="No scripts found" data-i18n="[no-scripts-text]No scripts found" className="flex-container regex-script-container flexFlowColumn"><RegexRuleGroup list={list} type={2} /></div>
             </div>
             <hr />
             <div id="scoped_scripts_block">
                 <div className="flex-container alignItemsBaseline">
                     <strong className="flex1" >{translate('Scoped Scripts')}</strong>
                     <label id="toggle_scoped_regex" className="checkbox flex-container" htmlFor="regex_scoped_toggle">
-                        <input type="checkbox" id="regex_scoped_toggle" className="enable_scoped" />
+                        <input type="checkbox" id="regex_scoped_toggle" className="enable_scoped" checked={scopedAllowed} onChange={event => authorize('scoped', event.target.checked)} />
                         <span className="sr-only">{translate("Toggle scoped regex scripts")}</span>
                         <span className="regex-toggle-on fa-solid fa-toggle-on fa-lg" data-i18n="[title]ext_regex_disallow_scoped" title={translate("Disallow using scoped regex")}></span>
                         <span className="regex-toggle-off fa-solid fa-toggle-off fa-lg" data-i18n="[title]ext_regex_allow_scoped" title={translate("Allow using scoped regex")}></span>
                     </label>
                 </div>
                 <small >{translate('Only available for this character. Saved to the card data.')}</small>
-                <div id="saved_scoped_scripts" no-scripts-text="No scripts found" data-i18n="[no-scripts-text]No scripts found" className="flex-container regex-script-container flexFlowColumn"></div>
+                <div id="saved_scoped_scripts" no-scripts-text="No scripts found" data-i18n="[no-scripts-text]No scripts found" className="flex-container regex-script-container flexFlowColumn"><RegexRuleGroup list={list} type={1} /></div>
             </div>
             </div>
             <div id="tool_bindings_tab_content" className={tab === 'tools' ? '' : 'displayNone'}>

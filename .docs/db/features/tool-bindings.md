@@ -21,7 +21,7 @@ Let users register real OpenAI-style function tools without writing an extension
 
 ## User-Visible Contract
 
-- The Regex drawer carries two tabs: 正则 (the legacy regex workbench, unchanged) and 工具绑定 (the bindings list and editor entry point).
+- The Regex drawer carries two tabs: 正则 (the regex workbench; the rule list, editor, import, preset selection, debugger, and scope authorization controls are React-owned) and 工具绑定 (the bindings list and editor entry point).
 - The tool-binding settings include a keyboard-accessible `强制调用` switch. Its visible label is also exposed as the switch's accessible name, and the switch can be focused and toggled with the keyboard.
 - Bindings persist globally in `feature_settings.tool_bindings` inside the user settings document — not inside preset files and not per character.
 - Each binding carries: name (API tool name, 1-64 chars of letters/digits/`_`/`-`), optional display name, model-facing description, parameters JSON Schema, action body, optional format-message body, enabled flag, and stealth flag.

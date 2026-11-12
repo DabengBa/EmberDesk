@@ -42,6 +42,8 @@ export function createPresetService(port: PresetPort) {
         return { settings: structuredClone(settings), names: Object.keys(names), selected: String(settings.preset_settings_openai ?? '') };
     };
     let current = snapshot();
+    // Detect an intervening apply even when selection returns to the same name.
+    let selectionRevision = 0;
     function refresh() {
         current = snapshot();
         for (const listener of listeners) listener();
@@ -64,9 +66,16 @@ export function createPresetService(port: PresetPort) {
         const savedName = await port.persist(name, preset);
         if (options.skipUpdate) return savedName;
         const { settings, presets, names } = port.read();
-        if (Object.hasOwn(names, savedName)) presets[names[savedName]] = preset;
+        if (Object.hasOwn(names, savedName)) {
+            const existing = presets[names[savedName]];
+            for (const key of Object.keys(existing)) delete existing[key];
+            Object.assign(existing, preset);
+        }
         else { names[savedName] = presets.length; presets.push(preset); }
-        if (options.select !== false) settings.preset_settings_openai = savedName;
+        if (options.select !== false && settings.preset_settings_openai !== savedName) {
+            selectionRevision++;
+            settings.preset_settings_openai = savedName;
+        }
         changed();
         return savedName;
     }
@@ -75,6 +84,7 @@ export function createPresetService(port: PresetPort) {
         if (!Object.hasOwn(names, name)) throw new Error('Preset not found');
         const preset = port.normalize(structuredClone(presets[names[name]]));
         const presetNameBefore = String(settings.preset_settings_openai ?? '');
+        selectionRevision++;
         settings.preset_settings_openai = name;
         try { await port.emit('before', { preset, presetName: name, presetNameBefore }); } catch (error) { console.error(error); }
         for (const [key, field] of Object.entries(port.fields)) {
@@ -94,6 +104,7 @@ export function createPresetService(port: PresetPort) {
         const state = port.read();
         delete state.names[name];
         if (state.settings.preset_settings_openai === name) {
+            selectionRevision++;
             state.settings.preset_settings_openai = '';
             const next = Object.keys(state.names)[0];
             if (next) await select(next);
@@ -160,6 +171,6 @@ export function createPresetService(port: PresetPort) {
     const findPreset = (name: string) => Object.hasOwn(port.read().names, name) ? String(port.read().names[name]) : undefined;
     const getSelectedPresetName = () => String(port.read().settings.preset_settings_openai ?? '');
     const getSelectedPreset = () => findPreset(getSelectedPresetName());
-    return { getSnapshot: () => current, subscribe: (listener: () => void) => { listeners.add(listener); return () => listeners.delete(listener); }, refresh, setField, restore, select, save, delete: remove, rename, requestSelect, saveCurrent, create, renameCurrent, deleteCurrent, restoreCurrent, importFile: (file: File) => port.importFile?.(file), exportFile: () => port.exportFile?.(), getAllPresets, findPreset, getSelectedPresetName, getSelectedPreset, getPresetBody: body };
+    return { getSnapshot: () => current, subscribe: (listener: () => void) => { listeners.add(listener); return () => listeners.delete(listener); }, refresh, setField, restore, select, save, delete: remove, rename, requestSelect, saveCurrent, create, renameCurrent, deleteCurrent, restoreCurrent, importFile: (file: File) => port.importFile?.(file), exportFile: () => port.exportFile?.(), getAllPresets, findPreset, getSelectedPresetName, getSelectedPreset, getSelectionRevision: () => selectionRevision, getPresetBody: body };
 }
 export type PresetService = ReturnType<typeof createPresetService>;
