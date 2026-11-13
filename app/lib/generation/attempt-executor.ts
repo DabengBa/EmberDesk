@@ -452,7 +452,7 @@ function createRecoveryState(ports: RecoveryStatePorts) {
     };
 }
 
-export interface AttemptRecoveryPorts<Attempt> {
+export interface AttemptRecoveryPorts<_Attempt> {
     recovery: { messageId: number | null; readonly hasIdentity?: boolean; ensure(candidate: number | null): Promise<unknown> };
     ownsRun(): boolean;
     processorMessageId(): number | null | undefined;

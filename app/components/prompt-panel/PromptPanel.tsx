@@ -612,6 +612,7 @@ export function PromptManagerList({ bridge }: { bridge: PromptPanelBridge }) {
                                             <input
                                                 type="text"
                                                 className="text_pole prompt-panel-pipeline-tool"
+                                                aria-label={translate('Tool name')}
                                                 list="prompt-panel-pipeline-tools"
                                                 placeholder={translate('Name of the tool binding this round must call')}
                                                 key={JSON.stringify([state.presetName, index, step.id, step.tool])}
@@ -643,6 +644,7 @@ export function PromptManagerList({ bridge }: { bridge: PromptPanelBridge }) {
                                             <label className="prompt-panel-field-label">{translate('Step instruction')}</label>
                                             <textarea
                                                 className="text_pole prompt-panel-content prompt-panel-pipeline-instruction"
+                                                aria-label={translate('Step instruction')}
                                                 rows={4}
                                                 placeholder={translate('Instruction appended to the request for this round')}
                                                 key={`${step.id}:prompt`}

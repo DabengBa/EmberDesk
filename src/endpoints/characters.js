@@ -10,10 +10,10 @@ import { sync as writeFileAtomicSync } from 'write-file-atomic';
 import yaml from 'yaml';
 import _ from 'lodash';
 import mime from 'mime-types';
-import { Jimp, JimpMime } from '../jimp.js';
+import { avatarToPng } from '../image-processing.js';
 import storage from 'node-persist';
 
-import { AVATAR_WIDTH, AVATAR_HEIGHT, DEFAULT_AVATAR_PATH } from '../constants.js';
+import { DEFAULT_AVATAR_PATH } from '../constants.js';
 import { default as validateAvatarUrlMiddleware, getFileNameValidationFunction, forbiddenRegExp } from '../middleware/validateFileName.js';
 import { deepMerge, humanizedDateTime, tryParse, MemoryLimitedMap, getConfigValue, mutateJsonString, clientRelativePath, getUniqueName, sanitizeSafeCharacterReplacements } from '../util.js';
 import { TavernCardValidator } from '../validator/TavernCardValidator.js';
@@ -328,7 +328,7 @@ async function writeCharacterData(inputFile, data, outputFile, request, crop = u
             })();
             const outputImage = write(inputImage, data);
             recordCharacterAvatarBlobSafe(request.user.profile?.handle ?? null, request.user.directories, outputAvatarName, outputImage);
-            startThumbnailPregeneration(request.user.directories, 'avatar', outputAvatarName, false, shouldRegenerateThumbnail);
+            startThumbnailPregeneration(request.user.directories, 'avatar', outputAvatarName, null, shouldRegenerateThumbnail);
             return true;
         }
 
@@ -378,7 +378,7 @@ async function writeCharacterData(inputFile, data, outputFile, request, crop = u
         if (!options.skipCanonicalAuditInvalidation) {
             invalidateCanonicalCharacterAuditSafe(request.user.profile?.handle ?? null, request.user.directories, `character_write:${outputAvatarName}`);
         }
-        startThumbnailPregeneration(request.user.directories, 'avatar', outputAvatarName, false, shouldRegenerateThumbnail);
+        startThumbnailPregeneration(request.user.directories, 'avatar', outputAvatarName, null, shouldRegenerateThumbnail);
         return true;
     } catch (err) {
         console.error(err);
@@ -807,34 +807,12 @@ function startThumbnailPregeneration(directories, type, file, isKnownAnimated, s
 
 /**
  * Applies avatar crop and resize operations to an image.
- * I couldn't fix the type issue, so the first argument has {any} type.
- * @param {object} jimp Jimp image instance
+ * @param {Buffer|string} input Image bytes or path
  * @param {Crop|undefined} [crop] Crop parameters
  * @returns {Promise<Buffer>} Processed image buffer
  */
-export async function applyAvatarCropResize(jimp, crop) {
-    if (!(jimp instanceof Jimp)) {
-        throw new TypeError('Expected a Jimp instance');
-    }
-
-    const image = /** @type {InstanceType<typeof Jimp>} */ (jimp);
-    let finalWidth = image.bitmap.width, finalHeight = image.bitmap.height;
-
-    // Apply crop if defined
-    if (typeof crop == 'object' && [crop.x, crop.y, crop.width, crop.height].every(x => typeof x === 'number')) {
-        image.crop({ x: crop.x, y: crop.y, w: crop.width, h: crop.height });
-        // Apply standard resize if requested
-        if (crop.want_resize) {
-            finalWidth = AVATAR_WIDTH;
-            finalHeight = AVATAR_HEIGHT;
-        } else {
-            finalWidth = crop.width;
-            finalHeight = crop.height;
-        }
-    }
-
-    image.cover({ w: finalWidth, h: finalHeight });
-    return await image.getBuffer(JimpMime.png);
+export async function applyAvatarCropResize(input, crop) {
+    return await avatarToPng(input, crop);
 }
 
 /**
@@ -844,8 +822,7 @@ export async function applyAvatarCropResize(jimp, crop) {
  * @returns {Promise<Buffer>} Image buffer
  */
 async function parseImageBuffer(buffer, crop) {
-    const image = await Jimp.fromBuffer(buffer);
-    return await applyAvatarCropResize(image, crop);
+    return await applyAvatarCropResize(buffer, crop);
 }
 
 /**
@@ -856,8 +833,7 @@ async function parseImageBuffer(buffer, crop) {
  */
 async function tryReadImage(imgPath, crop) {
     try {
-        const rawImg = await Jimp.read(imgPath);
-        return await applyAvatarCropResize(rawImg, crop);
+        return await applyAvatarCropResize(imgPath, crop);
     } catch (error) {
         // If it's an unsupported type of image (APNG) - just read the file as buffer
         console.error(`Failed to read image: ${imgPath}`, error);

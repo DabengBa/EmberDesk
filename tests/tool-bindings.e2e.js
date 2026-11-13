@@ -1033,6 +1033,8 @@ test.describe('reply pipeline step editor', () => {
         await rows.nth(0).locator('.prompt-panel-item-name').click();
         await expect(rows.nth(0).locator('.prompt-panel-pipeline-tool')).toHaveValue('analyze');
         await expect(rows.nth(0).locator('.prompt-panel-pipeline-instruction')).toHaveValue('PLAN_FIRST');
+        await expect(rows.nth(0).locator('.prompt-panel-pipeline-tool')).toHaveAccessibleName('工具名');
+        await expect(rows.nth(0).locator('.prompt-panel-pipeline-instruction')).toHaveAccessibleName('步指令');
 
         // Adding a row appends a step (auto-expanded); typing writes straight
         // into oai_settings.

@@ -1,4 +1,4 @@
-import { Fuse, Handlebars } from '../lib.js';
+import { DOMPurify, Fuse, Handlebars } from '../lib.js';
 import { markCharacterSortChanged } from './character-sort-save-guard.js';
 
 
@@ -155,10 +155,8 @@ export function applyStylePins() {
         }
 
         const formattedMessage = messageFormatting(firstMessage.mes, firstMessage.name, firstMessage.is_system, firstMessage.is_user, 0, {}, false);
-        const htmlElement = document.createElement('div');
-        htmlElement.innerHTML = formattedMessage;
-
-        const styleTags = htmlElement.querySelectorAll('style');
+        const fragment = DOMPurify.sanitize(formattedMessage, { ADD_TAGS: ['style'], RETURN_DOM_FRAGMENT: true });
+        const styleTags = fragment.querySelectorAll('style');
         if (styleTags.length === 0) {
             return;
         }

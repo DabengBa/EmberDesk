@@ -3,7 +3,7 @@ import path from 'node:path';
 
 import express from 'express';
 import sanitize from 'sanitize-filename';
-import { Jimp, JimpMime } from '../jimp.js';
+import { thumbnailImage } from '../image-processing.js';
 import { sync as writeFileAtomicSync } from 'write-file-atomic';
 import { imageSize as sizeOf } from 'image-size';
 
@@ -194,7 +194,7 @@ export async function generateThumbnail(directories, type, file, forceGenerate =
         const fileExtension = path.extname(file).toLowerCase();
         const sourceBuffer = blobSource?.contents ?? null;
 
-        // For WebP files, we must check if they are animated, as Jimp cannot process them.
+        // Animated images are served directly, not flattened into thumbnails.
         // If isKnownAnimated is false, we assume the caller knows it is static and skip this check.
         if (fileExtension === '.webp' && isKnownAnimated !== false) {
             const buffer = sourceBuffer ?? fs.readFileSync(pathToOriginalFile);
@@ -251,25 +251,9 @@ async function processSingleImage(file, originalFolder, thumbnailFolder, type, s
 
     try {
         const fileBuffer = sourceBuffer ?? fs.readFileSync(pathToOriginalFile);
-        const image = await Jimp.read(fileBuffer);
-
-        // Calculate aspect ratio from original image dimensions
-        const originalWidth = image.bitmap.width;
-        const originalHeight = image.bitmap.height;
-        const aspectRatio = (originalHeight > 0) ? (originalWidth / originalHeight) : 1.0;
-
-        const thumbImage = image.clone();
         const thumbnailResolution = getThumbnailResolution(type);
-
-        if (type === 'avatar') {
-            // Crop and resize to fixed dimensions
-            const [configWidth, configHeight] = dimensions[type];
-            thumbImage.cover({ w: configWidth, h: configHeight });
-        }
-
-        const buffer = pngFormat
-            ? await thumbImage.getBuffer(JimpMime.png)
-            : await thumbImage.getBuffer(JimpMime.jpeg, { quality: quality, jpegColorSpace: 'ycbcr' });
+        const [width, height] = dimensions[type];
+        const { buffer, aspectRatio } = await thumbnailImage(fileBuffer, { width, height, format: pngFormat ? 'png' : 'jpg', quality });
 
         writeFileAtomicSync(pathToCachedFile, buffer);
 

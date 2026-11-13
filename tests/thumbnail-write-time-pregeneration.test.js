@@ -5,10 +5,19 @@ import { fileURLToPath } from 'node:url';
 
 import { afterEach, describe, expect, jest, test } from '@jest/globals';
 import { CharXParser } from '../src/charx.js';
+import sharp from 'sharp';
+import extract from 'png-chunks-extract';
+import PNGtext from 'png-chunk-text';
+import * as realImageProcessing from '../src/image-processing.js';
+import * as realCharacterCard from '../src/character-card-parser.js';
+import { setConfigFilePath } from '../src/util.js';
+import { makeAnimatedImages, makeBmp } from './helpers/animated-image-fixtures.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, '..');
+setConfigFilePath(path.join(repoRoot, 'default/config.yaml'));
+const { generateThumbnail: realGenerateThumbnail } = await import('../src/endpoints/thumbnails.js');
 
 const tempRoots = [];
 
@@ -31,7 +40,7 @@ function makeUserDirectories(prefix) {
     return directories;
 }
 
-async function importCharacterRoutes({ generateThumbnailImpl, thumbnailsEnabled = true, parseImpl } = {}) {
+async function importCharacterRoutes({ generateThumbnailImpl, thumbnailsEnabled = true, parseImpl, realImages = false } = {}) {
     jest.resetModules();
 
     const mockGenerateThumbnail = jest.fn(generateThumbnailImpl ?? (() => Promise.resolve({ path: 'thumb.png', aspectRatio: 1, resolution: 1 })));
@@ -42,8 +51,8 @@ async function importCharacterRoutes({ generateThumbnailImpl, thumbnailsEnabled 
     const mockGetFreshIndexedCharacterFullPayload = jest.fn(() => null);
     const mockListIndexedCharacterPayloads = jest.fn(async () => []);
     const mockFindCharactersBoundToWorld = jest.fn(() => []);
-    const mockWrite = jest.fn(() => Buffer.from('character-png'));
-    const mockParse = jest.fn(parseImpl ?? (async () => '{"spec":"chara_card_v2","data":{"name":"Character"}}'));
+    const mockWrite = jest.fn(realImages ? realCharacterCard.write : () => Buffer.from('character-png'));
+    const mockParse = jest.fn(parseImpl ?? (realImages ? realCharacterCard.parse : async () => '{"spec":"chara_card_v2","data":{"name":"Character"}}'));
 
     jest.unstable_mockModule('../src/util.js', () => ({
         deepMerge: (target, source) => ({ ...target, ...source }),
@@ -79,35 +88,15 @@ async function importCharacterRoutes({ generateThumbnailImpl, thumbnailsEnabled 
         uuidv4: () => 'test-managed-media-id',
     }));
 
-    jest.unstable_mockModule('../src/jimp.js', () => ({
-        Jimp: class FakeJimp {
-            constructor() {
-                this.bitmap = { width: 64, height: 64 };
-            }
-
-            static async read() {
-                return new FakeJimp();
-            }
-
-            static async fromBuffer() {
-                return new FakeJimp();
-            }
-
-            crop() {}
-            cover() {}
-            resize() {}
-            async getBuffer() {
-                return Buffer.from('cropped');
-            }
-        },
-        JimpMime: { png: 'image/png' },
+    jest.unstable_mockModule('../src/image-processing.js', () => ({
+        avatarToPng: realImages ? realImageProcessing.avatarToPng : async () => Buffer.from('cropped'),
     }));
 
     jest.unstable_mockModule('../src/character-card-parser.js', () => ({
         parse: mockParse,
-        read: () => '{"spec":"chara_card_v2","data":{"name":"Character"}}',
+        read: realImages ? realCharacterCard.read : () => '{"spec":"chara_card_v2","data":{"name":"Character"}}',
         write: mockWrite,
-        extractImageData: image => image,
+        extractImageData: realImages ? realCharacterCard.extractImageData : image => image,
     }));
 
     jest.unstable_mockModule('../src/constants.js', () => ({
@@ -279,6 +268,96 @@ describe('thumbnail write-time pregeneration hooks', () => {
         expect(mapped.map(asset => asset.storageCategory)).toEqual(['background', 'misc']);
     });
 
+    test.each(['apng', 'gif', 'webp', 'bmp'])('character create processes real %s file via the production image/card stack', async format => {
+        const directories = makeUserDirectories('emberdesk-real-avatar-');
+        const { router } = await importCharacterRoutes({ realImages: true, thumbnailsEnabled: false });
+        const input = format === 'bmp' ? makeBmp() : (await makeAnimatedImages())[format];
+        const upload = path.join(directories.root, 'upload.tmp');
+        fs.writeFileSync(upload, input);
+        const request = {
+            body: {
+                ch_name: 'ImageTest', description: '', scenario: '', first_mes: '', mes_example: '', creator_notes: '',
+                system_prompt: '', post_history_instructions: '', tags: '', creator: '', talkativeness: 0.5, fav: false,
+                world: '', depth_prompt_prompt: '', depth_prompt_depth: 4, depth_prompt_role: 'system',
+                alternate_greetings: [], group_only_greetings: [], extensions: '{}',
+            },
+            file: { destination: directories.root, filename: 'upload.tmp' }, query: {},
+            user: { directories, profile: { handle: 'default-user' } },
+        };
+        const consoleError = jest.spyOn(console, 'error').mockImplementation(() => {});
+        try {
+            const response = await invokeRoute(router, 'post', '/create', request);
+            const cardPath = path.join(directories.characters, 'ImageTest.png');
+            if (format === 'webp') {
+                // The previous decoder also rejected animated WebP and the
+                // path fallback cannot be used as a PNG card.
+                expect(response.statusCode).toBe(500);
+                expect(fs.existsSync(cardPath)).toBe(false);
+                return;
+            }
+            expect(response.body).toBe('ImageTest.png');
+            const card = fs.readFileSync(cardPath);
+            expect(JSON.parse(realCharacterCard.read(card)).data.name).toBe('ImageTest');
+            if (format === 'apng') {
+                expect(extract(card).filter(chunk => chunk.name === 'fcTL')).toHaveLength(2);
+            } else {
+                expect(await sharp(card).metadata()).toMatchObject({ format: 'png', width: 2, height: 2 });
+                const pixel = await sharp(card).extract({ left: 0, top: 0, width: 1, height: 1 }).removeAlpha().raw().toBuffer();
+                expect([...pixel]).toEqual([255, 0, 0]);
+            }
+        } finally {
+            consoleError.mockRestore();
+        }
+    });
+
+    test.each(['png', 'apng'])('imports a real %s character card and retains metadata', async format => {
+        const directories = makeUserDirectories('emberdesk-real-import-');
+        const { router } = await importCharacterRoutes({ realImages: true, thumbnailsEnabled: false });
+        const image = format === 'apng' ? (await makeAnimatedImages()).apng : await sharp({ create: { width: 2, height: 2, channels: 3, background: 'red' } }).png().toBuffer();
+        const card = realCharacterCard.write(image, JSON.stringify({ spec: 'chara_card_v2', spec_version: '2.0', data: { name: 'Imported', description: 'retained', tags: [] } }));
+        const upload = path.join(directories.root, 'upload.png');
+        fs.writeFileSync(upload, card);
+        const response = await invokeRoute(router, 'post', '/import', {
+            body: { file_type: 'png' }, file: { path: upload, destination: directories.root, filename: 'upload.png' }, query: {},
+            user: { directories, profile: { handle: 'default-user' } },
+        });
+        expect(response.statusCode).toBe(200);
+        const result = fs.readFileSync(path.join(directories.characters, 'Imported.png'));
+        expect(JSON.parse(realCharacterCard.read(result)).data).toMatchObject({ name: 'Imported', description: 'retained' });
+        if (format === 'apng') expect(extract(result).filter(chunk => chunk.name === 'fcTL')).toHaveLength(2);
+    });
+
+    test('APNG character card pregeneration and later thumbnail read preserve animation', async () => {
+        const directories = makeUserDirectories('emberdesk-apng-pregen-');
+        const { router, mocks } = await importCharacterRoutes({ realImages: true, generateThumbnailImpl: realGenerateThumbnail });
+        fs.writeFileSync(path.join(directories.root, 'upload.tmp'), (await makeAnimatedImages()).apng);
+        const request = {
+            body: { ch_name: 'Animated', description: '', scenario: '', first_mes: '', mes_example: '', creator_notes: '',
+                system_prompt: '', post_history_instructions: '', tags: '', creator: '', talkativeness: 0.5, fav: false,
+                world: '', depth_prompt_prompt: '', depth_prompt_depth: 4, depth_prompt_role: 'system',
+                alternate_greetings: [], group_only_greetings: [], extensions: '{}' },
+            file: { destination: directories.root, filename: 'upload.tmp' }, query: {},
+            user: { directories, profile: { handle: 'default-user' } },
+        };
+        const response = await invokeRoute(router, 'post', '/create', request);
+        expect(response.body).toBe('Animated.png');
+        expect(mocks.generateThumbnail).toHaveBeenCalledTimes(1);
+        const pregen = await mocks.generateThumbnail.mock.results[0].value;
+        expect(pregen.path).toBeNull();
+        const card = fs.readFileSync(path.join(directories.characters, 'Animated.png'));
+        const chunks = extract(card);
+        expect(chunks.filter(chunk => chunk.name === 'fcTL')).toHaveLength(2);
+        const text = chunks.filter(chunk => chunk.name === 'tEXt').map(chunk => PNGtext.decode(chunk.data));
+        expect(text.map(entry => entry.keyword).sort()).toEqual(['ccv3', 'chara']);
+        for (const entry of text) {
+            expect(JSON.parse(Buffer.from(entry.text, 'base64').toString('utf8')).data.name).toBe('Animated');
+        }
+        expect(fs.readdirSync(directories.thumbnailsAvatar)).toEqual([]);
+        expect((await realGenerateThumbnail(directories, 'avatar', 'Animated.png')).path).toBeNull();
+        expect(fs.readdirSync(directories.thumbnailsAvatar)).toEqual([]);
+        expect(fs.readFileSync(path.join(directories.characters, 'Animated.png'))).toEqual(card);
+    });
+
     test('character create kicks off avatar pregeneration without awaiting it', async () => {
         const directories = makeUserDirectories('emberdesk-pregen-character-');
         let sawWrittenCharacter = false;
@@ -322,7 +401,7 @@ describe('thumbnail write-time pregeneration hooks', () => {
 
         expect(response.body).toBe('Tester.png');
         expect(sawWrittenCharacter).toBe(true);
-        expect(mocks.generateThumbnail).toHaveBeenCalledWith(directories, 'avatar', 'Tester.png', true, false);
+        expect(mocks.generateThumbnail).toHaveBeenCalledWith(directories, 'avatar', 'Tester.png', true, null);
     });
 
     test('character create remains successful when avatar pregeneration rejects', async () => {
@@ -368,7 +447,7 @@ describe('thumbnail write-time pregeneration hooks', () => {
 
         expect(response.body).toBe('Resilient.png');
         expect(fs.existsSync(path.join(directories.characters, 'Resilient.png'))).toBe(true);
-        expect(mocks.generateThumbnail).toHaveBeenCalledWith(directories, 'avatar', 'Resilient.png', true, false);
+        expect(mocks.generateThumbnail).toHaveBeenCalledWith(directories, 'avatar', 'Resilient.png', true, null);
         expect(warnSpy).toHaveBeenCalledWith('Thumbnail pregeneration skipped for avatar/Resilient.png:', expect.any(Error));
         warnSpy.mockRestore();
     });
@@ -427,7 +506,7 @@ describe('thumbnail write-time pregeneration hooks', () => {
         const response = await invokeRoute(router, 'post', '/duplicate', request);
 
         expect(response.body).toEqual({ path: 'tester_1.png' });
-        expect(mocks.generateThumbnail).toHaveBeenCalledWith(directories, 'avatar', 'tester_1.png', true, false);
+        expect(mocks.generateThumbnail).toHaveBeenCalledWith(directories, 'avatar', 'tester_1.png', true, null);
     });
 
     test('character avatar overwrite invalidates the previous thumbnail before pregeneration', async () => {
@@ -452,7 +531,7 @@ describe('thumbnail write-time pregeneration hooks', () => {
         expect(response.statusCode).toBe(200);
         expect(mocks.invalidateThumbnail).toHaveBeenCalledTimes(1);
         expect(mocks.invalidateThumbnail).toHaveBeenCalledWith(directories, 'avatar', 'Tester.png');
-        expect(mocks.generateThumbnail).toHaveBeenCalledWith(directories, 'avatar', 'Tester.png', true, false);
+        expect(mocks.generateThumbnail).toHaveBeenCalledWith(directories, 'avatar', 'Tester.png', true, null);
         expect(mocks.invalidateThumbnail.mock.invocationCallOrder[0]).toBeLessThan(mocks.generateThumbnail.mock.invocationCallOrder[0]);
     });
 

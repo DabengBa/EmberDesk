@@ -45,8 +45,7 @@ export function createChatMessageCommands(deps) {
         if (deps.getEditingId() === id) deps.setEditingId(undefined);
         await deps.emit('MESSAGE_UPDATED', id);
         if (!isCurrent(id, message, chatId)) return false;
-        try { await deps.save(); }
-        finally { if (isCurrent(id, message, chatId)) deps.refresh(); }
+        try { await deps.save(); } finally { if (isCurrent(id, message, chatId)) deps.refresh(); }
         return true;
     }
 
@@ -79,8 +78,7 @@ export function createChatMessageCommands(deps) {
         deps.getChat().splice(id + 1, 0, clone);
         remapUi(index => index > id ? index + 1 : index);
         deps.refresh();
-        try { await deps.save(); }
-        finally { if (isCurrent(id + 1, clone, chatId)) deps.refresh(); }
+        try { await deps.save(); } finally { if (isCurrent(id + 1, clone, chatId)) deps.refresh(); }
         if (!isCurrent(id + 1, clone, chatId)) return false;
         await deps.emit('MESSAGE_UPDATED', id + 1);
         return true;
@@ -117,8 +115,7 @@ export function createChatMessageCommands(deps) {
         [chat[source], chat[target]] = [chat[target], chat[source]];
         remapUi(index => index === source ? target : index === target ? source : index);
         deps.refresh();
-        try { await deps.save(); }
-        finally { if (isCurrent(target, message, chatId)) deps.refresh(); }
+        try { await deps.save(); } finally { if (isCurrent(target, message, chatId)) deps.refresh(); }
         if (!isCurrent(target, message, chatId)) return false;
         await deps.emit('MESSAGE_UPDATED', source);
         return true;

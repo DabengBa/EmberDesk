@@ -1,4 +1,5 @@
 import { memo, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
+import DOMPurify from 'dompurify';
 import type { KeyboardEvent } from 'react';
 import type { MainChatCommands } from '../../compat/workspace-commands';
 import type { MainChatMessageRecord } from '../../stores/main-chat-store';
@@ -16,13 +17,15 @@ const EMPTY_RENDER = {
 };
 
 /**
- * Imperative HTML injection for message-body HTML strings.
+ * Install sanitized rendered fragments without disturbing externally mounted frames.
  *
  * react-dom 19 diffs `dangerouslySetInnerHTML` by object reference, so a fresh
  * `{__html}` literal rewrites innerHTML on every commit — even for identical
  * strings — destroying externally-mounted children (frontend frames). This
- * component owns its subtree imperatively: React never diffs inside it, and
- * innerHTML is only assigned when the string actually changed.
+ * component owns its subtree imperatively and updates it only when HTML changes.
+ * The formatter already applies the message CSS/resource policy before producing
+ * these strings. Preserve its scoped style elements; this second pass is a
+ * defense against executable markup, not a replacement for that policy.
  */
 function StaticHtml({ html, className }: { html: string; className?: string }) {
     const ref = useRef<HTMLDivElement>(null);
@@ -33,7 +36,17 @@ function StaticHtml({ html, className }: { html: string; className?: string }) {
         }
         const last = element as HTMLDivElement & { __edHtml?: string };
         if (last.__edHtml !== html) {
-            element.innerHTML = html;
+            const fragment = DOMPurify.sanitize(html, {
+                RETURN_DOM_FRAGMENT: true,
+                ADD_TAGS: ['style'],
+                ADD_ATTR: ['target'],
+            });
+            for (const anchor of fragment.querySelectorAll<HTMLAnchorElement>('a[target]')) {
+                if (anchor.getAttribute('target')?.toLowerCase() === '_blank') {
+                    anchor.relList.add('noopener');
+                }
+            }
+            element.replaceChildren(fragment);
             last.__edHtml = html;
         }
     }, [html]);

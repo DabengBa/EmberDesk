@@ -18,6 +18,8 @@ Primary files:
 - `src/endpoints/character-write-service.js`
 - `src/endpoints/character-import-service.js`
 - `src/endpoints/characters.js`
+- `src/endpoints/thumbnails.js`
+- `src/image-processing.js`
 - `src/endpoints/chats.js`
 - `src/interaction-performance-report.js`
 - `public/script.js`
@@ -50,7 +52,11 @@ Separate from the SQLite slice, EmberDesk now also applies a short browser cache
 
 - `Cache-Control: private, max-age=3600, must-revalidate`
 
-That thumbnail-header change is intentionally scoped to repeat avatar/persona/background image loads. It does not change canonical storage, SQLite behavior, or startup payload size, and Firefox continues using the existing image `no-store` workaround path.
+The current `/thumbnail` route accepts character avatars only; it does not provide persona or background thumbnails. The header does not change canonical storage, SQLite behavior, or startup payload size, and Firefox continues using the existing image `no-store` workaround path.
+
+Character avatar conversion and static thumbnail generation use `src/image-processing.js`, backed by `sharp`; BMP input is decoded separately with `bmp-ts`. Conversion accepts PNG, JPEG, GIF, WebP, TIFF, AVIF and BMP signatures, rejects unsupported input such as SVG, and applies EXIF orientation before cropping or resizing. Avatar PNG conversion uses the first GIF frame and rejects animated PNG/WebP rather than silently flattening them. These are conversion rules, not a promise that every import endpoint accepts every format.
+
+The thumbnail route uses a 96 × 144 cover resize for static avatars and writes generated files atomically. GIF/APNG and detected animated WebP/PNG are served from the original instead of being reduced to a static thumbnail. Output defaults to JPEG; `thumbnails.format: png` selects PNG. The generated file is derived cache, not the canonical character card; equivalent images are not guaranteed to produce byte-identical output across image implementations. See [pnpm Workflow](./pnpm-workflow.md#native-image-processing) for the native runtime/install requirement.
 
 Separate from SQLite and thumbnail HTTP caching, EmberDesk now also ships a lower default JPEG thumbnail quality:
 
@@ -86,11 +92,10 @@ That CSS-only slice is intentionally narrow:
 - opaque thumbnails fully cover the placeholder after paint, while transparent avatar regions may continue to reveal the tint by design
 - it does not alter thumbnail routing, request timing, cache-busters, or runtime state
 
-Separate from SQLite, thumbnail HTTP caching, lazy image fetch behavior, placeholder paint, and JPEG quality tuning, EmberDesk now also pre-generates avatar and persona thumbnails immediately after successful source-image writes:
+Separate from SQLite, thumbnail HTTP caching, lazy image fetch behavior, placeholder paint, and JPEG quality tuning, EmberDesk also pre-generates character avatar thumbnails after successful source-image writes:
 
 - shared character writes now invalidate an existing avatar thumbnail before overwriting the canonical PNG, then start `generateThumbnail(..., true, false)` in fire-and-forget mode
 - the `/duplicate` character path is covered explicitly even though it bypasses the shared character-write helper
-- persona uploads now start `generateThumbnail(..., true, null)` after the canonical persona image lands, preserving the existing overwrite invalidation and cache-buster behavior
 - mutation success responses do not wait for thumbnail pregeneration to finish
 - if pregeneration fails or loses a race with a very fast follow-up request, the existing `/thumbnail` route remains the fallback source of truth for derived regeneration
 

@@ -28,7 +28,7 @@ export function createChatImportOperation(formData, { send, operationId = crypto
                     try {
                         const result = await attempt();
                         if (result.ok || result.status < 500 || i === 1) return result;
-                    } catch (error) {
+                    } catch {
                         if (i === 1) return { ok: false, error: 'network_error', completed: [], status: 0 };
                     }
                 }
