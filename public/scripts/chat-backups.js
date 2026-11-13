@@ -45,7 +45,6 @@ async function restoreChatBackup(name) {
     const result = await importCharacterChat(formData, { refresh: false });
 
     if (result.length === 0) {
-        toastr.error(t`Failed to import chat backup, try again later.`);
         return null;
     }
 

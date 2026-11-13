@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 import { afterAll, afterEach, beforeAll, describe, expect, jest, test } from '@jest/globals';
@@ -36,13 +37,17 @@ import {
 } from '../src/endpoints/world-info-store.js';
 import encodePngChunks from '../src/png/encode.js';
 import { setConfigFilePath } from '../src/util.js';
+import { getCanonicalSettingsDocument, upsertCanonicalSettingsDocument } from '../src/endpoints/settings-store.js';
 import { buildCharacterFileSnapshotRow } from '../src/endpoints/character-file-snapshot.js';
-import {
+// These state helpers are exercised in Node; loading the browser i18n shell
+// would initialize window-dependent UI dependencies before the tests run.
+jest.unstable_mockModule('../public/scripts/i18n.js', () => ({ translate: text => text }));
+const {
     getCharacterDeleteCandidates,
     shouldRefreshCharacterAfterEdit,
     removeCharactersFromState,
     resolveCharacterAvatarsByIds,
-} from '../public/scripts/character-list-state.js';
+} = await import('../public/scripts/character-list-state.js');
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 
@@ -385,18 +390,22 @@ jest.setTimeout(20000);
 test('frontend getCharacters implementation uses /api/characters/all to preserve eager payload mode', () => {
     const scriptSource = fs.readFileSync(path.join(repoRoot, 'public', 'script.js'), 'utf8');
     const fetchAllCharactersDataOnlyStart = scriptSource.indexOf('async function fetchAllCharactersDataOnly()');
-    const getCharactersStart = scriptSource.indexOf('export async function getCharacters()');
+    const refreshStart = scriptSource.indexOf('function enqueueCharacterRefresh(');
+    const getCharactersStart = scriptSource.indexOf('export function getCharacters()');
 
     expect(fetchAllCharactersDataOnlyStart).toBeGreaterThanOrEqual(0);
+    expect(refreshStart).toBeGreaterThanOrEqual(0);
     expect(getCharactersStart).toBeGreaterThanOrEqual(0);
 
     const fetchAllCharactersDataOnlyBody = scriptSource.slice(fetchAllCharactersDataOnlyStart, fetchAllCharactersDataOnlyStart + 500);
-    const getCharactersBody = scriptSource.slice(getCharactersStart, getCharactersStart + 800);
+    const refreshBody = scriptSource.slice(refreshStart, getCharactersStart);
+    const getCharactersBody = scriptSource.slice(getCharactersStart, getCharactersStart + 100);
 
     expect(fetchAllCharactersDataOnlyBody).toContain('fetch(\'/api/characters/all\'');
     expect(fetchAllCharactersDataOnlyBody).not.toContain('fetch(\'/api/characters/list\'');
-    expect(getCharactersBody).toContain('await fetchAllCharactersDataOnly()');
-    expect(getCharactersBody).not.toContain('fetch(\'/api/characters/list\'');
+    expect(refreshBody).toContain('await fetchAllCharactersDataOnly()');
+    expect(getCharactersBody).toContain('return enqueueCharacterRefresh()');
+    expect(refreshBody).not.toContain('fetch(\'/api/characters/list\'');
 });
 
 /**
@@ -769,8 +778,10 @@ async function invokeChatSave(directories, avatar, fileName, chat) {
             avatar_url: avatar,
             file_name: fileName,
             chat,
-            force: true,
+            create: true,
+            operationId: randomUUID(),
         },
+        get: () => undefined,
         user: { directories, profile: { handle: `chat-test-${path.basename(directories.root)}` } },
     };
     const response = createMockResponse();
@@ -785,12 +796,26 @@ async function invokeChatSave(directories, avatar, fileName, chat) {
     return response;
 }
 
+async function readChatVersion(directories, avatar, fileName) {
+    const response = createMockResponse();
+    await getChatsRouteHandler('/get')({
+        body: { avatar_url: avatar, file_name: fileName.replace(/\.jsonl$/, '') },
+        user: { directories, profile: { handle: 'default-user' } },
+    }, response);
+    expect(response.statusCode).toBe(200);
+    expect(response.headers['x-chat-version']).toMatch(/^[0-9a-f]{32}$/);
+    return response.headers['x-chat-version'];
+}
+
 async function invokeChatDelete(directories, avatar, chatfile) {
     const handler = getChatsRouteHandler('/delete');
+    const version = await readChatVersion(directories, avatar, chatfile);
     const request = {
         body: {
             avatar_url: avatar,
             chatfile,
+            version,
+            operationId: randomUUID(),
         },
         user: { directories, profile: { handle: 'default-user' } },
     };
@@ -808,12 +833,15 @@ async function invokeChatDelete(directories, avatar, chatfile) {
 
 async function invokeChatRename(directories, avatar, originalFile, renamedFile) {
     const handler = getChatsRouteHandler('/rename');
+    const version = await readChatVersion(directories, avatar, originalFile);
     const request = {
         body: {
             avatar_url: avatar,
             original_file: originalFile,
             renamed_file: renamedFile,
             is_group: false,
+            version,
+            operationId: randomUUID(),
         },
         user: { directories, profile: { handle: 'default-user' } },
     };
@@ -830,6 +858,7 @@ async function invokeChatImport(directories, avatar, file, format = 'jsonl') {
             avatar_url: avatar,
             character_name: path.parse(avatar).name,
             user_name: 'User',
+            operationId: randomUUID(),
         },
         file,
         user: { directories, profile: { handle: 'default-user' } },
@@ -1584,7 +1613,7 @@ describe('character index', () => {
             ]);
 
             expect(response.statusCode).toBe(200);
-            expect(response.body).toEqual({ ok: true });
+            expect(response.body).toEqual({ ok: true, version: expect.stringMatching(/^[0-9a-f]{32}$/) });
             const stats = db.prepare('SELECT chat_count, chat_size_bytes, date_last_chat_ms, stats_updated_at_ms FROM character_chat_stats WHERE character_id = ?').get('char-alpha');
             const chatPath = path.join(directories.chats, 'alpha', 'first.jsonl');
             const fileStat = fs.statSync(chatPath);
@@ -1644,7 +1673,7 @@ describe('character index', () => {
             expect(response.statusCode).toBe(200);
             expect(fs.existsSync(path.join(directories.chats, 'alpha', 'first.jsonl'))).toBe(false);
 
-            const session = db.prepare(`SELECT source_jsonl FROM chat_sessions WHERE owner_id = 'alpha'`).get();
+            const session = db.prepare('SELECT source_jsonl FROM chat_sessions WHERE owner_id = \'alpha\'').get();
             const expectedSize = Buffer.byteLength(session.source_jsonl);
             const stats = db.prepare('SELECT chat_count, chat_size_bytes, date_last_chat_ms FROM character_chat_stats WHERE character_id = ?').get('char-alpha');
             expect(stats).toEqual({
@@ -1695,7 +1724,7 @@ describe('character index', () => {
             ]);
 
             expect(saveResponse.statusCode).toBe(200);
-            expect(saveResponse.body).toEqual({ ok: true });
+            expect(saveResponse.body).toEqual({ ok: true, version: expect.stringMatching(/^[0-9a-f]{32}$/) });
 
             const refreshedListResponse = await invokeCharactersAll(directories);
             expect(refreshedListResponse.statusCode).toBe(200);
@@ -1729,7 +1758,7 @@ describe('character index', () => {
             ]);
 
             expect(saveResponse.statusCode).toBe(200);
-            expect(saveResponse.body).toEqual({ ok: true });
+            expect(saveResponse.body).toEqual({ ok: true, version: expect.stringMatching(/^[0-9a-f]{32}$/) });
 
             // The write-side invalidation mark is recorded at save time...
             expect(getPersistedCanonicalAuditStatus(db)).toEqual(expect.objectContaining({
@@ -1822,7 +1851,7 @@ describe('character index', () => {
             const response = await invokeChatRename(directories, 'alpha.png', 'first.jsonl', 'renamed.jsonl');
 
             expect(response.statusCode).toBe(200);
-            expect(response.body).toEqual({ ok: true, sanitizedFileName: 'renamed' });
+            expect(response.body).toEqual({ ok: true, sanitizedFileName: 'renamed', version: expect.stringMatching(/^[0-9a-f]{32}$/) });
             expect(fs.existsSync(path.join(directories.chats, 'alpha', 'first.jsonl'))).toBe(false);
             const renamedPath = path.join(directories.chats, 'alpha', 'renamed.jsonl');
             const fileStat = fs.statSync(renamedPath);
@@ -2459,6 +2488,10 @@ describe('character index', () => {
 
         const { manager, db } = openCanonicalDbForTests(directories);
         try {
+            upsertCanonicalSettingsDocument(db, {
+                userId: 'default-user', expectedRevision: 0,
+                payload: { power_user: { external_media_allowed_overrides: ['alpha.png'] } },
+            });
             db.prepare(`
                 INSERT INTO characters (
                     id, avatar_filename, internal_name, display_name, card_json, shallow_json, world_name, created_at_ms, updated_at_ms, deleted_at_ms
@@ -2490,6 +2523,7 @@ describe('character index', () => {
             const deleteResponse = await invokeCharacterDelete(directories, 'alpha.png');
             expect(deleteResponse.statusCode).toBe(200);
             expect(fs.existsSync(path.join(directories.characters, 'alpha.png'))).toBe(false);
+            expect(getCanonicalSettingsDocument(db, { userId: 'default-user' }).payload.power_user.external_media_allowed_overrides).toEqual([]);
 
             const deletedRow = db.prepare(`
                 SELECT deleted_at_ms
@@ -2821,13 +2855,13 @@ describe('character index', () => {
             description: 'Description Alpha One',
             scenario: 'Scenario Alpha One',
             first_mes: 'First Alpha One',
-            mes_example: 'Example Alpha One',
+            mes_example: '',
             data: expect.objectContaining({
                 name: 'Alpha One',
                 description: 'Description Alpha One',
                 scenario: 'Scenario Alpha One',
                 first_mes: 'First Alpha One',
-                mes_example: 'Example Alpha One',
+                mes_example: '',
                 creator_notes: 'Creator notes Alpha One',
                 alternate_greetings: [],
                 extensions: expect.objectContaining({

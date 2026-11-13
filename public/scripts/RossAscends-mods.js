@@ -1,4 +1,5 @@
 import { DOMPurify, Bowser } from '../lib.js';
+import { runDialoguePopupCommand, runDeleteMessageCommand } from './workspace-interaction-commands.js';
 
 import {
     online_status,
@@ -12,7 +13,7 @@ import {
     menu_type,
     substituteParams,
     openWorkspaceChildSlotHost,
-    closeWorkspaceChildSlotHost,
+
     openWorkspaceShellPromptManager,
     openWorkspaceShellWorldInfo,
 } from '../script.js';
@@ -40,9 +41,6 @@ import { getComposerValue, setComposerValue, getComposerSnapshot, subscribeCompo
 // The settings drawer opener is injected by script.js — importing it here would
 // add a new script.js reverse import (composition-root contract forbids that).
 var injectedOpenWorkspaceShellSettings = null;
-
-var RightNavPanel = null;
-var LNavPanel = null;
 
 var SelectedCharacterTab = null;
 
@@ -268,34 +266,35 @@ function RA_autoconnect(_PrevApi) {
     }
 }
 
-function OpenNavPanels() {
+function OpenNavPanels(drawerService) {
     // Below 1000px the mobile stylesheet renders open drawers as full-screen
     // overlays — auto-opening one would cover the whole workspace even on a
     // narrow desktop window, so the auto-open only applies on wide viewports.
-    if (!isMobile() && window.innerWidth > 1000) {
+    {
+        const restorable = new Set(drawerService.getRestorable({ mobile: isMobile(), width: window.innerWidth }));
         // Restore drawers that were open when the shell last unloaded. The
         // restore must not close sibling drawers: these opens land
         // asynchronously and would otherwise clobber whatever the user just
         // opened (including each other).
         const restoreFailed = label => error => console.warn(`Drawer restore failed (${label}).`, error);
-        if (accountStorage.getItem('LNavOpened') == 'true') {
+        if (restorable.has('left-nav-panel')) {
             void openWorkspaceShellPromptManager({ preserveOpenDrawers: true }).catch(restoreFailed('left-nav-panel'));
         }
 
-        if (accountStorage.getItem('NavOpened') == 'true') {
+        if (restorable.has('right-nav-panel')) {
             void openWorkspaceChildSlotHost('right-nav-panel', { preserveOpenDrawers: true }).catch(restoreFailed('right-nav-panel'));
         }
 
-        if (accountStorage.getItem('WINavOpened') == 'true') {
+        if (restorable.has('WorldInfo')) {
             console.debug('RA -- opening WI panel');
             void openWorkspaceShellWorldInfo({ preserveOpenDrawers: true }).catch(restoreFailed('WorldInfo'));
         }
 
-        if (accountStorage.getItem('RegexNavOpened') == 'true') {
+        if (restorable.has('RegexPanel')) {
             void openWorkspaceChildSlotHost('RegexPanel', { preserveOpenDrawers: true }).catch(restoreFailed('RegexPanel'));
         }
 
-        if (accountStorage.getItem('SettingsNavOpened') == 'true') {
+        if (restorable.has('SettingsPanel')) {
             void injectedOpenWorkspaceShellSettings?.({ preserveOpenDrawers: true })?.catch(restoreFailed('SettingsPanel'));
         }
     }
@@ -482,11 +481,9 @@ export function dragElement($elmnt) {
 
 // ---------------------------------------------------
 
-export function initRossMods({ openWorkspaceShellSettings = null } = {}) {
+export function initRossMods({ openWorkspaceShellSettings = null, drawerService } = {}) {
     injectedOpenWorkspaceShellSettings = openWorkspaceShellSettings;
 
-    RightNavPanel = document.getElementById('right-nav-panel');
-    LNavPanel = document.getElementById('left-nav-panel');
     SelectedCharacterTab = document.getElementById('rm_button_selected_ch');
 
     //when "+New Character" is clicked
@@ -506,23 +503,7 @@ export function initRossMods({ openWorkspaceShellSettings = null } = {}) {
         RA_autoconnect();
     }
 
-    if (!isMobile()) { //only read/set pin states on non-mobile devices
-        // First-run defaults are viewport-aware: wide desktops start with
-        // both side panels open and locked; narrower contexts start closed
-        // and unlocked. Stored explicit values are never overridden.
-        const sidePanelDefault = window.innerWidth > 1000 ? 'true' : 'false';
-        for (const key of ['LNavOpened', 'NavOpened', 'LNavLockOn', 'NavLockOn']) {
-            if (accountStorage.getItem(key) === null) {
-                accountStorage.setItem(key, sidePanelDefault);
-            }
-        }
-
-        // The header pin toggles are gone; stored lock state applies
-        // .pinnedOpen on each host directly, which the close paths and the
-        // shell dock read as the lock authority.
-        $(LNavPanel).toggleClass('pinnedOpen', accountStorage.getItem('LNavLockOn') == 'true');
-        $(RightNavPanel).toggleClass('pinnedOpen', accountStorage.getItem('NavLockOn') == 'true');
-    }
+    drawerService.initializePins({ mobile: isMobile(), width: window.innerWidth });
 
     // Drawer open/closed persistence (NavOpened/WINavOpened) is written by
     // openWorkspaceChildSlotHost/closeWorkspaceChildSlotHost.
@@ -530,7 +511,7 @@ export function initRossMods({ openWorkspaceShellSettings = null } = {}) {
     // Restore persisted drawers synchronously: accountStorage and drawer hosts
     // are ready by now, and landing before APP_READY removes the old 300ms
     // race window where a nav click could interleave with the restore.
-    OpenNavPanels();
+    OpenNavPanels(drawerService);
 
     $(SelectedCharacterTab).on('click', function () { accountStorage.setItem('SelectedNavTab', 'rm_button_selected_ch'); });
     $('#rm_button_characters').on('click', function () { accountStorage.setItem('SelectedNavTab', 'rm_button_characters'); });
@@ -569,7 +550,7 @@ export function initRossMods({ openWorkspaceShellSettings = null } = {}) {
         if (document.activeElement == hotkeyTargets.dialogue_popup_input && !isMobile()) {
             if (!event.shiftKey && !event.ctrlKey && event.key == 'Enter') {
                 event.preventDefault();
-                $('#dialogue_popup_ok').trigger('click');
+                runDialoguePopupCommand('confirmDialoguePopup');
                 return;
             }
         }
@@ -656,16 +637,16 @@ export function initRossMods({ openWorkspaceShellSettings = null } = {}) {
 
             if ($('#dialogue_popup').is(':visible')) {
                 if ($('#dialogue_popup_cancel').is(':visible')) {
-                    $('#dialogue_popup_cancel').trigger('click');
+                    runDialoguePopupCommand('cancelDialoguePopup');
                     return;
                 } else {
-                    $('#dialogue_popup_ok').trigger('click');
+                    runDialoguePopupCommand('confirmDialoguePopup');
                     return;
                 }
             }
 
             if ($('#select_chat_popup').is(':visible')) {
-                $('#select_chat_cross').trigger('click');
+                document.getElementById('shadow_select_chat_popup').close();
                 return;
             }
 
@@ -675,25 +656,12 @@ export function initRossMods({ openWorkspaceShellSettings = null } = {}) {
             }
 
             if ($('#dialogue_del_mes_cancel').is(':visible')) {
-                $('#dialogue_del_mes_cancel').trigger('click');
+                runDeleteMessageCommand('cancel');
                 return;
             }
 
-            if ($('.drawer-content')
-                .not('#WorldInfo')
-                .not('#right-nav-panel')
-                .is(':visible')) {
-                let visibleDrawerContent = $('.drawer-content:visible')
-                    .not('#WorldInfo')
-                    .not('#right-nav-panel');
-                visibleDrawerContent.each((_, element) => closeWorkspaceChildSlotHost(element.id));
-                return;
-            }
-
-            if ($('#WorldInfo').is(':visible')) {
-                closeWorkspaceChildSlotHost('WorldInfo');
-                return;
-            }
+            if (drawerService.handleEscape('primary')) return;
+            if (drawerService.handleEscape('world')) return;
 
             const movingDivs = $('#movingDivs > div').toArray().reverse();
             for (const div of movingDivs) {
@@ -703,11 +671,7 @@ export function initRossMods({ openWorkspaceShellSettings = null } = {}) {
                 }
             }
 
-            if ($('#right-nav-panel').is(':visible') &&
-                !$('#right-nav-panel').hasClass('pinnedOpen')) {
-                closeWorkspaceChildSlotHost('right-nav-panel');
-                return;
-            }
+            if (drawerService.handleEscape('right')) return;
             if ($('.draggable').is(':visible')) {
                 // Remove the first matched element
                 $('.draggable:first').remove();

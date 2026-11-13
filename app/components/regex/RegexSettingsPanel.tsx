@@ -7,6 +7,7 @@ import { RegexBulkControls, RegexRuleGroup, useRegexList } from './RegexRuleList
 import type { RegexListBridge } from './regex-list-types';
 import type { RegexPresetController, RegexToolbar } from './regex-types';
 import { RegexPresetControls } from './RegexPresetControls';
+import { ToolBindingsPanel, type ToolBindingsBridge } from './ToolBindingsPanel';
 
 /**
  * Regex drawer. Two tabs: the legacy regex workbench (markup kept mounted at
@@ -14,7 +15,7 @@ import { RegexPresetControls } from './RegexPresetControls';
  * these ids) and the user-level tool-bindings list managed by
  * public/scripts/tool-bindings.js.
  */
-export function RegexSettingsPanel({ list: listBridge, bridge, toolbar, presets }: { list?: RegexListBridge; bridge?: RegexListBridge; toolbar?: RegexToolbar; presets?: RegexPresetController }) {
+export function RegexSettingsPanel({ list: listBridge, bridge, toolbar, presets, toolBindings }: { list?: RegexListBridge; bridge?: RegexListBridge; toolbar?: RegexToolbar; presets?: RegexPresetController; toolBindings?: ToolBindingsBridge }) {
     useTranslated('');
     const [tab, setTab] = useState<'regex' | 'tools'>('regex');
     const list = useRegexList((listBridge ?? bridge)!);
@@ -99,19 +100,7 @@ export function RegexSettingsPanel({ list: listBridge, bridge, toolbar, presets 
             </div>
             </div>
             <div id="tool_bindings_tab_content" className={tab === 'tools' ? '' : 'displayNone'}>
-                <div className="flex-container">
-                    <ContractButton id="open_tool_binding_editor" className="menu_button menu_button_icon" label={translate('+ Tool binding')} nativeTitle title={translate("New tool binding")} icon={<i className="fa-solid fa-wrench" aria-hidden="true" />} />
-                    <div className="flex1"></div>
-                    <label className="checkbox flex-container margin-r5" htmlFor="tool_choice_required" title={translate("Force the model to call a tool on every request (tool_choice: required)")}>
-                        <input type="checkbox" id="tool_choice_required" className="sr-only tool-binding-enabled" aria-label={translate('Force call')} />
-                        <span className="tool-binding-toggle-on fa-solid fa-toggle-on fa-lg" title={translate("tool_choice: required")}></span>
-                        <span className="tool-binding-toggle-off fa-solid fa-toggle-off fa-lg" title={translate("tool_choice: auto")}></span>
-                    </label>
-                    <span className="marginLeft5 opacity50p" title={translate("tool_choice: auto \u2192 required")}>{translate('Force call')}</span>
-                </div>
-                <hr />
-                <small>{translate('When enabled this ships as a real function tool with generation requests; the action receives only args.')}</small>
-                <div id="saved_tool_bindings" className="flex-container regex-script-container flexFlowColumn"></div>
+                {toolBindings && <ToolBindingsPanel bridge={toolBindings} />}
             </div>
         </div>
     </WorkspacePanelChrome>

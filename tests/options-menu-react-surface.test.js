@@ -11,6 +11,40 @@ function readRepoFile(relativePath) {
 }
 
 describe('options menu + character context menu React surfaces', () => {
+    test('menu controller owns outside and Escape events and removes listeners', async () => {
+        const { loadTsModule } = await import('./helpers/load-ts-module.mjs');
+        const { createOptionsMenuController } = await loadTsModule('app/lib/history-panel-service.ts');
+        const effects = [];
+        const button = new EventTarget();
+        const documentTarget = new EventTarget();
+        const menu = createOptionsMenuController({ show: () => effects.push('show'), hide: () => effects.push('hide'), focus: () => effects.push('focus') });
+        const detach = menu.attach(button, documentTarget, () => false);
+        button.dispatchEvent(new Event('click'));
+        expect(menu.getSnapshot()).toBe(true);
+        documentTarget.dispatchEvent(new Event('click'));
+        expect(menu.getSnapshot()).toBe(false);
+        button.dispatchEvent(new Event('click'));
+        const escape = new Event('keydown');
+        Object.defineProperty(escape, 'key', { value: 'Escape' });
+        documentTarget.dispatchEvent(escape);
+        expect(effects).toEqual(['show', 'hide', 'show', 'hide', 'focus']);
+        detach();
+        button.dispatchEvent(new Event('click'));
+        expect(menu.getSnapshot()).toBe(false);
+    });
+    test('menu lifecycle has a typed command owner', async () => {
+        const { loadTsModule } = await import('./helpers/load-ts-module.mjs');
+        const { createOptionsMenuController } = await loadTsModule('app/lib/history-panel-service.ts');
+        const effects = [];
+        const menu = createOptionsMenuController({ show: () => effects.push('show'), hide: () => effects.push('hide'), focus: () => effects.push('focus') });
+        menu.toggle();
+        expect(menu.getSnapshot()).toBe(true);
+        menu.close(true);
+        expect(menu.getSnapshot()).toBe(false);
+        expect(effects).toEqual(['show', 'hide', 'focus']);
+        menu.close(true);
+        expect(effects).toEqual(['show', 'hide', 'focus']);
+    });
     const indexHtml = readRepoFile('public/index.html');
     const options = readRepoFile('app/components/options-menu/OptionsMenu.tsx');
     const ctxMenu = readRepoFile('app/components/context-menu/CharacterContextMenu.tsx');
@@ -34,17 +68,26 @@ describe('options menu + character context menu React surfaces', () => {
         }
     });
 
+    test('React options invoke explicit menu commands', () => {
+        const handlers = readRepoFile('public/scripts/dom-handlers.js');
+        expect(options).toContain('onCommand');
+        expect(script).toContain('runOptionsMenuCommand');
+        expect(handlers).toContain('export function runOptionsMenuCommand');
+    });
+
     test('current-chat memory is a Wire Log peer with lazy panel lifecycle and chat-change cleanup', () => {
         const domHandlers = readRepoFile('public/scripts/dom-handlers.js');
         const panels = readRepoFile('app/workspace-panels.tsx');
+        const historyService = readRepoFile('app/lib/history-panel-service.ts');
         expect(options).toContain('id="option_chat_memory"');
         expect(options.indexOf('id="option_chat_memory"')).toBeLessThan(options.indexOf('id="option_wire_log"'));
-        expect(domHandlers).toContain("id == 'option_chat_memory'");
-        expect(domHandlers).toContain('await openChatMemoryPanel()');
+        expect(historyService).toContain("id === 'option_chat_memory'");
+        expect(historyService).toContain('await ports.memory()');
+        expect(domHandlers).toContain('memory: openChatMemoryPanel');
         expect(script).toContain('openChatMemoryPanel: (...args) => openChatMemoryPanel(...args)');
         expect(script).toContain('eventSource.on(event_types.CHAT_CHANGED, closeChatMemoryPanel)');
-        expect(script).toContain('if (openId !== chatMemoryPanelOpenId) return');
-        expect(script).toContain('module.mountChatMemoryPanel(chatMemoryPanelHost, {');
+        expect(script).toContain('chatMemoryPanelController = workspace.createAuxiliaryPanelController({');
+        expect(script).toContain('module.mountChatMemoryPanel(host, {');
         expect(script).toContain('onDraftDiscarded: () => toastr.warning(');
         expect(script).toContain('module.unmountChatMemoryPanel(host)');
         expect(panels).toContain('export function mountChatMemoryPanel');
@@ -90,8 +133,8 @@ describe('options menu + character context menu React surfaces', () => {
 
     test('destructive action is marked and Escape closes the menu', () => {
         expect(options).toContain('options-menu-danger');
-        const domHandlers = readRepoFile('public/scripts/dom-handlers.js');
-        expect(domHandlers).toContain('e.key === \'Escape\' && isOptionsMenuVisible');
+        const service = readRepoFile('app/lib/history-panel-service.ts');
+        expect(service).toContain("keyEvent.key === 'Escape' && !keyEvent.isComposing");
     });
 
     test('both mounts run before registerCoreModules', () => {

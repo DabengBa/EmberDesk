@@ -291,6 +291,7 @@ export function PromptInspector({ bridge }: { bridge: PromptInspectorBridge }) {
 
     useEffect(() => {
         void load(round);
+        return () => { requestIdRef.current++; };
     }, [load, round]);
 
     useEffect(() => {

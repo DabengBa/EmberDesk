@@ -59,6 +59,7 @@ jest.unstable_mockModule('../public/scripts/slash-commands/SlashCommand.js', () 
 jest.unstable_mockModule('../public/scripts/slash-commands/SlashCommandArgument.js', () => ({ ARGUMENT_TYPE: {}, SlashCommandArgument: {} }));
 jest.unstable_mockModule('../public/scripts/templates.js', () => ({ renderTemplateAsync: jest.fn() }));
 jest.unstable_mockModule('../public/scripts/popup.js', () => ({ callGenericPopup: jest.fn(), Popup: {}, POPUP_RESULT: {}, POPUP_TYPE: {} }));
+jest.unstable_mockModule('../public/scripts/local-dialogs.js', () => ({ showLocalDialog: jest.fn() }));
 jest.unstable_mockModule('../public/scripts/i18n.js', () => ({ t: strings => strings[0] }));
 jest.unstable_mockModule('../public/scripts/tool-calling.js', () => ({ ToolManager: {
     canPerformToolCalls: () => toolCallingSupported,
@@ -68,6 +69,7 @@ jest.unstable_mockModule('../public/scripts/tool-calling.js', () => ({ ToolManag
 jest.unstable_mockModule('../public/scripts/feature-settings.js', () => ({ feature_settings: { tool_bindings: [{ name: 'analyze', enabled: true }] } }));
 jest.unstable_mockModule('../public/scripts/tool-bindings.js', () => ({ syncPipelineToolBindings: jest.fn() }));
 const openai = await import('../public/scripts/openai.js');
+const scriptPorts = await import('../public/script.js');
 const initialChatMemoryEnabled = openai.oai_settings.chat_memory_enabled;
 const runtime = await import('../public/scripts/reply-pipeline.js');
 const core = await import('../public/scripts/reply-pipeline-core.js');
@@ -170,6 +172,23 @@ test('first request reserves step material and instruction before trimming real 
     expect(generate_data.messages.at(-1).content).toContain('must call the analyze tool exactly once');
 });
 
+test.each(['first', 'closing'])('%s preview uses the first live round history budget', async round => {
+    includeHistory = true;
+    count.mockImplementation(async value => (Array.isArray(value) ? value : [value]).reduce((sum, m) => sum + (m.content ? 10 : 0), 0));
+    const history = Array.from({ length: 8 }, (_, i) => ({ role: 'user', content: `history-${7 - i}` }));
+    const run = core.getPipelineRunState();
+    const previewBase = { step: run.steps[0], total: run.steps.length, tag: 'pipeline:analyze', model: 'gpt-4o-mini' };
+    const [live] = await openai.prepareOpenAIMessages({ type: 'normal', pipelineStepTag: 'pipeline:analyze', messages: structuredClone(history) }, false, { bookkeep: false });
+    const before = structuredClone(core.getPipelineRunState());
+    const [preview] = await openai.prepareOpenAIMessages({
+        type: 'normal', pipelineStepTag: round === 'first' ? 'pipeline:analyze' : null,
+        pipelinePreviewBase: previewBase, messages: structuredClone(history),
+    }, true, { bookkeep: false });
+    expect(preview.filter(message => message.content?.startsWith('history-')))
+        .toEqual(live.filter(message => message.content?.startsWith('history-')));
+    expect(core.getPipelineRunState()).toEqual(before);
+});
+
 test('captured run bypasses base assembly and only prepares step-only tail once', async () => {
     const base = [{ role: 'user', content: 'captured WI/macros' }];
     runtime.applyPipelineRequestShaping({ type: 'normal', messages: base, tools: [] });
@@ -211,6 +230,31 @@ test('completed-run display folding still projects only final content for the ne
 function historyRecord(mes, is_user = false, extra = {}) {
     return { name: is_user ? 'User' : 'Character', is_user, is_system: false, mes, extra };
 }
+
+test('real OpenAI assembly passes the request-local map to in-chat injection', async () => {
+    includeHistory = true;
+    manager.serviceSettings.openai_max_context = 2000;
+    const local = { DEPTH_PROMPT: { value: 'private preview depth' } };
+    scriptPorts.getExtensionPromptMaxDepth.mockReturnValue(0);
+    scriptPorts.extension_prompt_types.IN_CHAT = 1;
+    scriptPorts.extension_prompt_roles.SYSTEM = 0;
+    scriptPorts.extension_prompt_roles.USER = 1;
+    scriptPorts.extension_prompt_roles.ASSISTANT = 2;
+    scriptPorts.getExtensionPrompt.mockImplementation(async (_position, _depth, _separator, role, _wrap, map) =>
+        role === 0 ? map?.DEPTH_PROMPT?.value ?? '' : '');
+    try {
+        const [messages, , completion] = await openai.prepareOpenAIMessages({
+            type: 'normal', extensionPrompts: local,
+            messages: openai.setOpenAIMessages([historyRecord('hello', true)], 'gpt-4o-mini'),
+        }, true, { bookkeep: false });
+        expect(completion.error).toBeUndefined();
+        expect(scriptPorts.getExtensionPrompt).toHaveBeenCalledWith(1, 0, '\n', 0, false, local);
+        expect(messages.some(message => message.content === 'private preview depth')).toBe(true);
+    } finally {
+        scriptPorts.getExtensionPrompt.mockReset();
+        scriptPorts.getExtensionPromptMaxDepth.mockReset();
+    }
+});
 
 function pipelineRecord() {
     return historyRecord('&lt;analyze&gt;PRIVATE_SCRATCH&lt;/analyze&gt;\n&lt;respond&gt;EDITED_FINAL&lt;/respond&gt;', false, {

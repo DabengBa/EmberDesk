@@ -1,4 +1,6 @@
 import { getComposerSnapshot, getComposerValue, setComposerValue, subscribeComposerState, subscribeComposerValue } from './main-chat-composer-service.js';
+import { publishQuietToLoud } from './generation-publication.js';
+import { runHistoryRowCommand, runOptionsMenuCommand } from './workspace-interaction-commands.js';
 import { Fuse, DOMPurify } from '../lib.js';
 import { canUseNegativeLookbehind, copyText, debounce, delay, findChar, flashHighlight, getCharIndex, isFalseBoolean, isTrueBoolean, onlyUnique, regexFromString, resolveAvatarData, showFontAwesomePicker, stringToRange, trimToEndSentence, trimToStartSentence, waitUntilCondition } from './utils.js';
 
@@ -326,7 +328,7 @@ export function initDefaultSlashCommands() {
     SlashCommandParser.addCommandObject(SlashCommand.fromProps({
         name: 'delchat',
         callback: async function () {
-            return displayPastChats().then(() => new Promise((resolve) => {
+            return displayPastChats().then((currentChat) => new Promise((resolve) => {
                 let resolved = false;
                 const timeOutId = setTimeout(() => {
                     toastr.error(t`Chat deletion timed out. Please try again.`);
@@ -345,8 +347,7 @@ export function initDefaultSlashCommands() {
 
                 eventSource.on(event_types.CHAT_DELETED, setResolved);
 
-                const currentChatDeleteButton = $('.select_chat_block[highlight=\'true\']').parent().find('.PastChat_cross');
-                $(currentChatDeleteButton).trigger('click', { fromSlashCommand: true });
+                if (currentChat) void runHistoryRowCommand('deleteChat', currentChat, { fromSlashCommand: true });
             }));
         },
         helpString: t`Deletes the current chat.`,
@@ -388,7 +389,7 @@ export function initDefaultSlashCommands() {
     SlashCommandParser.addCommandObject(SlashCommand.fromProps({
         name: 'closechat',
         callback: function () {
-            $('#option_close_chat').trigger('click');
+            void runOptionsMenuCommand('option_close_chat');
             return '';
         },
         helpString: t`Closes the current chat.`,
@@ -405,7 +406,7 @@ export function initDefaultSlashCommands() {
                     return resolve('');
                 };
                 eventSource.once(event_types.CHAT_CHANGED, eventCallback);
-                $('#option_close_chat').trigger('click');
+                void runOptionsMenuCommand('option_close_chat');
                 setTimeout(() => {
                     reject(t`Failed to open temporary chat`);
                     eventSource.removeListener(event_types.CHAT_CHANGED, eventCallback);
@@ -427,7 +428,7 @@ export function initDefaultSlashCommands() {
     SlashCommandParser.addCommandObject(SlashCommand.fromProps({
         name: 'chat-manager',
         callback: () => {
-            $('#option_select_chat').trigger('click');
+            void runOptionsMenuCommand('option_select_chat');
             return '';
         },
         aliases: ['chat-history', 'manage-chats'],
@@ -4936,31 +4937,27 @@ export async function promptQuietForLoudResponse(who, text) {
         // We don't need to modify the text
     }
 
-    let reply = await generateQuietPrompt({ quietPrompt: text, quietToLoud: true });
-    text = await getRegexedString(reply, regex_placement.SLASH_COMMAND);
-
-    const message = {
-        name: characters[character_id].name,
-        is_user: false,
-        is_name: true,
-        is_system: false,
-        send_date: getMessageTimeStamp(),
-        mes: substituteParams(text.trim()),
-        extra: {
-            type: system_message_types.COMMENT,
-            gen_id: Date.now(),
-            api: 'manual',
-            model: 'slash command',
-        },
-    };
-
-    chat_metadata.tainted = true;
-
-    chat.push(message);
-    await eventSource.emit(event_types.MESSAGE_SENT, (chat.length - 1));
-    addOneMessage(message);
-    await eventSource.emit(event_types.USER_MESSAGE_RENDERED, (chat.length - 1));
-    await saveChatConditional();
+    await generateQuietPrompt({ quietPrompt: text, quietToLoud: true, onOwnedCompletion: async (reply, ownsRun) => {
+        await publishQuietToLoud({
+            reply, ownsRun,
+            getChat: () => chat,
+            transform: value => getRegexedString(value, regex_placement.SLASH_COMMAND),
+            createMessage: value => ({
+                name: characters[character_id].name,
+                is_user: false,
+                is_name: true,
+                is_system: false,
+                send_date: getMessageTimeStamp(),
+                mes: substituteParams(value.trim()),
+                extra: { type: system_message_types.COMMENT, gen_id: Date.now(), api: 'manual', model: 'slash command' },
+            }),
+            markTainted: () => { chat_metadata.tainted = true; },
+            emitSent: index => eventSource.emit(event_types.MESSAGE_SENT, index),
+            render: message => addOneMessage(message),
+            emitRendered: index => eventSource.emit(event_types.USER_MESSAGE_RENDERED, index),
+            save: predicate => saveChatConditional(predicate),
+        });
+    } });
 }
 
 async function sendCommentMessage(args, text) {

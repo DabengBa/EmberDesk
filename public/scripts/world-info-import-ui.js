@@ -274,23 +274,25 @@ export function createWorldInfoImportUi({ getWorldNames, deleteWorldInfo, update
 
     async function importWorldInfoFiles(files) {
         const operation = beginLocalDialogOperation('world-info');
-        try { return await runWorldInfoBatchImport(files, {
-            signal: operation.signal,
-            prepare: prepareWorldInfoImportQueue,
-            isBusy: () => worldInfoImportBusy,
-            setBusy: busy => setWorldImportBusy(busy, { showToast: false }),
-            warnUnsupported: count => toastr.warning(t`${count} unsupported file(s) skipped. Supported formats: .json, .lorebook, .png.`, t`World Info Import`),
-            warnOverflow: count => toastr.warning(t`Only the first ${WORLD_INFO_IMPORT_BATCH_FILE_LIMIT} World Info files will be imported. ${count} extra file(s) were skipped.`, t`World Info Import`),
-            warnPrescan: () => toastr.warning(t`Conflict pre-scan failed. EmberDesk will ask about overwrites one file at a time.`, t`World Info Import`),
-            findConflicts: getWorldInfoBatchImportConflicts,
-            chooseConflicts: conflicts => showWorldInfoBatchConflictPopup(conflicts, operation.signal),
-            waitForCancelPrompt: waitForWorldInfoBatchCancelPrompt,
-            progress: updateWorldInfoBatchProgress,
-            importFile: importWorldInfo,
-            summarize: summarizeWorldInfoBatchImport,
-            showSummary: showWorldInfoBatchImportSummary,
-            notifySuccess: () => { void eventSource.emit(event_types.WORLDINFO_SETTINGS_UPDATED); },
-        }); } finally { operation.release(); }
+        try {
+            return await runWorldInfoBatchImport(files, {
+                signal: operation.signal,
+                prepare: prepareWorldInfoImportQueue,
+                isBusy: () => worldInfoImportBusy,
+                setBusy: busy => setWorldImportBusy(busy, { showToast: false }),
+                warnUnsupported: count => toastr.warning(t`${count} unsupported file(s) skipped. Supported formats: .json, .lorebook, .png.`, t`World Info Import`),
+                warnOverflow: count => toastr.warning(t`Only the first ${WORLD_INFO_IMPORT_BATCH_FILE_LIMIT} World Info files will be imported. ${count} extra file(s) were skipped.`, t`World Info Import`),
+                warnPrescan: () => toastr.warning(t`Conflict pre-scan failed. EmberDesk will ask about overwrites one file at a time.`, t`World Info Import`),
+                findConflicts: getWorldInfoBatchImportConflicts,
+                chooseConflicts: conflicts => showWorldInfoBatchConflictPopup(conflicts, operation.signal),
+                waitForCancelPrompt: waitForWorldInfoBatchCancelPrompt,
+                progress: updateWorldInfoBatchProgress,
+                importFile: importWorldInfo,
+                summarize: summarizeWorldInfoBatchImport,
+                showSummary: showWorldInfoBatchImportSummary,
+                notifySuccess: () => { void eventSource.emit(event_types.WORLDINFO_SETTINGS_UPDATED); },
+            });
+        } finally { operation.release(); }
     }
 
     /**

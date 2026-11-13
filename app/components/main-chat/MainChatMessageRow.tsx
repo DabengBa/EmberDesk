@@ -1,9 +1,11 @@
-import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { memo, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { KeyboardEvent } from 'react';
 import type { MainChatCommands } from '../../compat/workspace-commands';
 import type { MainChatMessageRecord } from '../../stores/main-chat-store';
 import { translate, useTranslated } from '../../compat/i18n.js';
 import { useFrontendFrames } from '../../compat/frontend-frames';
+import { getWorkspaceBulkDeleteController } from '../../lib/dialogue-service';
+
 
 const EMPTY_RENDER = {
     messageHtml: '',
@@ -80,7 +82,7 @@ function DraftTextarea({
 function normalizeClassNames(message: MainChatMessageRecord, isLast: boolean) {
     return [
         'mes',
-        ...message.rootClassNames.filter(className => className !== 'mes'),
+        ...message.rootClassNames.filter(className => className !== 'mes' && className !== 'selected'),
         ...(message.role === 'user' ? ['is_user'] : []),
         ...(message.lastInContext ? ['lastInContext'] : []),
         ...(isLast ? ['last_mes'] : []),
@@ -305,6 +307,9 @@ export const MainChatMessageRow = memo(function MainChatMessageRow({
     const render = { ...EMPTY_RENDER, ...message.render };
     const numericMessageId = Number(message.id);
     const canAddressMessage = Number.isInteger(numericMessageId) && numericMessageId >= 0;
+    const bulkController = getWorkspaceBulkDeleteController();
+    const bulk = useSyncExternalStore(bulkController.subscribe, bulkController.getSnapshot);
+    const bulkSelected = bulk.active && bulk.selected !== null && canAddressMessage && numericMessageId >= bulk.selected;
     const roleAttributes = {
         mesid: message.id,
         ch_name: message.name,
@@ -354,7 +359,7 @@ export const MainChatMessageRow = memo(function MainChatMessageRow({
         <div
             ref={rowRef}
             {...roleAttributes}
-            className={normalizeClassNames(message, isLast)}
+            className={`${normalizeClassNames(message, isLast)}${bulkSelected ? ' selected' : ''}`}
             data-main-chat-message-row-owner="react"
             data-main-chat-message-row={message.id}
             data-main-chat-message-row-state={message.state}
@@ -362,6 +367,11 @@ export const MainChatMessageRow = memo(function MainChatMessageRow({
             data-turn-card-position={turnCard?.position}
             data-reasoning-state={message.reasoningState ?? undefined}
             data-media-display={message.mediaDisplay ?? undefined}
+            onClick={event => {
+                if (!bulk.active || !canAddressMessage) return;
+                event.stopPropagation();
+                bulkController.choose(numericMessageId);
+            }}
             onClickCapture={event => {
                 if (message.actionsExpanded
                     && !(event.target as HTMLElement | null)?.closest?.('.extraMesButtons, .extraMesButtonsHint')) {
@@ -369,8 +379,8 @@ export const MainChatMessageRow = memo(function MainChatMessageRow({
                 }
             }}
         >
-            <div className="for_checkbox" />
-            <input type="checkbox" className="del_checkbox" data-i18n="[aria-label]Select message" aria-label="Select message" />
+            <div className="for_checkbox" style={{ display: bulk.active ? 'none' : 'block' }} />
+            <input type="checkbox" className="del_checkbox" data-i18n="[aria-label]Select message" aria-label="Select message" style={{ display: bulk.active ? 'grid' : 'none' }} checked={bulkSelected} readOnly />
             <div className="mesAvatarWrapper">
                 <div className="avatar">
                     {avatarFailed ? (

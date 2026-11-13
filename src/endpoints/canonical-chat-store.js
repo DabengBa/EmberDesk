@@ -242,9 +242,63 @@ function hasMatchingAttachmentSnapshot(db, sessionId, record) {
         === JSON.stringify(getExpectedAttachmentSnapshot(record));
 }
 
-export function upsertCanonicalChatSession(db, record, { onPersist = null } = {}) {
+function requireChatVersion(version) {
+    if (typeof version !== 'string' || version.length === 0) {
+        throw new TypeError('Canonical chat version must be a non-empty string.');
+    }
+}
+
+export function hasCanonicalChatProjectionTombstone(db, { ownerType, ownerId, sourcePath }) {
+    return Boolean(db.prepare(`
+        SELECT 1 FROM chat_projection_tombstones
+        WHERE owner_type = ? AND owner_id = ? AND source_path = ?
+    `).get(ownerType, ownerId, sourcePath));
+}
+
+export function getCanonicalChatOperation(db, operation) {
+    const row = db.prepare('SELECT fingerprint, result_json FROM chat_operation_results WHERE operation_id = ?').get(operation.id);
+    if (!row) return null;
+    if (row.fingerprint !== operation.fingerprint) return { status: 'operation_mismatch' };
+    return { ...JSON.parse(row.result_json), replayed: true };
+}
+
+function recordCanonicalChatOperation(db, operation, result) {
+    if (operation) db.prepare('INSERT INTO chat_operation_results (operation_id, fingerprint, result_json) VALUES (?, ?, ?)')
+        .run(operation.id, operation.fingerprint, JSON.stringify(result));
+}
+
+function persistCanonicalChatSession(db, record, { onPersist = null, condition = null, operation = null } = {}) {
     return withCanonicalTransaction(db, txnDb => {
-        const existing = getExistingSession(txnDb, record);
+        const replay = operation && getCanonicalChatOperation(txnDb, operation);
+        if (replay) return replay;
+        if (condition?.projection && hasCanonicalChatProjectionTombstone(txnDb, record)) {
+            return { status: 'suppressed' };
+        }
+        let existing = getExistingSession(txnDb, record);
+        if (condition?.create && !getCanonicalChatSession(txnDb, record)) {
+            // A moved session may still own the old path-derived identity.
+            if (getSessionBySourceKey(txnDb, record) || txnDb.prepare('SELECT 1 FROM chat_sessions WHERE id = ?').get(record.id)) {
+                const sourceKey = crypto.randomBytes(32).toString('hex');
+                record = {
+                    ...record,
+                    sourceKey,
+                    id: `chat-session-${sourceKey}`,
+                    messages: record.messages.map(message => ({
+                        ...message,
+                        id: `chat-message-${hashIdentity(sourceKey, message.identityKey)}`,
+                    })),
+                };
+            }
+            existing = null;
+        }
+        if (condition && !condition.projection) {
+            const atLocator = getCanonicalChatSession(txnDb, record);
+            if (condition.create
+                ? Boolean(existing || atLocator)
+                : !atLocator || existing?.id !== atLocator.id || atLocator.concurrency_token !== condition.version) {
+                return { status: 'conflict' };
+            }
+        }
         const sourceUnchanged = existing?.source_jsonl === record.sourceJsonl;
         const attachmentSnapshotMatches = existing
             ? hasMatchingAttachmentSnapshot(txnDb, existing.id, record)
@@ -252,7 +306,9 @@ export function upsertCanonicalChatSession(db, record, { onPersist = null } = {}
         const id = existing?.id ?? record.id;
         if (sourceUnchanged && existing.source_path === record.sourcePath && attachmentSnapshotMatches) {
             const result = { id, status: 'unchanged' };
+            if (condition && !condition.projection) result.version = existing.concurrency_token;
             onPersist?.(txnDb, result);
+            recordCanonicalChatOperation(txnDb, operation, result);
             return result;
         }
         const existingMessageIds = existing ? getExistingMessageIds(txnDb, id) : new Map();
@@ -316,7 +372,9 @@ export function upsertCanonicalChatSession(db, record, { onPersist = null } = {}
 
         if (sourceUnchanged && attachmentSnapshotMatches) {
             const result = { id, status: existing ? 'updated' : 'imported' };
+            if (condition && !condition.projection) result.version = getCanonicalChatSession(txnDb, record).concurrency_token;
             onPersist?.(txnDb, result);
+            recordCanonicalChatOperation(txnDb, operation, result);
             return result;
         }
 
@@ -356,9 +414,31 @@ export function upsertCanonicalChatSession(db, record, { onPersist = null } = {}
             }
         }
         const result = { id, status: existing ? 'updated' : 'imported' };
+        if (condition && !condition.projection) result.version = getCanonicalChatSession(txnDb, record).concurrency_token;
         onPersist?.(txnDb, result);
+        recordCanonicalChatOperation(txnDb, operation, result);
         return result;
     });
+}
+
+export function upsertCanonicalChatSession(db, record, { onPersist = null } = {}) {
+    return persistCanonicalChatSession(db, record, { onPersist });
+}
+
+/** Passive projection import must never recreate a deleted or moved session. */
+export function importCanonicalChatProjection(db, record) {
+    return persistCanonicalChatSession(db, record, { condition: { projection: true } });
+}
+
+/** Create only if no matching session exists. Does not expose an HTTP API. */
+export function createCanonicalChatSession(db, record, { onPersist = null, operation = null } = {}) {
+    return persistCanonicalChatSession(db, record, { onPersist, operation, condition: { create: true } });
+}
+
+/** Compare the version at the exact locator and write in one SQLite transaction. */
+export function saveCanonicalChatSessionIfCurrent(db, record, version, { onPersist = null, operation = null } = {}) {
+    requireChatVersion(version);
+    return persistCanonicalChatSession(db, record, { onPersist, operation, condition: { version } });
 }
 
 export function renameCanonicalChatSession(db, {
@@ -366,11 +446,19 @@ export function renameCanonicalChatSession(db, {
     nextLocator,
     nowMs = Date.now(),
     onPersist = null,
+    version = null,
+    operation = null,
 }) {
     return withCanonicalTransaction(db, txnDb => {
+        const replay = operation && getCanonicalChatOperation(txnDb, operation);
+        if (replay) return replay;
         const session = getCanonicalChatSession(txnDb, locator);
+        if (version !== null && (!session || session.concurrency_token !== version)) return { status: 'conflict' };
         if (!session) return null;
-        if (getCanonicalChatSession(txnDb, nextLocator)) throw new Error('Canonical chat rename destination already exists.');
+        if (getCanonicalChatSession(txnDb, nextLocator)) {
+            if (version !== null) return { status: 'conflict' };
+            throw new Error('Canonical chat rename destination already exists.');
+        }
         txnDb.prepare(`
             UPDATE chat_sessions
             SET
@@ -387,20 +475,39 @@ export function renameCanonicalChatSession(db, {
             session.id,
         );
         const result = { id: session.id, sourceJsonl: session.source_jsonl };
+        if (version !== null) result.version = getCanonicalChatSession(txnDb, nextLocator).concurrency_token;
         onPersist?.(txnDb, result);
+        recordCanonicalChatOperation(txnDb, operation, result);
+        return result;
+    });
+}
+
+function removeCanonicalChatSession(db, locator, { onPersist = null, version = null, operation = null } = {}) {
+    return withCanonicalTransaction(db, txnDb => {
+        const replay = operation && getCanonicalChatOperation(txnDb, operation);
+        if (replay) return replay;
+        const session = getCanonicalChatSession(txnDb, locator);
+        if (version !== null && (!session || session.concurrency_token !== version)) {
+            return { status: 'conflict' };
+        }
+        if (!session) return null;
+        txnDb.prepare('DELETE FROM chat_sessions WHERE id = ?').run(session.id);
+        const result = { id: session.id, sourceJsonl: session.source_jsonl };
+        if (version !== null) result.status = 'deleted';
+        onPersist?.(txnDb, result);
+        recordCanonicalChatOperation(txnDb, operation, result);
         return result;
     });
 }
 
 export function deleteCanonicalChatSession(db, locator, { onPersist = null } = {}) {
-    return withCanonicalTransaction(db, txnDb => {
-        const session = getCanonicalChatSession(txnDb, locator);
-        if (!session) return null;
-        txnDb.prepare('DELETE FROM chat_sessions WHERE id = ?').run(session.id);
-        const result = { id: session.id, sourceJsonl: session.source_jsonl };
-        onPersist?.(txnDb, result);
-        return result;
-    });
+    return removeCanonicalChatSession(db, locator, { onPersist });
+}
+
+/** Compare the version at the exact locator and delete in one SQLite transaction. */
+export function deleteCanonicalChatSessionIfCurrent(db, locator, version, { onPersist = null, operation = null } = {}) {
+    requireChatVersion(version);
+    return removeCanonicalChatSession(db, locator, { onPersist, version, operation });
 }
 
 /**

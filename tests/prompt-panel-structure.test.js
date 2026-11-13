@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { describe, expect, test } from '@jest/globals';
+import { loadTsModule } from './helpers/load-ts-module.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -20,8 +21,9 @@ describe('prompt panel + side-nav defaults', () => {
         expect(panel).toContain("aria-label={translate('Step model')}");
         expect(panel).toContain('list="prompt-panel-pipeline-models"');
         expect(script).toContain('getOpenAIModelList()');
-        expect(script).toContain("step.model = String(patch.model ?? '')");
-        expect(script).toContain("model: typeof step?.model === 'string' ? step.model : ''");
+        const service = read('app/lib/prompt-panel-service.ts');
+        expect(service).toContain("step.model = String(patch.model ?? '')");
+        expect(service).toContain("model: typeof step?.model === 'string' ? step.model : ''");
     });
     test('left nav drawer host lives in the top-settings holder with fillLeft', () => {
         const indexHtml = read('public/index.html');
@@ -36,12 +38,36 @@ describe('prompt panel + side-nav defaults', () => {
         expect(style).toContain('left: 0;');
     });
 
-    test('drawer persistence uses the LNav accountStorage keys', () => {
+    test('drawer persistence uses the LNav accountStorage keys', async () => {
         const scriptSource = read('public/script.js');
         const storage = read('public/scripts/util/AccountStorage.js');
-        expect(scriptSource).toContain('\'left-nav-panel\': \'LNavOpened\'');
+        expect(scriptSource).toContain('read: key => accountStorage.getItem(key)');
+        expect(scriptSource).toContain('write: (key, value) => accountStorage.setItem(key, value)');
         expect(storage).toContain('/^LNavLockOn$/');
         expect(storage).toContain('/^LNavOpened$/');
+
+        const { createWorkspaceDrawerService } = await loadTsModule('app/lib/workspace-drawer-service.ts');
+        const records = new Map();
+        const drawer = { id: 'left-nav-panel', open: false, pinned: false };
+        const service = createWorkspaceDrawerService({
+            get: id => id === drawer.id ? drawer : null,
+            list: () => [drawer],
+            read: key => records.get(key) ?? null,
+            write: (key, value) => records.set(key, value),
+            notify: () => {},
+        });
+        await service.open(drawer.id);
+        expect(records.get('LNavOpened')).toBe('true');
+        expect(service.getRestorable({ mobile: false, width: 1200 })).toContain(drawer.id);
+        service.setPinned(drawer.id, true);
+        expect(records.get('LNavLockOn')).toBe('true');
+        expect(service.close(drawer.id)).toBe(false);
+        expect(records.get('LNavOpened')).toBe('true');
+        service.setPinned(drawer.id, false);
+        expect(records.get('LNavLockOn')).toBe('false');
+        expect(service.close(drawer.id)).toBe(true);
+        expect(records.get('LNavOpened')).toBe('false');
+        expect(service.getRestorable({ mobile: false, width: 1200 })).not.toContain(drawer.id);
     });
 
     test('workspace shell slot routing maps promptManager to the left panel', () => {
@@ -52,17 +78,22 @@ describe('prompt panel + side-nav defaults', () => {
         expect(scriptSource).toContain('openPromptManager: openWorkspaceShellPromptManager');
     });
 
-    test('side panels seed viewport-aware open+lock defaults without overriding stored preference', () => {
+    test('side panels seed viewport-aware open+lock defaults without overriding stored preference', async () => {
         const mods = read('public/scripts/RossAscends-mods.js');
-        // Wide desktops seed open+locked; anything narrower seeds
-        // closed+unlocked. Stored explicit values are never overwritten.
-        expect(mods).toContain('const sidePanelDefault = window.innerWidth > 1000 ? \'true\' : \'false\'');
-        expect(mods).toContain('\'LNavOpened\', \'NavOpened\', \'LNavLockOn\', \'NavLockOn\'');
-        expect(mods).toContain('accountStorage.setItem(key, sidePanelDefault)');
-        // The header pin toggles are removed; the seeded lock keys apply
-        // .pinnedOpen straight onto each panel host.
-        expect(mods).toContain('$(LNavPanel).toggleClass(\'pinnedOpen\'');
-        expect(mods).toContain('$(RightNavPanel).toggleClass(\'pinnedOpen\'');
+        expect(mods).toContain('drawerService.initializePins({ mobile: isMobile(), width: window.innerWidth })');
+        const { createWorkspaceDrawerService } = await loadTsModule('app/lib/workspace-drawer-service.ts');
+        for (const [width, fallback] of [[1200, 'true'], [1000, 'false']]) {
+            const records = new Map([['LNavOpened', 'false'], ['NavLockOn', 'false']]);
+            const drawers = new Map(['left-nav-panel', 'right-nav-panel'].map(id => [id, { id, open: false, pinned: false }]));
+            const service = createWorkspaceDrawerService({
+                get: id => drawers.get(id), list: () => [...drawers.values()], read: key => records.get(key) ?? null,
+                write: (key, value) => records.set(key, value), notify: () => {},
+            });
+            service.initializePins({ mobile: false, width });
+            expect(Object.fromEntries(records)).toEqual({ LNavOpened: 'false', NavLockOn: 'false', NavOpened: fallback, LNavLockOn: fallback });
+            expect(drawers.get('left-nav-panel').pinned).toBe(fallback === 'true');
+            expect(drawers.get('right-nav-panel').pinned).toBe(false);
+        }
         expect(mods).not.toContain('lm_button_panel_pin');
         expect(mods).not.toContain('rm_button_panel_pin');
         expect(mods).toContain('openWorkspaceShellPromptManager');
@@ -136,8 +167,10 @@ describe('prompt panel + side-nav defaults', () => {
     test('token column is populated by a debounced recount, not the last-run counts map', () => {
         const scriptSource = read('public/script.js');
         expect(scriptSource).toContain('countTokensOpenAIAsync');
-        expect(scriptSource).toContain('tokenCountOverrides');
-        expect(scriptSource).toContain('scheduleRecount');
+        const service = read('app/lib/prompt-panel-service.ts');
+        expect(service).toContain('createPromptTokenRecount');
+        expect(service).toContain('recount.schedule()');
+        expect(scriptSource).toContain('workspace.createPromptPanelService');
         expect(scriptSource).toContain('CHAT_COMPLETION_PROMPT_READY');
         // The raw counts map must not feed the column — its keys are a mix of
         // section names and identifiers and only populate after a generation.
@@ -169,11 +202,13 @@ describe('prompt panel + side-nav defaults', () => {
 
     test('preset switching asks about unsaved changes only for user-initiated selections', () => {
         const openai = read('public/scripts/openai.js');
-        const handler = openai.slice(openai.indexOf('confirmSwitch: async'), openai.indexOf('askName: current'));
+        const handler = openai.slice(openai.indexOf('confirmSwitch: async'), openai.indexOf('askName: presetDialogs.askName'));
         expect(handler).toContain('isOpenAIPresetDirty');
-        expect(handler).toContain('customButtons');
-        expect(handler).toContain('POPUP_RESULT.AFFIRMATIVE');
-        expect(handler).toContain('POPUP_RESULT.NEGATIVE');
+        expect(handler).toContain('presetDialogs.confirmSwitch()');
+        const dialogs = read('public/scripts/preset-dialogs.js');
+        expect(dialogs).toContain("id: 'save'");
+        expect(dialogs).toContain("id: 'discard'");
+        expect(dialogs).toContain("id: 'cancel'");
         expect(read('app/lib/preset-service.ts')).toContain("if (decision === 'save') await save(");
     });
 
@@ -197,13 +232,18 @@ describe('prompt panel + side-nav defaults', () => {
         }
     });
 
-    test('prompt bridge moves an entry directly to its destination and saves once', () => {
-        const scriptSource = read('public/script.js');
-        const method = scriptSource.slice(scriptSource.indexOf('        movePrompt(identifier,'), scriptSource.indexOf('        updatePrompt(identifier,'));
+    test('prompt bridge moves an entry directly to its destination and saves once', async () => {
+        const { createPromptPanelService } = await loadTsModule('app/lib/prompt-panel-service.ts');
         const original = ['first', 'second', 'third', 'fourth'].map(identifier => ({ identifier, enabled: identifier !== 'second' }));
         const order = [...original];
         let saves = 0;
-        const bridge = new Function('getOrderList', 'persist', `return {${method}}`)(() => order, () => saves++);
+        const bridge = createPromptPanelService({
+            settings: () => ({}), order: () => order, ensureOrder: () => order,
+            save: () => saves++, syncTools: () => {}, uuid: () => '', dirty: () => false,
+            normalizePipeline: () => ({ enabled: false, steps: [] }), triggerTag: name => name,
+            toolNames: () => [], modelNames: () => [], count: async () => 0,
+            lastRunCounts: () => ({}), bindEvents: () => {}, openInspector: () => {},
+        });
         bridge.movePrompt('first', 2);
         expect(order).toEqual([original[1], original[2], original[0], original[3]]);
         expect(saves).toBe(1);
@@ -223,7 +263,7 @@ describe('prompt panel + side-nav defaults', () => {
         expect(scriptSource).toContain('saveServiceSettings');
         expect(scriptSource).toContain('addPromptOrderForCharacter');
         expect(scriptSource).toContain('isOpenAIPresetDirty');
-        expect(scriptSource).toContain('presetDirty');
+        expect(read('app/lib/prompt-panel-service.ts')).toContain('presetDirty: ports.dirty()');
     });
 });
 

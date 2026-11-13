@@ -15,6 +15,33 @@ test.beforeAll(async () => {
 test.afterAll(async () => { await server?.close(); });
 test.beforeEach(async ({ page }) => { await page.goto(url); await page.getByRole('button', { name: '打开记忆' }).click(); });
 
+test('numeric wheel creates and applies a bounded draft with one input event', async ({ page }) => {
+    await page.evaluate(() => window.panelTest.setFailure(false));
+    await page.getByRole('button', { name: '设置', exact: true }).click();
+    const input = page.getByLabel('最近保留完整轮数');
+    // Model the legacy document-level wheel delegate present in the workspace.
+    await page.evaluate(() => document.addEventListener('wheel', event => {
+        const input = document.activeElement;
+        if (!(input instanceof HTMLInputElement) || input.type !== 'number' || !input.hasAttribute('step') || input.dataset.workspaceNumeric === 'react' || event.target !== input) return;
+        event.preventDefault();
+        input.value = String(Math.max(Number(input.min), Number(input.value) + (event.deltaY < 0 ? 1 : -1) * Number(input.step)));
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+    }, { passive: false }));
+    await input.evaluate(node => { window.memoryWheelInputs = 0; node.addEventListener('input', () => window.memoryWheelInputs++); });
+    await input.focus();
+    await input.hover();
+    await page.mouse.wheel(0, -100);
+    await expect(input).toHaveValue('6');
+    await expect(page.getByRole('button', { name: '应用设置' })).toBeEnabled();
+    expect(await page.evaluate(() => window.memoryWheelInputs)).toBe(1);
+    await page.getByRole('button', { name: '应用设置' }).click();
+    expect(await page.evaluate(() => window.panelTest.calls.at(-1))).toEqual(['settings', { keepTurns: 6 }]);
+    await input.fill('1');
+    await input.hover();
+    await page.mouse.wheel(0, 100);
+    await expect(input).toHaveValue('1');
+});
+
 test('shows read-only summaries, eligibility and errors for stable-key actions', async ({ page }) => {
     await expect(page.getByRole('dialog', { name: '对话记忆' })).toBeVisible();
     await expect(page.getByText('旧摘要 <b>只读</b>')).toBeVisible();

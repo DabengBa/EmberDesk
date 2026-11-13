@@ -57,6 +57,7 @@ import {
     renameCanonicalCharacter,
     scanCanonicalCharacterWorldBindings,
     upsertCanonicalCharacter,
+    assertCanonicalCharacterCardCurrent,
 } from './character-store.js';
 import { getCanonicalWorldInfoBook, normalizeCanonicalWorldInfoName } from './world-info-store.js';
 import { mutateCharacterMediaAuthorizationInTransaction } from './settings-store.js';
@@ -543,7 +544,7 @@ async function listCanonicalCharacterChatsSafe(request, ownerId) {
  * @param {string} ownerId Character internal name
  * @param {string} filePath Legacy chat file destination
  * @param {string} jsonlData Full chat JSONL payload
- * @returns {Promise<{ok: boolean, repairKey?: string}|null>} Write result
+ * @returns {Promise<object|null>} Canonical write result or null when unavailable
  */
 async function writeCanonicalChatSafe(request, ownerId, filePath, jsonlData) {
     const state = await getCanonicalChatsDbSafe(request, 'writes');
@@ -556,6 +557,7 @@ async function writeCanonicalChatSafe(request, ownerId, filePath, jsonlData) {
         locator: { ownerType: 'character', ownerId, sourcePath },
         payload: parseCanonicalChatJsonl(jsonlData),
         operation: 'import',
+        condition: { create: true },
         projection: getCanonicalStorageSlice('chats').getProjectionMode(),
         projectJsonl(projectedJsonl) {
             const dir = path.dirname(filePath);
@@ -563,7 +565,7 @@ async function writeCanonicalChatSafe(request, ownerId, filePath, jsonlData) {
             writeFileAtomicSync(filePath, projectedJsonl, 'utf8');
         },
     });
-    return { ok: result.ok, repairKey: result.repairKey };
+    return result;
 }
 
 /**
@@ -1092,6 +1094,9 @@ function createCharacterWriteDependencies({ bustCache = null } = {}) {
                     const shallowPayload = toShallow(fullPayload);
 
                     withCanonicalTransaction(db, txnDb => {
+                        if (payload.expectedCardJson !== undefined) {
+                            assertCanonicalCharacterCardCurrent(txnDb, payloadAvatar, payload.expectedCardJson);
+                        }
                         const existing = txnDb.prepare(`
                             SELECT id, created_at_ms FROM characters
                             WHERE avatar_filename = ? AND deleted_at_ms IS NULL
@@ -1107,6 +1112,7 @@ function createCharacterWriteDependencies({ bustCache = null } = {}) {
                     });
                 }
             } catch (error) {
+                if (error?.code === 'CHARACTER_CARD_CONFLICT') throw error;
                 // No file fallback exists anymore: a failed canonical commit
                 // must surface instead of silently writing files.
                 throw createCanonicalWriteBlockedError(`canonical_commit_failed:${error?.message ?? error}`);
@@ -1321,12 +1327,12 @@ async function importFromByaf(uploadPath, { request }, preservedFileName) {
             const filePath = path.join(request.user.directories.chats, path.basename(fileName), chatName);
             const jsonlData = ByafParser.getChatFromScenario(scenario, request.body.user_name, card.name, byafData.chatBackgrounds);
             const canonicalResult = await writeCanonicalChatSafe(request, path.basename(fileName), filePath, jsonlData);
-            if (canonicalResult) {
+            if (canonicalResult?.authorityCommitted) {
                 console.log(`Created ${chatName} chat from BYAF import (canonical)`);
                 return chatName;
             }
             // No file-only fallback: an uncommitted session would be invisible.
-            console.warn(`Skipped ${chatName} chat from BYAF import: canonical chats unavailable`);
+            console.warn(`Skipped ${chatName} chat from BYAF import: canonical create was not committed (${canonicalResult?.reason ?? 'chats unavailable'})`);
             return null;
         };
 

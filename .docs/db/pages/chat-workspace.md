@@ -3,7 +3,7 @@ id: page.chat_workspace
 type: page
 name: Chat Workspace
 route: /
-related: [page.login, page.settings, feature.startup_bootstrap, feature.next_workspace_shell, feature.character_library_panel, feature.prompt_panel, feature.prompt_inspector, feature.chat_message_rendering, feature.chat_message_actions, feature.chat_regenerate, feature.chat_generation_auto_recovery, feature.character_export, feature.character_delete, feature.character_text_replace, feature.world_info_panel, term.character_card, term.shared_browser_library]
+related: [page.login, page.settings, feature.startup_bootstrap, feature.next_workspace_shell, feature.character_library_panel, feature.prompt_panel, feature.prompt_inspector, feature.chat_message_rendering, feature.chat_message_actions, feature.chat_regenerate, feature.chat_generation_auto_recovery, feature.chat_recovery, feature.character_export, feature.character_delete, feature.character_text_replace, feature.world_info_panel, term.character_card, term.shared_browser_library]
 ---
 
 # Page: Chat Workspace
@@ -35,6 +35,7 @@ This page exists so a user can run their daily LLM workflow from one browser sur
 - `feature.chat_message_actions`: discovering and using actions attached to rendered chat messages.
 - `feature.chat_regenerate`: re-running the current turn from the chat-options menu without re-sending the user message.
 - `feature.chat_generation_auto_recovery`: bounded automatic retry behavior for visible main-chat generation failures.
+- `feature.chat_recovery`: preserving and finding local edits after chat save conflicts or unconfirmed deletion, including the limits of recovery.
 - `feature.character_export`: exporting the active character card as PNG or JSON with keyboard-reachable format selection and visible feedback.
 - `feature.character_delete`: removing a character from the active library.
 - `feature.world_info_panel`: activating global World Info and editing world-book entries from the workspace drawer.
@@ -58,6 +59,7 @@ This page exists so a user can run their daily LLM workflow from one browser sur
 !include feature.chat_message_actions
 !include feature.chat_regenerate
 !include feature.chat_generation_auto_recovery
+!include feature.chat_recovery
 !include feature.character_export
 !include feature.character_delete
 !include feature.world_info_panel

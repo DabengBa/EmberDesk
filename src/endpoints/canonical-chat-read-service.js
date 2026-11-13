@@ -2,6 +2,7 @@ import {
     getCanonicalChatMessagePayloads,
     getCanonicalChatSession,
 } from './canonical-chat-store.js';
+import { withCanonicalTransaction } from '../canonical-sqlite.js';
 
 function parseCanonicalPayload(payloadJson, fieldName) {
     try {
@@ -45,6 +46,21 @@ export function readCanonicalChatPayload(db, locator) {
         parseCanonicalPayload(rows.session.header_payload_json, 'header payload'),
         ...rows.messages.map(message => parseCanonicalPayload(message.payloadJson, 'message payload')),
     ];
+}
+
+/** Read the payload and the version that guards it from the same snapshot. */
+export function readCanonicalChatVersionedPayload(db, locator) {
+    return withCanonicalTransaction(db, txn => {
+        const rows = getCanonicalPayloadRows(txn, locator);
+        if (!rows) return null;
+        return {
+            version: rows.session.concurrency_token,
+            payload: [
+                parseCanonicalPayload(rows.session.header_payload_json, 'header payload'),
+                ...rows.messages.map(message => parseCanonicalPayload(message.payloadJson, 'message payload')),
+            ],
+        };
+    });
 }
 
 /**

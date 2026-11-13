@@ -1,4 +1,5 @@
 import type { ProviderConnectionInput, ProviderConnectionResult } from '@/lib/provider-connection-service';
+import type { SettingsWriteOwner } from '@/lib/settings-write-owner';
 
 export interface RuntimeChatSnapshot {
     readonly id: string | null;
@@ -28,14 +29,18 @@ export interface RuntimeCommands {
     submitMessage(input: string): Promise<void>;
     stopGeneration(): void;
     loadEarlier(anchorId?: string): Promise<void>;
-    saveSettings(settings: SettingsDocument): Promise<void>;
+    saveSettings(settings: SettingsDocument, baseline?: SettingsDocument, revision?: number): Promise<void>;
     connectProvider(input: ProviderConnectionInput): Promise<ProviderConnectionResult>;
     testProviderConnection(input: ProviderConnectionInput): Promise<ProviderConnectionResult>;
 }
 
 export interface RuntimePort {
+    getSettingsWriteOwner?(): SettingsWriteOwner | undefined;
     getSnapshot(): RuntimeSnapshot;
     getChatCompletionSettings(): SettingsDocument;
+    getSettingsSnapshot(): SettingsDocument;
+    hasSettingsConflict?(): boolean;
+    downloadSettingsRecovery?(): void;
     subscribe(listener: () => void): () => void;
     commands: RuntimeCommands;
 }

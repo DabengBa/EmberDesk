@@ -128,6 +128,7 @@ export async function saveCharacterAuthoringFromPayload(saveModel = {}) {
     const draftTagIds = mode === 'create' ? getDraftTagIds() : [];
     const finishSave = beginCharacterSave(mode === 'edit' ? String(sourceCharacter?.avatar || saveModel?.fields?.avatar || '') : '');
     if (!finishSave) return { ok: false, mode };
+    let transition;
     try {
         const expectedName = String(saveModel?.fields?.name || '').trim();
         if (!expectedName) {
@@ -137,6 +138,13 @@ export async function saveCharacterAuthoringFromPayload(saveModel = {}) {
         if (mode === 'create' && state.is_send_press) {
             toastr.error(t`Cannot create characters while generating. Stop the request and try again.`, t`Creation aborted`);
             throw new Error('Creation aborted while generating');
+        }
+        if (mode === 'create') {
+            try {
+                transition = await shell().prepareChatTransition();
+            } catch {
+                return { ok: false, mode };
+            }
         }
 
         const avatarFileInput = /** @type {HTMLInputElement|null} */ (document.getElementById('add_avatar_button'));
@@ -187,10 +195,16 @@ export async function saveCharacterAuthoringFromPayload(saveModel = {}) {
             await getCharacters();
             const createdIndex = state.characters.findIndex(character => character?.avatar === avatarId);
             if (createdIndex >= 0) {
-            // select_selected_character alone leaves this_chid/menu_type in
-            // create-mode state — the authoring remount would rebuild an empty
-            // edit draft (avatar_url-less saves → 400) and aux writes would
-            // keep landing in create_save.
+                try {
+                    await shell().prepareChatTransition(transition);
+                } catch {
+                    toastr.error('The character was created, but the chat could not be safely switched. Keep this page open and recover your edits.', 'Chat could not be switched', { timeOut: 0 });
+                    return { ok: true, mode, avatar: avatarId, character: state.characters[createdIndex], switched: false };
+                }
+                // select_selected_character alone leaves this_chid/menu_type in
+                // create-mode state — the authoring remount would rebuild an empty
+                // edit draft (avatar_url-less saves → 400) and aux writes would
+                // keep landing in create_save.
                 setCharacterId(createdIndex);
                 setMenuType('character_edit');
                 if (Array.isArray(state.create_save.extra_books) && state.create_save.extra_books.length > 0) {
@@ -310,8 +324,16 @@ export async function renameCharacter(name = null, { silent = false, renameChats
         return false;
     }
 
-    const body = JSON.stringify({ avatar_url: oldAvatar, new_name: newValue });
     const authorizationClock = captureCharacterAuthorizationClock(state.power_user);
+    let transition;
+    try {
+        transition = await shell().prepareChatTransition();
+    } catch {
+        return false;
+    }
+    if (state.characters[state.this_chid]?.avatar !== oldAvatar) return false;
+
+    const body = JSON.stringify({ avatar_url: oldAvatar, new_name: newValue });
     const response = await fetch('/api/characters/rename', {
         method: 'POST',
         headers: getRequestHeaders(),
@@ -420,6 +442,13 @@ export async function renameCharacter(name = null, { silent = false, renameChats
             await eventSource.emit(event_types.CHARACTER_RENAMED, oldAvatar, newAvatar);
 
             // Unload current character
+            try {
+                await shell().prepareChatTransition(transition);
+            } catch {
+                toastr.error('The character was renamed, but the chat could not be safely switched. Keep this page open and recover your edits.', 'Chat could not be switched', { timeOut: 0 });
+                return false;
+            }
+            if (state.characters[state.this_chid]?.avatar !== oldAvatar) return false;
             setCharacterId(undefined);
             // Reload characters list
             await getCharacters();
@@ -461,11 +490,22 @@ export async function renameCharacter(name = null, { silent = false, renameChats
             throw new Error('Could not rename the character');
         }
     } catch (error) {
+        try {
+            await shell().prepareChatTransition(transition);
+        } catch {
+            toastr.error('The character rename failed and the chat could not be safely reloaded. Keep this page open and recover your edits.', 'Chat could not be reloaded', { timeOut: 0 });
+            return false;
+        }
         // Reloading to prevent data corruption
         if (!silent) await Popup.show.text(t`Rename Character`, t`Something went wrong. The page will be reloaded.`);
         else toastr.error(t`Something went wrong. The page will be reloaded.`, t`Rename Character`);
 
         console.log('Renaming character error:', error);
+        try {
+            await shell().prepareChatTransition(transition);
+        } catch {
+            return false;
+        }
         location.reload();
         return false;
     }

@@ -55,7 +55,7 @@ beforeAll(async () => {
     const directories = { root: path.join(root, 'alice'), storage: path.join(root, 'alice', 'storage') };
     db = openCanonicalDatabase({ handle: 'alice', directories, featureFlags: getCanonicalSqliteFeatureFlags() });
     runCanonicalMigrations(db, { strict: true });
-    const { coordinateWorkspaceWrite } = await import('../src/endpoints/coordinate-workspace-write.js');
+    const { coordinateWorkspaceWrite, coordinateReplaceIntent } = await import('../src/endpoints/coordinate-workspace-write.js');
     const app = express();
     app.use(express.json());
     app.use((request, _response, next) => {
@@ -68,6 +68,18 @@ beforeAll(async () => {
         if (request.body.delay) await new Promise(resolve => { release = resolve; });
         if (request.body.throw) throw new Error('writer threw after starting');
         return response.status(request.body.status ?? 200).json({ saved: request.body.target });
+    }));
+    app.post('/replace-proof', coordinateReplaceIntent(async (request, response) => {
+        if (request.body.delay) {
+            onStarted?.();
+            await new Promise(resolve => { release = resolve; });
+        }
+        return response.status(409).json({
+            ok: false, partial: true, reason: 'chat_write_failed',
+            applied: { worldBook: true, card: true, chat: false },
+            areas: { worldBook: { status: 'applied' }, card: { status: 'applied' }, chats: { status: 'failed', reason: 'conflict' } },
+            warnings: [],
+        });
     }));
     const { router: characters } = await import('../src/endpoints/characters.js');
     const { router: chats } = await import('../src/endpoints/chats.js');
@@ -98,6 +110,48 @@ describe('HTTP write tracking', () => {
         });
     }
 
+    test('partial conflict is durably recorded with area progress', async () => {
+        const { sessionId } = createWorkspaceWriteSession(db);
+        const intentId = 'partial-conflict';
+        createReplaceIntent(db, { sessionId, intentId, target: replaceTarget });
+        markReplaceIntentReady(db, { sessionId, intentId });
+        const response = await fetch(`${origin}/replace-proof`, {
+            method: 'POST', headers: { ...headers(sessionId), 'x-emberdesk-replace-intent': intentId },
+            body: JSON.stringify({ avatar_url: 'alice.png' }),
+        });
+        expect(response.status).toBe(409);
+        expect(getReplaceIntent(db, { sessionId, intentId })).toMatchObject({
+            outcome: 'unknown_partial', result: { areas: { worldBook: 'committed', card: 'committed', chat: 'not_committed' } },
+        });
+    });
+
+    test('a disconnected partial replacement retains its progress and cannot execute twice', async () => {
+        const { sessionId } = createWorkspaceWriteSession(db);
+        const intentId = 'partial-disconnected';
+        createReplaceIntent(db, { sessionId, intentId, target: replaceTarget });
+        markReplaceIntentReady(db, { sessionId, intentId });
+        const started = new Promise(resolve => { onStarted = resolve; });
+        const controller = new AbortController();
+        const first = fetch(`${origin}/replace-proof`, {
+            method: 'POST', headers: { ...headers(sessionId), 'x-emberdesk-replace-intent': intentId },
+            body: JSON.stringify({ avatar_url: 'alice.png', delay: true }), signal: controller.signal,
+        }).catch(() => null);
+        await started;
+        onStarted = null;
+        controller.abort();
+        await first;
+        release();
+        release = null;
+        await waitFor(() => getReplaceIntent(db, { sessionId, intentId }).status === 'finished');
+        expect(getReplaceIntent(db, { sessionId, intentId })).toMatchObject({
+            outcome: 'unknown_partial', result: { areas: { worldBook: 'committed', card: 'committed', chat: 'not_committed' } },
+        });
+        const again = await fetch(`${origin}/replace-proof`, {
+            method: 'POST', headers: { ...headers(sessionId), 'x-emberdesk-replace-intent': intentId },
+            body: JSON.stringify({ avatar_url: 'alice.png' }),
+        });
+        expect(again.status).toBe(409);
+    });
     test('actual replacement rejects a cancelled intent before running the writer', async () => {
         const { sessionId } = createWorkspaceWriteSession(db);
         const intentId = 'replace-fenced';

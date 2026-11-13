@@ -1,9 +1,41 @@
 import * as stylex from '@stylexjs/stylex';
-import type { TextareaHTMLAttributes } from 'react';
+import { useEffect, useRef } from 'react';
+import type { InputHTMLAttributes, TextareaHTMLAttributes } from 'react';
 import { getFieldErrorMessage, getValueAtPath } from '@/lib/settings-helpers.js';
+import { numericWheelValue } from '@/lib/workspace-drawer-service';
 import { useAutosizeTextareaRef } from '@/lib/autosize-textarea';
 import { FieldSwitch } from '@/components/fields/FieldSwitch';
 import { settingsStyles } from '@/styles/settings-surface.styles';
+
+let lastSettingsWheel = 0;
+
+function SettingNumber({ onNumberChange, ...props }: InputHTMLAttributes<HTMLInputElement> & { onNumberChange: (value: number) => void }) {
+    const ref = useRef<HTMLInputElement>(null);
+    useEffect(() => {
+        const element = ref.current;
+        if (!element) return;
+        const onWheel = (event: WheelEvent) => {
+            if (document.activeElement !== element || !element.hasAttribute('step')) return;
+            const parent = element.closest('.range-block-range-and-counter') ?? element.closest('div') ?? element.parentElement;
+            const slider = parent?.querySelector<HTMLInputElement>('input[type="range"]');
+            if (event.target !== element && event.target !== slider) return;
+            event.stopPropagation();
+            event.preventDefault();
+            const now = Date.now();
+            if (lastSettingsWheel && now - lastSettingsWheel < 25) return;
+            lastSettingsWheel = now;
+            const next = numericWheelValue(parseFloat(element.value), parseFloat(element.step), parseFloat(element.min), parseFloat(element.max), event.deltaY);
+            if (next === null) return;
+            element.value = String(next);
+            if (slider) slider.value = String(next);
+            onNumberChange(next);
+            element.dispatchEvent(new Event('input', { bubbles: true }));
+        };
+        document.addEventListener('wheel', onWheel, { passive: false });
+        return () => document.removeEventListener('wheel', onWheel);
+    }, [onNumberChange]);
+    return <input {...props} ref={ref} type="number" data-workspace-numeric="react" />;
+}
 
 function SettingTextarea({
     value,
@@ -116,8 +148,7 @@ export function SettingField({
                                 )}
 
                                 {variant === 'number' && (
-                                    <input
-                                        type="number"
+                                    <SettingNumber
                                         id={fieldId}
                                         name={name}
                                         {...stylex.props(settingsStyles.input)}
@@ -131,6 +162,10 @@ export function SettingField({
                                         onChange={event => {
                                             const nextValue = event.target.value;
                                             field.handleChange(nextValue === '' ? 0 : Number(nextValue));
+                                            onValueChange?.();
+                                        }}
+                                        onNumberChange={nextValue => {
+                                            field.handleChange(nextValue);
                                             onValueChange?.();
                                         }}
                                     />

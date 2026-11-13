@@ -5,6 +5,7 @@ const shell = {
     state, t: strings => strings[0], getCharaFilename: (_id, options) => options.manualAvatarKey,
     renameTagKey: jest.fn(), deleteTagKey: avatar => { delete state.tag_map[avatar]; }, saveSettingsDebounced: jest.fn(), delay: jest.fn(),
     setCharacterId: id => { state.this_chid = id; },
+    prepareChatTransition: jest.fn(async () => {}),
     getCharacters: () => { state.characters = [{ name: 'New', avatar: 'new.png' }]; },
     selectCharacterById: id => { state.this_chid = id; },
 };
@@ -20,9 +21,26 @@ beforeEach(() => {
     Object.assign(state, { characters: [{ name: 'Old', avatar: 'old.png' }], this_chid: 0, world_info: {}, active_character: null,
         power_user: { external_media_allowed_overrides: ['old.png', 'other.png'], external_media_forbidden_overrides: ['old.png', 'blocked.png'] } });
     shell.saveSettingsDebounced.mockClear();
+    shell.prepareChatTransition.mockReset().mockResolvedValue(undefined);
     globalThis.toastr = { success: jest.fn(), error: jest.fn(), warning: jest.fn() };
     globalThis.location = { reload: jest.fn() };
     globalThis.fetch = jest.fn(async () => ({ ok: true, json: async () => ({ avatar: 'new.png' }) }));
+});
+
+test('rename does not send a request when chat recovery cannot be checkpointed', async () => {
+    shell.prepareChatTransition.mockRejectedValueOnce(new Error('recovery unavailable'));
+    expect(await renameCharacter('New', { silent: true, renameChats: false })).toBe(false);
+    expect(fetch).not.toHaveBeenCalled();
+    expect(state.characters[state.this_chid].avatar).toBe('old.png');
+    expect(location.reload).not.toHaveBeenCalled();
+});
+
+test('rename retains the current chat when a write starts after the server commit', async () => {
+    shell.prepareChatTransition.mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('write pending'));
+    expect(await renameCharacter('New', { silent: true, renameChats: false })).toBe(false);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(state.characters[state.this_chid].avatar).toBe('old.png');
+    expect(location.reload).not.toHaveBeenCalled();
 });
 
 test('successful rename moves historical grants and denials, leaving no reusable old avatar grant', async () => {

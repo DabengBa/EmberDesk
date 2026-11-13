@@ -211,12 +211,15 @@ async function invokeRoute(router, method, routePath, request) {
         throw new Error(`Route not found: ${method.toUpperCase()} ${routePath}`);
     }
 
+    request.get ??= () => undefined;
+
     const response = {
         statusCode: 200,
         body: undefined,
+        finished: false,
         status(code) { this.statusCode = code; return this; },
-        send(payload) { this.body = payload; return this; },
-        sendStatus(code) { this.statusCode = code; this.body = code; return this; },
+        send(payload) { this.body = payload; this.finished = true; return this; },
+        sendStatus(code) { this.statusCode = code; this.body = code; this.finished = true; return this; },
     };
 
     await new Promise((resolve, reject) => {
@@ -235,7 +238,7 @@ async function invokeRoute(router, method, routePath, request) {
 
             Promise.resolve(handler(request, response, next))
                 .then(() => {
-                    if (handler.length < 3) {
+                    if (handler.length < 3 || response.finished) {
                         resolve();
                     }
                 })

@@ -35,7 +35,7 @@ export interface PromptPanelPipelineStep {
 export interface PromptPanelState {
     promptsById: Record<string, PromptPanelPrompt>;
     order: PromptPanelOrderEntry[];
-    tokenCounts: Record<string, number>;
+    tokenCounts: Record<string, number | null>;
     presetDirty: boolean;
     presetName?: string;
     /**
@@ -55,7 +55,7 @@ export interface PromptPanelBridge {
     getState(): PromptPanelState;
     setPromptEnabled(identifier: string, enabled: boolean): void;
     movePrompt(identifier: string, targetIndex: number): void;
-    updatePrompt(identifier: string, patch: Partial<PromptPanelPrompt>): void;
+    updatePrompt(identifier: string, patch: Partial<PromptPanelPrompt>, expected?: { presetName?: string }): void;
     addPrompt(): string | null;
     deletePrompt(identifier: string): void;
     setPipelineEnabled(enabled: boolean): void;
@@ -160,7 +160,9 @@ function useRowReorder<T>({ entries, getId, onMove, rowSelector, idDataKey }: {
         const rows = Array.from(list.querySelectorAll<HTMLElement>(rowSelector));
         const target = rows.find(row => pointer.y <= row.getBoundingClientRect().bottom) ?? rows.at(-1);
         if (!target) return;
-        const rect = target.getBoundingClientRect();
+        // An expanded editor can be much taller than its header. Dropping on
+        // the lower half of the header must still mean after that row.
+        const rect = target.querySelector<HTMLElement>('.prompt-panel-item-row')?.getBoundingClientRect() ?? target.getBoundingClientRect();
         const before = pointer.y < rect.top + rect.height / 2;
         const targetId = (target.dataset as Record<string, string | undefined>)[idDataKey]!;
         const ids = entries.map(getId);
@@ -271,9 +273,13 @@ export function PromptManagerList({ bridge }: { bridge: PromptPanelBridge }) {
     );
     const [expandedId, setExpandedId] = useState<string | null>(null);
     const [expandedStepId, setExpandedStepId] = useState<string | null>(null);
-    const [contentPopup, setContentPopup] = useState<{ id: string; draft: string } | null>(null);
+    const [contentPopup, setContentPopup] = useState<{ id: string; draft: string; presetName?: string } | null>(null);
     const knownIdsRef = useRef<Set<string> | null>(null);
     const knownStepIdsRef = useRef<Set<string> | null>(null);
+
+    useEffect(() => {
+        setContentPopup(null);
+    }, [state.presetName]);
 
     const promptReorder = useRowReorder({
         entries: state.order,
@@ -365,7 +371,7 @@ export function PromptManagerList({ bridge }: { bridge: PromptPanelBridge }) {
                     const isAbsolute = (prompt?.injection_position ?? 0) === INJECTION_POSITION_ABSOLUTE;
                     return (
                         <div
-                            key={entry.identifier}
+                            key={`${state.presetName ?? ''}:${entry.identifier}`}
                             role="listitem"
                             className={`prompt-panel-item${entry.enabled ? '' : ' prompt-panel-item-disabled'}${expanded ? ' prompt-panel-item-expanded' : ''}${promptReorder.drag?.id === entry.identifier ? ' prompt-panel-item-dragging' : ''}`}
                             data-prompt-identifier={entry.identifier}
@@ -442,7 +448,7 @@ export function PromptManagerList({ bridge }: { bridge: PromptPanelBridge }) {
                                                         nativeTitle
                                                         title={translate('Maximize editing')}
                                                         icon={<i className="fa-solid fa-expand" aria-hidden="true" />}
-                                                        onClick={() => setContentPopup({ id: entry.identifier, draft: prompt.content ?? '' })}
+                                                        onClick={() => setContentPopup({ id: entry.identifier, draft: prompt.content ?? '', presetName: state.presetName })}
                                                     />
                                                 </div>
                                                 <textarea
@@ -669,7 +675,7 @@ export function PromptManagerList({ bridge }: { bridge: PromptPanelBridge }) {
                     {(state.bindingToolNames ?? []).map(name => <option key={name} value={name} />)}
                 </datalist>
             </div>
-            {contentPopup ? createPortal(
+            {contentPopup && contentPopup.presetName === state.presetName ? createPortal(
                 <div className="prompt-content-overlay" onClick={() => setContentPopup(null)}>
                     <div
                         className="prompt-content-modal"
@@ -701,7 +707,7 @@ export function PromptManagerList({ bridge }: { bridge: PromptPanelBridge }) {
                                 type="button"
                                 className="menu_button"
                                 onClick={() => {
-                                    bridge.updatePrompt(contentPopup.id, { content: contentPopup.draft });
+                                    bridge.updatePrompt(contentPopup.id, { content: contentPopup.draft }, { presetName: contentPopup.presetName });
                                     setContentPopup(null);
                                 }}
                             >

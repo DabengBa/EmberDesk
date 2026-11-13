@@ -69,29 +69,39 @@ describe('prompt inspector wiring (structure)', () => {
         const openai = read('public/scripts/openai.js');
         expect(service).toContain('resolvePipelineModel(');
         expect(service).toContain('resolvePreviewPipelineModel(');
-        expect(service).toContain('isChatCompletionStreaming(state.oai_settings, attemptModel, type)');
+        expect(service).toContain('previewModel: resolvePreviewPipelineModel');
+        expect(service).toContain('liveModel: resolvePipelineModel');
+        expect(service).toContain('isOpenAIStreaming: (model, generationType) => isChatCompletionStreaming(shell().state.oai_settings, model, generationType)');
+        expect(service).toContain('getGenerationLifecycleService().runGenerationDispatch({');
+        expect(read('app/lib/generation/attempt-executor.ts')).toContain('runTransportAttempt({');
         expect(openai).toContain('model: requestedModel');
     });
     test('attempt model is used for message provenance and not attributed to pipeline progress cards', () => {
         const service = read('public/scripts/generation-service.js');
         const script = read('public/script.js');
         const tools = read('public/scripts/tool-calling.js');
-        expect(service).toContain('state.generatingAttemptModel = attemptModel');
+        expect(service).toContain('setAttemptModel: model => { shell().state.generatingAttemptModel = model; }');
+        expect(service).toContain('getGenerationLifecycleService().runGenerationDispatch({');
+        expect(read('app/lib/generation/attempt-executor.ts')).toContain('runTransportAttempt({');
         expect(script).toContain('generatingAttemptModel ?? getChatCompletionModel()');
         expect(tools).toContain('model: pipelineMeta ? null : getGeneratingModel()');
     });
     test('non-chat-completion streaming keeps the existing consumer decision', () => {
         const service = read('public/scripts/generation-service.js');
-        expect(service).toContain(": isStreamingEnabled() && type !== 'quiet'");
+        expect(service).toContain('isStreaming: isStreamingEnabled');
+        expect(service).toContain('getGenerationLifecycleService().runGenerationDispatch({');
+        const typed = read('app/lib/generation/attempt-executor.ts');
+        expect(typed).toContain('ports.isStreaming() && input.type !== \'quiet\'');
     });
     test('preview validates provider tool metadata against its resolved step model', () => {
         const service = read('public/scripts/generation-service.js');
-        expect(service).toContain('pipeline && !pipeline.fallback && !state.ToolManager.canPerformToolCalls(type, state.oai_settings, requestBody.model)');
+        expect(read('app/lib/generation/attempt-executor.ts')).toContain('pipeline && !pipeline.fallback && !ports.canUseTools(requestBody.model)');
+        expect(service).toContain('canUseTools: model => shell().state.ToolManager.canPerformToolCalls(type, shell().state.oai_settings, model)');
     });
     test('keeps prompt inspector controls discoverable by accessible name', () => {
         const inspector = read('app/components/prompt-panel/PromptInspector.tsx');
         const panel = read('app/components/prompt-panel/PromptPanel.tsx');
-        expect(inspector).toContain("aria-label={translate('Close')}");
+        expect(inspector).toContain('aria-label={translate(\'Close\')}');
         expect(panel).toMatch(/<textarea\s+className="text_pole prompt-content-modal-textarea"[\s\S]*?aria-label=\{translate\('Edit \$\{0\} content'\)\.replace\('\$\{0\}', state\.promptsById\[contentPopup\.id\]\?\.name \?\? contentPopup\.id\)\}/);
     });
 
@@ -128,21 +138,35 @@ describe('prompt inspector wiring (structure)', () => {
     test('preview mode assembles the pending message without writing chat state', () => {
         const service = read('public/scripts/generation-service.js');
         expect(service).toContain('preview = null');
-        expect(service).toContain('const isPreview = Boolean(preview');
-        expect(service).toContain('previewPendingMessage = await buildUserMessage(');
+        const typed = read('app/lib/generation/attempt-executor.ts');
+        expect(service).toContain('getGenerationLifecycleService().prepareOwnedGeneration({');
+        expect(typed).toContain('const entry = createRequestEntry(input, ports.entry)');
+        expect(typed).toContain('const isPreview = Boolean(input.preview && typeof input.preview === \'object\')');
+        expect(typed).toContain('const userInput = await assembleUserInput({');
+        expect(service).toContain('buildUser: (text, bias) => buildUserMessage(text, bias)');
+        expect(service).toContain('const previewPendingMessage = prepared.pending');
+        expect(typed).toContain('pending = await ports.buildUser(text, bias)');
         expect(service).toContain('emitSettingsReady: false');
-        expect(service).toContain('previewPipelineRequestShaping(requestBody');
+        expect(service).toContain('shape: (body, index) => previewPipelineRequestShaping(body, { round: index })');
         // Preview must return before sendGenerationRequest runs.
-        const previewBlock = service.indexOf('if (isPreview) {\n        return await buildPreviewRequestResult');
-        const sendCall = service.indexOf('await sendGenerationRequest(');
+        expect(typed).toContain('if (input.preview) return { kind: \'terminal\', value: await ports.preview(data, completion, summarized) }');
+        expect(service).toContain('preview: (data, chatCompletion, summarized) => buildPreviewRequestResult({');
+        const previewBlock = typed.indexOf('if (assembly.stages.kind === \'terminal\') return assembly.stages.value;');
+        const sendCall = typed.indexOf('return ports.dispatch(prepared.state, assembly);', previewBlock);
         expect(previewBlock).toBeGreaterThan(-1);
         expect(sendCall).toBeGreaterThan(previewBlock);
     });
 
     test('preview disables prompt bookkeeping and forces squashing', () => {
         const service = read('public/scripts/generation-service.js');
-        expect(service).toContain('squash: isPreview ? true : null, bookkeep: !isPreview');
-        expect(service).toContain('getPreviewPipelineTriggerTag(Number(preview?.round ?? 0))');
+        const typed = read('app/lib/generation/attempt-executor.ts');
+        expect(service).toContain('getGenerationLifecycleService().assemblePromptContent({');
+        expect(typed).toContain('assembleOpenAI: messages => assembleOpenAIRequest({');
+        expect(service).toContain('round: Number(preview?.round ?? 0)');
+        expect(service).toContain('previewTag: getPreviewPipelineTriggerTag');
+        expect(service).toContain('prepare: prepareOpenAIMessages');
+        expect(typed).toContain('{ squash: isPreview ? true : null, bookkeep: !isPreview }');
+        expect(typed).toContain('pipelineStepTag: isPreview ? ports.previewTag(round) : ports.liveTag(type)');
     });
 
     test('preview never emits CHAT_COMPLETION_SETTINGS_READY', () => {
@@ -153,10 +177,14 @@ describe('prompt inspector wiring (structure)', () => {
         expect(service).not.toContain('eventSource.emit(event_types.CHAT_COMPLETION_SETTINGS_READY');
     });
 
-    test('extension_prompts are snapshotted and restored around a preview', () => {
+    test('preview prompt writes use the typed request-local map without a global snapshot', () => {
         const service = read('public/scripts/generation-service.js');
-        expect(service).toContain('const extensionPromptSnapshot = { ...(state.extension_prompts ?? {}) };');
-        expect(service).toContain('delete state.extension_prompts[key]');
+        const typed = read('app/lib/generation/attempt-executor.ts');
+        expect(service).toContain('getGenerationLifecycleService().prepareOwnedGeneration({');
+        expect(typed).toContain('createPromptContext({ ...ports.promptContext, isolated: entry.isPreview })');
+        expect(service).toContain('promptContext.requestPrompts()');
+        expect(service).not.toContain('preview.promptScope.mutate(work)');
+        expect(typed).toContain('if (!isolatedPrompts) isolatedPrompts = snapshotPrompts()');
     });
 
     test('sendMessageAsUser delegates message construction to buildUserMessage', () => {
@@ -164,7 +192,7 @@ describe('prompt inspector wiring (structure)', () => {
         expect(script).toContain('export async function buildUserMessage(');
         const sendFn = script.slice(script.indexOf('export async function sendMessageAsUser'));
         expect(sendFn).toContain('await buildUserMessage(messageText, messageBias, { compact, name })');
-        expect(sendFn).toContain('await populateFileAttachment(message)');
+        expect(sendFn).toContain('await populateFileAttachment(message, \'file_form_input\', { isCurrent })');
         // Regex + macro semantics live in the shared builder only.
         const buildFn = script.slice(script.indexOf('export async function buildUserMessage'));
         expect(buildFn).toContain('getRegexedString(messageText, regex_placement.USER_INPUT)');
@@ -205,7 +233,7 @@ describe('prompt inspector wiring (structure)', () => {
 
         const script = read('public/script.js');
         expect(script).toContain('__emberDeskPromptInspectorBridge');
-        expect(script).toContain('openPromptInspector()');
+        expect(script).toContain('promptInspectorController.open()');
         expect(script).toContain('previewNextGenerationRequest({ round })');
     });
 });

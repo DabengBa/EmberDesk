@@ -7,6 +7,7 @@ import { withCanonicalTransaction } from './canonical-sqlite.js';
 import { recordImportLedgerEntry, removeImportLedgerEntry } from './canonical-import-ledger.js';
 import {
     normalizeCanonicalWorldInfoName,
+    getCanonicalWorldInfoBook,
     recordWorldInfoProjectionRepair,
     resolveWorldInfoProjectionRepair,
     upsertCanonicalWorldInfoBookInTransaction,
@@ -73,8 +74,14 @@ export function commitWorldBookWithProjectionIntent(db, {
     nowMs = Date.now(),
     sourceMtimeMs = null,
     sourceSizeBytes = null,
+    expectedPayload = undefined,
 }) {
     return withCanonicalTransaction(db, txn => {
+        if (expectedPayload !== undefined && JSON.stringify(getCanonicalWorldInfoBook(txn, name)) !== JSON.stringify(expectedPayload)) {
+            const error = new Error('world_book_conflict');
+            error.code = 'WORLD_BOOK_CONFLICT';
+            throw error;
+        }
         upsertCanonicalWorldInfoBookInTransaction(txn, {
             name,
             payload,

@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 
 import { afterEach, describe, expect, test } from '@jest/globals';
 
@@ -76,6 +77,11 @@ function makeResponse() {
     return {
         body: undefined,
         statusCode: 200,
+        headers: {},
+        set(name, value) {
+            this.headers[name.toLowerCase()] = value;
+            return this;
+        },
         send(payload) {
             this.body = payload;
             return this;
@@ -142,7 +148,18 @@ async function createSeededUser() {
 
 function callRoute(routePath, request) {
     const response = makeResponse();
-    return getRouteHandler(routePath)(request, response).then(() => response);
+    return getRouteHandler(routePath)({ get: () => undefined, ...request }, response).then(() => response);
+}
+
+async function saveExistingChat(directories, payload) {
+    const user = { directories, profile: { handle: 'alice' } };
+    const current = await callRoute('/get', { body: { avatar_url: 'alice.png', file_name: 'memory' }, user });
+    expect(current.statusCode).toBe(200);
+    expect(current.headers['x-chat-version']).toEqual(expect.any(String));
+    return callRoute('/save', {
+        body: { avatar_url: 'alice.png', file_name: 'memory', chat: payload, version: current.headers['x-chat-version'], operationId: randomUUID() },
+        user,
+    });
 }
 
 afterEach(() => {
@@ -167,12 +184,9 @@ describe('chat memory persistence', () => {
             { name: 'Alice', mes: 'Tomorrow at noon.', extra: { id: 'msg-char-0' } },
         ];
 
-        const saveResponse = await callRoute('/save', {
-            body: { avatar_url: 'alice.png', file_name: 'memory', chat: payload, force: false },
-            user: { directories, profile: { handle: 'alice' } },
-        });
+        const saveResponse = await saveExistingChat(directories, payload);
         expect(saveResponse.statusCode).toBe(200);
-        expect(saveResponse.body).toEqual({ ok: true });
+        expect(saveResponse.body).toEqual({ ok: true, version: expect.any(String) });
         expect(JSON.parse(fs.readFileSync(chatPath, 'utf8').split('\n')[0]).chat_metadata.chat_memory)
             .toEqual(chatMemory);
 
@@ -181,6 +195,7 @@ describe('chat memory persistence', () => {
             user: { directories, profile: { handle: 'alice' } },
         });
         expect(getResponse.statusCode).toBe(200);
+        expect(getResponse.headers['x-chat-version']).toBe(saveResponse.body.version);
         expect(getResponse.body[0].chat_metadata.chat_memory).toEqual(chatMemory);
     }, CASE_TIMEOUT_MS);
 
@@ -193,10 +208,7 @@ describe('chat memory persistence', () => {
             { name: 'Alice', mes: 'Tomorrow at noon.', extra: { id: 'msg-char-0' } },
         ];
 
-        expect((await callRoute('/save', {
-            body: { avatar_url: 'alice.png', file_name: 'memory', chat: payload, force: false },
-            user: { directories, profile: { handle: 'alice' } },
-        })).statusCode).toBe(200);
+        expect((await saveExistingChat(directories, payload)).statusCode).toBe(200);
 
         fs.rmSync(chatPath, { force: true });
         resetCanonicalBackendsForTests();

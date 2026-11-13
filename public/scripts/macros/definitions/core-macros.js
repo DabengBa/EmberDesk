@@ -485,9 +485,9 @@ export function registerCoreMacros() {
         description: 'Retired compatibility macro: world info outlets are gone, so this always resolves to an empty string.',
         returns: 'Empty string.',
         exampleUsage: ['{{outlet::character-achievements}}'],
-        handler: ({ unnamedArgs: [outlet] }) => {
+        handler: ({ unnamedArgs: [outlet], env }) => {
             if (!outlet) return '';
-            const value = extension_prompts[inject_ids.CUSTOM_WI_OUTLET(outlet)]?.value;
+            const value = (env?.extra?.promptMap ?? extension_prompts)[inject_ids.CUSTOM_WI_OUTLET(outlet)]?.value;
             return value || '';
         },
     });

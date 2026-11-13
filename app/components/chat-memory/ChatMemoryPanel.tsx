@@ -3,6 +3,7 @@ import * as stylex from '@stylexjs/stylex';
 import { panelStyles as chrome } from '../wire-log/wire-log-panel.styles';
 import { memoryStyles as styles } from './chat-memory.styles';
 import type { ChatMemoryOverrides, ChatMemoryPanelBridge, ChatMemorySettings } from './types';
+import { numericWheelValue } from '../../lib/workspace-drawer-service';
 
 const labels: Record<keyof ChatMemorySettings, string> = {
     enabled: '历史会话总结', keepTurns: '最近保留完整轮数', maxTokens: '每轮摘要最大输出 Token',
@@ -20,6 +21,28 @@ export function ChatMemoryPanel({ bridge }: { bridge: ChatMemoryPanelBridge }) {
     const mounted = useRef(false);
     const discardApproved = useRef(false);
     const hasDraft = useRef(false);
+    const lastNumericWheel = useRef(0);
+
+    useEffect(() => {
+        const onWheel = (event: WheelEvent) => {
+            const element = event.target;
+            if (!(element instanceof HTMLInputElement) || document.activeElement !== element || !dialogRef.current?.contains(element) || element.disabled) return;
+            const key = element.dataset.memoryNumeric;
+            if (key !== 'keepTurns' && key !== 'maxTokens') return;
+            event.preventDefault();
+            event.stopPropagation();
+            const now = Date.now();
+            if (lastNumericWheel.current && now - lastNumericWheel.current < 25) return;
+            lastNumericWheel.current = now;
+            const next = numericWheelValue(element.valueAsNumber, Number.parseFloat(element.step), Number.parseFloat(element.min), Number.parseFloat(element.max), event.deltaY);
+            if (next === null) return;
+            element.value = String(next);
+            setDraft(previous => ({ ...previous, [key]: next }));
+            element.dispatchEvent(new Event('input', { bubbles: true }));
+        };
+        document.addEventListener('wheel', onWheel, { passive: false });
+        return () => document.removeEventListener('wheel', onWheel);
+    }, []);
 
     useLayoutEffect(() => {
         hasDraft.current = Object.keys(draft).length > 0;
@@ -123,7 +146,7 @@ export function ChatMemoryPanel({ bridge }: { bridge: ChatMemoryPanelBridge }) {
                             {key === 'enabled' ? <input id={`chat-memory-${key}`} type="checkbox" checked={current.enabled} disabled={busy} {...stylex.props(styles.toggle)} onChange={event => setDraft(previous => ({ ...previous, enabled: event.target.checked }))} />
                                 : key === 'role' ? <select id={`chat-memory-${key}`} value={current.role} disabled={busy} {...stylex.props(styles.field)} onChange={event => setDraft(previous => ({ ...previous, role: event.target.value as ChatMemorySettings['role'] }))}><option value="system">system</option><option value="assistant">assistant</option><option value="user">user</option></select>
                                     : key === 'prompt' || key === 'wrap' ? <textarea id={`chat-memory-${key}`} value={current[key]} rows={key === 'prompt' ? 5 : 3} required disabled={busy} {...stylex.props(styles.field)} onChange={event => setDraft(previous => ({ ...previous, [key]: event.target.value }))} />
-                                        : <input id={`chat-memory-${key}`} type="number" value={Number.isNaN(current[key]) ? '' : current[key]} min={1} step={1} required disabled={busy} {...stylex.props(styles.field)} onChange={event => setDraft(previous => ({ ...previous, [key]: event.target.valueAsNumber }))} />}
+                                        : <input id={`chat-memory-${key}`} type="number" data-workspace-numeric="react" data-memory-numeric={key} value={Number.isNaN(current[key]) ? '' : current[key]} min={1} step={1} required disabled={busy} {...stylex.props(styles.field)} onChange={event => setDraft(previous => ({ ...previous, [key]: event.target.valueAsNumber }))} />}
                             <div {...stylex.props(styles.toolbar)}><span {...stylex.props(styles.muted)}>{Object.hasOwn(draft, key) ? '尚未应用' : Object.hasOwn(view.overrides, key) ? '当前会话覆盖' : '继承全局设置'}</span>
                                 <button type="button" disabled={busy || !Object.hasOwn(view.overrides, key)} {...stylex.props(chrome.button)} onClick={() => void run(() => bridge.updateSettings({ [key]: null }), [key])}>恢复默认</button>
                             </div>

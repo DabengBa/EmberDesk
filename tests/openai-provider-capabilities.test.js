@@ -2,7 +2,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { describe, expect, test } from '@jest/globals';
+import { describe, expect, jest, test } from '@jest/globals';
+import { loadTsModule } from './helpers/load-ts-module.mjs';
 
 import {
     getChatCompletionModelFromSettings,
@@ -102,34 +103,48 @@ describe('OpenAI provider capability helpers', () => {
         expect(source).not.toContain('requestSettings.custom_url =');
     });
 
-    test('keeps missing provider API key feedback visible before connection attempts', () => {
-        const source = fs.readFileSync(path.join(repoRoot, 'public/scripts/openai.js'), 'utf8');
-
-        expect(source).toContain('No secret key saved for ${oai_settings.chat_completion_source}');
-        expect(source).toContain('toastr.warning(t`Enter or save an API key before connecting.`);');
+    test('rejects a connection without credentials before issuing a request', async () => {
+        const { connectProvider } = await loadTsModule('app/lib/provider-connection-service.ts');
+        const dependencies = { fetch: jest.fn(), requestHeaders: jest.fn() };
+        await expect(connectProvider({ customUrl: '', openaiModel: 'model', hasSavedSecret: false }, dependencies))
+            .rejects.toThrow('Save an API key or configure a custom endpoint URL first.');
+        expect(dependencies.fetch).not.toHaveBeenCalled();
+        expect(dependencies.requestHeaders).not.toHaveBeenCalled();
     });
 
-    test('keeps missing provider credentials visible before test requests', () => {
-        const source = fs.readFileSync(path.join(repoRoot, 'public/scripts/openai.js'), 'utf8');
-
-        expect(source).toContain('function isProviderCredentialMissing()');
-        expect(source).toContain('if (isProviderCredentialMissing())');
-        expect(source).toContain('toastr.warning(t`Enter or save provider credentials before testing the connection.`);');
+    test('rejects missing test credentials and model before issuing a request', async () => {
+        const { testProviderConnection } = await loadTsModule('app/lib/provider-connection-service.ts');
+        const dependencies = { fetch: jest.fn(), requestHeaders: jest.fn() };
+        await expect(testProviderConnection({ customUrl: '', openaiModel: 'model', hasSavedSecret: false }, dependencies))
+            .rejects.toThrow('Save an API key or configure a custom endpoint URL first.');
+        await expect(testProviderConnection({ customUrl: '', openaiModel: ' ', hasSavedSecret: true }, dependencies))
+            .rejects.toThrow('Fill in the primary model before testing.');
+        expect(dependencies.fetch).not.toHaveBeenCalled();
+        expect(dependencies.requestHeaders).not.toHaveBeenCalled();
     });
 
-    test('keeps API test requests bounded and UI-free until they settle', () => {
-        const source = fs.readFileSync(path.join(repoRoot, 'public/scripts/openai.js'), 'utf8');
-        const testConnectionBody = source.match(/export async function testProviderConnection\(\) \{[\s\S]*?\n\}/)?.[0] ?? '';
-
-        expect(source).toContain('const API_TEST_REQUEST_TIMEOUT_MS = 15000;');
-        expect(testConnectionBody).toContain('new AbortController()');
-        expect(testConnectionBody).toContain('API connection test timed out');
-        expect(testConnectionBody).toContain('} finally {');
-        expect(testConnectionBody).toContain('clearTimeout(timeout);');
-        // The loading affordance moved to the React Providers tab; the function
-        // only refreshes the online status when it settles.
-        expect(testConnectionBody).toContain('displayOnlineStatus();');
-        expect(testConnectionBody).not.toContain('startStatusLoading');
+    test('bounds test requests to 15 seconds, aborts and cleans up the timer', async () => {
+        const { testProviderConnection } = await loadTsModule('app/lib/provider-connection-service.ts');
+        jest.useFakeTimers();
+        try {
+            const fetch = jest.fn((_url, { signal }) => new Promise((_resolve, reject) => {
+                signal.addEventListener('abort', () => reject(new Error('private details')));
+            }));
+            const pending = testProviderConnection(
+                { customUrl: 'https://example.invalid', openaiModel: 'model', hasSavedSecret: false },
+                { fetch, requestHeaders: () => ({}) },
+            );
+            const result = expect(pending).rejects.toThrow('API connection test timed out.');
+            await jest.advanceTimersByTimeAsync(14999);
+            expect(fetch).toHaveBeenCalledTimes(1);
+            expect(fetch.mock.calls[0][1].signal.aborted).toBe(false);
+            await jest.advanceTimersByTimeAsync(1);
+            await result;
+            expect(fetch.mock.calls[0][1].signal.aborted).toBe(true);
+            expect(jest.getTimerCount()).toBe(0);
+        } finally {
+            jest.useRealTimers();
+        }
     });
 
     test('resolves model descriptors with structured capability fields', () => {

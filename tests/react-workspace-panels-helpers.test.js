@@ -235,8 +235,8 @@ describe('React workspace panels bridge helpers', () => {
         expect(scriptSource.indexOf("const worldInfoMount = await mountReactWorldInfoPanel();")).toBeLessThan(scriptSource.indexOf("void ensureWorkspaceShellDeferredPanel('world-info-body');"));
         expect(scriptSource.indexOf("await openWorkspaceChildSlotHost('WorldInfo');")).toBeLessThan(scriptSource.indexOf("const worldInfoMount = await mountReactWorldInfoPanel();"));
         expect(scriptSource.indexOf("const worldInfoMount = await mountReactWorldInfoPanel();")).toBeLessThan(scriptSource.indexOf("return createWorkspaceShellPanelResult('worldInfo', worldInfoMount);"));
-        expect(scriptSource).toContain('function openWorkspaceChildSlotHostImmediate(hostId, { preserveOpenDrawers = false } = {})');
-        expect(scriptSource).toContain("drawer.style.opacity = '1';");
+        expect(scriptSource).not.toContain('function openWorkspaceChildSlotHostImmediate(');
+        expect(scriptSource).toContain("element.style.opacity = '1';");
         expect(scriptSource).toContain('function closeWorkspaceChildSlotHost(hostId, { force = false } = {})');
         expect(scriptSource).toContain('function deactivateWorkspaceChildSlotByKind(slotKey, options = {})');
         expect(scriptSource).toContain('function getWorkspaceChildSlotHostId(slotKey)');
@@ -244,9 +244,7 @@ describe('React workspace panels bridge helpers', () => {
         expect(scriptSource).not.toContain('group-chat-feature-removed');
         expect(scriptSource).toContain('function showWorkspaceChildSlotContent(selectedMenuId)');
         expect(scriptSource).toContain('async function openWorkspaceShellCharacterLibrary()');
-        // Drawer opens go through the serialized queue; the Immediate worker is
-        // only invoked from inside queueWorkspaceShellPanelOpenTask (variable
-        // hostId), never called directly with a literal drawer id.
+        // Drawer opens go through the single typed owner's serialized queue.
         expect(scriptSource.match(/openWorkspaceChildSlotHostImmediate\('/g)?.length ?? 0).toBe(0);
         expect(scriptSource.match(/openWorkspaceShellCharacterLibrary\(\) \{[\s\S]*?\n\}/)?.[0] ?? '').toContain("await openWorkspaceChildSlotHost('right-nav-panel');");
         expect(scriptSource).toContain("if (menu_type !== 'characters') {\n        selected_button = 'characters';\n        setMenuType('characters');\n        showWorkspaceChildSlotContent('rm_characters_block');");
@@ -326,7 +324,7 @@ describe('React workspace panels bridge helpers', () => {
         expect(configSource).not.toContain('mainChatMessageList:');
         expect(configSource).not.toContain('characterAuthoring:');
         expect(configSource).not.toContain('groupAuthoring:');
-        expect(packageSource).toContain('"build:react:workspace-panels": "vite build --mode workspace-panels"');
+        expect(packageSource).toContain('vite build --mode workspace-panels');
         expect(seedScriptSource).not.toContain('EMBERDESK_FEATURES_REACT_PANELS_MAINCHATMESSAGELIST');
         expect(seedScriptSource).not.toContain('features:');
         expect(workspaceFeatureSource).toContain('// Main Chat message list is React sole-owner; product flag is retired.');
@@ -524,16 +522,18 @@ describe('React workspace panels bridge helpers', () => {
 
     test('routes quiet/background requests through the generation service without owner markers', () => {
         const scriptSource = read('public/script.js');
+        const generationOwner = read('app/lib/generation/shared-state.ts');
         const workspacePanelSource = read('app/workspace-panels.tsx');
 
         expect(scriptSource).toContain('createGenerationCommand({');
         expect(scriptSource).toContain('createQuietGenerationLifecycleContract');
         expect(scriptSource).toContain('function getMainChatQuietTransportStore()');
         expect(scriptSource).toContain('function getMainChatQuietTransportBridgeState()');
-        expect(scriptSource).toContain('rememberMainChatQuietTransportSnapshot({');
-        expect(scriptSource).toContain('phase: \'running\'');
-        expect(scriptSource).toContain('phase: \'completed\'');
-        expect(scriptSource).toContain('phase: isMainChatQuietTransportStopException(error) ? \'stopped\' : \'error\'');
+        expect(scriptSource).toContain('return runQuietGeneration(');
+        expect(scriptSource).toContain('remember: rememberMainChatQuietTransportSnapshot');
+        expect(generationOwner).toContain('phase: \'running\'');
+        expect(generationOwner).toContain('phase: \'completed\'');
+        expect(generationOwner).toContain('phase: ports.isStopped(error) ? \'stopped\' : \'error\'');
         expect(scriptSource).toContain('quietTransport: getMainChatQuietTransportBridgeState()');
 
         expect(workspacePanelSource).not.toContain('data-main-chat-quiet-transport-');

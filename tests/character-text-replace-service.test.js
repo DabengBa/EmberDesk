@@ -373,7 +373,7 @@ describe('runCharacterTextReplace orchestration', () => {
                 ok: true, db: { fake: true }, locator: { session_id: 's1' }, filePath: '/data/chats/Seraphina/chat.jsonl', cardName: 'Seraphina',
             })),
             writeChatSession: jest.fn(() => ({ ok: true })),
-            readCanonicalChatPayload: jest.fn(() => structuredClone(chatPayload)),
+            readCanonicalChatVersionedPayload: jest.fn(() => ({ payload: structuredClone(chatPayload), version: 'test-version' })),
             editCharacterCard: jest.fn(async () => ({ ok: true })),
             ...overrides,
         };
@@ -430,6 +430,7 @@ describe('runCharacterTextReplace orchestration', () => {
         expect(order).toEqual(['world', 'card', 'chat']);
         expect(result.applied).toEqual({ card: true, worldBook: true, chat: true });
         expect(deps.replayWorldProjection).toHaveBeenCalled();
+        expect(deps.editCharacterCard).toHaveBeenCalledWith(expect.objectContaining({ expectedCardJson: expect.any(String) }));
     });
 
     test('reports committed card and chat even when their compatibility projections fail', async () => {
@@ -464,6 +465,40 @@ describe('runCharacterTextReplace orchestration', () => {
         expect(result.warnings).toEqual(expect.arrayContaining([
             expect.objectContaining({ code: 'world_book_snapshot_not_confirmed', name: 'Eldoria' }),
         ]));
+        expect(result.ok).toBe(false);
+        expect(result.status).toBe(500);
+        expect(result.partial).toBe(true);
+        expect(result.areas.chats.status).toBe('skipped');
+        expect(deps.writeChatSession).not.toHaveBeenCalled();
+    });
+
+    test('stops after an unexpected world commit failure and returns progress', async () => {
+        const deps = makeDependencies({
+            commitWorldBookWithProjectionIntent: jest.fn(() => { throw new Error('database unavailable'); }),
+        });
+        const result = await runCharacterTextReplace({ request: makeRequest(fullBody), apply: true, dependencies: deps });
+        expect(result).toMatchObject({ ok: false, status: 500, partial: false, reason: 'world_book_write_failed' });
+        expect(result.applied).toEqual({ card: false, worldBook: false, chat: false });
+        expect(result.areas.worldBook.status).toBe('unknown');
+        expect(result.outcomeUnknown).toBe(true);
+        expect(deps.editCharacterCard).not.toHaveBeenCalled();
+        expect(deps.writeChatSession).not.toHaveBeenCalled();
+    });
+
+    test('reports a concurrent chat conflict with the earlier committed progress', async () => {
+        const deps = makeDependencies({ writeChatSession: jest.fn(() => ({ ok: false, reason: 'conflict' })) });
+        const result = await runCharacterTextReplace({ request: makeRequest(fullBody), apply: true, dependencies: deps });
+        expect(result).toMatchObject({ ok: false, status: 409, partial: true, reason: 'chat_write_failed', applied: { card: true, worldBook: true, chat: false } });
+        expect(result.areas.chats).toMatchObject({ status: 'failed', reason: 'conflict' });
+    });
+
+    test('reports a concurrent card conflict after the world commit and stops before chat', async () => {
+        const conflict = Object.assign(new Error('character_card_conflict'), { code: 'CHARACTER_CARD_CONFLICT' });
+        const deps = makeDependencies({ editCharacterCard: jest.fn(async () => { throw conflict; }) });
+        const result = await runCharacterTextReplace({ request: makeRequest(fullBody), apply: true, dependencies: deps });
+        expect(result).toMatchObject({ ok: false, status: 409, partial: true, reason: 'card_conflict', applied: { card: false, worldBook: true, chat: false } });
+        expect(deps.editCharacterCard).toHaveBeenCalledWith(expect.objectContaining({ expectedCardJson: cardJson }));
+        expect(deps.writeChatSession).not.toHaveBeenCalled();
     });
 
     test('embedded book success and failure follow the card canonical write', async () => {

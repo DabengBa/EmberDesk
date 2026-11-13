@@ -73,14 +73,21 @@ describe('right navigation panel React surface', () => {
         expect(mountIdx).toBeLessThan(coreIdx);
     });
 
-    test('RossAscends panel captures resolve at init, not module eval', () => {
-        expect(rossMods).toContain('RightNavPanel = document.getElementById(\'right-nav-panel\')');
-        expect(rossMods).toContain('SelectedCharacterTab = document.getElementById(\'rm_button_selected_ch\')');
-        expect(rossMods).not.toContain('var RightNavPanel = document.getElementById');
-        // Module-level bindings moved into initRossMods.
+    test('RossAscends resolves mounted controls at init and uses the live drawer service', () => {
         const initIdx = rossMods.indexOf('export function initRossMods(');
+        const captureIdx = rossMods.indexOf("SelectedCharacterTab = document.getElementById('rm_button_selected_ch')");
         const bindIdx = rossMods.indexOf("$('#rm_ch_create_block').on('input'");
+        expect(initIdx).toBeGreaterThan(-1);
+        expect(captureIdx).toBeGreaterThan(initIdx);
         expect(bindIdx).toBeGreaterThan(initIdx);
+        expect(rossMods).toContain('drawerService.initializePins({ mobile: isMobile(), width: window.innerWidth })');
+        expect(script).toContain("import { createWorkspaceDrawerService } from './scripts/workspace-drawer-domain.js'");
+        const installIdx = script.indexOf('installWorkspaceDrawerService(createWorkspaceDrawerService);');
+        expect(installIdx).toBeGreaterThan(-1);
+        expect(installIdx).toBeLessThan(script.indexOf("measureStartupStage('mountRightNavPanel'"));
+        expect(script).toContain('drawerService: workspaceDrawerService');
+        expect(script).toContain('const element = document.getElementById(id)');
+        expect(script).toContain("get pinned() { return element.classList.contains('pinnedOpen'); }");
     });
 
     test('BulkEditOverlay resolves its container lazily', () => {

@@ -144,11 +144,21 @@ export function coordinateReplaceIntent(handler) {
                 try {
                     await handler(request, response, next);
                     if (!buffered) throw new Error('Replace intent handler did not send a response');
-                    // Any deterministic error (4xx) is 'completed': no canonical write was attempted.
-                    // Any 5xx is 'unknown': the server may have partially committed.
-                    const outcome = buffered.status < 500 ? 'completed' : 'unknown_partial';
+                    let body;
+                    try { body = typeof buffered.body === 'string' ? JSON.parse(buffered.body) : buffered.body; } catch { body = null; }
+                    const outcome = buffered.status >= 500 || body?.partial || body?.outcomeUnknown ? 'unknown_partial' : 'completed';
+                    const areas = {};
+                    for (const [key, source] of [['card', 'card'], ['chat', 'chats'], ['worldBook', 'worldBook']]) {
+                        const area = body?.areas?.[source];
+                        if (!area) continue;
+                        areas[key] = body.applied?.[key] ? 'committed'
+                            : area.status === 'unknown' ? 'unknown'
+                                : area.status === 'failed' ? 'not_committed'
+                                    : area.status === 'unchanged' ? 'unchanged' : 'not_attempted';
+                    }
                     return {
                         outcome,
+                        areas,
                         value: buffered,
                     };
                 } catch (error) {

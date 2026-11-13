@@ -15,6 +15,7 @@ import { applyCanonicalPragmas } from '../src/canonical-sqlite.js';
 import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
 import { write as writeCharacterCardPngData } from '../src/character-card-parser.js';
 import { DEFAULT_USER, USER_DIRECTORY_TEMPLATE } from '../src/constants.js';
+import { ensureCanonicalPreset } from '../src/endpoints/presets-store.js';
 import { upsertCanonicalSettingsDocument } from '../src/endpoints/settings-store.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -143,6 +144,8 @@ async function seedSettings(activeCharacterAvatar) {
             payload: settings,
             expectedRevision: 0,
         });
+        const defaultPreset = JSON.parse(await fs.promises.readFile(path.join(repoRoot, 'default/content/presets/openai/Default.json'), 'utf8'));
+        ensureCanonicalPreset(db, { name: 'Default', payload: defaultPreset, source: 'seed' });
     } finally {
         db.close();
     }

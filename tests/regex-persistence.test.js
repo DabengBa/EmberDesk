@@ -4,6 +4,7 @@ import { runInNewContext } from 'node:vm';
 import { stripTypeScriptTypes } from 'node:module';
 import { createRegexListBridge } from '../public/scripts/extensions/regex/regex-list-bridge.js';
 import { setValueByPath } from '../public/scripts/util/primitives.js';
+import { createRuntimeSettingsConflictGuard } from '../public/scripts/react-runtime-provider.js';
 
 // Unit proof: production functions with controlled browser and persistence boundaries.
 // The lane creates isolated data/tmp roots; the invoking worker owns cleanup. Budget: 10s.
@@ -111,7 +112,9 @@ function settingsSetup() {
         eventSource: { emit: async () => {} }, event_types: { SETTINGS_UPDATED: 'updated' },
         toastr: { error: jest.fn(), warning: jest.fn() }, t: strings => strings[0], console: { warn: jest.fn(), error: jest.fn() },
         saveSettingsDebounced: jest.fn(),
+        runtimeSettingsConflict: createRuntimeSettingsConflictGuard(), window: { dispatchEvent: jest.fn() }, Event: class Event {},
     };
+    context.buildRuntimeSettingsPayload = extract('public/script.js', 'function buildRuntimeSettingsPayload()', 'export async function saveSettings(', context);
     const save = extract('public/script.js', 'export async function saveSettings(loopCounter = 0)', '\n/**', context);
     context.saveSettings = save;
     return { save, context, requests };
@@ -120,25 +123,26 @@ function settingsSetup() {
 const tick = () => new Promise(setImmediate);
 const success = revision => ({ ok: true, json: async () => ({ result: 'ok', settings_revision: revision }) });
 
-test('strict settings waits for response, retries revision conflicts and rejects HTTP errors', async () => {
+test('strict settings waits for response, fails closed on revision conflicts and rejects HTTP errors', async () => {
     const s = settingsSetup();
     let settled = false;
     const save = s.save(0, { strict: true }).finally(() => { settled = true; });
     await tick();
     expect(settled).toBe(false);
     s.requests[0].resolve({ ok: false, status: 409, json: async () => ({ settings_revision: 4 }) });
+    await expect(save).rejects.toThrow('revision conflict');
+    expect(s.context.settingsDocumentRevision).toBe(1);
+    expect(s.requests).toHaveLength(1);
+    await expect(s.save(0, { strict: true })).rejects.toThrow('runtime settings conflict');
+    expect(s.requests).toHaveLength(1);
+    const fresh = settingsSetup();
+    const failed = fresh.save(0, { strict: true });
     await tick();
-    expect(JSON.parse(s.requests[1].request.body).settings_revision).toBe(4);
-    expect(settled).toBe(false);
-    s.requests[1].resolve(success(5));
-    await save;
-    const failed = s.save(0, { strict: true });
-    await tick();
-    s.requests[2].resolve({ ok: false, status: 500, statusText: 'offline' });
+    fresh.requests[0].resolve({ ok: false, status: 500, statusText: 'offline' });
     await expect(failed).rejects.toThrow('offline');
-    const legacy = s.save();
+    const legacy = fresh.save();
     await tick();
-    s.requests[3].resolve({ ok: false, status: 500, statusText: 'offline' });
+    fresh.requests[1].resolve({ ok: false, status: 500, statusText: 'offline' });
     await expect(legacy).resolves.toBeUndefined();
 });
 

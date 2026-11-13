@@ -230,13 +230,26 @@ export const testSetup = {
                 .then(response => response.json())
                 .catch(() => null);
             const csrfToken = csrfPayload?.token ?? csrfPayload?.data?.token ?? null;
+            const headers = {
+                'Content-Type': 'application/json',
+                ...(csrfToken ? { 'x-csrf-token': csrfToken } : {}),
+            };
+            const current = await fetch('/api/chats/get', {
+                method: 'POST', headers,
+                body: JSON.stringify({ avatar_url: body.avatar_url, file_name: body.file_name }),
+            });
+            if (!current.ok) {
+                return { ok: false, status: current.status, text: await current.text() };
+            }
+            const version = current.headers.get('X-Chat-Version');
+            const payload = await current.json();
+            if (!version && Array.isArray(payload)) {
+                throw new Error('Chat exists but its version is unavailable');
+            }
             const response = await fetch('/api/chats/save', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    ...(csrfToken ? { 'x-csrf-token': csrfToken } : {}),
-                },
-                body: JSON.stringify(body),
+                headers,
+                body: JSON.stringify({ ...body, ...(version ? { version } : { create: true }), operationId: crypto.randomUUID() }),
             });
             return { ok: response.ok, status: response.status, text: await response.text() };
         }, {
@@ -245,7 +258,7 @@ export const testSetup = {
                 file_name: fileName,
                 avatar_url: avatarUrl,
                 chat,
-                force: true,
+
             },
         });
         if (!result.ok) {

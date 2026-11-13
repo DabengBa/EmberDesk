@@ -5,6 +5,7 @@ const shell = {
     state,
     getCurrentCharacterAuthoringMode: () => 'edit',
     getCurrentCharacterAuthoringSource: () => state.characters[0],
+    getDraftTagIds: jest.fn(() => []),
     applyCharacterAuthoringSaveModel: jest.fn(), getOneCharacter: jest.fn(),
     getFirstMessage: jest.fn((_text, options) => ({ mes: 'transformed new', extra: options?.recordGreetingIdentity ? { greeting_identity: { index: 0, text: 'new', rendered: 'transformed new' } } : {} })),
     clearChat: jest.fn(), printMessages: jest.fn(), saveChatConditional: jest.fn(),

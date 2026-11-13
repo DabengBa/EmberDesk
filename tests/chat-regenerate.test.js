@@ -1,4 +1,6 @@
-import { describe, expect, test } from '@jest/globals';
+import { describe, expect, jest, test } from '@jest/globals';
+import { readFileSync } from 'node:fs';
+import { loadTsModule } from './helpers/load-ts-module.mjs';
 
 async function importFreshCore() {
     return import(`../public/scripts/chat-regenerate.js?cacheBust=${Date.now()}-${Math.random()}`);
@@ -11,6 +13,183 @@ const narrator = () => ({ is_user: false, is_system: false, mes: 'note', extra: 
 const manualAssistant = () => ({ is_user: false, is_system: false, mes: 'manual', extra: { api: 'manual' } });
 const systemNote = () => ({ is_user: false, is_system: true, mes: 'notice', extra: {} });
 const recoveryRow = () => ({ is_user: false, is_system: false, mes: '', extra: { api: 'openai' } });
+
+async function restoreFixture() {
+    const { collectRegenerateTurn } = await importFreshCore();
+    const { createGenerationLifecycleService } = await loadTsModule('app/lib/generation/attempt-executor.ts');
+    const env = {
+        chat: [userMessage(), assistantMessage('original')], chatId: 'same-chat', revision: 1,
+        chat_metadata: {}, pendingRegenerateRestore: null, this_edit_mes_id: undefined, abortController: new AbortController(),
+        system_message_types: { NARRATOR: 'narrator' }, collectRegenerateTurn,
+        getCurrentChatId: () => env.chatId,
+        getCurrentGenerationContextIdentity: () => ({ chatId: env.chatId, chatReference: env.chat, contextRevision: env.revision }),
+        isReactMainChatOwner: () => false, mainChatVisibleStartIndices: new Map(),
+        saveChatDebounced: jest.fn(), eventSource: { emit: jest.fn(async () => {}) },
+        event_types: { MESSAGE_DELETED: 'deleted' }, redisplayChat: jest.fn(async () => {}),
+        saveChatConditional: jest.fn(async predicate => predicate ? predicate() : true),
+        scrollChatToBottom: jest.fn(), console,
+    };
+    const lifecycle = createGenerationLifecycleService(env.getCurrentGenerationContextIdentity);
+    env.getGenerationLifecycleService = () => lifecycle;
+    const source = readFileSync(new URL('../public/script.js', import.meta.url), 'utf8');
+    const start = source.indexOf('export function removeRegenerateTurnTail(');
+    const end = source.indexOf('\nlet regenerateRequestInFlight = false;', start);
+    if (start < 0 || end < 0) throw new Error('Regenerate implementation not found');
+    const functions = source.slice(start, end).replaceAll('export function ', 'function ').replaceAll('export async function ', 'async function ');
+    const entry = new Function('env', `with (env) { ${functions}; return { removeRegenerateTurnTail, restoreRegenerateTurnTail }; }`)(env);
+    return { env, ...entry };
+}
+
+test('same-id replacement chat cannot receive a stale regenerate restore', async () => {
+    const f = await restoreFixture();
+    const snapshot = f.removeRegenerateTurnTail();
+    f.env.chat = [userMessage(), assistantMessage('other chat')];
+    expect(await f.restoreRegenerateTurnTail(snapshot)).toBe(false);
+    expect(f.env.chat[1].mes).toBe('other chat');
+    expect(f.env.saveChatConditional).not.toHaveBeenCalled();
+});
+
+test('typed lifecycle removes a generated tail synchronously and registers its restore snapshot', async () => {
+    const { createGenerationLifecycleService } = await loadTsModule('app/lib/generation/attempt-executor.ts');
+    const lifecycle = createGenerationLifecycleService(() => ({ chatId: 'chat' }));
+    const chat = [userMessage(), toolCard(), assistantMessage()];
+    const snapshot = { chatId: 'chat', insertIndex: 1, messages: [toolCard(), assistantMessage()] };
+    const calls = [];
+    const ownsRestore = () => true;
+    const result = lifecycle.removeRegenerateTail(snapshot, {
+        capture: () => ownsRestore,
+        clearView: index => calls.push(['view', index]),
+        clearEditing: index => calls.push(['edit', index]),
+        chat,
+        markTainted: () => calls.push(['tainted']),
+        save: () => calls.push(['save']),
+        deleted: length => calls.push(['deleted', length]),
+        render: index => calls.push(['render', index]),
+        register: value => calls.push(['register', value]),
+    });
+    expect(result).toBe(snapshot);
+    expect(snapshot.ownsRestore).toBe(ownsRestore);
+    expect(chat).toEqual([userMessage()]);
+    expect(calls).toEqual([
+        ['view', 1], ['edit', 1], ['tainted'], ['save'], ['deleted', 1], ['render', 1], ['register', snapshot],
+    ]);
+});
+
+test('real regenerate removal uses the installed typed owner', async () => {
+    const f = await restoreFixture();
+    const lifecycle = f.env.getGenerationLifecycleService();
+    const owner = jest.spyOn(lifecycle, 'removeRegenerateTail');
+    const snapshot = f.removeRegenerateTurnTail();
+    expect(owner).toHaveBeenCalledTimes(1);
+    expect(snapshot.messages[0].mes).toBe('original');
+    expect(f.env.chat).toEqual([userMessage()]);
+    expect(f.env.pendingRegenerateRestore).toBe(snapshot);
+});
+
+test('regenerate tail save carries live chat identity without treating stop as a chat switch', async () => {
+    const f = await restoreFixture();
+    f.removeRegenerateTurnTail();
+    const predicate = f.env.saveChatDebounced.mock.calls[0][0];
+    expect(typeof predicate).toBe('function');
+    expect(predicate()).toBe(true);
+    f.env.abortController.abort();
+    expect(predicate()).toBe(true);
+    f.env.chat = [userMessage('other chat')];
+    expect(predicate()).toBe(false);
+});
+
+test('a user-ended turn remains a synchronous no-op before runtime installation', async () => {
+    const f = await restoreFixture();
+    f.env.chat = [userMessage()];
+    f.env.pendingRegenerateRestore = { old: true };
+    f.env.getGenerationLifecycleService = () => { throw new Error('runtime not installed'); };
+    expect(f.removeRegenerateTurnTail()).toBeNull();
+    expect(f.env.pendingRegenerateRestore).toBeNull();
+    expect(f.env.saveChatDebounced).not.toHaveBeenCalled();
+});
+
+test('regenerate classification is shared by the synchronous facade and the typed lifecycle', async () => {
+    const { createGenerationLifecycleService } = await loadTsModule('app/lib/generation/attempt-executor.ts');
+    const lifecycle = createGenerationLifecycleService(() => ({ chatId: 'chat' }));
+    const facade = await importFreshCore();
+    const chat = [userMessage(), toolCard(), assistantMessage()];
+    expect(lifecycle.collectRegenerateTurn(chat, { chatId: 'chat' })).toEqual(facade.collectRegenerateTurn(chat, { chatId: 'chat' }));
+    expect(lifecycle.canRegenerateLastReply({ busy: false, connected: true, hasCharacter: true, chat })).toBe(true);
+    expect(lifecycle.canRegenerateLastReply({ busy: true, connected: true, hasCharacter: true, chat })).toBe(false);
+});
+
+test('regenerate save queued before chat switch checks live identity and skips redisplay', async () => {
+    const f = await restoreFixture();
+    const snapshot = f.removeRegenerateTurnTail();
+    f.env.redisplayChat.mockClear();
+    let release;
+    const waiting = new Promise(resolve => { release = resolve; });
+    let saved = false;
+    f.env.saveChatConditional.mockImplementationOnce(async predicate => { await waiting; saved = predicate ? predicate() : true; });
+    const restoring = f.restoreRegenerateTurnTail(snapshot);
+    f.env.chat = [userMessage(), assistantMessage('other chat')];
+    release();
+    await restoring;
+    expect(saved).toBe(false);
+    expect(f.env.redisplayChat).not.toHaveBeenCalled();
+});
+
+test('one regenerate snapshot cannot commit twice', async () => {
+    const f = await restoreFixture();
+    const snapshot = f.removeRegenerateTurnTail();
+    expect(await f.restoreRegenerateTurnTail(snapshot)).toBe(true);
+    expect(await f.restoreRegenerateTurnTail(snapshot)).toBe(false);
+    expect(f.env.saveChatConditional).toHaveBeenCalledTimes(1);
+});
+
+test.each(['revision', 'stop'])('regenerate restore is suppressed on %s', async change => {
+    const f = await restoreFixture();
+    const snapshot = f.removeRegenerateTurnTail();
+    if (change === 'revision') f.env.revision++;
+    else f.env.abortController.abort();
+    expect(await f.restoreRegenerateTurnTail(snapshot)).toBe(false);
+    expect(f.env.chat).toHaveLength(1);
+    expect(f.env.saveChatConditional).not.toHaveBeenCalled();
+});
+
+test('external generation cancellation suppresses regenerate restore', async () => {
+    const f = await restoreFixture();
+    const external = new AbortController();
+    const snapshot = f.removeRegenerateTurnTail(external.signal);
+    external.abort();
+    expect(await f.restoreRegenerateTurnTail(snapshot)).toBe(false);
+    expect(f.env.saveChatConditional).not.toHaveBeenCalled();
+});
+
+test('a second restore cannot commit while the first save is queued', async () => {
+    const f = await restoreFixture();
+    const snapshot = f.removeRegenerateTurnTail();
+    let release;
+    const waiting = new Promise(resolve => { release = resolve; });
+    f.env.saveChatConditional.mockImplementationOnce(async () => { await waiting; return true; });
+    const first = f.restoreRegenerateTurnTail(snapshot);
+    expect(f.env.chat[1].mes).toBe('original'); // commit remains synchronous before the first await
+    expect(await f.restoreRegenerateTurnTail(snapshot)).toBe(false);
+    release();
+    expect(await first).toBe(true);
+    expect(f.env.saveChatConditional).toHaveBeenCalledTimes(1);
+});
+
+test('chat switch during restore redisplay prevents stale scrolling', async () => {
+    const f = await restoreFixture();
+    const snapshot = f.removeRegenerateTurnTail();
+    let release;
+    let rendered;
+    const entered = new Promise(resolve => { rendered = resolve; });
+    const waiting = new Promise(resolve => { release = resolve; });
+    f.env.redisplayChat.mockImplementationOnce(async () => { rendered(); await waiting; });
+    const restoring = f.restoreRegenerateTurnTail(snapshot);
+    await entered;
+    f.env.chat = [userMessage(), assistantMessage('other')];
+    release();
+    expect(await restoring).toBe(false);
+    expect(f.env.scrollChatToBottom).not.toHaveBeenCalled();
+});
 
 describe('isRegenerateRemovableMessage', () => {
     test('removes generated assistant rows and pipeline/tool cards', async () => {

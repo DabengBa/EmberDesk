@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { createServer } from 'node:http';
+import { isDeepStrictEqual } from 'node:util';
 import { testSetup } from './frontend/frontent-test-utils.js';
 
 const chatName = 'Dev Character 001 Session 01';
@@ -40,6 +41,18 @@ async function openViewer(page) {
     return page.getByRole('dialog', { name: '链路日志' });
 }
 
+async function waitForForegroundRecord(page, chatId, message, previousIds) {
+    let found;
+    await expect.poll(async () => {
+        const entries = await api(page, `?chatId=${encodeURIComponent(chatId)}&limit=100`);
+        const records = await Promise.all(entries.map(entry => api(page, `/${encodeURIComponent(entry.id)}`)));
+        found = records.find(record => !previousIds.has(record.id) && record.context?.type === 'normal'
+            && JSON.stringify(record.request?.body).includes(message));
+        return found?.id;
+    }, { timeout: 20_000 }).toBeTruthy();
+    return found;
+}
+
 test.describe('wire log real upstream boundary', () => {
     test.describe.configure({ mode: 'serial' });
     test.setTimeout(120_000);
@@ -78,23 +91,22 @@ test.describe('wire log real upstream boundary', () => {
         await context.grantPermissions(['clipboard-read', 'clipboard-write']);
         await setup(page, upstream);
         await api(page, '/config', { enabled: true });
+        const beforeFirstSend = new Set((await api(page, '?limit=100')).map(entry => entry.id));
         await page.locator('#send_textarea').fill('Wire log browser proof');
         await page.locator('#send_but').click();
-        await expect.poll(() => requests.length).toBeGreaterThan(0);
-        let records;
-        await expect.poll(async () => {
-            records = await api(page, `?chatId=${encodeURIComponent(chatName)}`);
-            return records.length;
-        }).toBeGreaterThan(0);
-        const record = await api(page, `/${encodeURIComponent(records[0].id)}`);
+        const record = await waitForForegroundRecord(page, chatName, 'Wire log browser proof', beforeFirstSend);
         expect(record.context.chatId).toBe(chatName);
-        expect(record.request.body).toEqual(requests[0]);
-        expect(requests[0]).not.toHaveProperty('_trace');
+        // The newest stored record need not correspond to the first request:
+        // chat-memory maintenance may send concurrently. Pair by full body.
+        await expect.poll(() => requests.some(request => isDeepStrictEqual(request, record.request.body))).toBe(true);
+        expect(record.request.body).not.toHaveProperty('_trace');
         await expect(page.locator('#mes_stop')).toBeHidden();
         await page.evaluate(async () => window.SillyTavern.getContext().openCharacterChat('Dev Character 001 Session 02'));
+        const beforeSecondSend = new Set((await api(page, '?limit=100')).map(entry => entry.id));
         await page.locator('#send_textarea').fill('Another conversation wire proof');
         await page.locator('#send_but').click();
-        await expect.poll(async () => (await api(page, '?chatId=Dev%20Character%20001%20Session%2002')).length).toBe(1);
+        const otherRecord = await waitForForegroundRecord(page, 'Dev Character 001 Session 02', 'Another conversation wire proof', beforeSecondSend);
+        await expect.poll(() => requests.some(request => isDeepStrictEqual(request, otherRecord.request.body))).toBe(true);
         await expect(page.locator('#mes_stop')).toBeHidden();
         await page.evaluate(async chatName => window.SillyTavern.getContext().openCharacterChat(chatName), chatName);
 
@@ -106,10 +118,13 @@ test.describe('wire log real upstream boundary', () => {
             expect(await dialog.evaluate(node => node.contains(document.activeElement))).toBe(true);
         }
 
+        await expect(dialog.locator(`[data-wire-log-entry="${record.id}"]`)).toBeVisible();
+        await expect(dialog.locator(`[data-wire-log-entry="${otherRecord.id}"]`)).toHaveCount(0);
         await dialog.getByRole('button', { name: '只看当前会话', exact: true }).click();
         await expect(dialog.getByText('全部会话', { exact: true })).toBeVisible();
-        await expect(dialog.locator('button[aria-pressed]').filter({ hasText: 'gpt-4o-mini' })).toHaveCount(2);
-        await dialog.locator('button[aria-pressed]').filter({ hasText: record.id }).click();
+        await expect(dialog.locator(`[data-wire-log-entry="${record.id}"]`)).toBeVisible();
+        await expect(dialog.locator(`[data-wire-log-entry="${otherRecord.id}"]`)).toBeVisible();
+        await dialog.locator(`[data-wire-log-entry="${record.id}"]`).click();
         await expect(dialog.locator('[data-wire-log-copy="record"]')).toBeVisible();
         await page.screenshot({ path: '/tmp/wire-log-desktop.png', fullPage: true });
         await dialog.locator('[data-wire-log-copy="record"]').click();

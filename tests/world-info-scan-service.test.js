@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globals';
+import { loadTsModule } from './helpers/load-ts-module.mjs';
+import { EventEmitter } from '../public/lib/eventemitter.js';
 
 // Translation is a browser boundary, not part of the scanner under test.
 jest.unstable_mockModule('../public/scripts/i18n.js', () => ({ translate: text => text }));
@@ -11,6 +13,7 @@ const { WorldInfoBuffer, getSortedEntries, getWorldInfoPrompt } = await import('
 let shell;
 let events;
 const originalFetch = globalThis.fetch;
+const originalStorage = globalThis.localStorage;
 const entry = (uid, order, fields = {}) => ({ uid, order, content: `entry-${uid}`, key: ['cat'], position: 0, ...fields });
 
 beforeEach(() => {
@@ -45,11 +48,59 @@ beforeEach(() => {
 
 afterEach(() => {
     globalThis.fetch = originalFetch;
+    globalThis.localStorage = originalStorage;
     clearWorldInfoShellContext();
     jest.restoreAllMocks();
 });
 
 describe('World Info scan uses confirmed repository data without an editor', () => {
+    test('request-scoped scan prompts activate entries without reading or modifying the global prompt map', async () => {
+        state.setSelectedWorldInfo(['Book']);
+        state.worldInfoCache.set('Book', { entries: { 1: entry(1, 10, { key: ['private-trigger'], content: 'scoped lore' }) } });
+        const globalPrompts = { global: { value: 'unrelated', scan: true } };
+        const requestPrompts = { scoped: { value: 'private-trigger', scan: true } };
+        shell.getExtensionContext = () => ({ extensionPrompts: globalPrompts, tagMap: {} });
+        shell.getExtensionPromptByName = async (name, promptMap = globalPrompts) => promptMap[name]?.value ?? '';
+        const result = await getWorldInfoPrompt([], 4096, true, undefined, { promptMap: requestPrompts });
+        expect(result.worldInfo).toContain('scoped lore');
+        expect(globalPrompts).toEqual({ global: { value: 'unrelated', scan: true } });
+    });
+
+    test('nested asynchronous request listeners use separate contexts through the real scanner', async () => {
+        globalThis.localStorage = { getItem: () => null };
+        const { createGenerationLifecycleService } = await loadTsModule('app/lib/generation/attempt-executor.ts');
+        const lifecycle = createGenerationLifecycleService(() => ({ chatId: 'chat', contextRevision: 1 }));
+        const globalPrompts = {};
+        const createContext = () => lifecycle.createPromptContext({
+            globalPrompts: () => globalPrompts,
+            set: (key, value, _position, _depth, scan, _role, _filter, target) => { target[key] = { value, scan }; },
+        });
+        shell.getExtensionContext = () => ({ extensionPrompts: globalPrompts, tagMap: {} });
+        shell.getExtensionPromptByName = async (key, map = globalPrompts) => map[key]?.value ?? '';
+        state.setSelectedWorldInfo(['Book']);
+        state.worldInfoCache.set('Book', { entries: {
+            1: entry(1, 20, { key: ['outer-trigger'], content: 'outer lore' }),
+            2: entry(2, 10, { key: ['inner-trigger'], content: 'inner lore' }),
+        } });
+        const emitter = new EventEmitter();
+        const outer = createContext();
+        const inner = createContext();
+        let innerResult;
+        emitter.on('started', async (kind, { promptContext }) => {
+            await Promise.resolve();
+            promptContext.setWorldInfoScanPrompt(kind, `${kind}-trigger`, 1, 0, true);
+            if (kind === 'outer') {
+                await emitter.emit('started', 'inner', { promptContext: inner });
+                innerResult = await getWorldInfoPrompt([], 4096, true, undefined, { promptMap: inner.scanPrompts() });
+            }
+        });
+        await emitter.emit('started', 'outer', { promptContext: outer });
+        const outerResult = await getWorldInfoPrompt([], 4096, true, undefined, { promptMap: outer.scanPrompts() });
+        expect(innerResult.worldInfo).toBe('inner lore');
+        expect(outerResult.worldInfo).toBe('outer lore');
+        expect(globalPrompts).toEqual({});
+    });
+
     test('deduplicates global/character/chat books and awaits loaded listeners before sorting', async () => {
         state.setSelectedWorldInfo(['Global']);
         state.setWorldInfo({ charLore: [{ name: 'Character', extraBooks: ['Global', 'Chat', 'Extra'] }] });
@@ -123,5 +174,83 @@ describe('World Info scan uses confirmed repository data without an editor', () 
         await worldInfoRepository.save('Book', draft);
         expect((await getWorldInfoPrompt(['cat'], 4096, true)).worldInfo).toBe('draft');
         expect(events.filter(event => event[0] === 'updated')).toHaveLength(1);
+    });
+
+    test.each(['stop', 'chat switch'])('stale scan after %s does not consume new forced activations or publish activation', async () => {
+        state.setSelectedWorldInfo(['Book']);
+        state.worldInfoCache.set('Book', { entries: { 1: entry(1, 10) } });
+        let owns = true;
+        let release;
+        let entered;
+        const waiting = new Promise(resolve => { release = resolve; });
+        const started = new Promise(resolve => { entered = resolve; });
+        shell.eventSource.emit = async (type, ...args) => {
+            events.push([type, ...args]);
+            if (type === 'scan') { entered(); await waiting; }
+        };
+        const pending = getWorldInfoPrompt(['cat'], 4096, false, undefined, { ownsRun: () => owns });
+        await started;
+        owns = false;
+        const newActivation = entry(2, 10, { world: 'Book', content: 'new chat forced' });
+        WorldInfoBuffer.externalActivations.set('Book.2', newActivation);
+        release();
+        await pending;
+        expect(WorldInfoBuffer.externalActivations.get('Book.2')).toBe(newActivation);
+        expect(events.map(([type]) => type)).not.toContain('activated');
+    });
+
+    test('stale scan while book loading is pending does not publish loaded or consume new activations', async () => {
+        state.setSelectedWorldInfo(['Book']);
+        let owns = true;
+        let release;
+        let entered;
+        const waiting = new Promise(resolve => { release = resolve; });
+        const started = new Promise(resolve => { entered = resolve; });
+        globalThis.fetch = jest.fn(async () => {
+            entered();
+            await waiting;
+            return { ok: true, json: async () => ({ entries: { 1: entry(1, 10) } }) };
+        });
+        const pending = getWorldInfoPrompt(['cat'], 4096, false, undefined, { ownsRun: () => owns });
+        await started;
+        owns = false;
+        const activation = entry(2, 10, { world: 'Book' });
+        WorldInfoBuffer.externalActivations.set('Book.2', activation);
+        release();
+        await pending;
+        expect(events).toEqual([]);
+        expect(WorldInfoBuffer.externalActivations.get('Book.2')).toBe(activation);
+    });
+
+    test('typed generation story owner and real scanner share cancellation through the scan port', async () => {
+        const { createGenerationLifecycleService } = await loadTsModule('app/lib/generation/attempt-executor.ts');
+        const lifecycle = createGenerationLifecycleService(() => ({ chatId: 'chat', contextRevision: 1 }));
+        state.setSelectedWorldInfo(['Book']);
+        state.worldInfoCache.set('Book', { entries: { 1: entry(1, 10) } });
+        let owns = true;
+        let release;
+        let entered;
+        const waiting = new Promise(resolve => { release = resolve; });
+        const started = new Promise(resolve => { entered = resolve; });
+        shell.eventSource.emit = async type => {
+            events.push([type]);
+            if (type === 'scan') { entered(); await waiting; }
+        };
+        const ports = {
+            ownsRun: () => owns, quiet: () => 'quiet-token', clearQuiet: jest.fn(),
+            scan: (...args) => getWorldInfoPrompt(...args, { ownsRun: () => owns }),
+            flush: jest.fn(), inject: jest.fn(), anchor: jest.fn(), render: jest.fn(), clearStory: jest.fn(),
+        };
+        const pending = lifecycle.assembleWorldInfoStory({ messages: ['cat'], quietPrompt: '', maxContext: 100, dryRun: false, skipWIAN: false, description: '', system: '', characterDepthPrompt: '', creatorNotes: '', scenario: '', character: '', user: '' }, ports);
+        await started;
+        owns = false;
+        const activation = entry(2, 10, { world: 'Book' });
+        WorldInfoBuffer.externalActivations.set('Book.2', activation);
+        release();
+        expect(await pending).toBeNull();
+        expect(WorldInfoBuffer.externalActivations.get('Book.2')).toBe(activation);
+        expect(events.map(([type]) => type)).not.toContain('activated');
+        expect(ports.flush).not.toHaveBeenCalled();
+        expect(ports.clearQuiet).toHaveBeenCalledWith('quiet-token');
     });
 });

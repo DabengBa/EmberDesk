@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { describe, expect, test } from '@jest/globals';
+import { loadTsModule } from './helpers/load-ts-module.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -203,16 +204,21 @@ describe('world info card rendering', () => {
         expect(rehydrateSource).toContain('void hideWorldEditor();');
     });
 
-    test('world info drawer closes only an unpinned character drawer when opened from the top bar', () => {
-        const source = read('public/script.js');
-
-        expect(source).toContain('const isOpeningWorldInfoDrawer = targetDrawerID === \'WorldInfo\' && !drawerWasOpenAlready;');
-        expect(source).toContain('const $openDrawers = isOpeningWorldInfoDrawer');
-        expect(source).toContain('$(\'#right-nav-panel.openDrawer:not(.pinnedOpen)\').not(drawer)');
-        expect(source).not.toContain('$(\'#right-nav-panel.openDrawer\').not(drawer)');
-        expect(source).toContain('const $openIcons = isOpeningWorldInfoDrawer');
-        expect(source).toContain('$(\'#rm_button_panel_pin_div .openIcon:not(.drawerPinnedOpen)\')');
-        expect(source).not.toContain('#rightNavDrawerIcon');
+    test('opening world info closes unpinned drawers while retaining pinned ones', async () => {
+        const { createWorkspaceDrawerService } = await loadTsModule('app/lib/workspace-drawer-domain.ts');
+        const drawers = [
+            { id: 'WorldInfo', open: false, pinned: false },
+            { id: 'right-nav-panel', open: true, pinned: false },
+            { id: 'left-nav-panel', open: true, pinned: true },
+        ];
+        const service = createWorkspaceDrawerService({ get: id => drawers.find(drawer => drawer.id === id), list: () => drawers, read: () => null, write: () => {}, notify: () => {} });
+        await service.open('WorldInfo');
+        expect(drawers.map(drawer => drawer.open)).toEqual([true, false, true]);
+        service.close('WorldInfo');
+        service.setPinned('right-nav-panel', true);
+        drawers[1].open = true;
+        await service.open('WorldInfo');
+        expect(drawers.map(drawer => drawer.open)).toEqual([true, true, true]);
     });
 
     test('world book deletion confirmations default to cancel and mark destructive actions', () => {

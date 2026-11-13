@@ -14,7 +14,7 @@ The lifecycle boundary covers:
 
 - deciding whether a generation is eligible for bounded automatic recovery
 - planning the primary, primary-retry, and optional fallback attempts
-- preserving existing assistant-row baselines for `continue` and `swipe`
+- preserving the current assistant-turn baseline for regenerate and bounded recovery
 - deciding when partial attempt text should be cleared or restored
 - keeping recovery status outside `.mes_text`
 
@@ -22,7 +22,7 @@ It does not replace provider-specific payload builders, the compatibility-visibl
 
 ## Architecture And Constraints
 
-`public/scripts/chat-generation-command-service.js` is the framework-neutral command and attempt-execution owner. It uses `public/scripts/chat-generation-lifecycle.js` and `public/scripts/chat-generation-auto-recovery.js` for bounded recovery decisions instead of duplicating them in React or public adapters.
+`public/scripts/generation-service.js` is the browser-facing generation service. It uses the installed typed lifecycle in `app/lib/generation/attempt-executor.ts`, while `public/scripts/chat-generation-command-service.js`, `public/scripts/chat-generation-lifecycle.js`, and `public/scripts/chat-generation-auto-recovery.js` provide command classification and bounded recovery decisions. There is no second React transport owner.
 
 Important constraints:
 
@@ -35,15 +35,27 @@ Important constraints:
 
 ## Core Implementation
 
-`public/scripts/chat-generation-command-service.js` owns the command matrix, compatibility-envelope mapping, attempt sequence execution, and result policies. It uses pure lifecycle decisions from `public/scripts/chat-generation-lifecycle.js`:
+### Prompt preview and request-scoped prompts
+
+`previewNextGenerationRequest()` uses the same generation assembly path but stops before the model transport. `createPromptContext` in `app/lib/generation/attempt-executor.ts` creates a lazily captured prompt map for each preview. Generation passes that map to World Info scanning, story and macro expansion, chat injection, and OpenAI request assembly. Temporary depth, quiet, and World Info prompt writes use that map, rather than swapping the shared `extension_prompts` object. Visible, quiet, and background generation continue to use the shared map by default.
+
+`GENERATION_STARTED` and `GENERATION_AFTER_COMMANDS` retain their existing arguments and expose `promptContext` in the options object. An asynchronous listener that needs to contribute a request-local scan prompt can call `options.promptContext.setWorldInfoScanPrompt(key, value, position, depth, scan, role, filter)`. The text-completion combine events and `GENERATE_AFTER_DATA` also receive a trailing `{ promptContext }` argument. Existing contextless `setExtensionPrompt` and direct shared-map writes remain global: the runtime cannot attribute an arbitrary write after an `await` to a particular event invocation. Global contributions made before the preview map is captured are included; later writes require a refresh or an explicit request context. World Info scan and `CHAT_COMPLETION_PROMPT_READY` listeners retain their existing event shapes and are not implicitly scoped.
+
+The snapshot recursively copies plain objects and arrays, including cycles and aliases, without evaluating property getters during copying. Functions, accessors, and non-plain objects remain shared references; calling a function or accessor can still observe or mutate external state. The supported `setExtensionPrompt` path normally stores string/number/boolean fields plus an optional filter function; direct shared-map writes can supply other shapes and do not gain full isolation. A concurrent browser test covers the real World Info scan and OpenAI assembly alongside a background generation and an asynchronous filter; it does not prove isolation of arbitrary listener side effects. In particular, chat-memory's existing generation-start listener can schedule maintenance even for dry runs.
+
+The current `getExtensionPrompt` implementation uses an async predicate with `Array.prototype.filter`; a filter returning false is not awaited by that array operation. This pre-existing behavior is not evidence that filter rejection works and is outside the prompt-map isolation change.
+
+Listener audit for this path: the reply-pipeline and generation-type macro start listeners skip dry runs; chat memory's start listener does not. The React runtime provider observes generation start, and the prompt-panel bridge observes `CHAT_COMPLETION_PROMPT_READY`. The temporary response-length hook listens to `GENERATE_AFTER_DATA`. No in-repository prompt-writing listener was found for these generation or World Info events. `generateRawData()` emits its own non-preview events without a prompt context. The old `evaluateMacros` outlet helper reads the global map but has no in-repository callers; the active macro engine receives the request map. These observations are not a guarantee about arbitrary external listeners or their side effects.
+
+`public/scripts/chat-generation-command-service.js` owns the command matrix and compatibility-envelope mapping; attempt execution is installed from the typed runtime. Pure lifecycle decisions in `public/scripts/chat-generation-lifecycle.js` include:
 
 - `createGenerationLifecyclePlan()` creates the attempt list for a visible generation
-- `getGenerationAttemptBaseline()` returns the restore baseline that should be used for the active message row
+
 - `getGenerationFailureDecision()` classifies intermediate versus final failure cleanup
 - `getGenerationSuccessFinalization()` describes successful finalization state
 - `hasFallbackProviderForGeneration()` delegates fallback readiness to `hasFallbackProviderSettings()`
 
-`public/script.js` keeps compatibility entry points such as `Generate()` and `swipe()`, but `Generate()` first creates a generation request envelope and delegates to the service-owned attempt loop. React composer and message actions dispatch visible commands directly; slash, quiet, background, dry-run, nested, and provider-specific callers keep their public APIs while reaching the same command/lifecycle boundary. The React composer calls the existing `stopGeneration()` lifecycle from its stop button. Before a visible generation starts, the shell captures an existing-message baseline with `createExistingMessageRecoveryBaseline(type)` for `continue` and `swipe`. Failed intermediate attempts call `clearGenerationAttemptMessage(messageId, baseline)` so partial failed text does not leak into the next attempt, while final failure restores the original assistant row when the generation started from an existing row.
+`public/script.js` keeps compatibility entry points such as `Generate()` and delegates to the service-owned attempt loop. React composer and message actions dispatch visible commands directly; slash, quiet, background, dry-run and nested callers reach the same command/lifecycle boundary. The React composer calls `stopGeneration()` from its stop button. Regenerate preserves its assistant-turn baseline, while failed intermediate attempts clear the attempt row before retrying. Continue and swipe are retired from the current command surface.
 
 ### Composer input ownership
 
@@ -57,19 +69,19 @@ For an active reply pipeline, `public/scripts/generation-service.js` plans recov
 
 ## Scope Boundary
 
-The unified service includes direct, group, provider-specific, dry-run, nested, quiet, and background request families without removing any public caller contract. Renderer ownership, editing, rich-body rendering, and long-chat windowing remain the next independent migration slice. The bounded recovery behavior and public row/event contracts remain required; a prior release, not an in-process transport fallback, is the rollback boundary.
+The unified service covers the current direct-chat, dry-run, nested, quiet, and background request families. The current transport supports OpenAI-compatible chat completion; retired group, swipe, continue and non-OpenAI transport paths are not implied by this boundary. Bounded recovery and public row/event contracts remain required.
 
 ## Validation
 
 Focused proof:
 
 ```bash
-pnpm --dir tests run test:unit -- chat-generation-command-service.test.js chat-generation-lifecycle.test.js chat-generation-auto-recovery.test.js chat-completions-openai-fallback.test.js chat-completions-google.test.js main-chat-bridge-contract.test.js react-workspace-panels-helpers.test.js --runInBand
-pnpm --dir tests run test:e2e -- chat-message-streaming.e2e.js third-party-extension-runtime.e2e.js --workers=1
+pnpm --dir tests run test:unit -- generation-lifecycle-service.test.js main-chat-composer-submission.test.js world-info-scan-service.test.js reply-pipeline-assembly.test.js prompt-inspector.test.js --runInBand
+(cd tests && node run-playwright-lane.mjs prompt-inspector.e2e.js --workers=1)
 pnpm run test:compat
 ```
 
-The E2E proof covers primary failure fallback, stop exclusion from auto recovery, final manual recovery, continue baseline preservation, swipe baseline preservation, pre-token failure recovery, direct command dispatch from the React composer/actions, renderer compatibility during streaming, and mobile reachability.
+The inspector browser lane covers preview request assembly and a real World Info scan concurrent with a background request against a stub provider. The generation streaming and regenerate browser lanes provide additional recovery and cancellation coverage; none of these commands alone proves all asynchronous callers or live-provider behavior.
 
 ## Related Semantic IDs And Binding Points
 
@@ -88,7 +100,7 @@ Stable binding points:
 - `public/scripts/chat-generation-auto-recovery.js`
 - `public/scripts/chat-generation-command-service.js`
 - `Generate()` in `public/script.js`
-- `GenerationStreamSession` in `public/script.js`
+- `GenerationStreamSession` in `public/scripts/generation-service.js`
 - `.generation_auto_recovery_status`
 - `#chat > .mes`
 - `.mes_text`
@@ -97,5 +109,5 @@ Stable binding points:
 Related docs:
 
 - [Main Chat Rendering Call Chain](main-chat-rendering-call-chain.md)
-- [Third-Party Extension Compatibility](third-party-extension-compatibility.md)
+
 - [Chat Generation Auto Recovery](../db/features/chat-generation-auto-recovery.md)

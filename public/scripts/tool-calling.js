@@ -717,7 +717,7 @@ export class ToolManager {
      * @param {any} data Reply data
      * @returns {Promise<ToolInvocationResult>} Successful tool invocations
      */
-    static async invokeFunctionTools(data, { reasoningText = null, assistantMessage = null } = {}) {
+    static async invokeFunctionTools(data, { reasoningText = null, assistantMessage = null, ownsRun = () => true } = {}) {
         /** @type {ToolInvocationResult} */
         const result = {
             invocations: [],
@@ -726,7 +726,7 @@ export class ToolManager {
         };
         const toolCalls = ToolManager.#getToolCallsFromData(data);
 
-        if (!Array.isArray(toolCalls)) {
+        if (!Array.isArray(toolCalls) || !ownsRun()) {
             return result;
         }
         const assistant = assistantMessage ?? data?.choices?.find(choice => choice.index === 0)?.message ?? data?.message
@@ -735,6 +735,7 @@ export class ToolManager {
 
 
         for (const toolCall of toolCalls) {
+            if (!ownsRun()) return result;
             if (!toolCall || !toolCall.function || typeof toolCall.function !== 'object') {
                 continue;
             }
@@ -746,9 +747,15 @@ export class ToolManager {
             const displayName = ToolManager.getDisplayName(name);
             const isStealth = !getPipelineRunState() && ToolManager.isStealthTool(name);
             const message = await ToolManager.formatToolCallMessage(name, parameters);
+            if (!ownsRun()) return result;
             const toast = message && toastr.info(message, 'Tool Calling', { timeOut: 0 });
-            const toolResult = await ToolManager.invokeFunctionTool(name, parameters);
-            toastr.clear(toast);
+            let toolResult;
+            try {
+                toolResult = await ToolManager.invokeFunctionTool(name, parameters);
+            } finally {
+                toastr.clear(toast);
+            }
+            if (!ownsRun()) return result;
             console.log('[ToolManager] Function tool result:', result);
 
             // Handle tool errors — still create an invocation so the LLM sees the failure
@@ -1076,12 +1083,15 @@ export class ToolManager {
      * regexes at write time, so users can restyle/restructure it like a reply.
      * @param {ToolInvocation[]} invocations Successful tool invocations
      */
-    static async saveFunctionToolInvocations(invocations) {
-        if (!Array.isArray(invocations) || invocations.length === 0) {
+    static async saveFunctionToolInvocations(invocations, { ownsRun = () => true } = {}) {
+        const targetChat = chat;
+        const isCurrent = () => chat === targetChat && ownsRun();
+        if (!Array.isArray(invocations) || invocations.length === 0 || !isCurrent()) {
             return;
         }
         const runId = invocations.find(invocation => invocation?.pipeline?.runId)?.pipeline?.runId ?? null;
         await eventSource.emit(event_types.TOOL_CALLS_PERFORMED, invocations);
+        if (!isCurrent()) return;
 
         if (runId) {
             const index = chat.findLastIndex(message => Array.isArray(message?.extra?.tool_invocations)
@@ -1095,7 +1105,8 @@ export class ToolManager {
                 message.mes = getRegexedString(ToolManager.#formatToolInvocationMessage(merged), regex_placement.AI_OUTPUT);
                 updateMessageBlock(index, message);
                 await eventSource.emit(event_types.TOOL_CALLS_RENDERED, invocations);
-                await saveChatConditional();
+                if (!isCurrent()) return;
+                await saveChatConditional(isCurrent);
                 return;
             }
         }
@@ -1122,7 +1133,8 @@ export class ToolManager {
         chat.push(message);
         addOneMessage(message);
         await eventSource.emit(event_types.TOOL_CALLS_RENDERED, invocations);
-        await saveChatConditional();
+        if (!isCurrent()) return;
+        await saveChatConditional(isCurrent);
     }
 
     /**

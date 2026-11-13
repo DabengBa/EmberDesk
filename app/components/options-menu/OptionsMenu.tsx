@@ -24,10 +24,16 @@ const optionStyles = stylex.create({ item: { justifyContent: 'flex-start', textA
  * so delegated trigger('click') paths keep working; the delegated handler
  * re-checks eligibility before dispatching.
  */
-export function OptionsMenu({ showBackToMain = false, canRegenerate = false }: { showBackToMain?: boolean; canRegenerate?: boolean }) {
+export function OptionsMenu({ showBackToMain = false, canRegenerate = false, onCommand }: { showBackToMain?: boolean; canRegenerate?: boolean; onCommand?: (id: string) => void }) {
     return (
         <>
-        <div className="options-content">
+        <div className="options-content" onClick={event => {
+            if (!onCommand || !(event.target instanceof Element)) return;
+            const id = event.target.closest('button[id]')?.id;
+            if (!id || !['option_start_new_chat', 'option_close_chat', 'option_select_chat', 'option_regenerate', 'option_chat_memory', 'option_wire_log', 'option_delete_mes', 'option_back_to_main', 'attachFile'].includes(id)) return;
+            event.stopPropagation();
+            onCommand(id);
+        }}>
             <ContractButton className="displayNone" variant="ghost" xstyle={optionStyles.item} label="Close chat" icon={<i className="fa-lg fa-solid fa-times" aria-hidden="true" />} />
 
             <ContractButton id="option_back_to_main" variant="ghost" xstyle={optionStyles.item} label="Back to parent chat" icon={<i className="fa-lg fa-solid fa-left-long" aria-hidden="true" />} style={showBackToMain ? undefined : { display: 'none' }} />

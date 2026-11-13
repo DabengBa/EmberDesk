@@ -420,7 +420,7 @@ async function runMaintenanceLoop() {
             if (verifyHash !== currentHash) {
                 continue;
             }
-            await serializeMutation(token, async () => {
+            const saved = await serializeMutation(token, async () => {
                 const latest = reconcileActiveChatMemory({ persist: false });
                 const eligible = latest?.summarizableTurns.find(item => item.key === job.turnKey);
                 if (signal.aborted || !eligible || computeTurnHash(state.chat, eligible) !== currentHash || JSON.stringify(eligible.messageIds) !== JSON.stringify(turn.messageIds)) return;
@@ -441,8 +441,12 @@ async function runMaintenanceLoop() {
                     createdAt: record?.createdAt ?? Date.now(),
                     updatedAt: Date.now(),
                 });
-                await saveMutation('automatic', job.turnKey, 'success', rollback);
+                return saveMutation('automatic', job.turnKey, 'success', rollback);
             });
+            if (saved?.ok === false && ownsSession(token)) {
+                maintenance.queue = maintenance.queue.filter(item => item.action || !ownsSession(item.token));
+                return;
+            }
         } catch (error) {
             if (!ownsSession(token)) continue;
             if (error?.name === 'AbortError') {
@@ -451,7 +455,7 @@ async function runMaintenanceLoop() {
             const currentTurn = partitionChatTurns(state.chat).turns.find(item => item.key === job.turnKey);
             if (!currentTurn || computeTurnHash(state.chat, currentTurn) !== currentHash || JSON.stringify(currentTurn.messageIds) !== JSON.stringify(turn.messageIds)) continue;
             console.error('Chat memory summary failed');
-            await serializeMutation(token, async () => {
+            const saved = await serializeMutation(token, async () => {
                 const latest = reconcileActiveChatMemory({ persist: false });
                 const eligible = latest?.summarizableTurns.find(item => item.key === job.turnKey);
                 if (!eligible || computeTurnHash(state.chat, eligible) !== currentHash || JSON.stringify(eligible.messageIds) !== JSON.stringify(turn.messageIds)) return;
@@ -477,8 +481,12 @@ async function runMaintenanceLoop() {
                     stale: true,
                     updatedAt: Date.now(),
                 });
-                await saveMutation('automatic', job.turnKey, 'failed', rollback);
+                return saveMutation('automatic', job.turnKey, 'failed', rollback);
             });
+            if (saved?.ok === false && ownsSession(token)) {
+                maintenance.queue = maintenance.queue.filter(item => item.action || !ownsSession(item.token));
+                return;
+            }
         }
     }
 }

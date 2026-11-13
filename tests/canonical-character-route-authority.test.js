@@ -3,9 +3,10 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { afterEach, describe, expect, test } from '@jest/globals';
+import archiver from 'archiver';
+import { afterEach, describe, expect, jest, test } from '@jest/globals';
 
-import { setConfigFilePath } from '../src/util.js';
+import { humanizedDateTime, setConfigFilePath } from '../src/util.js';
 import { canonicalSqliteManager } from '../src/canonical-sqlite.js';
 import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
 import { auditCanonicalShadowImport } from '../src/canonical-sqlite-shadow-import.js';
@@ -125,11 +126,27 @@ function makeDirectories() {
         avatars: path.join(root, 'User Avatars'),
         backups: path.join(root, 'backups'),
         thumbnailsAvatar: path.join(root, 'thumbnails', 'avatar'),
-    };
+    }
     for (const directory of Object.values(directories)) {
         fs.mkdirSync(directory, { recursive: true });
     }
     return directories;
+}
+
+async function writeByafArchive(filePath, entries) {
+    await new Promise((resolve, reject) => {
+        const output = fs.createWriteStream(filePath);
+        const archive = archiver('zip');
+        output.on('close', resolve);
+        output.on('error', reject);
+        archive.on('warning', reject);
+        archive.on('error', reject);
+        archive.pipe(output);
+        for (const entry of entries) {
+            archive.append(JSON.stringify(entry.data), { name: entry.name });
+        }
+        archive.finalize();
+    });
 }
 
 function openDb(directories) {
@@ -211,6 +228,75 @@ afterEach(() => {
 });
 
 describe('characters projection off', () => {
+    test('BYAF import does not overwrite a colliding canonical chat or assign it as the imported character default', async () => {
+        const directories = makeDirectories();
+        const db = openDb(directories);
+        const nowMs = Date.UTC(2026, 0, 2, 3, 4, 5, 6);
+        const clock = jest.spyOn(Date, 'now').mockReturnValue(nowMs);
+        try {
+            const ownerId = 'BYAF Alice';
+            const chatName = `Collision - ${humanizedDateTime(nowMs)} imported.jsonl`;
+            const sourcePath = `chats/${ownerId}/${chatName}`;
+            const existingJsonl = JSON.stringify([
+                { chat_metadata: { source: 'pre-existing' } },
+                { name: 'User', mes: 'Keep this chat', send_date: '2026-01-01T00:00:00.000Z' },
+            ].map(row => row));
+            const existingPayload = JSON.parse(existingJsonl);
+            upsertCanonicalChatSession(db, createCanonicalChatSessionRecord(db, {
+                locator: { ownerType: 'character', ownerId, sourcePath },
+                payload: existingPayload,
+                nowMs,
+            }));
+            const canonicalBefore = db.prepare(`
+                SELECT source_jsonl FROM chat_sessions
+                WHERE owner_type = 'character' AND owner_id = ? AND source_path = ?
+            `).get(ownerId, sourcePath).source_jsonl;
+
+            const uploadName = 'import.byaf';
+            const uploadPath = path.join(directories.root, uploadName);
+            await writeByafArchive(uploadPath, [
+                {
+                    name: 'manifest.json',
+                    data: { characters: ['characters/card.json'], scenarios: ['scenarios/collision.json'], author: {} },
+                },
+                {
+                    name: 'characters/card.json',
+                    data: { name: 'BYAF Alice', displayName: ownerId, persona: '', images: [] },
+                },
+                {
+                    name: 'scenarios/collision.json',
+                    data: { title: 'Collision', firstMessages: [], messages: [] },
+                },
+            ]);
+
+            const response = makeResponse();
+            const previousCwd = process.cwd();
+            try {
+                process.chdir(repoRoot);
+                await getRouteHandler('/import')({
+                    body: { file_type: 'byaf', user_name: 'User' },
+                    file: { destination: directories.root, filename: uploadName },
+                    user: { directories, profile: { handle: 'alice' } },
+                }, response);
+            } finally {
+                process.chdir(previousCwd);
+            }
+
+            expect(response.statusCode).toBe(200);
+            expect(response.body).toEqual({ file_name: ownerId });
+            const canonicalAfter = db.prepare(`
+                SELECT source_jsonl FROM chat_sessions
+                WHERE owner_type = 'character' AND owner_id = ? AND source_path = ?
+            `).get(ownerId, sourcePath).source_jsonl;
+            expect(canonicalAfter).toBe(canonicalBefore);
+
+            const importedCard = JSON.parse(db.prepare('SELECT card_json FROM characters WHERE avatar_filename = ?').get(`${ownerId}.png`).card_json);
+            expect(importedCard.chat).not.toBe(path.basename(chatName, path.extname(chatName)));
+        } finally {
+            clock.mockRestore();
+        }
+    });
+
     test('renaming an unmapped legacy grant does not bind it to a canonical identity', async () => {
         const directories = makeDirectories();
         const { db } = await seedCanonicalCharacter(directories);

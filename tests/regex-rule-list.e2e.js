@@ -144,29 +144,54 @@ test.describe('regex rule list', () => {
             return route.continue();
         });
         // The scoped target is only bound while a character is selected.
-        await page.evaluate(async () => {
+        const memoryEnabled = await page.evaluate(async () => {
             const context = window.SillyTavern.getContext();
+            // The seeded chat otherwise starts unrelated background summary
+            // writes without an API key, racing this test's chat reload.
+            const previous = context.chatCompletionSettings.chat_memory_enabled;
+            context.chatCompletionSettings.chat_memory_enabled = false;
             await context.selectCharacterById(context.characters.findIndex(character => character.name === 'Dev Character 001'));
+            return previous;
         });
-        await importRules(page, [rule('React list scoped', { disabled: true })], 'scoped');
-        const scopedRows = page.locator('#saved_scoped_scripts .regex-react-row');
-        const scopedRow = scopedRows.filter({ hasText: 'React list scoped' });
-        await expect(scopedRow).toHaveCount(1);
-        await action(scopedRow, 'toggle-off').click();
-        // Enabling a scoped rule must write the character-bound list and then
-        // authorize that character — both through real persistence calls.
-        await expect(page.locator('.regex-list-status-saved')).toContainText('character:');
-        await expect.poll(() => merges.length).toBeGreaterThan(0);
-        await page.reload();
-        // Character selection is runtime state — re-bind the same identity and
-        // verify the enabled flag was persisted to that character's data.
-        await testSetup.awaitST({ page });
-        await page.evaluate(async () => {
-            const context = window.SillyTavern.getContext();
-            await context.selectCharacterById(context.characters.findIndex(character => character.name === 'Dev Character 001'));
-        });
-        await reopenRegex(page);
-        await expect(page.locator('#saved_scoped_scripts .regex-react-row').filter({ hasText: 'React list scoped' })).not.toHaveClass(/regex-react-disabled/);
+        try {
+            await importRules(page, [rule('React list scoped', { disabled: true })], 'scoped');
+            const scopedRows = page.locator('#saved_scoped_scripts .regex-react-row');
+            const scopedRow = scopedRows.filter({ hasText: 'React list scoped' });
+            await expect(scopedRow).toHaveCount(1);
+            // A library refresh replaces the selected character object even when
+            // its identity and scoped rules are unchanged. Exercise that real
+            // publication boundary before invoking the visible row action.
+            await page.evaluate(async () => {
+                const context = window.SillyTavern.getContext();
+                const next = structuredClone(context.characters);
+                next[context.characterId].description += ' [refresh fixture]';
+                const { publishCharacterLibrarySnapshot } = await import('/script.js');
+                await publishCharacterLibrarySnapshot(next);
+            });
+            await action(scopedRow, 'toggle-off').click();
+            // Enabling a scoped rule must write the character-bound list and then
+            // authorize that character — both through real persistence calls.
+            await expect(page.locator('.regex-list-status-saved')).toContainText('character:');
+            await expect.poll(() => merges.length).toBeGreaterThan(0);
+            await page.reload();
+            // Character selection is runtime state — re-bind the same identity and
+            // verify the enabled flag was persisted to that character's data.
+            await testSetup.awaitST({ page });
+            await page.evaluate(async () => {
+                const context = window.SillyTavern.getContext();
+                await context.selectCharacterById(context.characters.findIndex(character => character.name === 'Dev Character 001'));
+            });
+            await reopenRegex(page);
+            await expect(page.locator('#saved_scoped_scripts .regex-react-row').filter({ hasText: 'React list scoped' })).not.toHaveClass(/regex-react-disabled/);
+        } finally {
+            // Scoped authorization saves settings, so restore the original
+            // value even when an assertion fails in this serial suite.
+            await page.evaluate(async previous => {
+                window.SillyTavern.getContext().chatCompletionSettings.chat_memory_enabled = previous;
+                const { saveSettingsStrict } = await import('/scripts/preset-manager.js');
+                await saveSettingsStrict();
+            }, memoryEnabled);
+        }
     });
 
     test('bulk selection owns enable and delete without authorization', async ({ page }) => {

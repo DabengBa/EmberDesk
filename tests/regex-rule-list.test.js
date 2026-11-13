@@ -50,6 +50,32 @@ describe('React Regex list adapter', () => {
         expect(s.lists.get(s.targets[2])).toEqual([]);
         expect(s.lists.get(s.targets[0]).map(rule => rule.id)).toEqual(['two', 'new']);
     });
+    test('a refreshed character target does not retarget an action awaiting confirmation', async () => {
+        const oldTarget = { type: 1, avatar: 'a.png' };
+        const replacement = { type: 1, avatar: 'a.png' };
+        let current = oldTarget;
+        let resolveConfirmation;
+        const confirmation = new Promise(resolve => { resolveConfirmation = resolve; });
+        const rules = [{ id: 'rule', scriptName: 'Scoped' }];
+        const save = jest.fn(async () => {});
+        const bridge = createRegexListBridge({
+            capture: type => type === 1 ? current : undefined,
+            read: target => {
+                if (target !== current) throw new Error('Character no longer exists');
+                return rules;
+            },
+            save, authorize: jest.fn(), confirm: () => confirmation,
+            edit: jest.fn(), exportScripts: jest.fn(), afterChange: jest.fn(),
+        });
+        bridge.refresh();
+        const action = bridge.execute({ kind: 'delete', refs: [{ groupKey: 'character:a.png', id: 'rule' }] });
+        current = replacement;
+        bridge.refresh();
+        resolveConfirmation(true);
+        await expect(action).rejects.toThrow('Character no longer exists');
+        expect(save).not.toHaveBeenCalled();
+        expect(bridge.getSnapshot().groups.find(group => group.type === 1).rules).toHaveLength(1);
+    });
     test('reads source again after destination save so concurrent additions survive', async () => {
         const s = setup();
         s.save.mockImplementation(async (rules, type, target) => {

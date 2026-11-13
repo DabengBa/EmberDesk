@@ -2,6 +2,7 @@ import { describe, expect, test } from '@jest/globals';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { loadTsModule } from './helpers/load-ts-module.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -13,10 +14,14 @@ describe('legacy setup page controller retirement', () => {
         expect(fs.existsSync(path.join(repoRoot, 'public', 'setup.html'))).toBe(false);
     });
 
-    test('keeps shared setup helpers for the React owner', () => {
-        const shared = fs.readFileSync(path.join(repoRoot, 'public', 'scripts', 'setup-shared.js'), 'utf8');
-        expect(shared).toContain('export const setupMessages');
-        const helper = fs.readFileSync(path.join(repoRoot, 'app', 'lib', 'setup-helpers.ts'), 'utf8');
-        expect(helper).toContain("from '../../public/scripts/setup-shared.js'");
+    test('exposes working standalone React setup helpers', async () => {
+        const { buildSetupRequestBody, getSetupErrorMessage, getSetupPasswordVisibilityState, setupMessages } = await loadTsModule('app/lib/setup-helpers.ts');
+        const data = { handle: 'alice', name: 'Alice', password: 'secret123' };
+        expect(buildSetupRequestBody('fresh', data)).toEqual(data);
+        expect(buildSetupRequestBody('set-password', data)).toEqual({ password: 'secret123' });
+        expect(getSetupErrorMessage('User already exists')).toBe(setupMessages.userExists);
+        expect(getSetupErrorMessage(null)).toBe(setupMessages.genericError);
+        expect(getSetupPasswordVisibilityState('password')).toMatchObject({ type: 'text', ariaPressed: 'true', ariaLabel: setupMessages.hidePassword });
+        expect(getSetupPasswordVisibilityState('text')).toMatchObject({ type: 'password', ariaPressed: 'false', ariaLabel: setupMessages.showPassword });
     });
 });

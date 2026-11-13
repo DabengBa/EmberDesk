@@ -119,6 +119,49 @@ test('numeric controls expose native bounds and keyboard stepping', async ({ pag
     await expect(page.locator('#openai_max_context')).toHaveAttribute('step', '0.5');
 });
 
+test('React inline drawer responds once to keyboard and mouse with the compatibility event', async ({ page }) => {
+    await openControls(page);
+    const header = page.locator('#ai_response_configuration > .inline-drawer > .inline-drawer-toggle');
+    const content = page.locator('#ai_response_configuration > .inline-drawer > .inline-drawer-content');
+    await expect(header).toHaveAttribute('aria-expanded', 'true');
+    await content.evaluate(element => {
+        window.inlineDrawerEvents = 0;
+        element.parentElement.addEventListener('inline-drawer-toggle', () => window.inlineDrawerEvents++);
+    });
+    await header.focus();
+    await page.keyboard.press('Enter');
+    await expect(header).toHaveAttribute('aria-expanded', 'false');
+    await expect(content).not.toBeVisible();
+    await page.keyboard.press('Space');
+    await expect(header).toHaveAttribute('aria-expanded', 'true');
+    await expect(content).toBeVisible();
+    await header.click();
+    await expect(header).toHaveAttribute('aria-expanded', 'false');
+    expect(await page.evaluate(() => window.inlineDrawerEvents)).toBe(3);
+});
+
+test('focused numeric wheel emits once and clears a corrected invalid draft', async ({ page }) => {
+    await openControls(page);
+    const temp = page.locator('#temp_openai_counter');
+    await temp.fill('3');
+    await temp.blur();
+    await expect(temp).toHaveAttribute('aria-invalid', 'true');
+    // A wheel step from the out-of-range draft clamps to the valid maximum.
+    await temp.evaluate(element => {
+        window.wheelInputEvents = 0;
+        element.addEventListener('input', () => window.wheelInputEvents++);
+    });
+    await temp.focus();
+    await temp.hover();
+    await page.mouse.wheel(0, 100);
+    await expect(temp).toHaveValue('2');
+    await expect(temp).not.toHaveAttribute('aria-invalid', 'true');
+    await expect(page.locator('#temp_openai_counter-error')).toHaveCount(0);
+    await expect(page.locator('#temp_openai')).toHaveValue('2');
+    await expect.poll(() => page.evaluate(() => window.SillyTavern.getContext().chatCompletionSettings.temp_openai)).toBe(2);
+    expect(await page.evaluate(() => window.wheelInputEvents)).toBe(1);
+});
+
 test('invalid numeric draft remains visible and reports an error without changing live value', async ({ page }) => {
     await openControls(page);
     const temp = page.locator('#temp_openai_counter');

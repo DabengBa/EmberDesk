@@ -32,6 +32,28 @@ async function openWorldInfo(page) {
 }
 
 test.describe('world info workbench', () => {
+    test('global scan depth wheel updates and commits the current input', async ({ page }) => {
+        await testSetup.awaitST({ page });
+        await openWorldInfo(page);
+        const input = page.locator('[data-world-info-react-field="scan-depth"]');
+        const original = await input.inputValue();
+        await input.fill('4');
+        await input.hover();
+        await page.mouse.wheel(0, -100);
+        await expect(input).toHaveValue('5');
+        const save = page.waitForResponse(response => response.url().endsWith('/api/settings/save') && response.request().method() === 'POST');
+        await input.blur();
+        expect((await save).ok()).toBe(true);
+        await page.reload();
+        await testSetup.awaitST({ page });
+        await openWorldInfo(page);
+        await expect(input).toHaveValue('5');
+        const restore = page.waitForResponse(response => response.url().endsWith('/api/settings/save') && response.request().method() === 'POST');
+        await input.fill(original);
+        await input.blur();
+        expect((await restore).ok()).toBe(true);
+    });
+
     test('new book dialog cancels with Escape without writing', async ({ page }) => {
         await testSetup.awaitST({ page });
         await openWorldInfo(page);

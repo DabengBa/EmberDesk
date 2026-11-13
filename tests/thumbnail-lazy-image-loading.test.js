@@ -34,11 +34,12 @@ describe('thumbnail lazy image loading templates', () => {
     });
 
     test('character past chats keep their avatar template', () => {
-        const chatOpsSource = read('public/scripts/chat-ops-service.js');
+        const shellSource = read('public/script.js');
         const selectChatSource = read('app/components/select-chat/SelectChatList.tsx');
 
-        expect(chatOpsSource).toContain("avatarImg: String(avatarImg ?? '')");
-        expect(chatOpsSource).not.toContain("replaceWith(groupAvatar.clone())");
+        expect(shellSource).toContain("avatarImg: String(avatarImg ?? '')");
+        expect(shellSource).toContain('avatarImgURL: getThumbnailUrl(\'avatar\', characters[this_chid].avatar)');
+        expect(shellSource).not.toContain('replaceWith(groupAvatar.clone())');
         expect(selectChatSource).toContain('<div className="avatar"><img src={avatarImg} alt="" loading="lazy" decoding="async" /></div>');
     });
 });

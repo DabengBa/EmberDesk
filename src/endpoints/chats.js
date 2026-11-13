@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import readline from 'node:readline';
 import process from 'node:process';
+import crypto from 'node:crypto';
 
 import express from 'express';
 import sanitize from 'sanitize-filename';
@@ -11,7 +12,7 @@ import _ from 'lodash';
 import validateAvatarUrlMiddleware from '../middleware/validateFileName.js';
 import {
     getConfigValue,
-    humanizedDateTime,
+
     tryParse,
     generateTimestamp,
     removeOldBackups,
@@ -52,8 +53,8 @@ import {
     renameCanonicalChat,
     writeCanonicalChatPayload,
 } from './canonical-chat-write-service.js';
-import { calculateCanonicalCharacterChatStats, getCanonicalChatSession } from './canonical-chat-store.js';
-import { coordinateWorkspaceWrite } from './coordinate-workspace-write.js';
+import { calculateCanonicalCharacterChatStats, getCanonicalChatOperation, getCanonicalChatSession } from './canonical-chat-store.js';
+import { coordinateWorkspaceWrite, openRequestCoordinationDatabase } from './coordinate-workspace-write.js';
 
 const isBackupEnabled = !!getConfigValue('backups.chat.enabled', true, 'boolean');
 const maxTotalChatBackups = Number(getConfigValue('backups.chat.maxTotalBackups', -1, 'number'));
@@ -192,6 +193,13 @@ function getCanonicalChatLocator(directories, { ownerType, ownerId, filePath }) 
     };
 }
 
+function chatOperationIdentity(request, kind, locator) {
+    const id = request.body?.operationId;
+    if (typeof id !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(id)) return null;
+    const fingerprint = crypto.createHash('sha256').update(JSON.stringify([kind, locator, request.body])).digest('hex');
+    return { id, fingerprint };
+}
+
 function sendCanonicalChatReadBlocked(response, readState) {
     return response.status(503).send({
         error: 'canonical_chat_read_blocked',
@@ -216,11 +224,12 @@ async function readCanonicalChatRoutePayload(request, locator) {
     }
 
     reconcileCanonicalChatLocator(readState.db, request.user.directories, locator);
-    return {
+    return withCanonicalTransaction(readState.db, db => ({
         active: true,
-        payload: readCanonicalChatPayload(readState.db, locator),
-        db: readState.db,
-    };
+        payload: readCanonicalChatPayload(db, locator),
+        version: getCanonicalChatSession(db, locator)?.concurrency_token ?? null,
+        db,
+    }));
 }
 
 async function serializeCanonicalChatRoutePayload(request, locator) {
@@ -396,7 +405,7 @@ function getInteractionPerfChatTimestampMs() {
 
 function applyInteractionPerfChatTimestamp(filePath) {
     const timestampMs = getInteractionPerfChatTimestampMs();
-    if (timestampMs === null) {
+    if (timestampMs === null || getChatsProjectionMode() === 'off') {
         return;
     }
 
@@ -625,20 +634,28 @@ router.post('/save', rejectGroupChatRequest, validateAvatarUrlMiddleware, coordi
         }
 
         if (Array.isArray(chatData)) {
+            const isCreate = request.body.create === true;
+            const version = request.body.version;
+            if ((!isCreate && (typeof version !== 'string' || !/^[0-9a-f]{32}$/.test(version))) || (isCreate && version !== undefined)) {
+                return response.status(428).send({ error: 'chat_precondition_required' });
+            }
+            const locator = getCanonicalChatLocator(request.user.directories, { ownerType: 'character', ownerId: cardName, filePath: chatFilePath });
+            const operationIdentity = chatOperationIdentity(request, 'save', locator);
+            if (!operationIdentity) return response.status(400).send({ error: 'invalid_chat_operation_id' });
+            const prior = getCanonicalChatOperation(openRequestCoordinationDatabase(request), operationIdentity);
+            if (prior?.status === 'operation_mismatch') return response.status(409).send({ error: 'chat_operation_mismatch' });
+            if (prior) return response.send({ ok: true, version: prior.version });
             const writeState = await getCanonicalChatWriteState(request);
             if (writeState.blocked) {
                 return sendCanonicalChatWriteBlocked(response, writeState);
             }
             if (writeState.ok) {
-                await assertChatIntegrity(chatData, chatFilePath, request.body.force);
                 const result = writeCanonicalChatPayload({
                     db: writeState.db,
-                    locator: getCanonicalChatLocator(request.user.directories, {
-                        ownerType: 'character',
-                        ownerId: cardName,
-                        filePath: chatFilePath,
-                    }),
+                    locator,
                     payload: chatData,
+                    condition: isCreate ? { create: true } : { version },
+                    operationIdentity,
                     operation: 'save',
                     projection: getChatsProjectionMode(),
                     projectJsonl(jsonlData) {
@@ -666,16 +683,14 @@ router.post('/save', rejectGroupChatRequest, validateAvatarUrlMiddleware, coordi
                 });
                 if (!result.ok) {
                     if (!result.authorityCommitted) {
+                        if (['conflict', 'operation_mismatch'].includes(result.reason)) return response.status(409).send({ error: result.reason === 'conflict' ? 'chat_conflict' : 'chat_operation_mismatch' });
                         return sendCanonicalChatWriteRejected(response, result);
                     }
-                    return response.status(500).send({
-                        error: 'Failed to project canonical chat file.',
-                        repairKey: result.repairKey,
-                    });
+                    return response.send({ ok: true, version: result.version });
                 }
                 applyInteractionPerfChatTimestamp(chatFilePath);
                 syncCanonicalChatStatsAfterCharacterChatMutation(handle, request.user.directories, request.body.avatar_url, 'chat save');
-                return response.send({ ok: true });
+                return response.send({ ok: true, version: result.version });
             }
 
             return sendCanonicalChatWriteBlocked(response, writeState);
@@ -736,6 +751,7 @@ router.post('/get', rejectGroupChatRequest, validateAvatarUrlMiddleware, async f
         if (!canonical.active) {
             return sendCanonicalChatReadBlocked(response, canonical);
         }
+        if (canonical.version) response.set('X-Chat-Version', canonical.version);
         return response.send(canonical.payload ?? {});
     } catch (error) {
         console.error(error);
@@ -756,6 +772,15 @@ router.post('/rename', rejectGroupChatRequest, validateAvatarUrlMiddleware, asyn
         const pathToOriginalFile = path.join(pathToFolder, sanitize(request.body.original_file));
         const pathToRenamedFile = path.join(pathToFolder, sanitize(request.body.renamed_file));
         const sanitizedFileName = path.parse(pathToRenamedFile).name;
+        if (typeof request.body.version !== 'string' || !/^[0-9a-f]{32}$/.test(request.body.version)) return response.status(428).send({ error: 'chat_precondition_required' });
+        const originalLocator = getCanonicalChatLocator(request.user.directories, {
+            ownerType: 'character', ownerId: String(request.body.avatar_url).replace('.png', ''), filePath: pathToOriginalFile,
+        });
+        const operationIdentity = chatOperationIdentity(request, 'rename', originalLocator);
+        if (!operationIdentity) return response.status(400).send({ error: 'invalid_chat_operation_id' });
+        const prior = getCanonicalChatOperation(openRequestCoordinationDatabase(request), operationIdentity);
+        if (prior?.status === 'operation_mismatch') return response.status(409).send({ error: 'chat_operation_mismatch' });
+        if (prior) return response.send({ ok: true, sanitizedFileName, version: prior.version });
         console.debug('Old chat name', pathToOriginalFile);
         console.debug('New chat name', pathToRenamedFile);
 
@@ -764,11 +789,6 @@ router.post('/rename', rejectGroupChatRequest, validateAvatarUrlMiddleware, asyn
             return sendCanonicalChatWriteBlocked(response, writeState);
         }
         if (writeState.ok) {
-            const originalLocator = getCanonicalChatLocator(request.user.directories, {
-                ownerType: 'character',
-                ownerId: String(request.body.avatar_url).replace('.png', ''),
-                filePath: pathToOriginalFile,
-            });
             const nextLocator = getCanonicalChatLocator(request.user.directories, {
                 ownerType: 'character',
                 ownerId: String(request.body.avatar_url).replace('.png', ''),
@@ -777,18 +797,12 @@ router.post('/rename', rejectGroupChatRequest, validateAvatarUrlMiddleware, asyn
             // Canonical sessions are the authority: a stale projection file can
             // be missing, and a destination name may collide with an existing
             // session even when its projection file was cleaned up.
-            if (getCanonicalChatSession(writeState.db, {
-                ownerType: nextLocator.ownerType,
-                ownerId: nextLocator.ownerId,
-                sourcePath: nextLocator.sourcePath,
-            })) {
-                console.error('Either Source or Destination files are not available');
-                return response.status(400).send({ error: true });
-            }
             const result = renameCanonicalChat({
                 db: writeState.db,
                 locator: originalLocator,
                 nextLocator,
+                version: request.body.version,
+                operationIdentity,
                 projection: getChatsProjectionMode(),
                 projectRename(jsonl) {
                     writeFileAtomicSync(pathToRenamedFile, jsonl, 'utf8');
@@ -808,16 +822,14 @@ router.post('/rename', rejectGroupChatRequest, validateAvatarUrlMiddleware, asyn
             });
             if (!result.ok) {
                 if (!result.authorityCommitted) {
+                    if (['conflict', 'operation_mismatch'].includes(result.reason)) return response.status(409).send({ error: result.reason === 'conflict' ? 'chat_conflict' : 'chat_operation_mismatch' });
                     return response.status(400).send({ error: true });
                 }
-                return response.status(500).send({
-                    error: true,
-                    repairKey: result.repairKey,
-                });
+                return response.send({ ok: true, sanitizedFileName, version: result.version });
             }
             console.info('Successfully renamed canonical chat file.');
             syncCanonicalChatStatsAfterCharacterChatMutation(request.user.profile?.handle ?? null, request.user.directories, request.body.avatar_url, 'chat rename');
-            return response.send({ ok: true, sanitizedFileName });
+            return response.send({ ok: true, sanitizedFileName, version: result.version });
         }
 
         return sendCanonicalChatWriteBlocked(response, writeState);
@@ -839,30 +851,31 @@ router.post('/delete', rejectGroupChatRequest, validateAvatarUrlMiddleware, asyn
         if (!isPathUnderParent(request.user.directories.chats, chatFilePath)) {
             return response.sendStatus(400);
         }
+        if (typeof request.body.version !== 'string' || !/^[0-9a-f]{32}$/.test(request.body.version)) return response.status(428).send({ error: 'chat_precondition_required' });
+        const locator = getCanonicalChatLocator(request.user.directories, { ownerType: 'character', ownerId: dirName, filePath: chatFilePath });
+        const operationIdentity = chatOperationIdentity(request, 'delete', locator);
+        if (!operationIdentity) return response.status(400).send({ error: 'invalid_chat_operation_id' });
+        const prior = getCanonicalChatOperation(openRequestCoordinationDatabase(request), operationIdentity);
+        if (prior?.status === 'operation_mismatch') return response.status(409).send({ error: 'chat_operation_mismatch' });
+        if (prior) return response.send({ ok: true });
         const writeState = await getCanonicalChatWriteState(request);
         if (writeState.blocked) {
             return sendCanonicalChatWriteBlocked(response, writeState);
         }
         if (writeState.ok) {
             const chatsProjection = getChatsProjectionMode();
-            if (chatsProjection !== 'off' && !fs.existsSync(chatFilePath)) {
-                console.error('The chat file was not deleted.');
-                return response.sendStatus(400);
-            }
             const result = deleteCanonicalChat({
                 db: writeState.db,
-                locator: getCanonicalChatLocator(request.user.directories, {
-                    ownerType: 'character',
-                    ownerId: dirName,
-                    filePath: chatFilePath,
-                }),
+                locator,
+                version: request.body.version,
+                operationIdentity,
                 projection: chatsProjection,
                 projectDelete() {
                     if (chatsProjection === 'off') {
                         tryDeleteFile(chatFilePath);
                         return;
                     }
-                    if (!tryDeleteFile(chatFilePath)) {
+                    if (fs.existsSync(chatFilePath) && !tryDeleteFile(chatFilePath)) {
                         throw new Error('JSONL chat projection was not deleted.');
                     }
                 },
@@ -877,12 +890,10 @@ router.post('/delete', rejectGroupChatRequest, validateAvatarUrlMiddleware, asyn
             });
             if (!result.ok) {
                 if (!result.authorityCommitted) {
+                    if (['conflict', 'operation_mismatch'].includes(result.reason)) return response.status(409).send({ error: result.reason === 'conflict' ? 'chat_conflict' : 'chat_operation_mismatch' });
                     return response.sendStatus(400);
                 }
-                return response.status(500).send({
-                    error: 'Failed to project canonical chat deletion.',
-                    repairKey: result.repairKey,
-                });
+                return response.send({ ok: true });
             }
             syncCanonicalChatStatsAfterCharacterChatMutation(request.user.profile?.handle ?? null, request.user.directories, request.body.avatar_url, 'chat delete');
             return response.send({ ok: true });
@@ -969,6 +980,10 @@ router.post('/export', rejectGroupChatRequest, validateAvatarUrlMiddleware, asyn
 
 router.post('/import', validateAvatarUrlMiddleware, async function (request, response) {
     if (!request.body) return response.sendStatus(400);
+    const importId = request.body.operationId;
+    if (typeof importId !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(importId)) {
+        return response.status(400).send({ error: 'invalid_chat_operation_id' });
+    }
 
     const format = request.body.file_type;
     const avatarUrl = (request.body.avatar_url).replace('.png', '');
@@ -988,6 +1003,9 @@ router.post('/import', validateAvatarUrlMiddleware, async function (request, res
     try {
         const pathToUpload = path.join(request.file.destination, request.file.filename);
         const data = fs.readFileSync(pathToUpload, 'utf8');
+        const fingerprint = crypto.createHash('sha256').update(JSON.stringify(['chat-import', avatarUrl, characterName, userName, format, data])).digest('hex');
+        const importKey = crypto.createHash('sha256').update(importId).digest('hex');
+        let importIndex = 0;
 
         if (format === 'json') {
             fs.unlinkSync(pathToUpload);
@@ -1000,7 +1018,7 @@ router.post('/import', validateAvatarUrlMiddleware, async function (request, res
             avatarUrl,
             characterName,
             userName,
-            timestampLabel: humanizedDateTime,
+            timestampLabel: () => `${importKey}-${importIndex++}`,
             uploadPath: pathToUpload,
         });
 
@@ -1009,12 +1027,27 @@ router.post('/import', validateAvatarUrlMiddleware, async function (request, res
             return response.send({ error: true });
         }
 
+        if (!importPlan.writes.length) return response.status(400).send({ error: 'empty_chat_import' });
+        const operations = importPlan.writes.map((_, index) => ({
+            id: `import-${importKey}-${index}`,
+            fingerprint,
+        }));
+        const operationDb = openRequestCoordinationDatabase(request);
+        const previous = operations.map(operation => getCanonicalChatOperation(operationDb, operation));
+        if (previous.some(result => result?.status === 'operation_mismatch')) {
+            return response.status(409).send({ error: 'chat_operation_mismatch' });
+        }
+        if (previous.every(Boolean)) {
+            if (importPlan.uploadCleanup === CHAT_IMPORT_UPLOAD_CLEANUP.AFTER_SUCCESS) fs.unlinkSync(pathToUpload);
+            return response.send({ res: true, fileNames: importPlan.fileNames });
+        }
+
         const writeState = await getCanonicalChatWriteState(request);
         if (writeState.blocked) {
             return sendCanonicalChatWriteBlocked(response, writeState);
         }
         if (writeState.ok) {
-            for (const write of importPlan.writes) {
+            for (const [index, write] of importPlan.writes.entries()) {
                 const jsonlData = write.kind === 'copy-upload'
                     ? fs.readFileSync(write.uploadPath, 'utf8')
                     : write.contents;
@@ -1027,6 +1060,8 @@ router.post('/import', validateAvatarUrlMiddleware, async function (request, res
                     }),
                     payload: parseCanonicalChatJsonl(jsonlData),
                     operation: 'import',
+                    condition: { create: true },
+                    operationIdentity: operations[index],
                     projection: getChatsProjectionMode(),
                     projectJsonl(projectedJsonl) {
                         writeFileAtomicSync(write.filePath, projectedJsonl, 'utf8');
@@ -1042,9 +1077,11 @@ router.post('/import', validateAvatarUrlMiddleware, async function (request, res
                 });
                 if (!result.ok) {
                     if (!result.authorityCommitted) {
+                        if (result.reason === 'conflict' || result.reason === 'operation_mismatch') {
+                            return response.status(409).send({ error: result.reason === 'conflict' ? 'chat_conflict' : 'chat_operation_mismatch', completed: importPlan.fileNames.slice(0, index) });
+                        }
                         return sendCanonicalChatWriteRejected(response, result);
                     }
-                    return response.send({ error: true, repairKey: result.repairKey });
                 }
             }
             fileNames.push(...importPlan.fileNames);
@@ -1157,13 +1194,15 @@ export async function openCanonicalChatForTextReplace(request, { ownerId, chatFi
  * @param {{ db: object, locator: object, filePath: string, cardName: string, avatarUrl: string, payload: Array<object> }} options
  * @returns {{ ok: boolean, authorityCommitted?: boolean, reason?: string, repairKey?: string }}
  */
-export function writeCanonicalChatForTextReplace(request, { db, locator, filePath, cardName, avatarUrl, payload }) {
+export function writeCanonicalChatForTextReplace(request, { db, locator, filePath, cardName, avatarUrl, payload, version }) {
+    if (typeof version !== 'string' || !version) return { ok: false, authorityCommitted: false, reason: 'missing_chat_version' };
     const handle = getRequestHandle(request);
     const result = writeCanonicalChatPayload({
         db,
         locator,
         payload,
         operation: 'text-replace',
+        condition: { version },
         projection: getChatsProjectionMode(),
         projectJsonl(jsonlData) {
             writeChatProjection(jsonlData, filePath, handle, cardName, request.user.directories.backups);

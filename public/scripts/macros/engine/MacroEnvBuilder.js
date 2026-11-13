@@ -23,6 +23,7 @@ import { getStringHash } from '/scripts/utils.js';
  * @property {boolean} [replaceCharacterCard]
  * @property {Record<string, import('./MacroEnv.types.js').DynamicMacroValue>|null} [dynamicMacros]
  * @property {(value: string) => string} [postProcessFn]
+ * @property {Record<string, any>} [promptMap]
  */
 
 /**
@@ -89,7 +90,7 @@ class MacroEnvBuilder {
             system: { model: '' },
             functions: { postProcess: (x) => x },
             dynamicMacros: {},
-            extra: {},
+            extra: { promptMap: ctx.promptMap },
         };
 
         if (ctx.replaceCharacterCard) {

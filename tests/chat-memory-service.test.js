@@ -211,6 +211,39 @@ test('automatic jobs skip turns pinned while queued', async () => {
     expect(fetch).not.toHaveBeenCalled();
 });
 
+test('automatic maintenance stops remaining jobs when a memory save fails', async () => {
+    state.chat.push({ is_user: true, mes: 'third', extra: { id: 'w' } }, { mes: 'reply', extra: { id: 'c' } });
+    save.mockResolvedValue(false);
+    globalThis.fetch = jest.fn(async () => ({ ok: false, status: 503 }));
+    const log = jest.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+        service.scheduleMemoryMaintenance();
+        await new Promise(done => setTimeout(done, 50));
+        expect(fetch).toHaveBeenCalledTimes(1);
+        save.mockResolvedValue(true);
+        service.scheduleMemoryMaintenance();
+        await new Promise(done => setTimeout(done, 50));
+        expect(fetch).toHaveBeenCalledTimes(3);
+    } finally {
+        log.mockRestore();
+        handlers.changed();
+    }
+});
+
+test('automatic maintenance also stops if saving a successful summary fails', async () => {
+    state.chat.push({ is_user: true, mes: 'third', extra: { id: 'w' } }, { mes: 'reply', extra: { id: 'c' } });
+    save.mockResolvedValue(false);
+    globalThis.fetch = jest.fn(async () => ({ ok: true, json: async () => ({ text: 'summary' }) }));
+    try {
+        service.scheduleMemoryMaintenance();
+        await new Promise(done => setTimeout(done, 50));
+        expect(fetch).toHaveBeenCalledTimes(1);
+        expect(service.getChatMemoryView().summaries.every(item => item.status !== 'active' && item.text !== 'summary')).toBe(true);
+    } finally {
+        handlers.changed();
+    }
+});
+
 test('maintenance save guard rejects same-name session reopen', () => {
     state.is_send_press = false;
     globalThis.fetch = jest.fn(() => new Promise(() => {}));

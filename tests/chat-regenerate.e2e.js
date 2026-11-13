@@ -271,11 +271,8 @@ test.describe('chat regenerate', () => {
         });
 
         // An unsent composer draft must survive regeneration untouched.
-        await page.evaluate(() => {
-            const textarea = document.querySelector('#send_textarea');
-            textarea.value = 'unsent draft text';
-            textarea.dispatchEvent(new Event('input', { bubbles: true }));
-        });
+        await page.locator('#send_textarea').fill('unsent draft text');
+        await expect(page.locator('#send_textarea')).toHaveValue('unsent draft text');
 
         await clickRegenerateMenuItem(page);
         await waitForRegenerateSettled(page);

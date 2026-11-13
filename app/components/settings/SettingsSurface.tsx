@@ -23,6 +23,7 @@ import { SettingsTabs } from '@/components/settings/SettingsTabs';
 import { translate, useTranslated } from '@/compat/i18n.js';
 import { readStoredUiLocale, setUiLocale, uiLocaleOptions } from '../../../public/scripts/ui-locale.js';
 import type { RuntimePort } from '@/compat/runtime-port';
+import { createSettingsWriteOwner } from '@/lib/settings-write-owner';
 import { connectProvider, ProviderConnectionError, testProviderConnection } from '@/lib/provider-connection-service';
 import {
     buildSettingsFormDefaults,
@@ -35,9 +36,11 @@ import {
     settingsCoverage,
     settingsTabDefinitions,
     saveSettingsToRuntime,
+    hasSettingsFormConflict,
 } from '@/lib/settings-helpers.js';
 
 const SAVE_STATUS_TIMEOUT_MS = 4000;
+let standaloneSettingsWriteOwner: ReturnType<typeof createSettingsWriteOwner> | undefined;
 
 /** Translates a UI string; the key doubles as the English source text. */
 const t = (key: string) => translate(key, null);
@@ -136,6 +139,8 @@ export function SettingsSurface({
     runtime,
 }: SettingsSurfaceProps) {
     useTranslated('');
+    const writeOwner = useMemo(() => runtime?.getSettingsWriteOwner?.()
+        ?? (standaloneSettingsWriteOwner ??= createSettingsWriteOwner()), [runtime]);
     // Drawer variant uses the compact layout but leaves the title/close
     // chrome to WorkspacePanelChrome — no internal header row.
     const isCompact = variant === 'drawer';
@@ -144,6 +149,13 @@ export function SettingsSurface({
     const [pageError, setPageError] = useState('');
     const [saveStatus, setSaveStatus] = useState<{ kind: 'success' | 'info'; message: string } | null>(null);
     const [hasRevisionConflict, setHasRevisionConflict] = useState(false);
+    const [hasRuntimeConflict, setHasRuntimeConflict] = useState(() => runtime?.hasSettingsConflict?.() ?? false);
+    useEffect(() => {
+        const update = () => setHasRuntimeConflict(runtime?.hasSettingsConflict?.() ?? false);
+        window.addEventListener('emberdesk:runtime-settings-conflict', update);
+        update();
+        return () => window.removeEventListener('emberdesk:runtime-settings-conflict', update);
+    }, [runtime]);
     const [showDiagnostics, setShowDiagnostics] = useState(false);
     const [providerSecretInput, setProviderSecretInput] = useState('');
     const [providerActionBusy, setProviderActionBusy] = useState<'connect' | 'test' | null>(null);
@@ -376,9 +388,13 @@ export function SettingsSurface({
             if (!parsedPayload) {
                 throw new MessageError(t('Settings have not finished loading.'));
             }
+            if (runtime?.hasSettingsConflict?.()) {
+                throw new MessageError(t('Download your unsaved runtime settings before reloading. Saving is paused until reload.'));
+            }
 
             const csrfToken = await ensureCsrfToken();
             const baselineFormValues = buildSettingsFormDefaults(parsedPayload.settings);
+            const runtimeBaseline = runtime?.getSettingsSnapshot();
             // The prompt drawer may have changed the active preset since this
             // form loaded. Overlay only dirty form fields on the live authority,
             // not the stale settings query's copy of those generation values.
@@ -388,35 +404,43 @@ export function SettingsSurface({
                     baselineFormValues,
                 });
             const payload = buildPayload(parsedPayload.settings, parsedPayload.settingsRevision);
-            let savedPayload = payload;
-            const postSettings = (nextPayload: typeof payload) => fetch('/api/settings/save', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-Token': csrfToken,
-                },
-                body: JSON.stringify(nextPayload),
-            });
-            let response = await postSettings(payload);
-            if (response.status === 409) {
-                const refreshed = await refetchSettings();
-                if (refreshed.data) {
-                    const refreshedPayload = parseSettingsPayload(refreshed.data);
-                    const rebasedProvider = rebaseChatCompletionSettings(
-                        getValueAtPath(parsedPayload.settings, 'oai_settings') ?? {},
-                        getValueAtPath(payload, 'oai_settings') ?? {},
-                        getValueAtPath(refreshedPayload.settings, 'oai_settings') ?? {},
-                    );
-                    if (rebasedProvider !== null) {
-                        const rebasedPayload = buildSettingsSavePayload(refreshedPayload.settings, values, {
-                            settingsRevision: refreshedPayload.settingsRevision,
-                            baselineFormValues,
-                        });
-                        savedPayload = { ...rebasedPayload, oai_settings: rebasedProvider };
-                        response = await postSettings(savedPayload);
-                    }
+            const postSettings = (nextPayload: typeof payload) => {
+                if (runtime?.hasSettingsConflict?.()) {
+                    throw new MessageError(t('Download your unsaved runtime settings before reloading. Saving is paused until reload.'));
                 }
-            }
+                return fetch('/api/settings/save', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-Token': csrfToken,
+                    },
+                    body: JSON.stringify(nextPayload),
+                });
+            };
+            const { response, payload: savedPayload } = await writeOwner.saveForm({
+                payload,
+                post: postSettings,
+                rebase: async () => {
+                    const refreshed = await refetchSettings();
+                    if (refreshed.data) {
+                        const refreshedPayload = parseSettingsPayload(refreshed.data);
+                        return writeOwner.rebaseForm({
+                            base: parsedPayload.settings,
+                            local: payload,
+                            remote: refreshedPayload.settings,
+                            values,
+                            baseline: baselineFormValues,
+                            revision: refreshedPayload.settingsRevision,
+                            provider: document => getValueAtPath(document, 'oai_settings') ?? {},
+                            rebaseProvider: rebaseChatCompletionSettings,
+                            formDefaults: buildSettingsFormDefaults,
+                            formConflict: hasSettingsFormConflict,
+                            buildPayload: buildSettingsSavePayload,
+                        });
+                    }
+                    return null;
+                },
+            });
 
             if (!response.ok) {
                 if (response.status === 409) {
@@ -426,13 +450,15 @@ export function SettingsSurface({
                 throw new MessageError(t('Settings could not be saved.'));
             }
 
-            await saveSettingsToRuntime(savedPayload, runtime);
+            const result = await response.clone().json().catch(() => null);
+            const revision = Number.isSafeInteger(result?.settings_revision) ? result.settings_revision : undefined;
+            await saveSettingsToRuntime(savedPayload, runtime, runtimeBaseline, revision);
             await refetchSettings();
             setHasRevisionConflict(false);
             setSaveStatus({ kind: 'success', message: t('Saved') });
             try {
                 window.sessionStorage.setItem('emberdesk-settings-saved-at', String(Date.now()));
-                window.sessionStorage.setItem('emberdesk-settings-revision', String(savedPayload.settings_revision ?? ''));
+                window.sessionStorage.setItem('emberdesk-settings-revision', String(revision ?? ''));
             } catch {
                 // sessionStorage may be unavailable in private contexts
             }
@@ -566,6 +592,24 @@ export function SettingsSurface({
         onDirtyStateChange?.(hasUnsavedChanges);
         return () => onDirtyStateChange?.(false);
     }, [hasUnsavedChanges, onDirtyStateChange]);
+
+    useEffect(() => {
+        if (variant !== 'drawer') return;
+        const discardDraft = () => {
+            if (parsedPayload) {
+                settingsForm.reset(buildSettingsFormDefaults(parsedPayload.settings), { keepDefaultValues: true });
+            }
+            setProviderSecretInput('');
+            setHasRevisionConflict(false);
+            setProviderStatus('no_connection');
+            setSaveStatus(null);
+            setPageError('');
+            saveMutation.reset();
+            onDirtyStateChange?.(false);
+        };
+        window.addEventListener('emberdesk:discard-settings-draft', discardDraft);
+        return () => window.removeEventListener('emberdesk:discard-settings-draft', discardDraft);
+    }, [variant, parsedPayload, settingsForm, saveMutation, onDirtyStateChange]);
 
     function clearTransientState() {
         saveMutation.reset();
@@ -711,6 +755,16 @@ export function SettingsSurface({
                             </div>
                         )}
 
+                        {hasRuntimeConflict && (
+                            <div {...stylex.props(settingsStyles.status, settingsStyles.statusError)} role="alert" data-testid="runtime-settings-recovery">
+                                <p>{t('Runtime settings could not be saved because settings changed elsewhere. Saving is paused in this tab. Download the local settings before reloading, then compare the file with the current settings and reapply your changes manually.')}</p>
+                                <p>{t('The file may contain sensitive settings. It does not include unsaved edits in this form; copy those separately before closing the form or reloading.')}</p>
+                                <button type="button" {...stylex.props(settingsStyles.button, settingsStyles.buttonSecondary)} onClick={() => runtime?.downloadSettingsRecovery?.()}>
+                                    {t('Download runtime settings only')}
+                                </button>
+                            </div>
+                        )}
+
                         {hasRevisionConflict && (
                             <div {...stylex.props(settingsStyles.status, settingsStyles.statusError)} role="alert">
                                 <p>{t('This draft is based on an outdated revision and has not been lost. Reloading discards the local draft and shows the currently saved settings.')}</p>
@@ -730,7 +784,9 @@ export function SettingsSurface({
                                 className={`settings-status settings-status--success ${stylex.props(settingsStyles.status, settingsStyles.statusSuccess).className ?? ''}`}
                                 aria-live="polite"
                             >
-                                {saveStatus.message}
+                                {saveStatus.kind === 'success' && hasRuntimeConflict
+                                    ? t('Settings form saved; runtime changes remain unsaved.')
+                                    : saveStatus.message}
                             </output>
                         )}
 

@@ -360,6 +360,8 @@ test.describe('chat message rendering', () => {
         const consoleErrors = createConsoleErrorCollector(page);
 
         await testSetup.awaitST({ page });
+        // Rendering stored messages does not exercise model-generated memory summaries.
+        await page.evaluate(() => { window.SillyTavern.getContext().chatCompletionSettings.chat_memory_enabled = false; });
         await seedLongChatFixture(page, longChatName, longChat);
         await selectCharacterByName(page, characterName);
 
@@ -625,6 +627,8 @@ test.describe('chat message rendering', () => {
         const consoleErrors = createConsoleErrorCollector(page);
 
         await testSetup.awaitST({ page });
+        // Delete-mode selection is independent of background model summaries.
+        await page.evaluate(() => { window.SillyTavern.getContext().chatCompletionSettings.chat_memory_enabled = false; });
         await selectCharacterByName(page, characterName);
         await page.evaluate(() => {
             const context = window.SillyTavern.getContext();
@@ -637,11 +641,11 @@ test.describe('chat message rendering', () => {
         await expect(assistantRow).toBeVisible();
         await expectReactMessageRowState(page, assistantMessageIndex, true);
 
-        await page.getByRole('button', { name: 'Chat options' }).click();
+        await page.getByRole('button', { name: /Chat options|聊天选项/ }).click();
         await page.getByRole('button', { name: '删除消息' }).click();
         await expect(page.locator('#dialogue_del_mes')).toBeVisible();
         await expect(page.locator('#dialogue_del_mes_ok')).toBeDisabled();
-        await expect(page.locator('#dialogue_del_mes_summary')).toContainText('Select a message');
+        await expect(page.locator('#dialogue_del_mes_summary')).toContainText(/Select a message|选择一条消息/);
 
         const enteredDeleteModeState = await readDeleteModeRowState(page, assistantMessageIndex);
         expect(enteredDeleteModeState).toMatchObject({
@@ -654,7 +658,7 @@ test.describe('chat message rendering', () => {
 
         await assistantRow.click();
         await expect(page.locator('#dialogue_del_mes_ok')).toBeEnabled();
-        await expect(page.locator('#dialogue_del_mes_summary')).toContainText(`Delete ${seededMessages.length - assistantMessageIndex} messages`);
+        await expect(page.locator('#dialogue_del_mes_summary')).toContainText(String(seededMessages.length - assistantMessageIndex));
 
         const selectedDeleteModeState = await readDeleteModeRowState(page, assistantMessageIndex);
         expect(selectedDeleteModeState).toMatchObject({

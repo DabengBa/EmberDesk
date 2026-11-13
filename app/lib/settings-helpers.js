@@ -341,6 +341,18 @@ export function rebaseChatCompletionSettings(base, local, remote) {
     return merged;
 }
 
+/** Reject a rebase when a form field and the canonical document both changed it differently. */
+export function hasSettingsFormConflict(base, local, remote) {
+    return fieldBindings.some(({ formPath }) => {
+        const original = getValueAtPath(base, formPath);
+        const draft = getValueAtPath(local, formPath);
+        const latest = getValueAtPath(remote, formPath);
+        return !areFormValuesEqual(draft, original)
+            && !areFormValuesEqual(latest, original)
+            && !areFormValuesEqual(draft, latest);
+    });
+}
+
 /**
  * @param {object} baseSettings
  * @param {object} formValues
@@ -476,10 +488,12 @@ export function buildSettingsSavePayload(baseSettings, formValues, { settingsRev
  * Sends a saved Settings document through the injected runtime command port.
  *
  * @param {import('../compat/runtime-port').SettingsDocument} settings
- * @param {{ commands?: { saveSettings?: (settings: import('../compat/runtime-port').SettingsDocument) => Promise<void> } }|undefined} [runtime]
+ * @param {{ commands?: { saveSettings?: (settings: import('../compat/runtime-port').SettingsDocument, baseline?: import('../compat/runtime-port').SettingsDocument, revision?: number) => Promise<void> } }|undefined} [runtime]
+ * @param {import('../compat/runtime-port').SettingsDocument} [baseline]
+ * @param {number} [revision]
  * @returns {Promise<boolean>}
  */
-export async function saveSettingsToRuntime(settings, runtime) {
+export async function saveSettingsToRuntime(settings, runtime, baseline, revision) {
     if (
         !runtime
         || typeof runtime !== 'object'
@@ -491,7 +505,7 @@ export async function saveSettingsToRuntime(settings, runtime) {
         return false;
     }
 
-    await runtime.commands.saveSettings(settings);
+    await runtime.commands.saveSettings(settings, baseline, revision);
     return true;
 }
 

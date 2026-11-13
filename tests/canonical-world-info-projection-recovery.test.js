@@ -24,6 +24,7 @@ import {
 import { explainCanonicalRolloutBlockers, getCanonicalStorageControlPlaneStatus } from '../src/canonical-sqlite-operator.js';
 import { runCanonicalWorldInfoAudit, repairCanonicalWorldInfoProjection } from '../src/canonical-sqlite-operator.js';
 import { runCharacterTextReplace } from '../src/endpoints/character-text-replace-service.js';
+import * as characterStore from '../src/endpoints/character-store.js';
 import { runCanonicalWorldInfoShadowImport } from '../src/canonical-world-info-shadow-import.js';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -112,6 +113,23 @@ afterEach(() => {
 });
 
 describe('world info projection recovery protocol', () => {
+    test('character conditional write rejects a stale card after a concurrent edit', () => {
+        const directories = createDirectories(makeRoot());
+        const db = openDb(directories);
+        const other = openDb(directories);
+        const write = (connection, description) => characterStore.upsertCanonicalCharacter(connection, {
+            id: 'alice', avatarFilename: 'alice.png', fullPayload: { name: 'Alice', description },
+            shallowPayload: { name: 'Alice', description }, createdAtMs: 1, updatedAtMs: 2,
+        });
+        write(db, 'old');
+        const expected = db.prepare('SELECT card_json FROM characters WHERE avatar_filename = ?').get('alice.png').card_json;
+        write(other, 'concurrent edit');
+        expect(() => withCanonicalTransaction(db, txn => {
+            characterStore.assertCanonicalCharacterCardCurrent(txn, 'alice.png', expected);
+            write(txn, 'replacement');
+        })).toThrow('character_card_conflict');
+        expect(JSON.parse(db.prepare('SELECT card_json FROM characters WHERE avatar_filename = ?').get('alice.png').card_json).description).toBe('concurrent edit');
+    });
     test('cross-device quarantine never unlinks a replacement at the original path', () => {
         const directories = createDirectories(makeRoot());
         const db = openDb(directories);
@@ -622,6 +640,60 @@ describe('world info projection recovery protocol', () => {
         expect(replay.ok).toBe(true);
         expect(JSON.parse(fs.readFileSync(worldFile(directories, 'Bound Lore'), 'utf8')).entries.one.content).toBe('塞拉菲娜 rules');
         expect(openIntent(db, 'Bound Lore').resolved_at_ms).not.toBeNull();
+    });
+
+    test('text replacement stops on a concurrent world edit without overwriting it or writing the card', async () => {
+        const directories = createDirectories(makeRoot());
+        const db = openDb(directories);
+        const other = openDb(directories);
+        upsertCanonicalWorldInfoBook(db, { name: 'Bound Lore', payload: payload('Bound Lore', 'old text') });
+        const editCharacterCard = jest.fn();
+        const result = await runCharacterTextReplace({
+            request: {
+                body: { avatar_url: 'Alice.png', areas: { card: true, worldBook: true, chats: 'off' }, query: 'old', replacement: 'new' },
+                user: { profile: { handle: 'alice' }, directories },
+            },
+            apply: true,
+            dependencies: {
+                getCanonicalCharacterCardJson: async () => JSON.stringify({ data: { description: 'old', extensions: { world: 'Bound Lore' } } }),
+                getCharacterWriteDependencies: () => ({}),
+                getWorldInfoWriteState: async () => ({ ok: true, db }),
+                commitWorldBookWithProjectionIntent(txn, options) {
+                    upsertCanonicalWorldInfoBook(other, { name: 'Bound Lore', payload: payload('Bound Lore', 'concurrent edit') });
+                    return commitWorldBookWithProjectionIntent(txn, options);
+                },
+                editCharacterCard,
+            },
+        });
+        expect(getCanonicalWorldInfoBook(db, 'Bound Lore').entries.one.content).toBe('concurrent edit');
+        expect(result).toMatchObject({ ok: false, status: 409, reason: 'world_book_conflict', partial: false });
+        expect(editCharacterCard).not.toHaveBeenCalled();
+    });
+
+    test('reports a committed world book and stops before chat when the card write fails', async () => {
+        const directories = createDirectories(makeRoot());
+        const db = openDb(directories);
+        upsertCanonicalWorldInfoBook(db, { name: 'Bound Lore', payload: payload('Bound Lore', 'old text') });
+        const writeChatSession = jest.fn();
+        const result = await runCharacterTextReplace({
+            request: {
+                body: { avatar_url: 'Alice.png', areas: { card: true, worldBook: true, chats: 'current' }, chatFileName: 'one', query: 'old', replacement: 'new' },
+                user: { profile: { handle: 'alice' }, directories },
+            },
+            apply: true,
+            dependencies: {
+                getCanonicalCharacterCardJson: async () => JSON.stringify({ data: { description: 'old', extensions: { world: 'Bound Lore' } } }),
+                getCharacterWriteDependencies: () => ({}),
+                getWorldInfoWriteState: async () => ({ ok: true, db }),
+                openChatSession: async () => ({ ok: true, db }),
+                editCharacterCard: async () => ({ ok: false, reason: 'card_write_failed' }),
+                writeChatSession,
+            },
+        });
+        expect(getCanonicalWorldInfoBook(db, 'Bound Lore').entries.one.content).toBe('new text');
+        expect(result).toMatchObject({ ok: false, status: 500, partial: true, applied: { worldBook: true, card: false, chat: false } });
+        expect(result.areas.chats.status).toBe('skipped');
+        expect(writeChatSession).not.toHaveBeenCalled();
     });
 
     test('quantifies writer-lock time spent writing a projection file', () => {

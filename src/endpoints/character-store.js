@@ -180,6 +180,15 @@ export function clearCanonicalCharacterWorldBinding(db, { avatarFilename, nowMs 
     return true;
 }
 
+export function assertCanonicalCharacterCardCurrent(db, avatarFilename, expectedCardJson) {
+    const row = db.prepare('SELECT card_json FROM characters WHERE avatar_filename = ? AND deleted_at_ms IS NULL').get(avatarFilename);
+    if (!row || row.card_json !== expectedCardJson) {
+        const error = new Error('character_card_conflict');
+        error.code = 'CHARACTER_CARD_CONFLICT';
+        throw error;
+    }
+}
+
 export function upsertCanonicalCharacter(db, {
     id,
     avatarFilename,

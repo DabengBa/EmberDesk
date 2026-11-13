@@ -1,6 +1,7 @@
 import { ContractButton } from '../contract/ContractButton';
 import { ContractIconButton } from '../contract/ContractIconButton';
 import { translate, useTranslated } from '@/compat/i18n.js';
+import { useInlineDrawer } from '../../lib/workspace-drawer-service';
 /**
  * Right navigation panel markup (React-owned inside #right-nav-panel).
  * Contains the character create/edit form (#form_create), the import form,
@@ -9,7 +10,10 @@ import { translate, useTranslated } from '@/compat/i18n.js';
  * #tagInput/#tagList, bulk-edit owns the bulk controls, and the character
  * list itself is rendered dynamically into #rm_print_characters_block.
  */
-export function RightNavPanel() {
+export type CharacterSortSelection = { field: string; order: string | undefined; rule: string | undefined };
+
+export function RightNavPanel({ onCharacterSortChange }: { onCharacterSortChange: (selection: CharacterSortSelection) => void }) {
+    const notes = useInlineDrawer();
     useTranslated('');
     return (
         <>
@@ -123,17 +127,17 @@ export function RightNavPanel() {
                                 </div>
                             </div>
                             <div id="spoiler_free_desc" className="inline-drawer flex-container flexFlowColumn flexNoGap character-detail-section character-detail-notes">
-                                <div className="inline-drawer-toggle inline-drawer-header padding0 gap5px standoutHeader">
+                                <div className="inline-drawer-toggle inline-drawer-header padding0 gap5px standoutHeader" data-workspace-inline="react" role="button" tabIndex={0} aria-expanded={notes.open} onClick={notes.onClick} onKeyDown={notes.onKeyDown}>
                                     <div id="creators_notes_div" className="title_restorable flexGap5 wide100p character-detail-section-header">
                                         <span className="flex1" >{translate("Creator's Notes")}</span>
                                         <ContractIconButton id="creators_note_styles_button" className="margin0 menu_button" label="Allow / Forbid the use of global styles for this character." nativeTitle title="Allow / Forbid the use of global styles for this character." icon={<i className="fa-solid fa-palette fa-fw" aria-hidden="true" />} />
                                         <ContractIconButton id="spoiler_free_desc_button" className="margin0 menu_button" label="Show / Hide Description and First Message" nativeTitle title="Show / Hide Description and First Message" icon={<i className="fa-solid fa-eye fa-fw" aria-hidden="true" />} />
                                     </div>
                                     <div className="flex-container widthFitContent">
-                                        <div className="inline-drawer-icon fa-solid fa-circle-chevron-down down interactable"></div>
+                                        <div className={`inline-drawer-icon fa-solid interactable ${notes.open ? 'fa-circle-chevron-up up' : 'fa-circle-chevron-down down'}`}></div>
                                     </div>
                                 </div>
-                                <div className="inline-drawer-content">
+                                <div ref={notes.content} className={`inline-drawer-content${notes.open ? ' openInlineDrawer' : ''}`}>
                                     <div id="creator_notes_spoiler"></div>
                                     <div id="creator_notes_empty" >{translate("No Creator's Notes provided.")}</div>
                                 </div>
@@ -203,7 +207,10 @@ export function RightNavPanel() {
                                 </div>
                                 <div className="character-list-tool-group character-list-sort-group">
                                     <label htmlFor="character_sort_order" className="character-list-sort-label" >{translate('Sort')}</label>
-                                    <select id="character_sort_order" className="flex1 text_pole textarea_compact" title="Characters sorting order" data-i18n="[title]Characters sorting order">
+                                    <select id="character_sort_order" className="flex1 text_pole textarea_compact" title="Characters sorting order" data-i18n="[title]Characters sorting order" onChange={event => {
+                                        const option = event.currentTarget.selectedOptions[0];
+                                        if (option) onCharacterSortChange({ field: String(option.dataset.field), order: option.dataset.order, rule: option.dataset.rule });
+                                    }}>
                                         <option data-field="search" data-order="desc"  hidden>{translate('Search')}</option>
                                         <option data-field="name" data-order="asc" >{translate('A-Z')}</option>
                                         <option data-field="name" data-order="desc" >{translate('Z-A')}</option>

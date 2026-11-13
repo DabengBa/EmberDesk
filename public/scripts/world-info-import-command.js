@@ -49,8 +49,7 @@ export async function runWorldInfoFileImport(file, { overwriteMode = 'confirm', 
     const sanitizedWorldName = await getSanitizedFilename(worldName);
     if (signal?.aborted) return createWorldInfoImportResult('cancelled', file, sanitizedWorldName);
     let allowed;
-    try { allowed = await prepareWorldInfoImportOverwrite(sanitizedWorldName, metadata, overwriteMode, signal); }
-    catch (error) {
+    try { allowed = await prepareWorldInfoImportOverwrite(sanitizedWorldName, metadata, overwriteMode, signal); } catch (error) {
         console.error('Error preparing World Info overwrite:', error);
         toastr.error(t`Import failed. Please check your connection and try again.`);
         return createWorldInfoImportResult('failed', file, sanitizedWorldName);

@@ -76,6 +76,155 @@ async function resetSeededSideDrawers(page) {
 }
 
 test.describe('workspace shell panel navigation', () => {
+    test('settings wheel value saves and survives refresh', async ({ page }) => {
+        await testSetup.awaitST({ page });
+        await openShellPanel(page, '设置');
+        const input = page.locator('#SettingsPanel #settings-memory-maxTokens');
+        const save = page.locator('#SettingsPanel button[type="submit"]');
+        const success = page.locator('#SettingsPanel .settings-status--success');
+        const conflict = page.getByText(/当前草稿基于过期版本/);
+        await expect(input).toHaveValue('400');
+        for (let attempt = 0; attempt < 5; attempt++) {
+            await input.focus();
+            await input.hover();
+            await page.mouse.wheel(0, -100);
+            await expect(input).toHaveValue('401');
+            await expect(save).toBeEnabled();
+            await save.click();
+            await expect(success.or(conflict).first()).toBeVisible({ timeout: 30_000 });
+            if (await success.isVisible()) break;
+            await page.getByRole('button', { name: '重新加载当前设置', exact: true }).click();
+            await expect(conflict).toHaveCount(0);
+            await expect(input).toHaveValue('400');
+        }
+        await expect(success).toBeVisible();
+        await page.reload();
+        await testSetup.awaitST({ page });
+        const settingsButton = page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: '设置' });
+        if (await settingsButton.getAttribute('aria-pressed') !== 'true') await openShellPanel(page, '设置');
+        await expect(input).toHaveValue('401');
+        await expect(save).toBeDisabled();
+        // This lane shares one server-side settings document across tests.
+        // Restore the seed after proving persistence so later tests remain independent.
+        for (let attempt = 0; attempt < 5; attempt++) {
+            await input.fill('400');
+            await expect(save).toBeEnabled();
+            await save.click();
+            await expect(success.or(conflict).first()).toBeVisible({ timeout: 30_000 });
+            if (await success.isVisible()) break;
+            await page.getByRole('button', { name: '重新加载当前设置', exact: true }).click();
+            await expect(conflict).toHaveCount(0);
+        }
+        await expect(success).toBeVisible();
+    });
+    test('settings numeric wheel updates the controlled draft', async ({ page }) => {
+        await testSetup.awaitST({ page });
+        await openShellPanel(page, '设置');
+        const input = page.locator('#SettingsPanel #settings-memory-maxTokens');
+        await expect(input).toHaveValue('400');
+        await input.evaluate(element => {
+            window.settingsWheelInputs = 0;
+            element.addEventListener('input', () => window.settingsWheelInputs++);
+        });
+        await input.focus();
+        await input.hover();
+        await page.mouse.wheel(0, -100);
+        await expect(input).toHaveValue('401');
+        await expect(page.locator('#SettingsPanel button[type="submit"]')).toBeEnabled();
+        expect(await page.evaluate(() => window.settingsWheelInputs)).toBe(1);
+        await input.blur();
+        await expect(input).toHaveValue('401');
+        await input.fill('1');
+        await page.waitForTimeout(30); // The legacy wheel contract throttles updates to 25ms.
+        await page.mouse.wheel(0, 100);
+        await expect(input).toHaveValue('1'); // Clamp to the field's minimum.
+        expect(await page.evaluate(() => window.settingsWheelInputs)).toBe(3);
+        await input.blur();
+        await page.waitForTimeout(30);
+        await page.mouse.wheel(0, -100);
+        await expect(input).toHaveValue('1'); // Unfocused inputs do not consume wheel events.
+        expect(await page.evaluate(() => window.settingsWheelInputs)).toBe(3);
+    });
+    test('dirty Settings close can be cancelled or confirmed without persisting the draft', async ({ page }) => {
+        await testSetup.awaitST({ page });
+        await openShellPanel(page, '设置');
+        const panel = page.locator('#SettingsPanel');
+        const model = panel.locator('#settings-providers-fallbackProviderModel');
+        const original = await model.inputValue();
+        const draft = `drawer-discard-${Date.now()}`;
+        await model.fill(draft);
+        const secret = panel.locator('#provider-secret-input');
+        await secret.fill('unsaved-drawer-key');
+        await expect(panel.locator('button[type="submit"]')).toBeEnabled();
+        page.once('dialog', dialog => dialog.dismiss());
+        await page.keyboard.press('Escape');
+        await expect(panel).toHaveClass(/openDrawer/);
+        await expect(model).toHaveValue(draft);
+        await expect(secret).toHaveValue('unsaved-drawer-key');
+        page.once('dialog', dialog => dialog.accept());
+        await page.keyboard.press('Escape');
+        await expect(panel).toHaveClass(/closedDrawer/);
+        await openShellPanel(page, '设置');
+        await expect(model).toHaveValue(original);
+        await expect(secret).toHaveValue('');
+        await expect(panel.locator('button[type="submit"]')).toBeDisabled();
+    });
+    test('opening World Info closes an unpinned character drawer but preserves a pinned one', async ({ page }) => {
+        await testSetup.awaitST({ page });
+        await resetSeededSideDrawers(page);
+        await openShellPanel(page, '角色库');
+        await openShellPanel(page, '世界书');
+        await expect(page.locator('#right-nav-panel')).toHaveClass(/closedDrawer/);
+        await expect(page.locator('#WorldInfo')).toHaveClass(/openDrawer/);
+
+        await openShellPanel(page, '角色库');
+        await page.evaluate(() => document.getElementById('right-nav-panel').classList.add('pinnedOpen'));
+        await openShellPanel(page, '世界书');
+        await expect(page.locator('#right-nav-panel')).toHaveClass(/openDrawer/);
+        await expect(page.locator('#WorldInfo')).toHaveClass(/openDrawer/);
+    });
+    test('Escape keeps drawer and floating-panel priority, including pinned drawers', async ({ page }) => {
+        await testSetup.awaitST({ page });
+        await resetSeededSideDrawers(page);
+        await openShellPanel(page, '设置');
+        await page.evaluate(() => {
+            for (const id of ['WorldInfo', 'right-nav-panel']) {
+                const drawer = document.getElementById(id);
+                drawer.classList.replace('closedDrawer', 'openDrawer');
+                drawer.classList.remove('pinnedOpen');
+                drawer.style.opacity = '1';
+            }
+            const floating = document.createElement('div');
+            floating.id = 'escape-priority-test-panel';
+            floating.innerHTML = '<button class="dragClose">Close</button>';
+            floating.querySelector('button').addEventListener('click', () => floating.remove());
+            let container = document.querySelector('#movingDivs');
+            if (!container) {
+                container = document.createElement('div');
+                container.id = 'movingDivs';
+                document.body.append(container);
+            }
+            container.append(floating);
+            document.getElementById('SettingsPanel').classList.add('pinnedOpen');
+        });
+        await page.keyboard.press('Escape');
+        await expect(page.locator('#SettingsPanel')).toHaveClass(/openDrawer/);
+        await expect(page.locator('#WorldInfo')).toHaveClass(/openDrawer/);
+        await page.evaluate(() => document.getElementById('SettingsPanel').classList.remove('pinnedOpen'));
+        await page.keyboard.press('Escape');
+        await expect(page.locator('#SettingsPanel')).toHaveClass(/closedDrawer/);
+        await expect(page.locator('#SettingsPanel')).toBeHidden();
+        await expect(page.locator('#WorldInfo')).toHaveClass(/openDrawer/);
+        await page.keyboard.press('Escape');
+        await expect(page.locator('#WorldInfo')).toHaveClass(/closedDrawer/);
+        await expect(page.locator('#WorldInfo')).toBeHidden();
+        await expect(page.locator('#escape-priority-test-panel')).toBeVisible();
+        await page.keyboard.press('Escape');
+        await expect(page.locator('#escape-priority-test-panel')).toHaveCount(0);
+        await expect(page.locator('#right-nav-panel')).toHaveClass(/openDrawer/);
+        await page.keyboard.press('Escape');
+        await expect(page.locator('#right-nav-panel')).toHaveClass(/closedDrawer/);
+    });
     for (const viewport of [{ width: 320, height: 568 }, { width: 844, height: 390 }]) {
         test(`prompt drawer keeps its header and bottom controls accessible at ${viewport.width}x${viewport.height}`, async ({ page }) => {
             await page.setViewportSize(viewport);
@@ -363,7 +512,7 @@ test.describe('workspace shell panel navigation', () => {
         const originalFallback = await modelField.inputValue();
         const saveButton = page.locator('#SettingsPanel button[type="submit"]');
         const success = page.locator('#SettingsPanel .settings-status--success');
-        const conflict = page.getByText(/本地草稿仍保留/);
+        const conflict = page.getByText(/当前草稿基于过期版本/);
         // Drawer state is persisted by the legacy settings writer, which can
         // advance the revision while this test edits the React form. Preserve
         // the conflict contract: reload and reapply the draft rather than

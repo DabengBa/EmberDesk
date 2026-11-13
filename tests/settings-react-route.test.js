@@ -142,8 +142,9 @@ describe('settings React route flag', () => {
         expect(routeSource).toContain('class SettingsRevisionConflictError extends MessageError');
         expect(routeSource).toContain('if (!(error instanceof SettingsRevisionConflictError))');
         expect(routeSource).toContain('const refreshed = await refetchSettings();');
-        expect(routeSource).toContain('let response = await postSettings(payload);');
-        expect(routeSource).toContain('if (response.status === 409)');
+        expect(routeSource).toContain('await writeOwner.saveForm({');
+        const ownerSource = fs.readFileSync(new URL('../app/lib/settings-write-owner.ts', import.meta.url), 'utf8');
+        expect(ownerSource).toContain('if (response.status === 409)');
         expect(routeSource).toContain('const settingsForm = useForm(');
         expect(routeSource).toContain('const settingsSchema = z.object(');
         expect(routeSource).toContain('settingsForm.reset(nextDefaults, { keepDefaultValues: true });');
@@ -525,7 +526,7 @@ describe('settings React route flag', () => {
             power_user: { fast_ui_mode: false },
             feature_settings: { stale: false },
         }]);
-        expect(routeSource).toContain('await saveSettingsToRuntime(savedPayload, runtime);');
+        expect(routeSource).toContain('await saveSettingsToRuntime(savedPayload, runtime, runtimeBaseline, revision);');
     });
 
     test('coerces string numeric enums into form numbers for lossless save validation', async () => {

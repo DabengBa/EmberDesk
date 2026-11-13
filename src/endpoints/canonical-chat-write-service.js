@@ -7,12 +7,15 @@ import {
 } from '../canonical-import-ledger.js';
 import {
     createCanonicalChatSessionRecord,
+    createCanonicalChatSession,
     deleteCanonicalChatSession,
+    deleteCanonicalChatSessionIfCurrent,
     listOpenCanonicalChatProjectionRepairs,
     renameCanonicalChatSession,
     recordCanonicalChatProjectionRepair,
     resolveCanonicalChatProjectionRepair,
     upsertCanonicalChatSession,
+    saveCanonicalChatSessionIfCurrent,
     syncCanonicalCharacterChatStats,
 } from './canonical-chat-store.js';
 
@@ -89,6 +92,8 @@ export function writeCanonicalChatPayload({
     nowMs = Date.now(),
     onProjectionFailure = null,
     onAuthorityCommitted = null,
+    condition = null,
+    operationIdentity = null,
 }) {
     if (typeof projectJsonl !== 'function') {
         throw new Error('Canonical chat projection function is required.');
@@ -105,7 +110,7 @@ export function writeCanonicalChatPayload({
 
     const record = createCanonicalChatSessionRecord(db, { locator, payload, nowMs });
     const repairKey = buildRepairKey(locator, operation);
-    const persisted = upsertCanonicalChatSession(db, record, {
+    const options = {
         onPersist: projection === 'off' ? txn => syncCanonicalCharacterChatStats(txn, locator, nowMs) : (txn, result) => recordCanonicalChatProjectionRepair(txn, {
             repairKey,
             sessionId: result.id,
@@ -115,7 +120,17 @@ export function writeCanonicalChatPayload({
             details: {},
             nowMs,
         }),
-    });
+        operation: operationIdentity,
+    };
+    const persisted = condition?.create
+        ? createCanonicalChatSession(db, record, options)
+        : condition?.version
+            ? saveCanonicalChatSessionIfCurrent(db, record, condition.version, options)
+            : upsertCanonicalChatSession(db, record, options);
+    if (persisted.status === 'conflict' || persisted.status === 'operation_mismatch') {
+        return { ok: false, authorityCommitted: false, reason: persisted.status };
+    }
+    if (persisted.replayed) return { ok: true, authorityCommitted: true, version: persisted.version, replayed: true };
     if (projection === 'off') {
         // The chat file is an export surface now; post-commit side effects
         // (chat backups) still run but never fail the committed write.
@@ -129,6 +144,7 @@ export function writeCanonicalChatPayload({
             authorityCommitted: true,
             sessionId: persisted.id,
             status: persisted.status,
+            version: persisted.version,
         };
     }
     try {
@@ -154,6 +170,7 @@ export function writeCanonicalChatPayload({
             reason: 'projection_failed',
             repairKey,
             sessionId: persisted.id,
+            version: persisted.version,
         };
     }
 
@@ -162,6 +179,7 @@ export function writeCanonicalChatPayload({
         authorityCommitted: true,
         sessionId: persisted.id,
         status: persisted.status,
+        version: persisted.version,
     };
 }
 
@@ -192,6 +210,8 @@ export function renameCanonicalChat({
     nowMs = Date.now(),
     onProjectionFailure = null,
     onAuthorityCommitted = null,
+    version = null,
+    operationIdentity = null,
 }) {
     if (typeof projectRename !== 'function') {
         throw new Error('Canonical chat rename projection function is required.');
@@ -199,7 +219,7 @@ export function renameCanonicalChat({
 
     const repairKey = buildRepairKey(nextLocator, 'rename');
     const renamed = renameCanonicalChatSession(db, {
-        locator, nextLocator, nowMs,
+        locator, nextLocator, nowMs, version, operation: operationIdentity,
         onPersist: projection === 'off' ? txn => {
             syncCanonicalCharacterChatStats(txn, locator, nowMs);
             if (nextLocator.ownerId !== locator.ownerId) syncCanonicalCharacterChatStats(txn, nextLocator, nowMs);
@@ -208,17 +228,26 @@ export function renameCanonicalChat({
             details: { previousSourcePath: locator.sourcePath }, nowMs,
         }),
     });
+    if (renamed?.status === 'conflict' || renamed?.status === 'operation_mismatch') {
+        return { ok: false, authorityCommitted: false, reason: renamed.status };
+    }
+    if (renamed?.replayed) return { ok: true, authorityCommitted: true, version: renamed.version, replayed: true };
     if (!renamed) {
         return { ok: false, authorityCommitted: false, reason: 'missing_canonical_session' };
     }
     if (projection === 'off') {
         try {
-            onAuthorityCommitted?.(renamed.sourceJsonl);
+            withCanonicalTransaction(db, txn => {
+                const current = txn.prepare('SELECT 1 FROM chat_sessions WHERE owner_type = ? AND owner_id = ? AND source_path = ?')
+                    .get(locator.ownerType, locator.ownerId, locator.sourcePath);
+                if (current) return;
+                onAuthorityCommitted?.(renamed.sourceJsonl);
+                removeImportLedgerEntry(txn, { sliceKey: 'chats', sourcePath: locator.sourcePath });
+            });
         } catch (error) {
             console.warn('Canonical chat post-commit side effects skipped:', error);
         }
-        removeImportLedgerEntry(db, { sliceKey: 'chats', sourcePath: locator.sourcePath });
-        return { ok: true, authorityCommitted: true, sessionId: renamed.id };
+        return { ok: true, authorityCommitted: true, sessionId: renamed.id, version: renamed.version };
     }
     try {
         withCanonicalTransaction(db, txn => {
@@ -243,9 +272,10 @@ export function renameCanonicalChat({
             reason: 'projection_failed',
             repairKey,
             sessionId: renamed.id,
+            version: renamed.version,
         };
     }
-    return { ok: true, authorityCommitted: true, sessionId: renamed.id };
+    return { ok: true, authorityCommitted: true, sessionId: renamed.id, version: renamed.version };
 }
 
 export function deleteCanonicalChat({
@@ -255,27 +285,42 @@ export function deleteCanonicalChat({
     projection = 'sync',
     nowMs = Date.now(),
     onProjectionFailure = null,
+    version = null,
+    operationIdentity = null,
 }) {
     if (typeof projectDelete !== 'function') {
         throw new Error('Canonical chat delete projection function is required.');
     }
 
     const repairKey = buildRepairKey(locator, 'delete');
-    const deleted = deleteCanonicalChatSession(db, locator, {
+    const options = {
         onPersist: projection === 'off' ? txn => syncCanonicalCharacterChatStats(txn, locator, nowMs) : txn => recordCanonicalChatProjectionRepair(txn, {
             repairKey, sessionId: null, locator, operation: 'delete', reason: 'projection_failed', details: {}, nowMs,
         }),
-    });
+        operation: operationIdentity,
+    };
+    const deleted = version
+        ? deleteCanonicalChatSessionIfCurrent(db, locator, version, options)
+        : deleteCanonicalChatSession(db, locator, options);
+    if (deleted?.status === 'conflict' || deleted?.status === 'operation_mismatch') {
+        return { ok: false, authorityCommitted: false, reason: deleted.status };
+    }
+    if (deleted?.replayed) return { ok: true, authorityCommitted: true, replayed: true };
     if (!deleted) {
         return { ok: false, authorityCommitted: false, reason: 'missing_canonical_session' };
     }
     if (projection === 'off') {
         try {
-            projectDelete();
+            withCanonicalTransaction(db, txn => {
+                const current = txn.prepare('SELECT 1 FROM chat_sessions WHERE owner_type = ? AND owner_id = ? AND source_path = ?')
+                    .get(locator.ownerType, locator.ownerId, locator.sourcePath);
+                if (current) return;
+                projectDelete();
+                removeImportLedgerEntry(txn, { sliceKey: 'chats', sourcePath: locator.sourcePath });
+            });
         } catch (error) {
             console.warn('Canonical chat stale-file cleanup skipped:', error);
         }
-        removeImportLedgerEntry(db, { sliceKey: 'chats', sourcePath: locator.sourcePath });
         return { ok: true, authorityCommitted: true, sessionId: deleted.id };
     }
     try {

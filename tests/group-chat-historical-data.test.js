@@ -12,6 +12,7 @@ import { readCanonicalChatPayload } from '../src/endpoints/canonical-chat-read-s
 import {
     createCanonicalChatBackup,
     restoreCanonicalChatBackup,
+    getCanonicalChatRestoreVersion,
 } from '../src/endpoints/canonical-chat-backup-restore-service.js';
 import {
     readCanonicalRecentChatPayload,
@@ -152,6 +153,7 @@ describe('canonical backup restore preserves group sessions', () => {
         const restored = await restoreCanonicalChatBackup({
             db,
             backup,
+            expectedVersion: getCanonicalChatRestoreVersion(db),
             handle: 'alice',
             directories,
             nowMs: 1735689602000,

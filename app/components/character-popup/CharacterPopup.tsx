@@ -2,6 +2,7 @@ import { ContractButton } from '../contract/ContractButton';
 import { ContractIconButton } from '../contract/ContractIconButton';
 
 import { translate, useTranslated } from '@/compat/i18n.js';
+import { useInlineDrawer } from '../../lib/workspace-drawer-service';
 /**
  * Advanced Definitions popup markup (React-owned inside #character_popup).
  * The popup shell stays legacy-owned: script.js toggles display/opacity and
@@ -9,6 +10,8 @@ import { translate, useTranslated } from '@/compat/i18n.js';
  * form="form_create" associations, and data-macros attributes are preserved.
  */
 export function CharacterPopup() {
+    const prompts = useInlineDrawer();
+    const metadata = useInlineDrawer();
     useTranslated('');
     return (
         <>
@@ -21,14 +24,14 @@ export function CharacterPopup() {
             <hr className="margin-bot-10px" />
             <ContractIconButton id="character_cross" label="Close" icon={<i className="fa-solid fa-circle-xmark" aria-hidden="true" />} />
             <div className="inline-drawer">
-                <div className="inline-drawer-toggle inline-drawer-header">
+                <div className="inline-drawer-toggle inline-drawer-header" data-workspace-inline="react" role="button" tabIndex={0} aria-expanded={prompts.open} onClick={prompts.onClick} onKeyDown={prompts.onKeyDown}>
                     <h4>
                         <span >{translate('Prompt Overrides')}</span>
                         <small >{translate('(For Chat Completion and Instruct Mode)')}</small>
                     </h4>
-                    <div className="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
+                    <div className={`inline-drawer-icon fa-solid ${prompts.open ? 'fa-circle-chevron-up up' : 'fa-circle-chevron-down down'}`}></div>
                 </div>
-                <div className="inline-drawer-content">
+                <div ref={prompts.content} className={`inline-drawer-content${prompts.open ? ' openInlineDrawer' : ''}`}>
                     <small >{translate("Insert {{original}} into either box to include the respective default prompt from system settings.")}</small>
                     <div>
                         <h4 className="flex-container alignItemsBaseline">
@@ -54,14 +57,14 @@ export function CharacterPopup() {
             </div>
             <hr />
             <div className="inline-drawer">
-                <div className="inline-drawer-toggle inline-drawer-header">
+                <div className="inline-drawer-toggle inline-drawer-header" data-workspace-inline="react" role="button" tabIndex={0} aria-expanded={metadata.open} onClick={metadata.onClick} onKeyDown={metadata.onKeyDown}>
                     <h4>{/* This data-i18n attribute on the left is kept for backward compatibility, use the ones below when translating */}
                         <span >{translate("Creator's Metadata")}</span>
                         <small >{translate('(Not sent with the AI Prompt)')}</small>
                     </h4>
-                    <div className="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
+                    <div className={`inline-drawer-icon fa-solid ${metadata.open ? 'fa-circle-chevron-up up' : 'fa-circle-chevron-down down'}`}></div>
                 </div>
-                <div className="inline-drawer-content">
+                <div ref={metadata.content} className={`inline-drawer-content${metadata.open ? ' openInlineDrawer' : ''}`}>
                     <small >{translate('Everything here is optional')}</small>
                     <div className="flex-container flexnowrap">
                         <div className="flex1">

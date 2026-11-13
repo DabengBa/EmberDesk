@@ -2,9 +2,18 @@ import { describe, expect, jest, test } from '@jest/globals';
 
 import {
     createReactRuntimeProvider,
+    createRuntimeSettingsConflictGuard,
 } from '../public/scripts/react-runtime-provider.js';
 
 describe('React runtime provider', () => {
+    test('a runtime conflict blocks later writes until this session is reloaded', () => {
+        const guard = createRuntimeSettingsConflictGuard();
+        expect(guard.hasConflict()).toBe(false);
+        guard.assertWritable();
+        guard.markConflict();
+        expect(guard.hasConflict()).toBe(true);
+        expect(() => guard.assertWritable()).toThrow('runtime settings conflict');
+    });
     test('defers context reads until a consumer requests a snapshot', () => {
         const getContext = jest.fn(() => ({
             chatId: 'chat-1',
@@ -71,6 +80,9 @@ describe('React runtime provider', () => {
 
         const snapshot = runtime.getSnapshot();
         const settings = runtime.getChatCompletionSettings();
+        const allSettings = runtime.getSettingsSnapshot();
+        allSettings.oai_settings.temp_openai = 0;
+        expect(context.chatCompletionSettings.temp_openai).toBe(0.82);
         expect(settings).toEqual(context.chatCompletionSettings);
         settings.temp_openai = 1;
         expect(context.chatCompletionSettings.temp_openai).toBe(0.82);
