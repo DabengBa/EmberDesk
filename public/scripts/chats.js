@@ -26,6 +26,7 @@ import {
     chatElement,
 } from '../script.js';
 import { requireGenerationShellContext } from './generation-shell-context.js';
+import { requireMessageShellContext } from './message-shell-context.js';
 import { eventSource, event_types } from './events.js';
 import { getRequestHeaders } from './request-context.js';
 
@@ -143,12 +144,7 @@ export async function hideChatMessageRange(start, end, unhide, nameFitler = null
         if (!message) continue;
         if (nameFitler && message.name !== nameFitler) continue;
 
-        message.is_system = hide;
-
-        // Also toggle "hidden" state for all visible messages
-        const messageBlock = $(`.mes[mesid="${messageId}"]`);
-        if (!messageBlock.length) continue;
-        messageBlock.attr('is_system', String(hide));
+        requireMessageShellContext().getChatMessageCommands().updateMessage(messageId, target => { target.is_system = hide; });
     }
 
     await saveChatConditional();

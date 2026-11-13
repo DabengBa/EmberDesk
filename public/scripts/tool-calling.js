@@ -7,15 +7,7 @@ import { getRegexedString, regex_placement } from './extensions/regex/engine.js'
 import { updateMessageBlock } from './message-service.js';
 import { chat_completion_sources, getChatCompletionModel, model_list, oai_settings } from './openai.js';
 import { Popup } from './popup.js';
-import { SlashCommand } from './slash-commands/SlashCommand.js';
-import { ARGUMENT_TYPE, SlashCommandArgument, SlashCommandNamedArgument } from './slash-commands/SlashCommandArgument.js';
-import { SlashCommandClosure } from './slash-commands/SlashCommandClosure.js';
-import { enumIcons } from './slash-commands/SlashCommandCommonEnumsProvider.js';
-import { enumTypes, SlashCommandEnumValue } from './slash-commands/SlashCommandEnumValue.js';
-import { SlashCommandParser } from './slash-commands/SlashCommandParser.js';
-import { slashCommandReturnHelper } from './slash-commands/SlashCommandReturnHelper.js';
 import { hasEnabledToolBindings } from './tool-bindings-core.js';
-import { isTrueBoolean } from './utils.js';
 import { getPipelineRunState, validatePipelineToolCalls } from './reply-pipeline-core.js';
 
 /**
@@ -58,40 +50,6 @@ import { getPipelineRunState, validatePipelineToolCalls } from './reply-pipeline
  * @property {object} function.parameters - The parameters of the function.
  * @property {function} toString - A function to convert the tool to a string.
  */
-
-/**
- * Assigns nested variables to a scope.
- * @param {import('./slash-commands/SlashCommandScope.js').SlashCommandScope} scope The scope to assign variables to.
- * @param {object} arg Object to assign variables from.
- * @param {string} prefix Prefix for the variable names.
- */
-function assignNestedVariables(scope, arg, prefix) {
-    Object.entries(arg).forEach(([key, value]) => {
-        const newPrefix = `${prefix}.${key}`;
-        if (typeof value === 'object' && value !== null) {
-            if (Array.isArray(value)) {
-                scope.letVariable(newPrefix, JSON.stringify(value));
-            }
-            assignNestedVariables(scope, value, newPrefix);
-        } else {
-            scope.letVariable(newPrefix, value);
-        }
-    });
-}
-
-/**
- * Checks if a string is a valid JSON string.
- * @param {string} str The string to check
- * @returns {boolean} If the string is a valid JSON string
- */
-function isJson(str) {
-    try {
-        JSON.parse(str);
-        return true;
-    } catch {
-        return false;
-    }
-}
 
 /**
  * Tries to parse a string as JSON, returning the original string if parsing fails.
@@ -744,6 +702,11 @@ export class ToolManager {
             const id = toolCall.id;
             const parameters = toolCall.function.arguments;
             const name = toolCall.function.name;
+            if (getPipelineRunState()) {
+                const args = typeof parameters === 'string' ? JSON.parse(parameters) : parameters;
+                result.invocations.push({ id, displayName: getPipelineRunState().steps[getPipelineRunState().index].tool, name, parameters: stringify(parameters), result: args.content, error: false, signature: toolCall.signature || null, reasoning: reasoningText || null });
+                continue;
+            }
             const displayName = ToolManager.getDisplayName(name);
             const isStealth = !getPipelineRunState() && ToolManager.isStealthTool(name);
             const message = await ToolManager.formatToolCallMessage(name, parameters);
@@ -922,7 +885,7 @@ export class ToolManager {
             item.classList.add('tool-invocation');
             item.setAttribute('data-tool-invocation', '');
             if (invocation.pipeline) {
-                item.setAttribute('data-pipeline-step', invocation.name);
+                item.setAttribute('data-pipeline-step', invocation.pipeline.tool ?? invocation.name);
                 item.setAttribute('data-pipeline-display', invocation.pipeline.display ?? 'summary');
             }
             if (invocation.error) {
@@ -1031,7 +994,7 @@ export class ToolManager {
         const blocks = [];
         invocations.forEach((invocation, index) => {
             const isLast = index === invocations.length - 1;
-            const tag = safeTag(invocation?.name);
+            const tag = safeTag(invocation?.pipeline?.tool ?? invocation?.name);
             // Earlier steps escape their text too (literal inner content); the
             // last tag carries the reply RAW so <plot-options>-style markup
             // stays live for display-time regexes and the chip row.
@@ -1147,246 +1110,5 @@ export class ToolManager {
             onclick: () => Popup.show.text('Tool Calling Errors', DOMPurify.sanitize(errors.map(e => `${e.cause}: ${e.message}`).join('<br>'))),
             timeOut: 5000,
         });
-    }
-
-    static initToolSlashCommands() {
-        const toolsEnumProvider = () => ToolManager.tools.map(tool => {
-            const toolOpenAI = tool.toFunctionOpenAI();
-            return new SlashCommandEnumValue(toolOpenAI.function.name, toolOpenAI.function.description, enumTypes.enum, enumIcons.closure);
-        });
-
-        SlashCommandParser.addCommandObject(SlashCommand.fromProps({
-            name: 'tools-list',
-            aliases: ['tool-list'],
-            helpString: 'Gets a list of all registered tools in the OpenAI function JSON format. Use the <code>return</code> argument to specify the return value type.',
-            returns: 'A list of all registered tools.',
-            namedArgumentList: [
-                SlashCommandNamedArgument.fromProps({
-                    name: 'return',
-                    description: 'The way how you want the return value to be provided',
-                    typeList: [ARGUMENT_TYPE.STRING],
-                    defaultValue: 'none',
-                    enumList: slashCommandReturnHelper.enumList({ allowObject: true }),
-                    forceEnum: true,
-                }),
-            ],
-            callback: async (args) => {
-                /** @type {any} */
-                const returnType = String(args?.return ?? 'popup-html').trim().toLowerCase();
-                const objectToStringFunc = (tools) => Array.isArray(tools) ? tools.map(x => x.toString()).join('\n\n') : tools.toString();
-                const tools = ToolManager.tools.map(tool => tool.toFunctionOpenAI());
-                return await slashCommandReturnHelper.doReturn(returnType ?? 'popup-html', tools ?? [], { objectToStringFunc });
-            },
-        }));
-
-        SlashCommandParser.addCommandObject(SlashCommand.fromProps({
-            name: 'tools-invoke',
-            aliases: ['tool-invoke'],
-            helpString: 'Invokes a registered tool by name. The <code>parameters</code> argument MUST be a JSON-serialized object.',
-            namedArgumentList: [
-                SlashCommandNamedArgument.fromProps({
-                    name: 'parameters',
-                    description: 'The parameters to pass to the tool.',
-                    typeList: [ARGUMENT_TYPE.DICTIONARY],
-                    isRequired: true,
-                    acceptsMultiple: false,
-                }),
-            ],
-            unnamedArgumentList: [
-                SlashCommandArgument.fromProps({
-                    description: 'The name of the tool to invoke.',
-                    typeList: [ARGUMENT_TYPE.STRING],
-                    isRequired: true,
-                    acceptsMultiple: false,
-                    forceEnum: true,
-                    enumProvider: toolsEnumProvider,
-                }),
-            ],
-            callback: async (args, name) => {
-                const { parameters } = args;
-
-                const result = await ToolManager.invokeFunctionTool(String(name), parameters);
-                if (result instanceof Error) {
-                    throw result;
-                }
-
-                return result;
-            },
-        }));
-
-        SlashCommandParser.addCommandObject(SlashCommand.fromProps({
-            name: 'tools-register',
-            aliases: ['tool-register'],
-            helpString: `<div>Registers a new tool with the tool registry.</div>
-                <ul>
-                    <li>The <code>parameters</code> argument MUST be a JSON-serialized object with a valid JSON schema.</li>
-                    <li>The unnamed argument MUST be a closure that accepts the function parameters as local script variables.</li>
-                </ul>
-                <div>See <a target="_blank" href="https://json-schema.org/learn/">json-schema.org</a> and <a target="_blank" href="https://platform.openai.com/docs/guides/function-calling">OpenAI Function Calling</a> for more information.</div>
-                <div>Example:</div>
-                <pre><code>/let key=echoSchema
-{
-    "$schema": "http://json-schema.org/draft-04/schema#",
-    "type": "object",
-    "properties": {
-        "message": {
-            "type": "string",
-            "description": "The message to echo."
-        }
-    },
-    "required": [
-        "message"
-    ]
-}
-||
-/tools-register name=Echo description="Echoes a message. Call when the user is asking to repeat something" parameters={{var::echoSchema}} {: /echo {{var::arg.message}} :}</code></pre>`,
-            namedArgumentList: [
-                SlashCommandNamedArgument.fromProps({
-                    name: 'name',
-                    description: 'The name of the tool.',
-                    typeList: [ARGUMENT_TYPE.STRING],
-                    isRequired: true,
-                    acceptsMultiple: false,
-                }),
-                SlashCommandNamedArgument.fromProps({
-                    name: 'description',
-                    description: 'A description of what the tool does.',
-                    typeList: [ARGUMENT_TYPE.STRING],
-                    isRequired: true,
-                    acceptsMultiple: false,
-                }),
-                SlashCommandNamedArgument.fromProps({
-                    name: 'parameters',
-                    description: 'The parameters for the tool.',
-                    typeList: [ARGUMENT_TYPE.DICTIONARY],
-                    isRequired: true,
-                    acceptsMultiple: false,
-                }),
-                SlashCommandNamedArgument.fromProps({
-                    name: 'displayName',
-                    description: 'The display name of the tool.',
-                    typeList: [ARGUMENT_TYPE.STRING],
-                    isRequired: false,
-                    acceptsMultiple: false,
-                }),
-                SlashCommandNamedArgument.fromProps({
-                    name: 'formatMessage',
-                    description: 'The closure to be executed to format the tool call message. Must return a string.',
-                    typeList: [ARGUMENT_TYPE.CLOSURE],
-                    isRequired: true,
-                    acceptsMultiple: false,
-                }),
-                SlashCommandNamedArgument.fromProps({
-                    name: 'shouldRegister',
-                    description: 'The closure to be executed to determine if the tool should be registered. Must return a boolean.',
-                    typeList: [ARGUMENT_TYPE.CLOSURE],
-                    isRequired: false,
-                    acceptsMultiple: false,
-                }),
-                SlashCommandNamedArgument.fromProps({
-                    name: 'stealth',
-                    description: 'If true, a tool call result will not be shown in the chat and no follow-up generation will be performed.',
-                    typeList: [ARGUMENT_TYPE.BOOLEAN],
-                    isRequired: false,
-                    acceptsMultiple: false,
-                    defaultValue: String(false),
-                }),
-            ],
-            unnamedArgumentList: [
-                SlashCommandArgument.fromProps({
-                    description: 'The closure to be executed when the tool is invoked.',
-                    typeList: [ARGUMENT_TYPE.CLOSURE],
-                    isRequired: true,
-                    acceptsMultiple: false,
-                }),
-            ],
-            callback: async (args, action) => {
-                /**
-                 * Converts a slash command closure to a function.
-                 * @param {SlashCommandClosure} action Closure to convert to a function
-                 * @param {function(any): any} convertResult Function to convert the result
-                 * @returns {function} Function that executes the closure
-                 */
-                function closureToFunction(action, convertResult) {
-                    return async (args) => {
-                        const localClosure = action.getCopy();
-                        localClosure.onProgress = () => { };
-                        const scope = localClosure.scope;
-                        if (typeof args === 'object' && args !== null) {
-                            assignNestedVariables(scope, args, 'arg');
-                        } else if (typeof args !== 'undefined') {
-                            scope.letVariable('arg', args);
-                        }
-                        const result = await localClosure.execute();
-                        return convertResult(result.pipe);
-                    };
-                }
-
-                const { name, displayName, description, parameters, formatMessage, shouldRegister, stealth } = args;
-
-                if (!(action instanceof SlashCommandClosure)) {
-                    throw new Error('The unnamed argument must be a closure.');
-                }
-                if (typeof name !== 'string' || !name) {
-                    throw new Error('The "name" argument must be a non-empty string.');
-                }
-                if (typeof description !== 'string' || !description) {
-                    throw new Error('The "description" argument must be a non-empty string.');
-                }
-                if (typeof parameters !== 'string' || !isJson(parameters)) {
-                    throw new Error('The "parameters" argument must be a JSON-serialized object.');
-                }
-                if (displayName && typeof displayName !== 'string') {
-                    throw new Error('The "displayName" argument must be a string.');
-                }
-                if (formatMessage && !(formatMessage instanceof SlashCommandClosure)) {
-                    throw new Error('The "formatMessage" argument must be a closure.');
-                }
-                if (shouldRegister && !(shouldRegister instanceof SlashCommandClosure)) {
-                    throw new Error('The "shouldRegister" argument must be a closure.');
-                }
-
-                const actionFunc = closureToFunction(action, x => x);
-                const formatMessageFunc = formatMessage instanceof SlashCommandClosure ? closureToFunction(formatMessage, x => String(x)) : null;
-                const shouldRegisterFunc = shouldRegister instanceof SlashCommandClosure ? closureToFunction(shouldRegister, x => isTrueBoolean(x)) : null;
-
-                ToolManager.registerFunctionTool({
-                    name: String(name ?? ''),
-                    displayName: String(displayName ?? ''),
-                    description: String(description ?? ''),
-                    parameters: JSON.parse(parameters ?? '{}'),
-                    action: actionFunc,
-                    formatMessage: formatMessageFunc,
-                    shouldRegister: shouldRegisterFunc,
-                    stealth: stealth && isTrueBoolean(String(stealth)),
-                });
-
-                return '';
-            },
-        }));
-
-        SlashCommandParser.addCommandObject(SlashCommand.fromProps({
-            name: 'tools-unregister',
-            aliases: ['tool-unregister'],
-            helpString: 'Unregisters a tool from the tool registry.',
-            unnamedArgumentList: [
-                SlashCommandArgument.fromProps({
-                    description: 'The name of the tool to unregister.',
-                    typeList: [ARGUMENT_TYPE.STRING],
-                    isRequired: true,
-                    acceptsMultiple: false,
-                    forceEnum: true,
-                    enumProvider: toolsEnumProvider,
-                }),
-            ],
-            callback: async (_, name) => {
-                if (typeof name !== 'string' || !name) {
-                    throw new Error('The unnamed argument must be a non-empty string.');
-                }
-
-                ToolManager.unregisterFunctionTool(name);
-                return '';
-            },
-        }));
     }
 }

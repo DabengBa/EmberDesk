@@ -152,6 +152,9 @@ test.each(['insert', 'reorder', 'delete'])('retry never clears another row after
 
 test.each(['before', 'during', 'delete', 'final', 'multiple', 'multiple-final', 'multiple-real', 'unstable', 'unstable-real'])('fallback stream preserves its target when row changes %s progress', async timing => {
     const { context } = setup();
+    // This prose response belongs to the pipeline's closing round, not a
+    // normal step (which is required to call submit_story).
+    runtime.markPipelineFallbackRound();
     const other = { mes: 'unrelated', assistant: true };
     const third = { mes: 'another unrelated row', assistant: true };
     const recovery = { mes: 'recovery', assistant: true };

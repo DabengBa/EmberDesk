@@ -4,7 +4,7 @@ import { AutoCompleteFuzzyScore } from './AutoCompleteFuzzyScore.js';
 import { BlankAutoCompleteOption } from './BlankAutoCompleteOption.js';
 import { AutoCompleteNameResult } from './AutoCompleteNameResult.js';
 import { AutoCompleteSecondaryNameResult } from './AutoCompleteSecondaryNameResult.js';
-import { limitAutocompleteResults, sortAutocompleteResults } from './autocomplete-ranking.js';
+import { sortAutocompleteResults } from './autocomplete-ranking.js';
 
 /**@readonly*/
 /**@enum {Number}*/
@@ -422,12 +422,6 @@ export class AutoComplete {
             matchType: this.matchType,
             fuzzyCompare: this.fuzzyScoreCompare.bind(this),
         });
-
-        this.result = limitAutocompleteResults(this.result, {
-            query: this.name,
-            isSlashCommand: this.effectiveParserResult == this.parserResult && this.text.trimStart().startsWith('/'),
-        });
-
 
         if (this.isForceHidden) {
             // hidden with escape

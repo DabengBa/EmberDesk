@@ -104,7 +104,6 @@ const ROLE_BADGE_LABELS: Record<string, string> = {
 };
 
 const WARNING_LABELS: Record<string, string> = {
-    'slash-command': translate('Input starts with /: the slash command runs first on send, and this preview shows its literal text.'),
     'pending-attachment': translate('A file attachment is pending: its contents are not part of this preview.'),
     'bias-only-system': translate('Input contains only bias: it is sent as a system message and is not part of the prompt.'),
     'budget-exceeded': translate('Forced prompts exceed the context budget; the message list may be incomplete.'),

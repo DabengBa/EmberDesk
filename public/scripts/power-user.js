@@ -1,41 +1,27 @@
 import { Fuse, Handlebars } from '../lib.js';
 import { markCharacterSortChanged } from './character-sort-save-guard.js';
-import { runOptionsMenuCommand } from './workspace-interaction-commands.js';
+
 
 import {
     saveSettingsDebounced,
     scrollChatToBottom,
-    characters,
     reloadMarkdownProcessor,
-    reloadCurrentChat,
     substituteParams,
     printCharactersDebounced,
-    setCharacterId,
-    setEditedMessageId,
     chat,
     getFirstDisplayedMessageId,
-    showMoreMessages,
-    saveChatConditional,
     setAnimationDuration,
     ANIMATION_DURATION_DEFAULT,
-    setActiveCharacter,
     entitiesFilter,
-    doNewChat,
     messageFormatting,
     extension_prompt_types,
-    deleteMessage,
 } from '../script.js';
 import { favsToHotswap } from './RossAscends-mods.js';
 
-import { tag_map, tag_sort_mode, tags } from './tags.js';
+import { tag_sort_mode } from './tags.js';
 
-import { debounce, delay, getStringHash, isTrueBoolean, shuffle, sortMoments, stringToRange, timestampToMoment } from './utils.js';
+import { debounce, getStringHash, shuffle, sortMoments, timestampToMoment } from './utils.js';
 import { FILTER_TYPES, fuzzySearchCategories } from './filters.js';
-import { SlashCommandParser } from './slash-commands/SlashCommandParser.js';
-import { SlashCommand } from './slash-commands/SlashCommand.js';
-import { ARGUMENT_TYPE, SlashCommandArgument, SlashCommandNamedArgument } from './slash-commands/SlashCommandArgument.js';
-import { SlashCommandEnumValue, enumTypes } from './slash-commands/SlashCommandEnumValue.js';
-import { commonEnumProviders, enumIcons } from './slash-commands/SlashCommandCommonEnumsProvider.js';
 import { accountStorage } from './util/AccountStorage.js';
 import { fixToastrForDialogs } from './popup.js';
 import { DEFAULT_FRONTEND_FRAME_SETTINGS, normalizeFrontendFramesSettings } from './frontend-frame.js';
@@ -518,160 +504,6 @@ export function resetMovableStyles(id) {
     }
 }
 
-/**
- * Finds the ID of the tag with the given name.
- * @param {string} name
- * @returns {string} The ID of the tag with the given name.
- */
-function findTagIdByName(name) {
-    const matchTypes = [
-        (a, b) => a === b,
-        (a, b) => a.startsWith(b),
-        (a, b) => a.includes(b),
-    ];
-
-    // Only get tags that contain at least one record in the tag_map
-    const liveTagIds = new Set(Object.values(tag_map).flat());
-    const liveTags = tags.filter(x => liveTagIds.has(x.id));
-
-    const exactNameMatchIndex = liveTags.map(x => x.name.toLowerCase()).indexOf(name.toLowerCase());
-
-    if (exactNameMatchIndex !== -1) {
-        return liveTags[exactNameMatchIndex].id;
-    }
-
-    for (const matchType of matchTypes) {
-        const index = liveTags.findIndex(x => matchType(x.name.toLowerCase(), name.toLowerCase()));
-        if (index !== -1) {
-            return liveTags[index].id;
-        }
-    }
-}
-
-async function doRandomChat(_, tagName) {
-    /**
-     * Gets the ID of a random character.
-     * @returns {string} The order index of the randomly selected character.
-     */
-    function getRandomCharacterId() {
-        if (!tagName) {
-            return Math.floor(Math.random() * characters.length).toString();
-        }
-
-        const tagId = findTagIdByName(tagName);
-        const taggedCharacters = Object.entries(tag_map)
-            .filter(x => x[1].includes(tagId)) // Get only records that include the tag
-            .map(x => x[0]) // Map the character avatar
-            .filter(x => characters.find(y => y.avatar === x)); // Filter out characters that don't exist
-        const randomCharacter = taggedCharacters[Math.floor(Math.random() * taggedCharacters.length)];
-        const randomIndex = characters.findIndex(x => x.avatar === randomCharacter);
-        if (randomIndex === -1) {
-            return;
-        }
-        return randomIndex.toString();
-    }
-
-    const characterId = getRandomCharacterId();
-    if (!characterId) {
-        toastr.error('No characters found');
-        return;
-    }
-    setCharacterId(characterId);
-    setActiveCharacter(characters[characterId]?.avatar);
-    await delay(1);
-    await reloadCurrentChat();
-    return characters[characterId]?.name;
-}
-
-/**
- * Loads the chat until the given message ID is displayed.
- * @param {number} mesId
- * @returns JQuery<HTMLElement>
- */
-async function loadUntilMesId(mesId) {
-    let target;
-
-    while (getFirstDisplayedMessageId() > mesId && getFirstDisplayedMessageId() !== 0) {
-        await showMoreMessages();
-        await delay(1);
-        target = $('#chat').find(`.mes[mesid="${mesId}"]`);
-
-        if (target.length) {
-            break;
-        }
-    }
-
-    if (!target.length) {
-        toastr.error(`Could not find message with ID: ${mesId}`);
-        return target;
-    }
-
-    return target;
-}
-
-async function doMesCut(_, text) {
-    console.debug(`was asked to cut message id #${text}`);
-    const range = stringToRange(text, 0, chat.length - 1);
-
-    //reject invalid args or no args
-    if (!range) {
-        toastr.warning('Must provide a Message ID or a range to cut.');
-        return;
-    }
-
-    let totalMesToCut = (range.end - range.start) + 1;
-    let mesIDToCut = range.start;
-    let cutText = '';
-
-    for (let i = 0; i < totalMesToCut; i++) {
-        cutText += (chat[mesIDToCut]?.mes || '') + '\n';
-        let mesToCut = $('#chat').find(`.mes[mesid=${mesIDToCut}]`);
-
-        if (!mesToCut.length) {
-            mesToCut = await loadUntilMesId(mesIDToCut);
-
-            if (!mesToCut || !mesToCut.length) {
-                return;
-            }
-        }
-
-        setEditedMessageId(mesIDToCut);
-        await deleteMessage(mesIDToCut);
-    }
-
-    await saveChatConditional();
-
-    return cutText;
-}
-
-async function doDelMode(_, text) {
-    //reject invalid args
-    if (text && isNaN(text)) {
-        toastr.warning('Must enter a number or nothing.');
-        return '';
-    }
-
-    // Just enter the delete mode.
-    if (!text) {
-        void runOptionsMenuCommand('option_delete_mes', { fromSlashCommand: true });
-        return '';
-    }
-
-    const count = Number(text);
-
-    // Nothing to delete.
-    if (count < 1) {
-        return '';
-    }
-
-    if (count > chat.length) {
-        toastr.warning(`Cannot delete more than ${chat.length} messages.`);
-        return '';
-    }
-
-    const range = `${chat.length - count}-${chat.length - 1}`;
-    return doMesCut(_, range);
-}
 
 const EPHEMERAL_STOPPING_STRINGS = [];
 
@@ -741,166 +573,5 @@ jQuery(() => {
         adjustAutocompleteDebounced();
         setHotswapsDebounced();
     });
-
-    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
-        name: 'newchat',
-        /** @type {(args: { delete: string?}, string) => Promise<''>} */
-        callback: async (args, _) => {
-            await doNewChat({ deleteCurrentChat: isTrueBoolean(args.delete) });
-            return '';
-        },
-        namedArgumentList: [
-            SlashCommandNamedArgument.fromProps({
-                name: 'delete',
-                description: 'delete the current chat',
-                typeList: [ARGUMENT_TYPE.BOOLEAN],
-                defaultValue: 'false',
-                enumList: commonEnumProviders.boolean('trueFalse')(),
-            }),
-        ],
-        helpString: 'Start a new chat with the current character',
-    }));
-    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
-        name: 'random',
-        callback: doRandomChat,
-        unnamedArgumentList: [
-            SlashCommandArgument.fromProps({
-                description: 'optional tag name',
-                typeList: [ARGUMENT_TYPE.STRING],
-                enumProvider: () => tags.filter(tag => Object.values(tag_map).some(x => x.includes(tag.id))).map(tag => new SlashCommandEnumValue(tag.name, null, enumTypes.enum, enumIcons.tag)),
-            }),
-        ],
-        helpString: 'Start a new chat with a random character. If an argument is provided, only considers characters that have the specified tag.',
-    }));
-    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
-        name: 'del',
-        callback: doDelMode,
-        aliases: ['delete', 'delmode'],
-        unnamedArgumentList: [
-            new SlashCommandArgument(
-                'optional number', [ARGUMENT_TYPE.NUMBER], false,
-            ),
-        ],
-        helpString: 'Enter message deletion mode, and auto-deletes last N messages if numeric argument is provided.',
-        returns: 'The text of the deleted messages.',
-    }));
-    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
-        name: 'cut',
-        callback: doMesCut,
-        returns: 'the text of cut messages separated by a newline',
-        unnamedArgumentList: [
-            SlashCommandArgument.fromProps({
-                description: 'number or range',
-                typeList: [ARGUMENT_TYPE.NUMBER, ARGUMENT_TYPE.RANGE],
-                isRequired: true,
-                acceptsMultiple: true,
-                enumProvider: commonEnumProviders.messages(),
-            }),
-        ],
-        helpString: `
-            <div>
-                Cuts the specified message or continuous chunk from the chat.
-            </div>
-            <div>
-                Ranges are inclusive!
-            </div>
-            <div>
-                <strong>Example:</strong>
-                <ul>
-                    <li>
-                        <pre><code>/cut 0-10</code></pre>
-                    </li>
-                </ul>
-            </div>
-        `,
-        aliases: [],
-    }));
-    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
-        name: 'css-var',
-        /** @param {{to: string, varname: string }} args @param {string} value @returns {string} */
-        callback: (args, value) => {
-            // Map enum to target selector
-            const targetSelector = {
-                chat: '#chat',
-                background: '#bg1',
-                zoomedAvatar: 'div.zoomed_avatar',
-            }[args.to || 'chat'];
-
-            if (!targetSelector) {
-                toastr.error(`Invalid target: ${args.to}`);
-                return;
-            }
-
-            if (!args.varname) {
-                toastr.error('CSS variable name is required');
-                return;
-            }
-            if (!args.varname.startsWith('--')) {
-                toastr.error('CSS variable names must start with "--"');
-                return;
-            }
-
-            const elements = document.querySelectorAll(targetSelector);
-            if (elements.length === 0) {
-                toastr.error(`No elements found for ${args.to ?? 'chat'} with selector "${targetSelector}"`);
-                return;
-            }
-
-            elements.forEach(element => {
-                element.style.setProperty(args.varname, value);
-            });
-
-            console.info(`Set CSS variable "${args.varname}" to "${value}" on "${targetSelector}"`);
-        },
-        namedArgumentList: [
-            SlashCommandNamedArgument.fromProps({
-                name: 'varname',
-                description: 'CSS variable name (starting with double dashes)',
-                typeList: [ARGUMENT_TYPE.STRING],
-                isRequired: true,
-            }),
-            SlashCommandNamedArgument.fromProps({
-                name: 'to',
-                description: 'The target element to which the CSS variable will be applied',
-                typeList: [ARGUMENT_TYPE.STRING],
-                enumList: [
-                    new SlashCommandEnumValue('chat', null, enumTypes.enum, enumIcons.message),
-                    new SlashCommandEnumValue('background', null, enumTypes.enum, enumIcons.image),
-                    new SlashCommandEnumValue('zoomedAvatar', null, enumTypes.enum, enumIcons.character),
-                ],
-                defaultValue: 'chat',
-            }),
-        ],
-        unnamedArgumentList: [
-            SlashCommandArgument.fromProps({
-                description: 'CSS variable value',
-                typeList: [ARGUMENT_TYPE.STRING],
-                isRequired: true,
-            }),
-        ],
-        helpString: `
-            <div>
-                Sets a CSS variable to a specified value on a target element.
-                <br />
-                Only setting of variable names is supported. They have to be prefixed with double dashes ("--exampleVar").
-                Setting actual CSS properties is not supported. Custom CSS in the theme settings can be used for that.
-                <br /><br />
-                <b>This value will be gone after a page reload!</b>
-            </div>
-            <div>
-                <strong>Example:</strong>
-                <ul>
-                    <li>
-                        <pre><code>/css-var varname="--SmartThemeBodyColor" #ff0000</code></pre>
-                        Sets the text color of the chat to red
-                    </li>
-                    <li>
-                        <pre><code>/css-var to=zoomedAvatar varname="--SmartThemeBlurStrength" 0</code></pre>
-                        Remove the blur from the zoomed avatar
-                    </li>
-                </ul>
-            </div>
-        `,
-    }));
 });
 

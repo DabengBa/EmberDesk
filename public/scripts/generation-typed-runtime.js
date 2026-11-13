@@ -286,6 +286,7 @@ function prepareRegenerateRestore                                      (
 
 
 
+
 /** Select and run the existing provider transport for one bounded recovery attempt. */
 async function runTransportAttempt                                                                                   (input                                                     , ports                                                                                                             )                                   {
     const presetModel = ports.presetModel();
@@ -312,6 +313,7 @@ async function runTransportAttempt                                              
     if (!ports.ownsRun()) throw new Error('Generation was aborted.');
     if (!canPerformTools && ports.hasToolCalls(result)) ports.assertAllowed();
     if (!(canPerformTools && ports.hasToolCalls(result)) && ports.isEmpty(result)) throw ports.emptyFailure();
+    if (!ports.hasToolCalls(result)) ports.requirePipelineCall?.();
     return result;
 }
 
@@ -679,6 +681,7 @@ async function withPreviewPromptSnapshot        (ports
 
 
 
+
 /** Own the stream's tool round and completion decisions, with shell effects injected. */
 async function finishStreamAttempt                                           (input                                                                                                                                                   , ports                                                               )                                                                        {
     const { processor, text, type, attemptModel } = input;
@@ -696,7 +699,7 @@ async function finishStreamAttempt                                           (in
     if (input.canPerformTools && finished && withCalls) {
         const last = ports.lastMessage();
         const hasCalls = ports.hasToolCalls(calls);
-        const shouldDelete = (last?.mes === '' || last?.mes === '...') && !last?.extra?.reasoning && ['', '...'].includes(processor.result);
+        const shouldDelete = ports.hasPipeline() || ((last?.mes === '' || last?.mes === '...') && !last?.extra?.reasoning && ['', '...'].includes(processor.result));
         if (hasCalls && shouldDelete) await ports.deleteLast();
         check();
         if (hasCalls && !shouldDelete) {
@@ -735,6 +738,10 @@ async function finishStreamAttempt                                           (in
     if (finished) {
         const id = processor.messageId;
         if (!String(messageChunk ?? '').trim()) { ports.clearProcessor(); throw ports.emptyFailure(id); }
+        try { ports.requirePipelineCall?.(); } catch (error) {
+            if (error instanceof Error) (error                                  ).messageId = id;
+            throw error;
+        }
         if (input.isOpenAI && attemptModel) ports.setModel(id, attemptModel);
         await ports.finishMessage(id, text);
         check();
@@ -1040,7 +1047,7 @@ async function assembleUserInput         (input
     if (preview) {
         const wantsUser = (text !== '' || ports.hasAttachment()) && !automatic && type !== 'quiet';
         const wantsEmpty = !wantsUser && text === '' && !automatic && type === 'normal' && isOpenAI && ports.emptyText().trim().length > 0;
-        if (text.trim().startsWith('/')) warnings.push('slash-command');
+
         if (ports.hasAttachment()) warnings.push('pending-attachment');
         if (wantsUser) {
             if (bias && !ports.removeMacros(text)) warnings.push('bias-only-system');
@@ -1737,7 +1744,7 @@ async function finalizePipelineReply(input                    , ports           
     const cleaned = ports.clean(text);
     const runId = meta?.runId ?? null;
     let tagMarkup = '';
-    let mergedInvocations                                  = null;
+    let mergedInvocations                                                                = null;
     if (runId) {
         let cardIndex = -1;
         for (let index = ports.chat.length - 1; index >= 0; index--) {
@@ -1749,7 +1756,7 @@ async function finalizePipelineReply(input                    , ports           
         }
         if (cardIndex >= 0) {
             mergedInvocations = ports.chat[cardIndex].extra .tool_invocations ;
-            const replyIsTagged = mergedInvocations.at(-1)?.name === step?.tool;
+            const replyIsTagged = (mergedInvocations.at(-1)?.pipeline?.tool ?? mergedInvocations.at(-1)?.name) === step?.tool;
             tagMarkup = ports.formatTags(mergedInvocations, replyIsTagged ? cleaned : '');
             if (!replyIsTagged) tagMarkup = `${tagMarkup}\n${cleaned}`;
             tagMarkup = ports.regexOutput(tagMarkup);
@@ -1779,6 +1786,7 @@ async function finalizePipelineReply(input                    , ports           
         ...(fromStream ? { fromStream: { value: true } } : {}),
     });
 }
+
 
 
 
@@ -1865,7 +1873,7 @@ async function completeGenerationResponse(input                         , ports 
     if (!ports.ownsRun()) return;
     if (canPerformToolCalls) {
         const hasToolCalls = ports.hasToolCalls(data);
-        const shouldDeleteMessage = ['', '...'].includes(getMessage) && !reasoning;
+        const shouldDeleteMessage = Boolean(ports.hasPipeline?.()) || (['', '...'].includes(getMessage) && !reasoning);
         if (hasToolCalls && shouldDeleteMessage) await ports.deleteLastMessage();
         if (!ports.ownsRun()) return;
         const invocation = await ports.invokeTools(data, reasoning, () => ports.ownsRun());

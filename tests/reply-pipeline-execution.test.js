@@ -12,14 +12,7 @@ jest.unstable_mockModule('../public/scripts/message-service.js', () => ({ update
 jest.unstable_mockModule('../public/scripts/openai.js', () => ({ chat_completion_sources: { OPENAI: 'openai' }, getChatCompletionModel: () => 'model', model_list: [], oai_settings: { chat_completion_source: 'openai', reply_pipeline: { enabled: true, steps: [{ tool: 'analyze' }, { tool: 'later' }] } } }));
 jest.unstable_mockModule('../public/scripts/tool-bindings.js', () => ({ syncPipelineToolBindings: jest.fn() }));
 jest.unstable_mockModule('../public/scripts/popup.js', () => ({ Popup: {} }));
-jest.unstable_mockModule('../public/scripts/slash-commands/SlashCommand.js', () => ({ SlashCommand: {} }));
-jest.unstable_mockModule('../public/scripts/slash-commands/SlashCommandArgument.js', () => ({ ARGUMENT_TYPE: {}, SlashCommandArgument: {}, SlashCommandNamedArgument: {} }));
-jest.unstable_mockModule('../public/scripts/slash-commands/SlashCommandClosure.js', () => ({ SlashCommandClosure: class {} }));
-jest.unstable_mockModule('../public/scripts/slash-commands/SlashCommandCommonEnumsProvider.js', () => ({ enumIcons: {} }));
-jest.unstable_mockModule('../public/scripts/slash-commands/SlashCommandEnumValue.js', () => ({ enumTypes: {}, SlashCommandEnumValue: {} }));
-jest.unstable_mockModule('../public/scripts/slash-commands/SlashCommandParser.js', () => ({ SlashCommandParser: {} }));
-jest.unstable_mockModule('../public/scripts/slash-commands/SlashCommandReturnHelper.js', () => ({ slashCommandReturnHelper: jest.fn() }));
-jest.unstable_mockModule('../public/scripts/utils.js', () => ({ isTrueBoolean: jest.fn() }));
+
 const { ToolManager } = await import('../public/scripts/tool-calling.js');
 const { oai_settings } = await import('../public/scripts/openai.js');
 const { setPipelineRunStateProvider } = await import('../public/scripts/reply-pipeline-core.js');
@@ -36,6 +29,7 @@ beforeEach(() => {
     oai_settings.reply_pipeline.enabled = true;
     run = { steps: [{ tool: 'analyze' }], index: 0 };
     setPipelineRunStateProvider(() => run);
+    ToolManager.unregisterFunctionTool('submit_story');
     for (const name of ['analyze', 'later', 'outside']) {
         ToolManager.unregisterFunctionTool(name);
         ToolManager.registerFunctionTool({ name, description: `${name} description`, action, formatMessage: formatter, parameters: {}, stealth: false });
@@ -84,6 +78,29 @@ test('queued tool-card save receives a live ownership predicate', async () => {
     expect(committed).toBe(false);
 });
 
+test('native tools remain available without the retired Slash registration API', async () => {
+    expect(ToolManager.initToolSlashCommands).toBeUndefined();
+    run = null;
+    expect(await ToolManager.invokeFunctionTool('outside', '{"content":"native"}')).toBe('raw text');
+    expect(action).toHaveBeenCalledWith({ content: 'native' });
+    expect(await ToolManager.formatToolCallMessage('outside', '{}')).toBe('toast');
+});
+
+test('native registration respects shouldRegister and stealth calls stay out of chat', async () => {
+    run = null;
+    ToolManager.registerFunctionTool({ name: 'hidden-test', description: 'hidden', parameters: {}, action, stealth: true, shouldRegister: () => false });
+    try {
+        const request = {};
+        await ToolManager.registerFunctionToolsOpenAI(request);
+        expect(request.tools.some(tool => tool.function.name === 'hidden-test')).toBe(false);
+        const result = await ToolManager.invokeFunctionTools([[call('hidden-test')]]);
+        expect(result.stealthCalls).toEqual(['hidden-test']);
+        expect(result.invocations).toEqual([]);
+        expect(action).toHaveBeenCalledTimes(1);
+    } finally {
+        ToolManager.unregisterFunctionTool('hidden-test');
+    }
+});
 test('disabled pipeline suppresses tools on the next generation without changing bindings', () => {
     run = null;
     expect(ToolManager.canPerformToolCalls('normal')).toBe(true);
@@ -92,6 +109,19 @@ test('disabled pipeline suppresses tools on the next generation without changing
     expect(ToolManager.canPerformToolCalls('normal', restoredSettings, 'model')).toBe(false);
     oai_settings.reply_pipeline.enabled = true;
     expect(ToolManager.canPerformToolCalls('normal')).toBe(true);
+});
+
+test('active story carrier bypasses same-name formatter and action, but ordinary calls do not', async () => {
+    ToolManager.unregisterFunctionTool('submit_story');
+    ToolManager.registerFunctionTool({ name: 'submit_story', description: 'conflict', action, formatMessage: formatter, parameters: {}, stealth: false });
+    const result = await ToolManager.invokeFunctionTools([[call('submit_story')]]);
+    expect(result.invocations[0].result).toBe('raw text');
+    expect(action).not.toHaveBeenCalled();
+    expect(formatter).not.toHaveBeenCalled();
+    run = null;
+    await ToolManager.invokeFunctionTools([[call('submit_story', 'other')]]);
+    expect(action).toHaveBeenCalledTimes(1);
+    expect(formatter).toHaveBeenCalledTimes(1);
 });
 
 test('disabling during an active pipeline leaves its current run intact', () => {
@@ -106,15 +136,15 @@ test.each([[call('later')], [call('outside')], [call('analyze'), call('analyze',
 });
 
 test('nonstream and stream capture same original argument bytes; duplicate dispatch has no effects', async () => {
-    const assistant = { role: 'assistant', content: 'actual text', reasoning_content: 'reason', tool_calls: [call('analyze')] };
+    const assistant = { role: 'assistant', content: 'actual text', reasoning_content: 'reason', tool_calls: [call('submit_story')] };
     const result = await ToolManager.invokeFunctionTools({ choices: [{ index: 0, message: assistant }] });
     expect(run.pendingAssistant).toEqual(assistant);
     expect(result.invocations[0].result).toBe('raw text');
-    await expect(ToolManager.invokeFunctionTools([[call('analyze')]])).rejects.toThrow(/Reply pipeline/);
-    expect(action).toHaveBeenCalledTimes(1);
+    await expect(ToolManager.invokeFunctionTools([[call('submit_story')]])).rejects.toThrow(/Reply pipeline/);
+    expect(action).not.toHaveBeenCalled();
     run = { steps: [{ tool: 'analyze' }], index: 0 };
-    await ToolManager.invokeFunctionTools([[call('analyze')]], { reasoningText: 'stream reason', assistantMessage: { role: 'assistant', content: 'stream accompanying text', tool_calls: [call('analyze')], signature: 'sig' } });
-    expect(run.pendingAssistant.tool_calls).toEqual([call('analyze')]);
+    await ToolManager.invokeFunctionTools([[call('submit_story')]], { reasoningText: 'stream reason', assistantMessage: { role: 'assistant', content: 'stream accompanying text', tool_calls: [call('submit_story')], signature: 'sig' } });
+    expect(run.pendingAssistant.tool_calls).toEqual([call('submit_story')]);
     expect(run.pendingAssistant.content).toBe('stream accompanying text');
     expect(run.pendingAssistant.signature).toBe('sig');
 });
@@ -134,17 +164,17 @@ test('real registered tools survive pipeline shaping across two rounds', async (
     expect(runtime.beginPipelineRun()).toBe(true);
     const first = { type: 'normal', messages: [{ role: 'user', content: 'hello' }] };
     await ToolManager.registerFunctionToolsOpenAI(first);
-    const wireTools = JSON.parse(JSON.stringify(first.tools));
+
     expect(first.tools[0].toString()).toContain('<b>analyze</b>');
     runtime.applyPipelineRequestShaping(first);
-    expect(first.tools).toEqual(wireTools);
+    expect(first.tools[0].function.name).toBe('submit_story');
     expect(first.messages.at(-1).content).toContain('analyze');
 
-    runtime.preparePipelineRound([{ name: 'analyze', id: 'id', result: 'raw text' }]);
+    runtime.preparePipelineRound([{ name: 'submit_story', id: 'id', result: 'raw text' }]);
     const second = { type: 'normal', messages: [{ role: 'user', content: 'hello' }] };
     await ToolManager.registerFunctionToolsOpenAI(second);
     runtime.applyPipelineRequestShaping(second);
-    expect(second.tools).toEqual(wireTools);
+    expect(second.tools).toEqual(first.tools);
     expect(second.messages.at(-1).content).toContain('later');
     runtime.endPipelineRun();
 });

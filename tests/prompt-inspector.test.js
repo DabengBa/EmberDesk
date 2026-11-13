@@ -22,7 +22,7 @@ describe('pipeline request shaping shared by live send and preview', () => {
 
         const forced = { messages: [], tools: [{ type: 'function' }] };
         applyStepRequestOverrides(forced, { tool: 'analyze' }, { enforceMode: 'forced' });
-        expect(forced.tool_choice).toEqual({ type: 'function', function: { name: 'analyze' } });
+        expect(forced.tool_choice).toEqual({ type: 'function', function: { name: 'submit_story' } });
 
         const soft = { messages: [], tools: [{ type: 'function' }] };
         applyStepRequestOverrides(soft, { tool: 'analyze' }, { enforceMode: 'soft' });

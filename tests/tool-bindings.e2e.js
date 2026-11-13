@@ -92,25 +92,25 @@ async function installGenerateStub(page) {
 
 /**
  * Stubs the generate endpoint for reply-pipeline turns: each round answers with
- * the next not-yet-called pipeline step as a tool call; requests without a step
+ * the current logical step via submit_story; requests without a step
  * prompt (or with every step already called) get a plain-text reply.
  */
-async function installPipelineStub(page, { steps, closingText = 'PIPELINE_FINAL_REPLY' }) {
-    await page.evaluate(({ steps, closingText }) => {
+async function installPipelineStub(page, { steps, closingText = 'PIPELINE_FINAL_REPLY', emptyFinal = false }) {
+    await page.evaluate(({ steps, closingText, emptyFinal }) => {
         window.__emberdeskToolRequests = [];
         window.__emberdeskToolGenerationError = null;
         window.__emberdeskOriginalFetch ??= window.fetch.bind(window);
 
-        const toolCallPayload = (name, args) => ({
+        const toolCallPayload = (step, args) => ({
             choices: [{
                 index: 0,
                 message: {
                     role: 'assistant',
                     content: null,
                     tool_calls: [{
-                        id: `call_e2e_${name}`,
+                        id: `call_e2e_${step}`,
                         type: 'function',
-                        function: { name, arguments: JSON.stringify(args) },
+                        function: { name: 'submit_story', arguments: JSON.stringify(args) },
                     }],
                 },
                 finish_reason: 'tool_calls',
@@ -127,13 +127,13 @@ async function installPipelineStub(page, { steps, closingText = 'PIPELINE_FINAL_
             window.__emberdeskToolRequests.push(body);
             const messages = Array.isArray(body.messages) ? body.messages : [];
             const hasStepPrompt = messages.some(message => String(message?.content ?? '').includes('[Reply pipeline'));
-            const calledNames = messages
-                .filter(message => Array.isArray(message.tool_calls))
-                .flatMap(message => message.tool_calls.map(toolCall => toolCall?.function?.name));
-            const nextStep = steps.find(step => !calledNames.includes(step));
+            const instruction = messages.map(message => String(message?.content ?? ''))
+                .findLast(content => /\[Reply pipeline \d+\/\d+\]/.test(content));
+            const round = Number(instruction?.match(/\[Reply pipeline (\d+)\//)?.[1]);
+            const nextStep = steps[round - 1];
 
             let payload;
-            if (!hasStepPrompt || !nextStep) {
+            if (body.tool_choice === 'none' || !hasStepPrompt || !nextStep) {
                 payload = {
                     choices: [{
                         index: 0,
@@ -142,7 +142,7 @@ async function installPipelineStub(page, { steps, closingText = 'PIPELINE_FINAL_
                     }],
                 };
             } else {
-                const args = nextStep === 'respond'
+                const args = emptyFinal && round === steps.length ? { content: '' } : nextStep === 'respond'
                     ? { content: 'RESPOND_TEXT', options: ['Take the tea', 'Ask about the glade'] }
                     : { content: `${nextStep.toUpperCase()}_TEXT` };
                 payload = toolCallPayload(nextStep, args);
@@ -153,7 +153,7 @@ async function installPipelineStub(page, { steps, closingText = 'PIPELINE_FINAL_
                 headers: { 'Content-Type': 'application/json' },
             });
         };
-    }, { steps, closingText });
+    }, { steps, closingText, emptyFinal });
 }
 
 // All tests share the seeded user's settings document, so they must not run
@@ -444,7 +444,8 @@ test.describe('tool bindings', () => {
                 .catch(() => { });
         });
         await expect.poll(() => page.evaluate(() =>
-            window.__emberdeskToolRequests?.some(request => request.tool_choice === 'required') ?? false,
+            window.__emberdeskToolRequests?.some(request => request.tool_choice === 'required'
+                && request.messages?.some(message => String(message?.content ?? '').includes('required e2e message'))) ?? false,
         ), { timeout: 30_000 }).toBe(true);
     });
 
@@ -674,10 +675,10 @@ test.describe('tool bindings', () => {
         expect(turnRequests[0].messages.some(message => String(message?.content ?? '').includes('[Reply pipeline 1/3]') && String(message?.content ?? '').includes('analyze'))).toBe(true);
         expect(turnRequests[1].messages.some(message => String(message?.content ?? '').includes('[Reply pipeline 2/3]') && String(message?.content ?? '').includes('review'))).toBe(true);
         expect(turnRequests[2].messages.some(message => String(message?.content ?? '').includes('[Reply pipeline 3/3]') && String(message?.content ?? '').includes('respond'))).toBe(true);
-        expect(turnRequests[2].tools?.some(tool => tool?.function?.name === 'respond')).toBe(true);
+        expect(turnRequests[2].tools?.some(tool => tool?.function?.name === 'submit_story')).toBe(true);
         // Tools and all previously sent messages are an immutable run prefix.
         expect(turnRequests.map(request => (request.tools ?? []).map(tool => tool?.function?.name)))
-            .toEqual(Array(3).fill(['analyze', 'review', 'respond']));
+            .toEqual(Array(3).fill(['submit_story']));
         for (let index = 1; index < turnRequests.length; index++) {
             const previous = turnRequests[index - 1].messages;
             expect(turnRequests[index].messages.slice(0, previous.length)).toEqual(previous);
@@ -829,7 +830,7 @@ test.describe('tool bindings', () => {
                 properties: { content: { type: 'string' } },
                 required: ['content'],
             },
-            // respond returns an ok-object: unusable as a reply → fallback round.
+            // Pipeline submissions use the internal carrier, not binding actions.
             actionBody: 'return JSON.stringify({ ok: true });',
             formatMessageBody: '',
             stealth: false,
@@ -853,7 +854,8 @@ test.describe('tool bindings', () => {
         await testSetup.awaitST({ page });
         await expect(page.locator('html')).toHaveAttribute('data-reply-pipeline-init', 'true', { timeout: 30_000 });
 
-        await installPipelineStub(page, { steps: ['analyze', 'respond'], closingText: 'FALLBACK_REPLY_TEXT' });
+        // Empty final submitted content is unusable and triggers the fallback.
+        await installPipelineStub(page, { steps: ['analyze', 'respond'], closingText: 'FALLBACK_REPLY_TEXT', emptyFinal: true });
         await prepareOpenAiProvider(page);
 
         await page.locator('#send_textarea').fill('reply pipeline e2e message');

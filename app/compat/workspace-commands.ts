@@ -38,7 +38,7 @@ export interface MainChatGenerationCommand {
 
 export interface MainChatMessageActionsCommand {
     kind: 'open' | 'close';
-    messageId?: number;
+    messageId?: string;
 }
 
 export interface MainChatCommands {
@@ -46,24 +46,22 @@ export interface MainChatCommands {
     openCharacterLibrary(): CommandResult;
     loadMoreMessages(messagesToLoad?: number | null): CommandResult;
     loadMoreUntilMessage(anchorMessageId: string): CommandResult;
-    setSlashVisibleOwner(enabled: boolean): CommandResult;
-    selectSlashAutocompleteOption(index: number): CommandResult;
-    startMessageEdit(messageId: number): CommandResult;
-    updateMessageEdit(messageId: number, text: string): CommandResult;
-    commitMessageEdit(messageId: number): CommandResult;
-    cancelMessageEdit(messageId: number): CommandResult;
-    setMessageReasoningOpen(messageId: number, open: boolean): CommandResult;
-    copyMessageReasoning(messageId: number): CommandResult;
-    startMessageReasoningEdit(messageId: number): CommandResult;
-    updateMessageReasoningEdit(messageId: number, text: string): CommandResult;
-    commitMessageReasoningEdit(messageId: number): CommandResult;
-    cancelMessageReasoningEdit(messageId: number): CommandResult;
-    deleteMessageReasoning(messageId: number): CommandResult;
+    startMessageEdit(messageUid: string): CommandResult;
+    updateMessageEdit(messageUid: string, text: string): CommandResult;
+    commitMessageEdit(messageUid: string): CommandResult;
+    cancelMessageEdit(messageUid: string): CommandResult;
+    setMessageReasoningOpen(messageUid: string, open: boolean): CommandResult;
+    copyMessageReasoning(messageUid: string): CommandResult;
+    startMessageReasoningEdit(messageUid: string): CommandResult;
+    updateMessageReasoningEdit(messageUid: string, text: string): CommandResult;
+    commitMessageReasoningEdit(messageUid: string): CommandResult;
+    cancelMessageReasoningEdit(messageUid: string): CommandResult;
+    deleteMessageReasoning(messageUid: string): CommandResult;
     collapseAllMessageReasoning(): CommandResult;
-    copyMessage(messageId: number): CommandResult;
-    duplicateMessage(messageId: number): CommandResult;
-    deleteMessage(messageId: number): CommandResult;
-    moveMessage(messageId: number, direction: 'up' | 'down'): CommandResult;
+    copyMessage(messageUid: string): CommandResult;
+    duplicateMessage(messageUid: string): CommandResult;
+    deleteMessage(messageUid: string): CommandResult;
+    moveMessage(messageUid: string, direction: 'up' | 'down'): CommandResult;
     triggerVisibleGeneration(command: MainChatGenerationCommand): CommandResult;
     stopVisibleGeneration(): CommandResult;
     toggleMessageActionsShell(command: MainChatMessageActionsCommand): CommandResult;

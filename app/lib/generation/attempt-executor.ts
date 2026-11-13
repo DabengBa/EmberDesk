@@ -282,6 +282,7 @@ export interface GenerationTransportPorts<Trace, Schema, Fallback, Response, Str
     assertAllowed(): void;
     isEmpty(response: Response): boolean;
     emptyFailure(): Error;
+    requirePipelineCall?(): void;
 }
 
 /** Select and run the existing provider transport for one bounded recovery attempt. */
@@ -310,6 +311,7 @@ async function runTransportAttempt<Trace, Schema, Fallback, Response, StreamResu
     if (!ports.ownsRun()) throw new Error('Generation was aborted.');
     if (!canPerformTools && ports.hasToolCalls(result)) ports.assertAllowed();
     if (!(canPerformTools && ports.hasToolCalls(result)) && ports.isEmpty(result)) throw ports.emptyFailure();
+    if (!ports.hasToolCalls(result)) ports.requirePipelineCall?.();
     return result;
 }
 
@@ -672,6 +674,7 @@ export interface StreamAttemptPorts<ToolCalls, Invocation, Step, Meta, Result> {
     hasPipeline(): boolean;
     continueGeneration(): Promise<Result>;
     emptyFailure(messageId: number): Error;
+    requirePipelineCall?(): void;
     finishMessage(messageId: number, text: string): Promise<unknown>;
     refresh(): void;
     clearRecovery(messageId: number): void;
@@ -694,7 +697,7 @@ async function finishStreamAttempt<ToolCalls, Invocation, Step, Meta, Result>(in
     if (input.canPerformTools && finished && withCalls) {
         const last = ports.lastMessage();
         const hasCalls = ports.hasToolCalls(calls);
-        const shouldDelete = (last?.mes === '' || last?.mes === '...') && !last?.extra?.reasoning && ['', '...'].includes(processor.result);
+        const shouldDelete = ports.hasPipeline() || ((last?.mes === '' || last?.mes === '...') && !last?.extra?.reasoning && ['', '...'].includes(processor.result));
         if (hasCalls && shouldDelete) await ports.deleteLast();
         check();
         if (hasCalls && !shouldDelete) {
@@ -733,6 +736,10 @@ async function finishStreamAttempt<ToolCalls, Invocation, Step, Meta, Result>(in
     if (finished) {
         const id = processor.messageId;
         if (!String(messageChunk ?? '').trim()) { ports.clearProcessor(); throw ports.emptyFailure(id); }
+        try { ports.requirePipelineCall?.(); } catch (error) {
+            if (error instanceof Error) (error as Error & { messageId?: number }).messageId = id;
+            throw error;
+        }
         if (input.isOpenAI && attemptModel) ports.setModel(id, attemptModel);
         await ports.finishMessage(id, text);
         check();
@@ -1038,7 +1045,7 @@ async function assembleUserInput<Message>(input: {
     if (preview) {
         const wantsUser = (text !== '' || ports.hasAttachment()) && !automatic && type !== 'quiet';
         const wantsEmpty = !wantsUser && text === '' && !automatic && type === 'normal' && isOpenAI && ports.emptyText().trim().length > 0;
-        if (text.trim().startsWith('/')) warnings.push('slash-command');
+
         if (ports.hasAttachment()) warnings.push('pending-attachment');
         if (wantsUser) {
             if (bias && !ports.removeMacros(text)) warnings.push('bias-only-system');
@@ -1714,7 +1721,7 @@ export interface PipelineFinalInput {
 
 export interface PipelineFinalPorts {
     ownsRun(): boolean;
-    chat: Array<{ extra?: { tool_invocations?: Array<{ name?: string }>; reply_pipeline_run?: string | null; reply_pipeline_step?: string | null; [key: string]: unknown } }>;
+    chat: Array<{ extra?: { tool_invocations?: Array<{ name?: string; pipeline?: { tool?: string } }>; reply_pipeline_run?: string | null; reply_pipeline_step?: string | null; [key: string]: unknown } }>;
     clean(text: string): string;
     formatTags(invocations: Array<{ name?: string }>, text: string): string;
     regexOutput(text: string): string;
@@ -1735,7 +1742,7 @@ async function finalizePipelineReply(input: PipelineFinalInput, ports: PipelineF
     const cleaned = ports.clean(text);
     const runId = meta?.runId ?? null;
     let tagMarkup = '';
-    let mergedInvocations: Array<{ name?: string }> | null = null;
+    let mergedInvocations: Array<{ name?: string; pipeline?: { tool?: string } }> | null = null;
     if (runId) {
         let cardIndex = -1;
         for (let index = ports.chat.length - 1; index >= 0; index--) {
@@ -1747,7 +1754,7 @@ async function finalizePipelineReply(input: PipelineFinalInput, ports: PipelineF
         }
         if (cardIndex >= 0) {
             mergedInvocations = ports.chat[cardIndex].extra!.tool_invocations!;
-            const replyIsTagged = mergedInvocations.at(-1)?.name === step?.tool;
+            const replyIsTagged = (mergedInvocations.at(-1)?.pipeline?.tool ?? mergedInvocations.at(-1)?.name) === step?.tool;
             tagMarkup = ports.formatTags(mergedInvocations, replyIsTagged ? cleaned : '');
             if (!replyIsTagged) tagMarkup = `${tagMarkup}\n${cleaned}`;
             tagMarkup = ports.regexOutput(tagMarkup);
@@ -1798,6 +1805,7 @@ export interface GenerationResponsePorts {
     saveReply(reply: GenerationResponseReply): Promise<{ type: string; getMessage: string }>;
     setType(type: string): void;
     hasToolCalls(data: unknown): boolean;
+    hasPipeline?(): boolean;
     deleteLastMessage(): Promise<unknown>;
     invokeTools(data: unknown, reasoning: string, ownsRun: () => boolean): Promise<{ invocations: unknown[]; stealthCalls: unknown[]; errors?: unknown[] }>;
     showToolErrors(errors: unknown[]): void;
@@ -1863,7 +1871,7 @@ async function completeGenerationResponse(input: GenerationResponseInput, ports:
     if (!ports.ownsRun()) return;
     if (canPerformToolCalls) {
         const hasToolCalls = ports.hasToolCalls(data);
-        const shouldDeleteMessage = ['', '...'].includes(getMessage) && !reasoning;
+        const shouldDeleteMessage = Boolean(ports.hasPipeline?.()) || (['', '...'].includes(getMessage) && !reasoning);
         if (hasToolCalls && shouldDeleteMessage) await ports.deleteLastMessage();
         if (!ports.ownsRun()) return;
         const invocation = await ports.invokeTools(data, reasoning, () => ports.ownsRun());

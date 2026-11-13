@@ -1311,7 +1311,7 @@ test('typed user input assembly preserves send, preview, bias-only and empty rep
     expect(ports.sendUser).not.toHaveBeenCalled();
     ports.hasAttachment.mockReturnValue(true);
     const preview = await lifecycle.assembleUserInput({ ...input, text: '/hello', dryRun: true, preview: true }, ports);
-    expect(preview).toEqual({ pending: { mes: '/hello', bias: '' }, warnings: ['slash-command', 'pending-attachment'] });
+    expect(preview).toEqual({ pending: { mes: '/hello', bias: '' }, warnings: ['pending-attachment'] });
     expect(ports.sendUser).not.toHaveBeenCalled();
     const biasPreview = await lifecycle.assembleUserInput({ ...input, text: '{{bias}}', bias: 'b', dryRun: true, preview: true }, ports);
     expect(biasPreview).toEqual({ pending: null, warnings: ['pending-attachment', 'bias-only-system'] });
@@ -1400,15 +1400,17 @@ test('typed prompt history assembly filters, projects, decorates and reasons in 
     expect(reasoning).toHaveBeenCalledTimes(3);
 });
 
-test('typed streaming completion owns whether intermediate tool messages get a pipeline model', async () => {
+test('typed streaming completion removes provisional pipeline prose instead of assigning it a model', async () => {
     const processor = { isStopped: false, isFinished: true, toolCalls: [[{}]], result: 'working', messageId: 2, reasoningHandler: { reasoning: '' }, reasoningSignature: null };
     const setModel = jest.fn();
-    const ports = { ownsRun: () => true, clean: text => text, lastMessage: () => ({ mes: 'working' }), hasToolCalls: () => true, setModel, finalizeIntermediary: async () => {}, invokeTools: async () => ({ invocations: [], stealthCalls: [{}] }), endPipeline: jest.fn(), unblock: jest.fn(), clearProcessor: jest.fn(), hasPipeline: () => false };
+    const ports = { ownsRun: () => true, clean: text => text, lastMessage: () => ({ mes: 'working' }), hasToolCalls: () => true, setModel, deleteLast: jest.fn(async () => {}), finalizeIntermediary: jest.fn(async () => {}), invokeTools: async () => ({ invocations: [], stealthCalls: [{}] }), endPipeline: jest.fn(), unblock: jest.fn(), clearProcessor: jest.fn(), hasPipeline: () => false };
     await installedLifecycle.finishStreamAttempt({ type: 'normal', isOpenAI: true, canPerformTools: true, attemptModel: 'm', text: 'working', processor }, ports);
     expect(setModel).not.toHaveBeenCalled();
     ports.hasPipeline = () => true;
     await installedLifecycle.finishStreamAttempt({ type: 'normal', isOpenAI: true, canPerformTools: true, attemptModel: 'm', text: 'working', processor }, ports);
-    expect(setModel).toHaveBeenCalledWith(2, 'm');
+    expect(setModel).not.toHaveBeenCalled();
+    expect(ports.deleteLast).toHaveBeenCalledTimes(1);
+    expect(ports.finalizeIntermediary).toHaveBeenCalledTimes(1);
 });
 
 test('typed streaming tool completion saves one round and finalizes its pipeline result', async () => {
@@ -1429,7 +1431,7 @@ test('typed streaming tool completion saves one round and finalizes its pipeline
 test('typed streaming tool completion formats empty assistant content without optional reasoning fields', async () => {
     const processor = { isStopped: false, isFinished: true, toolCalls: [[{}]], result: '...', messageId: 1, reasoningHandler: { reasoning: '' }, reasoningSignature: null };
     const invokeTools = jest.fn(async () => ({ invocations: [], stealthCalls: [], errors: [] }));
-    const ports = { ownsRun: () => true, clean: text => text, lastMessage: () => ({ mes: '...' }), hasToolCalls: () => true, deleteLast: async () => {}, invokeTools, endPipeline: jest.fn(), unblock: jest.fn(), clearProcessor: jest.fn() };
+    const ports = { ownsRun: () => true, clean: text => text, lastMessage: () => ({ mes: '...' }), hasToolCalls: () => true, hasPipeline: () => false, deleteLast: async () => {}, invokeTools, endPipeline: jest.fn(), unblock: jest.fn(), clearProcessor: jest.fn() };
     await installedLifecycle.finishStreamAttempt({ type: 'normal', isOpenAI: true, canPerformTools: true, attemptModel: 'm', text: '', processor }, ports);
     expect(invokeTools).toHaveBeenCalledWith(processor.toolCalls, { reasoningText: '', assistantMessage: { role: 'assistant', content: null } });
 });
@@ -1439,7 +1441,7 @@ test('typed streaming tool completion cannot publish a final round after ownersh
     const lifecycle = createGenerationLifecycleService(() => ({ chatId: 'a', contextRevision: 1 }));
     let owned = true;
     const processor = { isStopped: false, isFinished: true, toolCalls: [[{}]], result: 'working', messageId: 2, reasoningHandler: { reasoning: '' }, reasoningSignature: null };
-    const ports = { ownsRun: () => owned, clean: text => text, lastMessage: () => ({ mes: 'working' }), hasToolCalls: () => true, hasPipeline: () => true, finalizeIntermediary: async () => {}, setModel: jest.fn(), invokeTools: async () => ({ invocations: [{}], stealthCalls: [], errors: [] }), prepareRound: () => ({ action: 'final', text: 'done' }), clearProcessor: jest.fn(), saveInvocations: async () => { owned = false; }, finalizePipeline: jest.fn(), markComplete: jest.fn() };
+    const ports = { ownsRun: () => owned, clean: text => text, lastMessage: () => ({ mes: 'working' }), hasToolCalls: () => true, hasPipeline: () => true, deleteLast: async () => {}, finalizeIntermediary: async () => {}, setModel: jest.fn(), invokeTools: async () => ({ invocations: [{}], stealthCalls: [], errors: [] }), prepareRound: () => ({ action: 'final', text: 'done' }), clearProcessor: jest.fn(), saveInvocations: async () => { owned = false; }, finalizePipeline: jest.fn(), markComplete: jest.fn() };
     await expect(lifecycle.finishStreamAttempt({ type: 'normal', isOpenAI: true, canPerformTools: true, attemptModel: 'm', text: 'working', processor }, ports)).rejects.toThrow('Generation was aborted.');
     expect(ports.finalizePipeline).not.toHaveBeenCalled();
     expect(ports.markComplete).not.toHaveBeenCalled();

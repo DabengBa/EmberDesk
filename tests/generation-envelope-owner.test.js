@@ -162,9 +162,11 @@ async function quietFixture() {
     };
     const source = readFileSync(new URL('../public/script.js', import.meta.url), 'utf8');
     const start = source.indexOf('export async function generateQuietPrompt(');
-    const end = source.indexOf('\n/**\n * Executes slash commands', start);
+    // Stop at this top-level function's closing brace, not the documentation
+    // of an unrelated neighbouring function (which may be removed or moved).
+    const end = source.indexOf('\n}\n', start);
     if (start < 0 || end < 0) throw new Error('quiet implementation not found');
-    const implementation = source.slice(start, end).replace('export async function generateQuietPrompt', 'async function generateQuietPrompt');
+    const implementation = source.slice(start, end + 2).replace('export async function generateQuietPrompt', 'async function generateQuietPrompt');
     const generateQuietPrompt = new Function('env', `with (env) { ${implementation}; return generateQuietPrompt; }`)(env);
     return { env, generateQuietPrompt, hook };
 }

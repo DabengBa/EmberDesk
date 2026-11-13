@@ -919,9 +919,15 @@ test('active chat deletion uses its loaded version and retains a recovery draft'
         await context.selectCharacterById(index);
         const name = context.characters[index].chat;
         context.chat.push({ name: 'You', is_user: true, mes: 'unsaved protected edit' });
-        await (await import('/scripts/dom-handlers.js')).runHistoryRowCommand('deleteChat', name, { fromSlashCommand: true });
         return name;
     });
+    const deletion = page.evaluate(async name => {
+        await (await import('/scripts/dom-handlers.js')).runHistoryRowCommand('deleteChat', name);
+    }, outcome);
+    const confirm = page.locator('dialog[open]').filter({ has: page.locator('.chat-file-name') });
+    await expect(confirm.locator('.chat-file-name')).toHaveText(outcome);
+    await confirm.locator('.popup-button-ok').click();
+    await deletion;
     expect(deletes).toHaveLength(1);
     expect(deletes[0]).toMatchObject({ chatfile: `${outcome}.jsonl`, version: expect.stringMatching(/^[0-9a-f]{32}$/), operationId: expect.any(String) });
     const drafts = await page.evaluate(async () => {
@@ -1083,13 +1089,15 @@ test('history UI delete command can retry a lost response after loader cleanup',
         else if (requests.length === 2) await route.abort('failed');
         else await route.continue();
     });
-    const remove = () => page.evaluate(async name => {
-        try { await (await import('/scripts/dom-handlers.js')).runHistoryRowCommand('deleteChat', name, { fromSlashCommand: true }); return true; }
+    const remove = page.evaluate(async name => {
+        try { await (await import('/scripts/dom-handlers.js')).runHistoryRowCommand('deleteChat', name); return true; }
         catch { return false; }
     }, file);
-    expect(await remove()).toBe(false);
-    await page.locator('#options_button').click();
-    await page.locator('#option_select_chat').click();
+    const confirm = page.locator('dialog[open]').filter({ has: page.locator('.chat-file-name') });
+    await expect(confirm.locator('.chat-file-name')).toHaveText(file);
+    await confirm.locator('.popup-button-ok').click();
+    expect(await remove).toBe(false);
+    await expect(page.locator('#shadow_select_chat_popup')).toBeVisible({ timeout: 6000 });
     const pending = page.getByTestId('pending-history-deletions');
     await expect(pending).toContainText(file);
     await pending.getByRole('button', { name: /retry deletion/i }).click();

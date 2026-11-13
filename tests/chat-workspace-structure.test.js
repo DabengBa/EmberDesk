@@ -160,11 +160,11 @@ describe('chat workspace structure', () => {
         expect(composerSource).toMatch(/id="send_textarea"[^>]*\baria-label="Chat message"/);
         expect(composerSource).toMatch(/id="send_textarea"[^>]*\baria-describedby="send_textarea_hint"/);
         expect(composerSource).toContain('id="send_textarea_hint"');
-        expect(composerSource).toContain("translate('Type /? for commands. Send requires an API connection.')");
+        expect(composerSource).toContain("translate('Send requires an API connection.')");
         expect(indexHtml).toContain('id="send_form"');
         expect(scriptSource).toContain("const sendTextareaHint = $('#send_textarea_hint');");
-        expect(scriptSource).toContain('sendTextareaHint.text(t`Type /? for commands. Send requires an API connection.`);');
-        expect(scriptSource).toContain('sendTextareaHint.text(t`Type /? for commands.`);');
+        expect(scriptSource).toContain('sendTextareaHint.text(t`Send requires an API connection.`);');
+        expect(scriptSource).toContain("sendTextareaHint.text('');");
         expect(keyboardSource).toContain("'.mes_stop', // Stop button in the chat bar");
         expect(keyboardSource).toContain("event.key === 'Enter' || event.key === ' '");
         expect(keyboardSource).toContain("event.key === ' '");
@@ -266,13 +266,18 @@ describe('chat workspace structure', () => {
 
     test('keeps reasoning header toggle explicit for React-owned message rows', () => {
         const reasoningSource = readRepoFile('public/scripts/reasoning.js');
+        const rowSource = readRepoFile('app/components/main-chat/MainChatMessageRow.tsx');
+        const headerBlock = reasoningSource.match(/\$\(document\)\.on\('click', '\.mes_reasoning_header',[\s\S]*?\n    \}\);/)?.[0] ?? '';
 
-        expectContainsMarkers(reasoningSource, [
-            "$(document).on('click', '.mes_reasoning_header', function (e) {",
-            'e.preventDefault();',
-            "const wasOpen = details.prop('open') === true;",
-            'details.prop(\'open\', !wasOpen);',
+        expectContainsMarkers(headerBlock, [
+            'if (isReactMainChatMessageRow(this)) return;',
+            "const wasOpen = messageBlock.find('.mes_reasoning_details').prop('open') === true;",
+            'commands.setMessageReasoningOpen(messageId, !wasOpen)',
         ]);
+        expect(headerBlock).not.toMatch(/\.prop\('open',|\.attr\('open',|\.removeAttr\('open'/);
+        const summaryBlock = rowSource.match(/<summary\s+className="mes_reasoning_summary[\s\S]*?<div className="mes_reasoning_header_block/)?.[0] ?? '';
+        expectContainsMarkers(rowSource, ['open={message.reasoningOpen}', 'commands?.setMessageReasoningOpen(messageUid, open)']);
+        expectContainsMarkers(summaryBlock, ['event.preventDefault();', 'event.stopPropagation();', 'setReasoningOpen(!message.reasoningOpen);']);
     });
 
     test('keeps message row actions discoverable by role and accessible name', () => {
@@ -413,7 +418,8 @@ describe('chat workspace structure', () => {
         expect(lifecycleSource).toContain("from './generation-shared-state.js'");
         expect(policySource).toContain('createGenerationLifecyclePlan({');
         expect(policySource).toContain('getGenerationFailureDecision({');
-        expect(generationServiceSource).toContain('decideFailure: getGenerationFailureDecision');
+        // The shell wraps the typed policy to suppress recovery after a user stop.
+        expect(generationServiceSource).toContain('decideFailure: input => getGenerationFailureDecision({ ...input, shouldAutoRecover: input.shouldAutoRecover && !isUserStoppedGeneration(input.failure) })');
         expect(typedGenerationSource).toContain('decision.shouldRestoreAttemptMessage');
         expect(generationServiceSource).toContain('hasFallbackProviderForGeneration({');
         // The installed lifecycle now owns the current recovery row ID.

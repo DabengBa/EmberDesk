@@ -154,7 +154,7 @@ import {
     feature_settings,
     initCoreFeatures,
 } from './scripts/feature-settings.js';
-import { COMMENT_NAME_DEFAULT, CONNECT_API_MAP, executeSlashCommandsOnChatInput, getMainChatSlashCommandAutoCompleteState, initDefaultSlashCommands, initSlashCommandAutoComplete, isExecutingCommandsFromChatInput, pauseScriptExecution, selectMainChatSlashCommandOption, setMainChatSlashCommandReactOwnerEnabled, stopScriptExecution, UNIQUE_APIS } from './scripts/slash-commands.js';
+
 import { initMacroAutoComplete } from './scripts/autocomplete/MacroAutoComplete.js';
 import { initFrontendFrameController } from './scripts/frontend-frame-controller.js';
 import {
@@ -240,7 +240,6 @@ import {
 import { getStreamingControlState } from './scripts/chat-streaming-control-state.js';
 import { getMainChatComposerState } from './scripts/main-chat-composer-state.js';
 import { getComposerValue, setComposerValue, getComposerSnapshot, subscribeComposerState, updateComposerInteraction, requestComposerFocus } from './scripts/main-chat-composer-service.js';
-import { getMainChatSlashCommandState } from './scripts/main-chat-slash-command-state.js';
 import { getMainChatStreamingTransportState } from './scripts/main-chat-streaming-transport-state.js';
 import { buildGreetingOptions, canSwitchGreeting } from './scripts/main-chat-greetings.js';
 import { createChatMessageActionsController } from './scripts/chat-message-actions-controller.js';
@@ -307,6 +306,8 @@ import {
     updateMessageElement,
 } from './scripts/message-service.js';
 import { registerMessageShellContext } from './scripts/message-shell-context.js';
+import { createChatMessageCommands } from './scripts/chat-message-commands.js';
+import { createChatMessageRowCommands } from './scripts/chat-message-row-commands.js';
 import { isCharacterExternalMediaAllowed } from './scripts/external-media-policy.js';
 import { setCharacterExternalMediaAuthorization } from './scripts/character-external-media-authorization.js';
 import { registerDomHandlersShellContext } from './scripts/dom-handlers-shell-context.js';
@@ -621,7 +622,6 @@ registerGenerationShellContext({
     isStreamingEnabled: (...args) => isStreamingEnabled(...args),
     parseMesExamples: (...args) => parseMesExamples(...args),
     pingServer: (...args) => pingServer(...args),
-    processCommands: (...args) => processCommands(...args),
     rememberMainChatStreamingTransportProcessorTerminal: (...args) => rememberMainChatStreamingTransportProcessorTerminal(...args),
     removeDepthPrompts: (...args) => removeDepthPrompts(...args),
     removeLastMessage: (...args) => removeLastMessage(...args),
@@ -869,6 +869,7 @@ registerCharacterLifecycleShellContext({
 });
 
 registerMessageShellContext({
+    getChatMessageCommands: () => getChatMessageCommands(),
     state: {
         get chat() { return chat; },
         get chat_metadata() { return chat_metadata; },
@@ -889,7 +890,7 @@ registerMessageShellContext({
         get this_chid() { return this_chid; },
         get itemizedPrompts() { return itemizedPrompts; },
         get power_user() { return power_user; },
-        get COMMENT_NAME_DEFAULT() { return COMMENT_NAME_DEFAULT; },
+
         get PromptReasoning() { return PromptReasoning; },
         get DOMPurify() { return DOMPurify; },
         get SVGInject() { return SVGInject; },
@@ -933,6 +934,7 @@ registerMessageShellContext({
 registerDomHandlersShellContext({
     backToMainChat: (...args) => backToMainChat(...args),
     openFileAttachmentPicker: (...args) => openFileAttachmentPicker(...args),
+    getChatMessageCommands: () => getChatMessageCommands(),
     state: {
         get amount_gen() { return amount_gen; },
         set amount_gen(value) { amount_gen = value; },
@@ -1082,7 +1084,7 @@ registerDomHandlersShellContext({
     openMessageDelete: (...args) => openMessageDelete(...args),
     openWireLogPanel: (...args) => openWireLogPanel(...args),
     openChatMemoryPanel: (...args) => openChatMemoryPanel(...args),
-    pauseScriptExecution: (...args) => pauseScriptExecution(...args),
+
     processDroppedFiles: (...args) => processDroppedFiles(...args),
     queueReactCharacterAuthoringRemount: (...args) => queueReactCharacterAuthoringRemount(...args),
     read_avatar_load: (...args) => read_avatar_load(...args),
@@ -1110,7 +1112,7 @@ registerDomHandlersShellContext({
     showBranchChatButtons: (...args) => showBranchChatButtons(...args),
     showDeleteConfirmWithCascade: (...args) => showDeleteConfirmWithCascade(...args),
     stopGeneration: (...args) => stopGeneration(...args),
-    stopScriptExecution: (...args) => stopScriptExecution(...args),
+
     t: (strings, ...values) => t(strings, ...values),
     toggleCharacterExportPopup: (...args) => toggleCharacterExportPopup(...args),
     getVisibleCharacterExportTrigger: (...args) => getVisibleCharacterExportTrigger(...args),
@@ -1682,33 +1684,6 @@ function getMainChatMessageUiStateById() {
     );
 }
 
-function shiftMainChatMessageUiStateAfterSplice(startIndex, delta) {
-    const normalizedStartIndex = Number(startIndex);
-    const normalizedDelta = Number(delta);
-    if (!Number.isInteger(normalizedStartIndex) || !Number.isInteger(normalizedDelta) || normalizedDelta === 0) {
-        return;
-    }
-
-    const nextState = new Map();
-    for (const [key, state] of mainChatMessageUiState.entries()) {
-        const messageId = Number(key);
-        if (!Number.isInteger(messageId) || messageId < normalizedStartIndex) {
-            nextState.set(key, state);
-            continue;
-        }
-
-        const nextMessageId = messageId + normalizedDelta;
-        if (nextMessageId >= 0) {
-            nextState.set(String(nextMessageId), state);
-        }
-    }
-
-    mainChatMessageUiState.clear();
-    for (const [key, state] of nextState.entries()) {
-        mainChatMessageUiState.set(key, state);
-    }
-}
-
 function setMainChatMessageUiState(messageId, patch) {
     const normalizedMessageId = Number(messageId);
     if (!Number.isInteger(normalizedMessageId) || normalizedMessageId < 0 || !patch || typeof patch !== 'object') {
@@ -1899,43 +1874,6 @@ function getMainChatGenerationControlBridgeState() {
     };
 }
 
-function getMainChatSlashCommandBridgeState() {
-    const formShell = document.getElementById('form_sheld');
-    const hasError = formShell?.classList.contains('script_error') === true;
-    const autoCompleteState = getMainChatSlashCommandAutoCompleteState();
-
-    return getMainChatSlashCommandState({
-        text: getComposerValue(),
-        autocompleteVisible: autoCompleteState.visible === true,
-        isExecuting: Boolean(isExecutingCommandsFromChatInput || formShell?.classList.contains('isExecutingCommandsFromChatInput')),
-        isPaused: formShell?.classList.contains('script_paused') === true,
-        isAborted: formShell?.classList.contains('script_aborted') === true,
-        hasError: hasError,
-        errorLabel: hasError ? 'error' : null,
-    });
-}
-
-function getMainChatSlashUiBridgeState() {
-    const autoCompleteState = getMainChatSlashCommandAutoCompleteState();
-
-    return {
-        active: Boolean(autoCompleteState.active),
-        visible: Boolean(autoCompleteState.visible),
-        replaceable: Boolean(autoCompleteState.replaceable),
-        detailsVisible: Boolean(autoCompleteState.detailsVisible),
-        selectedIndex: Number.isInteger(autoCompleteState.selectedIndex) ? autoCompleteState.selectedIndex : -1,
-        detailsHtml: typeof autoCompleteState.detailsHtml === 'string' ? autoCompleteState.detailsHtml : '',
-        options: Array.isArray(autoCompleteState.options)
-            ? autoCompleteState.options.map(option => ({
-                name: String(option?.name ?? ''),
-                type: String(option?.type ?? ''),
-                typeIcon: String(option?.typeIcon ?? ''),
-                selectable: option?.selectable !== false,
-                selected: option?.selected === true,
-            }))
-            : [],
-    };
-}
 
 function getMainChatStreamingTransportStore() {
     if (!globalThis.__emberDeskMainChatStreamingTransportStore || typeof globalThis.__emberDeskMainChatStreamingTransportStore !== 'object') {
@@ -3027,7 +2965,6 @@ function ensureMainChatMessageListReactHost() {
 }
 
 function cleanupMainChatMessageListReactHost() {
-    setMainChatSlashCommandReactOwnerEnabled(false);
     const chatContainer = document.getElementById('chat');
     if (chatContainer) {
         delete chatContainer.dataset.reactMainChatOwner;
@@ -3044,13 +2981,6 @@ function cleanupMainChatMessageListReactHost() {
             'mainChatComposerDisabled',
             'mainChatComposerGenerating',
             'mainChatComposerContext',
-            'mainChatSlashCommandActive',
-            'mainChatSlashCommandQueryLength',
-            'mainChatSlashCommandAutocomplete',
-            'mainChatSlashCommandExecuting',
-            'mainChatSlashCommandPaused',
-            'mainChatSlashCommandAborted',
-            'mainChatSlashCommandError',
         ]) {
             delete chatContainer.dataset[key];
         }
@@ -3129,7 +3059,6 @@ function getMainChatReactVisibleWindow(projectedChat) {
 function syncMainChatRuntimeDiagnostics(chatContainer, {
     generationControl,
     composer,
-    slashCommand,
     streamingTransport,
 } = {}) {
     if (!(chatContainer instanceof HTMLElement)) {
@@ -3149,13 +3078,6 @@ function syncMainChatRuntimeDiagnostics(chatContainer, {
         mainChatComposerDisabled: composer?.isDisabled === true,
         mainChatComposerGenerating: composer?.isGenerating === true,
         mainChatComposerContext: composer?.activeContext ?? 'none',
-        mainChatSlashCommandActive: slashCommand?.active === true,
-        mainChatSlashCommandQueryLength: slashCommand?.queryLength ?? 0,
-        mainChatSlashCommandAutocomplete: slashCommand?.autocompleteVisible === true ? 'visible' : 'hidden',
-        mainChatSlashCommandExecuting: slashCommand?.executing === true,
-        mainChatSlashCommandPaused: slashCommand?.paused === true,
-        mainChatSlashCommandAborted: slashCommand?.aborted === true,
-        mainChatSlashCommandError: slashCommand?.errorLabel ?? '',
     };
 
     for (const [key, value] of Object.entries(diagnostics)) {
@@ -3167,8 +3089,6 @@ function getMainChatMessageListReactBridgeState() {
     const chatContainer = document.getElementById('chat');
     const generationControl = getMainChatGenerationControlBridgeState();
     const composer = getMainChatComposerBridgeState();
-    const slashCommand = getMainChatSlashCommandBridgeState();
-    const slashUi = getMainChatSlashUiBridgeState();
     const streamingTransport = getMainChatStreamingTransportBridgeState();
     const projectedChat = reactMainChatProjectionCleared ? [] : chat;
     const visibleWindow = getMainChatReactVisibleWindow(projectedChat);
@@ -3176,7 +3096,6 @@ function getMainChatMessageListReactBridgeState() {
     syncMainChatRuntimeDiagnostics(chatContainer, {
         generationControl,
         composer,
-        slashCommand,
         streamingTransport,
     });
     const mainChatSnapshot = buildMainChatSnapshotFromLegacyChat({
@@ -3234,18 +3153,6 @@ function getMainChatMessageListReactBridgeState() {
                 : String(streamingTransport.activeMessageId),
             observedTokenCount: streamingTransport.observedTokenCount,
         },
-        slash: {
-            active: slashCommand.active,
-            replaceable: slashUi.replaceable,
-            detailsVisible: slashUi.detailsVisible,
-            detailsHtml: slashUi.detailsHtml,
-            options: slashUi.options,
-            autocompleteVisible: slashCommand.autocompleteVisible,
-            executing: slashCommand.executing,
-            paused: slashCommand.paused,
-            aborted: slashCommand.aborted,
-            errorLabel: slashCommand.errorLabel,
-        },
         messageUiById: getMainChatMessageUiStateById(),
         window: {
             visibleMessageIds,
@@ -3300,8 +3207,6 @@ function getMainChatMessageListReactBridgeState() {
         clientHeight: chatContainer?.clientHeight ?? 0,
         generationControl,
         composer,
-        slashCommand,
-        slashUi,
         streamingTransport,
         quietTransport: getMainChatQuietTransportBridgeState(),
         windowingContract: buildMainChatWindowingContract({
@@ -3321,6 +3226,12 @@ function getMainChatMessageListReactBridgeState() {
 }
 
 function getMainChatMessageListReactCommands() {
+    const identity = { character: characters[this_chid]?.avatar, chat: getCurrentChatId(), session: getChatMetadataSession(chat_metadata) };
+    const rowCommands = createChatMessageRowCommands({
+        commands: getChatMessageCommands(),
+        getChat: () => chat,
+        isCurrentChat: () => characters[this_chid]?.avatar === identity.character && getCurrentChatId() === identity.chat && getChatMetadataSession(chat_metadata) === identity.session,
+    });
     return createWorkspacePanelCommandPort({
         commands: {
             openCharacterLibrary: async () => {
@@ -3354,33 +3265,8 @@ function getMainChatMessageListReactCommands() {
                 }
                 return true;
             },
-            setSlashVisibleOwner: enabled => {
-                setMainChatSlashCommandReactOwnerEnabled(enabled);
-                return false;
-            },
-            selectSlashAutocompleteOption: index => selectMainChatSlashCommandOption(index),
-            startMessageEdit: messageId => startMainChatMessageEdit(messageId),
-            updateMessageEdit: (messageId, text) => updateMainChatMessageEdit(messageId, text),
-            commitMessageEdit: messageId => commitMainChatMessageEdit(messageId),
-            cancelMessageEdit: messageId => cancelMainChatMessageEdit(messageId),
-            setMessageReasoningOpen: (messageId, open) => setMainChatMessageReasoningOpen(messageId, open),
-            copyMessageReasoning: messageId => copyMainChatMessageReasoning(messageId),
-            startMessageReasoningEdit: messageId => startMainChatMessageReasoningEdit(messageId),
-            updateMessageReasoningEdit: (messageId, text) => updateMainChatMessageReasoningEdit(messageId, text),
-            commitMessageReasoningEdit: messageId => commitMainChatMessageReasoningEdit(messageId),
-            cancelMessageReasoningEdit: messageId => cancelMainChatMessageReasoningEdit(messageId),
-            deleteMessageReasoning: messageId => deleteMainChatMessageReasoning(messageId),
-            collapseAllMessageReasoning: () => collapseAllMainChatMessageReasoning(),
-            copyMessage: messageId => copyMainChatMessage(messageId),
-            duplicateMessage: messageId => duplicateMainChatMessage(messageId),
-            deleteMessage: messageId => deleteMessage(
-                messageId,
-                true,
-            ),
-            moveMessage: (messageId, direction) => messageEditMove(
-                messageId,
-                direction === 'up' ? messageId - 1 : messageId + 1,
-            ),
+            ...getChatMessageCommands(),
+            ...rowCommands,
             triggerVisibleGeneration: command => {
                 const kind = String(command?.kind ?? '');
                 if (kind === 'submitComposer') {
@@ -3397,9 +3283,11 @@ function getMainChatMessageListReactCommands() {
                 return true;
             },
             toggleMessageActionsShell: command => {
+                const messageId = command?.kind === 'open' ? rowCommands.resolveMessageUid(command.messageId) : undefined;
+                if (command?.kind === 'open' && messageId < 0) return false;
                 runMainChatVisibleMessageActionsShellAction({
                     kind: String(command?.kind ?? ''),
-                    messageId: Number.isInteger(command?.messageId) && command.messageId >= 0 ? command.messageId : undefined,
+                    messageId,
                 });
                 return false;
             },
@@ -4016,8 +3904,7 @@ export {
     countOccurrences,
     renderTemplate,
     itemizedPrompts,
-    UNIQUE_APIS,
-    CONNECT_API_MAP,
+
     system_messages,
     system_message_types,
     sendSystemMessage,
@@ -4223,6 +4110,11 @@ let dialogueCloseStop = false;
 const itemizedPrompts = [];
 
 export let chat_metadata = {};
+const chatMetadataSessions = new WeakMap();
+function getChatMetadataSession(metadata) {
+    if (!chatMetadataSessions.has(metadata)) chatMetadataSessions.set(metadata, {});
+    return chatMetadataSessions.get(metadata);
+}
 
 // Chat metadata is deliberately retained as-is; only the active visual override is read here.
 eventSource.on(event_types.CHAT_CHANGED, applyActiveBackground);
@@ -4415,7 +4307,7 @@ export const isGenerating = () => is_send_press;
 
 
 /** @type {string} */
-let this_edit_mes_chname = '';
+
 /** @type {number|undefined} */
 let this_edit_mes_id = undefined;
 
@@ -4602,11 +4494,7 @@ async function bootstrapWorkspace() {
     await measureStartupStage('mountRightNavPanel', () => mountRightNavPanel());
     await measureStartupStage('registerCoreModules', () => Promise.resolve().then(() => {
         initChatUtilities(optionsMenuModuleRef.mergeAttachmentFiles);
-        initDefaultSlashCommands();
         initOpenAI();
-    }));
-    await measureStartupStage('registerExtensionSlashCommands', () => Promise.resolve().then(() => {
-        ToolManager.initToolSlashCommands();
     }));
     await measureStartupStage('initPresetManager', () => initPresetManager());
     await measureStartupStage('initSystemMessages', () => initSystemMessages());
@@ -4621,7 +4509,6 @@ async function bootstrapWorkspace() {
     await measureStartupStage('getCharacters', () => getCharacters());
     await measureStartupStage('initTokenizers', () => initTokenizers());
     await measureStartupStage('hydrateFeatureModules', async () => {
-        await initSlashCommandAutoComplete();
         bindMainChatMessageListBridgeObservers();
         initMacroAutoComplete();
         // Register deferred panel hooks before initWorldInfo so they capture any needed state
@@ -4676,9 +4563,9 @@ export function displayOnlineStatus() {
     const sendTextareaHint = $('#send_textarea_hint');
 
     if (online_status == 'no_connection') {
-        sendTextareaHint.text(t`Type /? for commands. Send requires an API connection.`);
+        sendTextareaHint.text(t`Send requires an API connection.`);
     } else {
-        sendTextareaHint.text(t`Type /? for commands.`);
+        sendTextareaHint.text('');
     }
 }
 
@@ -5760,76 +5647,12 @@ export function cancelDebouncedChatSave() {
 
 
 export async function deleteLastMessage() {
-    if (greetingSelectionPending) return false;
-    const deletedMessageId = chat.length - 1;
-    chat.length = chat.length - 1;
-    if (isReactMainChatOwner()) {
-        clearMainChatMessageUiState(deletedMessageId);
-        if (this_edit_mes_id === deletedMessageId) {
-            this_edit_mes_id = undefined;
-        }
-        mainChatVisibleStartIndices.delete(getCurrentChatId());
-        saveChatDebounced();
-        await eventSource.emit(event_types.MESSAGE_DELETED, chat.length);
-        void mountReactMainChatMessageListPanel();
-        return;
-    }
-    chatElement.children('.mes').last().remove();
-    await eventSource.emit(event_types.MESSAGE_DELETED, chat.length);
+    return getChatMessageCommands().deleteRange(chat.length - 1, 1, { taint: false });
 }
 
-/**
- * Deletes a message from the chat by its ID, optionally asking for confirmation.
- * @param {number} id The ID of the message to delete.
- * @param {boolean} [askConfirmation=false] Whether to ask for confirmation before deleting.
- */
+/** Deletes a message, optionally asking for confirmation. */
 export async function deleteMessage(id, askConfirmation = false) {
-    if (greetingSelectionPending) return false;
-    if (askConfirmation) {
-        const result = await callGenericPopup(t`Are you sure you want to delete this message?`, POPUP_TYPE.CONFIRM, null, {
-            okButton: t`Delete Message`,
-            cancelButton: 'Cancel',
-        });
-        if (!result) {
-            return;
-        }
-    }
-
-    if (isReactMainChatOwner()) {
-        chat.splice(id, 1);
-        shiftMainChatMessageUiStateAfterSplice(id, -1);
-        chat_metadata.tainted = true;
-        if (this_edit_mes_id === id) {
-            this_edit_mes_id = undefined;
-        }
-        mainChatVisibleStartIndices.delete(getCurrentChatId());
-        saveChatDebounced();
-        await eventSource.emit(event_types.MESSAGE_DELETED, chat.length);
-        void mountReactMainChatMessageListPanel();
-        return;
-    }
-
-    const minId = getFirstDisplayedMessageId();
-    const messageElement = chatElement.find(`.mes[mesid="${id}"]`);
-    if (messageElement.length === 0) {
-        return;
-    }
-
-    chat.splice(id, 1);
-    messageElement.remove();
-
-    chat_metadata.tainted = true;
-
-    const startIndex = [0, minId].includes(id) ? id : null;
-    updateViewMessageIds(startIndex);
-    saveChatDebounced();
-
-    if (this_edit_mes_id === id) {
-        this_edit_mes_id = undefined;
-    }
-
-
-    await eventSource.emit(event_types.MESSAGE_DELETED, chat.length);
+    return getChatMessageCommands().deleteMessage(id, askConfirmation);
 }
 
 export const reloadChatMutex = new SimpleMutex(reloadCurrentChatUnsafe);
@@ -5878,15 +5701,13 @@ export function sendTextareaMessage(composerSubmission = getComposerSnapshot()) 
 async function submitComposerMessage(composerSubmission) {
     if (greetingSelectionPending) return;
     if (is_send_press) return;
-    if (isExecutingCommandsFromChatInput) return;
     if (regenerateRequestInFlight || generationEntryPending) return;
 
     const textareaText = composerSubmission.value;
     const currentComposer = getComposerSnapshot();
     if (composerSubmission.contextKey !== currentComposer.contextKey || composerSubmission.contextRevision !== currentComposer.contextRevision) return;
 
-    // Slash commands (e.g. /api to reconnect) still run while offline; a plain send cannot.
-    if (online_status === 'no_connection' && !textareaText.trimStart().startsWith('/')) {
+    if (online_status === 'no_connection') {
         flashComposerSendBlocked();
         toastr.warning(t`Not connected to API!`, '', { preventDuplicates: true });
         return;
@@ -6043,21 +5864,6 @@ export async function generateQuietPrompt({ quietPrompt = '', quietToLoud = fals
     });
 }
 
-/**
- * Executes slash commands and returns the new text and whether the generation was interrupted.
- * @param {string} message Text to be sent
- * @returns {Promise<boolean>} Whether the message sending was interrupted
- */
-export async function processCommands(message, composerSubmission = getComposerSnapshot()) {
-    if (!message || !message.trim().startsWith('/')) {
-        return false;
-    }
-    await executeSlashCommandsOnChatInput(message, {
-        clearChatInput: true,
-        composerSubmission,
-    });
-    return true;
-}
 
 /**
  * Extracts the contents of bias macros from a message.
@@ -6834,7 +6640,7 @@ let greetingSelectionPending = false;
  */
 export function canRegenerateLastReply() {
     return canRegenerateFromState({
-        busy: Boolean(greetingSelectionPending || is_send_press || regenerateRequestInFlight || generationEntryPending || isExecutingCommandsFromChatInput || this_edit_mes_id !== undefined),
+        busy: Boolean(greetingSelectionPending || is_send_press || regenerateRequestInFlight || generationEntryPending || this_edit_mes_id !== undefined),
         connected: online_status !== 'no_connection',
         hasCharacter: this_chid !== undefined || Boolean(String(name2 ?? '').trim()),
         chat,
@@ -8103,20 +7909,10 @@ function applyMessageEditText(messageId, inputText) {
     return { text, mes, bias };
 }
 
-// Common code for message editor done and auto-save
-function updateMessage(div) {
-    const mesBlock = div.closest('.mes_block');
-    const mesElement = div.closest('.mes');
-    const messageId = Number(mesElement.attr('mesid'));
-    const text = mesBlock.find('.edit_textarea').val()
-        ?? mesBlock.find('.mes_text').text();
-    const updated = applyMessageEditText(messageId, text);
-    return { mesBlock, ...updated };
-}
 
-function openMessageDelete(fromSlashCommand) {
+function openMessageDelete() {
     closeMessageEditor();
-    if (fromSlashCommand || !is_send_press) {
+    if (!is_send_press) {
         $('#dialogue_del_mes').css('display', 'block');
         globalThis.__emberDeskBulkDeleteController.open(t`Select a message to delete it and every message after it.`);
         $('#send_form').css('display', 'none');
@@ -8136,511 +7932,72 @@ function openMessageDelete(fromSlashCommand) {
     is_delete_mode = true;
 }
 
-function startMainChatMessageEdit(messageId) {
-    if (greetingSelectionPending) return false;
-    const normalizedMessageId = Number(messageId);
-    const message = chat[normalizedMessageId];
-    if (!Number.isInteger(normalizedMessageId) || normalizedMessageId < 0 || !message) {
-        return false;
-    }
-
-    this_edit_mes_id = normalizedMessageId;
-    this_edit_mes_chname = message.name || (message.is_user ? name1 : name2);
-    setMainChatMessageUiState(normalizedMessageId, {
-        editing: true,
-        editText: trimSpaces(message.mes || ''),
-    });
-    return true;
-}
-
-function updateMainChatMessageEdit(messageId, text) {
-    const normalizedMessageId = Number(messageId);
-    if (!Number.isInteger(normalizedMessageId) || normalizedMessageId < 0 || !chat[normalizedMessageId]) {
-        return false;
-    }
-
-    setMainChatMessageUiState(normalizedMessageId, {
-        editing: true,
-        editText: String(text ?? ''),
-    });
-    return true;
-}
-
-async function duplicateMainChatMessage(messageId) {
-    if (greetingSelectionPending) return false;
-    const normalizedMessageId = Number(messageId);
-    const sourceMessage = chat[normalizedMessageId];
-    if (!Number.isInteger(normalizedMessageId) || normalizedMessageId < 0 || !sourceMessage) {
-        return false;
-    }
-
-    const editState = mainChatMessageUiState.get(String(normalizedMessageId));
-    const clone = structuredClone(sourceMessage);
-    clone.send_date = Date.now();
-    // A duplicated message is a new message — it must not share the source's
-    // persistent identity or chat-memory turns see the same id twice.
-    clone.extra = { ...(clone.extra ?? {}), id: uuidv4() };
-    if (editState?.editing && typeof editState.editText === 'string') {
-        clone.mes = editState.editText;
-    }
-    clone.mes = String(clone.mes ?? '').trim();
-
-    chat.splice(normalizedMessageId + 1, 0, clone);
-    shiftMainChatMessageUiStateAfterSplice(normalizedMessageId + 1, 1);
-    await saveChatConditional();
-    void mountReactMainChatMessageListPanel();
-    await eventSource.emit(event_types.MESSAGE_UPDATED, normalizedMessageId + 1);
-    return true;
-}
-
-async function copyMainChatMessage(messageId) {
-    const normalizedMessageId = Number(messageId);
-    const sourceMessage = chat[normalizedMessageId];
-    if (!Number.isInteger(normalizedMessageId) || normalizedMessageId < 0 || !sourceMessage) {
-        return false;
-    }
-
-    await copyText(String(sourceMessage.mes ?? ''));
-    toastr.info('Copied!', '', { timeOut: 2000 });
-    return true;
-}
-
-async function commitMainChatMessageEdit(messageId) {
-    const normalizedMessageId = Number(messageId);
-    const editState = mainChatMessageUiState.get(String(normalizedMessageId));
-    if (!editState?.editing) {
-        return false;
-    }
-
-    const updated = applyMessageEditText(normalizedMessageId, editState.editText);
-    if (!updated) {
-        return false;
-    }
-
-    await eventSource.emit(event_types.MESSAGE_EDITED, normalizedMessageId);
-    setMainChatMessageUiState(normalizedMessageId, {
-        editing: false,
-        editText: null,
-    });
-    if (this_edit_mes_id === normalizedMessageId) {
-        this_edit_mes_id = undefined;
-    }
-    await eventSource.emit(event_types.MESSAGE_UPDATED, normalizedMessageId);
-    await saveChatConditional();
-    void mountReactMainChatMessageListPanel();
-    return true;
-}
-
-async function cancelMainChatMessageEdit(messageId) {
-    const normalizedMessageId = Number(messageId);
-    if (!Number.isInteger(normalizedMessageId) || normalizedMessageId < 0) {
-        return false;
-    }
-
-    setMainChatMessageUiState(normalizedMessageId, {
-        editing: false,
-        editText: null,
-    });
-    if (this_edit_mes_id === normalizedMessageId) {
-        this_edit_mes_id = undefined;
-    }
-    void mountReactMainChatMessageListPanel();
-    return true;
-}
-
-function setMainChatMessageReasoningOpen(messageId, open) {
-    const normalizedMessageId = Number(messageId);
-    const message = chat[normalizedMessageId];
-    if (!Number.isInteger(normalizedMessageId) || normalizedMessageId < 0 || !message) {
-        return false;
-    }
-
-    const hasReasoning = typeof message?.extra?.reasoning === 'string' && message.extra.reasoning !== '';
-    const isEditing = mainChatMessageUiState.get(String(normalizedMessageId))?.reasoningEditing === true;
-    if (!hasReasoning && !isEditing) {
-        return false;
-    }
-
-    setMainChatMessageUiState(normalizedMessageId, { reasoningOpen: open === true });
-    return true;
-}
-
-async function copyMainChatMessageReasoning(messageId) {
-    const normalizedMessageId = Number(messageId);
-    const message = chat[normalizedMessageId];
-    const reasoning = typeof message?.extra?.reasoning === 'string' ? message.extra.reasoning : '';
-    if (!Number.isInteger(normalizedMessageId) || normalizedMessageId < 0 || !reasoning) {
-        return false;
-    }
-
-    await copyText(reasoning);
-    toastr.info('Copied!', '', { timeOut: 2000 });
-    return true;
-}
-
-function startMainChatMessageReasoningEdit(messageId) {
-    if (greetingSelectionPending) return false;
-    const normalizedMessageId = Number(messageId);
-    const message = chat[normalizedMessageId];
-    if (!Number.isInteger(normalizedMessageId) || normalizedMessageId < 0 || !message) {
-        return false;
-    }
-
-    setMainChatMessageUiState(normalizedMessageId, {
-        reasoningOpen: true,
-        reasoningEditing: true,
-        reasoningEditText: typeof message?.extra?.reasoning === 'string' ? message.extra.reasoning : '',
-    });
-    return true;
-}
-
-function updateMainChatMessageReasoningEdit(messageId, text) {
-    const normalizedMessageId = Number(messageId);
-    const message = chat[normalizedMessageId];
-    if (!Number.isInteger(normalizedMessageId) || normalizedMessageId < 0 || !message) {
-        return false;
-    }
-
-    const reasoningEditText = String(text ?? '');
-    setMainChatMessageUiState(normalizedMessageId, {
-        reasoningOpen: true,
-        reasoningEditing: true,
-        reasoningEditText,
-    });
-    return true;
-}
-
-async function commitMainChatMessageReasoningEdit(messageId) {
-    const normalizedMessageId = Number(messageId);
-    const message = chat[normalizedMessageId];
-    const uiState = mainChatMessageUiState.get(String(normalizedMessageId));
-    if (!Number.isInteger(normalizedMessageId) || normalizedMessageId < 0 || !message || !uiState?.reasoningEditing) {
-        return false;
-    }
-
-    const reasoning = getRegexedString(
-        substituteParams(String(uiState.reasoningEditText ?? '')),
-        regex_placement.REASONING,
-        { isEdit: true },
-    );
-    setMainChatMessageUiState(normalizedMessageId, {
-        reasoningOpen: reasoning !== '',
-        reasoningEditing: false,
-        reasoningEditText: null,
-    });
-    if (reasoning === String(message?.extra?.reasoning ?? '')) {
-        return true;
-    }
-
-    message.extra ??= {};
-    message.extra.reasoning = reasoning;
-    message.extra.reasoning_type = message.extra.reasoning_type ? 'edited' : 'manual';
-    await saveChatConditional();
-    await eventSource.emit(event_types.MESSAGE_REASONING_EDITED, normalizedMessageId);
-    if (mainChatMessageUiState.get(String(normalizedMessageId))?.editing) {
-        await commitMainChatMessageEdit(normalizedMessageId);
-        return true;
-    }
-
-    void mountReactMainChatMessageListPanel();
-    return true;
-}
-
-async function cancelMainChatMessageReasoningEdit(messageId) {
-    const normalizedMessageId = Number(messageId);
-    if (!Number.isInteger(normalizedMessageId) || normalizedMessageId < 0) {
-        return false;
-    }
-
-    const uiState = mainChatMessageUiState.get(String(normalizedMessageId));
-    const hasReasoning = typeof chat[normalizedMessageId]?.extra?.reasoning === 'string'
-        && chat[normalizedMessageId].extra.reasoning !== '';
-    setMainChatMessageUiState(normalizedMessageId, {
-        reasoningOpen: hasReasoning && uiState?.reasoningOpen === true,
-        reasoningEditing: false,
-        reasoningEditText: null,
-    });
-    if (uiState?.editing) {
-        return cancelMainChatMessageEdit(normalizedMessageId);
-    }
-
-    void mountReactMainChatMessageListPanel();
-    return true;
-}
-
-async function deleteMainChatMessageReasoning(messageId) {
-    const normalizedMessageId = Number(messageId);
-    const message = chat[normalizedMessageId];
-    if (!Number.isInteger(normalizedMessageId) || normalizedMessageId < 0 || !message?.extra) {
-        return false;
-    }
-
-    const confirmed = await Popup.show.confirm(
-        'Remove Reasoning',
-        'Are you sure you want to clear the reasoning?<br />Visible message contents will stay intact.',
-    );
-    if (!confirmed) {
-        return false;
-    }
-
-    message.extra.reasoning = '';
-    delete message.extra.reasoning_type;
-    delete message.extra.reasoning_duration;
-    setMainChatMessageUiState(normalizedMessageId, {
-        reasoningOpen: false,
-        reasoningEditing: false,
-        reasoningEditText: null,
-    });
-    await saveChatConditional();
-    await eventSource.emit(event_types.MESSAGE_REASONING_DELETED, normalizedMessageId);
-    void mountReactMainChatMessageListPanel();
-    return true;
-}
-
-function collapseAllMainChatMessageReasoning() {
-    let changed = false;
-    for (let messageId = 0; messageId < chat.length; messageId++) {
-        const message = chat[messageId];
-        if (typeof message?.extra?.reasoning !== 'string' || message.extra.reasoning === '') {
-            continue;
-        }
-        setMainChatMessageUiState(messageId, { reasoningOpen: false });
-        changed = true;
-    }
-    return changed;
-}
-
-/**
- * Create the message edit UI.
- * @param {number} editMessageId The ID of the message to edit
- */
-export async function messageEdit(editMessageId) {
-    if (greetingSelectionPending) return false;
-    const editMessage = chat[editMessageId];
-    if (!editMessage) {
-        console.warn(`Message with id ${editMessageId} not found in chat array.`);
-        return;
-    }
-
-    if (isReactMainChatOwner()) {
-        startMainChatMessageEdit(editMessageId);
-        return;
-    }
-
-    const messageElement = chatElement.find(`.mes[mesid="${editMessageId}"]`);
-    if (messageElement.length === 0) {
-        console.warn(`Message element with id ${editMessageId} not found in DOM.`);
-        return;
-    }
-
-    this_edit_mes_id = editMessageId;
-    this_edit_mes_chname = editMessage.name || (editMessage.is_user ? name1 : name2);
-
-
-    const chatScrollPosition = chatElement.scrollTop();
-    const messageBlock = messageElement.find('.mes_block');
-    const messageText = messageBlock.find('.mes_text');
-
-    messageText.empty();
-    messageBlock.find('.mes_buttons').css('display', 'none');
-    messageBlock.find('.mes_edit_buttons').css('display', 'inline-flex');
-
-    // Also edit reasoning, if it exists
-    const reasoningEdit = messageBlock.find('.mes_reasoning_edit:visible');
-    if (reasoningEdit.length > 0) {
-        reasoningEdit.trigger('click');
-    }
-
-    const editTextArea = document.createElement('textarea');
-    editTextArea.id = 'curEditTextarea';
-    editTextArea.className = 'edit_textarea';
-    editTextArea.dataset.macros = '';
-    messageText.append(editTextArea);
-
-    const text = trimSpaces(editMessage.mes || '');
-    const $editTextArea = $(editTextArea);
-    $editTextArea.val(text);
-
-    const cssAutofit = CSS.supports('field-sizing', 'content');
-    if (!cssAutofit) {
-        $editTextArea.height(0);
-        $editTextArea.height(editTextArea.scrollHeight);
-    }
-
-    $editTextArea.trigger('focus');
-
-    // Sets the cursor at the end of the text
-    editTextArea.setSelectionRange(text.length, text.length);
-
-    if (Number(this_edit_mes_id) === chat.length - 1) {
-        chatElement.scrollTop(chatScrollPosition);
-    }
-
-    updateEditArrowClasses();
-    scheduleMainChatMessageListPanelRefresh();
-}
-
-/**
- * Close the open message editor.
- * This deletes the user's unsaved changes.
- * @param {number} [messageId=this_edit_mes_id]
- */
-async function messageEditCancel(messageId = this_edit_mes_id) {
-    if (isReactMainChatOwner()) {
-        return cancelMainChatMessageEdit(messageId);
-    }
-
-    let text = chat[messageId].mes;
-    let thisMesDiv;
-    // If this is the button then select it's parent. Otherwise, select by messageId.
-    if (this?.classList?.contains('mes_edit_cancel')) {
-        thisMesDiv = $(this).closest('.mes');
-    } else {
-        thisMesDiv = chatElement.children('.mes').filter(`[mesid="${messageId}"]`);
-    }
-
-    const thisMesBlock = thisMesDiv.find('.mes_block');
-    thisMesBlock.find('.mes_text').empty();
-    thisMesDiv.find('.mes_edit_buttons').css('display', 'none');
-    thisMesBlock.find('.mes_buttons').css('display', '');
-    thisMesBlock.find('.mes_text')
-        .append(messageFormatting(
-            text,
-            this_edit_mes_chname,
-            chat[messageId].is_system,
-            chat[messageId].is_user,
-            messageId,
-            {},
-            false,
-        ));
-    appendMediaToMessage(chat[messageId], thisMesDiv);
-    addCopyToCodeBlocks(thisMesDiv);
-
-    const reasoningEditDone = thisMesBlock.find('.mes_reasoning_edit_cancel:visible');
-    if (reasoningEditDone.length > 0) {
-        reasoningEditDone.trigger('click');
-    }
-
-    await eventSource.emit(event_types.MESSAGE_UPDATED, messageId);
-    if (messageId == this_edit_mes_id) {
-        this_edit_mes_id = undefined;
-    } else {
-        console.warn(`The message editor was closed on message #${messageId} while #${this_edit_mes_id} is being edited.`);
-    }
-
-    void mountReactMainChatMessageListPanel();
-}
-
-/**
- * Swaps chat[sourceId] with chat[targetId]. They must be adjacent.
- * @param {number} sourceId Index of the message to move
- * @param {number} targetId Index of the target message
- * @returns {Promise<boolean>} True if the messages were moved, false otherwise
- */
-async function messageEditMove(sourceId, targetId) {
-    if (greetingSelectionPending) return false;
-    if (is_send_press) {
-        console.warn(`The message #${sourceId} was not moved to #${targetId} because a generation is in progress.`);
-        return false;
-    }
-
-    if (Math.abs(sourceId - targetId) !== 1) {
-        console.error(`Message #${sourceId} and #${targetId} are not adjacent.`);
-        return false;
-    }
-
-    if (isReactMainChatOwner()) {
-        if (!chat[sourceId] || !chat[targetId]) {
-            console.error(`Message #${sourceId} or #${targetId} was not found.`);
-            return false;
-        }
-
-        [chat[sourceId], chat[targetId]] = [chat[targetId], chat[sourceId]];
-
-        if (this_edit_mes_id === sourceId) {
-            this_edit_mes_id = targetId;
-        }
-
-        await saveChatConditional();
-        void mountReactMainChatMessageListPanel();
-        await eventSource.emit(event_types.MESSAGE_UPDATED, sourceId);
-        return true;
-    }
-
-    const targetMessageDiv = chatElement.find(`.mes[mesid="${targetId}"]`);
-    const sourceMessageDiv = chatElement.find(`.mes[mesid="${sourceId}"]`);
-
-    if (sourceMessageDiv.length === 0 || targetMessageDiv.length === 0) {
-        console.error(`Message #${sourceId} or #${targetId} were not found.`);
-        return false;
-    }
-
-    if (sourceId <= targetId) {
-        sourceMessageDiv.insertAfter(targetMessageDiv);
-    } else {
-        sourceMessageDiv.insertBefore(targetMessageDiv);
-    }
-
-    //Swap Ids.
-    targetMessageDiv.attr('mesid', sourceId);
-    sourceMessageDiv.attr('mesid', targetId);
-
-    // Swap chat array entries.
-    [chat[sourceId], chat[targetId]] = [chat[targetId], chat[sourceId]];
-
-    // Update edited message id
-    if (this_edit_mes_id === sourceId) {
-        this_edit_mes_id = targetId;
-    }
-
-    updateViewMessageIds();
-    await saveChatConditional();
-    await eventSource.emit(event_types.MESSAGE_UPDATED, sourceId);
-    return true;
-}
-
-async function messageEditDone(div) {
-    if (isReactMainChatOwner()) {
-        return commitMainChatMessageEdit(this_edit_mes_id);
-    }
-
-    if (!(this_edit_mes_id >= 0)) {
-        console.trace('this_edit_mes_id cannot be blank when calling messageEditDone.');
-        return;
-    }
-
-    let { mesBlock, text, mes, bias } = updateMessage(div);
-
-    await eventSource.emit(event_types.MESSAGE_EDITED, this_edit_mes_id);
-    text = chat[this_edit_mes_id]?.mes ?? text;
-    mesBlock.find('.mes_text').empty();
-    mesBlock.find('.mes_edit_buttons').css('display', 'none');
-    mesBlock.find('.mes_buttons').css('display', '');
-    mesBlock.find('.mes_text').append(
-        messageFormatting(
-            text,
-            this_edit_mes_chname,
-            mes.is_system,
-            mes.is_user,
-            this_edit_mes_id,
-            {},
-            false,
+let chatMessageCommands;
+
+function getChatMessageCommands() {
+    return chatMessageCommands ??= createChatMessageCommands({
+        getChat: () => chat,
+        getChatId: () => JSON.stringify([characters[this_chid]?.avatar ?? null, getCurrentChatId()]),
+        getUiStates: () => mainChatMessageUiState,
+        getUiState: id => mainChatMessageUiState.get(String(id)),
+        setUiState: (id, patch) => setMainChatMessageUiState(id, patch),
+        getEditingId: () => this_edit_mes_id,
+        setEditingId: id => { this_edit_mes_id = id; },
+        isBlocked: () => greetingSelectionPending,
+        isGenerating: () => is_send_press,
+        prepareEdit: text => trimSpaces(text),
+        applyEdit: (id, text) => applyMessageEditText(id, text),
+        processReasoning: text => getRegexedString(substituteParams(text), regex_placement.REASONING, { isEdit: true }),
+        save: () => saveChatConditional(),
+        saveDebounced: () => saveChatDebounced(),
+        emit: (event, id) => eventSource.emit(event_types[event], id),
+        refresh: () => scheduleMainChatMessageListPanelRefresh(),
+        resetWindow: () => mainChatVisibleStartIndices.delete(getCurrentChatId()),
+        prepareBulkWindow: start => {
+            const chatId = getCurrentChatId();
+            const visibleStart = mainChatVisibleStartIndices.get(chatId);
+            if (Number.isInteger(visibleStart) && visibleStart >= start) {
+                mainChatVisibleStartIndices.set(chatId, Math.max(start - CHAT_TRUNCATION, 0));
+            }
+        },
+        getBulkRefresh: () => {
+            const identity = { character: characters[this_chid]?.avatar, chat: getCurrentChatId(), metadata: chat_metadata };
+            const isCurrent = () => characters[this_chid]?.avatar === identity.character && getCurrentChatId() === identity.chat && chat_metadata === identity.metadata;
+            return async () => {
+                if (!isCurrent()) return;
+                await mountReactMainChatMessageListPanel();
+                requestAnimationFrame(() => { if (isCurrent()) scrollChatToBottom(); });
+            };
+        },
+        taint: () => { chat_metadata.tainted = true; },
+        copyText: text => copyText(text),
+        notifyCopied: () => toastr.info('Copied!', '', { timeOut: 2000 }),
+        createId: () => uuidv4(),
+        confirmDelete: () => callGenericPopup(t`Are you sure you want to delete this message?`, POPUP_TYPE.CONFIRM, null, {
+            okButton: t`Delete Message`, cancelButton: 'Cancel',
+        }),
+        confirmReasoningDelete: () => Popup.show.confirm(
+            'Remove Reasoning',
+            'Are you sure you want to clear the reasoning?<br />Visible message contents will stay intact.',
         ),
-    );
-    mesBlock.find('.mes_bias').empty();
-    mesBlock.find('.mes_bias').append(messageFormatting(bias, '', false, false, -1, {}, false));
-    appendMediaToMessage(mes, div.closest('.mes'));
-    addCopyToCodeBlocks(div.closest('.mes'));
+    });
+}
 
-    const reasoningEditDone = mesBlock.find('.mes_reasoning_edit_done:visible');
-    if (reasoningEditDone.length > 0) {
-        reasoningEditDone.trigger('click');
-    }
+/** Opens a message editor through the shared command boundary. */
+export async function messageEdit(messageId) {
+    return getChatMessageCommands().startMessageEdit(messageId);
+}
 
-    await eventSource.emit(event_types.MESSAGE_UPDATED, this_edit_mes_id);
-    this_edit_mes_id = undefined;
-    await saveChatConditional();
-    void mountReactMainChatMessageListPanel();
+async function messageEditCancel(messageId = this_edit_mes_id) {
+    return getChatMessageCommands().cancelMessageEdit(messageId);
+}
+
+async function messageEditMove(sourceId, targetId) {
+    return getChatMessageCommands().moveMessage(sourceId, targetId);
+}
+
+async function messageEditDone() {
+    return getChatMessageCommands().commitMessageEdit(this_edit_mes_id);
 }
 
 /**
@@ -8980,7 +8337,9 @@ export function removeDepthPrompts(promptMap = extension_prompts) {
  * @param {boolean} reset Should a metadata be reset by this call.
  */
 export function updateChatMetadata(newValues, reset) {
+    const session = reset ? null : getChatMetadataSession(chat_metadata);
     chat_metadata = reset ? { ...newValues } : { ...chat_metadata, ...newValues };
+    if (session) chatMetadataSessions.set(chat_metadata, session);
 }
 
 
@@ -9204,20 +8563,13 @@ export function getFirstDisplayedMessageId() {
 export function closeMessageEditor(what = 'all') {
     if (what === 'message' || what === 'all') {
         if (this_edit_mes_id >= 0) {
-            if (isReactMainChatOwner()) {
-                void cancelMainChatMessageEdit(this_edit_mes_id);
-            } else {
-                chatElement.find(`.mes[mesid="${this_edit_mes_id}"] .mes_edit_cancel`).trigger('click');
-            }
+            void getChatMessageCommands().cancelMessageEdit(this_edit_mes_id);
         }
     }
     if (what === 'reasoning' || what === 'all') {
-        document.querySelectorAll('.reasoning_edit_textarea').forEach((el) => {
-            const cancelButton = el.closest('.mes')?.querySelector('.mes_reasoning_edit_cancel');
-            if (cancelButton instanceof HTMLElement) {
-                cancelButton.click();
-            }
-        });
+        for (const [messageId, state] of mainChatMessageUiState) {
+            if (state.reasoningEditing) void getChatMessageCommands().cancelMessageReasoningEdit(messageId);
+        }
     }
 }
 

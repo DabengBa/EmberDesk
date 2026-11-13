@@ -1,7 +1,7 @@
-import { throttle, uuidv4 } from './utils.js';
+import { throttle } from './utils.js';
 import { debounce_timeout } from './constants.js';
 import { eventSource, event_types } from './events.js';
-import { updateMessageElement } from './message-service.js';
+
 import { requireDomHandlersShellContext } from './dom-handlers-shell-context.js';
 import { renameComposerDraftContext, setComposerDraftContext, requestComposerFocus } from './main-chat-composer-service.js';
 import { installWorkspaceInteractionCommands } from './workspace-interaction-commands.js';
@@ -118,7 +118,7 @@ const openCharacterWorldPopup = (...args) => shell().openCharacterWorldPopup(...
 const openMessageDelete = (...args) => shell().openMessageDelete(...args);
 const openWireLogPanel = (...args) => shell().openWireLogPanel(...args);
 const openChatMemoryPanel = (...args) => shell().openChatMemoryPanel(...args);
-const pauseScriptExecution = (...args) => shell().pauseScriptExecution(...args);
+
 const processDroppedFiles = (...args) => shell().processDroppedFiles(...args);
 const queueReactCharacterAuthoringRemount = (...args) => shell().queueReactCharacterAuthoringRemount(...args);
 const read_avatar_load = (...args) => shell().read_avatar_load(...args);
@@ -141,14 +141,14 @@ const setOptionsMenuRegenerateAvailability = (...args) => shell().setOptionsMenu
 const showBranchChatButtons = (...args) => shell().showBranchChatButtons(...args);
 const showDeleteConfirmWithCascade = (...args) => shell().showDeleteConfirmWithCascade(...args);
 const stopGeneration = (...args) => shell().stopGeneration(...args);
-const stopScriptExecution = (...args) => shell().stopScriptExecution(...args);
+
 const t = (...args) => shell().t(...args);
 const toggleCharacterExportPopup = (...args) => shell().toggleCharacterExportPopup(...args);
 const getVisibleCharacterExportTrigger = (...args) => shell().getVisibleCharacterExportTrigger(...args);
 
 const updateCharacterRow = (...args) => shell().updateCharacterRow(...args);
 const updateFavButtonState = (...args) => shell().updateFavButtonState(...args);
-const updateViewMessageIds = (...args) => shell().updateViewMessageIds(...args);
+
 const waitUntilCondition = (...args) => shell().waitUntilCondition(...args);
 
 export function initDomHandlers() {
@@ -292,9 +292,9 @@ export async function bindLegacyShellHandlers() {
         document.getElementById('shadow_select_chat_popup').close();
     }
 
-    async function deleteChatByFileName(deleteFileName, { fromSlashCommand = false } = {}) {
+    async function deleteChatByFileName(deleteFileName) {
         console.debug('detected cross click for' + deleteFileName);
-        return shell().getHistoryCommands().deleteHistoryChat(deleteFileName, fromSlashCommand, {
+        return shell().getHistoryCommands().deleteHistoryChat(deleteFileName, false, {
             confirm: async () => {
                 const content = document.createElement('div');
                 const title = document.createElement('h3');
@@ -315,10 +315,10 @@ export async function bindLegacyShellHandlers() {
         });
     }
 
-    $(document).on('click', '.PastChat_cross', function (e, options) {
+    $(document).on('click', '.PastChat_cross', function (e) {
         e.stopPropagation();
         if (e.isTrigger) e.preventDefault();
-        return deleteChatByFileName($(this).attr('file_name'), options);
+        return deleteChatByFileName($(this).attr('file_name'));
     });
 
 
@@ -670,21 +670,18 @@ export async function bindLegacyShellHandlers() {
 
     ///////////// OPTIMIZED LISTENERS FOR LEFT SIDE OPTIONS POPUP MENU //////////////////////
     // Delegated binding: the menu items are React-owned inside #options and can be
-    // remounted; a document-level handler keeps jQuery-trigger compatibility
-    // (slash commands/extensions pass customData through trigger()).
-    optionsMenuCommand = async function (id, customData) {
-        return shell().getHistoryCommands().runHistoryMenuAction(id, customData?.fromSlashCommand || false, {
+    // remounted; a document-level handler keeps jQuery-trigger compatibility.
+    optionsMenuCommand = async function (id) {
+        return shell().getHistoryCommands().runHistoryMenuAction(id, false, {
             hasCharacter: () => state.this_chid !== undefined,
             isSending: () => Boolean(state.is_send_press),
             canRegenerate: canRegenerateLastReply,
-            history: async fromSlashCommand => {
+            history: async () => {
                 await displayPastChats();
-                if (!fromSlashCommand) {
-                    console.log('displaying shadow');
-                    const historyDialog = document.getElementById('shadow_select_chat_popup');
-                    if (!historyDialog.open) historyDialog.showModal();
-                    document.getElementById('select_chat_search').focus();
-                }
+                console.log('displaying shadow');
+                const historyDialog = document.getElementById('shadow_select_chat_popup');
+                if (!historyDialog.open) historyDialog.showModal();
+                document.getElementById('select_chat_search').focus();
             },
             confirmNew: async () => {
                 let deleteCurrentChat = false;
@@ -697,7 +694,7 @@ export async function bindLegacyShellHandlers() {
             },
             newChat: deleteCurrentChat => doNewChat({ deleteCurrentChat }),
             newAssistant: newAssistantChat,
-            deleteMessages: fromSlashCommand => { setTimeout(() => openMessageDelete(fromSlashCommand), state.animation_duration); },
+            deleteMessages: () => { setTimeout(() => openMessageDelete(), state.animation_duration); },
             regenerate: () => { void regenerateLastReply(); },
             closeChat: closeCurrentChat,
             memory: openChatMemoryPanel,
@@ -707,10 +704,10 @@ export async function bindLegacyShellHandlers() {
             closeMenu: () => menuController.close(),
         });
     };
-    $(document).on('click', '#options [id]', function (event, customData) {
+    $(document).on('click', '#options [id]', function (event) {
         const id = $(this).attr('id');
         if (event.isTrigger && ['option_start_new_chat', 'option_close_chat', 'option_select_chat', 'option_regenerate', 'option_chat_memory', 'option_wire_log', 'option_delete_mes', 'option_back_to_main', 'attachFile'].includes(id)) event.preventDefault();
-        return optionsMenuCommand(id, customData);
+        return optionsMenuCommand(id);
     });
 
     $('#newChatFromManageScreenButton').on('click', function (event) {
@@ -740,10 +737,8 @@ export async function bindLegacyShellHandlers() {
     //confirms message deletion with the "ok" button
     async function confirmMessageDeletion() {
         const controller = globalThis.__emberDeskBulkDeleteController;
-        return controller.confirm(t`Deleting messages…`, deletedFrom => controller.runEffects(deletedFrom, {
-            chat: state.chat,
-            metadata: state.chat_metadata,
-            prepare: () => {
+        return controller.confirm(t`Deleting messages…`, async deletedFrom => {
+            try {
                 $('#dialogue_del_mes').attr('aria-busy', 'true');
                 $('.del_checkbox').each(function () {
                     const checkbox = $(this);
@@ -754,30 +749,14 @@ export async function bindLegacyShellHandlers() {
                     row.removeClass('selected');
                     checkbox.prop('checked', false);
                 });
-            },
-            isReactOwner: isReactMainChatOwner,
-            getIdentity: () => shell().getMainChatIdentity(),
-            removeLegacyRows: index => {
-                state.chatElement.find(`.mes[mesid="${index}"]`).nextAll('div').remove();
-                state.chatElement.find(`.mes[mesid="${index}"]`).remove();
-            },
-            truncateUi: index => shell().truncateMainChatUiState(index),
-            save: () => saveChatConditional(),
-            scrollLegacy: () => state.chatElement.scrollTop(state.chatElement[0].scrollHeight),
-            emitDeleted: index => eventSource.emit(event_types.MESSAGE_DELETED, index),
-            refreshReact: identity => shell().refreshMainChatAfterBulkDelete(identity),
-            markLegacyLast: () => {
-                state.chatElement.find('.mes').removeClass('last_mes');
-                state.chatElement.find('.mes').last().addClass('last_mes');
-            },
-            invalidSelection: () => console.log('this_del_mes is not >= 0, not deleting'),
-            cleanup: () => {
+                await shell().getChatMessageCommands().deleteFrom(deletedFrom);
+            } finally {
                 $('#dialogue_del_mes').css('display', 'none').removeAttr('aria-busy');
                 $('#send_form').css('display', state.css_send_form_display);
                 requestComposerFocus();
                 state.is_delete_mode = false;
-            },
-        }));
+            }
+        });
     }
     deleteMessageCommands = { cancel: cancelMessageDeletion, confirm: confirmMessageDeletion };
     $('#dialogue_del_mes_cancel').on('click', event => { if (event.isTrigger) { event.preventDefault(); return cancelMessageDeletion(); } });
@@ -861,6 +840,7 @@ export async function bindLegacyShellHandlers() {
     });
 
     $(document).on('click', '.mes_edit_up', async function () {
+        if (isReactMainChatOwner()) return;
         if (state.this_edit_mes_id <= 0) {
             return;
         }
@@ -869,6 +849,7 @@ export async function bindLegacyShellHandlers() {
     });
 
     $(document).on('click', '.mes_edit_down', async function () {
+        if (isReactMainChatOwner()) return;
         if (state.this_edit_mes_id >= state.chat.length - 1) {
             return;
         }
@@ -878,35 +859,18 @@ export async function bindLegacyShellHandlers() {
     });
 
     $(document).on('click', '.mes_edit_copy', async function () {
+        if (isReactMainChatOwner()) return;
         const confirmation = await callGenericPopup(t`Create a copy of this message?`, state.POPUP_TYPE.CONFIRM);
         if (!confirmation) {
             return;
         }
 
-        const oldScroll = state.chatElement[0].scrollTop;
-        const clone = structuredClone(state.chat[state.this_edit_mes_id]);
-        clone.send_date = Date.now();
-        // A copied message is a new message — give it a fresh persistent id
-        // so chat-memory turn identity stays unique.
-        clone.extra = { ...(clone.extra ?? {}), id: uuidv4() };
-        const this_edit_mes_element = $(this).closest('.mes');
-        clone.mes = this_edit_mes_element.find('.edit_textarea').val().toString();
-
-        clone.mes = clone.mes.trim();
-
-        state.chat.splice(Number(state.this_edit_mes_id) + 1, 0, clone);
-        const newMessageElement = updateMessageElement(clone);
-        this_edit_mes_element.after(newMessageElement);
-
-        updateViewMessageIds();
-        await saveChatConditional();
-        state.chatElement[0].scrollTop = oldScroll;
-        await eventSource.emit(event_types.MESSAGE_UPDATED, Number(state.this_edit_mes_id) + 1);
+        await shell().getChatMessageCommands().duplicateMessage(state.this_edit_mes_id);
     });
 
-    $(document).on('click', '.mes_edit_delete', async function (event, customData) {
-        const fromSlashCommand = customData?.fromSlashCommand || false;
-        await deleteMessage(Number(state.this_edit_mes_id), fromSlashCommand !== true);
+    $(document).on('click', '.mes_edit_delete', async function () {
+        if (isReactMainChatOwner()) return;
+        await deleteMessage(Number(state.this_edit_mes_id), true);
     });
 
     $(document).on('click', '.mes_edit_done', async function () {
@@ -1039,19 +1003,6 @@ export async function bindLegacyShellHandlers() {
     $('#dupe_button').on('click', async function () {
         await duplicateCharacter();
     });
-
-    $(document).on('click', '#form_sheld .stscript_continue', function () {
-        pauseScriptExecution();
-    });
-
-    $(document).on('click', '#form_sheld .stscript_pause', function () {
-        pauseScriptExecution();
-    });
-
-    $(document).on('click', '#form_sheld .stscript_stop', function () {
-        stopScriptExecution();
-    });
-
 
     $('html').on('touchstart mousedown', async function (e) {
         const clickTarget = $(e.target);

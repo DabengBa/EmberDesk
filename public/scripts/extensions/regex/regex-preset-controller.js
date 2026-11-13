@@ -1,5 +1,4 @@
 import { t } from '../../i18n.js';
-import { equalsIgnoreCaseAndAccents } from '../../utils.js';
 
 /**
  * Regex preset controller. Preserves the legacy RegexPresetManager semantics
@@ -133,9 +132,9 @@ export function createRegexPresetController({
         }
     }
 
-    async function select(id, { fromSlashCommand = false } = {}) {
+    async function select(id) {
         if (!id) return;
-        if (!fromSlashCommand) await checkUnsavedChanges();
+        await checkUnsavedChanges();
         await applyPreset(id);
         presets().forEach(p => { p.isSelected = p.id === id; });
         await saveSettings();
@@ -198,16 +197,6 @@ export function createRegexPresetController({
             selected: presets().find(p => p.isSelected)?.id ?? '',
         }),
         select,
-        selectByNameOrId: async (name, { quiet = false } = {}) => {
-            const foundId = presets().find(p => p.id === name)?.id
-                ?? presets().find(p => equalsIgnoreCaseAndAccents(p.name, name))?.id;
-            if (foundId) {
-                await select(foundId, { fromSlashCommand: true });
-                return foundId;
-            }
-            if (!quiet) notify.warning(t`Regex preset "${name}" not found`);
-            return '';
-        },
         create,
         update,
         apply,

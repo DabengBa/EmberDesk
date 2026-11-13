@@ -1,8 +1,7 @@
-import { Component, Fragment, StrictMode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ChangeEvent, type ReactElement, type ReactNode, type TextareaHTMLAttributes } from 'react';
+import { Component, Fragment, StrictMode, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ChangeEvent, type ReactElement, type ReactNode, type TextareaHTMLAttributes } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { createPortal, flushSync } from 'react-dom';
 import { QueryClient, QueryClientProvider, useMutation, useQuery } from '@tanstack/react-query';
-import DOMPurify from 'dompurify';
 
 import {
     attachGlobalCompatibilityBridge,
@@ -149,12 +148,10 @@ class MainChatEffectBoundary extends Component<{ host: HTMLElement; revision: nu
     render() { return this.state.failed ? null : this.props.children; }
 }
 
-function MainChatSlashOwner({ commands, host, failure, revision }: { commands?: MainChatCommands; host: HTMLElement; failure: Element | null; revision: number }) {
+function MainChatFailureOwner({ host, failure, revision }: { host: HTMLElement; failure: Element | null; revision: number }) {
     useEffect(() => {
-        void commands?.setSlashVisibleOwner(true);
         clearMainChatFailure(host, failure);
-        return () => { void commands?.setSlashVisibleOwner(false); };
-    }, [commands, host, failure, revision]);
+    }, [host, failure, revision]);
     return null;
 }
 
@@ -2247,14 +2244,6 @@ function AuthoringWorkspacePanel({
     );
 }
 
-function SanitizedSlashDetails({ html }: { html: string }) {
-    const container = useRef<HTMLDivElement>(null);
-    useLayoutEffect(() => {
-        container.current?.replaceChildren(DOMPurify.sanitize(html, { RETURN_DOM_FRAGMENT: true }));
-    }, [html]);
-    return <div ref={container} />;
-}
-
 function MainChatMessageListWorkspacePanel({
     commands,
 }: {
@@ -2368,12 +2357,6 @@ function MainChatMessageListWorkspacePanel({
             return next;
         });
     }, []);
-    const slash = mainChatStoreSnapshot.slash;
-
-    const shouldShowSlashAutocomplete = slash.autocompleteVisible && slash.options.length > 0;
-    const shouldShowSlashDetails = slash.detailsVisible && slash.detailsHtml !== '';
-    const shouldShowSlashStatus = slash.paused || slash.aborted || slash.errorLabel !== null;
-
     return (
         <>
             {/* Message-row controls render as native <button> elements carrying
@@ -2408,59 +2391,6 @@ button.menu_button {
                 </button>
             ) : null}
             <MainChatGreetingPicker key={mainChatStoreSnapshot.greetings.chatId} greetings={mainChatStoreSnapshot.greetings} commands={commands} />
-            {shouldShowSlashAutocomplete ? (
-                <div
-                    className="autoComplete-wrap"
-                    data-main-chat-slash-ui-owner="react"
-                    style={{ left: '0', right: '0', bottom: '100%' }}
-                >
-                    <ul className="autoComplete">
-                        {slash.options.map((option, index) => (
-                            <li
-                                key={`${option.type}:${option.name}`}
-                                className={`item${option.selected ? ' selected' : ''}${option.selectable ? '' : ' not-selectable'}`}
-                                data-option-type={option.type}
-                                data-main-chat-slash-option={option.name}
-                                onPointerDown={event => {
-                                    event.preventDefault();
-                                    if (option.selectable) {
-                                        void commands?.selectSlashAutocompleteOption(index);
-                                    }
-                                }}
-                            >
-                                <span className="type monospace">{option.typeIcon || ' '}</span>
-                                <span className="specs">
-                                    <span className="name monospace">/{option.name}</span>
-                                </span>
-                            </li>
-                        ))}
-                    </ul>
-                </div>
-            ) : null}
-            {shouldShowSlashStatus || shouldShowSlashDetails ? (
-                <div
-                    className="autoComplete-detailsWrap full"
-                    data-main-chat-slash-ui-details="react"
-                    style={{ left: '0', right: '0', bottom: '100%' }}
-                >
-                    <div className="autoComplete-details">
-                        {shouldShowSlashStatus ? (
-                            <output>
-                                {slash.errorLabel
-                                    ? `Error: ${slash.errorLabel}`
-                                    : slash.aborted
-                                        ? 'Aborted'
-                                        : slash.paused
-                                            ? 'Paused'
-                                            : ''}
-                            </output>
-                        ) : null}
-                        {shouldShowSlashDetails ? (
-                            <SanitizedSlashDetails html={slash.detailsHtml} />
-                        ) : null}
-                    </div>
-                </div>
-            ) : null}
             {messages.map(message => {
                 const turnSummary = turnSummaryByAnchor.get(message.id);
                 if (collapsedMessageIds.has(message.id)) {
@@ -2877,7 +2807,7 @@ function renderIntoPanel(mount: WorkspacePanelMount, mainChatFailure: Element | 
                 ? <MainChatErrorBoundary host={mount.container} revision={mount.revision ?? 0}>
                     {panel}
                     <MainChatEffectBoundary host={mount.container} revision={mount.revision ?? 0}>
-                        <MainChatSlashOwner commands={mount.commands as MainChatCommands | undefined} host={mount.container} failure={mainChatFailure} revision={mount.revision ?? 0} />
+                        <MainChatFailureOwner host={mount.container} failure={mainChatFailure} revision={mount.revision ?? 0} />
                     </MainChatEffectBoundary>
                 </MainChatErrorBoundary>
                 : <Theme theme={emberDeskTheme} mode="dark">{panel}</Theme>}

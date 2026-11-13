@@ -70,7 +70,6 @@ const isAssistantRecoveryMessageId = (...args) => shell().isAssistantRecoveryMes
 const isStreamingEnabled = (...args) => shell().isStreamingEnabled(...args);
 
 const pingServer = (...args) => shell().pingServer(...args);
-const processCommands = (...args) => shell().processCommands(...args);
 const rememberMainChatStreamingTransportProcessorTerminal = (...args) => shell().rememberMainChatStreamingTransportProcessorTerminal(...args);
 const removeDepthPrompts = (...args) => shell().removeDepthPrompts(...args);
 const removeMacros = (...args) => shell().removeMacros(...args);
@@ -340,7 +339,7 @@ async function executeOwnedGenerationRequestInShell(generationEnvelope, lease) {
                 preparation: (entry, promptContext, isStale) => ({
                     unshallow: () => unshallowCharacter(shell().state.this_chid),
                     emitStarted: () => eventSource.emit(event_types.GENERATION_STARTED, type, { automatic_trigger, force_name2, quiet_prompt, quietToLoud, skipWIAN, signal, quietImage, depth, regenerate: entry.isRegenerate, promptContext }, entry.dryRun),
-                    commands: () => processCommands(entry.composerSubmission?.value ?? '', entry.composerSubmission),
+                    commands: async () => false,
                     emitAfterCommands: () => eventSource.emit(event_types.GENERATION_AFTER_COMMANDS, type, { automatic_trigger, force_name2, quiet_prompt, quietToLoud, skipWIAN, signal, quietImage, regenerate: entry.isRegenerate, promptContext }, entry.dryRun),
                     ping: pingServer, isStale, unblock: () => unblockGeneration(type),
                     serverUnreachable: () => {
@@ -553,6 +552,13 @@ async function executeOwnedGenerationRequestInShell(generationEnvelope, lease) {
                 return await pending;
             };
 
+            const requirePipelineCall = () => {
+                const run = getPipelineRunState();
+                if (type === 'normal' && run && !run.fallbackRound) {
+                    throw new Error('Reply pipeline: expected exactly one current-step call (submit_story).');
+                }
+            };
+
             return getGenerationLifecycleService().runGenerationDispatch({
                 type, depth, canPerformTools: policy.canPerformTools, pipeline: getPipelineRunState(),
                 isOpenAI: shell().state.main_api === 'openai', command: generationEnvelope.command,
@@ -587,6 +593,7 @@ async function executeOwnedGenerationRequestInShell(generationEnvelope, lease) {
                     isStreaming: isStreamingEnabled,
                     send: requestOptions => sendGenerationRequest(dispatchState.type, generate_data, requestOptions),
                     hasToolCalls: result => shell().state.ToolManager.hasToolCalls(result),
+                    requirePipelineCall,
                     assertAllowed: () => assertPipelineResponseAllowed(1, { canPerformToolCalls: dispatchState.canPerformTools }),
                     isEmpty: result => getGenerationLifecycleService().isGenerationResultEmpty({ jsonSchema, result }, {
                         extract: extractMessageFromData,
@@ -616,6 +623,7 @@ async function executeOwnedGenerationRequestInShell(generationEnvelope, lease) {
                     assertAllowed: count => assertPipelineResponseAllowed(count, { canPerformToolCalls: dispatchState.canPerformTools }),
                     lastMessage: () => shell().state.chat[shell().state.chat.length - 1],
                     hasToolCalls: calls => shell().state.ToolManager.hasToolCalls(calls),
+                    requirePipelineCall,
                     deleteLast: () => deleteRecoveryPlaceholder(recovery),
                     setModel: (id, model) => {
                         if (shell().state.chat[id]) {
@@ -652,7 +660,7 @@ async function executeOwnedGenerationRequestInShell(generationEnvelope, lease) {
                     successfulMessageId: () => shell().state.chat.length - 1,
                     clearSuccessStatus: clearGenerationAutoRecoveryStatus,
                     processorMessageId: () => shell().state.streamingProcessor?.messageId,
-                    decideFailure: getGenerationFailureDecision,
+                    decideFailure: input => getGenerationFailureDecision({ ...input, shouldAutoRecover: input.shouldAutoRecover && !isUserStoppedGeneration(input.failure) }),
                     clearProcessor: () => { shell().state.streamingProcessor = null; },
                     clearMessage: clearGenerationAttemptMessage,
                     showStatus: showGenerationAutoRecoveryStatus,
@@ -681,6 +689,7 @@ async function executeOwnedGenerationRequestInShell(generationEnvelope, lease) {
                     saveReply: reply => saveReply(reply),
                     setType: value => { dispatchState.type = value; },
                     hasToolCalls: response => shell().state.ToolManager.hasToolCalls(response),
+                    hasPipeline: () => Boolean(getPipelineRunState()),
                     deleteLastMessage: () => deleteRecoveryPlaceholder(recovery),
                     invokeTools: (response, reasoningText, ownsRun) => shell().state.ToolManager.invokeFunctionTools(response, { reasoningText, ownsRun }),
                     showToolErrors: errors => shell().state.ToolManager.showToolCallError(errors),

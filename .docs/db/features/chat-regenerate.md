@@ -20,11 +20,11 @@ Let users re-roll the current turn — the reply the AI produced after the last 
 ## User-Visible Contract
 
 - The chat-options menu (the button opening 开始新聊天 / 关闭聊天 / 管理聊天文件 / 删除消息) exposes a `重新生成` entry between 管理聊天文件 and the destructive 删除消息 section.
-- The entry stays mounted at all times; it is disabled while a generation is in flight, while composer slash commands are executing, while a message is being edited, when no provider is connected, and when there is no active chat or the chat is empty. Availability is re-evaluated every time the menu opens, and the handler re-validates on click.
+- The entry stays mounted at all times; it is disabled while a generation is in flight, while a message is being edited, when no provider is connected, and when there is no active chat or the chat is empty. Availability is re-evaluated every time the menu opens, and the handler re-validates on click.
 - Clicking 重新生成 removes the generated tail of the current turn — the assistant reply plus its same-turn tool/pipeline cards and failure recovery rows — and generates a replacement with the same preceding context.
-- Regeneration never creates a duplicate user message, never reads or clears the composer draft, never runs slash commands from the composer, never fires `send_if_empty`, and never attaches pending composer files.
+- Regeneration never creates a duplicate user message, never reads or clears the composer draft, never fires `send_if_empty`, and never attaches pending composer files.
 - When the chat's last message is a user message, the action is still available and fills in the missing assistant reply without deleting anything.
-- Manually inserted rows stop the cleanup: narrator notes, slash-command assistant messages, and plain system notices are never removed; if such a row sits at the end, regenerate appends a new reply after it instead.
+- Manually inserted rows stop the cleanup: historical narrator notes, manually inserted assistant messages, and plain system notices are never removed; if such a row sits at the end, regenerate appends a new reply after it instead.
 - A generation-only greeting can be re-rolled the same way — the old first message is replaced.
 - The replacement runs through the normal visible generation path: streaming, tool calls, reply-pipeline rounds, prompt triggers, and bounded automatic recovery behave exactly like a fresh send.
 - When regeneration fails after automatic recovery is exhausted, the removed turn is restored verbatim and a toast announces the restore. Restore is skipped — with a visible error toast — when the active chat changed mid-flight or the chat tail no longer matches the snapshot shape; in those cases the failed attempt's rows are kept rather than destroying both turns.
@@ -58,7 +58,7 @@ The menu dispatches the `regenerate` command kind into the same visible-generati
 ## Failure Signals
 
 - A second user message appears after regenerating.
-- The composer draft is cleared, executed as a slash command, or gains a pending attachment.
+- The composer draft is cleared, submitted, or gains a pending attachment.
 - Old reply text, folded pipeline markup, or tool-card content appears in the new request.
 - A failed regeneration leaves the old reply deleted or duplicated.
 - The menu action fires while a generation is already running.

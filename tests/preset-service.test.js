@@ -242,7 +242,7 @@ test('actual preset manager reads and saves OpenAI data without a select element
     const { service, settings, names, presets, calls } = fixture();
     const source = fs.readFileSync(new URL('../public/scripts/preset-manager.js', import.meta.url), 'utf8');
     const start = source.indexOf('class PresetManager {');
-    const end = source.indexOf('\n/**\n * Selects a preset by name', start);
+    const end = source.indexOf('\nexport async function initPresetManager(', start);
     const Manager = new Function('getOpenAIPresetService', 'openai_settings', 'openai_setting_names', 'oai_settings', 'ensurePlainObject', 'lodash', `${source.slice(start, end)}; return PresetManager;`)(() => service, presets, names, settings, value => value, { set: (object, path, value) => { object[path] = value; } });
     const manager = new Manager(null, 'openai');
     expect(manager.getAllPresets()).toEqual(['A', 'B']);
@@ -274,14 +274,12 @@ test('manager registers only OpenAI and forwards rename, delete and restore look
         delete: async name => calls.push(['delete', name]),
     };
     const on = (event, callback) => calls.push(['on', event, callback]);
-    const parser = { addCommandObject: command => calls.push(['command', command.name]) };
     const fetch = async (url, options) => {
         calls.push(['fetch', url, JSON.parse(options.body)]);
         return { ok: true, json: async () => ({ isDefault: true, preset: { temperature: 1 } }) };
     };
-    const setup = new Function('main_api', 'getOpenAIPresetService', 'eventSource', 'event_types', 'SlashCommandParser', 'SlashCommand', 'SlashCommandArgument', 'ARGUMENT_TYPE', 'fetch', 'getRequestHeaders', code + '\nreturn { initPresetManager, getPresetManager };')(
-        'openai', () => service, { on }, { CHAT_CHANGED: 'chat' }, parser,
-        { fromProps: value => value }, { fromProps: value => value }, { STRING: 'string' }, fetch, () => ({}),
+    const setup = new Function('main_api', 'getOpenAIPresetService', 'eventSource', 'event_types', 'fetch', 'getRequestHeaders', code + '\nreturn { initPresetManager, getPresetManager };')(
+        'openai', () => service, { on }, { CHAT_CHANGED: 'chat' }, fetch, () => ({}),
     );
     await setup.initPresetManager();
     const manager = setup.getPresetManager('openai');
@@ -290,7 +288,7 @@ test('manager registers only OpenAI and forwards rename, delete and restore look
     expect(await manager.deletePreset('Old')).toBe(true);
     expect(await manager.getDefaultPreset('New')).toEqual({ isDefault: true, preset: { temperature: 1 } });
     expect(calls).toEqual(expect.arrayContaining([
-        ['command', 'preset'], ['rename', 'New'], ['delete', 'Old'],
+        ['on', 'chat', expect.any(Function)], ['rename', 'New'], ['delete', 'Old'],
         ['fetch', '/api/presets/restore', { name: 'New', apiId: 'openai' }],
     ]));
 });

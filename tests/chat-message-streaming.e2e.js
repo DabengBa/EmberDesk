@@ -5,6 +5,7 @@ import { testSetup } from './frontend/frontent-test-utils.js';
 const characterName = 'Dev Character 001';
 const seededChatName = 'Dev Character 001 Session 01';
 const reactMainChatMessageListEnabled = true;
+const generationFailureNotice = /^(?:Generation failed\. You can retry by sending a new message or keep chatting\.|生成失败。你可以重新发送一条消息重试，或继续聊天。)$/;
 const mobileViewports = [
     { name: 'narrow phone', width: 390, height: 844 },
     { name: 'wide mobile', width: 768, height: 1024 },
@@ -167,6 +168,7 @@ async function installNonStreamingFetchStub(page, { content, delayMs = 200 }) {
         window.__emberdeskStreamingGenerationError = null;
         window.__emberdeskStreamingRequests = [];
         window.__emberdeskStreamingAbortCount = 0;
+        window.__emberdeskNonStreamingAborted = false;
         window.__emberdeskStreamingOriginalFetch ??= window.fetch.bind(window);
 
         window.fetch = async (input, init = {}) => {
@@ -189,6 +191,7 @@ async function installNonStreamingFetchStub(page, { content, delayMs = 200 }) {
                 };
                 const abort = () => finish(() => {
                     window.__emberdeskStreamingAbortCount += 1;
+                    window.__emberdeskNonStreamingAborted = true;
                     reject(new DOMException('Aborted', 'AbortError'));
                 });
                 const timer = window.setTimeout(() => finish(() => {
@@ -222,12 +225,19 @@ async function enableOpenAiStreaming(page, { chatCompletionSource = 'openai', st
         context.chatCompletionSettings.n = 1;
         context.chatCompletionSettings.send_if_empty = '';
     }, { source: chatCompletionSource, streamEnabled: streamOpenAi });
-    await page.evaluate(async () => {
-        const script = await import('/script.js');
-        script.changeMainAPI('openai');
-        script.setOnlineStatus('Valid');
-        script.activateSendButtons();
+    await page.evaluate(() => {
+        // Keep the browser-side import promise reachable while Playwright polls its result.
+        window.__enableOpenAiStreaming = { status: 'pending' };
+        window.__enableOpenAiStreaming.promise = import('/script.js').then(script => {
+            script.changeMainAPI('openai');
+            script.setOnlineStatus('Valid');
+            script.activateSendButtons();
+            window.__enableOpenAiStreaming.status = 'done';
+        }).catch(error => {
+            window.__enableOpenAiStreaming.status = `error: ${error?.stack ?? error}`;
+        });
     });
+    await expect.poll(() => page.evaluate(() => window.__enableOpenAiStreaming.status)).toBe('done');
 }
 
 async function enableFallbackProvider(page) {
@@ -333,15 +343,6 @@ function userRowForGeneration(page, lastVisibleMessageIdBeforeGeneration) {
     );
 }
 
-async function waitForSlashCommandExecution(page) {
-    return page.evaluate(async () => {
-        await window.__emberdeskSlashExecutionPromise;
-        return {
-            result: window.__emberdeskSlashExecutionResult ?? null,
-            error: window.__emberdeskSlashExecutionError ?? null,
-        };
-    });
-}
 
 async function installMessageEventCounters(page) {
     await page.evaluate(async () => {
@@ -536,82 +537,6 @@ async function expectMainChatComposerVisibleOwner(page, expectedOwned) {
     await expect(page.locator('#send_but')).toHaveCount(1);
 }
 
-async function expectMainChatSlashCommandState(page, expectations = {}) {
-    if (!reactMainChatMessageListEnabled) {
-        return;
-    }
-
-    const chat = page.locator('#chat');
-
-    if (expectations.active !== undefined) {
-        await expect(chat).toHaveAttribute('data-main-chat-slash-command-active', expectations.active ? 'true' : 'false');
-    }
-
-    if (expectations.queryLength !== undefined) {
-        await expect(chat).toHaveAttribute('data-main-chat-slash-command-query-length', String(expectations.queryLength));
-    }
-
-    if (expectations.autocomplete !== undefined) {
-        await expect(chat).toHaveAttribute('data-main-chat-slash-command-autocomplete', expectations.autocomplete ? 'visible' : 'hidden');
-    }
-
-    if (expectations.executing !== undefined) {
-        await expect(chat).toHaveAttribute('data-main-chat-slash-command-executing', expectations.executing ? 'true' : 'false');
-    }
-
-    if (expectations.paused !== undefined) {
-        await expect(chat).toHaveAttribute('data-main-chat-slash-command-paused', expectations.paused ? 'true' : 'false');
-    }
-
-    if (expectations.aborted !== undefined) {
-        await expect(chat).toHaveAttribute('data-main-chat-slash-command-aborted', expectations.aborted ? 'true' : 'false');
-    }
-
-    if (expectations.error !== undefined) {
-        await expect(chat).toHaveAttribute('data-main-chat-slash-command-error', expectations.error);
-    }
-}
-
-async function expectMainChatSlashUiOwner(page, expectations = {}) {
-    const reactAutocomplete = page.locator('.autoComplete-wrap[data-main-chat-slash-ui-owner="react"]');
-    const reactDetails = page.locator('[data-main-chat-slash-ui-details="react"]');
-    const legacyAutocomplete = page.locator('.autoComplete-wrap:not([data-main-chat-slash-ui-owner="react"])');
-    const legacyDetails = page.locator('.autoComplete-detailsWrap:not([data-main-chat-slash-ui-details="react"])');
-
-    if (!reactMainChatMessageListEnabled) {
-        await expect(reactAutocomplete).toHaveCount(0);
-        await expect(reactDetails).toHaveCount(0);
-        return;
-    }
-
-    if (expectations.visible !== undefined) {
-        if (expectations.visible) {
-            await expect(reactAutocomplete).toHaveCount(1);
-            await expect(reactAutocomplete).toBeVisible();
-
-            if (expectations.legacyHidden !== false) {
-                await expect(legacyAutocomplete).toHaveCount(1);
-                await expect(legacyAutocomplete).toHaveAttribute('aria-hidden', 'true');
-            }
-        } else {
-            await expect(reactAutocomplete).toHaveCount(0);
-        }
-    }
-
-    if (expectations.statusText !== undefined) {
-        if (expectations.statusText) {
-            await expect(reactDetails).toHaveCount(1);
-            await expect(reactDetails).toContainText(expectations.statusText);
-
-            if (expectations.legacyHidden !== false) {
-                await expect(legacyDetails).toHaveCount(1);
-                await expect(legacyDetails).toHaveAttribute('aria-hidden', 'true');
-            }
-        } else {
-            await expect(reactDetails).toHaveCount(0);
-        }
-    }
-}
 
 test.describe('chat message streaming', () => {
     test.describe.configure({ mode: 'serial' });
@@ -1144,6 +1069,9 @@ test.describe('chat message streaming', () => {
         expect(String(abortedMessage ?? '')).toMatch(/Aborted|Generation was aborted/i);
         expect(await page.evaluate(() => window.__emberdeskStreamingAbortCount)).toBe(1);
         await expect(page.locator('#chat .mes').filter({ hasText: 'This reply should never land because the request is aborted.' })).toHaveCount(0);
+        expect(await page.evaluate(() => window.__emberdeskNonStreamingAborted)).toBe(true);
+        expect(await page.evaluate(() => window.__emberdeskStreamingRequests.length)).toBe(1);
+        await expect(page.locator(`#chat .mes[mesid="${previousAssistantMessageId + 2}"]`)).toHaveCount(0);
         await expect(page.locator('body')).not.toHaveAttribute('data-generating', 'true');
         await expect(page.getByRole('button', { name: 'Retry generation' })).toHaveCount(0);
     });
@@ -1197,162 +1125,56 @@ test.describe('chat message streaming', () => {
         expect(quietReply).toBe('Beach sunset');
     });
 
-    test('visible slash automation observes autocomplete, execution, pause, continue, and abort through the public generation adapter', async ({ page }) => {
+    test('slash-prefixed composer input is sent as ordinary chat text', async ({ page }) => {
         await testSetup.awaitST({ page });
         await selectCharacterInFreshChat(page, characterName);
-
+        await enableOpenAiStreaming(page);
+        await installStreamingFetchStub(page, { chunks: ['Ordinary reply.'] });
+        const before = await getLastVisibleMessageId(page);
         const composer = page.locator('#send_textarea');
-        await composer.focus();
-        await composer.pressSequentially('/e');
-        await expectMainChatSlashCommandState(page, {
-            active: true,
-            queryLength: 1,
-            autocomplete: true,
-            executing: false,
-            paused: false,
-            aborted: false,
-            error: '',
-        });
-        await expectMainChatSlashUiOwner(page, { visible: true });
-
-        await composer.fill('normal text');
-        await expectMainChatSlashCommandState(page, {
-            active: false,
-            queryLength: 0,
-            autocomplete: false,
-            executing: false,
-            paused: false,
-            aborted: false,
-            error: '',
-        });
-        await expectMainChatSlashUiOwner(page, { visible: false, statusText: '' });
-
-        const scriptText = '/delay 1500 | /delay 1500 | /echo ready';
-        await composer.fill(scriptText);
-        await page.evaluate(async (text) => {
-            const { executeSlashCommandsOnChatInput } = await import('/scripts/slash-commands.js');
-            window.__emberdeskSlashExecutionResult = null;
-            window.__emberdeskSlashExecutionError = null;
-            window.__emberdeskSlashExecutionPromise = executeSlashCommandsOnChatInput(text, { clearChatInput: false })
-                .then(result => {
-                    window.__emberdeskSlashExecutionResult = {
-                        isError: Boolean(result?.isError),
-                        isAborted: Boolean(result?.isAborted),
-                        errorMessage: result?.errorMessage ?? null,
-                        abortReason: result?.abortReason ?? null,
-                    };
-                    return result;
-                })
-                .catch(error => {
-                    window.__emberdeskSlashExecutionError = String(error?.message ?? error);
-                    throw error;
-                });
-        }, scriptText);
-
-        await expectMainChatSlashCommandState(page, {
-            active: true,
-            queryLength: 5,
-            executing: true,
-            paused: false,
-            aborted: false,
-            error: '',
-        });
-
-        await page.evaluate(async () => {
-            const { pauseScriptExecution } = await import('/scripts/slash-commands.js');
-            pauseScriptExecution();
-        });
-        await expectMainChatSlashCommandState(page, {
-            active: true,
-            queryLength: 5,
-            executing: true,
-            paused: true,
-            aborted: false,
-            error: '',
-        });
-        await expectMainChatSlashUiOwner(page, { statusText: 'Paused' });
-
-        await page.evaluate(async () => {
-            const { pauseScriptExecution } = await import('/scripts/slash-commands.js');
-            pauseScriptExecution();
-        });
-        await expectMainChatSlashCommandState(page, {
-            active: true,
-            queryLength: 5,
-            executing: true,
-            paused: false,
-            aborted: false,
-            error: '',
-        });
-
-        await page.evaluate(async () => {
-            const { stopScriptExecution } = await import('/scripts/slash-commands.js');
-            stopScriptExecution();
-        });
-        await waitForSlashCommandExecution(page);
-        await expectMainChatSlashCommandState(page, {
-            active: true,
-            queryLength: 5,
-            executing: false,
-            paused: false,
-            aborted: true,
-            error: '',
-        });
-        await expectMainChatSlashUiOwner(page, { statusText: 'Aborted' });
-
-        const slashExecution = await page.evaluate(() => window.__emberdeskSlashExecutionResult);
-        expect(slashExecution).toEqual(expect.objectContaining({
-            isError: false,
-            isAborted: true,
-        }));
-
-        await composer.fill('back to normal text');
-        await expectMainChatSlashCommandState(page, {
-            active: false,
-            queryLength: 0,
-            autocomplete: false,
-            executing: false,
-            paused: false,
-            error: '',
-        });
-        await page.waitForTimeout(1300);
-        await expectMainChatSlashCommandState(page, {
-            active: false,
-            queryLength: 0,
-            autocomplete: false,
-            executing: false,
-            paused: false,
-            aborted: false,
-            error: '',
-        });
+        await composer.fill('/echo text');
+        await expect(page.locator('[data-main-chat-slash-ui-owner]')).toHaveCount(0);
+        await page.locator('#send_but').click();
+        await expect(userRowForGeneration(page, before).locator('.mes_text')).toHaveText('/echo text');
+        await expect(assistantRowForGeneration(page, before).locator('.mes_text')).toContainText('Ordinary reply.');
+        await expect.poll(() => page.evaluate(() => window.__emberdeskStreamingRequests.length)).toBe(1);
+        const request = await page.evaluate(() => window.__emberdeskStreamingRequests[0]);
+        expect(JSON.stringify(request)).toContain('/echo text');
     });
 
-    test('React slash details render dynamic help as sanitized HTML', async ({ page }) => {
+    test('legacy script injection metadata survives reopening without restoring or injecting prompts', async ({ page }) => {
         await testSetup.awaitST({ page });
         await selectCharacterInFreshChat(page, characterName);
-        await page.evaluate(async () => {
-            const { SlashCommandParser } = await import('/scripts/slash-commands/SlashCommandParser.js');
-            const { SlashCommand } = await import('/scripts/slash-commands/SlashCommand.js');
-            const { SlashCommandArgument } = await import('/scripts/slash-commands/SlashCommandArgument.js');
-            const attack = '<img src="data:image/png;base64,AA==" onerror="window.__reactSlashHelpXss=1"><a href="javascript:alert(1)">unsafe link</a>';
-            window.__reactSlashHelpXss = 0;
-            SlashCommandParser.addCommandObject(SlashCommand.fromProps({
-                name: 'secureproof',
-                helpString: `<strong>Safe help</strong>${attack}`,
-                unnamedArgumentList: [SlashCommandArgument.fromProps({ description: `<em>Safe argument</em>${attack}` })],
-            }));
+        const legacy = { value: 'RETIRED_SCRIPT_INJECT_SENTINEL', position: 0, depth: 0, scan: false, role: 0, filter: '/echo {{setvar::retirement_filter_proof::mutated}} | /return true' };
+        await page.evaluate(async (entry) => {
+            const context = window.SillyTavern.getContext();
+            context.chatMetadata.variables = { ...context.chatMetadata.variables, retirement_filter_proof: 'unchanged' };
+            context.chatMetadata.script_injects = { retirement_proof: entry };
+            await context.saveMetadata();
+            await context.openCharacterChat(context.chatId);
+        }, legacy);
+        const reopened = await page.evaluate(() => {
+            const context = window.SillyTavern.getContext();
+            return { metadata: context.chatMetadata.script_injects, prompts: context.extensionPrompts, variable: context.chatMetadata.variables.retirement_filter_proof };
         });
-
-        const composer = page.locator('#send_textarea');
-        await composer.focus();
-        await composer.pressSequentially('/securep');
-        await expectMainChatSlashUiOwner(page, { visible: true });
-        await composer.pressSequentially('roof');
-        const details = page.locator('[data-main-chat-slash-ui-details="react"]');
-        await expect(details).toContainText('Safe help');
-        await expect(details).toContainText('Safe argument');
-        await expect(details.locator('[onerror], a[href^="javascript:"]')).toHaveCount(0);
-        expect(await page.evaluate(() => window.__reactSlashHelpXss)).toBe(0);
+        expect(reopened.metadata).toEqual({ retirement_proof: legacy });
+        expect(reopened.variable).toBe('unchanged');
+        expect(reopened.prompts).not.toHaveProperty('script_inject_retirement_proof');
+        await enableOpenAiStreaming(page);
+        await installStreamingFetchStub(page, { chunks: ['Reply without injection.'] });
+        await startGeneration(page, 'Check retired metadata.');
+        await waitForGeneration(page);
+        const observed = await page.evaluate(() => ({
+            requests: window.__emberdeskStreamingRequests,
+            metadata: window.SillyTavern.getContext().chatMetadata.script_injects,
+            prompts: window.SillyTavern.getContext().extensionPrompts,
+            variable: window.SillyTavern.getContext().chatMetadata.variables.retirement_filter_proof,
+        }));
+        expect(observed.requests).toHaveLength(1);
+        expect(JSON.stringify(observed.requests)).not.toContain(legacy.value);
+        expect(observed.metadata).toEqual({ retirement_proof: legacy });
+        expect(observed.variable).toBe('unchanged');
+        expect(observed.prompts).not.toHaveProperty('script_inject_retirement_proof');
     });
 
     test('pipeline incompatible model never retries or reaches fallback provider', async ({ page }) => {
@@ -1514,7 +1336,7 @@ test.describe('chat message streaming', () => {
         expect(actual.run).toBeNull();
     });
 
-    test('pipeline retries the unfinished second step without replaying the completed tool', async ({ page }) => {
+    test('pipeline retries the unfinished second step without replaying the completed story', async ({ page }) => {
         await testSetup.awaitST({ page });
         await selectCharacterInFreshChat(page, characterName);
         await enableOpenAiStreaming(page);
@@ -1537,19 +1359,22 @@ test.describe('chat message streaming', () => {
             syncPipelineToolBindings(['analyze', 'review'], { activate: true });
         });
         await installStreamingFetchSequenceStub(page, { responses: [
-            { chunks: [{ tool_calls: [{ index: 0, id: 'call_first', type: 'function', function: { name: 'analyze', arguments: '{}' } }] }] },
+            { chunks: [{ tool_calls: [{ index: 0, id: 'call_first', type: 'function', function: { name: 'submit_story', arguments: '{"content":"FIRST_RESULT"}' } }] }] },
             { status: 500 }, { status: 500 },
-            { chunks: [{ tool_calls: [{ index: 0, id: 'call_second', type: 'function', function: { name: 'review', arguments: '{}' } }] }] },
+            { chunks: [{ tool_calls: [{ index: 0, id: 'call_second', type: 'function', function: { name: 'submit_story', arguments: '{"content":"FINAL_RESULT"}' } }] }] },
         ] });
         await startGeneration(page, 'Pipeline second step recovery');
         await waitForGeneration(page);
         const actual = await page.evaluate(async () => ({ requests: window.__emberdeskStreamingRequests, count: window.__completedToolCount, chat: window.SillyTavern.getContext().chat, run: (await import('/scripts/reply-pipeline-core.js')).getPipelineRunState() }));
         expect(actual.requests.map(request => request.model)).toEqual(['gpt-4.1-mini', 'gpt-4.1', 'gpt-4.1', 'fallback-model']);
-        expect(actual.count).toBe(1);
+        expect(actual.count ?? 0).toBe(0); // Story steps do not execute named tool actions.
         for (const request of actual.requests.slice(1)) {
             expect(JSON.stringify(request.messages)).toContain('FIRST_RESULT');
             expect(JSON.stringify(request.messages)).toContain('STEP_analyze MODEL=gpt-4.1-mini');
-            expect(request.tool_choice.function.name).toBe('review');
+            expect(request.tool_choice.function.name).toBe('submit_story');
+            const completed = request.messages.flatMap(message => message.tool_calls ?? []).filter(call => call.id === 'call_first');
+            expect(completed).toHaveLength(1);
+            expect(completed[0].function).toEqual({ name: 'submit_story', arguments: '{"content":"FIRST_RESULT"}' });
         }
         expect(JSON.stringify(actual.requests[1].messages)).toContain('STEP_review MODEL=gpt-4.1');
         expect(JSON.stringify(actual.requests[3].messages)).toContain('STEP_review MODEL=gpt-4.1');
@@ -1740,7 +1565,7 @@ test.describe('chat message streaming', () => {
 
         const recovery = page.locator('#send_but');
         await expect(recovery).toBeVisible();
-        await expect(assistantRowsAfterFailure.locator('.generation_failure_notice')).toContainText(/生成失败|Generation failed/);
+        await expect(assistantRowsAfterFailure.locator('.generation_failure_notice')).toHaveText(generationFailureNotice);
         await page.locator('#send_textarea').fill('Follow-up after provider failure.');
         await expect(page.locator('#send_textarea')).toHaveValue('Follow-up after provider failure.');
         await expect(page.locator('body')).not.toHaveAttribute('data-generating', 'true');
@@ -1844,7 +1669,7 @@ test.describe('chat message streaming', () => {
 
         const failedRow = assistantRowForGeneration(page, lastVisibleMessageIdBeforeGeneration);
         await expect(failedRow).toHaveCount(1);
-        await expect(failedRow.locator('.generation_failure_notice')).toContainText(/生成失败|Generation failed/);
+        await expect(failedRow.locator('.generation_failure_notice')).toHaveText(generationFailureNotice);
         await page.locator('#send_textarea').fill('Follow-up after pre-token provider failure.');
         await expect(page.locator('#send_textarea')).toHaveValue('Follow-up after pre-token provider failure.');
         await expect(page.locator('body')).not.toHaveAttribute('data-generating', 'true');

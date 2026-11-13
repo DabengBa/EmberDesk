@@ -24,7 +24,8 @@ describe('legacy dialogue popup structure', () => {
     test('bulk deletion uses the typed selection rather than a second shell index', () => {
         const handlers = read('public/scripts/dom-handlers.js');
         expect(handlers).toContain('controller.confirm(');
-        expect(handlers).toContain('controller.runEffects(');
+        expect(handlers).toContain('await shell().getChatMessageCommands().deleteFrom(deletedFrom)');
+        expect(handlers).not.toContain('controller.runEffects(');
         expect(handlers).not.toContain('state.this_del_mes');
     });
     test('dialogue controls accept direct React command callbacks', () => {

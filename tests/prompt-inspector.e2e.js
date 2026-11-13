@@ -47,8 +47,8 @@ async function enableOpenAiBackend(page) {
 }
 
 /** Intercepts the generate endpoint, records bodies, replies with a fixed completion. */
-async function installGenerateStub(page) {
-    await page.evaluate(() => {
+async function installGenerateStub(page, { story = false } = {}) {
+    await page.evaluate(({ story }) => {
         window.__promptInspectorRequests = [];
         window.__promptInspectorOriginalFetch ??= window.fetch.bind(window);
         window.fetch = async (input, init = {}) => {
@@ -56,15 +56,19 @@ async function installGenerateStub(page) {
             if (!String(url).endsWith('/api/backends/chat-completions/generate')) {
                 return window.__promptInspectorOriginalFetch(input, init);
             }
-            window.__promptInspectorRequests.push(JSON.parse(String(init.body ?? '{}')));
+            const body = JSON.parse(String(init.body ?? '{}'));
+            window.__promptInspectorRequests.push(body);
+            const pipeline = story;
             return new Response(JSON.stringify({
-                choices: [{ message: { content: 'stub reply' } }],
+                choices: [{ index: 0, finish_reason: pipeline ? 'tool_calls' : 'stop', message: pipeline
+                    ? { role: 'assistant', content: null, tool_calls: [{ id: 'call_preview_live', type: 'function', function: { name: 'submit_story', arguments: JSON.stringify({ content: 'stub reply' }) } }] }
+                    : { content: 'stub reply' } }],
             }), {
                 status: 200,
                 headers: { 'Content-Type': 'application/json' },
             });
         };
-    });
+    }, { story });
 }
 
 async function runPreview(page, round = 0) {
@@ -273,7 +277,7 @@ test.describe('prompt inspector (request preview)', () => {
         await testSetup.awaitST({ page });
         await selectCharacterInSeededChat(page);
         await enableOpenAiBackend(page);
-        await installGenerateStub(page);
+        await installGenerateStub(page, { story: true });
 
         // A runnable pipeline enables history projection; its configured tool
         // remains distinct from synthetic historical submit_story records.
@@ -392,6 +396,7 @@ test.describe('prompt inspector (request preview)', () => {
         expect(await budgetSettings()).toEqual(settingsBeforePreview);
         expect(await page.evaluate(() => window.__promptInspectorRequests.length)).toBe(1);
         const [live] = await page.evaluate(() => window.__promptInspectorRequests);
+        expect(live.tools.map(tool => tool.function.name)).toEqual(['submit_story']);
         // Compare what actually travels over JSON: undefined object fields are omitted.
         expect(live.messages).toEqual(JSON.parse(JSON.stringify(messages)));
     });
