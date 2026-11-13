@@ -63,7 +63,7 @@ async function saveSettingsDocument(page, settings, settingsRevision) {
 async function openSettings(page) {
     await page.goto('/settings');
     await expect(page.locator('.settings-page')).toBeVisible({ timeout: 60_000 });
-    await expect(page.getByRole('heading', { name: '设置' })).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByRole('heading', { name: '设置', exact: true })).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText('正在加载当前设置...')).toHaveCount(0, { timeout: 60_000 });
 }
 
@@ -126,13 +126,13 @@ test.describe('React settings sole-owner page', () => {
             await page.keyboard.press('Enter');
             const conflicted = await Promise.race([
                 page.locator('.settings-status--success').waitFor({ state: 'visible', timeout: 30_000 }).then(() => false),
-                page.getByText(/本地草稿仍保留/).waitFor({ state: 'visible', timeout: 30_000 }).then(() => true),
+                page.getByText(/当前草稿基于过期版本/).waitFor({ state: 'visible', timeout: 30_000 }).then(() => true),
             ]);
             if (!conflicted) {
                 break;
             }
             await page.getByRole('button', { name: '重新加载当前设置', exact: true }).click();
-            await expect(page.getByText(/本地草稿仍保留/)).toHaveCount(0, { timeout: 30_000 });
+            await expect(page.getByText(/当前草稿基于过期版本/)).toHaveCount(0, { timeout: 30_000 });
         }
         await expect(page.locator('.settings-status--success')).toContainText('已保存', { timeout: 30_000 });
 
@@ -162,6 +162,7 @@ test.describe('React settings sole-owner page', () => {
         await openSettings(page);
 
         const modelField = page.locator('#settings-providers-openaiModel');
+        const originalModel = await modelField.inputValue();
         const draftModel = `Local draft ${Date.now()}`;
         await modelField.fill(draftModel);
 
@@ -172,7 +173,9 @@ test.describe('React settings sole-owner page', () => {
         for (let attempt = 0; attempt < 3; attempt++) {
             const initial = await getSettingsPayload(page);
             const concurrentSettings = structuredClone(initial.settings);
-            concurrentSettings.e2e_probe_key = `Concurrent-${Date.now()}`;
+            // A non-overlapping change is automatically rebased. Change the
+            // same provider field to exercise the real unresolved conflict.
+            concurrentSettings.oai_settings.openai_model = `Remote draft ${Date.now()}`;
             const concurrent = await saveSettingsDocument(page, concurrentSettings, initial.settingsRevision);
             if (concurrent.status === 409) {
                 continue;
@@ -196,10 +199,77 @@ test.describe('React settings sole-owner page', () => {
         await expect(saveButton).toBeEnabled({ timeout: 30_000 });
         await saveButton.click();
 
-        await expect(page.getByText(/本地草稿仍保留/)).toBeVisible({ timeout: 30_000 });
+        await expect(page.getByText(/当前草稿基于过期版本/)).toBeVisible({ timeout: 30_000 });
         await expect(modelField).toHaveValue(draftModel);
         await expect(page.getByRole('button', { name: '重新加载当前设置', exact: true })).toBeVisible();
         await expect(saveButton).toBeDisabled();
+        const remoteModel = (await getSettingsPayload(page)).settings.oai_settings.openai_model;
+        expect(remoteModel).not.toBe(draftModel);
+        await page.getByRole('button', { name: '重新加载当前设置', exact: true }).click();
+        await expect(modelField).toHaveValue(remoteModel);
+        await expect(page.getByText(/当前草稿基于过期版本/)).toHaveCount(0);
+        await expect(saveButton).toBeDisabled();
+        const latest = await getSettingsPayload(page);
+        const restored = structuredClone(latest.settings);
+        restored.oai_settings.openai_model = originalModel;
+        expect((await saveSettingsDocument(page, restored, latest.settingsRevision)).status).toBeLessThan(400);
+    });
+
+    test('rebases non-overlapping concurrent provider changes and persists both', async ({ page }) => {
+        await testSetup.awaitST({ page });
+        await openSettings(page);
+        const before = await getSettingsPayload(page);
+        const local = `local-model-${Date.now()}`;
+        const remote = `remote-fallback-${Date.now()}`;
+        await page.locator('#settings-providers-openaiModel').fill(local);
+        const changed = structuredClone(before.settings);
+        changed.oai_settings.fallback_provider_model = remote;
+        expect((await saveSettingsDocument(page, changed, before.settingsRevision)).status).toBe(200);
+        const responses = [];
+        page.on('response', response => {
+            if (response.url().endsWith('/api/settings/save') && response.request().method() === 'POST') responses.push(response.status());
+        });
+        await page.locator('button[type="submit"]').click();
+        await expect(page.locator('.settings-status--success')).toBeVisible({ timeout: 30_000 });
+        expect(responses).toContain(409);
+        expect(responses).toContain(200);
+        const saved = await getSettingsPayload(page);
+        expect(saved.settings.oai_settings.openai_model).toBe(local);
+        expect(saved.settings.oai_settings.fallback_provider_model).toBe(remote);
+        await page.reload();
+        await openSettings(page);
+        await expect(page.locator('#settings-providers-openaiModel')).toHaveValue(local);
+        await expect(page.locator('#settings-providers-fallbackProviderModel')).toHaveValue(remote);
+        const latest = await getSettingsPayload(page);
+        const restored = structuredClone(latest.settings);
+        restored.oai_settings.openai_model = before.settings.oai_settings.openai_model;
+        restored.oai_settings.fallback_provider_model = before.settings.oai_settings.fallback_provider_model;
+        expect((await saveSettingsDocument(page, restored, latest.settingsRevision)).status).toBeLessThan(400);
+    });
+
+    test('preserves a concurrent edit to the same rendering setting', async ({ page }) => {
+        await testSetup.awaitST({ page });
+        await openSettings(page);
+        const before = await getSettingsPayload(page);
+        const input = page.locator('#settings-rendering-frontendFramesDepth');
+        const original = Number(await input.inputValue());
+        const local = original + 1;
+        const remote = original + 2;
+        await input.fill(String(local));
+        await expect(page.locator('button[type="submit"]')).toBeEnabled();
+        const changed = structuredClone(before.settings);
+        changed.power_user.frontend_frames = { ...(changed.power_user.frontend_frames ?? {}), depth: remote };
+        expect((await saveSettingsDocument(page, changed, before.settingsRevision)).status).toBe(200);
+        expect((await getSettingsPayload(page)).settings.power_user.frontend_frames.depth).toBe(remote);
+        await page.locator('button[type="submit"]').click();
+        await expect(page.getByText(/当前草稿基于过期版本/)).toBeVisible({ timeout: 30_000 });
+        await expect(input).toHaveValue(String(local));
+        const after = await getSettingsPayload(page);
+        expect(after.settings.power_user.frontend_frames.depth).toBe(remote);
+        const restored = structuredClone(after.settings);
+        if (before.settings.power_user.frontend_frames === undefined) delete restored.power_user.frontend_frames;
+        else restored.power_user.frontend_frames = before.settings.power_user.frontend_frames;
+        expect((await saveSettingsDocument(page, restored, after.settingsRevision)).status).toBe(200);
     });
 
     test('desktop and mobile viewports keep save controls reachable', async ({ page }) => {

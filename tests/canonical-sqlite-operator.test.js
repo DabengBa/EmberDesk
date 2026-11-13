@@ -1,6 +1,11 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import sharp from 'sharp';
+import extract from 'png-chunks-extract';
+import { makeAnimatedImages, makeBmp } from './helpers/animated-image-fixtures.js';
+import { read as readCharacterCard } from '../src/character-card-parser.js';
+import { AVATAR_HEIGHT, AVATAR_WIDTH } from '../src/constants.js';
 
 import { afterEach, describe, expect, test } from '@jest/globals';
 
@@ -300,6 +305,47 @@ describe('canonical sqlite operator helpers', () => {
             blocking: true,
             reason: 'audit_stale_after_projection_repair',
         }));
+    });
+
+    test.each(['apng', 'gif', 'webp', 'bmp'])('repairs a real %s character projection from SQLite without replacing its source', async format => {
+        const directories = createDirectories(makeRoot());
+        const manager = createManager();
+        const payload = { name: 'Alpha', chat: 'Alpha - chat', fav: false, tags: [], data: { name: 'Alpha', extensions: { fav: false, world: '' }, tags: [] } };
+        writeCharacterFile(directories, 'alpha.png', payload);
+        await runCanonicalShadowImport({
+            handle: 'alice', directories, featureFlags: { enabled: true, shadowImport: true, strict: false },
+            manager, buildSnapshotRow: createSnapshotBuilder(), nowMs: 1735689600000,
+        });
+        const db = manager.open({ handle: 'alice', directories, featureFlags: { enabled: true, strict: false } });
+        fs.rmSync(path.join(directories.characters, 'alpha.png'));
+        const source = format === 'bmp' ? makeBmp() : (await makeAnimatedImages())[format];
+        const sourcePath = path.join(directories.root, `source.${format}`);
+        fs.writeFileSync(sourcePath, source);
+        recordProjectionRepair(db, {
+            repairKey: 'repair:image', repairType: 'character_projection', avatarFilename: 'alpha.png', reason: 'projection_failed',
+            details: { operation: 'create', internalName: 'alpha', sourceImage: sourcePath }, nowMs: 1735689601111,
+        });
+        if (format === 'webp') {
+            await expect(repairCanonicalProjection({ db, directories, repairKeys: ['repair:image'], nowMs: 1735689602222 })).rejects.toThrow(/png file header/i);
+            expect(fs.readFileSync(sourcePath)).toEqual(source);
+            expect(fs.existsSync(path.join(directories.characters, 'alpha.png'))).toBe(false);
+            expect(listCanonicalRepairs(db)).toHaveLength(1);
+            return;
+        }
+        const result = await repairCanonicalProjection({ db, directories, repairKeys: ['repair:image'], nowMs: 1735689602222 });
+        expect(fs.readFileSync(sourcePath)).toEqual(source);
+        expect(result.results[0].status).toBe('repaired');
+        expect(listCanonicalRepairs(db)).toEqual([]);
+        const card = fs.readFileSync(path.join(directories.characters, 'alpha.png'));
+        expect(JSON.parse(readCharacterCard(card)).data.name).toBe('Alpha');
+        if (format === 'apng') {
+            expect(extract(card).filter(chunk => chunk.name === 'fcTL')).toHaveLength(2);
+        } else {
+            const metadata = await sharp(card).metadata();
+            expect(metadata).toMatchObject({ format: 'png', width: AVATAR_WIDTH, height: AVATAR_HEIGHT });
+            const pixel = await sharp(card).extract({ left: 0, top: 0, width: 1, height: 1 }).removeAlpha().raw().toBuffer();
+            expect([...pixel]).toEqual([255, 0, 0]);
+        }
     });
 
     test('reports repair_not_found when a requested character repair key does not exist', async () => {

@@ -498,6 +498,57 @@ export const CANONICAL_SQLITE_MIGRATIONS = Object.freeze([
                 ON character_replace_intents (status, acknowledged);
         `,
     }),
+    Object.freeze({
+        version: 15,
+        name: 'canonical_chat_conditional_versions',
+        sql: `
+            ALTER TABLE chat_sessions ADD COLUMN concurrency_token TEXT;
+            UPDATE chat_sessions SET concurrency_token = lower(hex(randomblob(16)));
+
+            CREATE TRIGGER chat_sessions_concurrency_insert
+            AFTER INSERT ON chat_sessions
+            BEGIN
+                UPDATE chat_sessions SET concurrency_token = lower(hex(randomblob(16))) WHERE id = NEW.id;
+            END;
+
+            CREATE TRIGGER chat_sessions_concurrency_update
+            AFTER UPDATE ON chat_sessions
+            WHEN NEW.concurrency_token IS OLD.concurrency_token
+            BEGIN
+                UPDATE chat_sessions SET concurrency_token = lower(hex(randomblob(16))) WHERE id = NEW.id;
+            END;
+        `,
+    }),
+    Object.freeze({
+        version: 16,
+        name: 'canonical_chat_projection_tombstones',
+        sql: `
+            CREATE TABLE chat_projection_tombstones (
+                owner_type TEXT NOT NULL,
+                owner_id TEXT NOT NULL,
+                source_path TEXT NOT NULL,
+                PRIMARY KEY (owner_type, owner_id, source_path)
+            );
+            CREATE TRIGGER chat_sessions_projection_deleted
+            AFTER DELETE ON chat_sessions
+            BEGIN
+                INSERT OR IGNORE INTO chat_projection_tombstones (owner_type, owner_id, source_path)
+                VALUES (OLD.owner_type, OLD.owner_id, OLD.source_path);
+            END;
+            CREATE TRIGGER chat_sessions_projection_moved
+            AFTER UPDATE OF owner_type, owner_id, source_path ON chat_sessions
+            WHEN OLD.owner_type IS NOT NEW.owner_type OR OLD.owner_id IS NOT NEW.owner_id OR OLD.source_path IS NOT NEW.source_path
+            BEGIN
+                INSERT OR IGNORE INTO chat_projection_tombstones (owner_type, owner_id, source_path)
+                VALUES (OLD.owner_type, OLD.owner_id, OLD.source_path);
+            END;
+        `,
+    }),
+    Object.freeze({
+        version: 17,
+        name: 'canonical_chat_operation_results',
+        sql: 'CREATE TABLE chat_operation_results (operation_id TEXT PRIMARY KEY, fingerprint TEXT NOT NULL, result_json TEXT NOT NULL);',
+    }),
 ]);
 
 export class CanonicalMigrationBlockedError extends Error {

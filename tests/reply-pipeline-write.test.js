@@ -1,5 +1,5 @@
 import { expect, jest, test } from '@jest/globals';
-import { readFileSync } from 'node:fs';
+import { loadTsModule } from './helpers/load-ts-module.mjs';
 
 // The production card writer uses DOM construction; the isolated shell only
 // needs its string result, not browser layout.
@@ -19,18 +19,11 @@ jest.unstable_mockModule('../public/scripts/popup.js', () => ({ Popup: {} }));
 const { ToolManager } = await import('../public/scripts/tool-calling.js');
 const runtime = await import('../public/scripts/reply-pipeline.js');
 const { getPipelineRunState } = await import('../public/scripts/reply-pipeline-core.js');
-const source = readFileSync(new URL('../public/scripts/generation-service.js', import.meta.url), 'utf8');
+const { createGenerationLifecycleService } = await loadTsModule('app/lib/generation/attempt-executor.ts');
+const lifecycle = createGenerationLifecycleService(() => ({}));
 
-function slice(startText, endText) {
-    const start = source.indexOf(startText);
-    const end = source.indexOf(endText, start);
-    expect(start).toBeGreaterThan(-1);
-    expect(end).toBeGreaterThan(start);
-    return source.slice(start, end);
-}
-
-// Execute the actual generation-service dispatch and final-fold statements,
-// with only the shell's storage/UI operations isolated in memory.
+// Execute typed dispatch and final folding, with real pipeline/tool logic and
+// only browser and storage effects isolated in memory.
 test.each(['stream', 'nonstream'])('%s call plus prose folds two real card writes into one assistant reply', async mode => {
     chat.length = 0;
     runtime.endPipelineRun();
@@ -39,38 +32,44 @@ test.each(['stream', 'nonstream'])('%s call plus prose folds two real card write
         chat.push({ is_user: false, mes: getMessage, extra: {} });
         return { type, getMessage };
     });
-    const context = {
-        state: { chat, ToolManager, regex_placement: { AI_OUTPUT: 'output' }, streamingProcessor: null },
-        type: 'normal', canPerformToolCalls: true, depth: 0, automatic_trigger: false, force_name2: false,
-        quiet_prompt: '', quietToLoud: false, skipWIAN: false, signal: null, quietImage: '', quietName: '', dryRun: false,
-        reasoning: '', reasoningSignature: null, title: '', imageUrls: null, attemptModel: 'model',
-        saveReply, cleanUpMessage: ({ getMessage }) => getMessage, getRegexedString: value => value,
-        deleteLastMessage: async () => { chat.pop(); }, getPipelineRunState, preparePipelineRound: runtime.preparePipelineRound,
-        endPipelineRun: runtime.endPipelineRun, saveChatConditional: async () => {}, unblockGeneration: () => {},
-        isReactMainChatOwner: () => true, mountReactMainChatMessageListPanel: async () => {},
-        scheduleMainChatMessageListPanelRefresh: () => {}, eventSource: { emit: async () => {} }, event_types: { MESSAGE_DELETED: 'deleted' },
-        rememberMainChatStreamingTransportProcessorTerminal: () => {}, Generate: async () => 'continue',
-        getGenerationSuccessFinalization: () => ({ action: 'save', type: 'normal' }),
-        isAssistantRecoveryMessageId: () => false, activeRecoveryMessageId: null,
-    };
-    const finalSource = slice('async function finalizePipelineReply(', '\n    async function finishGenerating()');
-    context.finalizePipelineReply = new Function('ctx', `with (ctx) { ${finalSource}; return finalizePipelineReply; }`)(context);
-    const dispatch = mode === 'stream'
-        ? slice('const isStreamFinished =', '\n                if (isStreamFinished)')
-        : slice("if (type == 'quiet') {", "\n        console.debug('/api/chats/save called by /Generate');");
-    const execute = new Function('ctx', `with (ctx) { return (async () => { ${dispatch} })(); }`);
+    const ownsRun = () => true;
+    const finalizePipeline = input => lifecycle.finalizePipelineReply(input, {
+        ownsRun, chat, clean: value => value, formatTags: (calls, text) => ToolManager.formatPipelineTagMarkup(calls, text),
+        regexOutput: value => value, removeCardView: () => {}, emitDeleted: async () => {}, saveReply,
+        endPipeline: runtime.endPipelineRun, saveChat: async () => {}, unblock: () => {}, clearProcessor: () => {}, refresh: () => {},
+    });
+    const saveInvocations = calls => ToolManager.saveFunctionToolInvocations(calls, { ownsRun });
+    const deleteLast = async () => { chat.pop(); };
     for (const [index, content] of ['first', 'second'].entries()) {
         runtime.applyPipelineRequestShaping({ type: 'normal', messages: [{ role: 'user', content: 'hello' }], tools: [] });
         const call = { id: `id-${index}`, type: 'function', function: { name: 'submit_story', arguments: JSON.stringify({ content }) } };
         const response = { choices: [{ index: 0, message: { role: 'assistant', content: 'companion prose', tool_calls: [call] } }] };
-        context.getMessage = 'companion prose';
-        context.data = response;
         if (mode === 'stream') {
             // The stream session has already saved its provisional assistant message.
             await saveReply({ type: 'normal', getMessage: 'companion prose' });
-            context.state.streamingProcessor = { isStopped: false, isFinished: true, toolCalls: [[call]], result: 'companion prose', messageId: chat.length - 1, reasoningHandler: { reasoning: '' } };
+            const processor = { isStopped: false, isFinished: true, toolCalls: [[call]], result: 'companion prose', messageId: chat.length - 1, reasoningHandler: { reasoning: '' }, reasoningSignature: null };
+            await lifecycle.finishStreamAttempt({ type: 'normal', isOpenAI: true, canPerformTools: true, attemptModel: 'model', text: 'companion prose', processor }, {
+                ownsRun, clean: value => value, lastMessage: () => chat.at(-1), hasToolCalls: () => true, hasPipeline: () => true,
+                deleteLast, invokeTools: (calls, options) => ToolManager.invokeFunctionTools(calls, options),
+                prepareRound: runtime.preparePipelineRound, clearProcessor: () => {}, saveInvocations,
+                markComplete: () => {}, finalizePipeline,
+            });
+        } else {
+            await lifecycle.completeGenerationResponse({ type: 'normal', data: response, canPerformToolCalls: true }, {
+                ownsRun, extractMessage: () => 'companion prose', extractTitle: () => '', extractReasoning: () => '',
+                extractImages: () => null, extractSignature: () => null, clean: value => value, cleanReasoning: value => value,
+                hasRecoveryMessage: () => false, saveReply, setType: () => {}, hasToolCalls: () => true,
+                hasPipeline: () => true, deleteLastMessage: deleteLast,
+                invokeTools: (data, reasoning, owner) => ToolManager.invokeFunctionTools(data, { reasoningText: reasoning, ownsRun: owner }),
+                preparePipeline: runtime.preparePipelineRound, saveTools: saveInvocations, finalizePipeline, continueAfterTools: async () => {},
+            });
         }
-        await execute(context);
+        if (index === 0) {
+            expect(chat).toHaveLength(1);
+            expect(chat[0].extra.tool_invocations.map(item => item.pipeline.tool)).toEqual(['analyze']);
+            expect(JSON.stringify(chat)).not.toContain('companion prose');
+            expect(getPipelineRunState().index).toBe(1);
+        }
     }
     expect(chat).toHaveLength(1);
     expect(chat[0].mes).toBe('&lt;analyze&gt;first&lt;/analyze&gt;\n&lt;respond&gt;second&lt;/respond&gt;');

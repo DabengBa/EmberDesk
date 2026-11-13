@@ -41,24 +41,10 @@ async function runGenerationScenario({ type = 'avatar', format = 'jpg', quality 
     jest.resetModules();
 
     const config = { format, quality };
-    const mockResize = jest.fn();
-    const mockCover = jest.fn();
-    const mockGetBuffer = jest.fn(async (mime, options) => Buffer.from(JSON.stringify({
-        mime,
-        quality: options?.quality ?? null,
-        jpegColorSpace: options?.jpegColorSpace ?? null,
-    })));
-
-    const fakeThumbImage = {
-        resize: mockResize,
-        cover: mockCover,
-        getBuffer: mockGetBuffer,
-    };
-
-    const fakeImage = {
-        bitmap: { width: 320, height: 240 },
-        clone: jest.fn(() => fakeThumbImage),
-    };
+    const mockThumbnailImage = jest.fn(async (_input, options) => ({
+        aspectRatio: 4 / 3,
+        buffer: Buffer.from(JSON.stringify(options)),
+    }));
 
     jest.unstable_mockModule('../src/util.js', () => ({
         getConfigValue: (key, defaultValue = null) => {
@@ -80,15 +66,7 @@ async function runGenerationScenario({ type = 'avatar', format = 'jpg', quality 
         isFirefox: () => false,
     }));
 
-    jest.unstable_mockModule('../src/jimp.js', () => ({
-        Jimp: {
-            read: jest.fn(async () => fakeImage),
-        },
-        JimpMime: {
-            png: 'image/png',
-            jpeg: 'image/jpeg',
-        },
-    }));
+    jest.unstable_mockModule('../src/image-processing.js', () => ({ thumbnailImage: mockThumbnailImage }));
 
     jest.unstable_mockModule('write-file-atomic', () => ({
         sync: (targetPath, buffer) => fs.writeFileSync(targetPath, buffer),
@@ -107,9 +85,7 @@ async function runGenerationScenario({ type = 'avatar', format = 'jpg', quality 
     return {
         result,
         outputBuffer,
-        mockResize,
-        mockCover,
-        mockGetBuffer,
+        mockThumbnailImage,
     };
 }
 
@@ -131,22 +107,17 @@ describe('thumbnail jpeg quality tuning', () => {
     });
 
     test.each(['avatar'])('jpg mode uses quality 85 for new %s thumbnails', async (type) => {
-        const { result, outputBuffer, mockCover, mockResize, mockGetBuffer } = await runGenerationScenario({
+        const { result, outputBuffer, mockThumbnailImage } = await runGenerationScenario({
             type,
             format: 'jpg',
             quality: 85,
         });
 
         expect(result.path).toBeTruthy();
-        expect(mockGetBuffer).toHaveBeenCalledWith('image/jpeg', { quality: 85, jpegColorSpace: 'ycbcr' });
-
-        expect(mockCover).toHaveBeenCalledWith({ w: 96, h: 144 });
-        expect(mockResize).not.toHaveBeenCalled();
+        expect(mockThumbnailImage).toHaveBeenCalledWith(expect.any(Buffer), { width: 96, height: 144, format: 'jpg', quality: 85 });
 
         expect(outputBuffer).toEqual(Buffer.from(JSON.stringify({
-            mime: 'image/jpeg',
-            quality: 85,
-            jpegColorSpace: 'ycbcr',
+            width: 96, height: 144, format: 'jpg', quality: 85,
         })));
     });
 
@@ -155,36 +126,34 @@ describe('thumbnail jpeg quality tuning', () => {
     });
 
     test('existing explicit quality 95 remains untouched as an override', async () => {
-        const { mockGetBuffer } = await runGenerationScenario({
+        const { mockThumbnailImage } = await runGenerationScenario({
             type: 'avatar',
             format: 'jpg',
             quality: 95,
         });
 
-        expect(mockGetBuffer).toHaveBeenCalledWith('image/jpeg', { quality: 95, jpegColorSpace: 'ycbcr' });
+        expect(mockThumbnailImage).toHaveBeenCalledWith(expect.any(Buffer), expect.objectContaining({ format: 'jpg', quality: 95 }));
     });
 
     test('missing quality key uses the runtime fallback 85', async () => {
-        const { mockGetBuffer } = await runGenerationScenario({
+        const { mockThumbnailImage } = await runGenerationScenario({
             type: 'avatar',
             format: 'jpg',
         });
 
-        expect(mockGetBuffer).toHaveBeenCalledWith('image/jpeg', { quality: 85, jpegColorSpace: 'ycbcr' });
+        expect(mockThumbnailImage).toHaveBeenCalledWith(expect.any(Buffer), expect.objectContaining({ format: 'jpg', quality: 85 }));
     });
 
     test('png mode ignores jpeg quality settings', async () => {
-        const { mockGetBuffer, outputBuffer } = await runGenerationScenario({
+        const { mockThumbnailImage, outputBuffer } = await runGenerationScenario({
             type: 'avatar',
             format: 'png',
             quality: 95,
         });
 
-        expect(mockGetBuffer).toHaveBeenCalledWith('image/png');
+        expect(mockThumbnailImage).toHaveBeenCalledWith(expect.any(Buffer), expect.objectContaining({ format: 'png', quality: 95 }));
         expect(outputBuffer).toEqual(Buffer.from(JSON.stringify({
-            mime: 'image/png',
-            quality: null,
-            jpegColorSpace: null,
+            width: 96, height: 144, format: 'png', quality: 95,
         })));
     });
 });

@@ -1,6 +1,50 @@
 import { expect, test } from '@playwright/test';
 import { testSetup } from './frontend/frontent-test-utils.js';
 
+test('saved character sort is restored when the workspace reloads', async ({ page }) => {
+    await testSetup.awaitST({ page });
+    await page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: '角色库' }).first().click();
+    const sort = page.locator('#emberdesk-react-character-sort');
+    const compat = page.locator('#character_sort_order');
+    await expect(sort).toBeVisible();
+    const original = await sort.inputValue();
+    const index = await compat.locator('option[data-field="name"][data-order="desc"]').evaluate(option => Array.from(option.parentElement.options).indexOf(option));
+    const selected = await sort.locator('option').nth(index).getAttribute('value');
+    try {
+        await sort.selectOption(selected);
+        await page.evaluate(async () => (await import('/script.js')).saveSettings());
+        await page.reload();
+        await testSetup.awaitST({ page });
+        await page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: '角色库' }).first().click();
+        await expect(sort).toHaveValue(selected);
+        await expect(compat.locator('option[data-field="name"][data-order="desc"]')).toHaveJSProperty('selected', true);
+    } finally {
+        if (!page.isClosed()) {
+            await sort.selectOption(original);
+            await page.evaluate(async () => (await import('/script.js')).saveSettings());
+        }
+    }
+});
+
+test('search sort is temporary and restores the user-selected order when cleared', async ({ page }) => {
+    await testSetup.awaitST({ page });
+    await page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: '角色库' }).first().click();
+    const search = page.locator('#emberdesk-react-character-search');
+    const sort = page.locator('#emberdesk-react-character-sort');
+    const compat = page.locator('#character_sort_order');
+    await expect(search).toBeVisible();
+    await expect(sort).toBeVisible();
+    const nameDesc = await compat.locator('option[data-field="name"][data-order="desc"]').evaluate(option => Array.from(option.parentElement.options).indexOf(option));
+    const selectedValue = await sort.locator('option').nth(nameDesc).getAttribute('value');
+    await sort.selectOption(selectedValue);
+    await search.fill('Dev Character 00');
+    await expect(compat.locator('option[data-field="search"]')).toHaveJSProperty('selected', true);
+    await expect(sort).toHaveValue(/^0:search:/);
+    await search.fill('');
+    await expect(compat.locator('option[data-field="search"]')).toHaveJSProperty('hidden', true);
+    await expect(sort).toHaveValue(selectedValue);
+});
+
 // Characterization only: these are explicit examples, not a proposed SQL contract.
 test('real browser character filters and sorting preserve current observable examples', async ({ page }) => {
     await testSetup.awaitST({ page });

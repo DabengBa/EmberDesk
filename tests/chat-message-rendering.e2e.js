@@ -388,6 +388,8 @@ test.describe('chat message rendering', () => {
         const consoleErrors = createConsoleErrorCollector(page);
 
         await testSetup.awaitST({ page });
+        // Rendering stored messages does not exercise model-generated memory summaries.
+        await page.evaluate(() => { window.SillyTavern.getContext().chatCompletionSettings.chat_memory_enabled = false; });
         await seedLongChatFixture(page, longChatName, longChat);
         await selectCharacterByName(page, characterName);
 
@@ -653,6 +655,8 @@ test.describe('chat message rendering', () => {
         const consoleErrors = createConsoleErrorCollector(page);
 
         await testSetup.awaitST({ page });
+        // Delete-mode selection is independent of background model summaries.
+        await page.evaluate(() => { window.SillyTavern.getContext().chatCompletionSettings.chat_memory_enabled = false; });
         await selectCharacterByName(page, characterName);
         await page.evaluate(() => {
             const context = window.SillyTavern.getContext();

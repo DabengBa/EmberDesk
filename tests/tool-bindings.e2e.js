@@ -92,25 +92,25 @@ async function installGenerateStub(page) {
 
 /**
  * Stubs the generate endpoint for reply-pipeline turns: each round answers with
- * the next not-yet-called pipeline step as a tool call; requests without a step
+ * the current logical step via submit_story; requests without a step
  * prompt (or with every step already called) get a plain-text reply.
  */
-async function installPipelineStub(page, { steps, closingText = 'PIPELINE_FINAL_REPLY' }) {
-    await page.evaluate(({ steps, closingText }) => {
+async function installPipelineStub(page, { steps, closingText = 'PIPELINE_FINAL_REPLY', emptyFinal = false }) {
+    await page.evaluate(({ steps, closingText, emptyFinal }) => {
         window.__emberdeskToolRequests = [];
         window.__emberdeskToolGenerationError = null;
         window.__emberdeskOriginalFetch ??= window.fetch.bind(window);
 
-        const toolCallPayload = (name, args) => ({
+        const toolCallPayload = (step, args) => ({
             choices: [{
                 index: 0,
                 message: {
                     role: 'assistant',
                     content: null,
                     tool_calls: [{
-                        id: `call_e2e_${name}`,
+                        id: `call_e2e_${step}`,
                         type: 'function',
-                        function: { name, arguments: JSON.stringify(args) },
+                        function: { name: 'submit_story', arguments: JSON.stringify(args) },
                     }],
                 },
                 finish_reason: 'tool_calls',
@@ -127,13 +127,13 @@ async function installPipelineStub(page, { steps, closingText = 'PIPELINE_FINAL_
             window.__emberdeskToolRequests.push(body);
             const messages = Array.isArray(body.messages) ? body.messages : [];
             const hasStepPrompt = messages.some(message => String(message?.content ?? '').includes('[Reply pipeline'));
-            const calledNames = messages
-                .filter(message => Array.isArray(message.tool_calls))
-                .flatMap(message => message.tool_calls.map(toolCall => toolCall?.function?.name));
-            const nextStep = steps.find(step => !calledNames.includes(step));
+            const instruction = messages.map(message => String(message?.content ?? ''))
+                .findLast(content => /\[Reply pipeline \d+\/\d+\]/.test(content));
+            const round = Number(instruction?.match(/\[Reply pipeline (\d+)\//)?.[1]);
+            const nextStep = steps[round - 1];
 
             let payload;
-            if (!hasStepPrompt || !nextStep) {
+            if (body.tool_choice === 'none' || !hasStepPrompt || !nextStep) {
                 payload = {
                     choices: [{
                         index: 0,
@@ -142,7 +142,7 @@ async function installPipelineStub(page, { steps, closingText = 'PIPELINE_FINAL_
                     }],
                 };
             } else {
-                const args = nextStep === 'respond'
+                const args = emptyFinal && round === steps.length ? { content: '' } : nextStep === 'respond'
                     ? { content: 'RESPOND_TEXT', options: ['Take the tea', 'Ask about the glade'] }
                     : { content: `${nextStep.toUpperCase()}_TEXT` };
                 payload = toolCallPayload(nextStep, args);
@@ -153,7 +153,7 @@ async function installPipelineStub(page, { steps, closingText = 'PIPELINE_FINAL_
                 headers: { 'Content-Type': 'application/json' },
             });
         };
-    }, { steps, closingText });
+    }, { steps, closingText, emptyFinal });
 }
 
 // All tests share the seeded user's settings document, so they must not run
@@ -161,6 +161,40 @@ async function installPipelineStub(page, { steps, closingText = 'PIPELINE_FINAL_
 test.describe.configure({ mode: 'serial' });
 
 test.describe('tool bindings', () => {
+    test('sanitized respond and copy chips handle native and synthetic clicks once', async ({ page }) => {
+        await testSetup.awaitST({ page });
+        await expect(page.locator('#RegexPanel')).toHaveAttribute('data-tool-bindings-init', 'true');
+        await page.evaluate(async () => {
+            await window.SillyTavern.getContext().selectCharacterById(0);
+            const { init } = await import('/scripts/tool-bindings.js');
+            const { messageFormatting } = await import('/scripts/message-service.js');
+            await init();
+            await init();
+            window.__toolChipCopies = [];
+            Object.defineProperty(navigator, 'clipboard', {
+                configurable: true,
+                value: { writeText: async text => window.__toolChipCopies.push(text) },
+            });
+            const host = document.createElement('div');
+            host.id = 'tool-chip-test-host';
+            Object.assign(host.style, { position: 'fixed', top: '10px', left: '10px', zIndex: '999999', background: 'white' });
+            host.innerHTML = messageFormatting('<div data-respond-option="" role="button" tabindex="0">▸ Pick the path</div><div data-copy-option="Copy this" role="button" tabindex="0">Copy</div>', '', true, false, -1);
+            document.body.append(host);
+        });
+        const respond = page.locator('#tool-chip-test-host [data-respond-option]');
+        const copy = page.locator('#tool-chip-test-host [data-copy-option]');
+        await expect(respond).toHaveCount(1);
+        await expect(copy).toHaveCount(1);
+        await respond.click();
+        await expect(page.locator('#send_textarea')).toHaveValue('Pick the path');
+        await page.locator('#send_textarea').fill('');
+        await page.evaluate(() => window.$('#tool-chip-test-host [data-respond-option]').trigger('click'));
+        await expect(page.locator('#send_textarea')).toHaveValue('Pick the path');
+        await copy.click();
+        await page.evaluate(() => window.$('#tool-chip-test-host [data-copy-option]').trigger('click'));
+        await expect.poll(() => page.evaluate(() => window.__toolChipCopies)).toEqual(['Copy this', 'Copy this']);
+    });
+
     test('force call switch has the visible accessible name', async ({ page }) => {
         await testSetup.awaitST({ page });
         await page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: '正则' }).first().click();
@@ -195,7 +229,15 @@ test.describe('tool bindings', () => {
         await expect(page.locator('#RegexPanel')).toHaveAttribute('data-tool-bindings-init', 'true', { timeout: 15_000 });
         await page.locator('#open_tool_binding_editor').click();
         await expect(page.locator('#tool_binding_editor_template')).toBeVisible({ timeout: 10_000 });
+        await page.locator('.popup-button-ok').click();
+        await expect(page.locator('#tb_name')).toBeFocused();
+        await expect(page.locator('#tb_name_error')).toBeVisible();
         await page.locator('#tb_name').fill('e2e_ui_tool');
+        await page.locator('#tb_parameters').fill('{');
+        await page.locator('.popup-button-ok').click();
+        await expect(page.locator('#tb_parameters')).toBeFocused();
+        await expect(page.locator('#tb_parameters_error')).toBeVisible();
+        await page.locator('#tb_parameters').fill('{"type":"object","properties":{}}');
         await page.locator('#tb_description').fill('created through the editor popup');
         await page.locator('#tb_action_body').fill('return { ok: true };');
         await page.locator('.popup-button-ok').click();
@@ -212,6 +254,63 @@ test.describe('tool bindings', () => {
             return window.SillyTavern.getContext().ToolManager.tools.map(tool => tool.toFunctionOpenAI().function.name);
         });
         expect(registered).toContain('e2e_ui_tool');
+
+        // Duplicate names must remain in the editor, focused on the name.
+        await page.locator('#open_tool_binding_editor').click();
+        await page.locator('#tb_name').fill('e2e_ui_tool');
+        await page.locator('.popup-button-ok').click();
+        await expect(page.locator('#tb_name')).toBeFocused();
+        await expect(page.locator('#tb_name_error')).toBeVisible();
+        await page.locator('.popup-button-cancel').click();
+        await expect(page.locator('#tool_binding_editor_template')).toHaveCount(0);
+
+        const row = page.locator('#saved_tool_bindings .tool-binding-label').filter({ hasText: 'e2e_ui_tool' });
+        await row.locator('.tool-binding-edit').click();
+        await page.locator('#tb_display_name').fill('Cancelled edit');
+        await page.locator('.popup-button-cancel').click();
+        await expect(row).not.toContainText('Cancelled edit');
+        await row.locator('.tool-binding-edit').click();
+        await page.locator('#tb_display_name').fill('Edited tool');
+        await page.locator('.popup-button-ok').click();
+        await expect(row).toContainText('Edited tool');
+        const enabled = row.locator('.tool-binding-enabled');
+        await expect(enabled).toBeChecked();
+        // The per-binding toggle must be keyboard-operable, not just clickable
+        // through its decorative icon.
+        await row.locator('.tool-binding-edit').focus();
+        await page.keyboard.press('Shift+Tab');
+        await expect(enabled).toBeFocused();
+        await expect(enabled).toHaveAccessibleName(/Edited tool/);
+        await expect.poll(() => enabled.locator('..').evaluate(label => getComputedStyle(label).outlineStyle)).not.toBe('none');
+        await enabled.press('Space');
+        await expect(enabled).not.toBeChecked();
+        await enabled.press('Space');
+        await expect(enabled).toBeChecked();
+        await row.locator('.tool-binding-toggle-on').click();
+        await expect(enabled).not.toBeChecked();
+        await expect.poll(() => page.evaluate(() => window.SillyTavern.getContext().featureSettings.tool_bindings.find(binding => binding.name === 'e2e_ui_tool')?.enabled)).toBe(false);
+        await expect.poll(() => page.evaluate(() => window.SillyTavern.getContext().ToolManager.tools.map(tool => tool.toFunctionOpenAI().function.name))).not.toContain('e2e_ui_tool');
+        await row.locator('.tool-binding-toggle-off').click();
+        await expect(enabled).toBeChecked();
+        await expect.poll(() => page.evaluate(() => window.SillyTavern.getContext().featureSettings.tool_bindings.find(binding => binding.name === 'e2e_ui_tool')?.enabled)).toBe(true);
+        await expect.poll(() => page.evaluate(() => window.SillyTavern.getContext().ToolManager.tools.map(tool => tool.toFunctionOpenAI().function.name))).toContain('e2e_ui_tool');
+
+        // Verify the UI edit survives a real settings write and boot registration.
+        await page.evaluate(async () => (await import('/script.js')).saveSettings());
+        await page.reload();
+        await testSetup.awaitST({ page });
+        await page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: '正则' }).first().click();
+        await page.locator('#RegexPanel .wpc-tab').filter({ hasText: '工具绑定' }).click();
+        await expect(row).toContainText('Edited tool');
+        await expect(enabled).toBeChecked();
+        await expect.poll(() => page.evaluate(() => window.SillyTavern.getContext().ToolManager.tools.map(tool => tool.toFunctionOpenAI().function.name))).toContain('e2e_ui_tool');
+        await row.locator('.tool-binding-delete').click();
+        await page.locator('.popup-button-cancel').click();
+        await expect(row).toHaveCount(1);
+        await row.locator('.tool-binding-delete').click();
+        await page.locator('.popup-button-ok').click();
+        await expect(row).toHaveCount(0);
+        await expect.poll(() => page.evaluate(() => window.SillyTavern.getContext().ToolManager.tools.map(tool => tool.toFunctionOpenAI().function.name))).not.toContain('e2e_ui_tool');
 
         // Switching back to the regex tab keeps the legacy controls functional.
         await page.locator('#RegexPanel .wpc-tab').filter({ hasText: /^正则$/ }).click();
@@ -545,6 +644,7 @@ test.describe('tool bindings', () => {
         expect(previews.after).toEqual(previews.before);
         expect(previews.requests).toBe(0);
 
+        await page.locator('#send_textarea').fill('reply pipeline e2e message');
         await page.evaluate(() => {
             window.__emberdeskToolGeneration = window.SillyTavern.getContext()
                 .generate('normal', { automatic_trigger: false })
@@ -575,10 +675,10 @@ test.describe('tool bindings', () => {
         expect(turnRequests[0].messages.some(message => String(message?.content ?? '').includes('[Reply pipeline 1/3]') && String(message?.content ?? '').includes('analyze'))).toBe(true);
         expect(turnRequests[1].messages.some(message => String(message?.content ?? '').includes('[Reply pipeline 2/3]') && String(message?.content ?? '').includes('review'))).toBe(true);
         expect(turnRequests[2].messages.some(message => String(message?.content ?? '').includes('[Reply pipeline 3/3]') && String(message?.content ?? '').includes('respond'))).toBe(true);
-        expect(turnRequests[2].tools?.some(tool => tool?.function?.name === 'respond')).toBe(true);
+        expect(turnRequests[2].tools?.some(tool => tool?.function?.name === 'submit_story')).toBe(true);
         // Tools and all previously sent messages are an immutable run prefix.
         expect(turnRequests.map(request => (request.tools ?? []).map(tool => tool?.function?.name)))
-            .toEqual(Array(3).fill(['analyze', 'review', 'respond']));
+            .toEqual(Array(3).fill(['submit_story']));
         for (let index = 1; index < turnRequests.length; index++) {
             const previous = turnRequests[index - 1].messages;
             expect(turnRequests[index].messages.slice(0, previous.length)).toEqual(previous);
@@ -730,7 +830,7 @@ test.describe('tool bindings', () => {
                 properties: { content: { type: 'string' } },
                 required: ['content'],
             },
-            // respond returns an ok-object: unusable as a reply → fallback round.
+            // Pipeline submissions use the internal carrier, not binding actions.
             actionBody: 'return JSON.stringify({ ok: true });',
             formatMessageBody: '',
             stealth: false,
@@ -754,7 +854,8 @@ test.describe('tool bindings', () => {
         await testSetup.awaitST({ page });
         await expect(page.locator('html')).toHaveAttribute('data-reply-pipeline-init', 'true', { timeout: 30_000 });
 
-        await installPipelineStub(page, { steps: ['analyze', 'respond'], closingText: 'FALLBACK_REPLY_TEXT' });
+        // Empty final submitted content is unusable and triggers the fallback.
+        await installPipelineStub(page, { steps: ['analyze', 'respond'], closingText: 'FALLBACK_REPLY_TEXT', emptyFinal: true });
         await prepareOpenAiProvider(page);
 
         await page.locator('#send_textarea').fill('reply pipeline e2e message');
@@ -932,6 +1033,8 @@ test.describe('reply pipeline step editor', () => {
         await rows.nth(0).locator('.prompt-panel-item-name').click();
         await expect(rows.nth(0).locator('.prompt-panel-pipeline-tool')).toHaveValue('analyze');
         await expect(rows.nth(0).locator('.prompt-panel-pipeline-instruction')).toHaveValue('PLAN_FIRST');
+        await expect(rows.nth(0).locator('.prompt-panel-pipeline-tool')).toHaveAccessibleName('工具名');
+        await expect(rows.nth(0).locator('.prompt-panel-pipeline-instruction')).toHaveAccessibleName('步指令');
 
         // Adding a row appends a step (auto-expanded); typing writes straight
         // into oai_settings.

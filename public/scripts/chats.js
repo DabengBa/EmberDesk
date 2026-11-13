@@ -1453,7 +1453,13 @@ async function onImageSwiped(messageId, element, direction) {
     appendMediaToMessage(message, element);
 }
 
-export function initChatUtilities() {
+let openAttachmentPicker = () => {};
+
+export function openFileAttachmentPicker() {
+    openAttachmentPicker();
+}
+
+export function initChatUtilities(mergeAttachmentFiles) {
     $(document).on('click', '.mes_pin', async function () {
         // Pinned messages never participate in turn summarization: pinning any
         // message locks its whole turn verbatim (chat-memory contract).
@@ -1546,30 +1552,22 @@ export function initChatUtilities() {
 
     const fileInput = document.getElementById('file_form_input');
 
-    // Do not change. #attachFile is added by extension.
-    $(document).on('click', '#attachFile', function () {
+    let attachmentChangeHandler;
+    openAttachmentPicker = function () {
         if (!(fileInput instanceof HTMLInputElement)) return;
         const $fileInput = $(fileInput);
-
-        // Preserve existing files in DataTransfer
-        const dataTransfer = new DataTransfer();
-        for (const file of fileInput.files) {
-            dataTransfer.items.add(file);
-        }
-
-        $fileInput.off('change').on('change', async () => {
-            for (const file of fileInput.files) {
-                if (!Array.from(dataTransfer.files).some(f => isSameFile(f, file))) {
-                    dataTransfer.items.add(file);
-                }
-            }
-
+        const existing = Array.from(fileInput.files);
+        if (attachmentChangeHandler) fileInput.removeEventListener('change', attachmentChangeHandler);
+        $fileInput.off('change');
+        attachmentChangeHandler = async () => {
+            const dataTransfer = new DataTransfer();
+            for (const file of mergeAttachmentFiles(existing, fileInput.files, isSameFile)) dataTransfer.items.add(file);
             fileInput.files = dataTransfer.files;
             await onFileAttach(fileInput.files);
-        });
-
-        $fileInput.trigger('click');
-    });
+        };
+        fileInput.addEventListener('change', attachmentChangeHandler);
+        fileInput.click();
+    };
 
     $(document).on('click', '.mes_embed', function () {
         const messageBlock = $(this).closest('.mes');
@@ -1748,16 +1746,7 @@ export function initChatUtilities() {
 
         // Workaround for Firefox: Use a DataTransfer object to indirectly set fileInput.files
         const dataTransfer = new DataTransfer();
-        for (const file of fileInput.files) {
-            dataTransfer.items.add(file);
-        }
-
-        // Preserve existing non-duplicate files in the input
-        for (const file of files) {
-            if (!Array.from(dataTransfer.files).some(f => isSameFile(f, file))) {
-                dataTransfer.items.add(file);
-            }
-        }
+        for (const file of mergeAttachmentFiles(fileInput.files, files, isSameFile)) dataTransfer.items.add(file);
 
         fileInput.files = dataTransfer.files;
         await onFileAttach(fileInput.files);

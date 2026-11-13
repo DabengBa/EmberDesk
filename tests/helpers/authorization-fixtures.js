@@ -4,11 +4,13 @@
  * Playwright runs files and tests in parallel against one shared data root, so
  * authorization tests must never share a character: a grant/revoke in one test
  * would otherwise race the persisted state asserted by another. These seeded
- * avatars (dev-character-041.png .. dev-character-047.png) are intentionally
+ * avatars (dev-character-034.png and dev-character-041.png ..
+ * dev-character-047.png) are intentionally
  * not used by any other E2E test. Do not rename or delete them elsewhere.
  */
 const FIXTURE_INDEX = {
     staleSettingsSave: 41,
+    delayedSettingsResponse: 34,
     immediateReload: 42,
     failedAuthorizationRollback: 43,
     renameSource: 44,

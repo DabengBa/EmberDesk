@@ -491,6 +491,18 @@ asset subdirectories (sprites, live2d) stay file-backed media, and only root-lev
       replacing canonical rows, records a durable restore journal, and re-requires chat audit;
       fixed-scale Node 26.3.0 benchmark proof now lives in
       `scripts/canonical-chat-node26-benchmark.mjs` and its feature evidence artifact.
+    - Chat save, rename, and delete use a loaded concurrency version and an operation ID;
+      explicit creation is create-only. Missing preconditions are rejected and stale writes
+      conflict instead of overwriting a newer session. SQLite stores operation receipts with
+      the mutation so a matching retry can return the original result; reusing an ID for a
+      different operation conflicts. Projection tombstones keep passive imports from
+      resurrecting deleted or renamed paths. User-facing local draft recovery is described in
+      [Chat Recovery](../db/features/chat-recovery.md).
+    - Backup manifest v2 includes tombstones and operation receipts alongside chat data.
+      Guarded restore merges this metadata with existing records and rejects conflicting
+      receipts before replacing sessions. Version 1 backups remain readable but cannot
+      restore metadata they never contained; existing metadata is retained. Receipts are
+      retained without an expiry because no retry-expiration contract is defined.
     - Operators create and restore chat bundles with
       `scripts/canonical-sqlite-repair.mjs backup-chat|restore-chat --backup-file <path>`;
       For crash recovery, create and save a fresh ID before starting the restore (a lowercase

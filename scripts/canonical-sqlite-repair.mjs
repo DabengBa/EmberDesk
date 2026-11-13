@@ -31,6 +31,7 @@ import { collectCanonicalManagedMediaGarbage } from '../src/endpoints/canonical-
 import {
     createCanonicalChatBackup,
     getCanonicalChatRestoreStatus,
+    getCanonicalChatRestoreVersion,
     restoreCanonicalChatBackup,
 } from '../src/endpoints/canonical-chat-backup-restore-service.js';
 import { getUserDirectories } from '../src/user-directories.js';
@@ -566,6 +567,7 @@ async function main() {
                 backup,
                 handle: options.handle,
                 directories,
+                expectedVersion: getCanonicalChatRestoreVersion(db),
                 ...(options.restoreId == null ? {} : { restoreId: options.restoreId }),
             });
             formatter = formatChatRestore;

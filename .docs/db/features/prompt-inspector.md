@@ -24,7 +24,8 @@ Let users verify what the model is actually about to see — resolved prompt ord
 - Pipeline preview builds the selected round with its own model (the closing round inherits the preset), without mutating a live run. The shared history/media prefix uses the first runnable step's model, matching live assembly; later mixed-model rounds reuse that prefix.
 - When a runnable [Reply Pipeline](feature.reply_pipeline) exists, a round selector previews each step round (step-scoped material and instruction, configured enforcement, per-step token cap and reasoning effort) and the closing round. The closing preview uses `tool_choice: 'none'` when tool definitions are available; otherwise it omits tool wiring. Preview does not touch live run state.
 - `刷新` reassembles against current state; `复制 JSON` copies the full request body; Escape, the close button, or the backdrop dismisses the overlay.
-- The preview performs no network request, writes no chat or settings state, does not clear the composer, does not materialize pending attachments and stores nothing persistently — prompt content stays in memory only. Known divergence is surfaced as explicit warnings (pending attachment, bias-only input, budget overflow, assembly error) rather than silently omitted.
+- The preview does not send a model-generation request, add a chat message, clear the composer, materialize pending attachments, or execute commands. Slash-prefixed text is ordinary message input. It assembles temporary prompt data in memory; other application services and event listeners may still run during assembly, including memory maintenance. Known divergence is surfaced as explicit warnings (pending attachment, slash-command input, bias-only input, budget overflow, assembly error) rather than silently omitted.
+- Temporary prompts created for a preview are scoped to that preview, so a simultaneous background generation does not consume them. A refresh takes a new snapshot of shared prompt data; changes made later by independent or contextless event listeners are not automatically attributed to an already-running preview. Consequently parity with a later send assumes the relevant state and listener contributions remain unchanged.
 - When no character is active or the chat completion API is not in use, the overlay shows an explanatory empty state instead of a partial prompt.
 
 ## Semantic Interaction IDs
@@ -39,16 +40,17 @@ Let users verify what the model is actually about to see — resolved prompt ord
 ## Acceptance Workflows
 
 - As a user about to send a message, type into the composer and open `查看 Prompt` from `提示词`; the overlay must show the pending text as the newest `预览合成` chat entry inside the ordered message list, the composer must keep its text, no message is appended to chat history, and no request reaches `/api/backends/chat-completions/generate`. Failure is a sent request, a cleared composer, or a preview that omits the pending text.
-- As a user checking prompt composition, toggle a prompt entry or world info content and press `刷新`; the message list and budget strip must reflect the change, and the listed messages must equal what a subsequent real send transmits. Failure is drift between the preview body and the real request body.
+- As a user checking prompt composition, toggle a prompt entry or world info content and press `刷新`; the message list and budget strip must reflect the change. With unchanged state and listener contributions, the listed messages must equal what a subsequent real send transmits. Failure is unexplained drift under those conditions.
+- As a user inspecting a prompt while background generation runs, the background request must not include the preview's temporary prompt or World Info activation, and the preview must retain its own assembly.
 - As a user inspecting a long chat, open the preview after history exceeds the context budget; entries that failed the budget check must appear in the dropped-messages section. Failure is silently truncated history.
 - As a user with a runnable reply pipeline, switch the round selector; each step round must show its step-scoped material, instruction and configured enforcement/token cap. The closing round must show `tool_choice: 'none'` when tools are available, or no tool wiring otherwise. Failure is a preview that mutates the live pipeline run or ignores per-step overrides.
-- As a user with a pending attachment, open the preview; the overlay must warn that the attachment is not included. A `/`-prefixed draft is ordinary message text and does not trigger a command warning.
+- As a user with a pending attachment, open the preview; the overlay must warn that the attachment is not included. A `/`-prefixed draft is ordinary message text; the current preview may still show a slash-command warning.
 
 ## Feature-Specific Evidence
 
 - The `.prompt-inspector-overlay` / `.prompt-inspector-panel` modal with the `预览（未发送）` badge, message rows carrying role/identifier/token metadata, the dropped-messages section, and the parameters grid are primary evidence.
 - `previewNextGenerationRequest()` in `generation-service.js` returning `{ kind: 'prompt-preview', request, entries, dropped, budget, pipeline, warnings }` is data-contract evidence; an end-to-end comparison asserting the preview body deep-equals the real POST body is parity evidence.
-- `CHAT_COMPLETION_SETTINGS_READY` not being emitted during preview and `extension_prompts` snapshot/restore are no-side-effect evidence.
+- `CHAT_COMPLETION_SETTINGS_READY` not being emitted during preview and the request-scoped prompt map are evidence for the preview boundary; concurrent preview/background browser coverage verifies the isolation rather than assuming event listeners have no side effects.
 
 ## Failure Signals
 

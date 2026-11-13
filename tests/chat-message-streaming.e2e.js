@@ -221,6 +221,7 @@ async function enableOpenAiStreaming(page, { chatCompletionSource = 'openai', st
         context.chatCompletionSettings.chat_completion_source = source;
         context.chatCompletionSettings.openai_model = 'gpt-4o-mini';
         context.chatCompletionSettings.stream_openai = streamEnabled;
+        context.chatCompletionSettings.fallback_provider_model = '';
         context.chatCompletionSettings.n = 1;
         context.chatCompletionSettings.send_if_empty = '';
     }, { source: chatCompletionSource, streamEnabled: streamOpenAi });
@@ -540,6 +541,52 @@ async function expectMainChatComposerVisibleOwner(page, expectedOwned) {
 test.describe('chat message streaming', () => {
     test.describe.configure({ mode: 'serial' });
 
+    test('stopped generation cannot consume a later World Info activation', async ({ page }) => {
+        await testSetup.awaitST({ page });
+        await selectCharacterInFreshChat(page, characterName);
+        await enableOpenAiStreaming(page);
+        await installStreamingFetchStub(page, { chunks: ['must not send'] });
+        await page.evaluate(async () => {
+            const state = await import('/scripts/world-info-state.js');
+            const scanner = await import('/scripts/world-info-service.js');
+            const { eventSource, event_types } = await import('/scripts/events.js');
+            const book = 'attempt28-world-scan';
+            state.setSelectedWorldInfo([book]);
+            state.worldInfoCache.set(book, { entries: { 1: { uid: 1, order: 1, content: 'matched', key: ['race'], position: 0 } } });
+            window.__worldScanEntered = false;
+            window.__worldActivationPublished = false;
+            window.__worldScanRelease = null;
+            window.__worldScanListener = async () => {
+                window.__worldScanEntered = true;
+                await new Promise(resolve => { window.__worldScanRelease = resolve; });
+            };
+            window.__worldActivationListener = () => { window.__worldActivationPublished = true; };
+            eventSource.on(event_types.WORLDINFO_SCAN_DONE, window.__worldScanListener);
+            eventSource.on(event_types.WORLD_INFO_ACTIVATED, window.__worldActivationListener);
+            window.__worldScanner = scanner;
+        });
+        await startGeneration(page, 'race');
+        await expect.poll(() => page.evaluate(() => window.__worldScanEntered)).toBe(true);
+        await page.evaluate(async () => {
+            const script = await import('/script.js');
+            script.stopGeneration();
+            window.__worldScanner.WorldInfoBuffer.externalActivations.set('new.2', { uid: 2, world: 'new' });
+            window.__worldScanRelease();
+        });
+        await waitForGeneration(page, { allowAbort: true });
+        const outcome = await page.evaluate(async () => {
+            const { eventSource, event_types } = await import('/scripts/events.js');
+            const state = await import('/scripts/world-info-state.js');
+            eventSource.removeListener(event_types.WORLDINFO_SCAN_DONE, window.__worldScanListener);
+            eventSource.removeListener(event_types.WORLD_INFO_ACTIVATED, window.__worldActivationListener);
+            state.setSelectedWorldInfo([]);
+            const preserved = window.__worldScanner.WorldInfoBuffer.externalActivations.has('new.2');
+            window.__worldScanner.WorldInfoBuffer.externalActivations.delete('new.2');
+            return { preserved, published: window.__worldActivationPublished, requests: window.__emberdeskStreamingRequests.length };
+        });
+        expect(outcome).toEqual({ preserved: true, published: false, requests: 0 });
+    });
+
     test('streams partial content into a stable message row and finalizes it', async ({ page }) => {
         await testSetup.awaitST({ page });
         await selectCharacterInFreshChat(page, characterName);
@@ -574,12 +621,32 @@ test.describe('chat message streaming', () => {
         });
         await expect(page.locator(`#chat .mes[mesid="${messageId}"]`)).toHaveCount(1);
         await expect(page.locator(`#chat .mes[mesid="${messageId}"]`).getByRole('button', { name: '消息操作' })).toBeVisible();
-        await expect(page.getByRole('button', { name: '中止请求' })).not.toBeVisible();
+        await expect(page.getByRole('button', { name: '中止请求' })).toBeHidden();
         await expectMainChatTransportMarkersRetired(page);
 
         const request = await page.evaluate(() => window.__emberdeskStreamingRequests.at(-1));
         expect(request.stream).toBe(true);
         expect(request.chat_completion_source).toBe('openai');
+    });
+
+    test('streams through an OpenAI-compatible custom endpoint', async ({ page }) => {
+        await testSetup.awaitST({ page });
+        await selectCharacterInFreshChat(page, characterName);
+        await enableOpenAiStreaming(page);
+        await page.evaluate(() => {
+            const settings = window.SillyTavern.getContext().chatCompletionSettings;
+            settings.custom_url = 'https://compatible.example/v1';
+            settings.openai_model = 'compatible-model';
+        });
+        await installStreamingFetchStub(page, { chunks: ['Compatible endpoint reply.'] });
+        const previousId = await getLastVisibleMessageId(page);
+        await startGeneration(page, 'Use the compatible endpoint.');
+        await expect(assistantRowForGeneration(page, previousId).locator('.mes_text')).toContainText('Compatible endpoint reply.');
+        await waitForGeneration(page);
+        const request = await page.evaluate(() => window.__emberdeskStreamingRequests.at(-1));
+        expect(request.chat_completion_source).toBe('openai');
+        expect(request.custom_url).toBe('https://compatible.example/v1');
+        expect(request.model).toBe('compatible-model');
     });
 
     test('stop restores controls without duplicating the streaming row', async ({ page }) => {
@@ -613,14 +680,14 @@ test.describe('chat message streaming', () => {
 
         await expect(page.locator('#mes_stop')).toBeVisible();
         await page.getByRole('button', { name: '中止请求' }).click({ timeout: 5_000 });
-        await expect(page.getByRole('button', { name: '中止请求' })).not.toBeVisible();
+        await expect(page.getByRole('button', { name: '中止请求' })).toBeHidden();
         await expectMainChatStreamingTransportState(page, {
             phase: 'stopped',
             messageId: Number(messageId),
             expectFallback: false,
         });
 
-        await expect(page.locator('#mes_stop')).not.toBeVisible();
+        await expect(page.locator('#mes_stop')).toBeHidden();
         await waitForGeneration(page, { allowAbort: true });
         await expectMainChatStreamingTransportState(page, {
             phase: ['stopped', 'idle'],
@@ -747,19 +814,19 @@ test.describe('chat message streaming', () => {
             window.__staleComposerSubmission = script.sendTextareaMessage();
         });
         await expect.poll(() => page.evaluate(() => typeof window.__composerStartRelease)).toBe('function');
-        expect(await page.evaluate(() => window.__emberdeskStreamingRequests.length)).toBe(0);
+        expect(await page.evaluate(() => window.__emberdeskStreamingRequests.filter(request => request.type !== 'chat_memory').length)).toBe(0);
         await selectCharacterByName(page, 'Dev Character 002', 'Dev Character 002 Session 01');
         await composer.fill('Another chat draft.');
         await selectCharacterByName(page, characterName);
         await expect(composer).toHaveValue('An old submission.');
-        const requestCountBeforeRelease = await page.evaluate(() => window.__emberdeskStreamingRequests.length);
+        const requestCountBeforeRelease = await page.evaluate(() => window.__emberdeskStreamingRequests.filter(request => request.type !== 'chat_memory').length);
         await page.evaluate(async () => {
             window.__composerStartRelease();
             await window.__staleComposerSubmission;
         });
         await expect(composer).toHaveValue('An old submission.');
         await expect(page.locator('#chat .mes[is_user="true"]').filter({ hasText: 'An old submission.' })).toHaveCount(0);
-        expect(await page.evaluate(() => window.__emberdeskStreamingRequests.length)).toBe(requestCountBeforeRelease);
+        expect(await page.evaluate(() => window.__emberdeskStreamingRequests.filter(request => request.type !== 'chat_memory').length)).toBe(requestCountBeforeRelease);
     });
 
     test('visible composer owner keeps newline, send, clear, and empty-submit behavior', async ({ page }) => {
@@ -913,7 +980,7 @@ test.describe('chat message streaming', () => {
         await expect(streamingRow.locator('.mes_text')).toContainText('Unified composer transport.');
 
         await page.getByRole('button', { name: '中止请求' }).click({ timeout: 5_000 });
-        await expect(page.getByRole('button', { name: '中止请求' })).not.toBeVisible();
+        await expect(page.getByRole('button', { name: '中止请求' })).toBeHidden();
         await expect(page.locator('body')).not.toHaveAttribute('data-generating', 'true');
         await expectMainChatTransportMarkersRetired(page);
     });
@@ -941,7 +1008,7 @@ test.describe('chat message streaming', () => {
             script.setOnlineStatus('no_connection');
         });
 
-        await expect(page.locator('#send_but')).not.toBeVisible();
+        await expect(page.locator('#send_but')).toBeHidden();
         await expectMainChatComposerState(page, {
             length: 'Disconnect sendability proof.'.length,
             empty: false,
@@ -978,8 +1045,8 @@ test.describe('chat message streaming', () => {
 
         await startGeneration(page, 'Abort a non-streaming request before any assistant row is created.');
         await expect(page.locator('#mes_stop')).toBeVisible();
-        // The stop control appears during prompt assembly, before fetch starts.
-        // Wait for the non-streaming transport so this test exercises its abort.
+        // The stop button is shown during preparation too. Wait for the
+        // transport itself so this test exercises an in-flight fetch abort.
         await expect.poll(() => page.evaluate(() => window.__emberdeskStreamingRequests.length)).toBe(1);
         const stopped = await triggerStopGeneration(page);
         expect(stopped).toBe(true);
@@ -1000,6 +1067,8 @@ test.describe('chat message streaming', () => {
             }
         });
         expect(String(abortedMessage ?? '')).toMatch(/Aborted|Generation was aborted/i);
+        expect(await page.evaluate(() => window.__emberdeskStreamingAbortCount)).toBe(1);
+        await expect(page.locator('#chat .mes').filter({ hasText: 'This reply should never land because the request is aborted.' })).toHaveCount(0);
         expect(await page.evaluate(() => window.__emberdeskNonStreamingAborted)).toBe(true);
         expect(await page.evaluate(() => window.__emberdeskStreamingRequests.length)).toBe(1);
         await expect(page.locator(`#chat .mes[mesid="${previousAssistantMessageId + 2}"]`)).toHaveCount(0);
@@ -1267,7 +1336,7 @@ test.describe('chat message streaming', () => {
         expect(actual.run).toBeNull();
     });
 
-    test('pipeline retries the unfinished second step without replaying the completed tool', async ({ page }) => {
+    test('pipeline retries the unfinished second step without replaying the completed story', async ({ page }) => {
         await testSetup.awaitST({ page });
         await selectCharacterInFreshChat(page, characterName);
         await enableOpenAiStreaming(page);
@@ -1290,19 +1359,22 @@ test.describe('chat message streaming', () => {
             syncPipelineToolBindings(['analyze', 'review'], { activate: true });
         });
         await installStreamingFetchSequenceStub(page, { responses: [
-            { chunks: [{ tool_calls: [{ index: 0, id: 'call_first', type: 'function', function: { name: 'analyze', arguments: '{}' } }] }] },
+            { chunks: [{ tool_calls: [{ index: 0, id: 'call_first', type: 'function', function: { name: 'submit_story', arguments: '{"content":"FIRST_RESULT"}' } }] }] },
             { status: 500 }, { status: 500 },
-            { chunks: [{ tool_calls: [{ index: 0, id: 'call_second', type: 'function', function: { name: 'review', arguments: '{}' } }] }] },
+            { chunks: [{ tool_calls: [{ index: 0, id: 'call_second', type: 'function', function: { name: 'submit_story', arguments: '{"content":"FINAL_RESULT"}' } }] }] },
         ] });
         await startGeneration(page, 'Pipeline second step recovery');
         await waitForGeneration(page);
         const actual = await page.evaluate(async () => ({ requests: window.__emberdeskStreamingRequests, count: window.__completedToolCount, chat: window.SillyTavern.getContext().chat, run: (await import('/scripts/reply-pipeline-core.js')).getPipelineRunState() }));
         expect(actual.requests.map(request => request.model)).toEqual(['gpt-4.1-mini', 'gpt-4.1', 'gpt-4.1', 'fallback-model']);
-        expect(actual.count).toBe(1);
+        expect(actual.count ?? 0).toBe(0); // Story steps do not execute named tool actions.
         for (const request of actual.requests.slice(1)) {
             expect(JSON.stringify(request.messages)).toContain('FIRST_RESULT');
             expect(JSON.stringify(request.messages)).toContain('STEP_analyze MODEL=gpt-4.1-mini');
-            expect(request.tool_choice.function.name).toBe('review');
+            expect(request.tool_choice.function.name).toBe('submit_story');
+            const completed = request.messages.flatMap(message => message.tool_calls ?? []).filter(call => call.id === 'call_first');
+            expect(completed).toHaveLength(1);
+            expect(completed[0].function).toEqual({ name: 'submit_story', arguments: '{"content":"FIRST_RESULT"}' });
         }
         expect(JSON.stringify(actual.requests[1].messages)).toContain('STEP_review MODEL=gpt-4.1');
         expect(JSON.stringify(actual.requests[3].messages)).toContain('STEP_review MODEL=gpt-4.1');
@@ -1465,6 +1537,8 @@ test.describe('chat message streaming', () => {
     test('provider failure leaves a readable recovery path without duplicating rows', async ({ page }) => {
         await testSetup.awaitST({ page });
         await selectCharacterInFreshChat(page, characterName);
+        // Simulate a persisted setting left by an earlier fallback-enabled session.
+        await enableFallbackProvider(page);
         await enableOpenAiStreaming(page);
         await installStreamingFetchStub(page, {
             chunks: ['Failure path partial text.'],
@@ -1507,8 +1581,8 @@ test.describe('chat message streaming', () => {
         await expect(page.locator(
             `#chat .mes[mesid="${assistantMessageIdForGeneration(lastVisibleMessageIdBeforeGeneration)}"]`,
         )).toHaveCount(1);
-        const failedAttemptRequestCount = await page.evaluate(() => window.__emberdeskStreamingRequests.length);
-        expect(failedAttemptRequestCount).toBe(2);
+        const failedAttemptModels = await page.evaluate(() => window.__emberdeskStreamingRequests.map(request => request.model));
+        expect(failedAttemptModels).toEqual(['gpt-4o-mini', 'gpt-4o-mini']);
 
         await installStreamingFetchStub(page, {
             chunks: ['Recovered ', 'retry text.'],
@@ -1556,7 +1630,7 @@ test.describe('chat message streaming', () => {
         await expect(assistantRow.locator('.mes_text')).toContainText('Fallback final reply.');
         await expect(assistantRow.locator('.mes_text')).not.toContainText('Primary partial text.');
         await expect(duplicateAssistantRow).toHaveCount(0);
-        await expect(assistantRow.getByRole('button', { name: 'Retry generation' })).not.toBeVisible();
+        await expect(assistantRow.getByRole('button', { name: 'Retry generation' })).toBeHidden();
 
         const requestBodies = await page.evaluate(() => window.__emberdeskStreamingRequests);
         expect(requestBodies).toHaveLength(3);

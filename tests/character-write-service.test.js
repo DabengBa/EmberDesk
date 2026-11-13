@@ -337,6 +337,21 @@ describe('character write service', () => {
         })]);
     });
 
+    test('forwards the expected card snapshot to the canonical edit and propagates a conflict', async () => {
+        const request = makeRequest({ characters: 'user/characters', chats: 'user/chats' });
+        const { dependencies } = makeDependencies({ existingPaths: ['user/characters/Tester.png'] });
+        const conflict = Object.assign(new Error('character_card_conflict'), { code: 'CHARACTER_CARD_CONFLICT' });
+        dependencies.performCanonicalWrite.mockRejectedValue(conflict);
+        await expect(editCharacterCard({
+            request, avatarUrl: 'Tester.png', targetFile: 'Tester', characterData: '{}',
+            expectedCardJson: '{"description":"old"}', dependencies,
+        })).rejects.toBe(conflict);
+        expect(dependencies.performCanonicalWrite).toHaveBeenCalledWith('edit', expect.objectContaining({
+            expectedCardJson: '{"description":"old"}',
+        }));
+        expect(dependencies.writeCharacterData).not.toHaveBeenCalled();
+    });
+
     test('edits a replacement avatar by cleaning up upload and busting cache without touching the retired index', async () => {
         const directories = {
             characters: 'user/characters',

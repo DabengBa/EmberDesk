@@ -12,9 +12,10 @@ import { persistCanonicalAuditStatus } from './canonical-sqlite-shadow-import.js
 import {
     getCanonicalChatMessagePayloads,
     getCanonicalChatSession,
+    hasCanonicalChatProjectionTombstone,
+    importCanonicalChatProjection,
     listCanonicalChatSessions,
     listOpenCanonicalChatProjectionRepairs,
-    upsertCanonicalChatSession,
 } from './endpoints/canonical-chat-store.js';
 
 export const CANONICAL_CHAT_AUDIT_SCOPE = 'chats';
@@ -256,6 +257,7 @@ export async function runCanonicalChatShadowImport({
     const entries = [];
     const projections = [];
     for (const item of listChatProjectionFiles(directories)) {
+        if (hasCanonicalChatProjectionTombstone(activeDb, item)) continue;
         try {
             const projection = parseJsonlProjection(item);
             projections.push(projection);
@@ -282,7 +284,8 @@ export async function runCanonicalChatShadowImport({
             });
             continue;
         }
-        const result = upsertCanonicalChatSession(activeDb, buildChatRecord(projection, activeDb, nowMs));
+        const result = importCanonicalChatProjection(activeDb, buildChatRecord(projection, activeDb, nowMs));
+        if (result.status === 'suppressed') continue;
         recordImportLedgerEntry(activeDb, {
             sliceKey: 'chats',
             sourcePath: projection.sourcePath,
@@ -370,7 +373,8 @@ export function reconcileCanonicalChatSources({
                 continue;
             }
             const projection = parseJsonlProjection(item);
-            const persisted = upsertCanonicalChatSession(db, buildChatRecord(projection, db, nowMs));
+            const persisted = importCanonicalChatProjection(db, buildChatRecord(projection, db, nowMs));
+            if (persisted.status === 'suppressed') continue;
             if (persisted.status === 'unchanged') {
                 continue;
             }
@@ -465,6 +469,7 @@ export async function auditCanonicalChatShadowImport({
     const entries = [];
     const projections = [];
     for (const item of listChatProjectionFiles(directories)) {
+        if (hasCanonicalChatProjectionTombstone(db, item) && !getCanonicalChatSession(db, item)) continue;
         try {
             projections.push(parseJsonlProjection(item));
         } catch (error) {

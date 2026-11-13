@@ -2,6 +2,7 @@ import { test, expect, jest } from '@jest/globals';
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import { createSortSaveGuard } from '../public/scripts/character-sort-save-guard.js';
+import { createRuntimeSettingsConflictGuard } from '../public/scripts/react-runtime-provider.js';
 
 function setup() {
     const source = readFileSync(new URL('../public/script.js', import.meta.url), 'utf8');
@@ -21,7 +22,10 @@ function setup() {
         fetch: (_, request) => new Promise(resolve => requests.push({ request, resolve })),
         eventSource: { emit: async () => {} }, event_types: { SETTINGS_UPDATED: 'updated' },
         toastr: { error: jest.fn(), warning: jest.fn() }, t: strings => strings[0], console: { error: jest.fn(), warn: jest.fn() },
+        runtimeSettingsConflict: createRuntimeSettingsConflictGuard(), window: { dispatchEvent: jest.fn() }, Event: class Event {},
     };
+    const helperStart = source.indexOf('function buildRuntimeSettingsPayload()');
+    context.buildRuntimeSettingsPayload = runInNewContext(`(${source.slice(helperStart, start)})`, context);
     const saveSettings = runInNewContext(`(${source.slice(start, end).replace('export ', '')})`, context);
     return { saveSettings, guard, listeners, requests, power_user, context };
 }
@@ -53,12 +57,10 @@ test('real saveSettings snapshots the sort and retains the guard through concurr
     const retry = saveSettings();
     await new Promise(setImmediate);
     requests[3].resolve({ ok: false, status: 409, json: async () => ({ settings_revision: 4 }) });
-    await new Promise(setImmediate);
-    expect(listeners.size).toBe(1);
-    expect(JSON.parse(requests[4].request.body).settings_revision).toBe(4);
-    requests[4].resolve({ ok: true, json: async () => ({ result: 'ok', settings_revision: 5 }) });
     await retry;
-    expect(listeners.size).toBe(0);
+    expect(requests).toHaveLength(4);
+    expect(listeners.size).toBe(1);
+    expect(context.toastr.warning).toHaveBeenCalled();
 });
 
 test.each([{}, { result: 'ok' }, { result: 'ok', settings_revision: null }, { settings_revision: 2 }])('unconfirmed HTTP 200 %j retains the sort warning', async response => {

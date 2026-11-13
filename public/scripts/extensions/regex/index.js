@@ -2,6 +2,7 @@ import { characters, getCurrentChatId, messageFormatting, reloadCurrentChat, sav
 import { eventSource, event_types } from '../../events.js';
 import { feature_settings, renderFeatureTemplateAsync } from '../../feature-settings.js';
 import { loadWorkspacePanelsModule } from '../../workspace-panels-react-bridge.js';
+import { getToolBindingsBridge } from '../../tool-bindings.js';
 import { callGenericPopup, Popup, POPUP_TYPE, POPUP_RESULT } from '../../popup.js';
 import { download, escapeHtml, getFileText, regexFromString, uuidv4 } from '../../utils.js';
 import { allowPresetScripts, allowScopedScripts, authorizeRegexTarget, captureRegexTarget, disallowPresetScripts, disallowScopedScripts, getCurrentPresetAPI, getCurrentPresetName, getRegexScripts, getScriptsByType, getScriptsForTarget, isPresetScriptsAllowed, isScopedScriptsAllowed, regex_placement, RegexProvider, runRegexScript, saveScriptsByType, SCRIPT_TYPES } from './engine.js';
@@ -758,6 +759,10 @@ export async function init() {
     $(regexPanel).append(regexSettingsHost);
     const workspacePanels = await loadWorkspacePanelsModule();
     regexListBridge.refresh();
+    // Published library snapshots replace character objects. Refresh only the
+    // list's future targets; operations already awaiting confirmation retain
+    // their original references and still fail safely if those were replaced.
+    document.addEventListener('emberdesk:character-library-snapshot', regexListBridge.refresh);
     const presetController = createRegexPresetController({
         getScriptsByType,
         getScriptsForTarget,
@@ -773,7 +778,7 @@ export async function init() {
         uuid: uuidv4,
         SCRIPT_TYPES,
     });
-    workspacePanels.mountRegexSettings(regexSettingsHost.get(0), { list: regexListBridge, toolbar: regexToolbar, presets: presetController });
+    workspacePanels.mountRegexSettings(regexSettingsHost.get(0), { list: regexListBridge, toolbar: regexToolbar, presets: presetController, toolBindings: getToolBindingsBridge() });
 
     await loadRegexScripts();
 

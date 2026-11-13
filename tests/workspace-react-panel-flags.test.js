@@ -1,5 +1,6 @@
 import { describe, expect, test } from '@jest/globals';
 import fs from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -45,10 +46,17 @@ describe('workspace React shell retirement', () => {
     });
 
     test('keeps the workspace panels build entry available', () => {
-        const packageSource = read('package.json');
+        const scripts = JSON.parse(read('package.json')).scripts;
         const viteSource = read('vite.config.ts');
 
-        expect(packageSource).toContain('"build:react:workspace-panels": "vite build --mode workspace-panels"');
+        const buildSteps = scripts['build:react:workspace-panels'].split(/\s*&&\s*/);
+        const generationStep = buildSteps.indexOf('pnpm run build:generation-state');
+        const viteStep = buildSteps.indexOf('vite build --mode workspace-panels');
+        expect(generationStep).toBeGreaterThanOrEqual(0);
+        expect(viteStep).toBeGreaterThan(generationStep);
+        expect(scripts['build:generation-state']).toBe('node scripts/build-generation-state.mjs');
+        // Check the real generator output, rather than only the package command.
+        execFileSync(process.execPath, ['scripts/build-generation-state.mjs', '--check'], { cwd: repoRoot });
         expect(viteSource).toContain('const isWorkspacePanelsBuild = mode === \'workspace-panels\';');
         expect(viteSource).toContain('return reactPanelConfig(\'workspace-panels\')');
         expect(viteSource).toContain('entry: path.resolve(process.cwd(), `app/${name}.tsx`)');

@@ -5,7 +5,7 @@ import path from 'node:path';
 import { sync as writeFileAtomicSync } from 'write-file-atomic';
 
 import { AVATAR_HEIGHT, AVATAR_WIDTH, DEFAULT_AVATAR_PATH } from './constants.js';
-import { Jimp, JimpMime } from './jimp.js';
+import { avatarToPngSized } from './image-processing.js';
 import { serverDirectory } from './server-directory.js';
 import { withCanonicalTransaction } from './canonical-sqlite.js';
 import { getPersistedCanonicalAuditStatus, invalidateCanonicalAuditStatus, auditCanonicalShadowImport } from './canonical-sqlite-shadow-import.js';
@@ -94,9 +94,7 @@ async function normalizeImageToPngBuffer(sourcePath) {
         ? sourcePath
         : path.resolve(serverDirectory, sourcePath);
     try {
-        const image = await Jimp.read(resolvedSourcePath);
-        image.cover({ w: AVATAR_WIDTH, h: AVATAR_HEIGHT });
-        return await image.getBuffer(JimpMime.png);
+        return await avatarToPngSized(resolvedSourcePath, AVATAR_WIDTH, AVATAR_HEIGHT);
     } catch {
         return fs.readFileSync(resolvedSourcePath);
     }

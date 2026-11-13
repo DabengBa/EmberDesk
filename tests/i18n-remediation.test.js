@@ -39,6 +39,7 @@ describe('locale remediation wiring', () => {
         }
     });
     test('raw regex accessibility text is translated', () => {
+        expect(readRepoFile('app/components/regex/RegexSettingsPanel.tsx')).toContain('<RegexPresetControls');
         expect(readRepoFile('app/components/regex/RegexPresetControls.tsx')).toContain('aria-label={translate(\'Regex presets\')}');
         expect(readRepoFile('app/components/regex/RegexDebugger.tsx')).toContain('aria-label={translate(\'Render mode\')}');
     });

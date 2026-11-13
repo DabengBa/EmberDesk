@@ -1,5 +1,136 @@
 import { expect, test } from '@playwright/test';
+import { createServer } from 'node:http';
 import { testSetup } from './frontend/frontent-test-utils.js';
+
+test('wire records retain their matching upstream bodies when foreground and memory requests coexist', async ({ page }) => {
+    test.setTimeout(120_000);
+    const requests = [];
+    const server = createServer(async (request, response) => {
+        const chunks = [];
+        for await (const chunk of request) chunks.push(chunk);
+        requests.push(JSON.parse(Buffer.concat(chunks).toString()));
+        response.writeHead(200, { 'Content-Type': 'application/json' });
+        response.end(JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'wire proof reply' }, finish_reason: 'stop' }] }));
+    });
+    await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+    try {
+        await testSetup.awaitST({ page });
+        await page.evaluate(async upstream => {
+            const context = window.SillyTavern.getContext();
+            Object.assign(context.chatCompletionSettings, { chat_memory_enabled: true, chat_completion_source: 'openai', openai_model: 'gpt-4o-mini', custom_url: upstream, stream_openai: false, n: 1, send_if_empty: '' });
+            const script = await import('/script.js');
+            script.changeMainAPI('openai');
+            script.setOnlineStatus('Valid');
+            script.activateSendButtons();
+            const { getRequestHeaders } = await import('/scripts/request-context.js');
+            await fetch('/api/wire-logs/config', { method: 'POST', headers: getRequestHeaders(), body: JSON.stringify({ enabled: true }) });
+            await context.selectCharacterById(context.characters.findIndex(character => character.name === 'Dev Character 001'));
+            await context.openCharacterChat('Dev Character 001 Session 01');
+        }, `http://127.0.0.1:${server.address().port}/v1`);
+        await page.locator('#send_textarea').fill('Wire log browser proof');
+        await page.locator('#send_but').click();
+        let records = [];
+        await expect.poll(async () => {
+            records = await page.evaluate(async () => {
+                const { getRequestHeaders } = await import('/scripts/request-context.js');
+                const list = await (await fetch('/api/wire-logs?limit=100', { headers: getRequestHeaders() })).json();
+                return Promise.all(list.map(async item => (await fetch(`/api/wire-logs/${encodeURIComponent(item.id)}`, { headers: getRequestHeaders() })).json()));
+            });
+            return records.some(record => record.context?.type === 'chat_memory') && records.some(record => JSON.stringify(record.request?.body).includes('Wire log browser proof'));
+        }, { timeout: 30_000 }).toBe(true);
+        const memory = records.find(record => record.context?.type === 'chat_memory');
+        const main = records.find(record => JSON.stringify(record.request?.body).includes('Wire log browser proof'));
+        expect(memory.context.chatId).toBe('Dev Character 001 Session 01');
+        expect(main.context.chatId).toBe('Dev Character 001 Session 01');
+        expect(requests).toContainEqual(memory.request.body);
+        expect(requests).toContainEqual(main.request.body);
+        expect(memory.request.body).not.toEqual(main.request.body);
+        expect(requests.every(request => !('_trace' in request))).toBe(true);
+        console.log('WIRE-PAIRING', JSON.stringify({ memoryType: memory.context.type, mainType: main.context.type, memoryMax: memory.request.body.max_tokens, mainMax: main.request.body.max_tokens, upstreamCount: requests.length, recordCount: records.length }));
+    } finally {
+        await page.close();
+        server.closeAllConnections();
+        await new Promise(resolve => server.close(resolve));
+    }
+});
+
+test('memory numeric wheel creates an applicable React draft', async ({ page }) => {
+    await testSetup.awaitST({ page });
+    await page.evaluate(async () => {
+        const context = window.SillyTavern.getContext();
+        context.chatCompletionSettings.chat_memory_enabled = false;
+        await context.selectCharacterById(context.characters.findIndex(character => character.name === 'Dev Character 001'));
+    });
+    await page.locator('#options_button').click();
+    await page.locator('#option_chat_memory').click();
+    await page.getByRole('button', { name: '设置', exact: true }).click();
+    const input = page.getByLabel('最近保留完整轮数');
+    const row = page.getByTestId('setting-keepTurns');
+    const inherited = await row.getByText('继承全局设置').isVisible();
+    const before = Number(await input.inputValue());
+    await input.focus();
+    await input.hover();
+    await page.mouse.wheel(0, -100);
+    await expect(input).toHaveValue(String(before + 1));
+    await expect(page.getByRole('button', { name: '应用设置' })).toBeEnabled();
+    await expect(page.getByText('尚未应用').first()).toBeVisible();
+    await page.getByRole('button', { name: '应用设置' }).click();
+    await expect(row.getByText('当前会话覆盖')).toBeVisible();
+    await expect(page.getByRole('button', { name: '应用设置' })).toBeDisabled();
+    await page.getByRole('button', { name: '关闭对话记忆' }).click();
+    await expect(page.getByRole('dialog', { name: '对话记忆' })).toHaveCount(0);
+    await page.locator('#options_button').click();
+    await page.locator('#option_chat_memory').click();
+    await page.getByRole('button', { name: '设置', exact: true }).click();
+    await expect(input).toHaveValue(String(before + 1));
+    if (inherited) await row.getByRole('button', { name: '恢复默认' }).click();
+    else {
+        await input.fill(String(before));
+        await page.getByRole('button', { name: '应用设置' }).click();
+    }
+    await expect(input).toHaveValue(String(before));
+});
+
+test('real memory and wire overlays restore focus and discard a forced-close draft', async ({ page }) => {
+    test.setTimeout(120_000);
+
+    await testSetup.awaitST({ page });
+
+    await page.evaluate(async () => {
+        const context = window.SillyTavern.getContext();
+        context.chatCompletionSettings.chat_memory_enabled = false;
+        await context.selectCharacterById(context.characters.findIndex(character => character.name === 'Dev Character 001'));
+    });
+    const options = page.locator('#options_button');
+    const open = async id => { await options.click(); await page.locator(id).click(); };
+    await open('#option_chat_memory');
+    await expect(page.getByRole('dialog', { name: '对话记忆' })).toBeVisible();
+    await page.getByRole('button', { name: '设置', exact: true }).click();
+    await page.getByLabel('最近保留完整轮数').fill('8');
+    page.once('dialog', dialog => dialog.dismiss());
+    await page.getByRole('button', { name: '关闭对话记忆' }).click();
+    await expect(page.getByLabel('最近保留完整轮数')).toHaveValue('8');
+    await page.evaluate(async () => {
+        const { eventSource, event_types } = await import('/scripts/events.js');
+        await eventSource.emit(event_types.CHAT_CHANGED, 'forced-test-change');
+    });
+    await expect(page.getByRole('dialog', { name: '对话记忆' })).toHaveCount(0);
+    await expect(page.getByText('会话已切换或面板已关闭，未应用的设置草稿已丢弃，未写入其他会话。')).toBeVisible();
+
+    await expect(options).toBeFocused();
+    await open('#option_chat_memory');
+    await page.getByRole('button', { name: '设置', exact: true }).click();
+    await expect(page.getByLabel('最近保留完整轮数')).not.toHaveValue('8');
+    await page.getByRole('button', { name: '关闭对话记忆' }).click();
+    await expect(options).toBeFocused();
+    await open('#option_wire_log');
+    await expect(page.getByRole('dialog', { name: '链路日志' })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog', { name: '链路日志' })).toHaveCount(0);
+    await expect(options).toBeFocused();
+    await open('#option_wire_log');
+    await expect(page.getByRole('dialog', { name: '链路日志' })).toBeVisible();
+});
 
 test('prompt panel fills its container and aligns token columns at different widths', async ({ page }) => {
     await page.goto('/login');
@@ -12,10 +143,11 @@ test('prompt panel fills its container and aligns token columns at different wid
             injection_position: 0, injection_depth: 4, injection_order: 100, injection_trigger: [],
         };
         const state = { promptsById: { [prompt.identifier]: prompt }, order: [{ identifier: prompt.identifier, enabled: true }], tokenCounts: { [prompt.identifier]: 1234 }, presetDirty: false };
+        const presetSnapshot = { names: ['Fixture'], selected: 'Fixture', settings: {} };
         mountPromptPanel(document.getElementById('prompt-layout-host'), {
             subscribe: () => () => {}, getState: () => state,
             setPromptEnabled() {}, movePrompt() {}, updatePrompt() {}, addPrompt() { return null; }, deletePrompt() {},
-        });
+        }, { subscribe: () => () => {}, getSnapshot: () => presetSnapshot });
     });
     await page.locator('.prompt-panel-item-name').click();
     for (const width of [340, 420, 560]) {
@@ -53,6 +185,7 @@ test('prompt handles reorder across rows without changing enablement or editor s
         };
         const listeners = new Set();
         window.promptDragMoves = [];
+        const presetSnapshot = { names: ['Fixture'], selected: 'Fixture', settings: {} };
         mountPromptPanel(document.getElementById('prompt-drag-host'), {
             subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); },
             getState: () => state,
@@ -65,13 +198,13 @@ test('prompt handles reorder across rows without changing enablement or editor s
                 listeners.forEach(listener => listener());
             },
             setPromptEnabled() {}, updatePrompt() {}, addPrompt() { return null; }, deletePrompt() {},
-        });
+        }, { subscribe: () => () => {}, getSnapshot: () => presetSnapshot });
     });
     const rows = page.locator('.prompt-panel-item');
     const order = () => rows.evaluateAll(items => items.map(item => item.dataset.promptIdentifier));
     const row = identifier => page.locator(`.prompt-panel-item[data-prompt-identifier="${identifier}"]`);
     const drag = async (source, target, bottom) => {
-        const handle = await row(source).getByRole('button', { name: `拖拽排序 ${source}`, exact: true }).boundingBox();
+        const handle = await row(source).locator('.prompt-panel-drag-handle').boundingBox();
         const destination = await row(target).locator('.prompt-panel-item-row').boundingBox();
         await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2);
         await page.mouse.down();
@@ -91,7 +224,8 @@ test('prompt handles reorder across rows without changing enablement or editor s
     await expect.poll(() => page.evaluate(() => window.promptDragMoves)).toEqual([
         { identifier: 'first', targetIndex: 2 }, { identifier: 'fourth', targetIndex: 0 },
     ]);
-    const handle = row('third').getByRole('button', { name: '拖拽排序 third', exact: true });
+    const handle = row('third').locator('.prompt-panel-drag-handle');
+    await expect(handle).toHaveAttribute('aria-label', /third/);
     await handle.press('ArrowUp');
     await expect.poll(order).toEqual(['fourth', 'third', 'second', 'first']);
     await expect(handle).toBeFocused();
@@ -189,10 +323,11 @@ test('preset row actions show dirty state and guard preset switching', async ({ 
     expect((await baselineSave).ok()).toBe(true);
     await expect(saveButton).not.toHaveClass(/is-dirty/, { timeout: 15_000 });
     await page.locator('#new_oai_preset').click();
-    const nameInput = page.locator('dialog[open] .popup-input');
+    const nameDialog = page.getByRole('dialog', { name: '预设名：' });
+    const nameInput = nameDialog.getByRole('textbox', { name: '预设名：' });
     await expect(nameInput).toBeVisible();
     await nameInput.fill('Aux Preset');
-    await page.locator('dialog[open] .popup-button-ok').click();
+    await nameDialog.getByRole('button', { name: '保存', exact: true }).click();
     await expect.poll(selectedPreset).toBe('Aux Preset');
     await expect(saveButton).not.toHaveClass(/is-dirty/, { timeout: 15_000 });
     const otherPreset = await select.locator('option').evaluateAll(options => options.find(option => option.textContent !== 'Aux Preset')?.textContent);

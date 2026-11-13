@@ -1,4 +1,5 @@
 import { describe, expect, test } from '@jest/globals';
+import { loadTsModule } from './helpers/load-ts-module.mjs';
 
 import {
     expectButtonAffordance,
@@ -88,20 +89,33 @@ describe('chat workspace structure', () => {
 
     test('restores both side panels through workspace slot hosts, not the retired drawer icons', () => {
         const rossAscendsSource = readRepoFile('public/scripts/RossAscends-mods.js');
-        const openNavPanels = rossAscendsSource.match(/function OpenNavPanels\(\) \{[\s\S]*?\n\}/)?.[0] ?? '';
+        const openNavPanels = rossAscendsSource.match(/function OpenNavPanels\(drawerService\) \{[\s\S]*?\n\}/)?.[0] ?? '';
 
         // The left drawer is the prompt preset panel; it opens via the
         // workspace child-slot host, never via the retired leftNavDrawerIcon.
         // Restore is gated on last-open state alone (pinning stays opt-in) and
         // must preserve open drawers so the deferred restores cannot clobber
         // a user-initiated drawer open.
-        expect(openNavPanels).toContain("accountStorage.getItem('LNavOpened')");
+        expect(openNavPanels).toContain('drawerService.getRestorable({ mobile: isMobile(), width: window.innerWidth })');
+        expect(openNavPanels).toContain("restorable.has('left-nav-panel')");
         expect(openNavPanels).toContain("openWorkspaceShellPromptManager({ preserveOpenDrawers: true })");
         expect(openNavPanels).not.toContain("$('#leftNavDrawerIcon').trigger('click')");
-        expect(openNavPanels).toContain("accountStorage.getItem('NavOpened')");
-        expect(openNavPanels).toContain("accountStorage.getItem('WINavOpened')");
+        expect(openNavPanels).toContain("restorable.has('right-nav-panel')");
+        expect(openNavPanels).toContain("restorable.has('WorldInfo')");
         expect(openNavPanels).toContain("openWorkspaceChildSlotHost('right-nav-panel', { preserveOpenDrawers: true })");
         expect(openNavPanels).toContain("openWorkspaceShellWorldInfo({ preserveOpenDrawers: true })");
+    });
+
+    test('restore selection reads each persisted open flag independently on wide desktop', async () => {
+        const { createWorkspaceDrawerService } = await loadTsModule('app/lib/workspace-drawer-service.ts');
+        const records = new Map([['LNavOpened', 'true'], ['NavOpened', 'false'], ['WINavOpened', 'true']]);
+        const service = createWorkspaceDrawerService({
+            get: () => null, list: () => [], read: key => records.get(key) ?? null,
+            write: (key, value) => records.set(key, value), notify: () => {},
+        });
+        expect(service.getRestorable({ mobile: false, width: 1200 })).toEqual(['left-nav-panel', 'WorldInfo']);
+        expect(service.getRestorable({ mobile: false, width: 1000 })).toEqual([]);
+        expect(service.getRestorable({ mobile: true, width: 1200 })).toEqual([]);
     });
 
     test('lets React own main-chat outer layout without wrapping protected rows', () => {
@@ -396,21 +410,29 @@ describe('chat workspace structure', () => {
         const generationServiceSource = readRepoFile('public/scripts/generation-service.js');
         const commandServiceSource = readRepoFile('public/scripts/chat-generation-command-service.js');
         const lifecycleSource = readRepoFile('public/scripts/chat-generation-lifecycle.js');
+        const policySource = readRepoFile('app/lib/generation/shared-state.ts');
+        const typedGenerationSource = readRepoFile('app/lib/generation/attempt-executor.ts');
 
-        // Transport retirement owns lifecycle planning in the generation command service;
-        // generation-service.js applies failure decisions and recovery UI side effects.
-        expect(commandServiceSource).toContain('createGenerationLifecyclePlan({');
-        expect(commandServiceSource).toContain('getGenerationFailureDecision({');
-        expect(generationServiceSource).toContain('getGenerationFailureDecision({');
-        expect(generationServiceSource).toContain('failureDecision.shouldRestoreAttemptMessage');
+        // Compatibility modules forward to the synchronous typed policy owner.
+        expect(commandServiceSource).toContain("from './generation-shared-state.js'");
+        expect(lifecycleSource).toContain("from './generation-shared-state.js'");
+        expect(policySource).toContain('createGenerationLifecyclePlan({');
+        expect(policySource).toContain('getGenerationFailureDecision({');
+        // The shell wraps the typed policy to suppress recovery after a user stop.
+        expect(generationServiceSource).toContain('decideFailure: input => getGenerationFailureDecision({ ...input, shouldAutoRecover: input.shouldAutoRecover && !isUserStoppedGeneration(input.failure) })');
+        expect(typedGenerationSource).toContain('decision.shouldRestoreAttemptMessage');
         expect(generationServiceSource).toContain('hasFallbackProviderForGeneration({');
-        expect(generationServiceSource).toContain('clearGenerationAttemptMessage(activeRecoveryMessageId);');
+        // The installed lifecycle now owns the current recovery row ID.
+        expect(generationServiceSource).toContain('getGenerationLifecycleService().runGenerationDispatch({');
+        expect(typedGenerationSource).toContain('const recovery = createRecoveryState({');
+        expect(generationServiceSource).toContain('clearMessage: clearGenerationAttemptMessage');
+        expect(typedGenerationSource).toContain('ports.clearMessage(recovery.messageId);');
 
-        expect(lifecycleSource).toContain("label: 'primary'");
-        expect(lifecycleSource).toContain("label: 'primary_retry'");
-        expect(lifecycleSource).toContain("label: 'fallback'");
-        expect(lifecycleSource).toContain('hasFallbackProviderSettings(settings)');
-        expect(lifecycleSource).toContain('isMainChatVisibleGeneration({ type, mainApi, dryRun, depth })');
-        expect(lifecycleSource).toContain('isRecoverableGenerationFailure(failure)');
+        expect(policySource).toContain("label: 'primary'");
+        expect(policySource).toContain("label: 'primary_retry'");
+        expect(policySource).toContain("label: 'fallback'");
+        expect(policySource).toContain('hasFallbackProviderSettings(settings)');
+        expect(policySource).toContain('isMainChatVisibleGeneration({ type, mainApi, dryRun, depth })');
+        expect(policySource).toContain('isRecoverableGenerationFailure(failure)');
     });
 });

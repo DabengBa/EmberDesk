@@ -7,6 +7,7 @@ import { runDeleteCharacterClosePreflight } from './delete-character-preflight.j
 import { requireChatOpsShellContext } from './chat-ops-shell-context.js';
 import { buildGreetingOptions, canSwitchGreeting, replaceGreeting } from './main-chat-greetings.js';
 import { getComposerSnapshot, requestComposerFocus, subscribeComposerState } from './main-chat-composer-service.js';
+import { runDeleteMessageCommand } from './workspace-interaction-commands.js';
 
 
 function shell() {
@@ -34,7 +35,7 @@ const consumeMainChatMessageListScrollRestore = (...args) => shell().consumeMain
 const delay = (...args) => shell().delay(...args);
 const deleteMainChatMessageListScrollSnapshot = (...args) => shell().deleteMainChatMessageListScrollSnapshot(...args);
 const equalsIgnoreCaseAndAccents = (...args) => shell().equalsIgnoreCaseAndAccents(...args);
-const flashHighlight = (...args) => shell().flashHighlight(...args);
+
 const getChatResult = (...args) => shell().getChatResult(...args);
 const getCurrentChatId = (...args) => shell().getCurrentChatId(...args);
 const getLastMessageId = (...args) => shell().getLastMessageId(...args);
@@ -48,12 +49,89 @@ const persistMainChatMessageListScrollSnapshotBeforeClear = (...args) => shell()
 const queueMainChatMessageListScrollRestore = (...args) => shell().queueMainChatMessageListScrollRestore(...args);
 const redisplayChat = (...args) => shell().redisplayChat(...args);
 const reloadCurrentChat = (...args) => shell().reloadCurrentChat(...args);
-const renderSelectChatListReact = (...args) => shell().renderSelectChatListReact(...args);
 
-// Guards against out-of-order chat-search responses overwriting newer results.
-let selectChatListGeneration = 0;
+
 let activeCharacterChatLoad;
 let failedCharacterChatLoad;
+let chatSessionVersion = 0;
+// Each record belongs to a particular successful read (or explicit creation),
+// not merely to a character: reopening a file replaces the record.
+const chatVersions = new Map();
+const chatWriteQueues = new Map();
+let chatClearInProgress = false;
+
+async function serializeChatWrite(key, work) {
+    const previous = chatWriteQueues.get(key) ?? Promise.resolve();
+    const next = previous.catch(() => {}).then(work);
+    chatWriteQueues.set(key, next);
+    try { return await next; } finally {
+        if (chatWriteQueues.get(key) === next) chatWriteQueues.delete(key);
+    }
+}
+
+async function sendChatWrite(request, url = '/api/chats/save') {
+    const send = async () => {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 15000);
+        try {
+            return await fetch(url, { ...request, signal: controller.signal });
+        } finally {
+            clearTimeout(timer);
+        }
+    };
+    try {
+        return await send();
+    } catch {
+        // The first request may already have committed. Replay the exact body.
+        try {
+            return await send();
+        } catch (error) {
+            error.unknownChatWriteOutcome = true;
+            throw error;
+        }
+    }
+}
+
+/**
+ * Run a current-chat deletion under the same queue as saves. `remove` must
+ * reject unless the deletion has been confirmed; it is responsible for its
+ * own durable operation ID and retry. No fresh GET is performed.
+ * @template T
+ * @param {{avatar: string, chat: string}} identity
+ * @param {(version: string) => Promise<T>} remove
+ * @param {{suspendConditionalSaves?: boolean}} [options]
+ * @returns {Promise<T>}
+ */
+export async function withCurrentChatDeleteVersion(identity, remove, { suspendConditionalSaves = true } = {}) {
+    const character = state.characters[state.this_chid];
+    const chat = state.chat;
+    const session = chatSessionVersion;
+    const key = chatSaveKey(identity.avatar, identity.chat);
+    const current = () => state.characters[state.this_chid] === character && character?.avatar === identity.avatar
+        && character?.chat === identity.chat && state.chat === chat && chatSessionVersion === session;
+    if (!current()) throw new Error('The requested chat is not the current session');
+    // A conditional save may have taken the UI save lock but not yet entered
+    // the per-file queue. Let it finish before placing the delete in that queue.
+    if (state.isChatSaving) {
+        await waitUntilCondition(() => !state.isChatSaving, state.DEFAULT_SAVE_EDIT_TIMEOUT, 100);
+        if (!current()) throw new Error('The requested chat is not the current session');
+    }
+    return serializeChatWrite(key, async () => {
+        const record = chatVersions.get(key);
+        if (!current() || !record?.version || record.pending || record.conflicted || record.session !== session || record.chatReference !== chat) {
+            throw new Error('The loaded chat version is unavailable or its save is unresolved');
+        }
+        // A rejected transport can have committed remotely. Fail closed until
+        // recovery explicitly reloads, even when the delete result is unknown.
+        record.conflicted = true;
+        record.deleting = suspendConditionalSaves;
+        try {
+            return await remove(record.version);
+        } finally {
+            record.deleting = false;
+        }
+    });
+}
 
 export function shouldPreserveCharacterChatTarget(avatar, chat) {
     return [activeCharacterChatLoad, failedCharacterChatLoad].some(load => load && load.avatar === avatar && load.chat === chat);
@@ -93,19 +171,12 @@ export async function deleteCharacterChatByName(characterId, fileName) {
         return;
     }
 
-    const response = await fetch('/api/chats/delete', {
-        method: 'POST',
-        headers: getRequestHeaders(),
-        body: JSON.stringify({
-            chatfile: `${fileName}.jsonl`,
-            avatar_url: character.avatar,
-        }),
-    });
-
-    if (!response.ok) {
-        console.error('Failed to delete chat for character.');
+    if (String(characterId) === String(state.this_chid) && fileName === character.chat) {
+        await shell().deleteCurrentChatWithRecovery(`${fileName}.jsonl`);
         return;
     }
+
+    await shell().deleteHistoryChatConditional({ avatar: character.avatar, chat: fileName });
 
     if (fileName === character.chat) {
         const chatsResponse = await fetch('/api/characters/chats', {
@@ -230,32 +301,98 @@ export async function printMessages() {
  * @param {object} [options] Options
  * @param {boolean} [options.clearData=false] Optionally clear the chat array's contents.
  */
-export async function clearChat({ clearData = false, preserveMainChatScrollSnapshot = true } = {}) {
-    cancelDebouncedChatSave();
-    cancelDebouncedMetadataSave();
-    closeMessageEditor();
-    if (preserveMainChatScrollSnapshot) {
-        persistMainChatMessageListScrollSnapshotBeforeClear();
+function beginChatTransition() {
+    if (chatClearInProgress || chatWriteQueues.has(currentChatSaveKey())) {
+        toastr.info('Wait for the current chat save to finish before switching.', 'Chat is still saving');
+        throw new Error('Current chat write has not finished');
     }
-    state.extension_prompts = {};
-    if (state.is_delete_mode) {
-        $('#dialogue_del_mes_cancel').trigger('click');
-    }
-    // React owns #chat after the main-chat cutover; changing the store projection
-    // is enough to clear rows and avoids a second DOM writer.
-    if (!isReactMainChatOwner()) {
-        // This also removes non '.mes' elements, e.g. '#show_more_messages'.
-        state.chatElement.children().remove();
-    }
-    if ($('.zoomed_avatar[forChar]').length) {
-        console.debug('saw avatars to remove');
-        $('.zoomed_avatar[forChar]').remove();
-    } else { console.debug('saw no avatars'); }
+    chatClearInProgress = true;
+}
 
-    if (clearData) state.chat.length = 0;
-    if (isReactMainChatOwner()) {
-        state.reactMainChatProjectionCleared = true;
-        void mountReactMainChatMessageListPanel();
+async function checkpointChatTransition() {
+    const recoveryRecord = chatVersions.get(currentChatSaveKey());
+    if (recoveryRecord?.recoveryFailed && recoveryRecord.session === chatSessionVersion && recoveryRecord.chatReference === state.chat) {
+        toastr.error('The recovery draft is not saved. Keep this chat open and retry saving after storage is available.', 'Recovery storage error', { timeOut: 0 });
+        throw new Error('Chat conflict recovery has not been saved');
+    }
+    if (recoveryRecord?.pending && recoveryRecord.session === chatSessionVersion && recoveryRecord.chatReference === state.chat) {
+        const character = state.characters[state.this_chid];
+        try {
+            const captured = shell().captureChatSaveRecovery?.();
+            if (!captured || !shell().preserveChatSaveConflict) throw new Error('Recovery storage is unavailable');
+            await shell().preserveChatSaveConflict({ avatar: character.avatar, chat: character.chat }, captured, () => true);
+        } catch (error) {
+            toastr.error('The unconfirmed save could not be preserved. Keep this chat open and retry after storage is available.', 'Recovery storage error', { timeOut: 0 });
+            throw error;
+        }
+    }
+    await shell().beforeClearRecovery?.();
+}
+
+export async function prepareChatTransition(previous) {
+    beginChatTransition();
+    try {
+        const capture = () => {
+            const character = state.characters[state.this_chid];
+            return {
+                session: chatSessionVersion,
+                chat: state.chat,
+                avatar: character?.avatar,
+                name: character?.chat,
+                recovery: character ? shell().captureChatSaveRecovery() : null,
+            };
+        };
+        const check = current => {
+            if (previous && (previous.session !== current.session || previous.chat !== current.chat
+                || previous.avatar !== current.avatar || previous.name !== current.name
+                || JSON.stringify(previous.recovery) !== JSON.stringify(current.recovery))) {
+                toastr.warning('The chat changed while the character request was in progress. Keep this page open and save or recover your edits before switching.', 'Chat could not be switched', { timeOut: 0 });
+                throw new Error('Chat changed during character transition');
+            }
+        };
+        check(capture());
+        await checkpointChatTransition();
+        const current = capture();
+        check(current);
+        return current;
+    } finally {
+        chatClearInProgress = false;
+    }
+}
+
+export async function clearChat({ clearData = false, preserveMainChatScrollSnapshot = true } = {}) {
+    beginChatTransition();
+    try {
+        await checkpointChatTransition();
+        chatSessionVersion++;
+        cancelDebouncedChatSave();
+        cancelDebouncedMetadataSave();
+        closeMessageEditor();
+        if (preserveMainChatScrollSnapshot) {
+            persistMainChatMessageListScrollSnapshotBeforeClear();
+        }
+        state.extension_prompts = {};
+        if (state.is_delete_mode) {
+            runDeleteMessageCommand('cancel');
+        }
+        // React owns #chat after the main-chat cutover; changing the store projection
+        // is enough to clear rows and avoids a second DOM writer.
+        if (!isReactMainChatOwner()) {
+            // This also removes non '.mes' elements, e.g. '#show_more_messages'.
+            state.chatElement.children().remove();
+        }
+        if ($('.zoomed_avatar[forChar]').length) {
+            console.debug('saw avatars to remove');
+            $('.zoomed_avatar[forChar]').remove();
+        } else { console.debug('saw no avatars'); }
+
+        if (clearData) state.chat.length = 0;
+        if (isReactMainChatOwner()) {
+            state.reactMainChatProjectionCleared = true;
+            void mountReactMainChatMessageListPanel();
+        }
+    } finally {
+        chatClearInProgress = false;
     }
 }
 
@@ -279,6 +416,8 @@ export async function renamePastChats(oldAvatar, newAvatar, newName) {
 
             if (getChatResponse.ok) {
                 const currentChat = await getChatResponse.json();
+                const version = getChatResponse.headers.get('X-Chat-Version');
+                if (!version || !Array.isArray(currentChat)) throw new Error('Past chat version is unavailable');
 
                 for (const message of currentChat) {
                     if (message.is_user || message.is_system || message.extra?.type == state.system_message_types.NARRATOR) {
@@ -300,14 +439,25 @@ export async function renamePastChats(oldAvatar, newAvatar, newName) {
                         file_name: fileNameWithoutExtension,
                         chat: currentChat,
                         avatar_url: newAvatar,
+                        version,
+                        operationId: crypto.randomUUID(),
                     }),
                     cache: 'no-cache',
                 });
-                const saveChatResponse = await fetch('/api/chats/save', saveChatRequest);
-
-                if (!saveChatResponse.ok) {
-                    throw new Error('Could not save chat');
-                }
+                const key = chatSaveKey(newAvatar, fileNameWithoutExtension);
+                await serializeChatWrite(key, async () => {
+                    // Do this inside the queue, before the request: even an
+                    // ambiguous network failure must not leave the old token
+                    // available to a queued save of the in-memory chat.
+                    const loaded = chatVersions.get(key);
+                    if (loaded) loaded.conflicted = true;
+                    const response = await sendChatWrite(saveChatRequest);
+                    if (!response.ok) throw new Error('Could not save chat');
+                    const result = await response.json();
+                    if (typeof result?.version !== 'string' || !result.version) throw new Error('Chat save response is missing its version');
+                });
+            } else {
+                throw new Error('Past chat could not be loaded');
             }
         } catch (error) {
             toastr.error(t`Past chat could not be updated: ${file_name}`);
@@ -317,19 +467,23 @@ export async function renamePastChats(oldAvatar, newAvatar, newName) {
 }
 
 
-export function saveChatDebounced() {
+export function saveChatDebounced(shouldSave = () => true) {
     const chid = state.this_chid;
+    const key = currentChatSaveKey();
+    const chat = state.chat;
+    const session = chatSessionVersion;
+    const stillCurrent = () => chid === state.this_chid && key === currentChatSaveKey() && chat === state.chat && session === chatSessionVersion && shouldSave();
 
     cancelDebouncedChatSave();
 
     state.chatSaveTimeout = setTimeout(async () => {
-        if (chid !== state.this_chid) {
+        if (!stillCurrent()) {
             console.warn('Chat save timeout triggered, but chid changed. Aborting.');
             return;
         }
 
         console.debug('Chat save timeout triggered');
-        await saveChatConditional();
+        await saveChatConditional(stillCurrent);
         console.debug('Chat saved');
     }, state.DEFAULT_SAVE_EDIT_TIMEOUT);
 }
@@ -346,7 +500,11 @@ export function saveChatDebounced() {
  *
  * @returns {Promise<boolean|undefined>}
  */
+const chatSaveKey = (avatar, name) => JSON.stringify([avatar, name]);
+const currentChatSaveKey = () => chatSaveKey(state.characters[state.this_chid]?.avatar, state.characters[state.this_chid]?.chat);
+
 export async function saveChat({ chatName, withMetadata, mesId, force = false, chatData = undefined } = {}) {
+    if (chatClearInProgress) return false;
     if (arguments.length > 0 && typeof arguments[0] !== 'object') {
         console.trace('saveChat called with positional arguments. Please use an object instead.');
         [chatName, withMetadata, mesId, force] = arguments;
@@ -373,7 +531,21 @@ export async function saveChat({ chatName, withMetadata, mesId, force = false, c
         return;
     }
 
-    state.characters[state.this_chid].date_last_chat = Date.now();
+    const character = state.characters[state.this_chid];
+    const key = chatSaveKey(character.avatar, fileName);
+    const explicitCreate = Boolean(chatName && chatName !== character.chat);
+    const session = chatSessionVersion;
+    const chatReference = state.chat;
+    const currentName = character.chat;
+    const isCurrent = () => session === chatSessionVersion && state.chat === chatReference
+        && state.characters[state.this_chid]?.avatar === character.avatar
+        && state.characters[state.this_chid]?.chat === currentName;
+    let recovery = null;
+
+    if (!explicitCreate) {
+        try { recovery = shell().captureChatSaveRecovery?.(); } catch { /* Recovery failure is reported if the save conflicts. */ }
+    }
+    character.date_last_chat = Date.now();
 
     const trimmedChat = Array.isArray(chatData)
         ? chatData
@@ -389,50 +561,162 @@ export async function saveChat({ chatName, withMetadata, mesId, force = false, c
     };
 
     try {
-        const saveChatRequest = await compressRequest({
-            method: 'POST',
-            cache: 'no-cache',
-            headers: getRequestHeaders(),
-            body: JSON.stringify({
-                ch_name: state.characters[state.this_chid].name,
-                file_name: fileName,
-                chat: [chatHeader, ...trimmedChat],
-                avatar_url: state.characters[state.this_chid].avatar,
-                force: force,
-            }),
+        return await serializeChatWrite(key, async () => {
+            if (!isCurrent()) return false;
+            let record = chatVersions.get(key);
+            if (!record && explicitCreate) {
+                record = { version: null, pending: null, conflicted: false, session, chatReference };
+                chatVersions.set(key, record);
+            }
+            const preserveConflict = async () => {
+                record.recoveryFailed = true;
+                try {
+                    if (!shell().preserveChatSaveConflict || !recovery) throw new Error('Recovery storage is unavailable');
+                    await shell().preserveChatSaveConflict({ avatar: character.avatar, chat: fileName }, recovery, isCurrent);
+                    record.recoveryFailed = false;
+                    toastr.error('This chat changed elsewhere. Local edits were saved in Chat History → Recovery drafts; restore them as a new chat or export them.', 'Chat save conflict', { timeOut: 0 });
+                } catch (error) {
+                    record.recoveryFailed = true;
+                    console.error('Chat save conflict recovery failed', error);
+                    toastr.error('Local edits could not be saved to a recovery draft. Keep this chat open and retry saving after storage is available.', 'Recovery storage error', { timeOut: 0 });
+                }
+            };
+            const handleUnknownSaveOutcome = async () => {
+                record.recoveryFailed = true;
+                try {
+                    const latest = isCurrent() ? shell().captureChatSaveRecovery?.() : recovery;
+                    if (!latest || !shell().preserveChatSaveConflict) throw new Error('Recovery storage is unavailable');
+                    await shell().preserveChatSaveConflict({ avatar: character.avatar, chat: fileName }, latest, isCurrent);
+                    record.recoveryFailed = false;
+                    toastr.error('The save result is unknown. Your current edits were saved in Chat History → Recovery drafts. Verify the draft there before refreshing.', 'Chat save outcome unknown', { timeOut: 0 });
+                    return true;
+                } catch (storageError) {
+                    record.recoveryFailed = true;
+                    console.error('Unknown chat save outcome recovery failed', storageError);
+                    toastr.error('The save result is unknown and your recovery draft could not be saved. Do not refresh or leave this chat. Keep this page open; your edits remain here. Copy your work and retry after storage is available.', 'Recovery storage error', { timeOut: 0 });
+                    return false;
+                }
+            };
+            if (record?.conflicted && record.recoveryFailed && !explicitCreate && record.session === session && record.chatReference === chatReference) {
+                await preserveConflict();
+                return false;
+            }
+            if (!record || record.conflicted || record.session !== session || record.chatReference !== chatReference) {
+                toastr.error('Chat version is unavailable or conflicted. Reload the chat before saving.', 'Chat could not be saved', { timeOut: 0 });
+                return false;
+            }
+            if (record?.pending && record.recoveryFailed && !explicitCreate && !await handleUnknownSaveOutcome()) return false;
+            const finishRequest = async request => {
+                const result = await sendChatWrite(request);
+                if (result.status === 409 || result.status === 428) {
+                    record.pending = null;
+                    record.conflicted = true;
+                    if (!explicitCreate) {
+                        await preserveConflict();
+                    } else {
+                        toastr.error('A chat with this name already exists. Choose another name.', 'Chat creation conflict', { timeOut: 0 });
+                    }
+                    return false;
+                }
+                if (!result.ok) {
+                    if (result.status < 500) record.pending = null;
+                    const data = await result.json().catch(() => ({}));
+                    if (data?.error === 'integrity' && !force) {
+                        const error = new Error('Chat integrity check failed');
+                        error.integrity = true;
+                        throw error;
+                    }
+                    const error = new Error(result.statusText || 'Chat save failed');
+                    if (result.status >= 500) error.unknownChatWriteOutcome = true;
+                    throw error;
+                }
+                const data = await result.json().catch(() => null);
+                if (typeof data?.version !== 'string' || !data.version) {
+                    const error = new Error('Chat save response is missing its version');
+                    error.unknownChatWriteOutcome = true;
+                    throw error;
+                }
+                record.version = data.version;
+                record.pending = null;
+                return true;
+            };
+            const finish = async request => {
+                try {
+                    return await finishRequest(request);
+                } catch (error) {
+                    if (error.integrity) {
+                        if (explicitCreate) {
+                            toastr.error('The chat could not be saved. Keep this page open and copy your work before leaving.', 'Chat integrity error', { timeOut: 0 });
+                            return false;
+                        }
+                        const checkpoint = async () => {
+                            record.recoveryFailed = true;
+                            try {
+                                const latest = isCurrent() ? shell().captureChatSaveRecovery?.() : recovery;
+                                if (!latest || !shell().preserveChatSaveConflict) throw new Error('Recovery storage is unavailable');
+                                await shell().preserveChatSaveConflict({ avatar: character.avatar, chat: fileName }, latest, isCurrent);
+                                record.recoveryFailed = false;
+                                return true;
+                            } catch (storageError) {
+                                console.error('Chat integrity recovery failed', storageError);
+                                toastr.error('Your recovery draft could not be saved. Do not refresh or leave this chat. Keep this page open, copy your work, and retry after storage is available.', 'Recovery storage error', { timeOut: 0 });
+                                return false;
+                            }
+                        };
+                        if (!await checkpoint()) return false;
+                        const answer = await Popup.show.input(
+                            t`ERROR: Chat integrity check failed while saving the file.`,
+                            t`<p>Your current edits were saved in Chat History → Recovery drafts. After you click OK, the page will reload.</p><p>To confirm an overwrite (and potentially <b>LOSE YOUR DATA</b>), enter <code>OVERWRITE</code> (in all caps) in the box below before clicking OK.</p>`,
+                            '', { okButton: 'OK', cancelButton: false },
+                        );
+                        if (answer !== 'OVERWRITE') {
+                            if (await checkpoint()) window.location.reload();
+                            return false;
+                        }
+                        if (!isCurrent()) return false;
+                        error.overwriteIntegrity = true;
+                        throw error;
+                    }
+                    if (error.unknownChatWriteOutcome && !explicitCreate) {
+                        await handleUnknownSaveOutcome();
+                        return false;
+                    }
+                    throw error;
+                }
+            };
+            if (record.pending) {
+                if (!await finish(record.pending)) return false;
+                if (!isCurrent() || chatVersions.get(key) !== record) return false;
+            }
+            if (explicitCreate && record.version) {
+                toastr.error('A chat with this name already exists. Choose another name.', 'Chat creation conflict');
+                return false;
+            }
+            const saveChatRequest = await compressRequest({
+                method: 'POST',
+                cache: 'no-cache',
+                headers: getRequestHeaders(),
+                body: JSON.stringify({
+                    ch_name: character.name,
+                    file_name: fileName,
+                    chat: [chatHeader, ...trimmedChat],
+                    avatar_url: character.avatar,
+                    force: force,
+                    ...(record.version ? { version: record.version } : { create: true }),
+                    operationId: crypto.randomUUID(),
+                }),
+            });
+            if (!isCurrent() || chatVersions.get(key) !== record) return false;
+            record.pending = saveChatRequest;
+            return await finish(saveChatRequest);
         });
-        const result = await fetch('/api/chats/save', saveChatRequest);
-
-        if (result.ok) {
-            return true;
-        }
-
-        const errorData = await result.json();
-        const isIntegrityError = errorData?.error === 'integrity' && !force;
-        if (!isIntegrityError) {
-            throw new Error(result.statusText);
-        }
-
-        const popupResult = await Popup.show.input(
-            t`ERROR: Chat integrity check failed while saving the file.`,
-            t`<p>After you click OK, the page will be reloaded to prevent data corruption.</p>
-              <p>To confirm an overwrite (and potentially <b>LOSE YOUR DATA</b>), enter <code>OVERWRITE</code> (in all caps) in the box below before clicking OK.</p>`,
-            '',
-            { okButton: 'OK', cancelButton: false },
-        );
-
-        const forceSaveConfirmed = popupResult === 'OVERWRITE';
-
-        if (!forceSaveConfirmed) {
-            console.warn('Chat integrity check failed, and user did not confirm the overwrite. Reloading the page.');
-            window.location.reload();
-            return false;
-        }
-
-        return await saveChat({ chatName, withMetadata, mesId, force: true, chatData });
     } catch (error) {
+        if (error.overwriteIntegrity) {
+            if (!isCurrent()) return false;
+            return await saveChat({ chatName, withMetadata, mesId, force: true, chatData });
+        }
         console.error(error);
-        toastr.error(t`Check the server connection and reload the page to prevent data loss.`, t`Chat could not be saved`);
+        toastr.error('Chat could not be saved. Keep this page open and copy your work before leaving.', 'Chat could not be saved', { timeOut: 0 });
         return false;
     }
 }
@@ -502,15 +786,28 @@ export async function selectChatGreeting({ index, characterId, chatId }) {
 
 export async function getChat({ strictReload = false } = {}) {
     const character = state.characters[state.this_chid];
-    const load = { avatar: character?.avatar, chat: character?.chat };
+    const load = { avatar: character?.avatar, chat: character?.chat, session: chatSessionVersion, chatReference: state.chat };
     activeCharacterChatLoad = load;
     const isCurrent = () => {
         const current = state.characters[state.this_chid];
-        return activeCharacterChatLoad === load && current?.avatar === load.avatar && current?.chat === load.chat;
+        return activeCharacterChatLoad === load && current?.avatar === load.avatar && current?.chat === load.chat && chatSessionVersion === load.session && state.chat === load.chatReference;
     };
     try {
         await unshallowCharacter(state.this_chid);
         if (!isCurrent()) return false;
+
+        const key = chatSaveKey(load.avatar, load.chat);
+        const hasUnresolvedWrite = () => {
+            const record = chatVersions.get(key);
+            return Boolean(record && record.session === load.session && record.chatReference === load.chatReference
+                && (record.pending || record.conflicted));
+        };
+        if (chatWriteQueues.has(key)) await chatWriteQueues.get(key).catch(() => {});
+        if (!isCurrent()) return false;
+        if (hasUnresolvedWrite()) {
+            toastr.error('This chat has an unresolved save. Preserve or retry your local edits before reloading.', 'Chat could not be reloaded');
+            return false;
+        }
 
         const response = await fetch('/api/chats/get', {
             method: 'POST',
@@ -529,6 +826,15 @@ export async function getChat({ strictReload = false } = {}) {
 
         const data = await response.json();
         if (!isCurrent()) return false;
+        if (hasUnresolvedWrite() || chatWriteQueues.has(key)) {
+            toastr.error('This chat has an unresolved save. Preserve or retry your local edits before reloading.', 'Chat could not be reloaded');
+            return false;
+        }
+        const version = response.headers.get('X-Chat-Version');
+        if (!version && (Array.isArray(data) || !data || typeof data !== 'object' || Object.keys(data).length)) {
+            throw new Error('Chat response is missing its version');
+        }
+        chatVersions.set(chatSaveKey(load.avatar, load.chat), { version: version || null, pending: null, conflicted: false, session: load.session, chatReference: load.chatReference });
         if (Array.isArray(data) && data.length > 0) {
             /** @type {ChatHeader} */
             const chatHeader = data.shift();
@@ -634,67 +940,36 @@ export async function getPastCharacterChats(characterId = null) {
 }
 
 
+export async function fetchChatHistory(searchQuery) {
+    const response = await fetch('/api/chats/search', {
+        method: 'POST',
+        headers: getRequestHeaders(),
+        body: JSON.stringify({ query: searchQuery, avatar_url: state.characters[state.this_chid].avatar }),
+    });
+    if (!response.ok) throw new Error('Search failed');
+    return response.json();
+}
+
+export async function loadChatHistory(searchQuery) {
+    const filteredData = await fetchChatHistory(searchQuery);
+    filteredData.sort((a, b) => sortMoments(timestampToMoment(a.last_mes), timestampToMoment(b.last_mes)));
+    return filteredData.map(chat => ({
+        fileName: String(chat.file_name ?? ''),
+        fileSize: String(chat.file_size ?? ''),
+        messageCount: Number(chat.message_count) || 0,
+        preview: String(chat.preview_message ?? ''),
+        dateLabel: timestampToMoment(chat.last_mes).format('lll'),
+    }));
+}
+
 export async function displayChats(searchQuery, currentChat, displayName, avatarImg, highlightNames) {
-    const generation = ++selectChatListGeneration;
-    try {
-        const response = await fetch('/api/chats/search', {
-            method: 'POST',
-            headers: getRequestHeaders(),
-            body: JSON.stringify({
-                query: searchQuery,
-                avatar_url: state.characters[state.this_chid].avatar,
-            }),
-        });
-
-        if (!response.ok) {
-            throw new Error('Search failed');
-        }
-
-        const filteredData = await response.json();
-        if (generation !== selectChatListGeneration) {
-            return;
-        }
-        filteredData.sort((a, b) => sortMoments(timestampToMoment(a.last_mes), timestampToMoment(b.last_mes)));
-
-        // React owns the list DOM inside #select_chat_div; this function is now
-        // fetch/sort/project only. Delegated click handlers keep working because
-        // the rendered rows replicate the #past_chat_template contract exactly.
-        const rendered = await renderSelectChatListReact({
-            searchQuery: String(searchQuery ?? ''),
-            currentChat: String(currentChat ?? ''),
-            avatarImg: String(avatarImg ?? ''),
-            items: filteredData.map(chat => ({
-                fileName: String(chat.file_name ?? ''),
-                fileSize: String(chat.file_size ?? ''),
-                messageCount: Number(chat.message_count) || 0,
-                preview: String(chat.preview_message ?? ''),
-                dateLabel: timestampToMoment(chat.last_mes).format('lll'),
-            })),
-        });
-        if (!rendered) {
-            return;
-        }
-
-        if (Array.isArray(highlightNames) && highlightNames.length) {
-            for (const fileName of highlightNames) {
-                const template = $('#select_chat_div .select_chat_block_wrapper')
-                    .filter((_, el) => $(el).find('.select_chat_block').attr('file_name') === fileName)
-                    .first();
-                if (template.length) {
-                    const templateOffset = template.offset().top - template.parent().offset().top;
-                    $('#select_chat_div').scrollTop(templateOffset);
-                    flashHighlight(template, debounce_timeout.extended);
-                }
-            }
-        }
-    } catch (error) {
-        console.error('Error loading chats:', error);
-        toastr.error('Could not load chat data. Try reloading the page.');
-    }
+    return shell().displayHistoryCompat(searchQuery, String(currentChat ?? ''), String(avatarImg ?? ''), Array.isArray(highlightNames) ? highlightNames : []);
 }
 
 
 export async function saveChatConditional(shouldSave = () => true) {
+    const key = currentChatSaveKey();
+    if (chatVersions.get(key)?.deleting) return false;
     try {
         await waitUntilCondition(() => !state.isChatSaving, state.DEFAULT_SAVE_EDIT_TIMEOUT, 100);
     } catch {
@@ -703,7 +978,7 @@ export async function saveChatConditional(shouldSave = () => true) {
     }
 
     try {
-        if (!shouldSave()) return false;
+        if (key !== currentChatSaveKey() || chatVersions.get(key)?.deleting || !shouldSave()) return false;
         cancelDebouncedChatSave();
 
         state.isChatSaving = true;
@@ -734,6 +1009,14 @@ export async function saveChatConditional(shouldSave = () => true) {
  */
 export async function renameCharacterChat({ characterId, oldFileName, newFileName, loader: showLoader }) {
     const currentChatId = getCurrentChatId();
+    const character = state.characters[characterId];
+    const activeCharacter = state.characters[state.this_chid];
+    const activeName = activeCharacter?.chat;
+    const chatReference = state.chat;
+    const session = chatSessionVersion;
+    const isTargetCurrent = () => state.characters[state.this_chid] === character && character?.chat === oldFileName;
+    const wasCurrent = isTargetCurrent();
+
     const body = {
         avatar_url: state.characters[characterId]?.avatar,
         original_file: `${oldFileName}.jsonl`,
@@ -757,11 +1040,24 @@ export async function renameCharacterChat({ characterId, oldFileName, newFileNam
     }) : null;
 
     try {
-        const response = await fetch('/api/chats/rename', {
-            method: 'POST',
-            body: JSON.stringify(body),
-            headers: getRequestHeaders(),
-        });
+        const rename = async version => sendChatWrite({
+            method: 'POST', headers: getRequestHeaders(),
+            body: JSON.stringify({ ...body, version, operationId: crypto.randomUUID() }),
+        }, '/api/chats/rename');
+        const response = wasCurrent
+            ? await withCurrentChatDeleteVersion({ avatar: body.avatar_url, chat: oldFileName }, rename, { suspendConditionalSaves: false })
+            : await serializeChatWrite(chatSaveKey(body.avatar_url, oldFileName), async () => {
+                if (isTargetCurrent()) throw new Error('Chat became current before rename');
+                const read = await fetch('/api/chats/get', {
+                    method: 'POST', headers: getRequestHeaders(),
+                    body: JSON.stringify({ avatar_url: body.avatar_url, file_name: oldFileName, ch_name: character?.name }),
+                });
+                const version = read.headers.get('X-Chat-Version');
+                if (!read.ok || !version || isTargetCurrent()) throw new Error('Chat version unavailable for rename');
+                const record = chatVersions.get(chatSaveKey(body.avatar_url, oldFileName));
+                if (record) record.conflicted = true;
+                return rename(version);
+            });
 
         if (!response.ok) {
             throw new Error('Unsuccessful request.');
@@ -769,8 +1065,15 @@ export async function renameCharacterChat({ characterId, oldFileName, newFileNam
 
         const data = await response.json();
 
-        if (data.error) {
+        if (data.error || !data.version) {
             throw new Error('Server returned an error.');
+        }
+
+        if (state.characters[state.this_chid] !== activeCharacter || activeCharacter?.chat !== activeName
+            || state.chat !== chatReference || chatSessionVersion !== session) {
+            // The server may have renamed the file; do not modify or reload a
+            // different chat after the request completes.
+            return true;
         }
 
         if (data.sanitizedFileName) {

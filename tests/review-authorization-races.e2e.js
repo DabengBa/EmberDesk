@@ -32,7 +32,8 @@ async function saved(page) {
         const { getRequestHeaders } = await import('/scripts/request-context.js');
         const res = await fetch('/api/settings/get', { method: 'POST', headers: getRequestHeaders(), body: '{}' });
         const json = await res.json();
-        return { revision: json.settings_revision, grants: JSON.parse(json.settings).power_user.external_media_allowed_overrides ?? [] };
+        const settings = JSON.parse(json.settings);
+        return { revision: json.settings_revision, grants: settings.power_user.external_media_allowed_overrides ?? [], model: settings.oai_settings.openai_model };
     });
 }
 async function avatar(page) {
@@ -42,25 +43,65 @@ async function avatar(page) {
 test('two tabs: stale unrelated settings save cannot restore a persisted revocation', async ({ page, context }) => {
     const name = AUTHORIZATION_FIXTURES.staleSettingsSave;
     await testSetup.awaitST({ page }); await select(page, name);
+    await page.waitForTimeout(2500);
     const id = await avatar(page);
     if (!await permission(page).isChecked()) { await permission(page).check(); }
     await expect.poll(async () => (await saved(page)).grants.includes(id)).toBe(true);
+    await page.waitForTimeout(2500);
     const other = await context.newPage();
-    await testSetup.awaitST({ page: other }); await select(other, name);
-    await expect(permission(other)).toBeChecked();
+    await testSetup.awaitST({ page: other });
+    await other.waitForTimeout(2500);
+    await expect.poll(() => other.evaluate(id => window.SillyTavern.getContext().powerUserSettings.external_media_allowed_overrides.includes(id), id)).toBe(true);
     await permission(page).uncheck();
     await expect.poll(async () => (await saved(page)).grants.includes(id)).toBe(false);
-    const revoked = await saved(page);
     const statuses = [];
     other.on('response', r => { if (r.url().includes('/api/settings/save')) statuses.push(r.status()); });
-    await other.evaluate(async () => { const { saveSettings } = await import('/script.js'); await saveSettings(); });
+    const unsavedModel = `authorization-recovery-${Date.now()}`;
+    const error = await other.evaluate(async value => {
+        window.SillyTavern.getContext().chatCompletionSettings.openai_model = value;
+        const { saveSettings } = await import('/script.js');
+        try { await saveSettings(0, { strict: true }); return null; } catch (error) { return error.message; }
+    }, unsavedModel);
     const restored = await saved(page);
-    console.log('REVIEW_RACE', JSON.stringify({ id, revoked, restored, statuses }));
+    expect(error).toContain('revision conflict');
     expect(statuses).toContain(409);
-    expect(statuses).toContain(200);
+    expect(statuses).not.toContain(200);
     expect(restored.grants).not.toContain(id);
-    await page.reload(); await testSetup.awaitST({ page }); await select(page, name);
-    await expect(permission(page)).not.toBeChecked();
+    expect(restored.model).not.toBe(unsavedModel);
+    await expect(other.locator('#toast-container')).toContainText(/Settings conflict|设置冲突/);
+    await expect.poll(() => other.evaluate(() => window.SillyTavern.getContext().chatCompletionSettings.openai_model)).toBe(unsavedModel);
+    const writesBeforeRetry = statuses.length;
+    const retryError = await other.evaluate(async () => {
+        const { saveSettings } = await import('/script.js');
+        try { await saveSettings(0, { strict: true }); return null; } catch (error) { return error.message; }
+    });
+    expect(retryError).toContain('runtime settings conflict');
+    expect(statuses).toHaveLength(writesBeforeRetry);
+    await other.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: '设置' }).click();
+    const recovery = other.locator('#SettingsPanel').getByTestId('runtime-settings-recovery');
+    await expect(recovery).toBeVisible();
+    await expect(recovery).toContainText(/saving is paused|已暂停保存/i);
+    await expect(other.locator('#SettingsPanel .settings-status--success')).toHaveCount(0);
+    const downloadPromise = other.waitForEvent('download');
+    await recovery.getByRole('button', { name: /download runtime settings only|仅下载运行时设置/i }).click();
+    const download = await downloadPromise;
+    const chunks = [];
+    for await (const chunk of await download.createReadStream()) chunks.push(chunk);
+    const exported = JSON.parse(Buffer.concat(chunks).toString());
+    expect(exported.oai_settings.openai_model).toBe(unsavedModel);
+    await page.close();
+    await other.reload(); await testSetup.awaitST({ page: other });
+    expect((await saved(other)).grants).not.toContain(id);
+    await other.waitForTimeout(2500);
+    await other.evaluate(async value => {
+        window.SillyTavern.getContext().chatCompletionSettings.openai_model = value;
+        const { saveSettings } = await import('/script.js');
+        await saveSettings(0, { strict: true });
+    }, exported.oai_settings.openai_model);
+    await expect.poll(async () => (await saved(other)).model).toBe(unsavedModel);
+    expect((await saved(other)).grants).not.toContain(id);
+    await other.reload(); await testSetup.awaitST({ page: other }); await select(other, name);
+    await expect(permission(other)).not.toBeChecked();
     await other.close();
 });
 

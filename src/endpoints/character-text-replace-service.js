@@ -15,7 +15,7 @@ import {
     openCanonicalChatForTextReplace,
     writeCanonicalChatForTextReplace,
 } from './chats.js';
-import { readCanonicalChatPayload } from './canonical-chat-read-service.js';
+import { readCanonicalChatVersionedPayload } from './canonical-chat-read-service.js';
 
 const MAX_SAMPLE_COUNT = 3;
 const SAMPLE_CONTEXT_RADIUS = 40;
@@ -542,7 +542,7 @@ export async function runCharacterTextReplace({ request, apply = false, dependen
         getCharacterFeatureFlags: dependencies.getCharacterFeatureFlags ?? (() => getCanonicalStorageSlice('characters').getFeatureFlags()),
         openChatSession: dependencies.openChatSession ?? openCanonicalChatForTextReplace,
         writeChatSession: dependencies.writeChatSession ?? writeCanonicalChatForTextReplace,
-        readCanonicalChatPayload: dependencies.readCanonicalChatPayload ?? readCanonicalChatPayload,
+        readCanonicalChatVersionedPayload: dependencies.readCanonicalChatVersionedPayload ?? readCanonicalChatVersionedPayload,
         editCharacterCard: dependencies.editCharacterCard ?? editCharacterCard,
     };
 
@@ -622,200 +622,240 @@ export async function runCharacterTextReplace({ request, apply = false, dependen
         totals: { occurrences: 0, changedTargets: 0 },
         warnings: [],
     };
+    function failed(area, reason, status = 500, outcomeUnknown = false) {
+        result.ok = false;
+        result.status = status;
+        result.reason = reason;
+        result.partial = Object.values(result.applied).some(Boolean);
+        result.outcomeUnknown = outcomeUnknown;
+        result.areas[area].status = outcomeUnknown ? 'unknown' : 'failed';
+        return result;
+    }
 
+    let currentArea = 'worldBook';
+    try {
     // ---- Area 1: bound World Info book ----
-    let refreshedCharacterBook = null;
-    if (areas.worldBook && boundWorldName && worldInfoState?.ok) {
-        const book = deps.getCanonicalWorldInfoBook(worldInfoState.db, normalizedWorldName);
-        if (!book) {
-            result.areas.worldBook = { status: 'missing', name: boundWorldName, matches: [], occurrences: 0 };
-        } else {
-            const bookPayload = clonePayload(book);
-            const { changed, matches } = transformWorldBookEntries(bookPayload.entries, worldFields, matcher, excluded);
-            result.areas.worldBook = {
-                status: changed ? (apply ? 'applied' : 'preview') : 'unchanged',
-                name: boundWorldName,
-                boundCharacterCount: deps.listCanonicalCharactersBoundToWorld(worldInfoState.db, normalizedWorldName).length,
-                matches,
-                occurrences: matches.reduce((sum, item) => sum + item.occurrences, 0),
-            };
-            if (changed) {
-                result.totals.occurrences += result.areas.worldBook.occurrences;
-                result.totals.changedTargets += 1;
-            }
-            if (apply && changed) {
+        let refreshedCharacterBook = null;
+        if (areas.worldBook && boundWorldName && worldInfoState?.ok) {
+            const book = deps.getCanonicalWorldInfoBook(worldInfoState.db, normalizedWorldName);
+            if (!book) {
+                result.areas.worldBook = { status: 'missing', name: boundWorldName, matches: [], occurrences: 0 };
+            } else {
+                const bookPayload = clonePayload(book);
+                const { changed, matches } = transformWorldBookEntries(bookPayload.entries, worldFields, matcher, excluded);
+                result.areas.worldBook = {
+                    status: changed ? (apply ? 'applied' : 'preview') : 'unchanged',
+                    name: boundWorldName,
+                    boundCharacterCount: deps.listCanonicalCharactersBoundToWorld(worldInfoState.db, normalizedWorldName).length,
+                    matches,
+                    occurrences: matches.reduce((sum, item) => sum + item.occurrences, 0),
+                };
+                if (changed) {
+                    result.totals.occurrences += result.areas.worldBook.occurrences;
+                    result.totals.changedTargets += 1;
+                }
+                if (apply && changed) {
                 // Authority and projection intent commit together; the shared
                 // worker then applies the file projection under its own lock.
-                const repairKey = deps.commitWorldBookWithProjectionIntent(worldInfoState.db, {
-                    directories,
-                    name: normalizedWorldName,
-                    payload: bookPayload,
-                    mode: getCanonicalStorageSlice('world_info').getProjectionMode(),
-                    nowMs: Date.now(),
-                });
-                result.applied.worldBook = true;
-                try {
-                    deps.replayWorldProjection(worldInfoState.db, { directories, repairKey });
-                } catch {
+                    let repairKey;
+                    try {
+                        repairKey = deps.commitWorldBookWithProjectionIntent(worldInfoState.db, {
+                            directories,
+                            name: normalizedWorldName,
+                            payload: bookPayload,
+                            expectedPayload: book,
+                            mode: getCanonicalStorageSlice('world_info').getProjectionMode(),
+                            nowMs: Date.now(),
+                        });
+                    } catch (error) {
+                        if (error?.code === 'WORLD_BOOK_CONFLICT') return failed('worldBook', 'world_book_conflict', 409);
+                        return failed('worldBook', 'world_book_write_failed', 500, true);
+                    }
+                    result.applied.worldBook = true;
+                    try {
+                        deps.replayWorldProjection(worldInfoState.db, { directories, repairKey });
+                    } catch {
                     // Canonical commit already happened — a projection failure
                     // stays a durably pending v1 intent, not an un-apply.
-                    result.areas.worldBook.projectionFailed = true;
-                    result.areas.worldBook.repairKey = repairKey;
-                    result.warnings.push({ code: 'world_book_projection_failed', name: normalizedWorldName });
+                        result.areas.worldBook.projectionFailed = true;
+                        result.areas.worldBook.repairKey = repairKey;
+                        result.warnings.push({ code: 'world_book_projection_failed', name: normalizedWorldName });
+                    }
+                }
+                // The card's embedded snapshot must reflect the post-replace book —
+                // read it back from the same db so preview and apply agree.
+                if (apply && changed) {
+                    const persisted = deps.getCanonicalWorldInfoBook(worldInfoState.db, normalizedWorldName) ?? bookPayload;
+                    refreshedCharacterBook = persisted.originalData
+                    ?? (persisted.entries ? deps.convertWorldInfoToCharacterBook(normalizedWorldName, persisted.entries) : null);
+                } else if (changed) {
+                    refreshedCharacterBook = bookPayload.originalData
+                    ?? (bookPayload.entries ? deps.convertWorldInfoToCharacterBook(normalizedWorldName, bookPayload.entries) : null);
                 }
             }
-            // The card's embedded snapshot must reflect the post-replace book —
-            // read it back from the same db so preview and apply agree.
-            if (apply && changed) {
-                const persisted = deps.getCanonicalWorldInfoBook(worldInfoState.db, normalizedWorldName) ?? bookPayload;
-                refreshedCharacterBook = persisted.originalData
-                    ?? (persisted.entries ? deps.convertWorldInfoToCharacterBook(normalizedWorldName, persisted.entries) : null);
-            } else if (changed) {
-                refreshedCharacterBook = bookPayload.originalData
-                    ?? (bookPayload.entries ? deps.convertWorldInfoToCharacterBook(normalizedWorldName, bookPayload.entries) : null);
-            }
         }
-    }
 
-    // ---- Area 2: the character card ----
-    let cardChangedByFields = false;
-    if (areas.card && cardPayload) {
-        const { changed, matches } = transformCharacterCard(cardPayload, cardFields, matcher, excluded);
-        cardChangedByFields = changed;
-        result.areas.card = {
-            status: changed ? (apply ? 'applied' : 'preview') : 'unchanged',
-            matches,
-            occurrences: matches.reduce((sum, item) => sum + item.occurrences, 0),
-        };
-        if (changed) {
-            result.totals.occurrences += result.areas.card.occurrences;
-        }
-    }
-
-    let embeddedBookChanged = false;
-    if (areas.worldBook && !boundWorldName && hasEmbeddedBook) {
-        const embeddedMatches = transformEmbeddedBook(embeddedBook, worldFields, matcher, excluded);
-        embeddedBookChanged = embeddedMatches.changed;
-        result.areas.worldBook = {
-            status: embeddedBookChanged ? (apply ? 'applied' : 'preview') : 'unchanged',
-            name: null,
-            embedded: true,
-            matches: embeddedMatches.matches,
-            occurrences: embeddedMatches.matches.reduce((sum, item) => sum + item.occurrences, 0),
-        };
-        if (embeddedBookChanged) {
-            result.totals.occurrences += result.areas.worldBook.occurrences;
-        }
-    } else if (areas.worldBook && !boundWorldName && !hasEmbeddedBook) {
-        result.areas.worldBook = { status: 'unbound', name: null, matches: [], occurrences: 0 };
-    }
-
-    // Backfill the embedded snapshot whenever a bound book changed (or the
-    // stored copy is simply stale) — even when card fields were not selected.
-    const snapshotNeedsRefresh = refreshedCharacterBook != null
-        && JSON.stringify(cardPayload?.data?.character_book ?? null) !== JSON.stringify(refreshedCharacterBook);
-    if (snapshotNeedsRefresh && cardPayload?.data && typeof cardPayload.data === 'object') {
-        cardPayload.data.character_book = refreshedCharacterBook;
-    }
-
-    const cardHasChanges = cardChangedByFields || embeddedBookChanged || snapshotNeedsRefresh;
-    if (cardHasChanges && cardChangedByFields === false) {
-        result.areas.card.status = 'refresh';
-        result.areas.card.snapshotRefreshed = !apply && snapshotNeedsRefresh;
-    }
-    if (cardHasChanges) {
-        result.totals.changedTargets += 1;
-    }
-
-    const cardNeedsWrite = cardHasChanges;
-
-    if (apply && cardNeedsWrite && cardPayload) {
-        const writeResult = await deps.editCharacterCard({
-            request,
-            avatarUrl,
-            targetFile: internalName,
-            characterData: JSON.stringify(cardPayload),
-            dependencies: deps.getCharacterWriteDependencies(),
-        });
-        if (writeResult?.ok || writeResult?.authorityCommitted === true) {
-            result.applied.card = true;
-            if (cardChangedByFields) {
-                result.areas.card.status = 'applied';
-            }
-            if (snapshotNeedsRefresh) {
-                result.areas.card.snapshotRefreshed = true;
-            }
-            if (embeddedBookChanged) {
-                result.applied.worldBook = true;
-            }
-            if (!writeResult.ok) {
-                result.areas.card.projectionFailed = true;
-                result.warnings.push({ code: 'card_projection_failed', repairKey: writeResult.repairKey ?? null });
-            }
-        } else {
-            result.areas.card.status = 'failed';
-            result.areas.card.reason = writeResult?.reason ?? 'write_failed';
-            result.warnings.push({ code: 'card_write_failed', reason: result.areas.card.reason });
-            if (embeddedBookChanged) {
-                result.areas.worldBook.status = 'failed';
-                result.areas.worldBook.reason = result.areas.card.reason;
-            }
-            if (result.applied.worldBook && snapshotNeedsRefresh) {
-                result.warnings.push({ code: 'world_book_snapshot_not_confirmed', name: boundWorldName });
-            }
-        }
-    }
-
-    // ---- Area 3: the current chat session ----
-    if (areas.chats === 'current' && chatSession?.ok) {
-        const payload = deps.readCanonicalChatPayload(chatSession.db, chatSession.locator);
-        if (payload == null) {
-            result.areas.chats = { status: 'missing', fileName: chatFileName, matches: [], occurrences: 0 };
-            result.warnings.push({ code: 'chat_session_missing', fileName: chatFileName });
-        } else {
-            const chatPayload = clonePayload(payload);
-            const { changed, matches } = transformChatMessages(chatPayload, chatFields, matcher, excluded);
-            result.areas.chats = {
+        // ---- Area 2: the character card ----
+        currentArea = 'card';
+        let cardChangedByFields = false;
+        if (areas.card && cardPayload) {
+            const { changed, matches } = transformCharacterCard(cardPayload, cardFields, matcher, excluded);
+            cardChangedByFields = changed;
+            result.areas.card = {
                 status: changed ? (apply ? 'applied' : 'preview') : 'unchanged',
-                fileName: chatFileName,
                 matches,
                 occurrences: matches.reduce((sum, item) => sum + item.occurrences, 0),
             };
             if (changed) {
-                result.totals.occurrences += result.areas.chats.occurrences;
-                result.totals.changedTargets += 1;
+                result.totals.occurrences += result.areas.card.occurrences;
             }
-            if (apply && changed) {
-                const writeResult = deps.writeChatSession(request, {
-                    db: chatSession.db,
-                    locator: chatSession.locator,
-                    filePath: chatSession.filePath,
-                    cardName: chatSession.cardName,
+        }
+
+        let embeddedBookChanged = false;
+        if (areas.worldBook && !boundWorldName && hasEmbeddedBook) {
+            const embeddedMatches = transformEmbeddedBook(embeddedBook, worldFields, matcher, excluded);
+            embeddedBookChanged = embeddedMatches.changed;
+            result.areas.worldBook = {
+                status: embeddedBookChanged ? (apply ? 'applied' : 'preview') : 'unchanged',
+                name: null,
+                embedded: true,
+                matches: embeddedMatches.matches,
+                occurrences: embeddedMatches.matches.reduce((sum, item) => sum + item.occurrences, 0),
+            };
+            if (embeddedBookChanged) {
+                result.totals.occurrences += result.areas.worldBook.occurrences;
+            }
+        } else if (areas.worldBook && !boundWorldName && !hasEmbeddedBook) {
+            result.areas.worldBook = { status: 'unbound', name: null, matches: [], occurrences: 0 };
+        }
+
+        // Backfill the embedded snapshot whenever a bound book changed (or the
+        // stored copy is simply stale) — even when card fields were not selected.
+        const snapshotNeedsRefresh = refreshedCharacterBook != null
+        && JSON.stringify(cardPayload?.data?.character_book ?? null) !== JSON.stringify(refreshedCharacterBook);
+        if (snapshotNeedsRefresh && cardPayload?.data && typeof cardPayload.data === 'object') {
+            cardPayload.data.character_book = refreshedCharacterBook;
+        }
+
+        const cardHasChanges = cardChangedByFields || embeddedBookChanged || snapshotNeedsRefresh;
+        if (cardHasChanges && cardChangedByFields === false) {
+            result.areas.card.status = 'refresh';
+            result.areas.card.snapshotRefreshed = !apply && snapshotNeedsRefresh;
+        }
+        if (cardHasChanges) {
+            result.totals.changedTargets += 1;
+        }
+
+        const cardNeedsWrite = cardHasChanges;
+
+        if (apply && cardNeedsWrite && cardPayload) {
+            let writeResult;
+            try {
+                writeResult = await deps.editCharacterCard({
+                    request,
                     avatarUrl,
-                    payload: chatPayload,
+                    targetFile: internalName,
+                    characterData: JSON.stringify(cardPayload),
+                    expectedCardJson: cardJson,
+                    dependencies: deps.getCharacterWriteDependencies(),
                 });
-                if (writeResult?.ok || writeResult?.authorityCommitted === true) {
-                    result.applied.chat = true;
-                    if (!writeResult.ok) {
-                        result.areas.chats.projectionFailed = true;
-                        result.warnings.push({ code: 'chat_projection_failed', repairKey: writeResult.repairKey ?? null });
+            } catch (error) {
+                if (error?.code === 'CHARACTER_CARD_CONFLICT') return failed('card', 'card_conflict', 409);
+                return failed('card', 'card_write_failed', 500, true);
+            }
+            if (writeResult?.ok || writeResult?.authorityCommitted === true) {
+                result.applied.card = true;
+                if (cardChangedByFields) {
+                    result.areas.card.status = 'applied';
+                }
+                if (snapshotNeedsRefresh) {
+                    result.areas.card.snapshotRefreshed = true;
+                }
+                if (embeddedBookChanged) {
+                    result.applied.worldBook = true;
+                }
+                if (!writeResult.ok) {
+                    result.areas.card.projectionFailed = true;
+                    result.warnings.push({ code: 'card_projection_failed', repairKey: writeResult.repairKey ?? null });
+                }
+            } else {
+                result.areas.card.status = 'failed';
+                result.areas.card.reason = writeResult?.reason ?? 'write_failed';
+                result.warnings.push({ code: 'card_write_failed', reason: result.areas.card.reason });
+                if (embeddedBookChanged) {
+                    result.areas.worldBook.status = 'failed';
+                    result.areas.worldBook.reason = result.areas.card.reason;
+                }
+                if (result.applied.worldBook && snapshotNeedsRefresh) {
+                    result.warnings.push({ code: 'world_book_snapshot_not_confirmed', name: boundWorldName });
+                }
+                return failed('card', 'card_write_failed', result.areas.card.reason === 'conflict' ? 409 : 500);
+            }
+        }
+
+        // ---- Area 3: the current chat session ----
+        currentArea = 'chats';
+        if (areas.chats === 'current' && chatSession?.ok) {
+            const snapshot = deps.readCanonicalChatVersionedPayload(chatSession.db, chatSession.locator);
+            if (snapshot == null) {
+                result.areas.chats = { status: 'missing', fileName: chatFileName, matches: [], occurrences: 0 };
+                result.warnings.push({ code: 'chat_session_missing', fileName: chatFileName });
+                if (apply) return failed('chats', 'chat_session_missing', 409);
+            } else {
+                const chatPayload = clonePayload(snapshot.payload);
+                const { changed, matches } = transformChatMessages(chatPayload, chatFields, matcher, excluded);
+                result.areas.chats = {
+                    status: changed ? (apply ? 'applied' : 'preview') : 'unchanged',
+                    fileName: chatFileName,
+                    matches,
+                    occurrences: matches.reduce((sum, item) => sum + item.occurrences, 0),
+                };
+                if (changed) {
+                    result.totals.occurrences += result.areas.chats.occurrences;
+                    result.totals.changedTargets += 1;
+                }
+                if (apply && changed) {
+                    let writeResult;
+                    try {
+                        writeResult = deps.writeChatSession(request, {
+                            db: chatSession.db,
+                            locator: chatSession.locator,
+                            filePath: chatSession.filePath,
+                            cardName: chatSession.cardName,
+                            avatarUrl,
+                            payload: chatPayload,
+                            version: snapshot.version,
+                        });
+                    } catch {
+                        return failed('chats', 'chat_write_failed', 500, true);
                     }
-                } else {
-                    result.areas.chats.status = 'failed';
-                    result.areas.chats.reason = writeResult?.reason ?? 'write_failed';
-                    result.warnings.push({ code: 'chat_write_failed', reason: result.areas.chats.reason, repairKey: writeResult?.repairKey ?? null });
+                    if (writeResult?.ok || writeResult?.authorityCommitted === true) {
+                        result.applied.chat = true;
+                        if (!writeResult.ok) {
+                            result.areas.chats.projectionFailed = true;
+                            result.warnings.push({ code: 'chat_projection_failed', repairKey: writeResult.repairKey ?? null });
+                        }
+                    } else {
+                        result.areas.chats.status = 'failed';
+                        result.areas.chats.reason = writeResult?.reason ?? 'write_failed';
+                        result.warnings.push({ code: 'chat_write_failed', reason: result.areas.chats.reason, repairKey: writeResult?.repairKey ?? null });
+                        return failed('chats', 'chat_write_failed', result.areas.chats.reason === 'conflict' ? 409 : 500);
+                    }
                 }
             }
         }
-    }
 
-    if (result.areas.worldBook.boundCharacterCount > 1) {
-        result.warnings.push({
-            code: 'shared_world_book',
-            name: boundWorldName,
-            characters: result.areas.worldBook.boundCharacterCount,
-        });
-    }
+        if (result.areas.worldBook.boundCharacterCount > 1) {
+            result.warnings.push({
+                code: 'shared_world_book',
+                name: boundWorldName,
+                characters: result.areas.worldBook.boundCharacterCount,
+            });
+        }
 
-    return result;
+        return result;
+    } catch (error) {
+        console.error('Text replace failed after partial progress:', error);
+        return failed(currentArea, 'text_replace_failed');
+    }
 }

@@ -89,6 +89,10 @@ export async function createBranch(mesId) {
         return;
     }
 
+    const sourceChat = chat;
+    const sourceCharacter = characters[this_chid];
+    const sourceName = sourceCharacter?.chat;
+    const isCurrent = () => chat === sourceChat && characters[this_chid] === sourceCharacter && sourceCharacter?.chat === sourceName;
     const lastMes = chat[mesId];
     const mainChatName = (getCurrentChatDetails()).sessionName;
     const newMetadata = { main_chat: mainChatName };
@@ -107,6 +111,7 @@ export async function createBranch(mesId) {
         return `${cleanName} - Branch #${i}`;
     }
     const existingChats = await getExistingChatNames();
+    if (!isCurrent()) return;
     const name = getUniqueName(mainChatName, (x) => existingChats.includes(x), { nameBuilder: buildBranchName });
     if (!name) {
         console.error('Could not generate a unique branch name.');
@@ -116,7 +121,7 @@ export async function createBranch(mesId) {
 
     const branchChatSnapshot = structuredClone(chat.slice(0, Number(mesId) + 1));
 
-    await saveChat({ chatName: name, withMetadata: newMetadata, mesId, chatData: branchChatSnapshot });
+    if (await saveChat({ chatName: name, withMetadata: newMetadata, mesId, chatData: branchChatSnapshot }) !== true || !isCurrent()) return;
     // append to branches list if it exists
     // otherwise create it
     if (typeof lastMes.extra !== 'object') {
@@ -129,7 +134,7 @@ export async function createBranch(mesId) {
     return name;
 }
 
-async function backToMainChat() {
+export async function backToMainChat() {
     const mainChatName = getMainChatName();
     const allChats = await getExistingChatNames();
 
@@ -163,8 +168,6 @@ export async function branchChat(mesId) {
 }
 
 export function initBranchUI() {
-    $('#option_back_to_main').on('click', backToMainChat);
-
     $(document).on('click', '.mes_create_branch', async function () {
         const mesId = $(this).closest('.mes').attr('mesid');
         if (mesId !== undefined) {

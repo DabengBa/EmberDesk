@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import { describe, expect, test } from '@jest/globals';
 import { buildSettingsSavePayload } from '../app/lib/settings-helpers.js';
+import { loadTsModule } from './helpers/load-ts-module.mjs';
 
 const read = path => fs.readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 
@@ -9,9 +10,19 @@ const source = read('public/scripts/PromptManager.js')
     .replace(/^import .*;$/gm, '')
     .replace(/^export (?=const |class |function )/gm, '')
     .replace(/export \{[\s\S]*?\};\s*$/, '');
-const { PromptManager, chatCompletionDefaultPrompts, removeRetiredExamplePrompts } = new Function(`${source}\nreturn { PromptManager, chatCompletionDefaultPrompts, removeRetiredExamplePrompts };`)();
+const { PromptManager, Prompt, PromptCollection, installPromptManagerDomain, chatCompletionDefaultPrompts, removeRetiredExamplePrompts } = new Function('eventSource', 'event_types', 'substituteParams', 'TokenHandler', 'uuidv4', `${source}\nreturn { PromptManager, Prompt, PromptCollection, installPromptManagerDomain, chatCompletionDefaultPrompts, removeRetiredExamplePrompts };`)(
+    { on() {} }, {}, text => text, class {}, () => 'uuid',
+);
+const { createPromptManagerDomain } = await loadTsModule('app/lib/prompt-manager.ts');
+installPromptManagerDomain(createPromptManagerDomain);
 
 describe('retired example-dialogue preset data', () => {
+    test('facade constructors preserve Prompt instanceof across the typed domain', () => {
+        const prompt = new Prompt({ identifier: 'custom' });
+        expect(prompt).toBeInstanceOf(Prompt);
+        expect(new PromptCollection(prompt).get('custom')).toBe(prompt);
+        expect(new PromptManager()).toBeInstanceOf(PromptManager);
+    });
     test('imported and cached presets are normalized before persistence and survive export cleanly', () => {
         const openai = read('public/scripts/openai.js');
         const migration = openai.match(/function migrateChatCompletionSettings\(settings\) \{[\s\S]*?\n\}/)[0];

@@ -1,5 +1,6 @@
-import { Fuse, Handlebars } from '../lib.js';
+import { DOMPurify, Fuse, Handlebars } from '../lib.js';
 import { markCharacterSortChanged } from './character-sort-save-guard.js';
+
 
 import {
     saveSettingsDebounced,
@@ -154,10 +155,8 @@ export function applyStylePins() {
         }
 
         const formattedMessage = messageFormatting(firstMessage.mes, firstMessage.name, firstMessage.is_system, firstMessage.is_user, 0, {}, false);
-        const htmlElement = document.createElement('div');
-        htmlElement.innerHTML = formattedMessage;
-
-        const styleTags = htmlElement.querySelectorAll('style');
+        const fragment = DOMPurify.sanitize(formattedMessage, { ADD_TAGS: ['style'], RETURN_DOM_FRAGMENT: true });
+        const styleTags = fragment.querySelectorAll('style');
         if (styleTags.length === 0) {
             return;
         }
@@ -253,7 +252,10 @@ export async function loadPowerUserSettings(settings) {
     }
 
 
-    $(`#character_sort_order option[data-order="${power_user.sort_order}"][data-field="${power_user.sort_field}"]`).prop('selected', true);
+    const sortSelector = /** @type {HTMLSelectElement|null} */ (document.getElementById('character_sort_order'));
+    const savedSort = Array.from(sortSelector?.options ?? []).find(option =>
+        option.dataset.order === power_user.sort_order && option.dataset.field === power_user.sort_field);
+    if (savedSort) savedSort.selected = true;
     switchReducedMotion();
     reloadMarkdownProcessor();
     applyToastrPosition();
@@ -331,7 +333,7 @@ export function fuzzySearchWorldInfo(data, searchValue, fuzzySearchCaches = null
  * @param {Object<string, *>} [options.customContextSettings] Custom context settings.
  * @returns {string} The rendered story string.
  */
-export function renderStoryString(params, { customStoryString = null, customContextSettings = null } = {}) {
+export function renderStoryString(params, { customStoryString = null, customContextSettings = null, promptMap = undefined } = {}) {
     try {
         const contextSettings = structuredClone({ ...DEFAULT_CONTEXT, ...customContextSettings });
         const storyString = customStoryString ?? contextSettings.story_string;
@@ -347,7 +349,7 @@ export function renderStoryString(params, { customStoryString = null, customCont
         let output = compiledTemplate(params);
 
         // substitute {{macro}} params that are not defined in the story string
-        output = substituteParams(output, params.user, params.char);
+        output = substituteParams(output, { name1Override: params.user, name2Override: params.char, promptMap });
 
         // remove leading newlines
         output = output.replace(/^\n+/, '');
@@ -442,13 +444,24 @@ const compareFunc = (first, second) => {
  * @param {boolean} forceSearch Whether to force search sorting
  * @param {import('./filters.js').FilterHelper} [filterHelper=null] Filter helper to use
  */
+export function applyCharacterSortSelection({ field, order, rule }) {
+    if (field !== 'search') {
+        power_user.sort_field = String(field);
+        power_user.sort_order = order;
+        power_user.sort_rule = rule;
+        markCharacterSortChanged();
+    }
+    printCharactersDebounced();
+    saveSettingsDebounced();
+}
+
 export function sortEntitiesList(entities, forceSearch, filterHelper = null) {
     filterHelper = filterHelper ?? entitiesFilter;
     if (power_user.sort_field == undefined || entities.length === 0) {
         return;
     }
 
-    const isSearch = forceSearch || $('#character_sort_order option[data-field="search"]').is(':selected');
+    const isSearch = forceSearch || !!document.querySelector('#character_sort_order option[data-field="search"]:checked');
 
     if (!isSearch && power_user.sort_order === 'random') {
         shuffle(entities);
@@ -557,20 +570,6 @@ jQuery(() => {
     $(window).on('resize', async () => {
         adjustAutocompleteDebounced();
         setHotswapsDebounced();
-    });
-
-    // Settings that go into the settings document
-    $(document).on('change', '#character_sort_order', function () {
-        const field = String($(this).find(':selected').data('field'));
-        // Save sort order, but do not save search sorting, as this is a temporary sorting option
-        if (field !== 'search') {
-            power_user.sort_field = field;
-            power_user.sort_order = $(this).find(':selected').data('order');
-            power_user.sort_rule = $(this).find(':selected').data('rule');
-            markCharacterSortChanged();
-        }
-        printCharactersDebounced();
-        saveSettingsDebounced();
     });
 });
 

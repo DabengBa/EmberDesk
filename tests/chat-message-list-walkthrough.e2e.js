@@ -210,7 +210,7 @@ async function selectPastChatByVisibleName(page, chatName) {
     await search.fill(chatName);
     const chatRow = page.locator('#select_chat_div .select_chat_block').filter({ hasText: chatName }).first();
     await expect(chatRow).toBeVisible();
-    await chatRow.getByRole('button', { name: `Open chat: ${chatName}`, exact: true }).click();
+    await chatRow.locator('button.select_chat_open').filter({ hasText: chatName }).click();
     await expect(page.locator('#shadow_select_chat_popup')).toBeHidden();
 }
 
@@ -354,6 +354,8 @@ test.describe('main chat message list walkthrough', () => {
 
         await testSetup.awaitST({ page });
         await grantClipboardPermissions(page);
+        // Message-list navigation does not exercise model-generated memory summaries.
+        await page.evaluate(() => { window.SillyTavern.getContext().chatCompletionSettings.chat_memory_enabled = false; });
         await selectCharacterFromVisibleList(page, characterName);
 
         await openPastChatSearchThenClose(page, 'Session');
@@ -388,6 +390,8 @@ test.describe('main chat message list walkthrough', () => {
         const consoleErrors = createConsoleErrorCollector(page);
 
         await testSetup.awaitST({ page });
+        // History navigation does not exercise background model summaries.
+        await page.evaluate(() => { window.SillyTavern.getContext().chatCompletionSettings.chat_memory_enabled = false; });
         await selectCharacterFromVisibleList(page, characterName);
         await openPastChatsPopup(page);
 
@@ -409,9 +413,11 @@ test.describe('main chat message list walkthrough', () => {
 
     test('chat history keeps a rename draft after the server rejects it', async ({ page }) => {
         await testSetup.awaitST({ page });
+        await page.evaluate(() => { window.SillyTavern.getContext().chatCompletionSettings.chat_memory_enabled = false; });
         await selectCharacterFromVisibleList(page, characterName);
         await openPastChatsPopup(page);
-        await expect(page.getByRole('button', { name: 'Chat options' })).toHaveAttribute('aria-expanded', 'false');
+        // The modal makes the underlying options button inert and inaccessible.
+        await expect(page.locator('#options_button')).toHaveAttribute('aria-expanded', 'false');
         const row = page.locator(`.select_chat_block[file_name="${seededChatName}"]`);
         await row.getByRole('button', { name: '重命名聊天文件' }).click();
         const dialog = page.getByRole('dialog', { name: '输入聊天的新名称：' });
@@ -419,7 +425,7 @@ test.describe('main chat message list walkthrough', () => {
         await name.fill('Rename draft retained after failure');
         await page.route('**/api/chats/rename', route => route.fulfill({ status: 500, json: { error: 'rejected' } }));
         await dialog.getByRole('button', { name: '重命名聊天', exact: true }).click();
-        await expect(dialog.getByRole('alert')).toContainText('Chat was not renamed');
+        await expect(dialog.getByRole('alert')).toContainText('聊天未重命名');
         await expect(name).toHaveValue('Rename draft retained after failure');
         await expect(name).toBeEnabled();
         await dialog.getByRole('button', { name: '取消', exact: true }).click();

@@ -1,4 +1,5 @@
-import { describe, expect, test } from '@jest/globals';
+import { beforeAll, describe, expect, jest, test } from '@jest/globals';
+import { loadTsModule } from './helpers/load-ts-module.mjs';
 
 import {
     GENERATION_COMMAND_KINDS,
@@ -11,11 +12,93 @@ import {
     createGenerationCommandPlan,
     createGenerationRequestEnvelope,
     executeGenerationAttempts,
+    installGenerationAttemptExecutor,
     isForegroundGenerationEntry,
     mapLegacyGenerationTypeToCommandKind,
     mapGenerationCommandKindToLifecycleType,
     simulateGenerationCommandOutcome,
 } from '../public/scripts/chat-generation-command-service.js';
+
+const typedAttemptExecutor = jest.fn((await loadTsModule('app/lib/generation/attempt-executor.ts')).executeGenerationAttempts);
+const typedSharedState = await loadTsModule('app/lib/generation/shared-state.ts');
+beforeAll(() => installGenerationAttemptExecutor(typedAttemptExecutor));
+test.each([
+    ['normal', {}, false, true, false, true],
+    ['normal', { regenerate: true }, false, false, true, true],
+    ['normal', { regenerate: true, preview: {} }, false, false, false, false],
+    ['quiet', { quietToLoud: true }, false, false, false, true],
+    ['quiet', { quietToLoud: true, backgroundGeneration: true }, false, false, false, false],
+    ['normal', { depth: 1, regenerate: true }, false, false, false, false],
+    ['normal', {}, true, false, false, false],
+])('typed entry policy for %s options %j and dryRun %s', (type, options, dryRun, captureComposer, regenerate, foreground) => {
+    expect(typedSharedState.prepareGenerationEnvelope(type, options, dryRun)).toEqual({ captureComposer, regenerate, foreground });
+});
+test('the synchronous browser facade and installed lifecycle share the entry policy', async () => {
+    const facade = await import('../public/scripts/chat-generation-command-service.js');
+    const runtime = await import('../public/scripts/generation-typed-runtime.js');
+    const lifecycle = runtime.createGenerationLifecycleService(() => ({ chatId: 'chat', contextRevision: 0 }));
+    expect(lifecycle.prepareGenerationEnvelope).toBe(facade.prepareGenerationEnvelope);
+});
+test('synchronous compatibility facades expose the same typed generation policies', async () => {
+    const shared = await import('../public/scripts/generation-shared-state.js');
+    const command = await import('../public/scripts/chat-generation-command-service.js');
+    const lifecycle = await import('../public/scripts/chat-generation-lifecycle.js');
+    const recovery = await import('../public/scripts/chat-generation-auto-recovery.js');
+    for (const facade of [command, lifecycle, recovery]) {
+        expect(Object.keys(facade).length).toBeGreaterThan(0);
+        for (const name of Object.keys(facade)) {
+            expect(name in shared).toBe(true);
+            expect(facade[name]).toBe(shared[name]);
+        }
+    }
+});
+test('the attempt facade rejects execution before the typed runtime is installed', async () => {
+    await jest.isolateModulesAsync(async () => {
+        const fresh = await import('../public/scripts/chat-generation-command-service.js');
+        await expect(fresh.executeGenerationAttempts({ attempts: [], runAttempt: async () => {}, handleFailure: async () => ({}) })).rejects.toThrow('Generation attempt executor is not installed.');
+    });
+});
+
+test('stop while a retry is preparing prevents the next transport attempt', async () => {
+    let resume;
+    const waiting = new Promise(resolve => { resume = resolve; });
+    const controller = new AbortController();
+    const runAttempt = jest.fn().mockRejectedValueOnce(new TypeError('network'));
+    const pending = executeGenerationAttempts({
+        attempts: [{}, {}], signal: controller.signal, runAttempt,
+        handleFailure: async () => ({ action: 'retry' }),
+        prepareRetryAttempt: async (_attempt, index) => { if (index === 1) await waiting; },
+    });
+    await new Promise(resolve => setImmediate(resolve));
+    controller.abort();
+    resume();
+    await expect(pending).rejects.toThrow('Generation was aborted.');
+    expect(runAttempt).toHaveBeenCalledTimes(1);
+});
+
+test('stop before a late transport rejection prevents recovery', async () => {
+    let rejectTransport;
+    const waiting = new Promise((_resolve, reject) => { rejectTransport = reject; });
+    const controller = new AbortController();
+    const handleFailure = jest.fn(async () => ({ action: 'retry' }));
+    const pending = executeGenerationAttempts({ attempts: [{}, {}], signal: controller.signal, runAttempt: () => waiting, handleFailure });
+    await new Promise(resolve => setImmediate(resolve));
+    controller.abort();
+    rejectTransport(new TypeError('network'));
+    await expect(pending).rejects.toThrow('Generation was aborted.');
+    expect(handleFailure).not.toHaveBeenCalled();
+});
+
+test('stop before a late transport success prevents publishing the result', async () => {
+    let resolveTransport;
+    const waiting = new Promise(resolve => { resolveTransport = resolve; });
+    const controller = new AbortController();
+    const pending = executeGenerationAttempts({ attempts: [{}], signal: controller.signal, runAttempt: () => waiting, handleFailure: async () => ({ action: 'retry' }) });
+    await new Promise(resolve => setImmediate(resolve));
+    controller.abort();
+    resolveTransport('late response');
+    await expect(pending).rejects.toThrow('Generation was aborted.');
+});
 
 describe('chat generation command service', () => {
     test('exposes the complete public command kind matrix', () => {
@@ -374,4 +457,15 @@ describe('chat generation command service', () => {
             'run:1:fallback',
         ]);
     });
+});
+
+test('the JS attempt facade can install exactly one typed executor', async () => {
+    const execute = typedAttemptExecutor;
+    execute.mockClear();
+    installGenerationAttemptExecutor(execute);
+    expect(() => installGenerationAttemptExecutor(() => {})).toThrow('Generation attempt executor already installed.');
+    await expect(executeGenerationAttempts({
+        attempts: [1], runAttempt: async () => 'typed', handleFailure: async () => ({}),
+    })).resolves.toBe('typed');
+    expect(execute).toHaveBeenCalledTimes(1);
 });

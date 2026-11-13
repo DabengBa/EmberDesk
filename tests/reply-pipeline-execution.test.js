@@ -1,7 +1,11 @@
 import { beforeEach, expect, jest, test } from '@jest/globals';
 
 jest.unstable_mockModule('../public/lib.js', () => ({ DOMPurify: {} }));
-jest.unstable_mockModule('../public/script.js', () => Object.fromEntries(['addOneMessage', 'chat', 'getGeneratingApi', 'getGeneratingModel', 'main_api', 'saveChatConditional', 'system_avatar', 'systemUserName'].map(key => [key, key === 'main_api' ? 'openai' : jest.fn()])));
+const chat = [];
+const emit = jest.fn(async () => {});
+const save = jest.fn(async predicate => { if (!predicate || predicate()) return true; });
+jest.unstable_mockModule('../public/script.js', () => ({ addOneMessage: jest.fn(), chat, getGeneratingApi: jest.fn(), getGeneratingModel: jest.fn(), main_api: 'openai', saveChatConditional: save, system_avatar: '', systemUserName: 'system' }));
+jest.unstable_mockModule('../public/scripts/events.js', () => ({ eventSource: { emit }, event_types: { TOOL_CALLS_PERFORMED: 'performed', TOOL_CALLS_RENDERED: 'rendered' } }));
 jest.unstable_mockModule('../public/scripts/feature-settings.js', () => ({ feature_settings: { tool_bindings: [{ name: 'analyze', enabled: true }, { name: 'later', enabled: true }] } }));
 jest.unstable_mockModule('../public/scripts/extensions/regex/engine.js', () => ({ getRegexedString: jest.fn(), regex_placement: {} }));
 jest.unstable_mockModule('../public/scripts/message-service.js', () => ({ updateMessageBlock: jest.fn() }));
@@ -18,8 +22,10 @@ const action = jest.fn(async () => 'raw text');
 const formatter = jest.fn(() => 'toast');
 const call = (name, id = 'id') => ({ id, type: 'function', function: { name, arguments: '{ "content": "raw text" }' } });
 globalThis.toastr = { info: jest.fn(), clear: jest.fn() };
+globalThis.document = { createElement: () => ({ classList: { add() {} }, setAttribute() {}, append() {}, outerHTML: '<details></details>' }) };
 beforeEach(() => {
     action.mockClear(); formatter.mockClear();
+    chat.length = 0; emit.mockReset().mockResolvedValue(undefined); save.mockClear();
     oai_settings.reply_pipeline.enabled = true;
     run = { steps: [{ tool: 'analyze' }], index: 0 };
     setPipelineRunStateProvider(() => run);
@@ -28,6 +34,48 @@ beforeEach(() => {
         ToolManager.unregisterFunctionTool(name);
         ToolManager.registerFunctionTool({ name, description: `${name} description`, action, formatMessage: formatter, parameters: {}, stealth: false });
     }
+});
+
+test('stop during asynchronous tool formatting prevents starting the tool', async () => {
+    run = null;
+    let resume;
+    formatter.mockImplementationOnce(() => new Promise(resolve => { resume = resolve; }));
+    let owned = true;
+    const pending = ToolManager.invokeFunctionTools([[call('outside')]], { ownsRun: () => owned });
+    await new Promise(resolve => setImmediate(resolve));
+    owned = false;
+    resume('formatted');
+    await pending;
+    expect(action).not.toHaveBeenCalled();
+});
+
+test('ownership lost during performed event prevents publishing the tool card', async () => {
+    let resume;
+    emit.mockImplementationOnce(() => new Promise(resolve => { resume = resolve; }));
+    let owned = true;
+    const pending = ToolManager.saveFunctionToolInvocations([{ name: 'outside', parameters: '{}', result: 'result' }], { ownsRun: () => owned });
+    await new Promise(resolve => setImmediate(resolve));
+    owned = false;
+    resume();
+    await pending;
+    expect(chat).toEqual([]);
+    expect(save).not.toHaveBeenCalled();
+});
+
+test('queued tool-card save receives a live ownership predicate', async () => {
+    let release;
+    let owned = true;
+    let committed = false;
+    save.mockImplementationOnce(async predicate => {
+        await new Promise(resolve => { release = resolve; });
+        if (!predicate || predicate()) committed = true;
+    });
+    const pending = ToolManager.saveFunctionToolInvocations([{ name: 'outside', parameters: '{}', result: 'result' }], { ownsRun: () => owned });
+    await new Promise(resolve => setImmediate(resolve));
+    owned = false;
+    release();
+    await pending;
+    expect(committed).toBe(false);
 });
 
 test('native tools remain available without the retired Slash registration API', async () => {

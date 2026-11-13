@@ -1,19 +1,21 @@
 import { eventSource, event_types } from './events.js';
 import { TOKEN_PADDING, inject_ids } from './constants.js';
 import { executeGenerationAttempts, createGenerationCommandPlan, createGenerationRequestEnvelope } from './chat-generation-command-service.js';
+import * as generationCommandService from './chat-generation-command-service.js';
 import {
     getGenerationFailureDecision,
-    getGenerationSuccessFinalization,
+
     hasFallbackProviderForGeneration,
 } from './chat-generation-lifecycle.js';
 import { getWorldInfoPrompt } from './world-info-service.js';
-import { requireGenerationShellContext } from './generation-shell-context.js';
+import { getGenerationLifecycleService, requireGenerationShellContext } from './generation-shell-context.js';
 import { getComposerSnapshot, clearComposerValue } from './main-chat-composer-service.js';
 import { applyChatMemoryToCoreChat } from './chat-memory-service.js';
 import {
     endPipelineRun,
     getPipelineTriggerTag,
     getPreviewPipelineTriggerTag,
+    getRunnablePipeline,
     getPipelineStepMeta,
     getCurrentPipelineStep,
     isPipelineFallbackRound,
@@ -26,6 +28,9 @@ import { getChatCompletionModelFromSettings, isChatCompletionStreaming } from '.
 import { getFallbackOpenAIModel } from './chat-generation-auto-recovery.js';
 import { t } from './i18n.js';
 import { assertPipelineResponseAllowed, getActivePipelineRunId, getPipelineRunState } from './reply-pipeline-core.js';
+import { derivePreviewBudget, isUserStoppedGenerationError } from './generation-shared-state.js';
+
+export { derivePreviewBudget } from './generation-shared-state.js';
 
 function shell() {
     return requireGenerationShellContext();
@@ -38,23 +43,9 @@ function shell() {
  * @returns {boolean}
  */
 export function isUserStoppedGeneration(exception) {
-    if (state.abortController?.signal?.aborted) {
-        return true;
-    }
-    const message = String(exception?.message ?? '').toLowerCase();
-    return message.includes('generation was aborted') || message.includes('clicked stop button');
+    return isUserStoppedGenerationError(exception, Boolean(shell().state.abortController?.signal?.aborted));
 }
 
-const state = new Proxy({}, {
-    get: (_, key) => shell().state[key],
-    set: (_, key, value) => {
-        shell().state[key] = value;
-        return true;
-    },
-    has: (_, key) => key in shell().state,
-    ownKeys: () => Reflect.ownKeys(shell().state),
-    getOwnPropertyDescriptor: (_, key) => Object.getOwnPropertyDescriptor(shell().state, key),
-});
 
 const addChatsSeparator = (...args) => shell().addChatsSeparator(...args);
 const cleanUpMessage = (...args) => shell().cleanUpMessage(...args);
@@ -127,6 +118,7 @@ const isOdd = (...args) => shell().isOdd(...args);
 const delay = (...args) => shell().delay(...args);
 
 export class GenerationStreamSession {
+    #streamState;
     /**
      * Creates a new streaming processor.
      * @param {string} type Generation type
@@ -134,9 +126,17 @@ export class GenerationStreamSession {
      * @param {Date} timeStarted Date when generation was started
      * @param {PromptReasoning} promptReasoning Prompt reasoning instance
      */
-    constructor(type, forceName2, timeStarted, promptReasoning) {
-        this.result = '';
-        this.messageId = -1;
+    constructor(type, forceName2, timeStarted, promptReasoning, ownsRun = () => true) {
+        this.#streamState = getGenerationLifecycleService().createStreamState(timeStarted);
+        // Keep the existing session API while the installed typed lifecycle owns the mutable stream data.
+        for (const key of Object.keys(this.#streamState)) {
+            Object.defineProperty(this, key, {
+                enumerable: true,
+                configurable: true,
+                get: () => this.#streamState[key],
+                set: value => { this.#streamState[key] = value; },
+            });
+        }
         /** @type {HTMLElement} */
         this.messageDom = null;
         /** @type {HTMLElement} */
@@ -145,29 +145,12 @@ export class GenerationStreamSession {
         this.messageTimerDom = null;
         this.type = type;
         this.force_name2 = forceName2;
-        this.isStopped = false;
-        this.isFinished = false;
+        this.ownsRun = ownsRun;
         this.generator = this.nullStreamingGeneration;
-        this.abortController = new AbortController();
-        this.firstMessageText = '...';
-        this.timeStarted = timeStarted;
-        /** @type {number?} */
-        this.timeToFirstToken = null;
-        this.createdAt = new Date();
-        this.toolCalls = [];
         // Initialize reasoning in its own handler
-        this.reasoningHandler = new state.ReasoningHandler(timeStarted);
+        this.reasoningHandler = new (shell().state.ReasoningHandler)(timeStarted);
         /** @type {PromptReasoning} */
         this.promptReasoning = promptReasoning;
-        /** @type {string[]} */
-        this.images = [];
-        /** @type {string?} */
-        this.reasoningSignature = null;
-        this.suppressErrorRecovery = false;
-        this.isFinalizing = false;
-        this.observedTokenCount = 0;
-        this.observedChunkCount = 0;
-        this.fromFallbackAttempt = false;
     }
 
     /**
@@ -180,6 +163,11 @@ export class GenerationStreamSession {
             return;
         }
 
+        if (this.messageDom && this.messageDom.getAttribute('mesid') !== String(messageId)) {
+            this.messageDom = null;
+            this.messageTextDom = null;
+            this.messageTimerDom = null;
+        }
         if (this.messageDom === null || this.messageTextDom === null) {
             this.messageDom = document.querySelector(`#chat .mes[mesid="${messageId}"]`);
             this.messageTextDom = this.messageDom?.querySelector('.mes_text');
@@ -207,130 +195,62 @@ export class GenerationStreamSession {
         unblockGeneration();
     }
 
+    /** Browser effects for the installed typed stream message lifecycle. */
+    #messagePorts() {
+        return {
+            getMessage: id => shell().state.chat[id],
+            indexOfMessage: message => shell().state.chat.indexOf(message),
+            saveInitial: (text, ownsRun) => saveReply({ type: this.type, getMessage: text, fromStreaming: true, ownsRun }),
+            lastMessageId: () => shell().state.chat.length - 1,
+            checkDom: id => this.#checkDomElements(id),
+            updateVisibility: () => this.#updateMessageBlockVisibility(),
+            clean: (text, isFinal, stoppingStrings) => cleanUpMessage({ getMessage: text, displayIncompleteSentences: !isFinal, stoppingStrings }),
+            count: (text, token) => countOccurrences(text, token),
+            isOdd: count => isOdd(count),
+            startUI: () => this.markUIGenStarted(),
+            stopUI: () => this.markUIGenStopped(),
+            scroll: () => scrollChatToBottom({ waitForFrame: true }),
+            isScrollLocked: () => shell().state.scrollLock,
+            refresh: () => scheduleMainChatMessageListPanelRefresh(),
+            mount: () => { void mountReactMainChatMessageListPanel(); },
+            addCopyButtons: id => {
+                const element = isReactMainChatOwner() ? null : shell().state.chatElement.find(`.mes[mesid="${id}"]`);
+                if (element) addCopyToCodeBlocks(element);
+            },
+            processImages: (message, imageUrls, ownsRun) => processImageAttachment(message, { imageUrls, ownsRun }),
+            renderImages: message => {
+                if (!isReactMainChatOwner()) appendMediaToMessage(message, $(this.messageDom));
+                else scheduleMainChatMessageListPanelRefresh();
+            },
+            emitReceived: (id, type) => eventSource.emit(event_types.MESSAGE_RECEIVED, id, type),
+            emitRendered: (id, type) => eventSource.emit(event_types.CHARACTER_MESSAGE_RENDERED, id, type),
+            saveChat: ownsRun => saveChatConditional(ownsRun),
+            showFailure: id => showGenerationFailureRecovery(id),
+        };
+    }
+
     async onStartStreaming(text) {
-        await saveReply({ type: this.type, getMessage: text, fromStreaming: true });
-        const messageId = state.chat.length - 1;
-        await this.#checkDomElements(messageId);
-        this.markUIGenStarted();
-        scrollChatToBottom({ waitForFrame: true });
-        return messageId;
+        return getGenerationLifecycleService().startStreamMessage(this, this.#messagePorts(), text);
     }
 
     async onProgressStreaming(messageId, text, isFinal) {
-        let processedText = cleanUpMessage({
-            getMessage: text,
-            displayIncompleteSentences: !isFinal,
-            stoppingStrings: this.stoppingStrings,
-        });
-
-        const charsToBalance = ['*', '"', '```', '~~~'];
-        for (const char of charsToBalance) {
-            if (!isFinal && isOdd(countOccurrences(processedText, char))) {
-                const separator = char.length > 1 ? '\n' : '';
-                processedText = processedText.trimEnd() + separator + char;
-            }
-        }
-
-        const mesChanged = state.chat[messageId].mes !== processedText;
-        await this.#checkDomElements(messageId);
-        this.#updateMessageBlockVisibility();
-        const currentTime = new Date();
-        state.chat[messageId].mes = processedText;
-        state.chat[messageId].gen_started = this.timeStarted;
-        state.chat[messageId].gen_finished = currentTime;
-        if (!state.chat[messageId].extra) {
-            state.chat[messageId].extra = {};
-        }
-        state.chat[messageId].extra.time_to_first_token = this.timeToFirstToken;
-
-        // Update reasoning
-        await this.reasoningHandler.process(messageId, mesChanged, this.promptReasoning);
-        processedText = state.chat[messageId].mes;
-
-        scheduleMainChatMessageListPanelRefresh();
-
-        if (!state.scrollLock) {
-            scrollChatToBottom({ waitForFrame: true });
-        }
+        return getGenerationLifecycleService().progressStreamMessage(this, this.#messagePorts(), messageId, text, isFinal);
     }
 
-    /**
-     * Finalizes an intermediary message after generation is complete, or a tool call is performed.
-     * Performs essential message processing (code blocks, reasoning, attachments, events)
-     * without the heavier finish operations (UI unlock - optional, sound, save chat).
-     * @param {number} messageId - The message ID to finalize.
-     * @param {string} text - The message text.
-     * @param {Object} options - Additional options for finalization.
-     * @param {boolean} options.unlockUI - Whether to unlock the generation UI.
-     */
     async finalizeIntermediaryMessage(messageId, text, { unlockUI = true }) {
-        this.isFinalizing = true;
-        void mountReactMainChatMessageListPanel();
-        await this.onProgressStreaming(messageId, text, true);
-        const messageElement = isReactMainChatOwner() ? null : state.chatElement.find(`.mes[mesid="${messageId}"]`);
-        const message = state.chat[messageId];
-        if (messageElement) {
-            addCopyToCodeBlocks(messageElement);
-        }
-
-        await this.reasoningHandler.finish(messageId);
-
-        if (Array.isArray(this.images) && this.images.length > 0) {
-            await processImageAttachment(message, { imageUrls: this.images });
-            if (!isReactMainChatOwner()) {
-                appendMediaToMessage(message, $(this.messageDom));
-            } else {
-                scheduleMainChatMessageListPanelRefresh();
-            }
-        }
-
-        // Store reasoning signature for models that support multi-turn context
-        if (this.reasoningSignature) {
-            message.extra = message.extra || {};
-            message.extra.reasoning_signature = this.reasoningSignature;
-        }
-
-        if (unlockUI) {
-            this.markUIGenStopped();
-        }
-
-        await eventSource.emit(event_types.MESSAGE_RECEIVED, this.messageId, this.type);
-        await eventSource.emit(event_types.CHARACTER_MESSAGE_RENDERED, this.messageId, this.type);
-
-        this.isFinalizing = false;
-        void mountReactMainChatMessageListPanel();
+        return getGenerationLifecycleService().finalizeStreamMessage(this, this.#messagePorts(), messageId, text, unlockUI);
     }
 
     async onFinishStreaming(messageId, text) {
-        await this.finalizeIntermediaryMessage(messageId, text, { unlockUI: true });
-
-        await saveChatConditional();
+        return getGenerationLifecycleService().finishStreamMessage(this, this.#messagePorts(), messageId, text);
     }
 
     async onErrorStreaming({ suppressRecovery = false } = {}) {
-        this.isStopped = true;
-        this.isFinalizing = false;
-
-        if (this.messageId !== -1 && this.result) {
-            await this.onProgressStreaming(this.messageId, this.result, true);
-        }
-
-        this.markUIGenStopped();
-        if (suppressRecovery) {
-            return;
-        }
-
-        showGenerationFailureRecovery(this.messageId);
-
-        eventSource.emit(event_types.MESSAGE_RECEIVED, this.messageId, this.type);
-        eventSource.emit(event_types.CHARACTER_MESSAGE_RENDERED, this.messageId, this.type);
+        return getGenerationLifecycleService().errorStreamMessage(this, this.#messagePorts(), suppressRecovery);
     }
 
     onStopStreaming() {
-        this.abortController.abort();
-        this.isStopped = true;
-        this.isFinalizing = false;
-        this.isFinished = true;
+        getGenerationLifecycleService().stopStream(this.#streamState);
         rememberMainChatStreamingTransportProcessorTerminal(this, 'stopped');
         void mountReactMainChatMessageListPanel();
     }
@@ -344,59 +264,36 @@ export class GenerationStreamSession {
     }
 
     async generate() {
-        if (this.messageId == -1) {
-            this.messageId = await this.onStartStreaming(this.firstMessageText);
-            await delay(1); // delay for message to be rendered
-            state.scrollLock = false;
-        }
-
-        // Stopping strings are expensive to calculate, especially with macros enabled. To remove stopping strings
-        // when streaming, we cache the result of getStoppingStrings instead of calling it once per token.
-        this.stoppingStrings = getStoppingStrings(state.main_api);
-
-        try {
-            const sw = new state.Stopwatch(1000 / STREAMING_FPS);
-            const timestamps = [];
-            for await (const { text, toolCalls, state } of this.generator()) {
-                const now = Date.now();
-                timestamps.push(now);
-                if (!this.timeToFirstToken) {
-                    this.timeToFirstToken = now - this.createdAt.getTime();
-                }
-                if (this.isStopped || this.abortController.signal.aborted) {
-                    return this.result;
-                }
-
-                this.toolCalls = toolCalls;
-                this.result = text;
-                this.observedTokenCount += 1;
-                this.observedChunkCount += 1;
-                scheduleMainChatMessageListPanelRefresh();
-                // Get the updated reasoning string into the handler
-                this.reasoningHandler.updateReasoning(this.messageId, state?.reasoning);
-                this.images = state?.images ?? [];
-                this.reasoningSignature = state?.signature ?? null;
-                await eventSource.emit(event_types.STREAM_TOKEN_RECEIVED, text);
-                await sw.tick(async () => await this.onProgressStreaming(this.messageId, text));
-            }
-            const seconds = (timestamps[timestamps.length - 1] - timestamps[0]) / 1000;
-            console.warn(`Stream stats: ${timestamps.length} tokens, ${seconds.toFixed(2)} seconds, rate: ${Number(timestamps.length / seconds).toFixed(2)} TPS`);
-        } catch (err) {
-            // in the case of a self-inflicted abort, we have already cleaned up
-            if (!this.isFinished) {
-                console.error(err);
-                await this.onErrorStreaming({ suppressRecovery: this.suppressErrorRecovery });
-            }
-            return this.result;
-        }
-
-        this.isFinished = true;
-        void mountReactMainChatMessageListPanel();
-        return this.result;
+        return getGenerationLifecycleService().generateStream(this, {
+            delay: () => delay(1),
+            resetScroll: () => { shell().state.scrollLock = false; },
+            stoppingStrings: () => getStoppingStrings(shell().state.main_api),
+            createStopwatch: () => new (shell().state.Stopwatch)(1000 / STREAMING_FPS),
+            refresh: () => scheduleMainChatMessageListPanelRefresh(),
+            emitToken: text => eventSource.emit(event_types.STREAM_TOKEN_RECEIVED, text),
+            mount: () => { void mountReactMainChatMessageListPanel(); },
+        });
     }
 }
 
+export function getCurrentGenerationContextIdentity() {
+    return { chatId: shell().state.characters?.[shell().state.this_chid]?.chat ?? null, chatReference: shell().state.chat, contextRevision: getComposerSnapshot().contextRevision };
+}
+
 export async function executeGenerationRequestInShell(generationEnvelope) {
+    const { type, options, dryRun } = generationEnvelope;
+    const lifecycle = getGenerationLifecycleService();
+    return lifecycle.run({
+        foreground: generationCommandService.isForegroundGenerationEntry
+            ? generationCommandService.isForegroundGenerationEntry(type, options, dryRun)
+            : !(dryRun || options.depth || options.preview) && (type !== 'quiet' || (!options.backgroundGeneration && options.quietToLoud)),
+        signal: options?.signal,
+        execute: lease => executeOwnedGenerationRequestInShell(generationEnvelope, lease),
+        onComplete: type === 'quiet' ? options?.onOwnedCompletion : undefined,
+    });
+}
+
+async function executeOwnedGenerationRequestInShell(generationEnvelope, lease) {
     let {
         type,
         options,
@@ -415,1267 +312,426 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
         depth = 0,
         preview = null,
     } = options;
-    // Preview mode: assemble exactly what a send would assemble — tools,
-    // squash, pipeline shaping included — but never commits chat state,
-    // attachments, or the fetch. Shares the whole assembly path with 'send'.
-    const isPreview = Boolean(preview && typeof preview === 'object');
-    const previewWarnings = [];
-    if (isPreview) {
-        dryRun = true;
-    }
-    // Regenerate mode: re-run the current turn with the same context. It is a
-    // normal generation in every lifecycle respect — the difference is the
-    // input: no composer read, no user message, no slash-command handling; the
-    // old generated tail is snapshotted and removed before prompt assembly.
-    // Quiet/nested/dry-run calls must never take the destructive branch — a
-    // misused flag there would delete the tail and write nothing back.
-    const isRegenerate = options?.regenerate === true && type === 'normal' && !depth && !dryRun;
-    const composerSubmission = type !== 'quiet' && !depth && !isRegenerate && (!dryRun || isPreview)
-        ? options.composerSubmission ?? getComposerSnapshot()
-        : null;
-    const submittedChat = state.chat;
-    // Establish cancellation before the first await, so Stop cannot be lost
-    // while a character or GENERATION_STARTED listener is still loading.
-    if (!isPreview && !(state.abortController && signal)) {
-        state.abortController = new AbortController();
-    }
-    const submissionSignal = state.abortController?.signal;
-    const cancelStaleSubmission = () => {
-        if (!composerSubmission || dryRun) return false;
-        const current = getComposerSnapshot();
-        if (state.chat !== submittedChat || current.contextKey !== composerSubmission.contextKey || current.contextRevision !== composerSubmission.contextRevision || submissionSignal?.aborted || signal?.aborted) {
-            unblockGeneration(type);
-            return true;
-        }
-        return false;
-    };
-    // Capture conversation identity before any asynchronous assembly or retries.
-    const requestTrace = {
-        type,
-        chatId: state.characters?.[state.this_chid]?.chat ?? null,
-        charName: state.name2,
-        regenerate: isRegenerate,
-    };
+
     console.log('Generate entered');
-    if (!isPreview) {
-        setGenerationProgress(0);
-        state.generation_started = new Date();
-    }
-
-    // Prevent generation from shallow characters
-    await unshallowCharacter(state.this_chid);
-    if (cancelStaleSubmission()) return;
-
-    await eventSource.emit(event_types.GENERATION_STARTED, type, { automatic_trigger, force_name2, quiet_prompt, quietToLoud, skipWIAN, signal, quietImage, depth, regenerate: isRegenerate }, dryRun);
-    if (cancelStaleSubmission()) return;
-
-    await eventSource.emit(event_types.GENERATION_AFTER_COMMANDS, type, { automatic_trigger, force_name2, quiet_prompt, quietToLoud, skipWIAN, signal, quietImage, regenerate: isRegenerate }, dryRun);
-    if (cancelStaleSubmission()) return;
-
-    if (!dryRun) {
-        // Ping server to make sure it is still alive
-        const pingResult = await pingServer();
-        if (cancelStaleSubmission()) return;
-
-        if (!pingResult) {
-            unblockGeneration(type);
-            toastr.error(t`Verify that the server is running and accessible.`, t`ST Server cannot be reached`);
-            throw new Error('Server unreachable');
-        }
-
-        // If generated any message, set the flag to indicate it can't be recreated again.
-        state.chat_metadata.tainted = true;
-    }
-
-    //#########QUIET PROMPT STUFF##############
-    // process quiet prompt params
-    if (quiet_prompt) {
-        quiet_prompt = substituteParams(quiet_prompt);
-    }
-
-    const hasBackendConnection = state.online_status !== 'no_connection';
-
-    // We can't do anything because we're not in a chat right now. (Unless it's a dry run, in which case we need to
-    // assemble the prompt so we can count its tokens regardless of whether a chat is active.)
-    if (!dryRun && !hasBackendConnection) {
-        state.is_send_press = false;
-        return Promise.resolve();
-    }
-
-    let textareaText;
-    if (isRegenerate) {
-        // Direct Generate() callers bypass the menu-layer canRegenerate
-        // check — a second regenerate must never start while a generation is
-        // already running, or it would delete the tail out from under it.
-        if (state.is_send_press) {
-            console.warn('Regenerate skipped: a generation is already in flight');
-            return Promise.resolve();
-        }
-        // Not a composer send: the draft stays untouched (never read, never
-        // cleared), no user message is re-sent, and send_if_empty must not
-        // fire — the previous user message is already in the history.
-        state.is_send_press = true;
-        textareaText = '';
-    } else if (type !== 'quiet' && !depth && (!dryRun || isPreview)) {
-        if (!isPreview) {
-            state.is_send_press = true;
-        }
-        textareaText = composerSubmission.value;
-        if (!isPreview && getComposerSnapshot().value === textareaText) {
-            clearComposerValue({ expected: composerSubmission });
-        }
-    } else {
-        textareaText = '';
-    }
-
-    if (!dryRun) {
-        deactivateSendButtons();
-    }
-
-    let regenerateSnapshot = null;
-    if (isRegenerate && !dryRun) {
-        // Discard the current turn's generated tail (assistant reply, same-turn
-        // tool/pipeline cards, recovery rows) before the prompt is assembled —
-        // the old reply must not feed the new request. All early bail-outs
-        // above already ran, so the removal is only ever followed by a real
-        // generation. The snapshot restores the tail when the turn fails
-        // outright (not when the user clicks stop).
-        regenerateSnapshot = removeRegenerateTurnTail();
-    }
-
-    let { messageBias, promptBias } = getBiasStrings(textareaText, type);
-
-    //*********************************
-    //PRE FORMATING STRING
-    //*********************************
-
-    // Quiet background requests should not attach pending files to the chat
-    const noAttachTypes = [
-        'quiet',
-    ];
-    //for normal messages sent from user..
-    if ((textareaText != '' || (hasPendingFileAttachment() && !noAttachTypes.includes(type))) && !automatic_trigger && type !== 'quiet' && !dryRun && !depth && !isRegenerate) {
-        // If user message contains no text other than bias - send as a system message
-        if (messageBias && !removeMacros(textareaText)) {
-            sendSystemMessage(state.system_message_types.GENERIC, ' ', { bias: messageBias });
-        } else {
-            await sendMessageAsUser(textareaText, messageBias, null, false, undefined, { signal: submissionSignal });
-        }
-    } else if (textareaText == '' && !automatic_trigger && !dryRun && !isRegenerate && [undefined, 'normal'].includes(type) && state.main_api == 'openai' && state.oai_settings.send_if_empty.trim().length > 0 && !depth) {
-        // Use send_if_empty if set and the user message is empty. Only when sending messages normally
-        await sendMessageAsUser(state.oai_settings.send_if_empty.trim(), messageBias, null, false, undefined, { signal: submissionSignal });
-    }
-    if (cancelStaleSubmission()) return;
-
-    // Preview-only mirror of the two send paths above: build the pending user
-    // message without writing chat state. Attachments are reported, never
-    // materialized (populateFileAttachment writes files to disk).
-    let previewPendingMessage = null;
-    if (isPreview) {
-        const wantsUserMessage = (textareaText != '' || hasPendingFileAttachment()) && !automatic_trigger && type !== 'quiet';
-        const wantsEmptyReplacement = !wantsUserMessage && textareaText == '' && !automatic_trigger && type === 'normal' && state.main_api == 'openai' && state.oai_settings.send_if_empty.trim().length > 0;
-
-        if (hasPendingFileAttachment()) {
-            previewWarnings.push('pending-attachment');
-        }
-        if (wantsUserMessage) {
-            if (messageBias && !removeMacros(textareaText)) {
-                // Real send emits a bias-only system message; it never enters the prompt.
-                previewWarnings.push('bias-only-system');
-            } else {
-                previewPendingMessage = await buildUserMessage(textareaText, messageBias);
-            }
-        } else if (wantsEmptyReplacement) {
-            previewPendingMessage = await buildUserMessage(state.oai_settings.send_if_empty.trim(), messageBias);
-        }
-    }
-
-    // Preview is a chat-completion (openai) feature — bail before the legacy
-    // text-completion machinery (in-context markers, prompt combining) runs.
-    if (isPreview && state.main_api !== 'openai') {
-        return {
-            kind: 'prompt-preview-empty',
-            reason: 'unsupported-api',
-            warnings: previewWarnings,
-        };
-    }
-
-    let canPerformToolCalls = !dryRun && state.ToolManager.canPerformToolCalls(type) && depth < state.ToolManager.RECURSE_LIMIT;
-    let generate_data;
-    let previewChatCompletion = null;
-    let summarizedEntries = [];
-    const promptReasoning = new state.PromptReasoning();
-    if (!dryRun && type === 'normal' && state.main_api === 'openai' && getPipelineRunState()?.messages) {
-        // Keep the existing generation owner, but never rescan WI, re-expand
-        // macros or replay folded UI cards for an in-flight continuation.
-        const [prompt] = await prepareOpenAIMessages({ type, pipelineStepTag: getPipelineTriggerTag(type), pipelineStepModel: resolvePipelineModel(getChatCompletionModelFromSettings(state.oai_settings)) }, false);
-        generate_data = { prompt };
-    } else {
-        let {
-            description,
-            system,
-            charDepthPrompt,
-            creatorNotes,
-            scenario,
-        } = getCharacterCardFields();
-
-        // Depth prompt (character-specific A/N)
-        removeDepthPrompts();
-        const depthPromptText = charDepthPrompt || '';
-        const depthPromptDepth = state.characters[state.this_chid]?.data?.extensions?.depth_prompt?.depth ?? state.depth_prompt_depth_default;
-        const depthPromptRole = getExtensionPromptRoleByName(state.characters[state.this_chid]?.data?.extensions?.depth_prompt?.role ?? state.depth_prompt_role_default);
-        setExtensionPrompt(inject_ids.DEPTH_PROMPT, depthPromptText, state.extension_prompt_types.IN_CHAT, depthPromptDepth, false, depthPromptRole);
-
-        // First message in fresh 1-on-1 chat reacts to user/character settings changes.
-        // Preview works on a copy of the chat — the pending user message is appended
-        // exactly where sendMessageAsUser would have pushed it (end of history).
-        const chatForAssembly = isPreview
-            ? (previewPendingMessage ? [...state.chat, previewPendingMessage] : state.chat.slice())
-            : state.chat;
-        if (chatForAssembly.length) {
-            if (isPreview) {
-                chatForAssembly[0] = { ...chatForAssembly[0], mes: substituteParams(chatForAssembly[0].mes) };
-            } else {
-                state.chat[0].mes = substituteParams(state.chat[0].mes);
-            }
-        }
-
-        // Collect messages with usable content
-        const canUseTools = state.ToolManager.isToolCallingSupported();
-        let coreChat = chatForAssembly.filter(x => !x.is_system || (canUseTools && Array.isArray(x.extra?.tool_invocations)));
-
-        // Chat memory projection: turns covered by an active summary collapse
-        // into a single pseudo message in place — the canonical chat array stays
-        // untouched, World Info scanning sees the replaced text, and the pseudo
-        // items flow through the same regex/reasoning pipeline as real messages.
-        const chatMemoryProjection = applyChatMemoryToCoreChat(coreChat, { chat: chatForAssembly, dryRun });
-        coreChat = chatMemoryProjection.items;
-        summarizedEntries = chatMemoryProjection.summarized;
-
-        coreChat = await Promise.all(coreChat.map(async (/** @type {ChatMessage} */ chatItem, index) => {
-            let message = chatItem.mes;
-            let regexType = chatItem.is_user ? state.regex_placement.USER_INPUT : state.regex_placement.AI_OUTPUT;
-            let options = { isPrompt: true, depth: (coreChat.length - index - 1) };
-
-            let regexedMessage = getRegexedString(message, regexType, options);
-            regexedMessage = await appendFileContent(chatItem, regexedMessage);
-
-            const titles = [];
-            if (chatItem?.extra?.append_title && chatItem?.extra?.title) {
-                titles.push(chatItem.extra.title);
-            }
-            if (Array.isArray(chatItem?.extra?.media)) {
-                for (const mediaItem of chatItem.extra.media) {
-                    if (mediaItem?.title && mediaItem?.append_title) {
-                        titles.push(mediaItem.title);
-                    }
-                }
-            }
-            if (titles.length > 0) {
-                regexedMessage = `${regexedMessage}\n\n${titles.join('\n\n')}`;
-            }
-
-            return {
-                ...chatItem,
-                mes: regexedMessage,
-                index,
-            };
-        }));
-
-
-        for (let i = coreChat.length - 1; i >= 0; i--) {
-            const depth = coreChat.length - i - 1;
-
-            coreChat[i] = {
-                ...coreChat[i],
-                mes: promptReasoning.addToMessage(
-                    coreChat[i].mes,
-                    getRegexedString(
-                        String(coreChat[i].extra?.reasoning ?? ''),
-                        state.regex_placement.REASONING,
-                        { isPrompt: true, depth: depth },
-                    ),
-                    false,
-                    coreChat[i].extra?.reasoning_duration,
-                ),
-            };
-            if (promptReasoning.isLimitReached()) {
-                break;
-            }
-        }
-
-        // Determine token limit
-        let this_max_context = getMaxPromptTokens();
-
-
-        console.log(`Core/all messages: ${coreChat.length}/${state.chat.length}`);
-
-        force_name2 = true;
-
-        // Add WI to prompt (and also inject WI to AN value via hijack)
-        // Make quiet prompt available for WIAN
-        setExtensionPrompt(inject_ids.QUIET_PROMPT, quiet_prompt || '', state.extension_prompt_types.IN_PROMPT, 0, true);
-        const chatForWI = coreChat.map(x => x.mes).reverse();
-        /** @type {import('./world-info.js').WIGlobalScanData} */
-        const globalScanData = {
-            characterDescription: description,
-            characterDepthPrompt: charDepthPrompt,
-            creatorNotes: creatorNotes,
-            scenario: scenario,
-            trigger: 'normal',
-        };
-        const { worldInfo, worldInfoBefore, worldInfoAfter, worldInfoDepth } = await getWorldInfoPrompt(chatForWI, this_max_context, dryRun, globalScanData);
-        setExtensionPrompt(inject_ids.QUIET_PROMPT, '', state.extension_prompt_types.IN_PROMPT, 0, true);
-
-        if (skipWIAN !== true) {
-            console.log('skipWIAN not active, adding WIAN');
-            // Add all depth WI entries to prompt
-            flushWIInjections();
-            if (Array.isArray(worldInfoDepth)) {
-                worldInfoDepth.forEach((e) => {
-                    const joinedEntries = e.entries.join('\n');
-                    setExtensionPrompt(inject_ids.CUSTOM_WI_DEPTH_ROLE(e.depth, e.role), joinedEntries, state.extension_prompt_types.IN_CHAT, e.depth, false, e.role);
-                });
-            }
-        } else {
-            console.log('skipping WIAN');
-        }
-
-        // Collect before / after story string injections
-        const beforeScenarioAnchor = await getExtensionPrompt(state.extension_prompt_types.BEFORE_PROMPT);
-        const afterScenarioAnchor = await getExtensionPrompt(state.extension_prompt_types.IN_PROMPT);
-
-        const storyStringParams = {
-            description: description,
-            system: system,
-            char: state.name2,
-            user: state.name1,
-            wiBefore: worldInfoBefore,
-            wiAfter: worldInfoAfter,
-            loreBefore: worldInfoBefore,
-            loreAfter: worldInfoAfter,
-            anchorBefore: beforeScenarioAnchor.trim(),
-            anchorAfter: afterScenarioAnchor.trim(),
-            scenario: scenario,
-            mesExamples: '',
-            mesExamplesRaw: '',
-        };
-
-        // Render the story string and combine with injections
-        const storyString = renderStoryString(storyStringParams);
-        let combinedStoryString = storyString;
-
-        setExtensionPrompt(inject_ids.STORY_STRING, '', state.extension_prompt_types.IN_CHAT, 0);
-
-
-        // Inject all Depth prompts. Chat Completion does it separately
-        let injectedIndices = [];
-        if (state.main_api !== 'openai') {
-            injectedIndices = await doChatInject(coreChat);
-        }
-
-        let chat2 = [];
-        let userMessageIndices = [];
-        for (let i = coreChat.length - 1, j = 0; i >= 0; i--, j++) {
-            if (state.main_api == 'openai') {
-                chat2[i] = coreChat[j].mes;
-                continue;
-            }
-
-            chat2[i] = formatMessageHistoryItem(coreChat[j]);
-
-            if (coreChat[j].is_user) {
-                userMessageIndices.push(i);
-            }
-        }
-
-        const userAlignmentMessage = '';
-
-        let oaiMessages = [];
-
-        if (state.main_api === 'openai') {
-            const presetModel = getChatCompletionModelFromSettings(state.oai_settings);
-            const assemblyModel = isPreview ? resolvePreviewPipelineModel(presetModel, 0) : (type === 'normal' ? resolvePipelineModel(presetModel) : presetModel);
-            oaiMessages = setOpenAIMessages(coreChat, assemblyModel);
-        }
-
-        // hack for regeneration of the first message
-        if (chat2.length == 0) {
-            chat2.push('');
-        }
-
-        let chatString = addChatsSeparator('');
-
-        async function getMessagesTokenCount() {
-            const encodeString = [
-                combinedStoryString,
-                userAlignmentMessage,
-                chatString,
-                modifyLastPromptLine(''),
-            ].join('').replace(/\r/gm, '');
-            return getTokenCountAsync(encodeString, TOKEN_PADDING);
-        }
-
-        // Collect enough messages to fill the context
-        let arrMes = Array.from({ length: chat2.length });
-        let tokenCount = await getMessagesTokenCount();
-        let lastAddedIndex = 0;
-
-        // Pre-allocate all injections first.
-        // If it doesn't fit - user shot himself in the foot
-        for (const index of injectedIndices) {
-            // not needed for OAI prompting
-            if (state.main_api == 'openai') {
-                break;
-            }
-
-            const item = chat2[index];
-
-            if (typeof item !== 'string') {
-                continue;
-            }
-
-            tokenCount += await getTokenCountAsync(item.replace(/\r/gm, ''));
-            if (tokenCount < this_max_context) {
-                chatString = chatString + item;
-                arrMes[index] = item;
-                lastAddedIndex = Math.max(lastAddedIndex, index);
-            } else {
-                break;
-            }
-        }
-
-        for (let i = 0; i < chat2.length; i++) {
-            // not needed for OAI prompting
-            if (state.main_api == 'openai') {
-                break;
-            }
-
-            // Skip already injected messages
-            if (arrMes[i] !== undefined) {
-                continue;
-            }
-
-            const item = chat2[i];
-
-            if (typeof item !== 'string') {
-                continue;
-            }
-
-            tokenCount += await getTokenCountAsync(item.replace(/\r/gm, ''));
-            if (tokenCount < this_max_context) {
-                chatString = chatString + item;
-                arrMes[i] = item;
-                lastAddedIndex = Math.max(lastAddedIndex, i);
-            } else {
-                break;
-            }
-        }
-
-        // Unsparse the array. Adjust injected indices
-        const newArrMes = [];
-        const newInjectedIndices = [];
-        for (let i = 0; i < arrMes.length; i++) {
-            if (arrMes[i] !== undefined) {
-                newArrMes.push(arrMes[i]);
-                if (injectedIndices.includes(i)) {
-                    newInjectedIndices.push(newArrMes.length - 1);
-                }
-            }
-        }
-
-        arrMes = newArrMes;
-        injectedIndices = newInjectedIndices;
-
-        if (state.main_api !== 'openai') {
-            setInContextMessages(arrMes.length - injectedIndices.length, type);
-        }
-
-        let mesSend = [];
-        console.debug('calling runGenerate');
-
-        if (!dryRun) {
-            state.is_send_press = true;
-        }
-
-        let generatedPromptCache = '';
-        if (generatedPromptCache.length == 0) {
-            console.debug('generating prompt');
-            chatString = '';
-            arrMes = arrMes.reverse();
-            arrMes.forEach(function (item, i, _arr) {
-                // OAI doesn't need all of this
-                if (state.main_api === 'openai') {
-                    return;
-                }
-
-                // Cohee: This removes a newline from the end of the last message in the context
-                // Last prompt line will add a newline if it's not a continuation
-                if (i === arrMes.length - 1) {
-                    item = item.replace(/\n?$/, '');
-                }
-
-                mesSend[mesSend.length] = { message: item, extensionPrompts: [] };
+    return getGenerationLifecycleService().runOwnedRequest({
+        ownsRun: () => lease.owns(),
+        prepare: async () => {
+            const prepared = await getGenerationLifecycleService().prepareOwnedGeneration({
+                type, dryRun, depth, preview, regenerate: options?.regenerate === true,
+                signal, composerSubmission: options.composerSubmission, quietPrompt: quiet_prompt, automatic: automatic_trigger,
+            }, {
+                entry: {
+                    getController: () => shell().state.abortController,
+                    setController: controller => { shell().state.abortController = controller; },
+                    getComposer: getComposerSnapshot,
+                    setSignal: submissionSignal => lease.setSignal(submissionSignal),
+                },
+                promptContext: { globalPrompts: () => shell().state.extension_prompts, set: (...args) => setExtensionPrompt(...args) },
+                identity: getCurrentGenerationContextIdentity,
+                chat: () => shell().state.chat,
+                currentComposer: getComposerSnapshot,
+                ownsRun: () => lease.owns(),
+                unblock: () => unblockGeneration(type),
+                chatId: () => shell().state.characters?.[shell().state.this_chid]?.chat ?? null,
+                characterName: () => shell().state.name2,
+                start: () => { setGenerationProgress(0); shell().state.generation_started = new Date(); },
+                preparation: (entry, promptContext, isStale) => ({
+                    unshallow: () => unshallowCharacter(shell().state.this_chid),
+                    emitStarted: () => eventSource.emit(event_types.GENERATION_STARTED, type, { automatic_trigger, force_name2, quiet_prompt, quietToLoud, skipWIAN, signal, quietImage, depth, regenerate: entry.isRegenerate, promptContext }, entry.dryRun),
+                    commands: async () => false,
+                    emitAfterCommands: () => eventSource.emit(event_types.GENERATION_AFTER_COMMANDS, type, { automatic_trigger, force_name2, quiet_prompt, quietToLoud, skipWIAN, signal, quietImage, regenerate: entry.isRegenerate, promptContext }, entry.dryRun),
+                    ping: pingServer, isStale, unblock: () => unblockGeneration(type),
+                    serverUnreachable: () => {
+                        toastr.error(t`Verify that the server is running and accessible.`, t`ST Server cannot be reached`);
+                        throw new Error('Server unreachable');
+                    },
+                    markTainted: () => { shell().state.chat_metadata.tainted = true; },
+                }),
+                preflight: {
+                    substitute: substituteParams,
+                    hasBackendConnection: () => shell().state.online_status !== 'no_connection',
+                    clearSending: () => { shell().state.is_send_press = false; },
+                },
+                composer: {
+                    isSending: () => shell().state.is_send_press,
+                    setSending: value => { shell().state.is_send_press = value; },
+                    currentValue: () => getComposerSnapshot().value,
+                    clear: expected => clearComposerValue({ expected }),
+                    onBusy: () => console.warn('Regenerate skipped: a generation is already in flight'),
+                },
+                deactivate: deactivateSendButtons,
+                remove: removeRegenerateTurnTail,
+                bias: getBiasStrings,
+                userInput: (isStale, entry) => ({
+                    hasAttachment: hasPendingFileAttachment,
+                    removeMacros,
+                    emptyText: () => shell().state.oai_settings.send_if_empty,
+                    sendSystem: bias => sendSystemMessage(shell().state.system_message_types.GENERIC, ' ', { bias }),
+                    sendUser: (text, bias) => sendMessageAsUser(text, bias, null, false, undefined, { signal: entry.submissionSignal }),
+                    buildUser: (text, bias) => buildUserMessage(text, bias),
+                    isStale,
+                }),
+                isOpenAI: () => shell().state.main_api === 'openai',
+                policy: {
+                    canUseTools: () => shell().state.ToolManager.canPerformToolCalls(type),
+                    recurseLimit: () => shell().state.ToolManager.RECURSE_LIMIT,
+                    liveModel: resolvePipelineModel,
+                    previewModel: model => resolvePreviewPipelineModel(model, 0),
+                },
             });
-        }
-
-        let mesExmString = '';
-
-        function setPromptString() {
-            if (state.main_api == 'openai') {
-                return;
-            }
-
-            console.debug('--setting Prompt string');
-
-            if (mesSend.length) {
-                mesSend[mesSend.length - 1].message = modifyLastPromptLine(mesSend[mesSend.length - 1].message);
-            }
-        }
-
-        function modifyLastPromptLine(lastMesString) {
-            //#########QUIET PROMPT STUFF PT2##############
-
-            // Add quiet generation prompt at depth 0
-            if (quiet_prompt && quiet_prompt.length) {
-                const quietAppend = `\n${quiet_prompt}`;
-                lastMesString += quietAppend;
-
-
-                // Ross: bailing out early prevents quiet prompts from respecting other instruct prompt toggles
-                // for sysgen, SD, and summary this is desireable as it prevents the AI from responding as char..
-                // but for idle prompting, we want the flexibility of the other prompt toggles, and to respect them as per settings in the extension
-                // need a detection for what the quiet prompt is being asked for...
-
-                // Bail out early?
-                if (!quietToLoud) {
-                    return lastMesString;
-                }
-            }
-
-
-            // Add character's name
-            if (force_name2) {
-                if (!lastMesString.endsWith('\n')) {
-                    lastMesString += '\n';
-                }
-                lastMesString += `${state.name2}:`;
-            }
-
-            return lastMesString;
-        }
-
-        async function checkPromptSize() {
-            console.debug('---checking Prompt size');
-            setPromptString();
-            const jointMessages = mesSend.map((e) => `${e.extensionPrompts.join('')}${e.message}`).join('');
-            const prompt = [
-                combinedStoryString,
-                mesExmString,
-                addChatsSeparator(jointMessages),
-                '\n',
-                modifyLastPromptLine(''),
-                generatedPromptCache,
-            ].join('').replace(/\r/gm, '');
-            let thisPromptContextSize = await getTokenCountAsync(prompt, TOKEN_PADDING);
-
-            if (thisPromptContextSize > this_max_context) {        //if the prepared prompt is larger than the max context size...
-                if (mesSend.length > 0) {                    // if the chat history is longer than 0
-                    mesSend.shift();                            // remove the first (oldest) chat entry..
-                    await checkPromptSize();                            // and check size again..
-                } else {
-                    //end
-                    console.debug(`---mesSend.length = ${mesSend.length}`);
-                }
-            }
-        }
-
-        if (generatedPromptCache.length > 0 && state.main_api !== 'openai') {
-            console.debug('---Generated Prompt Cache length: ' + generatedPromptCache.length);
-            await checkPromptSize();
-        } else {
-            console.debug('---calling setPromptString ' + generatedPromptCache.length);
-            setPromptString();
-        }
-
-        let mesSendString = '';
-
-        async function getCombinedPrompt() {
-            // OAI has its own prompt manager. No need to do anything here
-            if (state.main_api === 'openai') {
-                return '';
-            }
-
-            // Deep clone
-            let finalMesSend = structuredClone(mesSend);
-
-            // Add prompt bias after everything else
-            if (promptBias.trim().length !== 0) {
-                finalMesSend[finalMesSend.length - 1].message +=
-                    /\s/.test(finalMesSend[finalMesSend.length - 1].message.slice(-1))
-                        ? promptBias.trimStart()
-                        : ` ${promptBias.trimStart()}`;
-            }
-
-            // Flattens the multiple prompt objects to a string.
-            const combine = () => {
-                // Right now, everything is suffixed with a newline
-                mesSendString = finalMesSend.map((e) => `${e.extensionPrompts.join('')}${e.message}`).join('');
-
-                // add a custom dingus (if defined)
-                mesSendString = addChatsSeparator(mesSendString);
-
-
-                let combinedPrompt = [
-                    combinedStoryString,
-                    mesExmString,
-                    mesSendString,
-                    generatedPromptCache,
-                ].join('').replace(/\r/gm, '');
-
-                return combinedPrompt;
-            };
-
-            finalMesSend.forEach((item, i) => {
-                item.injected = injectedIndices.includes(finalMesSend.length - i - 1);
-            });
-
-            let data = {
-                api: state.main_api,
-                combinedPrompt: null,
-                description,
-                char: state.name2,
-                user: state.name1,
-                worldInfo,
-                beforeScenarioAnchor,
-                afterScenarioAnchor,
-                storyString,
-                mesExmString,
-                mesSendString,
-                finalMesSend,
-                generatedPromptCache,
-                main: system,
-            };
-
-            // Before returning the combined prompt, give available context related information to all subscribers.
-            await eventSource.emit(event_types.GENERATE_BEFORE_COMBINE_PROMPTS, data);
-
-            // If one or multiple subscribers return a value, forfeit the responsibillity of flattening the context.
-            return !data.combinedPrompt ? combine() : data.combinedPrompt;
-        }
-
-        let finalPrompt = await getCombinedPrompt();
-
-        const eventData = { prompt: finalPrompt, dryRun: dryRun };
-        await eventSource.emit(event_types.GENERATE_AFTER_COMBINE_PROMPTS, eventData);
-        finalPrompt = eventData.prompt;
-
-        switch (state.main_api) {
-            case 'openai': {
-                let [prompt, , chatCompletion] = await prepareOpenAIMessages({
-                    name2: state.name2,
-                    charDescription: description,
-                    worldInfo: worldInfo,
-                    extensionPrompts: state.extension_prompts,
-                    bias: promptBias,
-                    type: type,
-                    quietPrompt: quiet_prompt,
-                    quietImage: quietImage,
-                    messages: oaiMessages,
-                    assemblyModel: isPreview ? resolvePreviewPipelineModel(getChatCompletionModelFromSettings(state.oai_settings), 0) : (type === 'normal' ? resolvePipelineModel(getChatCompletionModelFromSettings(state.oai_settings)) : null),
-                    pipelineStepModel: isPreview ? resolvePreviewPipelineModel(getChatCompletionModelFromSettings(state.oai_settings), Number(preview?.round ?? 0)) : (type === 'normal' ? resolvePipelineModel(getChatCompletionModelFromSettings(state.oai_settings)) : null),
-                    pipelineStepTag: isPreview ? getPreviewPipelineTriggerTag(Number(preview?.round ?? 0)) : getPipelineTriggerTag(type),
-                    // Even a closing-round preview uses the initial pipeline history.
-                    pipelineHistory: isPreview && !!getPreviewPipelineTriggerTag(0),
-                }, dryRun, { squash: isPreview ? true : null, bookkeep: !isPreview });
-                generate_data = { prompt: prompt };
-                previewChatCompletion = chatCompletion ?? null;
-
-                if (!dryRun) {
-                    setInContextMessages(state.openai_messages_count, type);
-                }
-                break;
-            }
-        }
-    }
-
-    await eventSource.emit(event_types.GENERATE_AFTER_DATA, generate_data, dryRun);
-
-    if (isPreview) {
-        return await buildPreviewRequestResult({
-            type,
-            generateData: generate_data,
-            chatCompletion: previewChatCompletion,
-            round: Number(preview?.round ?? 0),
-            warnings: previewWarnings,
-            pendingMessage: previewPendingMessage,
-            summarized: summarizedEntries,
-            // The pending user message is the newest chatHistory entry;
-            // buildPreviewRequestResult resolves its identifier from the final
-            // assembled pool (depth injections can shift the numbering).
-            pendingEntryIdentifier: null,
-        });
-    }
-
-    if (dryRun) {
-        return Promise.resolve();
-    }
-
-    /**
-     * Calls the streaming or non-streaming generation API.
-     * @returns {Promise<void|*|Awaited<*>|String|{fromStream}|string|undefined|Object>}
-     * @throws {Error|object} Error with message text, or Error with response JSON
-     */
-    let activeRecoveryMessageId = null;
-
-    /**
-     * Final-direct path: the completed pipeline step's result IS the reply.
-     * Writes the assistant message, mirrors the normal generation tail, and
-     * returns the same String shape the API chain expects.
-     */
-    async function finalizePipelineReply({ type, text, step, meta, reasoning = '', reasoningSignature = null, title = '', imageUrls = null, fromStream = false }) {
-        // Tool results are already authored content: skip stopping-string
-        // trimming (it silently truncates) but keep the AI_OUTPUT regex pass.
-        const cleaned = cleanUpMessage({
-            getMessage: text,
-            displayIncompleteSentences: false,
-            stoppingStrings: [],
-        });
-
-        // Fold the run's progress card into the reply: its invocations move
-        // onto the assistant message and its steps become <tool>text</tool>
-        // tag blocks leading `mes` — semantic XML, no chrome, no raw JSON.
-        // The last tag carries the reply text itself; prompt assembly strips
-        // earlier tags and unwraps the last one, so markup never reaches the
-        // wire while the model still gets invocations + reply via replay.
-        const runId = meta?.runId ?? null;
-        let tagMarkup = '';
-        let mergedInvocations = null;
-        if (runId) {
-            const cardIndex = state.chat.findLastIndex(message => Array.isArray(message?.extra?.tool_invocations)
-                && message.extra?.reply_pipeline_run === runId);
-            if (cardIndex >= 0) {
-                const cardMessage = state.chat[cardIndex];
-                mergedInvocations = cardMessage.extra.tool_invocations;
-                // Only when the last invocation IS the final step does its tag
-                // carry the reply text; otherwise the reply is appended bare.
-                const replyIsTagged = (mergedInvocations.at(-1)?.pipeline?.tool ?? mergedInvocations.at(-1)?.name) === step?.tool;
-                tagMarkup = state.ToolManager.formatPipelineTagMarkup(mergedInvocations, replyIsTagged ? cleaned : '');
-                if (!replyIsTagged) {
-                    tagMarkup = `${tagMarkup}\n${cleaned}`;
-                }
-                // Write-time AI_OUTPUT regexes run on the tag markup too —
-                // the reply text was already regex'd inside cleanUpMessage.
-                tagMarkup = getRegexedString(tagMarkup, state.regex_placement.AI_OUTPUT);
-                state.chat.splice(cardIndex, 1);
-                if (isReactMainChatOwner()) {
-                    void mountReactMainChatMessageListPanel();
-                } else {
-                    state.chatElement.find(`.mes[mesid="${cardIndex}"]`).remove();
-                }
-                await eventSource.emit(event_types.MESSAGE_DELETED, state.chat.length);
-            }
-        }
-
-        const finalText = tagMarkup ? tagMarkup : cleaned;
-        const saved = await saveReply({ type, getMessage: finalText, reasoning, reasoningSignature, title, imageUrls });
-        const savedMessage = state.chat[state.chat.length - 1];
-        if (savedMessage?.extra) {
-            savedMessage.extra.reply_pipeline_run = runId;
-            savedMessage.extra.reply_pipeline_step = step?.id ?? null;
-            if (mergedInvocations) {
-                savedMessage.extra.tool_invocations = mergedInvocations;
-            }
-        }
-        endPipelineRun();
-        await saveChatConditional();
-        unblockGeneration(type);
-        state.streamingProcessor = null;
-        scheduleMainChatMessageListPanelRefresh();
-        return Object.defineProperties(new String(saved.getMessage), {
-            'messageChunk': { value: cleaned },
-            ...(fromStream ? { 'fromStream': { value: true } } : {}),
-        });
-    }
-
-    async function finishGenerating() {
-        console.debug('rungenerate calling API');
-
-        showStopButton();
-
-        // A pipeline continuation owns its own retries.  Its parent must not
-        // retry an already completed tool round when this round fails.
-        const command = generationEnvelope.command;
-        const pipelineContinuation = depth > 0 && type === 'normal' && state.main_api === 'openai' && Boolean(getPipelineRunState());
-        const recoveryCommand = pipelineContinuation ? { ...command, depth: 0, capabilities: { ...command.capabilities, autoRecover: true } } : command;
-        const lifecyclePlan = createGenerationCommandPlan(recoveryCommand, {
-            fallbackReady: hasFallbackProviderForGeneration({
-                settings: state.oai_settings,
-            }),
-            statusLabels: getGenerationLifecycleStatusLabels(),
-        });
-        const { shouldAutoRecover, attempts } = lifecyclePlan;
-        const createEmptyReplyFailure = (messageId = null) => {
-            const error = new Error('empty reply');
-            error.emptyReply = true;
-            error.messageId = messageId;
-            return error;
-        };
-
-        const isEmptyGenerationResult = (result) => {
-            if (jsonSchema) {
-                return false;
-            }
-
-            if (result?.fromStream) {
-                return String(result ?? '').trim().length === 0;
-            }
-
-            const text = cleanUpMessage({
-                getMessage: extractMessageFromData(result),
-                displayIncompleteSentences: false,
-            });
-            return String(text ?? '').trim().length === 0;
-        };
-
-        const ensureRecoveryMessage = async (candidateMessageId = null) => {
-            if (isAssistantRecoveryMessageId(candidateMessageId)) {
-                activeRecoveryMessageId = candidateMessageId;
-                return activeRecoveryMessageId;
-            }
-
-            if (isAssistantRecoveryMessageId(activeRecoveryMessageId)) {
-                return activeRecoveryMessageId;
-            }
-
-            await saveReply({ type, getMessage: '', fromStreaming: true });
-            activeRecoveryMessageId = state.chat.length - 1;
-            return activeRecoveryMessageId;
-        };
-
-        const pipelineMeta = type === 'normal' ? getPipelineStepMeta() : null;
-        const pipelineStep = pipelineMeta ? getCurrentPipelineStep() : null;
-        if (type === 'normal' && getActivePipelineRunId()) {
-            requestTrace.pipelineRun = getActivePipelineRunId();
-        }
-        if (pipelineMeta && pipelineStep) {
-            requestTrace.pipelineRun = pipelineMeta.runId;
-            if (!isPipelineFallbackRound()) {
-                requestTrace.pipelineStep = pipelineStep.tool;
-            }
-        }
-        const runGenerationAttempt = async (attempt, attemptIndex) => {
-            const isIntermediateAttempt = attemptIndex < attempts.length - 1;
-            const presetModel = getChatCompletionModelFromSettings(state.oai_settings);
-            const fallbackModel = attempt.fallbackProvider ? getFallbackOpenAIModel(state.oai_settings) : null;
-            const attemptModel = type === 'normal' ? resolvePipelineModel(presetModel, { fallbackModel }) : (fallbackModel || presetModel);
-            state.generatingAttemptModel = attemptModel;
-            if (state.main_api === 'openai') {
-                canPerformToolCalls = state.ToolManager.canPerformToolCalls(type, state.oai_settings, attemptModel) && depth < state.ToolManager.RECURSE_LIMIT;
-            }
-            const requestOptions = {
-                jsonSchema,
-                fallbackProvider: attempt.fallbackProvider,
-                model: attemptModel,
-                trace: requestTrace,
-            };
-
-            const useStreaming = state.main_api === 'openai'
-                ? isChatCompletionStreaming(state.oai_settings, attemptModel, type)
-                : isStreamingEnabled() && type !== 'quiet';
-            if (useStreaming) {
-                state.streamingProcessor = new GenerationStreamSession(type, force_name2, state.generation_started, promptReasoning);
-                state.streamingProcessor.suppressErrorRecovery = isIntermediateAttempt;
-                state.streamingProcessor.fromFallbackAttempt = Boolean(attempt.fallbackProvider);
-                if (activeRecoveryMessageId !== null && activeRecoveryMessageId >= 0) {
-                    state.streamingProcessor.messageId = activeRecoveryMessageId;
-                }
-
-                state.streamingProcessor.generator = await sendStreamingRequest(type, generate_data, requestOptions);
-
-                let getMessage = await state.streamingProcessor.generate();
-                if (state.streamingProcessor.abortController.signal.aborted && state.streamingProcessor.isFinished) {
-                    throw new Error('Generation was aborted.');
-                }
-                let messageChunk = cleanUpMessage({
-                    getMessage: getMessage,
-                    displayIncompleteSentences: false,
-                });
-
-                const isStreamFinished = state.streamingProcessor && !state.streamingProcessor.isStopped && state.streamingProcessor.isFinished;
-                const isStreamWithToolCalls = state.streamingProcessor && Array.isArray(state.streamingProcessor.toolCalls) && state.streamingProcessor.toolCalls.length;
-                if (!canPerformToolCalls && isStreamFinished) {
-                    assertPipelineResponseAllowed(state.streamingProcessor?.toolCalls
-                        ?.reduce((count, calls) => count + (Array.isArray(calls) ? calls.length : 0), 0) ?? 0, { canPerformToolCalls });
-                }
-                if (canPerformToolCalls && isStreamFinished && isStreamWithToolCalls) {
-                    const lastMessage = state.chat[state.chat.length - 1];
-                    const hasToolCalls = state.ToolManager.hasToolCalls(state.streamingProcessor.toolCalls);
-                    const shouldDeleteMessage = Boolean(getPipelineRunState()) || (['', '...'].includes(lastMessage?.mes) && !lastMessage?.extra?.reasoning && ['', '...'].includes(state.streamingProcessor?.result));
-                    if (hasToolCalls && shouldDeleteMessage) await deleteLastMessage();
-                    if (hasToolCalls && !shouldDeleteMessage) {
-                        await state.streamingProcessor.finalizeIntermediaryMessage(state.streamingProcessor.messageId, getMessage, { unlockUI: false });
-                    }
-                    const invocationResult = await state.ToolManager.invokeFunctionTools(state.streamingProcessor.toolCalls, {
-                        reasoningText: state.streamingProcessor.reasoningHandler.reasoning,
-                        assistantMessage: {
-                            role: 'assistant', content: getMessage || null,
-                            ...(state.streamingProcessor.reasoningHandler.reasoning ? { reasoning: state.streamingProcessor.reasoningHandler.reasoning } : {}),
-                            ...(state.streamingProcessor.reasoningSignature ? { signature: state.streamingProcessor.reasoningSignature } : {}),
+            if (!prepared || prepared.kind === 'terminal') return prepared;
+            return { kind: 'ready', state: prepared };
+        },
+        assemble: async prepared => {
+            const { entry, promptContext, promptBias, policy } = prepared;
+            const { isPreview } = entry;
+            dryRun = entry.dryRun;
+            quiet_prompt = prepared.quietPrompt;
+            const previewPendingMessage = prepared.pending;
+            const previewWarnings = prepared.warnings;
+            const promptReasoning = new (shell().state.PromptReasoning)();
+            const stages = await getGenerationLifecycleService().prepareRequestStages({
+                type, dryRun, preview: isPreview, isOpenAI: shell().state.main_api === 'openai',
+                hasPipelineMessages: Boolean(getPipelineRunState()?.messages), forceName: force_name2,
+            }, {
+                ownsRun: () => lease.owns(),
+                continuation: () => getGenerationLifecycleService().preparePipelineContinuation({
+                    ownsRun: () => lease.owns(),
+                    prepare: () => prepareOpenAIMessages({ type, pipelineStepTag: getPipelineTriggerTag(type), pipelineStepModel: resolvePipelineModel(getChatCompletionModelFromSettings(shell().state.oai_settings)) }, false),
+                }),
+                base: () => getGenerationLifecycleService().prepareGenerationFoundation({
+                    ownsRun: () => lease.owns(),
+                    card: getCharacterCardFields,
+                    clearDepth: () => removeDepthPrompts(promptContext.requestPrompts()),
+                    depthSettings: () => ({
+                        depth: shell().state.characters[shell().state.this_chid]?.data?.extensions?.depth_prompt?.depth,
+                        role: shell().state.characters[shell().state.this_chid]?.data?.extensions?.depth_prompt?.role,
+                        defaultDepth: shell().state.depth_prompt_depth_default,
+                        defaultRole: shell().state.depth_prompt_role_default,
+                    }),
+                    resolveRole: getExtensionPromptRoleByName,
+                    setDepth: (text, depth, role) => setExtensionPrompt(inject_ids.DEPTH_PROMPT, text, shell().state.extension_prompt_types.IN_CHAT, depth, false, role, null, promptContext.requestPrompts()),
+                    historyInput: () => ({
+                        chat: shell().state.chat, preview: isPreview, pending: previewPendingMessage,
+                        canUseTools: shell().state.ToolManager.isToolCallingSupported(),
+                        userPlacement: shell().state.regex_placement.USER_INPUT,
+                        assistantPlacement: shell().state.regex_placement.AI_OUTPUT,
+                        reasoningPlacement: shell().state.regex_placement.REASONING,
+                    }),
+                    historyPorts: {
+                        substitute: substituteParams,
+                        project: (items, chat) => applyChatMemoryToCoreChat(items, { chat, dryRun }),
+                        regex: (message, placement, depth) => getRegexedString(message, placement, { isPrompt: true, depth }),
+                        appendFile: appendFileContent,
+                        addReasoning: (message, reasoning, duration) => promptReasoning.addToMessage(message, reasoning, false, duration),
+                        reasoningLimitReached: () => promptReasoning.isLimitReached(),
+                    },
+                    maxTokens: getMaxPromptTokens,
+                }),
+                world: base => {
+                    const { description, system, charDepthPrompt, creatorNotes, scenario } = base.card;
+                    const coreChat = base.history.items;
+                    console.log(`Core/all messages: ${coreChat.length}/${shell().state.chat.length}`);
+                    return getGenerationLifecycleService().assembleWorldInfoStory({
+                        messages: coreChat.map(item => item.mes), quietPrompt: quiet_prompt,
+                        maxContext: base.maxTokens, dryRun, skipWIAN,
+                        description, system, characterDepthPrompt: charDepthPrompt, creatorNotes, scenario,
+                        character: shell().state.name2, user: shell().state.name1,
+                    }, {
+                        ownsRun: () => lease.owns(),
+                        quiet: value => {
+                            const promptMap = promptContext.requestPrompts();
+                            setExtensionPrompt(inject_ids.QUIET_PROMPT, value, shell().state.extension_prompt_types.IN_PROMPT, 0, true, undefined, null, promptMap);
+                            return (promptMap ?? shell().state.extension_prompts)[inject_ids.QUIET_PROMPT];
                         },
+                        currentQuiet: () => (promptContext.requestPrompts() ?? shell().state.extension_prompts)[inject_ids.QUIET_PROMPT],
+                        clearQuiet: () => setExtensionPrompt(inject_ids.QUIET_PROMPT, '', shell().state.extension_prompt_types.IN_PROMPT, 0, true, undefined, null, promptContext.requestPrompts()),
+                        scan: (...args) => getWorldInfoPrompt(...args, { ownsRun: () => lease.owns(), promptMap: promptContext.scanPrompts() }),
+                        flush: () => flushWIInjections(promptContext.requestPrompts()),
+                        inject: (text, depth, role) => setExtensionPrompt(inject_ids.CUSTOM_WI_DEPTH_ROLE(depth, role), text, shell().state.extension_prompt_types.IN_CHAT, depth, false, role, null, promptContext.requestPrompts()),
+                        anchor: kind => getExtensionPrompt(kind === 'before' ? shell().state.extension_prompt_types.BEFORE_PROMPT : shell().state.extension_prompt_types.IN_PROMPT, undefined, undefined, undefined, undefined, promptContext.requestPrompts()),
+                        render: (params, options) => renderStoryString(params, { ...options, promptMap: promptContext.requestPrompts() }),
+                        clearStory: () => setExtensionPrompt(inject_ids.STORY_STRING, '', shell().state.extension_prompt_types.IN_CHAT, 0, false, undefined, null, promptContext.requestPrompts()),
                     });
-                    const shouldStopGeneration = (!invocationResult.invocations.length && shouldDeleteMessage) || invocationResult.stealthCalls.length;
-                    if (hasToolCalls) {
-                        if (shouldStopGeneration) {
-                            if (Array.isArray(invocationResult.errors) && invocationResult.errors.length) {
-                                state.ToolManager.showToolCallError(invocationResult.errors);
-                            }
-                            endPipelineRun();
-                            unblockGeneration(type);
-                            state.streamingProcessor = null;
-                            return;
-                        }
+                },
+                assemble: (base, worldStory, forceName) => {
+                    const { description, system } = base.card;
+                    const coreChat = base.history.items;
+                    const { worldInfo, storyString } = worldStory;
+                    return getGenerationLifecycleService().assemblePromptContent({
+                        type, isOpenAI: shell().state.main_api === 'openai', dryRun, isPreview,
+                        round: Number(preview?.round ?? 0), messages: coreChat, maxContext: base.maxTokens,
+                        storyString, description, system, character: shell().state.name2, user: shell().state.name1,
+                        worldInfo, beforeScenarioAnchor: worldStory.beforeScenarioAnchor, afterScenarioAnchor: worldStory.afterScenarioAnchor,
+                        quietPrompt: quiet_prompt, quietToLoud, quietImage, forceName, promptBias, api: shell().state.main_api,
+                    }, {
+                        ownsRun: () => lease.owns(),
+                        inject: messages => doChatInject(messages, promptContext.requestPrompts()),
+                        format: formatMessageHistoryItem,
+                        presetModel: () => getChatCompletionModelFromSettings(shell().state.oai_settings),
+                        assemblyModel: policy.assemblyModel,
+                        setMessages: setOpenAIMessages,
+                        separator: addChatsSeparator,
+                        countInitial: text => getTokenCountAsync(text, TOKEN_PADDING),
+                        countHistory: text => getTokenCountAsync(text),
+                        setContext: count => setInContextMessages(count, type),
+                        setSending: () => { shell().state.is_send_press = true; },
+                        before: data => eventSource.emit(event_types.GENERATE_BEFORE_COMBINE_PROMPTS, data, { promptContext }),
+                        after: data => eventSource.emit(event_types.GENERATE_AFTER_COMBINE_PROMPTS, data, { promptContext }),
+                        extensionPrompts: () => promptContext.requestPrompts() ?? shell().state.extension_prompts,
+                        openAI: {
+                            getRunnablePipeline,
+                            getPresetModel: () => getChatCompletionModelFromSettings(shell().state.oai_settings),
+                            previewTag: getPreviewPipelineTriggerTag,
+                            previewModel: resolvePreviewPipelineModel,
+                            liveModel: resolvePipelineModel,
+                            liveTag: getPipelineTriggerTag,
+                            prepare: prepareOpenAIMessages,
+                        },
+                        setOpenAIContext: () => setInContextMessages(shell().state.openai_messages_count, type),
+                    });
+                },
+                publish: data => getGenerationLifecycleService().publishGenerationData(data, dryRun, {
+                    ownsRun: () => lease.owns(),
+                    emit: (value, isDryRun) => eventSource.emit(event_types.GENERATE_AFTER_DATA, value, isDryRun, { promptContext }),
+                }),
+                preview: (data, chatCompletion, summarized) => buildPreviewRequestResult({
+                    type,
+                    generateData: data,
+                    chatCompletion,
+                    round: Number(preview?.round ?? 0),
+                    warnings: previewWarnings,
+                    pendingMessage: previewPendingMessage,
+                    summarized,
+                    // The pending user message is the newest chatHistory entry;
+                    // buildPreviewRequestResult resolves its identifier from the final
+                    // assembled pool (depth injections can shift the numbering).
+                    pendingEntryIdentifier: null,
+                    ownsRun: () => lease.owns(),
+                }),
+            });
+            return { stages, promptReasoning };
+        },
+        dispatch: async (prepared, assembly) => {
+            const { entry, requestIdentity, requestTrace, regenerateSnapshot, policy } = prepared;
+            const { submissionSignal } = entry;
+            const { stages, promptReasoning } = assembly;
+            const generate_data = stages.data;
+            force_name2 = stages.forceName;
+            async function finalizePipelineReply(input) {
+                return getGenerationLifecycleService().finalizePipelineReply(input, {
+                    ownsRun: () => lease.owns(),
+                    chat: shell().state.chat,
+                    clean: text => cleanUpMessage({ getMessage: text, displayIncompleteSentences: false, stoppingStrings: [] }),
+                    formatTags: (invocations, text) => shell().state.ToolManager.formatPipelineTagMarkup(invocations, text),
+                    regexOutput: text => getRegexedString(text, shell().state.regex_placement.AI_OUTPUT),
+                    removeCardView: index => {
+                        if (isReactMainChatOwner()) void mountReactMainChatMessageListPanel();
+                        else shell().state.chatElement.find(`.mes[mesid="${index}"]`).remove();
+                    },
+                    emitDeleted: length => eventSource.emit(event_types.MESSAGE_DELETED, length),
+                    saveReply: reply => saveReply(reply),
+                    endPipeline: () => endPipelineRun(),
+                    saveChat: ownsRun => saveChatConditional(ownsRun),
+                    unblock: generationType => unblockGeneration(generationType),
+                    clearProcessor: () => { shell().state.streamingProcessor = null; },
+                    refresh: () => scheduleMainChatMessageListPanelRefresh(),
+                });
+            }
 
-                        const pipelineProcessor = state.streamingProcessor;
-                        const pipelineReasoning = pipelineProcessor.reasoningHandler.reasoning;
-                        const pipelineReasoningSignature = pipelineProcessor.reasoningSignature;
-                        const pipelineDecision = preparePipelineRound(invocationResult.invocations);
-                        state.streamingProcessor = null;
-                        await state.ToolManager.saveFunctionToolInvocations(invocationResult.invocations);
-                        if (pipelineDecision?.action === 'final') {
-                            rememberMainChatStreamingTransportProcessorTerminal(pipelineProcessor, 'completed');
-                            return await finalizePipelineReply({
-                                type,
-                                text: pipelineDecision.text,
-                                step: pipelineDecision.step,
-                                meta: pipelineDecision.meta,
-                                reasoning: pipelineReasoning,
-                                reasoningSignature: pipelineReasoningSignature,
-                                fromStream: true,
+            const deleteRecoveryPlaceholder = async recovery => {
+                const chat = shell().state.chat;
+                if (recovery.hasIdentity && recovery.messageId !== chat.length - 1) {
+                    throw new Error('Generation recovery message is no longer available.');
+                }
+                // deleteLastMessage removes the row synchronously before awaiting its event.
+                // Retire this round's identity only when that exact row was removed.
+                const pending = deleteLastMessage();
+                if (recovery.hasIdentity && recovery.messageId === null) recovery.messageId = null;
+                return await pending;
+            };
+
+            const requirePipelineCall = () => {
+                const run = getPipelineRunState();
+                if (type === 'normal' && run && !run.fallbackRound) {
+                    throw new Error('Reply pipeline: expected exactly one current-step call (submit_story).');
+                }
+            };
+
+            return getGenerationLifecycleService().runGenerationDispatch({
+                type, depth, canPerformTools: policy.canPerformTools, pipeline: getPipelineRunState(),
+                isOpenAI: shell().state.main_api === 'openai', command: generationEnvelope.command,
+                trace: requestTrace, signal: submissionSignal, cancelSignal: signal, jsonSchema, quietToLoud,
+            }, {
+                ownsRun: () => lease.owns(),
+                currentProcessor: () => shell().state.streamingProcessor,
+                isOpenAI: () => shell().state.main_api === 'openai',
+                isRecoveryMessage: isAssistantRecoveryMessageId,
+                recoveryIdentityAt: id => shell().state.chat[id],
+                recoveryIndexOf: message => shell().state.chat.indexOf(message),
+                createRecoveryMessage: async () => {
+                    const chat = shell().state.chat;
+                    let message;
+                    await saveReply({ type, getMessage: '', fromStreaming: true, ownsRun: () => lease.owns(), onMessageCreated: created => { message = created; } });
+                    const messageId = message ? chat.indexOf(message) : -1;
+                    if (!lease.owns() || shell().state.chat !== chat || messageId < 0) throw new Error('Generation recovery message is no longer available.');
+                    return { messageId, identity: message };
+                },
+                getModel: () => shell().state.generatingAttemptModel,
+                setModel: model => { shell().state.generatingAttemptModel = model; },
+                continueGeneration: (generationType, nextDepth) => Generate(generationType, { automatic_trigger, force_name2, quiet_prompt, quietToLoud, skipWIAN, signal, quietImage, quietName, depth: nextDepth }, dryRun),
+                transport: (dispatchState, recovery) => ({
+                    presetModel: () => getChatCompletionModelFromSettings(shell().state.oai_settings),
+                    fallbackModel: () => getFallbackOpenAIModel(shell().state.oai_settings),
+                    pipelineModel: resolvePipelineModel,
+                    setAttemptModel: model => { shell().state.generatingAttemptModel = model; },
+                    canPerformTools: model => shell().state.ToolManager.canPerformToolCalls(dispatchState.type, shell().state.oai_settings, model),
+                    recurseLimit: () => shell().state.ToolManager.RECURSE_LIMIT,
+
+                    isOpenAIStreaming: (model, generationType) => isChatCompletionStreaming(shell().state.oai_settings, model, generationType),
+                    isStreaming: isStreamingEnabled,
+                    send: requestOptions => sendGenerationRequest(dispatchState.type, generate_data, requestOptions),
+                    hasToolCalls: result => shell().state.ToolManager.hasToolCalls(result),
+                    requirePipelineCall,
+                    assertAllowed: () => assertPipelineResponseAllowed(1, { canPerformToolCalls: dispatchState.canPerformTools }),
+                    isEmpty: result => getGenerationLifecycleService().isGenerationResultEmpty({ jsonSchema, result }, {
+                        extract: extractMessageFromData,
+                        clean: getMessage => cleanUpMessage({ getMessage, displayIncompleteSentences: false }),
+                    }),
+
+                    createStream: ({ intermediate, fallback }) => {
+                        shell().state.streamingProcessor = getGenerationLifecycleService().initializeAttemptStream({
+                            intermediate, fallback, recoveryMessageId: recovery.messageId,
+                        }, () => new GenerationStreamSession(dispatchState.type, force_name2, shell().state.generation_started, promptReasoning,
+                            () => dispatchState.ownsStream(dispatchState.processor) && (!recovery.hasIdentity || recovery.messageId !== null)));
+                        if (recovery.hasIdentity) {
+                            Object.defineProperty(shell().state.streamingProcessor, 'messageId', {
+                                configurable: true, enumerable: true, get: () => recovery.messageId ?? -1, set: () => {},
                             });
                         }
-                        if (getPipelineRunState()) return { pipelineContinuation: true };
-                        depth = depth + 1;
-                        return Generate('normal', { automatic_trigger, force_name2, quiet_prompt, quietToLoud, skipWIAN, signal, quietImage, quietName, depth }, dryRun);
-                    }
-                }
+                        return shell().state.streamingProcessor;
+                    },
+                    sendStream: requestOptions => sendStreamingRequest(dispatchState.type, generate_data, requestOptions),
+                    setStreamGenerator: (generator, processor) => { processor.generator = generator; },
+                    consumeStream: processor => processor.generate(),
+                    streamAborted: processor => processor.abortController.signal.aborted && processor.isFinished,
+                }),
+                stream: (dispatchState, recovery, processor) => ({
+                    ownsRun: () => dispatchState.ownsCleanup() && (!recovery.hasIdentity || recovery.messageId !== null),
+                    clean: getMessage => cleanUpMessage({ getMessage, displayIncompleteSentences: false }),
+                    assertAllowed: count => assertPipelineResponseAllowed(count, { canPerformToolCalls: dispatchState.canPerformTools }),
+                    lastMessage: () => shell().state.chat[shell().state.chat.length - 1],
+                    hasToolCalls: calls => shell().state.ToolManager.hasToolCalls(calls),
+                    requirePipelineCall,
+                    deleteLast: () => deleteRecoveryPlaceholder(recovery),
+                    setModel: (id, model) => {
+                        if (shell().state.chat[id]) {
+                            shell().state.chat[id].extra ??= {};
+                            shell().state.chat[id].extra.model = model;
+                        }
+                    },
+                    finalizeIntermediary: (id, message) => processor.finalizeIntermediaryMessage(id, message, { unlockUI: false }),
+                    invokeTools: (calls, options) => shell().state.ToolManager.invokeFunctionTools(calls, { ...options, ownsRun: () => dispatchState.ownsCleanup() && (!recovery.hasIdentity || recovery.messageId !== null) }),
+                    showErrors: errors => shell().state.ToolManager.showToolCallError(errors),
+                    endPipeline: endPipelineRun,
+                    unblock: unblockGeneration,
+                    clearProcessor: () => { shell().state.streamingProcessor = null; },
+                    prepareRound: preparePipelineRound,
+                    saveInvocations: invocations => shell().state.ToolManager.saveFunctionToolInvocations(invocations, { ownsRun: () => dispatchState.ownsCleanup() && (!recovery.hasIdentity || recovery.messageId !== null) }),
+                    markComplete: current => rememberMainChatStreamingTransportProcessorTerminal(current, 'completed'),
+                    finalizePipeline: finalizePipelineReply,
+                    hasPipeline: () => Boolean(getPipelineRunState()),
 
-                if (isStreamFinished) {
-                    const finishedMessageId = state.streamingProcessor.messageId;
+                    finishMessage: (id, message) => processor.onFinishStreaming(id, message),
+                    refresh: scheduleMainChatMessageListPanelRefresh,
+                    clearRecovery: clearGenerationAutoRecoveryStatus,
+                }),
+                round: () => ({
+                    plan: command => createGenerationCommandPlan(command, {
+                        fallbackReady: hasFallbackProviderForGeneration({ settings: shell().state.oai_settings }),
+                        statusLabels: getGenerationLifecycleStatusLabels(),
+                    }),
+                    activeRunId: getActivePipelineRunId,
+                    meta: getPipelineStepMeta,
+                    step: getCurrentPipelineStep,
+                    isFallback: isPipelineFallbackRound,
+                    execute: executeGenerationAttempts,
+                    successfulMessageId: () => shell().state.chat.length - 1,
+                    clearSuccessStatus: clearGenerationAutoRecoveryStatus,
+                    processorMessageId: () => shell().state.streamingProcessor?.messageId,
+                    decideFailure: input => getGenerationFailureDecision({ ...input, shouldAutoRecover: input.shouldAutoRecover && !isUserStoppedGeneration(input.failure) }),
+                    clearProcessor: () => { shell().state.streamingProcessor = null; },
+                    clearMessage: clearGenerationAttemptMessage,
+                    showStatus: showGenerationAutoRecoveryStatus,
+                    deactivate: deactivateSendButtons,
+                    showStop: showStopButton,
+                    isRecoveryMessage: isAssistantRecoveryMessageId,
+                    clearStatus: clearGenerationAutoRecoveryStatus,
+                    showFailure: showGenerationFailureRecovery,
+                }),
+                response: (dispatchState, recovery) => ({
+                    ownsRun: () => lease.owns() && (!recovery.hasIdentity || recovery.messageId !== null),
 
-                    if (!String(messageChunk ?? '').trim()) {
-                        state.streamingProcessor = null;
-                        throw createEmptyReplyFailure(finishedMessageId);
-                    }
-
-                    if (type === 'normal' && getPipelineRunState() && !getPipelineRunState().fallbackRound) {
-                        const error = new Error('Reply pipeline: expected exactly one current-step call (submit_story).');
-                        error.messageId = finishedMessageId;
-                        throw error;
-                    }
-
-                    if (state.main_api === 'openai' && state.chat[finishedMessageId] && attemptModel) {
-                        state.chat[finishedMessageId].extra ??= {};
-                        state.chat[finishedMessageId].extra.model = attemptModel;
-                    }
-                    await state.streamingProcessor.onFinishStreaming(finishedMessageId, getMessage);
-                    rememberMainChatStreamingTransportProcessorTerminal(state.streamingProcessor, 'completed');
-                    scheduleMainChatMessageListPanelRefresh();
-                    state.streamingProcessor = null;
-                    clearGenerationAutoRecoveryStatus(finishedMessageId);
-                    // A run reaching this tail ended without tool calls:
-                    // fallback completion or mid-run abandonment.
-                    endPipelineRun();
-                    return Object.defineProperties(new String(getMessage), {
-                        'messageChunk': { value: messageChunk },
-                        'fromStream': { value: true },
-                    });
-                }
-
-                const failedMessageId = state.streamingProcessor?.messageId;
-                state.streamingProcessor = null;
-                const streamError = new Error('stream connection closed before completion');
-                streamError.messageId = failedMessageId;
-                throw streamError;
-            }
-
-            const result = await sendGenerationRequest(type, generate_data, requestOptions);
-            if (!canPerformToolCalls && state.ToolManager.hasToolCalls(result)) {
-                assertPipelineResponseAllowed(1, { canPerformToolCalls });
-            }
-            const carriesToolCalls = canPerformToolCalls && state.ToolManager.hasToolCalls(result);
-            if (!carriesToolCalls && isEmptyGenerationResult(result)) {
-                throw createEmptyReplyFailure(activeRecoveryMessageId);
-            }
-            if (!carriesToolCalls && type === 'normal' && getPipelineRunState() && !getPipelineRunState().fallbackRound) {
-                throw new Error('Reply pipeline: expected exactly one current-step call (submit_story).');
-            }
-            return result;
-        };
-
-        const prepareRetryAttempt = async (attempt, attemptIndex) => {
-            if (attemptIndex <= 0) {
-                return;
-            }
-
-            await ensureRecoveryMessage(activeRecoveryMessageId);
-
-            clearGenerationAttemptMessage(activeRecoveryMessageId);
-            showGenerationAutoRecoveryStatus(activeRecoveryMessageId, attempt.status, attempt.label === 'fallback' ? 'fallback' : 'primary');
-            deactivateSendButtons();
-            showStopButton();
-        };
-
-        const handleAttemptFailure = async (exception, attempt, attemptIndex) => {
-            const isIntermediateAttempt = attemptIndex < attempts.length - 1;
-            const candidateRecoveryMessageId = exception?.messageId ?? state.streamingProcessor?.messageId ?? activeRecoveryMessageId;
-            const failureDecision = getGenerationFailureDecision({
-                shouldAutoRecover: shouldAutoRecover && !isUserStoppedGeneration(exception),
-                failure: exception,
-                isIntermediateAttempt,
+                    unblock: generationType => unblockGeneration(generationType),
+                    showApiError: response => toastr.error(response, t`API Error`, { preventDuplicates: true }),
+                    extractJson: (response, returnInvalidJson) => extractJsonFromData(response, { returnInvalidJson }),
+                    extractMessage: response => extractMessageFromData(response),
+                    extractTitle: response => extractTitleFromData(response),
+                    extractReasoning: response => extractReasoningFromData(response),
+                    extractImages: response => extractImagesFromData(response),
+                    extractSignature: response => extractReasoningSignatureFromData(response),
+                    clean: (message, displayIncompleteSentences) => cleanUpMessage({ getMessage: message, displayIncompleteSentences }),
+                    cleanReasoning: reasoning => getRegexedString(reasoning, shell().state.regex_placement.REASONING),
+                    hasRecoveryMessage: () => isAssistantRecoveryMessageId(recovery.messageId),
+                    replaceRecovery: reply => replaceAssistantRecoveryMessage(recovery.messageId, reply),
+                    clearRecoveryStatus: () => clearGenerationAutoRecoveryStatus(recovery.messageId),
+                    saveReply: reply => saveReply(reply),
+                    setType: value => { dispatchState.type = value; },
+                    hasToolCalls: response => shell().state.ToolManager.hasToolCalls(response),
+                    hasPipeline: () => Boolean(getPipelineRunState()),
+                    deleteLastMessage: () => deleteRecoveryPlaceholder(recovery),
+                    invokeTools: (response, reasoningText, ownsRun) => shell().state.ToolManager.invokeFunctionTools(response, { reasoningText, ownsRun }),
+                    showToolErrors: errors => shell().state.ToolManager.showToolCallError(errors),
+                    preparePipeline: invocations => preparePipelineRound(invocations),
+                    saveTools: (invocations, ownsRun) => shell().state.ToolManager.saveFunctionToolInvocations(invocations, { ownsRun }),
+                    finalizePipeline: input => finalizePipelineReply(input),
+                    logSave: () => console.debug('/api/chats/save called by /Generate'),
+                    endPipeline: () => endPipelineRun(),
+                    saveChat: ownsRun => saveChatConditional(ownsRun),
+                    clearProcessor: () => { shell().state.streamingProcessor = null; },
+                }),
+                failure: dispatchState => ({
+                    ownsRun: () => dispatchState.ownsCleanup(),
+                    cleanupStopped: () => getGenerationLifecycleService().cleanupStoppedGeneration({
+                        aborted: Boolean(signal?.aborted || submissionSignal?.aborted),
+                        current: getCurrentGenerationContextIdentity(), expected: requestIdentity,
+                        processor: shell().state.streamingProcessor, expectedProcessor: dispatchState.processor,
+                        pipeline: getPipelineRunState(), expectedPipeline: dispatchState.pipeline,
+                    }, {
+                        endPipeline: endPipelineRun,
+                        unblock: () => unblockGeneration(dispatchState.type),
+                        clearProcessor: () => { shell().state.streamingProcessor = null; },
+                    }),
+                    reportError: message => toastr.error(message, t`Text generation error`, { timeOut: 10000, extendedTimeOut: 20000 }),
+                    endPipeline: endPipelineRun,
+                    hasRegenerateSnapshot: Boolean(regenerateSnapshot),
+                    isUserStopped: isUserStoppedGeneration,
+                    restore: () => restoreRegenerateTurnTail(regenerateSnapshot),
+                    reportRestore: restored => {
+                        if (restored) toastr.warning(t`Regeneration failed — the previous reply was restored.`, t`Regenerate`);
+                        else toastr.error(t`Regeneration failed — the previous reply could not be restored.`, t`Regenerate`);
+                    },
+                    unblock: () => unblockGeneration(dispatchState.type),
+                    log: error => console.log(error),
+                    clearProcessor: () => { shell().state.streamingProcessor = null; },
+                }),
             });
-            state.streamingProcessor = null;
-
-            if (failureDecision.action !== 'retry') {
-                if (failureDecision.shouldRestoreAttemptMessage) {
-                    await ensureRecoveryMessage(candidateRecoveryMessageId);
-                    clearGenerationAttemptMessage(activeRecoveryMessageId);
-                } else if (isAssistantRecoveryMessageId(candidateRecoveryMessageId)) {
-                    activeRecoveryMessageId = candidateRecoveryMessageId;
-                }
-                clearGenerationAutoRecoveryStatus(activeRecoveryMessageId);
-                if (failureDecision.shouldShowFailureRecovery && isAssistantRecoveryMessageId(activeRecoveryMessageId)) {
-                    showGenerationFailureRecovery(activeRecoveryMessageId);
-                }
-                return {
-                    action: 'throw',
-                    exception,
-                    attempt,
-                };
-            }
-
-            await ensureRecoveryMessage(candidateRecoveryMessageId);
-            clearGenerationAttemptMessage(activeRecoveryMessageId);
-            return {
-                action: 'retry',
-                exception,
-                attempt,
-            };
-        };
-
-        return executeGenerationAttempts({
-            attempts,
-            prepareRetryAttempt,
-            runAttempt: async (attempt, attemptIndex) => {
-                const result = await runGenerationAttempt(attempt, attemptIndex);
-                clearGenerationAutoRecoveryStatus(activeRecoveryMessageId ?? state.chat.length - 1);
-                return result;
-            },
-            handleFailure: handleAttemptFailure,
-        });
-    }
-
-    const previousAttemptModel = state.generatingAttemptModel;
-    try {
-        const generationResult = await finishGenerating();
-        return await onSuccess(generationResult);
-    } catch (exception) {
-        return onError(exception);
-    } finally {
-        state.generatingAttemptModel = previousAttemptModel;
-    }
-
-    /**
-     * Handles the successful response from the generation API.
-     * @param data
-     * @returns {Promise<String|{fromStream}|*|string|string|void|Awaited<*>|undefined>}
-     * @throws {Error} Throws an error if the response data contains an error message
-     */
-    async function onSuccess(data) {
-        if (!data) return;
-
-        if (data.pipelineContinuation) {
-            return Generate('normal', { automatic_trigger, force_name2, quiet_prompt, quietToLoud, skipWIAN, signal, quietImage, quietName, depth: depth + 1 }, dryRun);
-        }
-
-        if (data?.fromStream) {
-            return data;
-        }
-
-        let messageChunk = '';
-
-        // if an error was returned in data, show it and throw it
-        if (data.error) {
-            unblockGeneration(type);
-
-            if (data?.response) {
-                toastr.error(data.response, t`API Error`, { preventDuplicates: true });
-            }
-            throw new Error(data?.response);
-        }
-
-        if (jsonSchema) {
-            unblockGeneration(type);
-            return extractJsonFromData(data, { returnInvalidJson: jsonSchema.returnInvalid ?? false });
-        }
-
-        //const getData = await response.json();
-        let getMessage = extractMessageFromData(data);
-        let title = extractTitleFromData(data);
-        let reasoning = extractReasoningFromData(data);
-        let imageUrls = extractImagesFromData(data);
-        const reasoningSignature = extractReasoningSignatureFromData(data);
-
-        messageChunk = cleanUpMessage({
-            getMessage: getMessage,
-            displayIncompleteSentences: false,
-        });
-
-
-        reasoning = getRegexedString(reasoning, state.regex_placement.REASONING);
-
-        reasoning = reasoning.trim();
-
-        //Formating
-        const displayIncomplete = type === 'quiet' && !quietToLoud;
-        getMessage = cleanUpMessage({
-            getMessage: getMessage,
-            displayIncompleteSentences: displayIncomplete,
-        });
-
-        if (type == 'quiet') {
-            unblockGeneration(type);
-            return getMessage;
-        } else {
-            const finalization = getGenerationSuccessFinalization({
-                hasActiveRecoveryMessage: isAssistantRecoveryMessageId(activeRecoveryMessageId),
-                type,
-            });
-            if (finalization.action === 'replace_recovery_message') {
-                ({ type, getMessage } = await replaceAssistantRecoveryMessage(activeRecoveryMessageId, {
-                    type,
-                    getMessage,
-                    title,
-                    reasoning,
-                    imageUrls,
-                    reasoningSignature,
-                }));
-                clearGenerationAutoRecoveryStatus(activeRecoveryMessageId);
-            } else {
-                ({ type, getMessage } = await saveReply({ type: finalization.type, getMessage, title, reasoning, imageUrls, reasoningSignature }));
-            }
-        }
-
-        if (canPerformToolCalls) {
-            const hasToolCalls = state.ToolManager.hasToolCalls(data);
-            const shouldDeleteMessage = Boolean(getPipelineRunState()) || (['', '...'].includes(getMessage) && !reasoning);
-            if (hasToolCalls && shouldDeleteMessage) await deleteLastMessage();
-            const invocationResult = await state.ToolManager.invokeFunctionTools(data, { reasoningText: reasoning });
-            const shouldStopGeneration = (!invocationResult.invocations.length && shouldDeleteMessage) || invocationResult.stealthCalls.length;
-            if (hasToolCalls) {
-                if (shouldStopGeneration) {
-                    if (Array.isArray(invocationResult.errors) && invocationResult.errors.length) {
-                        state.ToolManager.showToolCallError(invocationResult.errors);
-                    }
-                    endPipelineRun();
-                    unblockGeneration(type);
-                    return;
-                }
-
-                const pipelineDecision = preparePipelineRound(invocationResult.invocations);
-                await state.ToolManager.saveFunctionToolInvocations(invocationResult.invocations);
-                if (pipelineDecision?.action === 'final') {
-                    return await finalizePipelineReply({
-                        type,
-                        text: pipelineDecision.text,
-                        step: pipelineDecision.step,
-                        meta: pipelineDecision.meta,
-                        reasoning,
-                        reasoningSignature,
-                        title,
-                        imageUrls,
-                    });
-                }
-                depth = depth + 1;
-                return Generate('normal', { automatic_trigger, force_name2, quiet_prompt, quietToLoud, skipWIAN, signal, quietImage, quietName, depth }, dryRun);
-            }
-        }
-
-        console.debug('/api/chats/save called by /Generate');
-        // Reaching the normal tail means no tool calls were processed: the run
-        // ended via fallback completion or mid-run abandonment.
-        endPipelineRun();
-        await saveChatConditional();
-        unblockGeneration(type);
-        state.streamingProcessor = null;
-
-        // Don't break the API chain that expects a single string in return
-        return Object.defineProperty(new String(getMessage), 'messageChunk', { value: messageChunk });
-    }
-
-    /**
-     * Exception handler for finishGenerating
-     * @param {Error|object} exception Error or response JSON
-     * @throws {Error|object} Re-throws the exception
-     */
-    async function onError(exception) {
-        // if the response JSON was thrown, show the error message
-        if (typeof exception?.error?.message === 'string') {
-            toastr.error(exception.error.message, t`Text generation error`, { timeOut: 10000, extendedTimeOut: 20000 });
-        } else if (String(exception?.message ?? '').startsWith('Reply pipeline:')) {
-            toastr.error(exception.message, t`Text generation error`, { timeOut: 10000, extendedTimeOut: 20000 });
-        }
-
-        endPipelineRun();
-
-        // A failed regenerate restores the removed turn tail — losing a good
-        // reply to a provider hiccup is worse than keeping the old one. A user
-        // stop keeps the (possibly partial) new reply instead.
-        if (regenerateSnapshot && !isUserStoppedGeneration(exception)) {
-            const restored = await restoreRegenerateTurnTail(regenerateSnapshot);
-            if (restored) {
-                toastr.warning(t`Regeneration failed — the previous reply was restored.`, t`Regenerate`);
-            } else {
-                toastr.error(t`Regeneration failed — the previous reply could not be restored.`, t`Regenerate`);
-            }
-        }
-
-        unblockGeneration(type);
-        console.log(exception);
-        state.streamingProcessor = null;
-        throw exception;
-    }
+        },
+    });
 }
 //MARK: Generate() ends
 
-/**
- * Derives the inspector budget block and its overflow warning from the
- * assembled ChatCompletion. Step materials are paid for after the base
- * assembly, so an exhausted budget survives only as a negative remainder —
- * that must surface as the same overflow warning an assembly failure gets.
- * @param {object} args
- * @param {object|null} args.chatCompletion Assembled ChatCompletion instance
- * @param {number} args.contextTokens Context + reserved reply
- * @param {number} args.responseTokens Reserved reply tokens
- * @returns {{budget: object|null, warning: string|null}}
- */
-export function derivePreviewBudget({ chatCompletion, contextTokens, responseTokens }) {
-    if (!chatCompletion) {
-        return { budget: null, warning: null };
-    }
-    const budget = {
-        context: contextTokens,
-        response: responseTokens,
-        remaining: chatCompletion.tokenBudget,
-        used: contextTokens - responseTokens - chatCompletion.tokenBudget,
-        totalTokens: chatCompletion.getTotalTokenCount(),
-    };
-    const errorName = chatCompletion.error?.name;
-    const warning = errorName === 'TokenBudgetExceeded' || budget.remaining < 0
-        ? 'budget-exceeded'
-        : (errorName ? 'assembly-error' : null);
-    return { budget, warning };
-}
 
 /**
  * Turns the assembled preview state into the final request body the send path
@@ -1693,125 +749,63 @@ export function derivePreviewBudget({ chatCompletion, contextTokens, responseTok
  * @param {object[]} [args.summarized] Turn-summary projection entries applied to this assembly
  * @returns {Promise<object>} Serializable preview result for the inspector UI
  */
-async function buildPreviewRequestResult({ type, generateData, chatCompletion, round, warnings, pendingMessage, pendingEntryIdentifier = null, summarized = [] }) {
-    const messages = generateData?.prompt;
-    if (!Array.isArray(messages)) {
-        return {
-            kind: 'prompt-preview-empty',
-            reason: state.main_api !== 'openai' ? 'unsupported-api' : 'no-active-character',
-            warnings,
-        };
-    }
-
-    const { generate_data: requestBody, stream } = await buildChatCompletionRequest({
-        type,
-        messages,
-        model: type === 'normal' ? resolvePreviewPipelineModel(getChatCompletionModelFromSettings(state.oai_settings), round) : null,
-        emitSettingsReady: false,
+async function buildPreviewRequestResult({ type, generateData, chatCompletion, round, warnings, pendingMessage, pendingEntryIdentifier = null, summarized = [], ownsRun }) {
+    return getGenerationLifecycleService().buildPreviewResult({
+        type, isOpenAI: shell().state.main_api === 'openai', data: generateData, round, warnings,
+        pending: pendingMessage, pendingIdentifier: pendingEntryIdentifier, summarized, completion: chatCompletion,
+    }, {
+        ownsRun,
+        previewModel: index => resolvePreviewPipelineModel(getChatCompletionModelFromSettings(shell().state.oai_settings), index),
+        build: (messages, index, model) => buildChatCompletionRequest({ type, messages, model, emitSettingsReady: false }),
+        shape: (body, index) => previewPipelineRequestShaping(body, { round: index }),
+        canUseTools: model => shell().state.ToolManager.canPerformToolCalls(type, shell().state.oai_settings, model),
+        responseTokens: () => Number(shell().state.oai_settings?.openai_max_tokens) || 0,
+        maxPromptTokens: () => getMaxPromptTokens(),
+        budget: (completion, contextTokens, responseTokens) => derivePreviewBudget({ chatCompletion: completion, contextTokens, responseTokens }),
     });
-    const pipeline = previewPipelineRequestShaping(requestBody, { round });
-    if (pipeline && !pipeline.fallback && !state.ToolManager.canPerformToolCalls(type, state.oai_settings, requestBody.model)) {
-        throw new Error(`Reply pipeline: model ${requestBody.model} does not support tools in this provider.`);
-    }
-    const responseTokens = Number(state.oai_settings?.openai_max_tokens) || 0;
-    const contextTokens = getMaxPromptTokens() + responseTokens;
-    const previewBudget = derivePreviewBudget({ chatCompletion, contextTokens, responseTokens });
-    const { budget } = previewBudget;
-    if (previewBudget.warning) {
-        warnings = [...warnings, previewBudget.warning];
-    }
-
-    // The pending user message carries the highest chatHistory-N identifier —
-    // derived from the final assembled pool, which may be longer than the raw
-    // oaiMessages array once depth injections are merged in.
-    let maxHistoryIndex = 0;
-    for (const entry of chatCompletion?.getChatEntries?.() ?? []) {
-        const match = /^chatHistory-(\d+)$/.exec(String(entry?.identifier ?? ''));
-        if (match) {
-            maxHistoryIndex = Math.max(maxHistoryIndex, Number(match[1]));
-        }
-    }
-    const resolvedPendingIdentifier = pendingMessage && maxHistoryIndex > 0
-        ? `chatHistory-${maxHistoryIndex}`
-        : pendingEntryIdentifier;
-
-    return {
-        kind: 'prompt-preview',
-        type,
-        model: requestBody?.model ?? null,
-        stream,
-        request: requestBody,
-        entries: chatCompletion?.getChatEntries?.() ?? [],
-        dropped: chatCompletion?.getDroppedEntries?.() ?? [],
-        summarized: Array.isArray(summarized) ? summarized : [],
-        budget,
-        pipeline,
-        warnings,
-        pendingMessage: pendingMessage ? {
-            name: pendingMessage.name ?? null,
-            mes: pendingMessage.mes ?? '',
-        } : null,
-        pendingEntryIdentifier: resolvedPendingIdentifier,
-        messagesInContext: messages.filter(x => !x?.tool_calls && ['user', 'assistant', 'tool'].includes(x?.role)).length,
-    };
 }
 
 /**
  * Preview the request a normal generation would produce right now, without
- * sending it and without mutating chat state. Runs the full assembly path of
+ * sending it and without mutating chat shell().state. Runs the full assembly path of
  * executeGenerationRequestInShell and stops before the fetch.
  * @param {object} [options] Options
  * @param {number} [options.round] Pipeline round index to preview (0 = first step)
  * @returns {Promise<object>} Serializable preview result
  */
 export async function previewNextGenerationRequest({ round = 0 } = {}) {
-    // extension_prompts is module state mutated during assembly (depth prompt,
-    // WI depth injections, quiet-prompt staging). Snapshot and restore so a
-    // preview cannot leak injection keys into the next real generation.
-    const extensionPromptSnapshot = { ...(state.extension_prompts ?? {}) };
-    try {
-        const envelope = createGenerationRequestEnvelope({
-            type: 'normal',
-            options: { preview: { round: Number(round) || 0 } },
-            dryRun: true,
-            mainApi: state.main_api,
-        });
-        return await executeGenerationRequestInShell(envelope);
-    } finally {
-        for (const key of Object.keys(state.extension_prompts ?? {})) {
-            if (!(key in extensionPromptSnapshot)) {
-                delete state.extension_prompts[key];
-            }
-        }
-        for (const [key, value] of Object.entries(extensionPromptSnapshot)) {
-            state.extension_prompts[key] = value;
-        }
-    }
+    await shell().ensureGenerationRuntime?.();
+    return executeGenerationRequestInShell(createGenerationRequestEnvelope({
+        type: 'normal',
+        options: { preview: { round: Number(round) || 0 } },
+        dryRun: true,
+        mainApi: shell().state.main_api,
+    }));
 }
 
 export function updateEditArrowClasses() {
-    if (!(state.this_edit_mes_id >= 0)) {
+    if (!(shell().state.this_edit_mes_id >= 0)) {
         return;
     }
     if (isReactMainChatOwner()) {
         return;
     }
 
-    const message = state.chatElement.children('.mes').filter(`.mes[mesid="${state.this_edit_mes_id}"]`);
+    const message = shell().state.chatElement.children('.mes').filter(`.mes[mesid="${shell().state.this_edit_mes_id}"]`);
 
     const downButton = message.find('.mes_edit_down');
     const upButton = message.find('.mes_edit_up');
     const copyButton = message.find('.mes_edit_copy');
     const deleteButton = message.find('.mes_edit_delete');
-    const lastId = Number(state.chatElement.find('.mes').last().attr('mesid'));
-    const firstId = Number(state.chatElement.find('.mes').first().attr('mesid'));
+    const lastId = Number(shell().state.chatElement.find('.mes').last().attr('mesid'));
+    const firstId = Number(shell().state.chatElement.find('.mes').first().attr('mesid'));
 
     copyButton.removeClass('disabled');
     deleteButton.removeClass('disabled');
 
     // The last message cannot be moved down.
-    downButton.toggleClass('disabled', lastId === Number(state.this_edit_mes_id));
+    downButton.toggleClass('disabled', lastId === Number(shell().state.this_edit_mes_id));
     // The first message cannot be moved up.
-    upButton.toggleClass('disabled', firstId === Number(state.this_edit_mes_id));
+    upButton.toggleClass('disabled', firstId === Number(shell().state.this_edit_mes_id));
 }
 

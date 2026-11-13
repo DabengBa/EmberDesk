@@ -7,11 +7,11 @@ import { ContractButton } from '../contract/ContractButton';
  * `data-format`, so the contract classes/attribute stay on the rendered
  * <button>.
  */
-export function ExportFormatPopup() {
+export function ExportFormatPopup({ onExport }: { onExport?: (format: string) => void } = {}) {
     return (
         <>
-            <ContractButton className="export_format list-group-item" data-format="png" label="PNG" width="100%" />
-            <ContractButton className="export_format list-group-item" data-format="json" label="JSON" width="100%" />
+            <ContractButton className="export_format list-group-item" data-format="png" label="PNG" width="100%" onClick={onExport ? event => { event.stopPropagation(); onExport('png'); } : undefined} />
+            <ContractButton className="export_format list-group-item" data-format="json" label="JSON" width="100%" onClick={onExport ? event => { event.stopPropagation(); onExport('json'); } : undefined} />
         </>
     );
 }

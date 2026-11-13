@@ -21,7 +21,7 @@ import { resolveCanonicalChatProjectionPath } from './canonical-chat-projection-
 import { getCanonicalStorageSlice } from '../canonical-storage-slice-registry.js';
 import { recordImportLedgerEntry, removeImportLedgerEntry } from '../canonical-import-ledger.js';
 
-export const CANONICAL_CHAT_BACKUP_MANIFEST_VERSION = 1;
+export const CANONICAL_CHAT_BACKUP_MANIFEST_VERSION = 2;
 export const CANONICAL_CHAT_ATTACHMENT_MANIFEST_VERSION = 1;
 const RESTORE_ID_PATTERN = /^chat-restore-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
@@ -52,7 +52,13 @@ function getCanonicalChatDatabaseRevision(db) {
     return {
         sessionCount: Number(row?.session_count ?? 0),
         maxUpdatedAtMs: Number(row?.max_updated_at_ms ?? 0),
+        version: getCanonicalChatRestoreVersion(db),
     };
+}
+
+export function getCanonicalChatRestoreVersion(db) {
+    const rows = db.prepare('SELECT owner_type, owner_id, source_path, concurrency_token FROM chat_sessions ORDER BY owner_type, owner_id, source_path').all();
+    return crypto.createHash('sha256').update(JSON.stringify(rows)).digest('hex');
 }
 
 function createBackupSessionRows(db) {
@@ -131,8 +137,15 @@ function validateBackupShape(backup) {
     if (!backup || typeof backup !== 'object') {
         return { ok: false, reasonCode: 'invalid_backup_manifest' };
     }
-    if (Number(backup.manifestVersion) !== CANONICAL_CHAT_BACKUP_MANIFEST_VERSION) {
+    if (![1, CANONICAL_CHAT_BACKUP_MANIFEST_VERSION].includes(Number(backup.manifestVersion))) {
         return { ok: false, reasonCode: 'unsupported_backup_manifest_version' };
+    }
+    if (Number(backup.manifestVersion) === 2 && (
+        !Array.isArray(backup.tombstones) || !Array.isArray(backup.operationResults)
+        || backup.tombstones.some(row => !row || typeof row.owner_type !== 'string' || typeof row.owner_id !== 'string' || typeof row.source_path !== 'string')
+        || backup.operationResults.some(row => !row || typeof row.operation_id !== 'string' || typeof row.fingerprint !== 'string' || typeof row.result_json !== 'string')
+    )) {
+        return { ok: false, reasonCode: 'incomplete_backup_manifest' };
     }
     if (!Array.isArray(backup.sessions) || !backup.databaseRevision || !backup.projectionState || !backup.attachmentManifest) {
         return { ok: false, reasonCode: 'incomplete_backup_manifest' };
@@ -415,24 +428,35 @@ export function createCanonicalChatBackup({
     db,
     createdAtMs = Date.now(),
 }) {
-    const projectionRepairs = listOpenCanonicalChatProjectionRepairs(db);
-    const attachmentEntries = listAttachmentManifestEntries(db);
-    return {
-        manifestVersion: CANONICAL_CHAT_BACKUP_MANIFEST_VERSION,
-        createdAtMs: Number(createdAtMs),
-        schemaVersion: getCanonicalMigrationStatus(db).currentVersion,
-        databaseRevision: getCanonicalChatDatabaseRevision(db),
-        projectionState: {
-            openRepairCount: projectionRepairs.length,
-            repairKeys: projectionRepairs.map(repair => repair.repairKey),
-        },
-        attachmentManifest: {
-            version: CANONICAL_CHAT_ATTACHMENT_MANIFEST_VERSION,
-            entries: attachmentEntries,
-        },
-        sessions: createBackupSessionRows(db),
-        projectionRepairs,
-    };
+    db.exec('SAVEPOINT canonical_chat_backup');
+    try {
+        const projectionRepairs = listOpenCanonicalChatProjectionRepairs(db);
+        const attachmentEntries = listAttachmentManifestEntries(db);
+        const backup = {
+            manifestVersion: CANONICAL_CHAT_BACKUP_MANIFEST_VERSION,
+            createdAtMs: Number(createdAtMs),
+            schemaVersion: getCanonicalMigrationStatus(db).currentVersion,
+            databaseRevision: getCanonicalChatDatabaseRevision(db),
+            projectionState: {
+                openRepairCount: projectionRepairs.length,
+                repairKeys: projectionRepairs.map(repair => repair.repairKey),
+            },
+            attachmentManifest: {
+                version: CANONICAL_CHAT_ATTACHMENT_MANIFEST_VERSION,
+                entries: attachmentEntries,
+            },
+            sessions: createBackupSessionRows(db),
+            projectionRepairs,
+            tombstones: db.prepare('SELECT owner_type, owner_id, source_path FROM chat_projection_tombstones ORDER BY owner_type, owner_id, source_path').all(),
+            operationResults: db.prepare('SELECT operation_id, fingerprint, result_json FROM chat_operation_results ORDER BY operation_id').all(),
+        };
+        db.exec('RELEASE canonical_chat_backup');
+        return backup;
+    } catch (error) {
+        db.exec('ROLLBACK TO canonical_chat_backup');
+        db.exec('RELEASE canonical_chat_backup');
+        throw error;
+    }
 }
 
 export function getCanonicalChatRestoreStatus(db, restoreId = null) {
@@ -499,9 +523,13 @@ export async function restoreCanonicalChatBackup({
     directories,
     nowMs = Date.now(),
     restoreId = `chat-restore-${randomUUID()}`,
+    expectedVersion,
 }) {
     if (typeof restoreId !== 'string' || !RESTORE_ID_PATTERN.test(restoreId)) {
         return { ok: false, status: 'blocked', reasonCode: 'invalid_restore_id', restoreId, commitState: 'not_committed' };
+    }
+    if (typeof expectedVersion !== 'string' || !/^[0-9a-f]{64}$/.test(expectedVersion)) {
+        return { ok: false, status: 'blocked', reasonCode: 'restore_version_required', restoreId, commitState: 'not_committed' };
     }
     const manifestVersion = Number(backup?.manifestVersion ?? null);
     let commitState = 'not_committed';
@@ -584,7 +612,7 @@ export async function restoreCanonicalChatBackup({
             };
         }
 
-        const previousSessions = listCanonicalChatSessions(db);
+        let previousSessions;
         writeRestoreStatus(db, {
             restoreId,
             manifestVersion: backup.manifestVersion,
@@ -595,6 +623,27 @@ export async function restoreCanonicalChatBackup({
         });
         commitState = 'unknown';
         withCanonicalTransaction(db, txnDb => {
+            if (getCanonicalChatRestoreVersion(txnDb) !== expectedVersion) {
+                const error = new Error('chat_conflict');
+                error.code = 'CHAT_RESTORE_CONFLICT';
+                throw error;
+            }
+            const existingOperation = txnDb.prepare('SELECT fingerprint, result_json FROM chat_operation_results WHERE operation_id = ?');
+            const insertOperation = txnDb.prepare('INSERT OR IGNORE INTO chat_operation_results (operation_id, fingerprint, result_json) VALUES (?, ?, ?)');
+            for (const row of Number(backup.manifestVersion) === 2 ? backup.operationResults : []) {
+                const existing = existingOperation.get(row.operation_id);
+                if (existing && (existing.fingerprint !== row.fingerprint || existing.result_json !== row.result_json)) {
+                    const error = new Error('chat_operation_conflict');
+                    error.code = 'CHAT_RESTORE_OPERATION_CONFLICT';
+                    throw error;
+                }
+                insertOperation.run(row.operation_id, row.fingerprint, row.result_json);
+            }
+            const insertTombstone = txnDb.prepare('INSERT OR IGNORE INTO chat_projection_tombstones (owner_type, owner_id, source_path) VALUES (?, ?, ?)');
+            for (const row of Number(backup.manifestVersion) === 2 ? backup.tombstones : []) {
+                insertTombstone.run(row.owner_type, row.owner_id, row.source_path);
+            }
+            previousSessions = listCanonicalChatSessions(txnDb);
             txnDb.prepare('DELETE FROM chat_projection_repairs').run();
             txnDb.prepare('DELETE FROM chat_sessions').run();
             for (const record of stagedRecords) {
@@ -697,6 +746,12 @@ export async function restoreCanonicalChatBackup({
         });
         return { ok: true, status: 'restored', reasonCode: null, restoreId, commitState };
     } catch (error) {
+        if (error?.code === 'CHAT_RESTORE_CONFLICT' || error?.code === 'CHAT_RESTORE_OPERATION_CONFLICT') {
+            const reasonCode = error.code === 'CHAT_RESTORE_OPERATION_CONFLICT' ? 'chat_operation_conflict' : 'chat_conflict';
+            writeRestoreStatus(db, { restoreId, manifestVersion, backupCreatedAtMs: backup?.createdAtMs ?? null,
+                status: 'blocked', commitState: 'not_committed', reasonCode, nowMs, finishedAtMs: nowMs });
+            return { ok: false, status: 'blocked', reasonCode, restoreId, commitState: 'not_committed' };
+        }
         let journalWritten = true;
         try {
             if (!claimed) throw error;

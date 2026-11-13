@@ -13,6 +13,28 @@ function read(relativePath) {
 }
 
 describe('legacy dialogue popup structure', () => {
+    test('the bootstrapped typed controller is the only dialogue result owner', () => {
+        const script = read('public/script.js');
+        const handlers = read('public/scripts/dom-handlers.js');
+        expect(script).toContain('dialogueController = workspace.createDialogueController()');
+        expect(script).not.toContain('dialogueResolve');
+        expect(handlers).not.toContain('state.dialogueResolve');
+        expect(handlers).toContain('state.dialogueController');
+    });
+    test('bulk deletion uses the typed selection rather than a second shell index', () => {
+        const handlers = read('public/scripts/dom-handlers.js');
+        expect(handlers).toContain('controller.confirm(');
+        expect(handlers).toContain('await shell().getChatMessageCommands().deleteFrom(deletedFrom)');
+        expect(handlers).not.toContain('controller.runEffects(');
+        expect(handlers).not.toContain('state.this_del_mes');
+    });
+    test('dialogue controls accept direct React command callbacks', () => {
+        const source = read('app/components/dialogue-popups/DialoguePopups.tsx');
+        expect(source).toContain('commands?.confirmDialoguePopup');
+        expect(source).toContain('commands?.cancelDialoguePopup');
+        expect(read('public/script.js')).toContain('runDialoguePopupCommand');
+        expect(read('app/workspace-panels.tsx')).toContain('<DialoguePopupControls commands={commands}');
+    });
     test('confirmation popup buttons are React-owned contract buttons bound by ID', () => {
         const source = read('app/components/dialogue-popups/DialoguePopups.tsx');
 
@@ -34,18 +56,17 @@ describe('legacy dialogue popup structure', () => {
         expect(index).not.toContain('id="dialogue_del_mes_ok"');
     });
 
-    test('control mounts run before the ID-bound click handlers', () => {
+    test('dialogue controls mount after their controller and compatibility handlers delegate', () => {
         const scriptSource = read('public/script.js');
         const domHandlersSource = read('public/scripts/dom-handlers.js');
 
-        expect(domHandlersSource).toContain('mountDialoguePopupControls()');
         expect(domHandlersSource).toContain('mountDialogueDelMesControls()');
-        const mountIdx = domHandlersSource.indexOf('mountDialoguePopupControls()');
-        const bindIdx = domHandlersSource.indexOf("$('#dialogue_popup_ok').on('click'");
-        expect(mountIdx).toBeGreaterThanOrEqual(0);
-        expect(bindIdx).toBeGreaterThan(mountIdx);
-
-        expect(scriptSource).toContain("measureStartupStage('mountDialoguePopupControls'");
+        expect(domHandlersSource).toContain("$(document).on('click', '#dialogue_popup_ok'");
+        expect(domHandlersSource).toContain("$(document).on('click', '#dialogue_popup_cancel'");
+        const controllerIdx = scriptSource.indexOf('dialogueController = workspace.createDialogueController()');
+        const mountIdx = scriptSource.indexOf("measureStartupStage('mountDialoguePopupControls'");
+        expect(controllerIdx).toBeGreaterThanOrEqual(0);
+        expect(mountIdx).toBeGreaterThan(controllerIdx);
         expect(scriptSource).toContain("measureStartupStage('mountDialogueDelMesControls'");
     });
 });

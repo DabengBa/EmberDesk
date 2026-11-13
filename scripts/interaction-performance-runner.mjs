@@ -595,17 +595,28 @@ async function getCsrfToken(page) {
 async function markChatStatsDirty(page, csrfToken, avatar) {
     await page.evaluate(async ({ token, targetAvatar }) => {
         const dirtyTimestamp = '2026-05-10T00:00:00.000Z';
+        const headers = { 'Content-Type': 'application/json', 'X-CSRF-Token': token };
+        const current = await fetch('/api/chats/get', {
+            method: 'POST', credentials: 'same-origin', headers,
+            body: JSON.stringify({ avatar_url: targetAvatar, file_name: 'interaction-perf-dirty' }),
+        });
+        if (!current.ok) {
+            throw new Error(`Chat dirty lookup failed with status ${current.status}`);
+        }
+        const version = current.headers.get('X-Chat-Version');
+        const payload = await current.json();
+        if (!version && Array.isArray(payload)) {
+            throw new Error('Chat dirty lookup returned a chat without a version');
+        }
         const response = await fetch('/api/chats/save', {
             method: 'POST',
             credentials: 'same-origin',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-Token': token,
-            },
+            headers,
             body: JSON.stringify({
                 avatar_url: targetAvatar,
                 file_name: 'interaction-perf-dirty',
-                force: true,
+                ...(version ? { version } : { create: true }),
+                operationId: crypto.randomUUID(),
                 chat: [
                     {
                         user_name: 'User',
@@ -626,7 +637,7 @@ async function markChatStatsDirty(page, csrfToken, avatar) {
         });
 
         if (!response.ok) {
-            throw new Error(`Chat dirty mutation failed with status ${response.status}`);
+            throw new Error(`Chat dirty mutation failed with status ${response.status}: ${await response.text()}`);
         }
     }, { token: csrfToken, targetAvatar: avatar });
 }

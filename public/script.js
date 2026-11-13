@@ -1,4 +1,11 @@
 import {
+    generation_started, generatingAttemptModel, scrollLock, streamingProcessor, is_send_press, abortController,
+    setGenerationStarted, setGeneratingAttemptModel, setScrollLock, setStreamingProcessor, setSending, setAbortController,
+    withGeneratingModel,
+} from './scripts/generation-shared-state.js';
+export { streamingProcessor, is_send_press, withGeneratingModel };
+
+import {
     showdown,
     moment,
     DOMPurify,
@@ -7,12 +14,14 @@ import {
     SVGInject,
     Popper,
     initLibraryShims,
+    localforage,
     default as libs,
     lodash,
 } from './lib.js';
 
 import { humanizedDateTime, favsToHotswap, getMessageTimeStamp, dragElement, isMobile, initRossMods, shouldSendOnEnter } from './scripts/RossAscends-mods.js';
 import { applyResetChatState } from './scripts/chat-state-reset.js';
+import { createChatImportOperation } from './scripts/chat-import-protocol.js';
 
 import {
     getWorldInfoSettings,
@@ -69,6 +78,7 @@ import {
     forceCharacterEditorTokenize,
     applyPowerUserSettings,
     applyStylePins,
+    applyCharacterSortSelection,
 } from './scripts/power-user.js';
 
 import {
@@ -94,6 +104,7 @@ import {
 } from './scripts/openai.js';
 
 import {
+    backToMainChat,
     initBranchUI,
     showBranchChatButtons,
 } from './scripts/chat-branch.js';
@@ -182,16 +193,17 @@ import {
 import {
     createGenerationCommand,
     createGenerationRequestEnvelope,
-    isForegroundGenerationEntry,
+    installGenerationAttemptExecutor,
 } from './scripts/chat-generation-command-service.js';
 import { collectRegenerateTurn } from './scripts/chat-regenerate.js';
+import { canRegenerateLastReply as canRegenerateFromState, runGenerationEntry, runQuietGeneration } from './scripts/generation-shared-state.js';
 import { markdownUnderscoreExt } from './scripts/showdown-underscore.js';
 
-import { registerPromptManagerMigration } from './scripts/PromptManager.js';
+import { installPromptManagerDomain, registerPromptManagerMigration } from './scripts/PromptManager.js';
 import { normalizeReplyPipeline, pipelineTriggerTag } from './scripts/reply-pipeline-core.js';
 import { endPipelineRun } from './scripts/reply-pipeline.js';
 import { normalizeToolBindings } from './scripts/tool-bindings-core.js';
-import { syncPipelineToolBindings } from './scripts/tool-bindings.js';
+import { installToolBindingsServiceFactory, syncPipelineToolBindings } from './scripts/tool-bindings.js';
 import { getRegexedString, regex_placement } from './scripts/extensions/regex/engine.js';
 import { FILTER_STATES, FILTER_TYPES, FilterHelper, isFilterState } from './scripts/filters.js';
 import { initLocales, t, translate } from './scripts/i18n.js';
@@ -202,13 +214,13 @@ import { ensurePanel, registerPanelHook } from './scripts/deferred-panels.js';
 import { getCharacterCardTagId } from './scripts/deferred-panel-replays.js';
 import { BulkEditOverlay } from './scripts/BulkEditOverlay.js';
 import { beginSettingsSaveSnapshot, finishSettingsSaveSnapshot } from './scripts/character-sort-save-guard.js';
-import { appendFileContent, hasPendingFileAttachment, populateFileAttachment, decodeStyleTags, encodeStyleTags, normalizeStyleTagsForMarkdown, preserveNeutralChat, restoreNeutralChat, formatCreatorNotes, initChatUtilities, addDOMPurifyHooks } from './scripts/chats.js';
+import { appendFileContent, hasPendingFileAttachment, populateFileAttachment, decodeStyleTags, encodeStyleTags, normalizeStyleTagsForMarkdown, preserveNeutralChat, restoreNeutralChat, formatCreatorNotes, initChatUtilities, openFileAttachmentPicker, addDOMPurifyHooks } from './scripts/chats.js';
 import {
     getPresetManager,
     initPresetManager,
 } from './scripts/preset-manager.js';
 import { getLastMessageId, initMacros } from './scripts/macros.js';
-import { setUserControls } from './scripts/user.js';
+import { getCurrentUserHandle, setUserControls } from './scripts/user.js';
 import { POPUP_RESULT, POPUP_TYPE, Popup, callGenericPopup, fixToastrForDialogs } from './scripts/popup.js';
 import { renderTemplate, renderTemplateAsync } from './scripts/templates.js';
 import { initCustomSelectedSamplers, validateDisabledSamplers } from './scripts/samplerSelect.js';
@@ -242,7 +254,7 @@ import { accountStorage } from './scripts/util/AccountStorage.js';
 import { getSystemMessageByType, initSystemMessages, SAFETY_CHAT, sendSystemMessage, system_message_types, system_messages } from './scripts/system-messages.js';
 import { event_types, eventSource } from './scripts/events.js';
 import { initAccessibility } from './scripts/a11y.js';
-import { initDomHandlers, bindLegacyShellHandlers } from './scripts/dom-handlers.js';
+import { initDomHandlers, bindLegacyShellHandlers, runHistoryRowCommand, runOptionsMenuCommand, runDialoguePopupCommand, runDeleteMessageCommand, runCharacterExportCommand } from './scripts/dom-handlers.js';
 import { AudioPlayer } from './scripts/audio-player.js';
 import { SimpleMutex } from './scripts/util/SimpleMutex.js';
 import { MacroEnvBuilder } from './scripts/macros/engine/MacroEnvBuilder.js';
@@ -260,6 +272,7 @@ import { showMainChatFailure } from './scripts/main-chat-failure.js';
 import { registerWorldInfoShellContext } from './scripts/world-info-shell-context.js';
 import {
     executeGenerationRequestInShell,
+    getCurrentGenerationContextIdentity,
     isUserStoppedGeneration,
     previewNextGenerationRequest,
     updateEditArrowClasses,
@@ -286,6 +299,7 @@ import {
     getMessageTextHTML,
     messageFormatting,
     processImageAttachment,
+    replaceGenerationRecoveryMessage,
     saveReply,
     scrollChatToBottom,
     updateMessageBlock,
@@ -339,24 +353,28 @@ export {
     updateMessageElement,
     saveReply,
 };
-import { registerGenerationShellContext } from './scripts/generation-shell-context.js';
+import { createGenerationBootstrapAdmission, createGenerationRuntimeBootstrap, getGenerationLifecycleService, installGenerationLifecycleService, registerGenerationShellContext } from './scripts/generation-shell-context.js';
 import { registerCharacterLifecycleShellContext } from './scripts/character-lifecycle-shell-context.js';
 import {
     clearChat,
     closeCurrentChatForDelete,
     deleteCharacterChatByName,
     displayChats,
+    fetchChatHistory,
     getChat,
     getPastCharacterChats,
     shouldPreserveCharacterChatTarget,
+    withCurrentChatDeleteVersion,
     loadEarlierChatMessages,
     openCharacterChat,
+    prepareChatTransition,
     printMessages,
     renameCharacterChat,
     renamePastChats,
     saveChat,
     saveChatConditional,
     saveChatDebounced,
+
     selectChatGreeting,
 } from './scripts/chat-ops-service.js';
 import { registerChatOpsShellContext } from './scripts/chat-ops-shell-context.js';
@@ -382,15 +400,20 @@ import { initChatMemory, getChatMemoryDisplayItems } from './scripts/chat-memory
 import { getRequestHeaders, installAjaxCsrfPrefilter, loadCsrfToken } from './scripts/request-context.js';
 import { installPublicBrowserApi } from './scripts/public-api.js';
 import { createReactRuntimeProvider } from './scripts/react-runtime-provider.js';
+import { createSettingsWriteOwner } from './scripts/settings-write-owner.js';
+import { createWorkspaceDrawerService } from './scripts/workspace-drawer-domain.js';
 
 // API OBJECT FOR EXTERNAL WIRING
 installPublicBrowserApi({ libs, getContext });
+
+const runtimeSettingsConflict = createSettingsWriteOwner();
 
 const reactRuntimePort = createReactRuntimeProvider({
     getContext: () => ({ ...getContext(), providerStatus: online_status }),
     eventSource,
     eventTypes: event_types,
     commands: {
+        settingsWriteOwner: runtimeSettingsConflict,
         submitMessage: input => sendTextareaMessage({ ...getComposerSnapshot(), value: String(input ?? '') }),
         stopGeneration: () => stopGeneration(),
         loadEarlier: anchorId => {
@@ -399,7 +422,10 @@ const reactRuntimePort = createReactRuntimeProvider({
                 Number.isInteger(numericAnchorId) && numericAnchorId >= 0 ? numericAnchorId : null,
             );
         },
-        saveSettings: (settings) => {
+        saveSettings: (settings, baseline, revision) => {
+            // A response already in flight may arrive after a runtime conflict.
+            // Do not let it replace any of the still-unreconciled local values.
+            if (runtimeSettingsConflict.hasConflict()) return;
             const context = getContext();
             const mappings = [
                 ['chatCompletionSettings', 'oai_settings'],
@@ -432,9 +458,13 @@ const reactRuntimePort = createReactRuntimeProvider({
                         const otherSettings = { ...savedSettings };
                         delete otherSettings.external_media_allowed_overrides;
                         delete otherSettings.external_media_forbidden_overrides;
-                        Object.assign(runtimeSettings, otherSettings);
+                        for (const [key, value] of Object.entries(otherSettings)) {
+                            if (!baseline || JSON.stringify(runtimeSettings[key]) === JSON.stringify(baseline[settingsKey]?.[key])) runtimeSettings[key] = value;
+                        }
                     } else {
-                        Object.assign(runtimeSettings, savedSettings);
+                        for (const [key, value] of Object.entries(savedSettings)) {
+                            if (!baseline || JSON.stringify(runtimeSettings[key]) === JSON.stringify(baseline[settingsKey]?.[key])) runtimeSettings[key] = value;
+                        }
                     }
                     if (runtimeKey === 'chatCompletionSettings'
                         && previousModel !== undefined
@@ -446,7 +476,16 @@ const reactRuntimePort = createReactRuntimeProvider({
                     }
                 }
             }
+            if (Number.isSafeInteger(revision) && revision > 0) {
+                settingsDocumentRevision = Math.max(settingsDocumentRevision ?? 0, revision);
+            }
             refreshOpenAIPresetService();
+        },
+        hasSettingsConflict: () => runtimeSettingsConflict.hasConflict(),
+        downloadSettingsRecovery: () => {
+            const snapshot = buildRuntimeSettingsPayload();
+            delete snapshot.settings_revision;
+            download(JSON.stringify(snapshot, null, 2), 'emberdesk-unsaved-settings.json', 'application/json');
         },
         connectProvider: input => connectProviderConnection(input),
         testProviderConnection: input => testProviderConnection(input),
@@ -488,7 +527,7 @@ registerWorldInfoShellContext({
     getMenuType: () => menu_type,
     eventSource,
     eventTypes: event_types,
-    getExtensionPromptByName: (promptName) => getExtensionPromptByName(promptName),
+    getExtensionPromptByName: (promptName, promptMap) => getExtensionPromptByName(promptName, promptMap),
     saveMetadata: () => saveMetadata(),
     getCurrentChatId: () => getCurrentChatId(),
     get extensionPromptRoles() { return extension_prompt_roles; },
@@ -513,7 +552,7 @@ registerWorldInfoShellContext({
 registerGenerationShellContext({
     state: {
         get generatingAttemptModel() { return generatingAttemptModel; },
-        set generatingAttemptModel(value) { generatingAttemptModel = value; },
+        set generatingAttemptModel(value) { setGeneratingAttemptModel(value); },
         get INTERACTABLE_CONTROL_CLASS() { return INTERACTABLE_CONTROL_CLASS; },
         get chat() { return chat; },
         get chat_metadata() { return chat_metadata; },
@@ -544,15 +583,15 @@ registerGenerationShellContext({
         get ReasoningHandler() { return ReasoningHandler; },
         get Stopwatch() { return Stopwatch; },
         get abortController() { return abortController; },
-        set abortController(value) { abortController = value; },
+        set abortController(value) { setAbortController(value); },
         get scrollLock() { return scrollLock; },
-        set scrollLock(value) { scrollLock = value; },
+        set scrollLock(value) { setScrollLock(value); },
         get streamingProcessor() { return streamingProcessor; },
-        set streamingProcessor(value) { streamingProcessor = value; },
+        set streamingProcessor(value) { setStreamingProcessor(value); },
         get is_send_press() { return is_send_press; },
-        set is_send_press(value) { is_send_press = value; },
+        set is_send_press(value) { setSending(value); },
         get generation_started() { return generation_started; },
-        set generation_started(value) { generation_started = value; },
+        set generation_started(value) { setGenerationStarted(value); },
         get animation_duration() { return animation_duration; },
         get Popup() { return Popup; },
         get this_edit_mes_id() { return this_edit_mes_id; },
@@ -592,6 +631,7 @@ registerGenerationShellContext({
     replaceAssistantRecoveryMessage: (...args) => replaceAssistantRecoveryMessage(...args),
     saveChatConditional: (...args) => saveChatConditional(...args),
     saveReply: (...args) => saveReply(...args),
+    ensureGenerationRuntime: () => ensureGenerationRuntime(),
     scheduleMainChatMessageListPanelRefresh: (...args) => scheduleMainChatMessageListPanelRefresh(...args),
     sendGenerationRequest: (...args) => sendGenerationRequest(...args),
     sendMessageAsUser: (...args) => sendMessageAsUser(...args),
@@ -691,6 +731,12 @@ registerChatOpsShellContext({
     callGenericPopup: (...args) => callGenericPopup(...args),
     cancelDebouncedChatSave: (...args) => cancelDebouncedChatSave(...args),
     cancelDebouncedMetadataSave: (...args) => cancelDebouncedMetadataSave(...args),
+    beforeClearRecovery: (...args) => beforeClearRecovery(...args),
+    beginChatRecovery: (...args) => beginChatRecovery(...args),
+    captureChatSaveRecovery: (...args) => captureChatSaveRecovery(...args),
+    preserveChatSaveConflict: (...args) => preserveChatSaveConflict(...args),
+    deleteCurrentChatWithRecovery: (...args) => delChat(...args),
+    deleteHistoryChatConditional: (...args) => deleteHistoryChatConditional(...args),
     clamp: (...args) => clamp(...args),
     closeMessageEditor: (...args) => closeMessageEditor(...args),
     compressRequest: (...args) => compressRequest(...args),
@@ -712,7 +758,9 @@ registerChatOpsShellContext({
     persistMainChatMessageListScrollSnapshotBeforeClear: (...args) => persistMainChatMessageListScrollSnapshotBeforeClear(...args),
     queueMainChatMessageListScrollRestore: (...args) => queueMainChatMessageListScrollRestore(...args),
     redisplayChat: (...args) => redisplayChat(...args),
+    reloadCurrentChat: (...args) => reloadCurrentChat(...args),
     renderSelectChatListReact: (...args) => renderSelectChatListReact(...args),
+    displayHistoryCompat: (...args) => displayHistoryCompat(...args),
     saveTokenCache: (...args) => saveTokenCache(...args),
     scrollOnMediaLoad: (...args) => scrollOnMediaLoad(...args),
     select_rm_characters: (...args) => select_rm_characters(...args),
@@ -771,6 +819,7 @@ registerCharacterLifecycleShellContext({
     cancelDebounce: (...args) => cancelDebounce(...args),
     clearChat: (...args) => clearChat(...args),
     closeCurrentChatForDelete: (...args) => closeCurrentChatForDelete(...args),
+    prepareChatTransition: (...args) => prepareChatTransition(...args),
     getDraftTagIds: (...args) => getDraftTagIds(...args),
     assignTagIdsToAvatar: (...args) => assignTagIdsToAvatar(...args),
     deleteTagKey: (...args) => deleteTagKey(...args),
@@ -883,6 +932,8 @@ registerMessageShellContext({
     updateReasoningUI: (...args) => updateReasoningUI(...args),
 });
 registerDomHandlersShellContext({
+    backToMainChat: (...args) => backToMainChat(...args),
+    openFileAttachmentPicker: (...args) => openFileAttachmentPicker(...args),
     getChatMessageCommands: () => getChatMessageCommands(),
     state: {
         get amount_gen() { return amount_gen; },
@@ -901,8 +952,7 @@ registerDomHandlersShellContext({
         get css_send_form_display() { return css_send_form_display; },
         get dialogueCloseStop() { return dialogueCloseStop; },
         set dialogueCloseStop(value) { dialogueCloseStop = value; },
-        get dialogueResolve() { return dialogueResolve; },
-        set dialogueResolve(value) { dialogueResolve = value; },
+        get dialogueController() { return dialogueController; },
         get DragAndDropHandler() { return DragAndDropHandler; },
         get fav_ch_checked() { return fav_ch_checked; },
         get is_advanced_char_open() { return is_advanced_char_open; },
@@ -910,9 +960,9 @@ registerDomHandlersShellContext({
         get isChatSaving() { return isChatSaving; },
         get is_delete_mode() { return is_delete_mode; },
         set is_delete_mode(value) { is_delete_mode = value; },
-        get isExportPopupOpen() { return isExportPopupOpen; },
+        get isExportPopupOpen() { return exportPopupController?.isOpen() ?? false; },
         get is_send_press() { return is_send_press; },
-        set is_send_press(value) { is_send_press = value; },
+        set is_send_press(value) { setSending(value); },
         get loader() { return loader; },
         get mainChatMessageActionsController() { return mainChatMessageActionsController; },
         set mainChatMessageActionsController(value) { mainChatMessageActionsController = value; },
@@ -929,15 +979,14 @@ registerDomHandlersShellContext({
         get POPUP_TYPE() { return POPUP_TYPE; },
         get power_user() { return power_user; },
         get scrollLock() { return scrollLock; },
-        set scrollLock(value) { scrollLock = value; },
+        set scrollLock(value) { setScrollLock(value); },
         get selected_button() { return selected_button; },
         set selected_button(value) { selected_button = value; },
         get SimpleMutex() { return SimpleMutex; },
         get streamingProcessor() { return streamingProcessor; },
         get tag_import_setting() { return tag_import_setting; },
         get this_chid() { return this_chid; },
-        get this_del_mes() { return this_del_mes; },
-        set this_del_mes(value) { this_del_mes = value; },
+
         get this_edit_mes_id() { return this_edit_mes_id; },
     },
     bootstrapWorkspace: (...args) => bootstrapWorkspace(...args),
@@ -952,6 +1001,7 @@ registerDomHandlersShellContext({
     closeCurrentChat: (...args) => closeCurrentChat(...args),
     closeMessageEditor: (...args) => closeMessageEditor(...args),
     closeWorkspaceChildSlotHost: (...args) => closeWorkspaceChildSlotHost(...args),
+    handleWorkspaceDrawerOutsidePointer: target => workspaceDrawerService?.handleOutsidePointer(target),
     copyText: (...args) => copyText(...args),
     createChatMessageActionsController: (...args) => createChatMessageActionsController(...args),
     createOrEditCharacter: (...args) => createOrEditCharacter(...args),
@@ -961,7 +1011,7 @@ registerDomHandlersShellContext({
     deleteCharacter: (...args) => deleteCharacter(...args),
     deleteMessage: (...args) => deleteMessage(...args),
     displayPastChats: (...args) => displayPastChats(...args),
-    doDrawerOpenClick: (...args) => doDrawerOpenClick(...args),
+
     doNewChat: (...args) => doNewChat(...args),
     download: (...args) => download(...args),
     dragElement: (...args) => dragElement(...args),
@@ -972,6 +1022,10 @@ registerDomHandlersShellContext({
     getCharacters: (...args) => getCharacters(...args),
     getCharacterSource: (...args) => getCharacterSource(...args),
     getOptionsPopper: (...args) => getOptionsPopper(...args),
+    getOptionsMenuControllerFactory: () => optionsMenuModuleRef?.createOptionsMenuController,
+    getHistoryImportCommand: () => optionsMenuModuleRef?.importHistoryFiles,
+    getCharacterExportCommand: () => optionsMenuModuleRef?.exportCharacter,
+    getHistoryCommands: () => optionsMenuModuleRef,
     getRequestHeaders: (...args) => getRequestHeaders(...args),
     handleUnifiedImport: (...args) => handleUnifiedImport(...args),
     importCharacter: (...args) => importCharacter(...args),
@@ -1154,25 +1208,41 @@ function getWorkspaceShellChromeState() {
     };
 }
 
-const WORKSPACE_DRAWER_OPENED_STORAGE_KEYS = {
-    'left-nav-panel': 'LNavOpened',
-    'right-nav-panel': 'NavOpened',
-    WorldInfo: 'WINavOpened',
-    RegexPanel: 'RegexNavOpened',
-    SettingsPanel: 'SettingsNavOpened',
-};
-
-const WORKSPACE_DRAWER_LOCKED_STORAGE_KEYS = {
-    'left-nav-panel': 'LNavLockOn',
-    'right-nav-panel': 'NavLockOn',
-};
-
 /**
  * Optional per-host close guards. Return false to refuse a close — used by
  * the settings drawer to intercept with a dirty-changes confirm.
  * @type {Record<string, () => boolean>}
  */
 const WORKSPACE_DRAWER_CLOSE_GUARDS = {};
+let workspaceDrawerService = null;
+
+function installWorkspaceDrawerService(factory) {
+    const wrap = element => ({
+        id: element.id,
+        get open() { return element.classList.contains('openDrawer'); },
+        set open(value) {
+            element.classList.toggle('openDrawer', value);
+            element.classList.toggle('closedDrawer', !value);
+            if (value) element.style.opacity = '1';
+        },
+        get pinned() { return element.classList.contains('pinnedOpen'); },
+        set pinned(value) { element.classList.toggle('pinnedOpen', value); },
+    });
+    workspaceDrawerService = factory({
+        get(id) {
+            const element = document.getElementById(id);
+            return element instanceof HTMLElement ? wrap(element) : null;
+        },
+        list: () => Array.from(document.querySelectorAll('.openDrawer')).filter(element => element instanceof HTMLElement).map(wrap),
+        listVisible: () => Array.from(document.querySelectorAll('.drawer-content')).filter(element => element instanceof HTMLElement && Boolean(element.offsetWidth || element.offsetHeight || element.getClientRects().length)).map(wrap),
+        read: key => accountStorage.getItem(key),
+        write: (key, value) => accountStorage.setItem(key, value),
+        notify: notifyWorkspaceDrawerStateChange,
+    });
+    for (const [id, guard] of Object.entries(WORKSPACE_DRAWER_CLOSE_GUARDS)) workspaceDrawerService.setCloseGuard(id, guard);
+}
+
+installWorkspaceDrawerService(createWorkspaceDrawerService);
 
 export function setWorkspaceDrawerCloseGuard(hostId, guard) {
     if (typeof guard === 'function') {
@@ -1180,6 +1250,7 @@ export function setWorkspaceDrawerCloseGuard(hostId, guard) {
     } else {
         delete WORKSPACE_DRAWER_CLOSE_GUARDS[hostId];
     }
+    workspaceDrawerService?.setCloseGuard(hostId, typeof guard === 'function' ? guard : null);
 }
 
 // The settings drawer refuses to close while its React form reports unsaved
@@ -1189,76 +1260,19 @@ setWorkspaceDrawerCloseGuard('SettingsPanel', () => {
     if (!globalThis.__emberDeskSettingsDirty) {
         return true;
     }
-    return window.confirm(translate('The settings have unsaved changes. Leaving discards them. Close anyway?'));
+    const discard = window.confirm(translate('The settings have unsaved changes. Leaving discards them. Close anyway?'));
+    if (discard) {
+        window.dispatchEvent(new Event('emberdesk:discard-settings-draft'));
+    }
+    return discard;
 });
 
 export async function openWorkspaceChildSlotHost(hostId, { preserveOpenDrawers = false } = {}) {
-    const drawer = document.getElementById(hostId);
-    if (!(drawer instanceof HTMLElement)) {
-        return;
-    }
-
-    await queueWorkspaceShellPanelOpenTask(() => {
-        openWorkspaceChildSlotHostImmediate(hostId, { preserveOpenDrawers });
-    });
+    return workspaceDrawerService.open(hostId, { preserveOpenDrawers });
 }
 
 export function closeWorkspaceChildSlotHost(hostId, { force = false } = {}) {
-    const drawer = document.getElementById(hostId);
-    if (!(drawer instanceof HTMLElement) || (!force && drawer.classList.contains('pinnedOpen'))) {
-        return false;
-    }
-
-    const closeGuard = WORKSPACE_DRAWER_CLOSE_GUARDS[hostId];
-    if (closeGuard && !closeGuard()) {
-        return false;
-    }
-
-    if (force) {
-        drawer.classList.remove('pinnedOpen');
-    }
-    drawer.classList.remove('openDrawer');
-    drawer.classList.add('closedDrawer');
-    const storageKey = WORKSPACE_DRAWER_OPENED_STORAGE_KEYS[hostId];
-    if (storageKey) {
-        accountStorage.setItem(storageKey, 'false');
-    }
-    notifyWorkspaceDrawerStateChange();
-    return true;
-}
-
-function openWorkspaceChildSlotHostImmediate(hostId, { preserveOpenDrawers = false } = {}) {
-    const drawer = document.getElementById(hostId);
-    if (!(drawer instanceof HTMLElement)) {
-        return;
-    }
-
-    if (!preserveOpenDrawers) {
-        document.querySelectorAll('.openDrawer:not(.pinnedOpen)').forEach(openDrawer => {
-            if (openDrawer === drawer) {
-                return;
-            }
-            const guard = WORKSPACE_DRAWER_CLOSE_GUARDS[openDrawer.id];
-            if (guard && !guard()) {
-                return;
-            }
-            openDrawer.classList.remove('openDrawer');
-            openDrawer.classList.add('closedDrawer');
-            const openStorageKey = WORKSPACE_DRAWER_OPENED_STORAGE_KEYS[openDrawer.id];
-            if (openStorageKey) {
-                accountStorage.setItem(openStorageKey, 'false');
-            }
-        });
-    }
-
-    drawer.classList.add('openDrawer');
-    drawer.classList.remove('closedDrawer');
-    drawer.style.opacity = '1';
-    const storageKey = WORKSPACE_DRAWER_OPENED_STORAGE_KEYS[hostId];
-    if (storageKey) {
-        accountStorage.setItem(storageKey, 'true');
-    }
-    notifyWorkspaceDrawerStateChange();
+    return workspaceDrawerService.close(hostId, { force });
 }
 
 /**
@@ -1271,6 +1285,17 @@ function notifyWorkspaceDrawerStateChange() {
     window.dispatchEvent(new CustomEvent('emberdesk:workspace-drawer-change'));
 }
 
+function setLegacyCharacterShellVisibility(selector, visible) {
+    const element = document.querySelector(selector.startsWith('#') ? selector : `#${selector}`);
+    if (!(element instanceof HTMLElement)) {
+        return;
+    }
+
+    // Clearing the inline value restores the stylesheet's natural display mode
+    // just like jQuery show(), while retaining the legacy node identity.
+    element.style.display = visible ? '' : 'none';
+}
+
 function showWorkspaceChildSlotContent(selectedMenuId) {
     const normalizedMenuId = String(selectedMenuId ?? '').replace('#', '');
     const displayModes = {
@@ -1279,8 +1304,8 @@ function showWorkspaceChildSlotContent(selectedMenuId) {
 
     const reactAuthoringOwnsPanel = normalizedMenuId === 'rm_ch_create_block'
         && Boolean(getWorkspaceReactFeatures()?.reactPanels?.characterAuthoring);
-    $('#result_info').toggle(normalizedMenuId === 'rm_ch_create_block' && !reactAuthoringOwnsPanel);
-    $('#rm_button_selected_ch h2').toggle(!reactAuthoringOwnsPanel);
+    setLegacyCharacterShellVisibility('#result_info', normalizedMenuId === 'rm_ch_create_block' && !reactAuthoringOwnsPanel);
+    setLegacyCharacterShellVisibility('#rm_button_selected_ch h2', !reactAuthoringOwnsPanel);
     document.querySelectorAll('#right-nav-panel .right_menu').forEach(menu => {
         if (!(menu instanceof HTMLElement)) {
             return;
@@ -1303,21 +1328,8 @@ async function ensureWorkspaceShellDeferredPanel(panelId) {
     }
 }
 
-let workspaceShellPanelOpenTaskChain = Promise.resolve();
-
-/**
- * Serializes drawer open mutations so concurrent open calls cannot interleave
- * their class/storage writes. Returns the queued task's promise.
- */
-function queueWorkspaceShellPanelOpenTask(task) {
-    // Tasks must stay synchronous; a task awaiting this chain would deadlock.
-    const next = workspaceShellPanelOpenTaskChain.then(() => task());
-    workspaceShellPanelOpenTaskChain = next.catch(() => {});
-    return next;
-}
-
 function waitForWorkspaceShellPanelOpenTask() {
-    return workspaceShellPanelOpenTaskChain;
+    return workspaceDrawerService.waitForOpen();
 }
 
 function getWorkspaceChildSlotHostId(slotKey) {
@@ -1421,13 +1433,7 @@ function setWorkspaceShellSlotPinned(slotKey, pinned) {
         throw new Error(`Workspace shell slot has no mount target: ${String(slotKey)}`);
     }
 
-    drawer.classList.toggle('pinnedOpen', Boolean(pinned));
-    // Keep the class and the persisted lock key atomic so a reload can't
-    // resurrect a divergent pin state.
-    const lockStorageKey = WORKSPACE_DRAWER_LOCKED_STORAGE_KEYS[drawerId];
-    if (lockStorageKey) {
-        accountStorage.setItem(lockStorageKey, pinned ? 'true' : 'false');
-    }
+    workspaceDrawerService.setPinned(drawerId, Boolean(pinned));
     return { kind, mounted: true, status: 'mounted' };
 }
 
@@ -3466,7 +3472,11 @@ function getReactCharacterLibraryPanelBridge() {
             chooseBogusFolder($('#rm_print_characters_block'), 'back');
         },
         onClearFilters() {
-            $('#character_search_bar').val('').trigger('input');
+            const input = document.getElementById('character_search_bar');
+            if (input instanceof HTMLInputElement && input.value !== '') {
+                input.value = '';
+                input.dispatchEvent(new Event('input', { bubbles: true }));
+            }
             onClearAllFiltersClick(entitiesFilter);
         },
         onBulkToggleCharacter(id, checked) {
@@ -3483,14 +3493,15 @@ function getReactCharacterLibraryPanelBridge() {
             document.getElementById(actionId)?.click();
         },
         applySearchQuery(searchQuery) {
-            const input = $('#character_search_bar');
+            const input = document.getElementById('character_search_bar');
             const normalizedQuery = String(searchQuery ?? '');
             updateCharacterLibraryToolbarOwnerState({ searchQuery: normalizedQuery });
-            if (String(input.val() ?? '') === normalizedQuery) {
+            if (!(input instanceof HTMLInputElement) || input.value === normalizedQuery) {
                 return;
             }
 
-            input.val(normalizedQuery).trigger('input');
+            input.value = normalizedQuery;
+            input.dispatchEvent(new Event('input', { bubbles: true }));
         },
         applySortOption(sortValue) {
             const selector = /** @type {HTMLSelectElement|null} */ (document.getElementById('character_sort_order'));
@@ -3508,7 +3519,8 @@ function getReactCharacterLibraryPanelBridge() {
                 sortValue: getCharacterLibrarySortOptionValue(selector.options[optionIndex], optionIndex),
             });
             selector.selectedIndex = optionIndex;
-            $('#character_sort_order').trigger('change');
+            const selected = selector.options[optionIndex];
+            applyCharacterSortSelection({ field: selected.dataset.field, order: selected.dataset.order, rule: selected.dataset.rule });
         },
         toggleBulkEdit() {
             if (!characterGroupOverlay) {
@@ -3995,19 +4007,7 @@ let currentVersion = '0.0.0';
 let deferredCoreFeatureTask = null;
 const deferredVersionTask = createSingleFlightTask(() => measureStartupStage('deferred.getClientVersion', () => getClientVersion()));
 
-let generation_started = new Date();
-let generatingAttemptModel = null;
 
-/** Run synchronous step-only macro expansion with the step's model. */
-export function withGeneratingModel(model, callback) {
-    const previous = generatingAttemptModel;
-    generatingAttemptModel = model ?? previous;
-    try {
-        return callback();
-    } finally {
-        generatingAttemptModel = previous;
-    }
-}
 /** @type {Character[]} */
 export let characters = [];
 const pendingDeletedCharacterAvatars = new Set();
@@ -4047,8 +4047,24 @@ function getExportPopper() {
     }
     return exportPopper;
 }
-let isExportPopupOpen = false;
-let exportPopupTrigger = null;
+let exportPopupController = null;
+
+function getExportPopupController() {
+    if (!exportPopupController) {
+        exportPopupController = optionsMenuModuleRef.createExportPopupController({
+            position: reference => {
+                exportPopper?.destroy();
+                exportPopper = Popper.createPopper(reference, document.getElementById('export_format_popup'), { placement: 'left' });
+            },
+            show: () => $('#export_format_popup').show(),
+            hide: () => $('#export_format_popup').hide(),
+            update: updateCharacterExportPopupPosition,
+            focusFirst: () => document.querySelector('#export_format_popup .export_format')?.focus(),
+            restoreFocus: trigger => { if (trigger instanceof HTMLElement && document.contains(trigger)) trigger.focus(); },
+        });
+    }
+    return exportPopupController;
+}
 
 function updateCharacterExportPopupPosition() {
     getExportPopper()?.update();
@@ -4060,13 +4076,7 @@ function closeCharacterExportPopup({ restoreFocus = true } = {}) {
         return;
     }
 
-    $(exportPopup).hide();
-    isExportPopupOpen = false;
-    updateCharacterExportPopupPosition();
-
-    if (restoreFocus && exportPopupTrigger instanceof HTMLElement && document.contains(exportPopupTrigger)) {
-        exportPopupTrigger.focus();
-    }
+    getExportPopupController().close(restoreFocus);
 }
 
 function toggleCharacterExportPopup(referenceElement = document.getElementById('export_button')) {
@@ -4075,22 +4085,7 @@ function toggleCharacterExportPopup(referenceElement = document.getElementById('
         return;
     }
 
-    exportPopper?.destroy();
-    exportPopper = Popper.createPopper(referenceElement, exportPopup, {
-        placement: 'left',
-    });
-
-    isExportPopupOpen = !isExportPopupOpen;
-    exportPopupTrigger = referenceElement;
-
-    if (!isExportPopupOpen) {
-        closeCharacterExportPopup();
-        return;
-    }
-
-    $(exportPopup).show();
-    updateCharacterExportPopupPosition();
-    exportPopup.querySelector('.export_format')?.focus();
+    getExportPopupController().toggle(referenceElement);
 }
 
 function getVisibleCharacterExportTrigger() {
@@ -4108,7 +4103,7 @@ function getVisibleCharacterExportTrigger() {
 const messageTemplate = $('#message_template .mes');
 export const chatElement = $('#chat');
 
-let dialogueResolve = null;
+let dialogueController = null;
 let dialogueCloseStop = false;
 /** @type {ChatMetadata} */
 // Retired: prompt itemization storage kept as an inert array for the extension-facing shell contract.
@@ -4124,8 +4119,7 @@ function getChatMetadataSession(metadata) {
 // Chat metadata is deliberately retained as-is; only the active visual override is read here.
 eventSource.on(event_types.CHAT_CHANGED, applyActiveBackground);
 eventSource.on(event_types.CHAT_CHANGED, closeChatMemoryPanel);
-/** @type {GenerationStreamSession} */
-export let streamingProcessor = null;
+
 let crop_data = undefined;
 let is_delete_mode = false;
 let isCharacterDeleteReconcileInProgress = false;
@@ -4133,7 +4127,7 @@ let characterDeleteReconcileGeneration = 0;
 let currentCharacterListPageEntities = [];
 let currentCharacterListEntitySnapshot = null;
 let fav_ch_checked = false;
-let scrollLock = false;
+
 export let abortStatusCheck = new AbortController();
 export let charDragDropHandler = null;
 export let chatDragDropHandler = null;
@@ -4309,10 +4303,8 @@ let popup_type = '';
 let chat_file_for_del = '';
 export let online_status = 'no_connection';
 
-export let is_send_press = false; //Send generation
 export const isGenerating = () => is_send_press;
 
-let this_del_mes = -1;
 
 /** @type {string} */
 
@@ -4385,7 +4377,7 @@ export let max_context = 2048;
 export let extension_prompts = {};
 
 export let main_api;// = "kobold";
-let abortController = new AbortController();
+
 
 //css
 var css_send_form_display = $('<div id=send_form></div>').css('display');
@@ -4465,7 +4457,15 @@ async function bootstrapWorkspace() {
         overlayHideMode: 'immediate',
     });
 
-    await measureStartupStage('bootstrapUi', () => Promise.resolve().then(() => {
+    await measureStartupStage('bootstrapUi', async () => {
+        const workspace = await loadWorkspacePanelsModule();
+        optionsMenuModuleRef = workspace;
+        dialogueController = workspace.createDialogueController();
+        globalThis.__emberDeskDialogueController = dialogueController;
+        installChatRecovery(workspace);
+
+        installPromptManagerDomain(workspace.createPromptManagerDomain);
+        installToolBindingsServiceFactory(workspace.createToolBindingsService);
         registerPromptManagerMigration();
         initDomHandlers();
         initStandaloneMode();
@@ -4474,7 +4474,7 @@ async function bootstrapWorkspace() {
         addDOMPurifyHooks();
         reloadMarkdownProcessor();
         applyBrowserFixes();
-    }));
+    });
 
     // Every React surface below renders user-visible copy on first paint and
     // does not subscribe to `i18n:applied`, so the locale data has to exist
@@ -4493,7 +4493,7 @@ async function bootstrapWorkspace() {
     await measureStartupStage('readSecretState', () => readSecretState());
     await measureStartupStage('mountRightNavPanel', () => mountRightNavPanel());
     await measureStartupStage('registerCoreModules', () => Promise.resolve().then(() => {
-        initChatUtilities();
+        initChatUtilities(optionsMenuModuleRef.mergeAttachmentFiles);
         initOpenAI();
     }));
     await measureStartupStage('initPresetManager', () => initPresetManager());
@@ -4516,6 +4516,7 @@ async function bootstrapWorkspace() {
         initWorldInfo();
         initRossMods({
             openWorkspaceShellSettings,
+            drawerService: workspaceDrawerService,
         });
         initBulkEdit();
         initReasoning();
@@ -4610,9 +4611,9 @@ export async function selectCharacterById(id, { switchMenu = true } = {}) {
         //if clicked on a different character from what was currently selected
         if (!is_send_press) {
             persistMainChatMessageListScrollSnapshotBeforeClear();
+            await clearChat({ clearData: true });
             setCharacterId(undefined);
             setCharacterName('');
-            await clearChat({ clearData: true });
             cancelTtsPlay();
             this_edit_mes_id = undefined;
             selected_button = 'character_edit';
@@ -4841,20 +4842,9 @@ async function reconcileCharacterListAfterDelete(options) {
 /** Checks the state of the current search, and adds/removes the search sorting option accordingly */
 function verifyCharactersSearchSortRule() {
     const searchTerm = entitiesFilter.getFilterData(FILTER_TYPES.SEARCH);
-    const searchOption = $('#character_sort_order option[data-field="search"]');
-    const selector = $('#character_sort_order');
-    const isHidden = searchOption.attr('hidden') !== undefined;
-
-    // If we have a search term, we are displaying the sorting option for it
-    if (searchTerm && isHidden) {
-        searchOption.removeAttr('hidden');
-        searchOption.prop('selected', true);
-        flashHighlight(selector);
-    }
-    // If search got cleared, we make sure to hide the option and go back to the one before
-    if (!searchTerm && !isHidden) {
-        searchOption.attr('hidden', '');
-        $(`#character_sort_order option[data-order="${power_user.sort_order}"][data-field="${power_user.sort_field}"]`).prop('selected', true);
+    const selector = /** @type {HTMLSelectElement|null} */ (document.getElementById('character_sort_order'));
+    if (optionsMenuModuleRef?.updateCharacterSearchSort(selector, searchTerm, { field: power_user.sort_field, order: power_user.sort_order })) {
+        flashHighlight($(selector));
     }
 
     updateCharacterLibraryToolbarOwnerState({ sortValue: getSelectedCharacterLibrarySortValue() });
@@ -5100,17 +5090,36 @@ export async function publishCharacterLibrarySnapshot(snapshot) {
     // Capture the active identity at the synchronous commit boundary, not when
     // the request began: the user may have completed another selection since.
     const previousAvatar = this_chid !== undefined ? characters[this_chid]?.avatar : null;
+    if (previousAvatar && !normalizedCharacters.some(character => character.avatar === previousAvatar)) {
+        try {
+            await prepareChatTransition();
+        } catch {
+            return false;
+        }
+        if (characters[this_chid]?.avatar !== previousAvatar) return publishCharacterLibrarySnapshot(snapshot);
+        await Popup.show.text(t`ERROR: The active character is no longer available.`, t`The page will be refreshed to prevent data loss. Press "OK" to continue.`);
+        if (characters[this_chid]?.avatar !== previousAvatar) return publishCharacterLibrarySnapshot(snapshot);
+        try {
+            await prepareChatTransition();
+        } catch {
+            return false;
+        }
+        if (characters[this_chid]?.avatar !== previousAvatar) return publishCharacterLibrarySnapshot(snapshot);
+        return location.reload();
+    }
     characters.splice(0, characters.length, ...normalizedCharacters);
 
     if (previousAvatar) {
         const newCharacterId = characters.findIndex(x => x.avatar === previousAvatar);
         if (newCharacterId >= 0) {
             setCharacterId(newCharacterId);
+            // Consumers that bind to character object identity must refresh
+            // before an action can target the newly published objects.
+            document.dispatchEvent(new Event('emberdesk:character-library-snapshot'));
             await selectCharacterById(newCharacterId, { switchMenu: false });
-        } else {
-            await Popup.show.text(t`ERROR: The active character is no longer available.`, t`The page will be refreshed to prevent data loss. Press "OK" to continue.`);
-            return location.reload();
         }
+    } else {
+        document.dispatchEvent(new Event('emberdesk:character-library-snapshot'));
     }
 
     // Membership changes (add/import/rename/delete fallback) reprint in
@@ -5130,7 +5139,7 @@ function enqueueCharacterRefresh(reportStatus = false) {
             const snapshot = await fetchAllCharactersDataOnly();
             // The user can enter bulk mode while the request is in flight.
             if (reportStatus && characterGroupOverlay.isRealtimeRefreshBlocked) return null;
-            await publishCharacterLibrarySnapshot(snapshot);
+            if (await publishCharacterLibrarySnapshot(snapshot) === false) return reportStatus ? false : undefined;
             return reportStatus ? true : undefined;
         } catch (error) {
             console.error('Failed to fetch characters:', error);
@@ -5216,21 +5225,160 @@ function startCharacterLibraryRealtime() {
     connect();
 }
 
-async function delChat(chatfile) {
-    const response = await fetch('/api/chats/delete', {
-        method: 'POST',
-        headers: getRequestHeaders(),
-        body: JSON.stringify({
-            chatfile: chatfile,
-            avatar_url: characters[this_chid].avatar,
-        }),
+let chatRecoveryDrafts;
+let pendingChatRecovery;
+let conditionalHistoryDelete;
+
+function captureChatSaveRecovery() {
+    return {
+        account: getCurrentUserHandle(),
+        snapshot: structuredClone({ messages: chat, metadata: chat_metadata, editor: Array.from(mainChatMessageUiState.entries()), composer: getComposerSnapshot() }),
+    };
+}
+
+async function preserveChatSaveConflict(identity, captured, isCurrent) {
+    if (!chatRecoveryDrafts || !pendingChatRecovery || !captured?.account) throw new Error('Recovery storage is unavailable');
+    if (isCurrent() && captured.account === getCurrentUserHandle()) {
+        await pendingChatRecovery.begin(identity);
+        await pendingChatRecovery.checkpoint();
+    } else {
+        await chatRecoveryDrafts.create(captured.account, identity, captured.snapshot);
+        window.dispatchEvent(new Event('emberdesk:recovery-drafts-changed'));
+    }
+}
+
+function isLiveHistoryTarget(identity) {
+    const current = characters[this_chid];
+    return (current?.avatar === identity.avatar && current?.chat === identity.chat)
+        || shouldPreserveCharacterChatTarget(identity.avatar, identity.chat);
+}
+
+function installChatRecovery(workspace) {
+    const storage = localforage.createInstance({ name: 'EmberDesk_ChatRecovery' });
+    chatRecoveryDrafts = workspace.createChatRecoveryDrafts({ storage, newId: () => crypto.randomUUID(), now: () => Date.now() });
+    const atomic = workspace.createIndexedDbDeleteAtomic('EmberDesk_ChatRecovery', 'keyvaluepairs', async () => {
+        await storage.ready();
+        if (storage.driver() !== localforage.INDEXEDDB) throw new Error('IndexedDB recovery storage is unavailable');
     });
-    if (response.ok === true) {
+    conditionalHistoryDelete = workspace.createConditionalHistoryDelete({
+        storage,
+        atomic,
+        newId: () => crypto.randomUUID(),
+        readVersion: async identity => {
+            // The live session's version must come from the owner of its save queue,
+            // never from a fresh GET that could approve deleting unseen remote edits.
+            if (isLiveHistoryTarget(identity)) throw new Error('The loaded chat version is not available to history deletion');
+            const response = await fetch('/api/chats/get', {
+                method: 'POST', headers: getRequestHeaders(), cache: 'no-cache',
+                body: JSON.stringify({ avatar_url: identity.avatar, file_name: identity.chat }),
+            });
+            if (!response.ok) throw new Error(`Could not read chat version (${response.status})`);
+            const version = response.headers.get('X-Chat-Version');
+            if (!version) throw new Error('Chat version is unavailable');
+            return version;
+        },
+        send: (request, context) => {
+            const name = request.chatfile.replace(/\.jsonl$/, '');
+            if (context.account !== getCurrentUserHandle()) throw new Error('Account changed');
+            if (isLiveHistoryTarget({ avatar: request.avatar_url, chat: name }) && !context.replay && !context.versionLocked) throw new Error('The loaded chat version is not available to history deletion');
+            return fetch('/api/chats/delete', { method: 'POST', headers: getRequestHeaders(), body: JSON.stringify(request) });
+        },
+    });
+    const changed = () => window.dispatchEvent(new Event('emberdesk:recovery-drafts-changed'));
+    pendingChatRecovery = workspace.createPendingChatRecovery({
+        account: getCurrentUserHandle,
+        snapshot: () => ({ messages: chat, metadata: chat_metadata, editor: Array.from(mainChatMessageUiState.entries()), composer: getComposerSnapshot() }),
+        create: async (identity, snapshot, account) => {
+            const draft = await chatRecoveryDrafts.create(account, identity, snapshot);
+            changed();
+            return draft.id;
+        },
+        update: async (id, snapshot, account) => {
+            await chatRecoveryDrafts.update(account, id, snapshot);
+            changed();
+        },
+    });
+    // While a deletion is unresolved the user can keep editing the loaded
+    // session. Persist those changes without waiting for a chat switch.
+    let checkpointRunning = false;
+    let checkpointWarning = false;
+    setInterval(() => {
+        if (checkpointRunning) return;
+        checkpointRunning = true;
+        void pendingChatRecovery.checkpointIfChanged().then(() => {
+            checkpointWarning = false;
+        }, error => {
+            console.error('Recovery checkpoint failed', error);
+            if (!checkpointWarning) {
+                checkpointWarning = true;
+                toastr.error('Recent edits could not be saved to the recovery draft. Keep this chat open and export your work after storage is available.', 'Recovery storage error', { timeOut: 0 });
+            }
+        }).finally(() => { checkpointRunning = false; });
+    }, 1000);
+}
+
+async function deleteHistoryChatConditional(identity, deferConfirmation = false) {
+    try {
+        const account = getCurrentUserHandle();
+        return await conditionalHistoryDelete(account, identity, isLiveHistoryTarget(identity) ? remove => withCurrentChatDeleteVersion(identity, remove) : undefined, deferConfirmation);
+    } catch (error) {
+        if (error instanceof Error && error.message === 'Chat deletion failed (409)') {
+            toastr.error('A newer version or conflicting operation prevented deletion. Open Chat History → Recovery drafts to restore your local messages as a new chat or export your draft. Retrying the same request will not overwrite the newer version.', 'Chat deletion conflict', { timeOut: 0 });
+        } else {
+            toastr.error('The chat was not confirmed deleted. Retry later; any saved recovery draft remains available to export.', 'Chat deletion could not be confirmed', { timeOut: 0 });
+        }
+        throw error;
+    } finally {
+        window.dispatchEvent(new Event('emberdesk:recovery-drafts-changed'));
+    }
+}
+
+async function beforeClearRecovery() {
+    try {
+        await pendingChatRecovery?.beforeClear();
+    } catch (error) {
+        toastr.error('The recovery draft could not be saved. The current chat has not been cleared.', 'Recovery storage error', { timeOut: 0 });
+        throw error;
+    }
+}
+
+async function beginChatRecovery(identity) {
+    try {
+        await pendingChatRecovery.begin(identity);
+    } catch (error) {
+        toastr.error('The recovery draft could not be saved. The chat was not deleted.', 'Recovery storage error', { timeOut: 0 });
+        throw error;
+    }
+}
+
+async function delChat(chatfile) {
+    const avatar = characters[this_chid].avatar;
+    const name = chatfile.replace('.jsonl', '');
+    const current = name === characters[this_chid].chat;
+    const account = getCurrentUserHandle();
+    const identity = { avatar, chat: name };
+    // A persisted replay can belong to an earlier loaded session, even if the
+    // same file name is now selected. Never clear that newer session on replay.
+    const earlierSession = current && await conditionalHistoryDelete.hasPending(account, identity) && !pendingChatRecovery.isActive(identity);
+    if (current) {
+        if (account !== getCurrentUserHandle() || characters[this_chid]?.avatar !== avatar || characters[this_chid]?.chat !== name) {
+            throw new Error('The selected chat changed before recovery could be saved');
+        }
+        await beginChatRecovery(identity);
+    }
+    const operationId = await deleteHistoryChatConditional(identity, current);
+    {
         // choose another chat if current was deleted
-        const name = chatfile.replace('.jsonl', '');
-        if (name === characters[this_chid].chat) {
-            chat_metadata = {};
+        if (current && !earlierSession && characters[this_chid]?.avatar === avatar && characters[this_chid]?.chat === name) {
             await replaceCurrentChat();
+        } else if (current && earlierSession) {
+            await pendingChatRecovery.checkpoint();
+            toastr.warning('The earlier deletion was confirmed. The current session was kept; switch chats or reload to refresh it. A recovery copy is available.', 'Chat deletion', { timeOut: 0 });
+        }
+        if (current) {
+            if (account !== getCurrentUserHandle()) throw new Error('Account changed');
+            await conditionalHistoryDelete.confirm(account, identity, operationId);
+            window.dispatchEvent(new Event('emberdesk:recovery-drafts-changed'));
         }
         await eventSource.emit(event_types.CHAT_DELETED, name);
     }
@@ -5239,6 +5387,7 @@ async function delChat(chatfile) {
 
 export async function replaceCurrentChat() {
     await clearChat({ clearData: true });
+    chat_metadata = {};
 
     const chatsResponse = await fetch('/api/characters/chats', {
         method: 'POST',
@@ -5348,42 +5497,23 @@ function isAssistantRecoveryMessageId(messageId) {
     return typeof messageId === 'number' && messageId >= 0 && message && !message.is_user && !message.is_system;
 }
 
-async function replaceAssistantRecoveryMessage(messageId, { type, getMessage, title = '', reasoning = '', imageUrls = [], reasoningSignature = null }) {
-    if (!isAssistantRecoveryMessageId(messageId)) {
-        return null;
-    }
-
-    const message = chat[messageId];
-    const generationFinished = new Date();
-    message.title = title;
-    message.mes = getMessage;
-    message.gen_started = generation_started;
-    message.gen_finished = generationFinished;
-    message.send_date = getMessageTimeStamp();
-    message.extra = message.extra || {};
-    message.extra.api = getGeneratingApi();
-    message.extra.model = getGeneratingModel();
-    message.extra.reasoning = String(reasoning ?? '');
-    message.extra.reasoning_duration = null;
-    message.extra.reasoning_signature = reasoningSignature;
-    await processImageAttachment(message, { imageUrls });
-
-
-    if (!isReactMainChatOwner()) {
-        updateMessageElement(message, {
-            messageId,
-            messageElement: chatElement.find(`.mes[mesid="${messageId}"]`),
-            adjustMediaScroll: SCROLL_BEHAVIOR.ADJUST,
-        });
-    }
-
-    if (isReactMainChatOwner()) {
-        scheduleMainChatMessageListPanelRefresh();
-    }
-
-    await eventSource.emit(event_types.MESSAGE_RECEIVED, messageId, type);
-    await eventSource.emit(event_types.CHARACTER_MESSAGE_RENDERED, messageId, type);
-    return { type, getMessage };
+async function replaceAssistantRecoveryMessage(messageId, options) {
+    return replaceGenerationRecoveryMessage(messageId, {
+        ...options,
+        render(message, id) {
+            if (!isReactMainChatOwner()) {
+                updateMessageElement(message, {
+                    messageId: id,
+                    messageElement: chatElement.find(`.mes[mesid="${id}"]`),
+                    adjustMediaScroll: SCROLL_BEHAVIOR.ADJUST,
+                });
+                return;
+            }
+            if (isReactMainChatOwner()) {
+                scheduleMainChatMessageListPanelRefresh();
+            }
+        },
+    });
 }
 
 function getGenerationLifecycleStatusLabels() {
@@ -5648,6 +5778,7 @@ export function substituteParamsLegacy(content, _name1, _name2, _original, _grou
  * @param {boolean} [options.replaceCharacterCard=true] - Whether to replace character card macros.
  * @param {Record<string, import('./scripts/macros/engine/MacroEnv.types.js').DynamicMacroValue>} [options.dynamicMacros={}] - Additional environment variables as dynamic macros for substitution. Registered as macro functions.
  * @param {(x: string) => string} [options.postProcessFn=(x) => x] - Post-processing function for each substituted macro.
+ * @param {Record<string, any>} [options.promptMap] - Request-scoped extension prompts for macro evaluation.
  * @returns {string} The string with substituted parameters.
  */
 export function substituteParams(content, options = {}) {
@@ -5673,6 +5804,7 @@ export function substituteParams(content, options = {}) {
         groupOverride: options.groupOverride,
         replaceCharacterCard: options.replaceCharacterCard ?? true,
         dynamicMacros: options.dynamicMacros ?? {},
+        promptMap: options.promptMap,
         postProcessFn: options.postProcessFn ?? ((x) => x),
     });
 
@@ -5704,76 +5836,32 @@ export function getStoppingStrings(_api = main_api) {
  * @prop {boolean} [backgroundGeneration] Whether this quiet request is acting as a background helper flow.
  * @prop {boolean} [removeReasoning] Parses and removes the reasoning block according to reasoning format preferences
  * @prop {boolean} [trimToSentence] Whether to trim the response to the last complete sentence
+ * @prop {(result: string, ownsRun: () => boolean) => Promise<void>} [onOwnedCompletion] Internal publication hook while the generation lease is live.
  * @param {GenerateQuietPromptParams} params Parameters for the quiet prompt generation
  * @returns {Promise<string>} Generated text. If using structured output, will contain a serialized JSON object.
  */
-export async function generateQuietPrompt({ quietPrompt = '', quietToLoud = false, skipWIAN = false, quietImage = null, quietName = null, responseLength = null, jsonSchema = null, backgroundGeneration = false, removeReasoning = true, trimToSentence = false } = {}) {
+export async function generateQuietPrompt({ quietPrompt = '', quietToLoud = false, skipWIAN = false, quietImage = null, quietName = null, responseLength = null, jsonSchema = null, backgroundGeneration = false, removeReasoning = true, trimToSentence = false, onOwnedCompletion } = {}) {
     if (arguments.length > 0 && typeof arguments[0] !== 'object') {
         console.trace('generateQuietPrompt called with positional arguments. Please use an object instead.');
         [quietPrompt, quietToLoud, skipWIAN, quietImage, quietName, responseLength, jsonSchema] = arguments;
     }
 
-    const responseLengthCustomized = typeof responseLength === 'number' && responseLength > 0;
-    const quietTransportDecision = createGenerationCommand({
-        kind: backgroundGeneration ? 'backgroundGeneration' : quietToLoud ? 'quietToLoud' : 'quietPrompt',
-        mainApi: main_api,
-        quietPrompt: true,
-        quietToLoud: quietToLoud ?? false,
-        backgroundGeneration: backgroundGeneration ?? false,
+    return runQuietGeneration({ quietPrompt, quietToLoud, skipWIAN, quietImage, quietName, responseLength, jsonSchema, backgroundGeneration, removeReasoning, trimToSentence, onOwnedCompletion }, {
+        snapshot: (kind, loud, background) => ({
+            ...createGenerationCommand({ kind, mainApi: main_api, quietPrompt: true, quietToLoud: loud, backgroundGeneration: background }),
+            ...createQuietGenerationLifecycleContract({ quietToLoud: loud, backgroundGeneration: background }),
+        }),
+        remember: rememberMainChatQuietTransportSnapshot,
+        saveLength: length => TempResponseLength.save(main_api, length),
+        setupLengthHook: () => TempResponseLength.setupEventHook(main_api),
+        isLengthCustomized: () => TempResponseLength.isCustomized(),
+        restoreLength: () => TempResponseLength.restore(main_api),
+        removeLengthHook: hook => TempResponseLength.removeEventHook(main_api, hook),
+        generate: options => Generate('quiet', options),
+        trim: trimToEndSentence,
+        removeReasoning: removeReasoningFromString,
+        isStopped: isMainChatQuietTransportStopException,
     });
-    const quietTransportContract = createQuietGenerationLifecycleContract({
-        quietToLoud: quietToLoud ?? false,
-        backgroundGeneration: backgroundGeneration ?? false,
-    });
-    const quietTransportSnapshot = {
-        ...quietTransportDecision,
-        ...quietTransportContract,
-        error: '',
-    };
-    let eventHook = () => { };
-    try {
-        /** @type {GenerateOptions} */
-        const generateOptions = {
-            quiet_prompt: quietPrompt ?? '',
-            quietToLoud: quietToLoud ?? false,
-            backgroundGeneration: backgroundGeneration ?? false,
-            skipWIAN: skipWIAN ?? false,
-            force_name2: true,
-            quietImage: quietImage ?? null,
-            quietName: quietName ?? null,
-            jsonSchema: jsonSchema ?? null,
-        };
-        rememberMainChatQuietTransportSnapshot({
-            ...quietTransportSnapshot,
-            phase: 'running',
-        });
-        if (responseLengthCustomized) {
-            TempResponseLength.save(main_api, responseLength);
-            eventHook = TempResponseLength.setupEventHook(main_api);
-        }
-        let result = await Generate('quiet', generateOptions);
-        result = trimToSentence ? trimToEndSentence(result) : result;
-        result = removeReasoning ? removeReasoningFromString(result) : result;
-        rememberMainChatQuietTransportSnapshot({
-            ...quietTransportSnapshot,
-            phase: 'completed',
-        });
-        return result;
-    } catch (error) {
-        rememberMainChatQuietTransportSnapshot({
-            ...quietTransportSnapshot,
-            phase: isMainChatQuietTransportStopException(error) ? 'stopped' : 'error',
-            error: isMainChatQuietTransportStopException(error)
-                ? ''
-                : String(error?.message ?? error ?? ''),
-        });
-        throw error;
-    } finally {
-        if (responseLengthCustomized && TempResponseLength.isCustomized()) {
-            TempResponseLength.restore(main_api);
-            TempResponseLength.removeEventHook(main_api, eventHook);
-        }
-    }
 }
 
 
@@ -5838,12 +5926,12 @@ async function getAllExtensionPrompts() {
  * @param {string} moduleName Module name
  * @returns {Promise<string>} Extension prompt
  */
-export async function getExtensionPromptByName(moduleName) {
+export async function getExtensionPromptByName(moduleName, promptMap = extension_prompts) {
     if (!moduleName) {
         return '';
     }
 
-    const prompt = extension_prompts[moduleName];
+    const prompt = promptMap[moduleName];
 
     if (!prompt) {
         return '';
@@ -5855,7 +5943,7 @@ export async function getExtensionPromptByName(moduleName) {
         return '';
     }
 
-    return substituteParams(prompt.value);
+    return substituteParams(prompt.value, { promptMap });
 }
 
 /**
@@ -5880,9 +5968,10 @@ export function getExtensionPromptMaxDepth() {
  * @param {string} [separator] Separator for joining multiple prompts
  * @param {number} [role] Role of the prompt
  * @param {boolean} [wrap] Wrap start and end with a separator
+ * @param {Record<string, any>} [promptMap] Request-scoped prompts; defaults to the shared map.
  * @returns {Promise<string>} Extension prompt
  */
-export async function getExtensionPrompt(position = extension_prompt_types.IN_PROMPT, depth = undefined, separator = '\n', role = undefined, wrap = true) {
+export async function getExtensionPrompt(position = extension_prompt_types.IN_PROMPT, depth = undefined, separator = '\n', role = undefined, wrap = true, promptMap = extension_prompts) {
     const filterByFunction = async (prompt) => {
         const hasFilter = typeof prompt.filter === 'function';
         if (hasFilter && !await prompt.filter()) {
@@ -5890,9 +5979,9 @@ export async function getExtensionPrompt(position = extension_prompt_types.IN_PR
         }
         return true;
     };
-    const promptPromises = Object.keys(extension_prompts)
+    const promptPromises = Object.keys(promptMap)
         .sort()
-        .map((x) => extension_prompts[x])
+        .map((x) => promptMap[x])
         .filter(x => x.position == position && x.value)
         .filter(x => depth === undefined || x.depth === undefined || x.depth === depth)
         .filter(x => role === undefined || x.role === undefined || x.role === role)
@@ -5907,7 +5996,7 @@ export async function getExtensionPrompt(position = extension_prompt_types.IN_PR
         values = values + separator;
     }
     if (values.length) {
-        values = substituteParams(values);
+        values = substituteParams(values, { promptMap });
     }
     return values;
 }
@@ -6390,6 +6479,7 @@ function removeLastMessage() {
  * @property {string} [quietName] Name to use for the quiet prompt (defaults to "System:")
  * @property {number} [depth] Recursion depth for the generation. Used to prevent infinite loops in tool calls.
  * @property {JsonSchema} [jsonSchema] JSON schema to use for the structured generation. Usually requires a special instruction.
+ * @property {(result: string, ownsRun: () => boolean) => Promise<void>} [onOwnedCompletion] Internal completion hook for quiet publication.
  */
 
 /**
@@ -6401,59 +6491,37 @@ function removeLastMessage() {
  * @returns {Promise<any>} Returns a promise that resolves when the text is done generating.
  */
 export async function Generate(type, options = {}, dryRun = false) {
-    if (greetingSelectionPending) return;
-    if (!options.composerSubmission && type !== 'quiet' && !options.depth && !options.regenerate && (!dryRun || options.preview)) {
-        options = { ...options, composerSubmission: getComposerSnapshot() };
-    }
-    // The regenerate flag only means something for a real, top-level visible
-    // turn — quiet/nested/preview calls must never delete the tail.
-    const isRegenerateEnvelope = options?.regenerate === true && type === 'normal' && !options?.depth && !dryRun && !options?.preview;
-    const generationEnvelope = createGenerationRequestEnvelope({
-        type,
-        options,
-        dryRun,
-        mainApi: main_api,
-        kind: isRegenerateEnvelope ? 'regenerate' : '',
+    return runGenerationEntry(type, options, dryRun, {
+        greetingPending: () => greetingSelectionPending,
+        captureComposer: current => ({ ...current, composerSubmission: getComposerSnapshot() }),
+        envelope: (entryType, entryOptions, entryDryRun, regenerate) => createGenerationRequestEnvelope({
+            type: entryType, options: entryOptions, dryRun: entryDryRun, mainApi: main_api, kind: regenerate ? 'regenerate' : '',
+        }),
+        enter: () => generationBootstrapAdmission.enter(),
+        setPending: value => { generationEntryPending = value; },
+        clearRestore: () => { pendingRegenerateRestore = null; },
+        identity: getCurrentGenerationContextIdentity,
+        bootstrap: ensureGenerationRuntime,
+        execute: executeGenerationRequestInShell,
+        takeRestore: () => { const snapshot = pendingRegenerateRestore; pendingRegenerateRestore = null; return snapshot; },
+        isStopped: isUserStoppedGeneration,
+        restore: restoreRegenerateTurnTail,
+        reportRestore: restored => {
+            if (restored) toastr.warning(t`Regeneration failed — the previous reply was restored.`, t`Regenerate`);
+            else toastr.error(t`Regeneration failed — the previous reply could not be restored.`, t`Regenerate`);
+        },
+        endPipeline: endPipelineRun,
+        unblock: unblockGeneration,
     });
-    // Closes the TOCTOU between "Generate() entered" and "is_send_press set"
-    // deep inside the service — both the send and the regenerate guards check
-    // this flag so the two can never overlap in the pre-flag awaits.
-    const tracksEntry = isForegroundGenerationEntry(type, options, dryRun);
-    if (tracksEntry) {
-        generationEntryPending = true;
-    }
-    if (isRegenerateEnvelope) {
-        pendingRegenerateRestore = null;
-    }
-    try {
-        return await executeGenerationRequestInShell(generationEnvelope);
-    } catch (error) {
-        // Failures inside the service's dispatch boundary are recovered by
-        // its onError (which consumes the pending snapshot). Anything escaping
-        // earlier — prompt assembly, World Info, token counting — reaches
-        // this catch with the turn tail already removed: restore it, free
-        // the UI, then re-throw.
-        if (isRegenerateEnvelope && pendingRegenerateRestore) {
-            const snapshot = pendingRegenerateRestore;
-            pendingRegenerateRestore = null;
-            if (!isUserStoppedGeneration(error)) {
-                const restored = await restoreRegenerateTurnTail(snapshot);
-                if (restored) {
-                    toastr.warning(t`Regeneration failed — the previous reply was restored.`, t`Regenerate`);
-                } else {
-                    toastr.error(t`Regeneration failed — the previous reply could not be restored.`, t`Regenerate`);
-                }
-            }
-            endPipelineRun();
-            unblockGeneration(type);
-        }
-        throw error;
-    } finally {
-        if (tracksEntry) {
-            generationEntryPending = false;
-        }
-    }
 }
+
+const generationBootstrapAdmission = createGenerationBootstrapAdmission();
+const ensureGenerationRuntime = createGenerationRuntimeBootstrap({
+    load: () => import('./scripts/generation-typed-runtime.js'),
+    readIdentity: getCurrentGenerationContextIdentity,
+    installLifecycle: installGenerationLifecycleService,
+    installAttempt: installGenerationAttemptExecutor,
+});
 
 //MARK: Generate() ends
 
@@ -6464,11 +6532,12 @@ export async function Generate(type, options = {}, dryRun = false) {
  * tool/pipeline cards, recovery rows — ending at the last user message;
  * user-authored rows (narrator notes, slash-command messages, plain system
  * notices) stop the scan and are never removed.
- * @returns {{chatId: string|null, insertIndex: number, messages: object[]}|null}
+ * @param {AbortSignal} [signal] External cancellation for this generation.
+ * @returns {{chatId: string|null, insertIndex: number, messages: object[], ownsRestore: () => boolean}|null}
  *          null when there is no generated tail (e.g. the last message is a
  *          user message — regenerate then fills in the missing reply).
  */
-export function removeRegenerateTurnTail() {
+export function removeRegenerateTurnTail(signal) {
     const snapshot = collectRegenerateTurn(chat, {
         chatId: getCurrentChatId() ?? null,
         narratorType: system_message_types.NARRATOR,
@@ -6478,27 +6547,26 @@ export function removeRegenerateTurnTail() {
         return null;
     }
 
-    if (isReactMainChatOwner()) {
-        for (let index = chat.length - 1; index >= snapshot.insertIndex; index--) {
-            clearMainChatMessageUiState(index);
-        }
-        mainChatVisibleStartIndices.delete(getCurrentChatId());
-    }
-    if (this_edit_mes_id !== undefined && this_edit_mes_id >= snapshot.insertIndex) {
-        this_edit_mes_id = undefined;
-    }
-    chat.length = snapshot.insertIndex;
-    chat_metadata.tainted = true;
-    saveChatDebounced();
-    void eventSource.emit(event_types.MESSAGE_DELETED, chat.length);
-    // React owner remounts; the legacy owner drops the trailing .mes rows —
-    // redisplayChat(startIndex) with an empty tail slice removes without adding.
-    void redisplayChat({ startIndex: snapshot.insertIndex });
-    // Register as the pending undo for this regenerate envelope — consumed by
-    // restoreRegenerateTurnTail or by Generate()'s escape hatch when a failure
-    // bypasses the service-level dispatch boundary.
-    pendingRegenerateRestore = snapshot;
-    return snapshot;
+    // Generate installs the runtime before a non-empty synchronous removal.
+    const lifecycle = getGenerationLifecycleService();
+    const saveChatReference = chat;
+    const saveChatId = getCurrentChatId() ?? null;
+    return lifecycle.removeRegenerateTail(snapshot, {
+        capture: () => lifecycle.captureContextGuard(abortController?.signal, signal),
+        clearView: start => {
+            if (isReactMainChatOwner()) {
+                for (let index = chat.length - 1; index >= start; index--) clearMainChatMessageUiState(index);
+                mainChatVisibleStartIndices.delete(getCurrentChatId());
+            }
+        },
+        clearEditing: start => { if (this_edit_mes_id !== undefined && this_edit_mes_id >= start) this_edit_mes_id = undefined; },
+        chat,
+        markTainted: () => { chat_metadata.tainted = true; },
+        save: () => saveChatDebounced(() => chat === saveChatReference && (getCurrentChatId() ?? null) === saveChatId),
+        deleted: length => { void eventSource.emit(event_types.MESSAGE_DELETED, length); },
+        render: startIndex => { void redisplayChat({ startIndex }); },
+        register: value => { pendingRegenerateRestore = value; },
+    });
 }
 
 /**
@@ -6508,54 +6576,51 @@ export function removeRegenerateTurnTail() {
  * @returns {Promise<boolean>} Whether the snapshot was restored
  */
 export async function restoreRegenerateTurnTail(snapshot) {
-    pendingRegenerateRestore = null;
-    if (!snapshot || !Array.isArray(snapshot.messages) || snapshot.messages.length === 0) {
-        return false;
-    }
-    // Never write into a different chat than the one the snapshot came from —
-    // the user may have switched chats while generation was in flight. Both
-    // sides normalize to null: the Assistant scratch chat and any chat
-    // without a file id report undefined here.
-    if ((getCurrentChatId() ?? null) !== snapshot.chatId) {
+    if (pendingRegenerateRestore === snapshot) pendingRegenerateRestore = null;
+    // Preserve the public no-op before the generation runtime has been installed.
+    if (!snapshot || !Array.isArray(snapshot.messages) || snapshot.messages.length === 0) return false;
+    const preparation = getGenerationLifecycleService().prepareRegenerateRestore(snapshot, {
+        chatId: getCurrentChatId() ?? null,
+        collect: () => collectRegenerateTurn(chat, {
+            chatId: getCurrentChatId() ?? null,
+            narratorType: system_message_types.NARRATOR,
+        }),
+    });
+    if (preparation.kind === 'empty') return false;
+    if (preparation.kind === 'stale') {
         console.warn('Regenerate restore skipped: chat changed during generation');
         return false;
     }
-
-    // The failed attempt's removable tail must end exactly where the removed
-    // turn did — anything else means rows arrived mid-flight in an unexpected
-    // shape and restoring would scramble the order. Check BEFORE truncating
-    // so a skipped restore keeps the attempt's rows instead of losing both.
-    const attemptTail = collectRegenerateTurn(chat, {
-        chatId: getCurrentChatId() ?? null,
-        narratorType: system_message_types.NARRATOR,
-    });
-    if (attemptTail.insertIndex !== snapshot.insertIndex) {
+    if (preparation.kind === 'changed') {
         console.warn('Regenerate restore skipped: chat tail changed shape');
         return false;
     }
+    const attemptTail = preparation.tail;
 
-    // Remove what the failed attempt produced (same removable-tail rule).
-    if (isReactMainChatOwner()) {
-        for (let index = chat.length - 1; index >= attemptTail.insertIndex; index--) {
-            clearMainChatMessageUiState(index);
-        }
-    }
-    if (this_edit_mes_id !== undefined && this_edit_mes_id >= attemptTail.insertIndex) {
-        this_edit_mes_id = undefined;
-    }
-    const removedAttemptRows = chat.length - attemptTail.insertIndex;
-    chat.length = attemptTail.insertIndex;
-    if (removedAttemptRows > 0) {
-        void eventSource.emit(event_types.MESSAGE_DELETED, chat.length);
-    }
-
-    chat.splice(snapshot.insertIndex, 0, ...snapshot.messages);
-    chat_metadata.tainted = true;
-    mainChatVisibleStartIndices.delete(getCurrentChatId());
-    await saveChatConditional();
-    await redisplayChat({ startIndex: snapshot.insertIndex });
-    scrollChatToBottom({ waitForFrame: true });
-    return true;
+    return getGenerationLifecycleService().restoreRegenerateTurn(snapshot, {
+        commit() {
+            // Remove what the failed attempt produced (same removable-tail rule).
+            if (isReactMainChatOwner()) {
+                for (let index = chat.length - 1; index >= attemptTail.insertIndex; index--) {
+                    clearMainChatMessageUiState(index);
+                }
+            }
+            if (this_edit_mes_id !== undefined && this_edit_mes_id >= attemptTail.insertIndex) {
+                this_edit_mes_id = undefined;
+            }
+            const removedAttemptRows = chat.length - attemptTail.insertIndex;
+            chat.length = attemptTail.insertIndex;
+            if (removedAttemptRows > 0) {
+                void eventSource.emit(event_types.MESSAGE_DELETED, chat.length);
+            }
+            chat.splice(snapshot.insertIndex, 0, ...snapshot.messages);
+            chat_metadata.tainted = true;
+            mainChatVisibleStartIndices.delete(getCurrentChatId());
+        },
+        save: ownsRestore => saveChatConditional(ownsRestore),
+        render: () => redisplayChat({ startIndex: snapshot.insertIndex }),
+        scroll: () => scrollChatToBottom({ waitForFrame: true }),
+    });
 }
 
 let regenerateRequestInFlight = false;
@@ -6574,16 +6639,12 @@ let greetingSelectionPending = false;
  * @returns {boolean}
  */
 export function canRegenerateLastReply() {
-    if (greetingSelectionPending || is_send_press || regenerateRequestInFlight || generationEntryPending || this_edit_mes_id !== undefined) {
-        return false;
-    }
-    if (online_status === 'no_connection') {
-        return false;
-    }
-    if (this_chid === undefined && !String(name2 ?? '').trim()) {
-        return false;
-    }
-    return Array.isArray(chat) && chat.length > 0;
+    return canRegenerateFromState({
+        busy: Boolean(greetingSelectionPending || is_send_press || regenerateRequestInFlight || generationEntryPending || this_edit_mes_id !== undefined),
+        connected: online_status !== 'no_connection',
+        hasCharacter: this_chid !== undefined || Boolean(String(name2 ?? '').trim()),
+        chat,
+    });
 }
 
 /**
@@ -6624,6 +6685,7 @@ export function setOptionsMenuRegenerateAvailability(canRegenerate) {
  * Stops the generation and any streaming if it is currently running.
  */
 export function stopGeneration() {
+    const bootstrapStopped = generationBootstrapAdmission.stop();
     let stopped = false;
     if (streamingProcessor) {
         rememberMainChatStreamingTransportProcessorTerminal(streamingProcessor, 'stopped');
@@ -6642,6 +6704,7 @@ export function stopGeneration() {
         }
         stopped = true;
     }
+    stopped ||= bootstrapStopped;
     if (stopped) {
         void mountReactMainChatMessageListPanel();
     }
@@ -6654,7 +6717,7 @@ export function stopGeneration() {
  * @param {object[]} messages Array of chat messages
  * @returns {Promise<number[]>} Array of indices where the extension prompts were injected
  */
-async function doChatInject(messages) {
+async function doChatInject(messages, promptMap = extension_prompts) {
     const injectedMessages = [];
     let totalInsertedMessages = 0;
     messages.reverse();
@@ -6673,7 +6736,7 @@ async function doChatInject(messages) {
         const wrap = false;
 
         for (const role of roles) {
-            const extensionPrompt = String(await getExtensionPrompt(extension_prompt_types.IN_CHAT, i, separator, role, wrap)).trimStart();
+            const extensionPrompt = String(await getExtensionPrompt(extension_prompt_types.IN_CHAT, i, separator, role, wrap, promptMap)).trimStart();
             const isNarrator = role === extension_prompt_roles.SYSTEM;
             const isUser = role === extension_prompt_roles.USER;
             const name = names[role];
@@ -6704,12 +6767,12 @@ async function doChatInject(messages) {
     return injectedIndices;
 }
 
-function flushWIInjections() {
+function flushWIInjections(promptMap = extension_prompts) {
     const depthPrefix = inject_ids.CUSTOM_WI_DEPTH;
 
-    for (const key of Object.keys(extension_prompts)) {
+    for (const key of Object.keys(promptMap)) {
         if (key.startsWith(depthPrefix)) {
-            delete extension_prompts[key];
+            delete promptMap[key];
         }
     }
 }
@@ -6724,7 +6787,7 @@ function unblockGeneration(type) {
         return;
     }
 
-    is_send_press = false;
+    setSending(false);
     activateSendButtons();
     setGenerationProgress(0);
     flushEphemeralStoppingStrings();
@@ -6853,7 +6916,7 @@ export async function sendMessageAsUser(messageText, messageBias, insertAt = nul
 
     if (typeof insertAt === 'number' && insertAt >= 0 && insertAt <= chat.length) {
         chat.splice(insertAt, 0, message);
-        await saveChatConditional();
+        await saveChatConditional(isCurrent);
         if (!isCurrent()) return message;
         await eventSource.emit(event_types.MESSAGE_SENT, insertAt);
         if (!isCurrent()) return message;
@@ -6862,7 +6925,7 @@ export async function sendMessageAsUser(messageText, messageBias, insertAt = nul
         await eventSource.emit(event_types.USER_MESSAGE_RENDERED, insertAt);
     } else {
         chat.push(message);
-        await saveChatConditional();
+        await saveChatConditional(isCurrent);
         if (!isCurrent()) return message;
         const chat_id = (chat.length - 1);
         await eventSource.emit(event_types.MESSAGE_SENT, chat_id);
@@ -7191,7 +7254,7 @@ export function getGeneratingModel(_mes) {
  * A function mainly used to switch 'generating' state - setting it to false and activating the buttons again
  */
 export function activateSendButtons() {
-    is_send_press = false;
+    setSending(false);
     applyGenerationControlState(getStreamingControlState({ isFinished: true }));
 }
 
@@ -7248,7 +7311,7 @@ export function setMenuType(value) {
 }
 
 export function setExternalAbortController(controller) {
-    abortController = controller;
+    setAbortController(controller);
 }
 
 /**
@@ -7310,7 +7373,7 @@ export function setEditedMessageId(value) {
 }
 
 export function setSendButtonState(value) {
-    is_send_press = value;
+    setSending(value);
 }
 
 
@@ -7589,6 +7652,7 @@ async function applyStartupSettingsCore(data, _initLoaderHandle = null) {
 
         accountStorage.init(settings?.accountStorage);
         await setUserControls(data.enable_accounts);
+        window.dispatchEvent(new Event('emberdesk:recovery-drafts-changed'));
         setRequestCompressionConfig(data.request_compression);
 
         // Allow subscribers to mutate settings
@@ -7667,9 +7731,36 @@ export async function getSettings(initLoaderHandle = null) {
 }
 
 //MARK: saveSettings()
+function buildRuntimeSettingsPayload() {
+    const persistedCurrentVersion = resolvePersistedCurrentVersion({
+        currentVersion,
+        settingsVersion: settings?.currentVersion ?? null,
+    });
+    return {
+        accountStorage: accountStorage.getState(),
+        currentVersion: persistedCurrentVersion ?? undefined,
+        active_character: active_character,
+        amount_gen: amount_gen,
+        max_context: max_context,
+        main_api: main_api,
+        world_info_settings: getWorldInfoSettings(),
+        power_user: power_user,
+        feature_settings: feature_settings,
+        tags: tags,
+        tag_map: tag_map,
+        oai_settings: oai_settings,
+        background: background_settings,
+        ...(settingsDocumentRevision != null ? { settings_revision: settingsDocumentRevision } : {}),
+    };
+}
+
 export async function saveSettings(loopCounter = 0) {
     // The opt-in caller needs an acknowledgement rather than a scheduled save.
     const strict = arguments[1]?.strict === true;
+    if (runtimeSettingsConflict.hasConflict()) {
+        if (strict) runtimeSettingsConflict.assertWritable();
+        return;
+    }
     if (!settingsReady) {
         console.warn('Settings not ready, scheduling another save');
         saveSettingsDebounced();
@@ -7697,27 +7788,7 @@ export async function saveSettings(loopCounter = 0) {
         }
     }
 
-    const persistedCurrentVersion = resolvePersistedCurrentVersion({
-        currentVersion,
-        settingsVersion: settings?.currentVersion ?? null,
-    });
-
-    const payload = {
-        accountStorage: accountStorage.getState(),
-        currentVersion: persistedCurrentVersion ?? undefined,
-        active_character: active_character,
-        amount_gen: amount_gen,
-        max_context: max_context,
-        main_api: main_api,
-        world_info_settings: getWorldInfoSettings(),
-        power_user: power_user,
-        feature_settings: feature_settings,
-        tags: tags,
-        tag_map: tag_map,
-        oai_settings: oai_settings,
-        background: background_settings,
-        ...(settingsDocumentRevision != null ? { settings_revision: settingsDocumentRevision } : {}),
-    };
+    const payload = buildRuntimeSettingsPayload();
 
     const sortSaveSnapshot = beginSettingsSaveSnapshot(payload.settings_revision);
     let savedRevision;
@@ -7729,27 +7800,15 @@ export async function saveSettings(loopCounter = 0) {
             body: JSON.stringify(payload),
             cache: 'no-cache',
         });
-        const result = await fetch('/api/settings/save', saveSettingsRequest);
+        const result = await runtimeSettingsConflict.saveRuntime({
+            post: () => fetch('/api/settings/save', saveSettingsRequest),
+            onConflict: () => {
+                window.dispatchEvent(new Event('emberdesk:runtime-settings-conflict'));
+                toastr.warning(t`Settings were updated elsewhere. Open Settings and download your unsaved runtime settings before reloading.`, t`Settings conflict`, { timeOut: 0, extendedTimeOut: 0, closeButton: true });
+            },
+        });
 
         if (!result.ok) {
-            if (result.status === 409) {
-                try {
-                    const conflict = await result.json();
-                    if (Number.isFinite(Number(conflict?.settings_revision))) {
-                        settingsDocumentRevision = Math.max(settingsDocumentRevision ?? 0, Number(conflict.settings_revision));
-                    }
-                } catch {
-                    // ignore parse failures
-                }
-                if (loopCounter < MAX_RETRIES) {
-                    // A concurrent in-flight save landed first. Retry once with the
-                    // adopted revision — the payload reserializes the live in-memory
-                    // document, so the newest snapshot wins without dropping edits.
-                    return await saveSettings(loopCounter + 1, strict ? { strict: true } : undefined);
-                }
-                toastr.warning(t`Settings were updated elsewhere. Reload to pick up the latest settings before saving again.`, t`Settings conflict`);
-                throw new Error('Failed to save settings: revision conflict');
-            }
             throw new Error(`Failed to save settings: ${result.statusText}`);
         }
 
@@ -7776,7 +7835,7 @@ export async function saveSettings(loopCounter = 0) {
         await eventSource.emit(event_types.SETTINGS_UPDATED);
     } catch (error) {
         console.error('Error saving settings:', error);
-        toastr.error(t`Check the server connection and reload the page to prevent data loss.`, t`Settings could not be saved`);
+        if (!runtimeSettingsConflict.hasConflict()) toastr.error(t`Check the server connection and reload the page to prevent data loss.`, t`Settings could not be saved`);
         if (strict && savedRevision === undefined) throw error;
     } finally {
         if (!sortSaveFinished) finishSettingsSaveSnapshot(sortSaveSnapshot, savedRevision);
@@ -7855,13 +7914,12 @@ function openMessageDelete() {
     closeMessageEditor();
     if (!is_send_press) {
         $('#dialogue_del_mes').css('display', 'block');
-        $('#dialogue_del_mes_summary').text(t`Select a message to delete it and every message after it.`);
-        $('#dialogue_del_mes_ok').prop('disabled', true);
-        $('#dialogue_del_mes_cancel').prop('disabled', false);
+        globalThis.__emberDeskBulkDeleteController.open(t`Select a message to delete it and every message after it.`);
         $('#send_form').css('display', 'none');
         $('.del_checkbox').each(function () {
             const checkbox = $(this);
             const row = checkbox.closest('.mes');
+            if (row.is('[data-main-chat-message-row-owner="react"]')) return;
             checkbox.css('display', 'grid');
             row.find('.for_checkbox').first().css('display', 'none');
         });
@@ -7871,7 +7929,6 @@ function openMessageDelete() {
             this_chid: ${this_chid}
             is_send_press: ${is_send_press}`);
     }
-    this_del_mes = -1;
     is_delete_mode = true;
 }
 
@@ -7999,25 +8056,41 @@ export function getCurrentChatDetails() {
     };
 }
 
-export async function displayPastChats(hightlightNames = []) {
-    // React owns #select_chat_div contents; re-render replaces rows, no manual empty().
-    $('#select_chat_search').val('').off('input');
+let selectChatSearchCommand = () => {};
 
+export async function displayPastChats(hightlightNames = []) {
     const chatDetails = getCurrentChatDetails();
     const currentChat = chatDetails.sessionName;
-    const displayName = chatDetails.characterName;
+
     const avatarImg = chatDetails.avatarImgURL;
-    await displayChats('', currentChat, displayName, avatarImg, hightlightNames);
-
+    const module = await loadWorkspacePanelsModule();
+    const controller = getReactSelectChatListBridge(module).controller;
+    controller.setSearchQuery('');
+    const initial = controller.getSnapshot();
+    const listState = { searchQuery: initial.searchQuery, currentChat: String(currentChat ?? ''), avatarImg: String(avatarImg ?? ''), items: initial.items };
+    const mounted = await renderSelectChatListReact(listState, initial);
+    const showHistory = async (searchQuery, highlightNames) => {
+        if (!await controller.displayChats(String(searchQuery ?? ''), highlightNames)) {
+            const snapshot = controller.getSnapshot();
+            if (snapshot.open && snapshot.error && snapshot.searchQuery === searchQuery) {
+                console.error('Error loading chats:', snapshot.error);
+                toastr.error('Could not load chat data. Try reloading the page.');
+            }
+            return;
+        }
+    };
     const debouncedDisplay = debounce((searchQuery) => {
-        displayChats(searchQuery, currentChat, displayName, avatarImg, []);
+        if (controller.getSnapshot().open) void showHistory(searchQuery, []);
     });
-
-    // Define the search input listener
-    $('#select_chat_search').off('input').on('input', function () {
-        const searchQuery = $(this).val();
-        debouncedDisplay(searchQuery);
+    selectChatSearchCommand = searchQuery => {
+        controller.setSearchQuery(String(searchQuery ?? ''));
+        debouncedDisplay(String(searchQuery ?? ''));
+    };
+    // Preserve synthetic extension events; native input is owned by React.
+    $('#select_chat_search').off('input').on('input', function (event) {
+        if (event.isTrigger) selectChatSearchCommand($(this).val());
     });
+    await showHistory('', hightlightNames);
 
     // UX convenience: Focus the search field when the Manage Chat Files view opens.
     setTimeout(function () {
@@ -8026,6 +8099,9 @@ export async function displayPastChats(hightlightNames = []) {
     }, 200);
 
     addChatBackupsBrowser();
+    const snapshot = controller.getSnapshot();
+    if (!mounted || !snapshot.open || !await renderSelectChatListReact(listState, snapshot)) return null;
+    return controller.getRenderedSelection();
 }
 
 export function selectRightMenuWithAnimation(selectedMenuId) {
@@ -8034,20 +8110,22 @@ export function selectRightMenuWithAnimation(selectedMenuId) {
     };
     const reactAuthoringOwnsPanel = selectedMenuId === 'rm_ch_create_block'
         && Boolean(getWorkspaceReactFeatures()?.reactPanels?.characterAuthoring);
-    $('#result_info').toggle(selectedMenuId === 'rm_ch_create_block' && !reactAuthoringOwnsPanel);
-    $('#rm_button_selected_ch h2').toggle(!reactAuthoringOwnsPanel);
+    setLegacyCharacterShellVisibility('#result_info', selectedMenuId === 'rm_ch_create_block' && !reactAuthoringOwnsPanel);
+    setLegacyCharacterShellVisibility('#rm_button_selected_ch h2', !reactAuthoringOwnsPanel);
     document.querySelectorAll('#right-nav-panel .right_menu').forEach((menu) => {
-        $(menu).css('display', 'none');
+        if (!(menu instanceof HTMLElement)) return;
+        menu.style.display = 'none';
+        menu.style.transition = 'none';
+        menu.style.opacity = '0';
 
         if (selectedMenuId && selectedMenuId.replace('#', '') === menu.id) {
             const mode = displayModes[menu.id] ?? 'block';
-            $(menu).css('display', mode);
-            $(menu).css('opacity', 0.0);
-            $(menu).transition({
-                opacity: 1.0,
-                duration: animation_duration,
-                easing: animation_easing,
-                complete: function () { },
+            menu.style.display = mode;
+            menu.style.transition = `opacity ${animation_duration}ms ${animation_easing}`;
+            requestAnimationFrame(() => {
+                if (menu.isConnected && menu.style.display !== 'none') {
+                    menu.style.opacity = '1';
+                }
             });
         }
     });
@@ -8204,9 +8282,10 @@ function select_rm_characters() {
  * @param {number} role Extension prompt role. Defaults to SYSTEM.
  * @param {boolean} scan Should the prompt be included in the world info scan.
  * @param {(function(): Promise<boolean>|boolean)} filter Filter function to determine if the prompt should be injected.
+ * @param {Record<string, any>} [promptMap] Optional destination; defaults to the shared prompt map.
  */
-export function setExtensionPrompt(key, value, position, depth, scan = false, role = extension_prompt_roles.SYSTEM, filter = null) {
-    extension_prompts[key] = {
+export function setExtensionPrompt(key, value, position, depth, scan = false, role = extension_prompt_roles.SYSTEM, filter = null, promptMap = extension_prompts) {
+    promptMap[key] = {
         value: String(value),
         position: Number(position),
         depth: Number(depth),
@@ -8244,10 +8323,10 @@ export function getExtensionPromptRoleByName(roleName) {
  * Removes all char A/N prompt injections from the chat.
  * Clears character depth prompts before applying the current prompt.
  */
-export function removeDepthPrompts() {
-    for (const key of Object.keys(extension_prompts)) {
+export function removeDepthPrompts(promptMap = extension_prompts) {
+    for (const key of Object.keys(promptMap)) {
         if (key.startsWith(inject_ids.DEPTH_PROMPT)) {
-            delete extension_prompts[key];
+            delete promptMap[key];
         }
     }
 }
@@ -8347,6 +8426,7 @@ export async function setCharacterSettingsOverrides() {
  * @deprecated Use `callGenericPopup` instead.
  */
 export function callPopup(text, type, inputValue = '', { okButton, rows, wide, wider, large, allowHorizontalScrolling, allowVerticalScrolling, cropAspect: _cropAspect } = {}) {
+    if (!dialogueController) return Promise.reject(new Error('Dialogue controller is not initialized'));
     function getOkButtonText() {
         if (['text', 'char_not_selected'].includes(popup_type)) {
             $dialoguePopupCancel.css('display', 'none');
@@ -8388,23 +8468,29 @@ export function callPopup(text, type, inputValue = '', { okButton, rows, wide, w
     } else {
         $dialoguePopupOk.text(getOkButtonText());
     }
-    $dialoguePopupInput.toggle(popup_type === 'input').val(inputValue).attr('rows', rows ?? 1);
-    $dialoguePopupText.empty().append(text);
-    $shadowPopup.css('display', 'block');
+    const reactInput = $dialoguePopupInput.attr('data-react-dialogue-input') === 'true';
+    if (!reactInput) $dialoguePopupInput.toggle(popup_type === 'input').val(inputValue).attr('rows', rows ?? 1);
+    const presentation = globalThis.__emberDeskDialoguePresentation;
+    if (presentation) {
+        presentation.open(text);
+    } else {
+        $dialoguePopupText.empty().append(text);
+        $shadowPopup.css('display', 'block');
+    }
 
-    if (popup_type == 'input') {
+    if (popup_type == 'input' && !reactInput) {
         $dialoguePopupInput.trigger('focus');
     }
 
-    $shadowPopup.transition({
-        opacity: 1,
-        duration: animation_duration,
-        easing: animation_easing,
-    });
+    if (!presentation) {
+        $shadowPopup.transition({
+            opacity: 1,
+            duration: animation_duration,
+            easing: animation_easing,
+        });
+    }
 
-    return new Promise((resolve) => {
-        dialogueResolve = resolve;
-    });
+    return dialogueController.callPopup(popup_type, String(inputValue ?? ''), rows ?? 1);
 }
 
 
@@ -8419,22 +8505,33 @@ export async function saveMetadata() {
  * @returns {Promise<string[]>} List of imported file names.
  */
 export async function importCharacterChat(formData, { refresh = true } = {}) {
-    const fetchResult = await fetch('/api/chats/import', {
-        method: 'POST',
-        body: formData,
-        headers: getRequestHeaders({ omitContentType: true }),
-        cache: 'no-cache',
+    const fileName = formData.get('avatar')?.name || 'chat file';
+    const operation = createChatImportOperation(formData, {
+        send: body => fetch('/api/chats/import', {
+            method: 'POST', body, headers: getRequestHeaders({ omitContentType: true }), cache: 'no-cache',
+        }),
     });
-
-    if (fetchResult.ok) {
-        const data = await fetchResult.json();
-        if (data.res && refresh) {
-            await displayPastChats();
+    const run = async () => {
+        const result = await operation.run();
+        if (result.ok) {
+            if (refresh) await displayPastChats();
+            return result.fileNames;
         }
-        return data?.fileNames || [];
-    }
-
-    return [];
+        const completed = result.completed.length;
+        const reason = result.error === 'chat_conflict' ? 'A destination already exists' : result.error === 'chat_operation_mismatch' ? 'The import operation does not match' : 'The import could not be confirmed';
+        toastr.error(`${fileName}: ${reason}. ${completed} chat(s) confirmed imported; other results may be unknown. Close any open dialog, then click to retry the same upload. Keep this page open to retry.`, 'Chat import', {
+            timeOut: 0, extendedTimeOut: 0, closeButton: true, escapeHtml: true,
+            onclick: async () => {
+                const names = await run();
+                if (names.length) {
+                    toastr.success(`Successfully imported ${names.length} chat(s).`);
+                    if (!refresh) await displayPastChats(names);
+                }
+            },
+        });
+        return [];
+    };
+    return await run();
 }
 
 export function updateViewMessageIds(startIndex = null) {
@@ -8800,7 +8897,11 @@ async function importCharacter(file, { preserveFileName = '', importTags = false
                 await fetch(getThumbnailUrl('avatar', avatarFileName), { cache: 'reload' });
             }
 
-            $('#character_search_bar').val('').trigger('input');
+            const searchInput = document.getElementById('character_search_bar');
+            if (searchInput instanceof HTMLInputElement && searchInput.value !== '') {
+                searchInput.value = '';
+                searchInput.dispatchEvent(new Event('input', { bubbles: true }));
+            }
 
             if (exists) {
                 toastr.success(t`Character Replaced: ${String(data.file_name).replace('.png', '')}`);
@@ -9033,77 +9134,6 @@ export async function newAssistantChat({ temporary: _temporary = false } = {}) {
     setCharacterName(neutralCharacterName);
     setTemporaryChatStatus(true);
     sendSystemMessage(system_message_types.ASSISTANT_NOTE);
-}
-
-/**
- * Event handler to open a navbar drawer when a drawer open button is clicked.
- * Handles click events on .drawer-opener elements.
- * Opens the drawer associated with the clicked button according to the data-target attribute.
- * @returns {void}
- */
-function doDrawerOpenClick() {
-    const targetDrawerID = $(this).attr('data-target');
-    const drawer = document.getElementById(String(targetDrawerID ?? ''));
-    const drawerContent = drawer?.querySelector(':scope > .drawer-content');
-    if (!(drawerContent instanceof HTMLElement)
-        || drawerContent.classList.contains('openDrawer')
-        || drawer?.classList.contains('resizing')) {
-        return;
-    }
-    openWorkspaceChildSlotHost(drawerContent.id).catch(error => {
-        console.warn('Drawer open click failed.', error);
-    });
-}
-
-/**
- * Event handler to open or close a navbar drawer when a navbar icon is clicked.
- * Handles click events on .drawer-toggle elements.
- * @returns {Promise<void>}
- */
-export async function doNavbarIconClick() {
-    const icon = $(this).find('.drawer-icon');
-    const drawer = $(this).parent().find('.drawer-content');
-    const drawerWasOpenAlready = $(this).parent().find('.drawer-content').hasClass('openDrawer');
-    const targetDrawerID = $(this).parent().find('.drawer-content').attr('id');
-    const isOpeningWorldInfoDrawer = targetDrawerID === 'WorldInfo' && !drawerWasOpenAlready;
-
-    if (!drawerWasOpenAlready) {
-        const $worldInfoBlockingDrawers = $('#right-nav-panel.openDrawer:not(.pinnedOpen)').not(drawer);
-        const $worldInfoBlockingIcons = $('#rm_button_panel_pin_div .openIcon:not(.drawerPinnedOpen)');
-        const $openDrawers = isOpeningWorldInfoDrawer
-            ? $('.openDrawer').not(drawer).not($worldInfoBlockingDrawers).not('.pinnedOpen').add($worldInfoBlockingDrawers)
-            : $('.openDrawer:not(.pinnedOpen)');
-        const $openIcons = isOpeningWorldInfoDrawer
-            ? $('.openIcon').not($worldInfoBlockingIcons).not('.drawerPinnedOpen').add($worldInfoBlockingIcons)
-            : $('.openIcon:not(.drawerPinnedOpen)');
-        for (const iconEl of $openIcons) {
-            $(iconEl).toggleClass('closedIcon openIcon');
-        }
-        for (const el of $openDrawers) {
-            $(el).toggleClass('closedDrawer openDrawer');
-        }
-        if ($openDrawers.length && animation_duration) {
-            await delay(animation_duration);
-        }
-        icon.toggleClass('openIcon closedIcon');
-        drawer.toggleClass('openDrawer closedDrawer');
-
-        if (targetDrawerID === 'right-nav-panel') {
-            favsToHotswap();
-            $('#rm_print_characters_block').trigger('scroll');
-        }
-
-        // Set the height of "autoSetHeight" textareas within the drawer to their scroll height
-        if (!CSS.supports('field-sizing', 'content')) {
-            const textareas = $(this).closest('.drawer').find('.drawer-content textarea.autoSetHeight');
-            for (const textarea of textareas) {
-                await resetScrollHeight($(textarea));
-            }
-        }
-    } else if (drawerWasOpenAlready) {
-        icon.toggleClass('closedIcon openIcon');
-        drawer.toggleClass('closedDrawer openDrawer');
-    }
 }
 
 function addDebugFunctions() {
@@ -9359,7 +9389,7 @@ async function mountRightNavPanel() {
 
     try {
         const module = await loadWorkspacePanelsModule();
-        module.mountRightNavPanel(host);
+        module.mountRightNavPanel(host, { onCharacterSortChange: applyCharacterSortSelection });
         panel.dataset.reactRightNavMounted = 'true';
     } catch (error) {
         console.error('Failed to mount right nav panel:', error);
@@ -9367,6 +9397,14 @@ async function mountRightNavPanel() {
 }
 
 async function mountPromptPanel() {
+    let workspace;
+    try {
+        workspace = await loadWorkspacePanelsModule();
+        initializeAuxiliaryPanelControllers(workspace);
+    } catch (error) {
+        console.error('Failed to initialize auxiliary panels:', error);
+        return;
+    }
     const panel = document.getElementById('left-nav-panel');
     if (!panel) {
         console.warn('Left nav panel not found');
@@ -9381,10 +9419,10 @@ async function mountPromptPanel() {
     panel.replaceChildren(host);
 
     try {
-        const module = await loadWorkspacePanelsModule();
+        const module = workspace;
         const presetService = installOpenAIPresetService(module.createPresetService);
         installProviderConnectionService(module);
-        module.mountPromptPanel(host, getPromptPanelBridge(presetService), presetService);
+        module.mountPromptPanel(host, getPromptPanelBridge(presetService, module), presetService);
         panel.dataset.reactPromptPanelMounted = 'true';
     } catch (error) {
         console.error('Failed to mount prompt panel:', error);
@@ -9400,388 +9438,56 @@ async function mountPromptPanel() {
  * useSyncExternalStore sees stable snapshots.
  * @returns {object} Bridge object for the React prompt list
  */
-function getPromptPanelBridge(presetService) {
-    if (globalThis.__emberDeskPromptPanelBridge) {
-        return globalThis.__emberDeskPromptPanelBridge;
-    }
-
-    const listeners = new Set();
-    let cachedState = null;
-    let cachedOrder = null;
-    let eventsBound = false;
-    let tokenCountOverrides = {};
-    let recountTimer = null;
-    let recountGeneration = 0;
-
-    const emit = (scheduleTokens = true) => {
-        cachedState = null;
-        for (const listener of listeners) {
-            try {
-                listener();
-            } catch (error) {
-                console.error('Prompt panel listener failed:', error);
-            }
-        }
-        if (scheduleTokens) {
-            scheduleRecount();
-        }
-    };
-
-    /**
-     * Recomputes the per-prompt token column. Regular prompts are counted
-     * through countTokensOpenAIAsync (content-hash cached, so edits only
-     * retokenize the changed entry). Markers have no static content — they
-     * report the last assembled request's actual count instead, or null when
-     * no generation has run yet.
-     */
-    const recountTokens = async () => {
-        const generation = ++recountGeneration;
-        const prompts = Array.isArray(oai_settings.prompts) ? oai_settings.prompts : [];
-        const lastRunCounts = promptManager?.tokenHandler?.getCounts?.() ?? {};
-        const entries = await Promise.all(getOrderList().map(async entry => {
-            const prompt = prompts.find(item => item?.identifier === entry.identifier);
-            if (!prompt) {
-                return [entry.identifier, null];
-            }
-            if (prompt.marker) {
-                const lastRun = lastRunCounts[entry.identifier];
-                return [entry.identifier, typeof lastRun === 'number' && lastRun > 0 ? lastRun : null];
-            }
-            try {
-                return [entry.identifier, await countTokensOpenAIAsync({ role: prompt.role ?? 'system', content: prompt.content ?? '' })];
-            } catch {
-                return [entry.identifier, null];
-            }
-        }));
-        if (generation !== recountGeneration) {
-            return;
-        }
-        const nextCounts = Object.fromEntries(entries);
-        const unchanged = Object.keys(nextCounts).length === Object.keys(tokenCountOverrides).length
-            && Object.entries(nextCounts).every(([identifier, count]) => tokenCountOverrides[identifier] === count);
-        if (unchanged) {
-            return;
-        }
-        tokenCountOverrides = nextCounts;
-        emit(false);
-    };
-
-    const scheduleRecount = () => {
-        clearTimeout(recountTimer);
-        recountTimer = setTimeout(() => {
-            void recountTokens();
-        }, 400);
-    };
-
+function getPromptPanelBridge(presetService, workspace) {
+    if (globalThis.__emberDeskPromptPanelBridge) return globalThis.__emberDeskPromptPanelBridge;
     const getOrderList = () => promptManager?.getPromptOrderForCharacter(promptManager.activeCharacter) ?? [];
-
-    /**
-     * Reuses the previous order snapshot while its contents are unchanged so
-     * useSyncExternalStore keeps a stable reference across unrelated emits.
-     * A fresh array identity would trip the list's order-change effect and
-     * cancel a pointer drag still in flight.
-     * @param {object[]} order Freshly mapped order entries
-     * @returns {object[]} Stable order snapshot
-     */
-    const stabilizeOrder = (order) => {
-        if (cachedOrder?.length === order.length && cachedOrder.every((entry, index) => entry.identifier === order[index].identifier && entry.enabled === order[index].enabled)) {
-            return cachedOrder;
-        }
-        cachedOrder = order;
-        return order;
-    };
-
-    /**
-     * Normalizes a stored injection_trigger list to the supported vocabulary.
-     * 'all' dominates and represents every generation type; 'pipeline:<tool>'
-     * scopes a prompt to the named reply-pipeline step round. Retired trigger
-     * values are dropped. Legacy empty arrays mean 'all'.
-     * @param {unknown} triggers Stored trigger list
-     * @returns {string[]} Normalized trigger list
-     */
-    const normalizeInjectionTriggers = (triggers) => {
-        const isAllowed = value => ['all', 'normal'].includes(value)
-            || (typeof value === 'string' && value.startsWith('pipeline:') && value.length > 'pipeline:'.length);
-        const list = Array.isArray(triggers) ? triggers.filter(isAllowed) : [];
-        return (!list.length || list.includes('all')) ? ['all'] : list;
-    };
-
-    /**
-     * Trigger tags for the runnable pipeline steps of the active preset —
-     * used to offer one checkbox per pipeline round in the trigger row.
-     * @returns {string[]} e.g. ['pipeline:analyze', 'pipeline:review']
-     */
-    const getPipelineTriggerTags = () => {
-        const pipeline = normalizeReplyPipeline(oai_settings?.reply_pipeline);
-        if (!pipeline.enabled) {
-            return [];
-        }
-        return [...new Set(pipeline.steps.map(step => pipelineTriggerTag(step.tool)))];
-    };
-
-    /**
-     * Returns the raw reply_pipeline object for mutation, creating the
-     * default shape first when the preset has none.
-     * @returns {object} Mutable oai_settings.reply_pipeline
-     */
-    const ensurePipeline = () => {
-        if (!oai_settings.reply_pipeline || typeof oai_settings.reply_pipeline !== 'object' || Array.isArray(oai_settings.reply_pipeline)) {
-            oai_settings.reply_pipeline = { enabled: false, steps: [] };
-        }
-        if (!Array.isArray(oai_settings.reply_pipeline.steps)) {
-            oai_settings.reply_pipeline.steps = [];
-        }
-        return oai_settings.reply_pipeline;
-    };
-
-    /**
-     * Row order IS the plan: the last row produces the reply. Keep `final`
-     * pointing at it after every mutation.
-     * @param {object} pipeline Mutable pipeline object
-     */
-    const syncPipelineFinal = (pipeline) => {
-        pipeline.final = String(pipeline.steps.at(-1)?.tool ?? '');
-    };
-
-    /**
-     * Raw (untruncated) pipeline steps for the editor rows.
-     * @returns {{id: string, tool: string, prompt: string}[]}
-     */
-    const getPipelineStepRows = () => {
-        const steps = oai_settings?.reply_pipeline?.steps;
-        if (!Array.isArray(steps)) {
-            return [];
-        }
-        return steps.map((step, index) => ({
-            id: typeof step?.id === 'string' && step.id.length > 0 ? step.id : `step-${index + 1}`,
-            tool: String(step?.tool ?? ''),
-            prompt: typeof step?.prompt === 'string' ? step.prompt : '',
-            model: typeof step?.model === 'string' ? step.model : '',
-        }));
-    };
-
-    /**
-     * Enabled, non-stealth binding names — suggestions for the step tool field.
-     * @returns {string[]}
-     */
-    const getEligibleToolNames = () => normalizeToolBindings(feature_settings.tool_bindings)
-        .filter(binding => binding.enabled && !binding.stealth)
-        .map(binding => binding.name);
-
-    /**
-     * Returns the live prompt-order array for the active character, creating
-     * the per-character bucket first when the preset has none so appended
-     * entries actually persist.
-     * @returns {object[]} Mutable order entry list
-     */
     const ensureOrderList = () => {
         const order = getOrderList();
-        if (order.length || !promptManager?.activeCharacter) {
-            return order;
-        }
-        const bucketExists = (promptManager.serviceSettings?.prompt_order ?? [])
+        if (order.length || !promptManager?.activeCharacter) return order;
+        const exists = (promptManager.serviceSettings?.prompt_order ?? [])
             .some(list => String(list.character_id) === String(promptManager.activeCharacter.id));
-        if (!bucketExists) {
-            promptManager.addPromptOrderForCharacter(promptManager.activeCharacter, []);
-        }
+        if (!exists) promptManager.addPromptOrderForCharacter(promptManager.activeCharacter, []);
         return getOrderList();
     };
-
-    const persist = () => {
-        void promptManager?.saveServiceSettings();
-        emit();
-    };
-
-    globalThis.__emberDeskPromptPanelBridge = {
-        subscribe(listener) {
-            if (!eventsBound) {
-                eventsBound = true;
-                presetService.subscribe(() => emit(false));
-                [
-                    event_types.OAI_PRESET_CHANGED_AFTER,
-                    event_types.PRESET_CHANGED,
-                    event_types.SETTINGS_UPDATED,
-                    event_types.CHAT_LOADED,
-                    event_types.CHAT_CHANGED,
-                    event_types.APP_INITIALIZED,
-                    event_types.CHAT_COMPLETION_PROMPT_READY,
-                ].forEach(eventType => eventSource.on(eventType, () => emit()));
-            }
-            scheduleRecount();
-            listeners.add(listener);
-            return () => listeners.delete(listener);
+    promptInspectorController = workspace.createAuxiliaryPanelController({
+        load: loadWorkspacePanelsModule,
+        createHost: () => {
+            const host = document.createElement('div');
+            host.id = 'emberdesk-prompt-inspector-host';
+            document.body.appendChild(host);
+            return host;
         },
-        getState() {
-            if (cachedState) {
-                return cachedState;
-            }
-            const prompts = Array.isArray(oai_settings.prompts) ? oai_settings.prompts : [];
-            const promptsById = {};
-            for (const prompt of prompts) {
-                if (prompt?.identifier) {
-                    promptsById[prompt.identifier] = {
-                        identifier: prompt.identifier,
-                        name: prompt.name ?? prompt.identifier,
-                        role: prompt.role ?? null,
-                        content: prompt.content ?? '',
-                        marker: Boolean(prompt.marker),
-                        system_prompt: Boolean(prompt.system_prompt),
-                        forbid_overrides: Boolean(prompt.forbid_overrides),
-                        injection_position: prompt.injection_position ?? 0,
-                        injection_depth: prompt.injection_depth ?? null,
-                        injection_order: prompt.injection_order ?? null,
-                        injection_trigger: normalizeInjectionTriggers(prompt.injection_trigger),
-                    };
-                }
-            }
-            cachedState = {
-                promptsById,
-                order: stabilizeOrder(getOrderList().map(entry => ({ identifier: entry.identifier, enabled: Boolean(entry.enabled) }))),
-                tokenCounts: { ...tokenCountOverrides },
-                presetDirty: isOpenAIPresetDirty(),
-                presetName: oai_settings.preset_settings_openai,
-                pipelineTriggerTags: getPipelineTriggerTags(),
-                pipeline: {
-                    enabled: Boolean(oai_settings?.reply_pipeline?.enabled),
-                    steps: getPipelineStepRows(),
-                },
-                bindingToolNames: getEligibleToolNames(),
-                pipelineModelNames: getOpenAIModelList().map(model => model.id).filter(id => typeof id === 'string'),
-            };
-            return cachedState;
+        isConnected: host => host.isConnected,
+        mount: (module, host) => module.mountPromptInspector(host, getPromptInspectorBridge()),
+        unmount: module => module.unmountPromptInspector(),
+        remove: host => host.remove(),
+        captureFocus: () => document.activeElement,
+        restoreFocus: focus => { if (focus instanceof HTMLElement && focus.isConnected) focus.focus(); },
+        onError: error => console.error('Failed to mount prompt inspector:', error),
+    });
+    globalThis.__emberDeskPromptPanelBridge = workspace.createPromptPanelService({
+        settings: () => oai_settings,
+        order: getOrderList,
+        ensureOrder: ensureOrderList,
+        save: () => { void promptManager?.saveServiceSettings(); },
+        syncTools: syncPipelineToolBindings,
+        uuid: () => promptManager?.getUuidv4?.() ?? uuidv4(),
+        dirty: isOpenAIPresetDirty,
+        normalizePipeline: normalizeReplyPipeline,
+        triggerTag: pipelineTriggerTag,
+        toolNames: () => normalizeToolBindings(feature_settings.tool_bindings)
+            .filter(binding => binding.enabled && !binding.stealth).map(binding => binding.name),
+        modelNames: () => getOpenAIModelList().map(model => model.id).filter(id => typeof id === 'string'),
+        count: countTokensOpenAIAsync,
+        lastRunCounts: () => promptManager?.tokenHandler?.getCounts?.() ?? {},
+        bindEvents: changed => {
+            presetService.subscribe(changed);
+            [event_types.OAI_PRESET_CHANGED_AFTER, event_types.PRESET_CHANGED, event_types.SETTINGS_UPDATED,
+                event_types.CHAT_LOADED, event_types.CHAT_CHANGED, event_types.APP_INITIALIZED,
+                event_types.CHAT_COMPLETION_PROMPT_READY].forEach(type => eventSource.on(type, changed));
         },
-        setPromptEnabled(identifier, enabled) {
-            const entry = getOrderList().find(item => item.identifier === identifier);
-            if (!entry) {
-                return;
-            }
-            entry.enabled = Boolean(enabled);
-            persist();
-        },
-        movePrompt(identifier, targetIndex) {
-            const order = getOrderList();
-            const index = order.findIndex(item => item.identifier === identifier);
-            if (index < 0 || !Number.isInteger(targetIndex) || targetIndex < 0 || targetIndex >= order.length || index === targetIndex) {
-                return;
-            }
-            order.splice(targetIndex, 0, ...order.splice(index, 1));
-            persist();
-        },
-        updatePrompt(identifier, patch) {
-            const prompt = (oai_settings.prompts ?? []).find(item => item?.identifier === identifier);
-            if (!prompt || prompt.marker) {
-                return;
-            }
-            if (patch && Object.prototype.hasOwnProperty.call(patch, 'injection_trigger')) {
-                patch = { ...patch, injection_trigger: normalizeInjectionTriggers(patch.injection_trigger) };
-            }
-            Object.assign(prompt, patch);
-            persist();
-        },
-        addPrompt() {
-            if (!Array.isArray(oai_settings.prompts)) {
-                oai_settings.prompts = [];
-            }
-            const identifier = promptManager?.getUuidv4?.() ?? uuidv4();
-            oai_settings.prompts.push({
-                identifier,
-                name: 'New Prompt',
-                role: 'system',
-                system_prompt: false,
-                marker: false,
-                content: '',
-                injection_position: 0,
-                injection_depth: 4,
-                injection_order: 100,
-                injection_trigger: ['all'],
-            });
-            ensureOrderList().push({ identifier, enabled: true });
-            persist();
-            return identifier;
-        },
-        deletePrompt(identifier) {
-            const prompts = Array.isArray(oai_settings.prompts) ? oai_settings.prompts : [];
-            const prompt = prompts.find(item => item?.identifier === identifier);
-            if (!prompt || prompt.marker) {
-                return;
-            }
-            oai_settings.prompts = prompts.filter(item => item?.identifier !== identifier);
-            const order = getOrderList();
-            const index = order.findIndex(item => item.identifier === identifier);
-            if (index >= 0) {
-                order.splice(index, 1);
-            }
-            persist();
-        },
-        setPipelineEnabled(enabled) {
-            ensurePipeline().enabled = Boolean(enabled);
-            if (enabled) syncPipelineToolBindings(ensurePipeline().steps.map(step => step.tool), { activate: true });
-            persist();
-        },
-        addPipelineStep() {
-            const pipeline = ensurePipeline();
-            pipeline.steps.push({ id: `step-${uuidv4().slice(0, 8)}`, tool: '', prompt: '' });
-            // Adding the first row means the user wants a pipeline — enable it.
-            if (pipeline.steps.length === 1) {
-                pipeline.enabled = true;
-            }
-            syncPipelineFinal(pipeline);
-            persist();
-        },
-        updatePipelineStep(index, patch) {
-            const pipeline = ensurePipeline();
-            const step = pipeline.steps[index];
-            if (!step) {
-                return;
-            }
-            // Only the inline-editable fields are patched; advanced step keys
-            // (display, max_tokens, reasoning_effort) survive UI edits.
-            if (patch && Object.prototype.hasOwnProperty.call(patch, 'tool')) {
-                step.tool = String(patch.tool ?? '');
-                syncPipelineFinal(pipeline);
-            }
-            if (patch && Object.prototype.hasOwnProperty.call(patch, 'prompt')) {
-                step.prompt = String(patch.prompt ?? '');
-            }
-            if (patch && Object.prototype.hasOwnProperty.call(patch, 'model')) {
-                step.model = String(patch.model ?? '');
-            }
-            persist();
-        },
-        commitPipelineStepTool(index, name, expected) {
-            const current = getPipelineStepRows()[index];
-            if (!expected || expected.presetName !== oai_settings.preset_settings_openai
-                || current?.id !== expected.id || current?.tool !== expected.tool) return;
-            const pipeline = ensurePipeline();
-            if (!pipeline.steps[index]) return;
-            pipeline.steps[index].tool = String(name ?? '').trim();
-            syncPipelineFinal(pipeline);
-            syncPipelineToolBindings([pipeline.steps[index].tool], { activate: true });
-            persist();
-        },
-        deletePipelineStep(index) {
-            const pipeline = ensurePipeline();
-            if (index < 0 || index >= pipeline.steps.length) {
-                return;
-            }
-            pipeline.steps.splice(index, 1);
-            syncPipelineFinal(pipeline);
-            persist();
-        },
-        movePipelineStep(index, targetIndex) {
-            const pipeline = ensurePipeline();
-            if (index < 0 || index >= pipeline.steps.length || !Number.isInteger(targetIndex) || targetIndex < 0 || targetIndex >= pipeline.steps.length || index === targetIndex) {
-                return;
-            }
-            pipeline.steps.splice(targetIndex, 0, ...pipeline.steps.splice(index, 1));
-            syncPipelineFinal(pipeline);
-            persist();
-        },
-        openPromptInspector() {
-            void openPromptInspectorOverlay();
-        },
-    };
-
+        openInspector: () => { void promptInspectorController.open(); },
+    });
     return globalThis.__emberDeskPromptPanelBridge;
 }
 
@@ -9803,102 +9509,79 @@ function getPromptInspectorBridge() {
     return globalThis.__emberDeskPromptInspectorBridge;
 }
 
-let promptInspectorHost = null;
-let promptInspectorOpenId = 0;
-
-/**
- * Opens the prompt inspector overlay: mounts the React surface into a host
- * div appended to <body>. A second call while open is a no-op — the existing
- * overlay can refresh itself.
- */
-async function openPromptInspectorOverlay() {
-    if (promptInspectorHost?.isConnected) {
-        return;
-    }
-    const openId = ++promptInspectorOpenId;
-    try {
-        const module = await loadWorkspacePanelsModule();
-        // A close racing the async module load must not mount a stale overlay.
-        if (openId !== promptInspectorOpenId) {
-            return;
-        }
-        promptInspectorHost = document.createElement('div');
-        promptInspectorHost.id = 'emberdesk-prompt-inspector-host';
-        document.body.appendChild(promptInspectorHost);
-        module.mountPromptInspector(promptInspectorHost, getPromptInspectorBridge());
-    } catch (error) {
-        console.error('Failed to mount prompt inspector:', error);
-        promptInspectorHost?.remove();
-        promptInspectorHost = null;
-    }
-}
+let promptInspectorController = null;
 
 function closePromptInspectorOverlay() {
-    promptInspectorOpenId++;
-    if (!promptInspectorHost) {
-        return;
-    }
-    const host = promptInspectorHost;
-    promptInspectorHost = null;
-    loadWorkspacePanelsModule()
-        .then(module => module.unmountPromptInspector?.())
-        .catch(() => {})
-        .finally(() => host.remove());
+    promptInspectorController?.close();
 }
 
-let chatMemoryPanelHost = null;
-let chatMemoryPanelOpenId = 0;
-let chatMemoryReturnFocus = null;
+let chatMemoryPanelController = null;
+let wireLogPanelController = null;
+
+/** Initialize even when the prompt drawer itself is absent. */
+function initializeAuxiliaryPanelControllers(workspace) {
+    if (chatMemoryPanelController && wireLogPanelController) return;
+    const shared = {
+        load: () => Promise.resolve(workspace),
+        isConnected: host => host.isConnected,
+        remove: host => host.remove(),
+        captureFocus: () => {
+            const active = document.activeElement;
+            // Menu actions close the menu after dispatch; its focused item may
+            // still have a layout box while the hide animation is pending.
+            if (active instanceof HTMLElement && active.closest('#options')) {
+                return document.getElementById('options_button');
+            }
+            return active instanceof HTMLElement ? active : null;
+        },
+        restoreFocus: focus => {
+            if (focus?.isConnected && focus.getClientRects().length) focus.focus();
+            if (!focus || document.activeElement !== focus || focus === document.body) {
+                document.getElementById('options_button')?.focus();
+            }
+        },
+    };
+    const createHost = id => {
+        const host = document.createElement('div');
+        host.id = id;
+        document.body.appendChild(host);
+        return host;
+    };
+    chatMemoryPanelController = workspace.createAuxiliaryPanelController({
+        ...shared,
+        createHost: () => createHost('emberdesk-chat-memory-panel-host'),
+        canOpen: () => {
+            if (getContext().chatMemory.getView()) return true;
+            toastr.info('请先打开一个可用的会话。', '对话记忆');
+            return false;
+        },
+        mount: (module, host, close) => module.mountChatMemoryPanel(host, {
+            ...getContext().chatMemory,
+            close,
+            onDraftDiscarded: () => toastr.warning('会话已切换或面板已关闭，未应用的设置草稿已丢弃，未写入其他会话。', '对话记忆'),
+        }),
+        unmount: (module, host) => module.unmountChatMemoryPanel(host),
+        onError: error => {
+            console.error('Failed to mount or unmount chat memory panel:', error);
+            toastr.error('对话记忆面板加载失败，请重试。');
+        },
+    });
+    wireLogPanelController = workspace.createAuxiliaryPanelController({
+        ...shared,
+        createHost: () => createHost('emberdesk-wire-log-panel-host'),
+        mount: (module, host) => module.mountWireLogPanel(host, getWireLogPanelBridge()),
+        unmount: module => module.unmountWireLogPanel(),
+        onError: error => console.error('Failed to mount or unmount wire log panel:', error),
+    });
+}
 
 async function openChatMemoryPanel() {
-    if (chatMemoryPanelHost?.isConnected) return;
-    const memory = getContext().chatMemory;
-    if (!memory.getView()) {
-        toastr.info('请先打开一个可用的会话。', '对话记忆');
-        return;
-    }
-    const openId = ++chatMemoryPanelOpenId;
-    chatMemoryReturnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    try {
-        const module = await loadWorkspacePanelsModule();
-        if (openId !== chatMemoryPanelOpenId) return;
-        chatMemoryPanelHost = document.createElement('div');
-        chatMemoryPanelHost.id = 'emberdesk-chat-memory-panel-host';
-        document.body.appendChild(chatMemoryPanelHost);
-        module.mountChatMemoryPanel(chatMemoryPanelHost, {
-            ...memory,
-            close: closeChatMemoryPanel,
-            onDraftDiscarded: () => toastr.warning('会话已切换或面板已关闭，未应用的设置草稿已丢弃，未写入其他会话。', '对话记忆'),
-        });
-    } catch (error) {
-        console.error('Failed to mount chat memory panel:', error);
-        chatMemoryPanelHost?.remove();
-        chatMemoryPanelHost = null;
-        toastr.error('对话记忆面板加载失败，请重试。');
-    }
+    await chatMemoryPanelController?.open();
 }
 
 function closeChatMemoryPanel() {
-    chatMemoryPanelOpenId++;
-    if (!chatMemoryPanelHost) return;
-    const host = chatMemoryPanelHost;
-    const returnFocus = chatMemoryReturnFocus;
-    chatMemoryPanelHost = null;
-    chatMemoryReturnFocus = null;
-    loadWorkspacePanelsModule()
-        .then(module => module.unmountChatMemoryPanel(host))
-        .catch(error => console.error('Failed to unmount chat memory panel:', error))
-        .finally(() => {
-            host.remove();
-            const target = returnFocus?.isConnected && returnFocus.getClientRects().length
-                ? returnFocus : document.getElementById('options_button');
-            target?.focus();
-        });
+    chatMemoryPanelController?.close();
 }
-
-let wireLogPanelHost = null;
-let wireLogPanelOpenId = 0;
-let wireLogReturnFocus = null;
 
 /**
  * Runtime bridge for the wire log overlay. The panel only needs the chat the
@@ -9921,45 +9604,11 @@ function getWireLogPanelBridge() {
  * appended to <body>. A second call while open is a no-op.
  */
 async function openWireLogPanel() {
-    if (wireLogPanelHost?.isConnected) {
-        return;
-    }
-    const openId = ++wireLogPanelOpenId;
-    wireLogReturnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    try {
-        const module = await loadWorkspacePanelsModule();
-        // A close racing the async module load must not mount a stale overlay.
-        if (openId !== wireLogPanelOpenId) {
-            return;
-        }
-        wireLogPanelHost = document.createElement('div');
-        wireLogPanelHost.id = 'emberdesk-wire-log-panel-host';
-        document.body.appendChild(wireLogPanelHost);
-        module.mountWireLogPanel(wireLogPanelHost, getWireLogPanelBridge());
-    } catch (error) {
-        console.error('Failed to mount wire log panel:', error);
-        wireLogPanelHost?.remove();
-        wireLogPanelHost = null;
-    }
+    await wireLogPanelController?.open();
 }
 
 function closeWireLogPanel() {
-    wireLogPanelOpenId++;
-    if (!wireLogPanelHost) {
-        return;
-    }
-    const host = wireLogPanelHost;
-    wireLogPanelHost = null;
-    loadWorkspacePanelsModule()
-        .then(module => module.unmountWireLogPanel?.())
-        .catch(() => {})
-        .finally(() => {
-            host.remove();
-            const target = wireLogReturnFocus?.isConnected && wireLogReturnFocus.getClientRects().length
-                ? wireLogReturnFocus : document.getElementById('options_button');
-            target?.focus();
-            wireLogReturnFocus = null;
-        });
+    wireLogPanelController?.close();
 }
 
 /**
@@ -9969,14 +9618,16 @@ function closeWireLogPanel() {
  * @param {{searchQuery: string, currentChat: string, avatarImg: string, items: object[]}} state
  * @returns {Promise<boolean>} Whether the list rendered
  */
-async function renderSelectChatListReact(state) {
+async function renderSelectChatListReact(state, expectedSnapshot) {
     const container = document.getElementById('select_chat_div');
     if (!(container instanceof HTMLElement)) {
         return false;
     }
     try {
         const module = await loadWorkspacePanelsModule();
-        const bridge = getReactSelectChatListBridge();
+        const bridge = getReactSelectChatListBridge(module);
+        if (expectedSnapshot && bridge.controller.getSnapshot() !== expectedSnapshot) return false;
+        if (!expectedSnapshot) bridge.controller.project(state.items, state.searchQuery, state.highlightNames);
         const mounted = module.mountSelectChatList(container, bridge, state);
         if (!mounted) {
             return false;
@@ -9989,11 +9640,65 @@ async function renderSelectChatListReact(state) {
     }
 }
 
-function getReactSelectChatListBridge() {
+async function displayHistoryCompat(searchQuery, currentChat, avatarImg, highlightNames) {
+    let module;
+    try {
+        module = await loadWorkspacePanelsModule();
+    } catch (error) {
+        console.error('Error loading chats:', error);
+        toastr.error('Could not load chat data. Try reloading the page.');
+        return;
+    }
+    const controller = getReactSelectChatListBridge(module).controller;
+    const query = String(searchQuery ?? '');
+    if (!await controller.displayChats(query, highlightNames, { rawQuery: searchQuery })) {
+        const snapshot = controller.getSnapshot();
+        if (snapshot.open && snapshot.error && snapshot.searchQuery === query) {
+            console.error('Error loading chats:', snapshot.error);
+            toastr.error('Could not load chat data. Try reloading the page.');
+        }
+        return;
+    }
+    const snapshot = controller.getSnapshot();
+    await renderSelectChatListReact({ searchQuery: query, currentChat, avatarImg, highlightNames, items: snapshot.items }, snapshot);
+}
+
+function getReactSelectChatListBridge(module) {
     return globalThis.__emberDeskSelectChatListBridge ??= {
         clearSearch() {
-            $('#select_chat_search').val('').trigger('input').trigger('focus');
+            selectChatSearchCommand('');
+            document.getElementById('select_chat_search')?.focus();
         },
+        highlightRow(row) { flashHighlight($(row), debounce_timeout.extended); },
+        controller: (() => {
+            const controller = module.createHistoryPanelController({
+                load: async query => module.projectHistoryChats(
+                    await fetchChatHistory(query),
+                    (a, b) => sortMoments(timestampToMoment(a), timestampToMoment(b)),
+                    value => timestampToMoment(value).format('lll'),
+                ),
+                focusSearch: () => document.getElementById('select_chat_search')?.focus(),
+                restoreFocus: () => {
+                    const dialog = document.getElementById('shadow_select_chat_popup');
+                    if (dialog?.open) dialog.close();
+                },
+                openChat: fileName => runHistoryRowCommand('openChat', fileName, false),
+                renameChat: fileName => runHistoryRowCommand('renameChat', fileName),
+                deleteChat: fileName => runHistoryRowCommand('deleteChat', fileName),
+                saveChat: () => saveChatConditional(),
+                exportChat: (fileName, format) => runHistoryRowCommand('exportChat', fileName, format, true),
+            });
+            document.getElementById('shadow_select_chat_popup')?.addEventListener('close', () => controller.endSession());
+            controller.subscribe(() => {
+                const container = document.getElementById('select_chat_div');
+                if (container) container.setAttribute('aria-busy', String(controller.getSnapshot().busy));
+            });
+            return controller;
+        })(),
+        openChat(fileName) { return this.controller.openChat(fileName); },
+        renameChat(fileName) { return this.controller.renameChat(fileName); },
+        exportChat(fileName, format) { return this.controller.exportChat(fileName, format); },
+        deleteChat(fileName) { return this.controller.deleteChat(fileName); },
     };
 }
 
@@ -10015,11 +9720,43 @@ async function mountSelectChatPopup() {
 
     const host = document.createElement('div');
     host.id = 'emberdesk-react-select-chat-host';
+
     popup.replaceChildren(host);
 
     try {
         const module = await loadWorkspacePanelsModule();
-        module.mountSelectChatPopup(host);
+        const controller = getReactSelectChatListBridge(module).controller;
+        module.mountSelectChatPopup(host, controller, query => selectChatSearchCommand(query), () => runHistoryRowCommand('close'), () => runHistoryRowCommand('newChat'), input => runHistoryRowCommand('importFiles', input), {
+            list: async () => {
+                const account = getCurrentUserHandle();
+                const entries = chatRecoveryDrafts ? await chatRecoveryDrafts.list(account) : [];
+                if (account !== getCurrentUserHandle()) throw new Error('Account changed');
+                return entries;
+            },
+            listPendingDeletes: async () => {
+                const account = getCurrentUserHandle();
+                const entries = conditionalHistoryDelete ? await conditionalHistoryDelete.listPending(account) : [];
+                if (account !== getCurrentUserHandle()) throw new Error('Account changed');
+                return entries.map(identity => ({ ...identity, account }));
+            },
+            retryDelete: async item => {
+                if (item.account !== getCurrentUserHandle()) throw new Error('Account changed');
+                const current = characters[this_chid];
+                if (current?.avatar === item.avatar && current?.chat === item.chat) await delChat(`${item.chat}.jsonl`);
+                else await deleteHistoryChatConditional({ avatar: item.avatar, chat: item.chat });
+            },
+            restoreDraft: draft => module.restoreChatRecoveryDraft(chatRecoveryDrafts, getCurrentUserHandle(), draft.id, request => fetch('/api/chats/save', {
+                method: 'POST', headers: getRequestHeaders(), body: JSON.stringify(request),
+            })),
+            exportDraft: draft => {
+                const url = URL.createObjectURL(new Blob([JSON.stringify(draft, null, 2)], { type: 'application/json' }));
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = `chat-recovery-${draft.id}.json`;
+                link.click();
+                setTimeout(() => URL.revokeObjectURL(url), 1000);
+            },
+        });
         popup.dataset.reactSelectChatMounted = 'true';
     } catch (error) {
         console.error('Failed to mount select chat popup:', error);
@@ -10077,7 +9814,7 @@ async function mountOptionsMenu() {
     try {
         const module = await loadWorkspacePanelsModule();
         optionsMenuModuleRef = module;
-        module.mountOptionsMenu(host, { showBackToMain: Boolean(chat_metadata?.main_chat) });
+        module.mountOptionsMenu(host, { showBackToMain: Boolean(chat_metadata?.main_chat) }, id => runOptionsMenuCommand(id));
         popup.dataset.reactOptionsMenuMounted = 'true';
     } catch (error) {
         console.error('Failed to mount options menu:', error);
@@ -10115,7 +9852,7 @@ async function mountExportFormatPopup() {
 
     try {
         const module = await loadWorkspacePanelsModule();
-        module.mountExportFormatPopup(host);
+        module.mountExportFormatPopup(host, format => runCharacterExportCommand(format));
         popup.dataset.reactExportFormatMounted = 'true';
     } catch (error) {
         console.error('Failed to mount export format popup:', error);
@@ -10142,7 +9879,47 @@ async function mountDialoguePopupControls() {
 
     try {
         const module = await loadWorkspacePanelsModule();
-        module.mountDialoguePopupControls(host);
+        if (!dialogueController) throw new Error('Dialogue controller is not initialized');
+        const presentationHost = document.createElement('div');
+        presentationHost.hidden = true;
+        controls.append(presentationHost);
+        try {
+            const presentation = module.createDialoguePresentationController({
+                show: () => $('#shadow_popup').css('display', 'block'),
+                fadeIn: () => $('#shadow_popup').stop(true, false).transition({ opacity: 1, duration: animation_duration, easing: animation_easing }),
+                fadeOut: () => $('#shadow_popup').stop(true, false).transition({ opacity: 0, duration: animation_duration, easing: animation_easing }),
+                hide: kind => {
+                    $('#shadow_popup').css('display', 'none');
+                    $('#dialogue_popup').removeClass('large_dialogue_popup');
+                    if (kind === 'confirm') $('#dialogue_popup').removeClass('wide_dialogue_popup');
+                },
+                schedule: callback => setTimeout(callback, animation_duration),
+            });
+            module.mountDialoguePopupContent(presentationHost, presentation, content => $('#dialogue_popup_text').empty().append(content));
+            globalThis.__emberDeskDialoguePresentation = {
+                open: content => module.openDialoguePresentation(presentation, content),
+                close: kind => presentation.close(kind),
+            };
+        } catch (error) {
+            presentationHost.remove();
+            console.error('Failed to mount dialogue popup content:', error);
+        }
+        const originalInput = document.getElementById('dialogue_popup_input');
+        if (originalInput) {
+            const inputHost = document.createElement('div');
+            inputHost.id = 'emberdesk-react-dialogue-input-host';
+            originalInput.replaceWith(inputHost);
+            try {
+                module.mountDialoguePopupInput(inputHost, dialogueController);
+            } catch (error) {
+                inputHost.replaceWith(originalInput);
+                throw error;
+            }
+        }
+        module.mountDialoguePopupControls(host, {
+            confirmDialoguePopup: () => runDialoguePopupCommand('confirmDialoguePopup'),
+            cancelDialoguePopup: () => runDialoguePopupCommand('cancelDialoguePopup'),
+        });
         controls.dataset.reactDialoguePopupMounted = 'true';
     } catch (error) {
         console.error('Failed to mount dialogue popup controls:', error);
@@ -10169,7 +9946,11 @@ async function mountDialogueDelMesControls() {
 
     try {
         const module = await loadWorkspacePanelsModule();
-        module.mountDialogueDelMesControls(host);
+        const controller = globalThis.__emberDeskBulkDeleteController ??= module.getWorkspaceBulkDeleteController();
+        module.mountDialogueDelMesControls(host, controller, {
+            confirm: () => runDeleteMessageCommand('confirm'),
+            cancel: () => runDeleteMessageCommand('cancel'),
+        });
         container.dataset.reactDialogueDelMesMounted = 'true';
     } catch (error) {
         console.error('Failed to mount dialogue delete-message controls:', error);

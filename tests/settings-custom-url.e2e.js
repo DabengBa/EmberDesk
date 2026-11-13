@@ -41,11 +41,14 @@ test.describe('custom_url /v1 round-trip', () => {
         await openSettings(page);
 
         const urlField = page.locator('#settings-providers-customUrl');
+        const originalUrl = await urlField.inputValue();
+        const modelField = page.locator('#settings-providers-openaiModel');
+        const originalModel = await modelField.inputValue();
         const saveButton = page.getByRole('button', { name: '保存设置' });
         const successToast = page.locator('.settings-status--success');
 
         await urlField.fill(urlWithV1);
-        await page.locator('#settings-providers-openaiModel').fill('rpg');
+        await modelField.fill('rpg');
         await saveButton.click();
         await expect(successToast).toContainText('已保存', { timeout: 30_000 });
         expect((await getSettingsPayload(page)).settings.oai_settings.custom_url).toBe(urlWithV1);
@@ -54,5 +57,13 @@ test.describe('custom_url /v1 round-trip', () => {
         await saveButton.click();
         await expect(successToast).toContainText('已保存', { timeout: 30_000 });
         expect((await getSettingsPayload(page)).settings.oai_settings.custom_url).toBe(urlNoV1);
+
+        // This suite shares a server-side settings document with later browser
+        // tests. Do not leave its real external endpoint and test model active.
+        await urlField.fill(originalUrl);
+        await modelField.fill(originalModel);
+        await saveButton.click();
+        await expect.poll(async () => (await getSettingsPayload(page)).settings.oai_settings.custom_url).toBe(originalUrl);
+        expect((await getSettingsPayload(page)).settings.oai_settings.openai_model).toBe(originalModel);
     });
 });

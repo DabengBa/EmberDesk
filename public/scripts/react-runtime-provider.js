@@ -1,3 +1,5 @@
+import { createSettingsWriteOwner } from './settings-write-owner.js';
+
 const RUNTIME_EVENT_KEYS = Object.freeze([
     'CHAT_CHANGED',
     'SETTINGS_UPDATED',
@@ -6,6 +8,9 @@ const RUNTIME_EVENT_KEYS = Object.freeze([
     'GENERATION_ENDED',
     'ONLINE_STATUS_CHANGED',
 ]);
+
+// Retained for callers of the old guard factory; policy lives in the typed owner.
+export const createRuntimeSettingsConflictGuard = createSettingsWriteOwner;
 
 function freezeSnapshot(snapshot) {
     return Object.freeze({
@@ -110,11 +115,28 @@ export function createReactRuntimeProvider({
     };
 
     return {
+        getSettingsWriteOwner() {
+            return commands.settingsWriteOwner;
+        },
         getSnapshot() {
             return refreshSnapshot();
         },
         getChatCompletionSettings() {
             return structuredClone(getContext().chatCompletionSettings ?? {});
+        },
+        getSettingsSnapshot() {
+            const context = getContext();
+            return structuredClone({
+                oai_settings: context.chatCompletionSettings ?? {},
+                power_user: context.powerUserSettings ?? {},
+                feature_settings: context.featureSettings ?? {},
+            });
+        },
+        hasSettingsConflict() {
+            return commands.hasSettingsConflict?.() ?? false;
+        },
+        downloadSettingsRecovery() {
+            return commands.downloadSettingsRecovery?.();
         },
         subscribe(listener) {
             if (typeof listener !== 'function') {
@@ -129,7 +151,9 @@ export function createReactRuntimeProvider({
             submitMessage: input => Promise.resolve(commands.submitMessage(input)),
             stopGeneration: () => commands.stopGeneration(),
             loadEarlier: anchorId => Promise.resolve(commands.loadEarlier(anchorId)),
-            saveSettings: settings => Promise.resolve(commands.saveSettings(settings)),
+            saveSettings: (settings, baseline, revision) => Promise.resolve(baseline === undefined && revision === undefined
+                ? commands.saveSettings(settings)
+                : commands.saveSettings(settings, baseline, revision)),
             connectProvider: input => Promise.resolve(commands.connectProvider(input)),
             testProviderConnection: input => Promise.resolve(commands.testProviderConnection(input)),
         }),

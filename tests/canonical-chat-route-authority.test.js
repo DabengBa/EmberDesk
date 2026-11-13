@@ -46,6 +46,11 @@ function makeResponse() {
     return {
         body: undefined,
         statusCode: 200,
+        headers: {},
+        set(name, value) {
+            this.headers[name.toLowerCase()] = value;
+            return this;
+        },
         send(payload) {
             this.body = payload;
             return this;
@@ -68,6 +73,11 @@ function getRouteHandler(routePath) {
     }
     const handler = layer.route.stack.at(-1).handle;
     return (request, response, next) => handler({ get: () => undefined, ...request }, response, next);
+}
+
+function currentVersion(db, filename = 'first.jsonl') {
+    return db.prepare('SELECT concurrency_token FROM chat_sessions WHERE owner_type = ? AND owner_id = ? AND source_path = ?')
+        .get('character', 'alice', `chats/alice/${filename}`).concurrency_token;
 }
 
 afterEach(() => {
@@ -266,12 +276,13 @@ describe('canonical chat route authority', () => {
                 file_name: 'first',
                 chat: nextPayload,
                 force: false,
+                version: currentVersion(db), operationId: 'route-save',
             },
             user: { directories, profile: { handle: 'alice' } },
         }, response);
 
         expect(response.statusCode).toBe(200);
-        expect(response.body).toEqual({ ok: true });
+        expect(response.body).toEqual({ ok: true, version: expect.stringMatching(/^[0-9a-f]{32}$/) });
         expect(db.prepare(`
             SELECT header_payload_json
             FROM chat_sessions
@@ -318,6 +329,7 @@ describe('canonical chat route authority', () => {
                         { name: 'User', mes: 'Must not write the fallback projection' },
                     ],
                     force: false,
+                    version: '0'.repeat(32), operationId: 'route-frozen',
                 },
                 user: { directories, profile: { handle: 'alice' } },
             }, response);
@@ -383,6 +395,7 @@ describe('canonical chat route authority', () => {
                     { name: 'User', mes: 'Attachment', extra: { file: 'files/unregistered.txt' } },
                 ],
                 force: false,
+                version: currentVersion(db), operationId: 'route-attachment',
             },
             user: { directories, profile: { handle: 'alice' } },
         }, response);
@@ -454,22 +467,23 @@ describe('chats projection off', () => {
                 expect(response.body.error).toBeUndefined();
             };
             const writes = () => db.prepare('SELECT n FROM stats_write_probe').get().n;
-            await invoke('/save', { file_name: 'first', chat: [{ chat_metadata: {} }, { mes: 'saved' }], force: true });
+            await invoke('/save', { file_name: 'first', chat: [{ chat_metadata: {} }, { mes: 'saved' }], force: true, version: currentVersion(db), operationId: 'stats-save' });
             expect(writes()).toBe(1);
-            await invoke('/rename', { original_file: 'first.jsonl', renamed_file: 'renamed.jsonl' });
+            await invoke('/rename', { original_file: 'first.jsonl', renamed_file: 'renamed.jsonl', version: currentVersion(db), operationId: 'stats-rename' });
             expect(writes()).toBe(2);
             const locator = { ownerType: 'character', ownerId: 'alice', sourcePath: 'chats/alice/renamed.jsonl' };
             expect(writeCanonicalChatForTextReplace({ user }, {
                 db, locator, filePath: path.join(directories.chats, 'alice', 'renamed.jsonl'), cardName: 'alice', avatarUrl: 'alice.png',
                 payload: [{ chat_metadata: {} }, { mes: 'replaced' }],
+                version: currentVersion(db, 'renamed.jsonl'),
             }).ok).toBe(true);
             expect(writes()).toBe(3);
-            await invoke('/delete', { chatfile: 'renamed.jsonl' });
+            await invoke('/delete', { chatfile: 'renamed.jsonl', version: currentVersion(db, 'renamed.jsonl'), operationId: 'stats-delete' });
             expect(writes()).toBe(4);
             expect(db.prepare('SELECT chat_count FROM character_chat_stats').get().chat_count).toBe(0);
             const filename = 'upload.jsonl';
             fs.writeFileSync(path.join(directories.root, filename), '{"chat_metadata":{}}\n{"mes":"imported"}');
-            await invoke('/import', { file_type: 'jsonl', character_name: 'Alice', user_name: 'User' }, { file: { destination: directories.root, filename } });
+            await invoke('/import', { file_type: 'jsonl', character_name: 'Alice', user_name: 'User', operationId: 'stats-import' }, { file: { destination: directories.root, filename } });
             expect(writes()).toBe(5);
             expect(db.prepare('SELECT chat_count FROM character_chat_stats').get().chat_count).toBe(1);
         } finally {
@@ -497,12 +511,13 @@ describe('chats projection off', () => {
                     file_name: 'first',
                     chat: nextPayload,
                     force: false,
+                    version: currentVersion(db), operationId: 'projection-off-save',
                 },
                 user: { directories, profile: { handle: 'alice' } },
             }, response);
 
             expect(response.statusCode).toBe(200);
-            expect(response.body).toEqual({ ok: true });
+            expect(response.body).toEqual({ ok: true, version: expect.stringMatching(/^[0-9a-f]{32}$/) });
             expect(db.prepare('SELECT header_payload_json FROM chat_sessions WHERE owner_id = \'alice\'').get())
                 .toEqual({ header_payload_json: JSON.stringify(nextPayload[0]) });
             // Canonical save replaces the stale projection file's authority entirely.
@@ -513,8 +528,12 @@ describe('chats projection off', () => {
         }
     });
 
-    test('/save under projection off leaves a brand-new chat entirely fileless', async () => {
+    test.each([false, true])('/save under projection off leaves a brand-new chat fileless (performance mode: %s)', async (perfMode) => {
         process.env[PROJECTION_ENV] = 'off';
+        if (perfMode) {
+            process.env.EMBERDESK_INTERACTION_PERF_MODE = '1';
+            process.env.EMBERDESK_INTERACTION_PERF_CHAT_MTIME_MS = '1778371200000';
+        }
         try {
             const directories = makeDirectories();
             const db = canonicalSqliteManager.open({
@@ -541,6 +560,7 @@ describe('chats projection off', () => {
                         { name: 'Alice', mes: 'DB only' },
                     ],
                     force: false,
+                    create: true, operationId: 'projection-off-create',
                 },
                 user: { directories, profile: { handle: 'alice' } },
             }, response);
@@ -550,6 +570,10 @@ describe('chats projection off', () => {
             expect(fs.existsSync(path.join(directories.chats, 'alice', 'fresh.jsonl'))).toBe(false);
         } finally {
             delete process.env[PROJECTION_ENV];
+            if (perfMode) {
+                delete process.env.EMBERDESK_INTERACTION_PERF_MODE;
+                delete process.env.EMBERDESK_INTERACTION_PERF_CHAT_MTIME_MS;
+            }
         }
     });
 
@@ -557,11 +581,11 @@ describe('chats projection off', () => {
         process.env[PROJECTION_ENV] = 'sync';
         try {
             const directories = makeDirectories();
-            await seedCanonicalChat(directories, [{ chat_metadata: {} }, { name: 'User', mes: 'authority' }]);
+            const { db } = await seedCanonicalChat(directories, [{ chat_metadata: {} }, { name: 'User', mes: 'authority' }]);
             fs.writeFileSync(path.join(directories.chats, 'alice', 'first.jsonl'), 'stale');
             const response = makeResponse();
             await getRouteHandler('/rename')({
-                body: { avatar_url: 'alice.png', original_file: 'first.jsonl', renamed_file: 'renamed.jsonl' },
+                body: { avatar_url: 'alice.png', original_file: 'first.jsonl', renamed_file: 'renamed.jsonl', version: currentVersion(db), operationId: 'projection-sync-rename' },
                 user: { directories, profile: { handle: 'alice' } },
             }, response);
             expect(response.statusCode).toBe(200);
@@ -586,6 +610,7 @@ describe('chats projection off', () => {
                     avatar_url: 'alice.png',
                     original_file: 'first.jsonl',
                     renamed_file: 'renamed.jsonl',
+                    version: currentVersion(db), operationId: 'projection-off-rename',
                 },
                 user: { directories, profile: { handle: 'alice' } },
             }, response);
@@ -615,6 +640,7 @@ describe('chats projection off', () => {
                 body: {
                     avatar_url: 'alice.png',
                     chatfile: 'first.jsonl',
+                    version: currentVersion(db), operationId: 'projection-off-delete',
                 },
                 user: { directories, profile: { handle: 'alice' } },
             }, response);

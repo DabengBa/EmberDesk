@@ -1,9 +1,6 @@
 import { beforeEach, expect, jest, test } from '@jest/globals';
-import { readFileSync } from 'node:fs';
+import { loadTsModule } from './helpers/load-ts-module.mjs';
 
-// Real pipeline runtime: the depth-exhausted run is produced by the production
-// state machine, not hand-built, so the guard is proven against the same shape
-// generation-service sees at depth === RECURSE_LIMIT.
 globalThis.localStorage = { getItem: () => null };
 jest.unstable_mockModule('../public/scripts/openai.js', () => ({ oai_settings: { reply_pipeline: {
     enabled: true, steps: [{ tool: 'analyze' }, { tool: 'review' }, { tool: 'respond' }],
@@ -15,132 +12,135 @@ jest.unstable_mockModule('../public/scripts/tool-bindings.js', () => ({ syncPipe
 const runtime = await import('../public/scripts/reply-pipeline.js');
 const { assertPipelineResponseAllowed, getPipelineRunState } = await import('../public/scripts/reply-pipeline-core.js');
 const { isRecoverableGenerationFailure } = await import('../public/scripts/chat-generation-auto-recovery.js');
-
-const source = readFileSync(new URL('../public/scripts/generation-service.js', import.meta.url), 'utf8');
+const { createGenerationLifecycleService } = await loadTsModule('app/lib/generation/attempt-executor.ts');
+const lifecycle = createGenerationLifecycleService(() => ({}));
 
 beforeEach(() => {
     runtime.endPipelineRun();
     runtime.beginPipelineRun();
-    // Depth exhaustion: RECURSE_LIMIT gate closes the run before the call
-    // validator inside invokeFunctionTools can ever see the response.
     runtime.markPipelineFallbackRound();
 });
 
-/**
- * Executes the real response-boundary statements of generation-service.js.
- * The slice ends before the dispatch gate, so nothing about tool execution is
- * reimplemented here — only the guard under test runs.
- */
-function boundarySlice(mode) {
-    const start = mode === 'stream'
-        ? source.indexOf('const isStreamFinished =')
-        : source.indexOf('const result = await sendGenerationRequest');
-    const end = mode === 'stream'
-        ? source.indexOf('if (canPerformToolCalls && isStreamFinished', start)
-        : source.indexOf('const carriesToolCalls', start);
-    expect(start).toBeGreaterThan(-1);
-    expect(end).toBeGreaterThan(start);
-    return source.slice(start, end);
+// Exercise the typed transport's actual recurse gate and, for streams, its
+// real completion policy. Only provider and browser effects are controlled.
+async function runClosingRound({ streaming, calls, type = 'normal', text = 'closing prose', depth = 10 }) {
+    let canPerformTools;
+    const invokeTools = jest.fn();
+    const processor = { isStopped: false, isFinished: true, toolCalls: calls ? [[{ id: 'bad' }]] : [],
+        result: text, messageId: 7, reasoningHandler: { reasoning: '' }, reasoningSignature: null };
+    const emptyFailure = () => Object.assign(new Error('empty reply'), { emptyReply: true, messageId: 7 });
+    const requirePipelineCall = () => {
+        const run = getPipelineRunState();
+        if (type === 'normal' && run && !run.fallbackRound) throw new Error('Reply pipeline: expected exactly one current-step call (submit_story).');
+    };
+    const transport = {
+        ownsRun: () => true, presetModel: () => 'model', pipelineModel: model => model,
+        setAttemptModel: () => {}, canPerformTools: () => true, recurseLimit: () => 10,
+        setCanPerformTools: value => { canPerformTools = value; },
+        isOpenAIStreaming: () => streaming, createStream: () => processor,
+        sendStream: async () => ({}), setStreamGenerator: () => {}, consumeStream: async () => text,
+        streamAborted: () => false,
+        finishStream: (_context, text, current) => lifecycle.finishStreamAttempt({
+            type, isOpenAI: true, canPerformTools, attemptModel: 'model', text, processor: current,
+        }, {
+            ownsRun: () => true, clean: value => value,
+            assertAllowed: count => assertPipelineResponseAllowed(count, { canPerformToolCalls: canPerformTools }),
+            invokeTools, requirePipelineCall, emptyFailure, setModel: () => {}, finishMessage: async () => {}, markComplete: () => {},
+            refresh: () => {}, clearProcessor: () => {}, clearRecovery: () => {}, endPipeline: () => {},
+        }),
+        send: async () => ({ content: text, tool_calls: calls ? [{ id: 'bad' }] : [] }),
+        hasToolCalls: result => Boolean(result.tool_calls?.length),
+        assertAllowed: () => assertPipelineResponseAllowed(1, { canPerformToolCalls: canPerformTools }),
+        isEmpty: result => !result.content.trim(), emptyFailure, requirePipelineCall,
+    };
+    const result = lifecycle.runTransportAttempt({ type, depth, isOpenAI: true,
+        attempt: { fallbackProvider: false }, index: 0, attemptCount: 1, jsonSchema: null, trace: {} }, transport);
+    return { result, invokeTools, canPerformTools: () => canPerformTools };
 }
 
-test('depth-exhausted stream response with tool calls rejects instead of succeeding', async () => {
+test.each([false, true])('depth-exhausted response with tool calls rejects before tool dispatch (stream=%s)', async streaming => {
     expect(getPipelineRunState().fallbackRound).toBe(true);
-    // Depth exhaustion closes canPerformToolCalls, so the response boundary —
-    // not the (unreachable) validator inside invokeFunctionTools — must reject.
-    const state = { streamingProcessor: { isStopped: false, isFinished: true, toolCalls: [[{ id: 'bad' }]] } };
-    const run = new Function('state', 'assertPipelineResponseAllowed', 'canPerformToolCalls',
-        `return (async () => { ${boundarySlice('stream')} })();`);
-    await expect(run(state, assertPipelineResponseAllowed, false))
-        .rejects.toThrow(/Reply pipeline: expected exactly one current-step call \(none\)/);
+    const run = await runClosingRound({ streaming, calls: true });
+    await expect(run.result).rejects.toThrow(/Reply pipeline: expected exactly one current-step call \(none\)/);
+    expect(run.canPerformTools()).toBe(false);
+    expect(run.invokeTools).not.toHaveBeenCalled();
 });
 
-test('depth-exhausted nonstream response with tool calls rejects instead of succeeding', async () => {
-    const state = { ToolManager: { hasToolCalls: result => Boolean(result?.tool_calls?.length) } };
-    const run = new Function('state', 'type', 'generate_data', 'requestOptions', 'sendGenerationRequest',
-        'assertPipelineResponseAllowed', 'canPerformToolCalls',
-        `return (async () => { ${boundarySlice('nonstream')} return result; })();`);
-    const response = { content: 'fallback prose', tool_calls: [{ id: 'bad' }] };
-    await expect(run(state, 'normal', {}, {}, async () => response, assertPipelineResponseAllowed, false))
-        .rejects.toThrow(/Reply pipeline: expected exactly one current-step call \(none\)/);
+test.each([false, true])('prose-only closing response succeeds (stream=%s)', async streaming => {
+    const run = await runClosingRound({ streaming, calls: false });
+    const result = await run.result;
+    expect(streaming ? String(result) : result.content).toBe('closing prose');
+    expect(run.canPerformTools()).toBe(false);
+    expect(run.invokeTools).not.toHaveBeenCalled();
 });
 
-test('clean prose-only closing round stays allowed', async () => {
-    const state = { ToolManager: { hasToolCalls: result => Boolean(result?.tool_calls?.length) } };
-    const run = new Function('state', 'type', 'generate_data', 'requestOptions', 'sendGenerationRequest',
-        'assertPipelineResponseAllowed', 'canPerformToolCalls',
-        `return (async () => { ${boundarySlice('nonstream')} return result; })();`);
-    await expect(run(state, 'normal', {}, {}, async () => ({ content: 'closing prose' }), assertPipelineResponseAllowed, false))
-        .resolves.toEqual({ content: 'closing prose' });
-});
-
-test('required nonstream step rejects prose without saving a reply', async () => {
+test.each([true, false])('required pipeline step rejects prose before completion (stream=%s)', async streaming => {
     runtime.endPipelineRun();
     runtime.beginPipelineRun();
-    await expect(runFinishedBoundary('nonstream', 'normal', 'prose'))
-        .rejects.toThrow('Reply pipeline: expected exactly one current-step call (submit_story).');
+    const run = await runClosingRound({ streaming, calls: false, depth: 0 });
+    await expect(run.result).rejects.toMatchObject({ message: 'Reply pipeline: expected exactly one current-step call (submit_story).', ...(streaming ? { messageId: 7 } : {}) });
+    expect(run.invokeTools).not.toHaveBeenCalled();
 });
 
-test('required stream step rejects prose and identifies the provisional message', async () => {
-    runtime.endPipelineRun();
-    runtime.beginPipelineRun();
-    await expect(runFinishedBoundary('stream', 'normal', 'prose'))
-        .rejects.toMatchObject({ message: 'Reply pipeline: expected exactly one current-step call (submit_story).', messageId: 7 });
-});
-
-test('both response boundaries guard before their dispatch gate', () => {
-    // The gate itself: depth === RECURSE_LIMIT disables dispatch, so the
-    // validator path is unreachable and the boundary must reject on its own.
-    expect(source).toContain('&& depth < state.ToolManager.RECURSE_LIMIT');
-    const streamGuard = source.indexOf('assertPipelineResponseAllowed(state.streamingProcessor?.toolCalls');
-    const streamDispatch = source.indexOf('state.ToolManager.invokeFunctionTools(state.streamingProcessor.toolCalls');
-    const streamGate = source.indexOf('if (canPerformToolCalls && isStreamFinished && isStreamWithToolCalls)');
-    expect(streamGuard).toBeGreaterThan(-1);
-    expect(streamGuard).toBeLessThan(streamGate);
-    expect(streamGate).toBeLessThan(streamDispatch);
-    const nonstreamGuard = source.indexOf('assertPipelineResponseAllowed(1, { canPerformToolCalls })');
-    const nonstreamSuccess = source.indexOf('if (!carriesToolCalls && isEmptyGenerationResult(result))');
-    expect(nonstreamGuard).toBeGreaterThan(-1);
-    expect(nonstreamGuard).toBeLessThan(nonstreamSuccess);
-});
-
-// Run the actual finished-response boundary, including the existing empty
-// error constructor, so empty replies are checked against recovery policy.
-function runFinishedBoundary(mode, type, text) {
-    const constructorStart = source.indexOf('const createEmptyReplyFailure =');
-    const constructorEnd = source.indexOf('const isEmptyGenerationResult =', constructorStart);
-    const start = mode === 'stream'
-        ? source.indexOf('const finishedMessageId = state.streamingProcessor.messageId;')
-        : source.indexOf('const carriesToolCalls =');
-    const end = mode === 'stream'
-        ? source.indexOf("if (state.main_api === 'openai'", start)
-        : source.indexOf('return result;', start);
-    expect(constructorStart).toBeGreaterThan(-1);
-    expect(constructorEnd).toBeGreaterThan(constructorStart);
-    expect(start).toBeGreaterThan(-1);
-    expect(end).toBeGreaterThan(start);
-    const state = { streamingProcessor: { messageId: 7 }, ToolManager: { hasToolCalls: () => false } };
-    const run = new Function('state', 'type', 'messageChunk', 'result', 'canPerformToolCalls', 'getPipelineRunState', 'isEmptyGenerationResult', 'activeRecoveryMessageId',
-        `return (async () => { ${source.slice(constructorStart, constructorEnd)} ${source.slice(start, end)} return 'accepted'; })();`);
-    return run(state, type, text, { content: text }, true, getPipelineRunState, result => !result.content.trim(), 7);
-}
-
-test.each(['stream', 'nonstream'])('%s active run accepts a quiet response without advancing', async mode => {
+test.each([true, false])('active run accepts a quiet response without advancing (stream=%s)', async streaming => {
     runtime.endPipelineRun();
     runtime.beginPipelineRun();
     const run = getPipelineRunState();
-    await expect(runFinishedBoundary(mode, 'quiet', 'quiet output')).resolves.toBe('accepted');
+    const attempt = await runClosingRound({ streaming, calls: false, type: 'quiet', text: 'quiet output', depth: 0 });
+    await expect(attempt.result).resolves.toBeTruthy();
     expect(getPipelineRunState()).toBe(run);
     expect(run.index).toBe(0);
 });
 
-test.each(['stream', 'nonstream'])('%s empty response retains recoverable classification without advancing', async mode => {
+test.each([true, false])('empty response retains recoverable classification without advancing (stream=%s)', async streaming => {
     runtime.endPipelineRun();
     runtime.beginPipelineRun();
     const run = getPipelineRunState();
     let failure;
-    try { await runFinishedBoundary(mode, 'normal', '   '); } catch (error) { failure = error; }
+    const attempt = await runClosingRound({ streaming, calls: false, text: '   ', depth: 0 });
+    try { await attempt.result; } catch (error) { failure = error; }
     expect(failure).toMatchObject({ message: 'empty reply', emptyReply: true, messageId: 7 });
     expect(isRecoverableGenerationFailure(failure)).toBe(true);
     expect(getPipelineRunState()).toBe(run);
     expect(run.index).toBe(0);
+});
+
+test('final story reply tags the final pipeline step using carrier metadata', async () => {
+    const invocation = { name: 'submit_story', pipeline: { tool: 'respond' } };
+    const chat = [{ extra: { reply_pipeline_run: 'run', tool_invocations: [invocation] } }];
+    const formatTags = jest.fn((_calls, text) => `<respond>${text}</respond>`);
+    const saveReply = jest.fn(async reply => { chat.push({ extra: {} }); return reply; });
+    await lifecycle.finalizePipelineReply({ type: 'normal', text: 'answer', step: { tool: 'respond' }, meta: { runId: 'run' } }, {
+        ownsRun: () => true, chat, clean: value => value, formatTags, regexOutput: value => value,
+        removeCardView: () => {}, emitDeleted: async () => {}, saveReply,
+        endPipeline: () => {}, saveChat: async () => {}, unblock: () => {}, clearProcessor: () => {}, refresh: () => {},
+    });
+    expect(formatTags).toHaveBeenCalledWith([invocation], 'answer');
+    expect(saveReply.mock.calls[0][0].getMessage).toBe('<respond>answer</respond>');
+});
+
+test('stream story call removes provisional prose before saving the pipeline card', async () => {
+    const deleteLast = jest.fn(async () => {});
+    const finalizeIntermediary = jest.fn(async () => {});
+    const processor = { isStopped: false, isFinished: true, toolCalls: [[{ id: 'one' }]], result: 'provisional', messageId: 1,
+        reasoningHandler: { reasoning: 'thinking' }, reasoningSignature: null };
+    await lifecycle.finishStreamAttempt({ type: 'normal', isOpenAI: true, canPerformTools: true, attemptModel: 'model', text: 'provisional', processor }, {
+        ownsRun: () => true, clean: value => value, lastMessage: () => ({ mes: 'provisional' }), hasToolCalls: () => true,
+        hasPipeline: () => true, deleteLast, finalizeIntermediary, invokeTools: async () => ({ invocations: [{}], stealthCalls: [] }),
+        prepareRound: () => ({ action: 'continue' }), clearProcessor: () => {}, saveInvocations: async () => {},
+    });
+    expect(deleteLast).toHaveBeenCalledTimes(1);
+    expect(finalizeIntermediary).not.toHaveBeenCalled();
+});
+
+test('nonstream story call removes provisional prose before saving the pipeline card', async () => {
+    const deleteLastMessage = jest.fn(async () => {});
+    await lifecycle.completeGenerationResponse({ data: {}, type: 'normal', canPerformToolCalls: true }, {
+        ownsRun: () => true, extractMessage: () => 'provisional', extractTitle: () => '', extractReasoning: () => 'thinking',
+        extractImages: () => null, extractSignature: () => null, clean: value => value, cleanReasoning: value => value,
+        hasRecoveryMessage: () => false, saveReply: async reply => reply, setType: () => {}, hasToolCalls: () => true,
+        hasPipeline: () => true, deleteLastMessage, invokeTools: async () => ({ invocations: [{}], stealthCalls: [] }),
+        preparePipeline: () => ({ action: 'continue' }), saveTools: async () => {}, continueAfterTools: async () => {},
+    });
+    expect(deleteLastMessage).toHaveBeenCalledTimes(1);
 });

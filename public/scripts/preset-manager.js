@@ -349,8 +349,7 @@ class PresetManager {
                     && JSON.stringify(settings.extensions) === stagedSettingsSnapshot) {
                     settings.extensions = priorSettingsExtensions;
                     if (settingsCommitted) {
-                        try { await saveSettings(0, { strict: true }); }
-                        catch (rollbackError) { throw new AggregateError([error, rollbackError], 'Preset save failed and settings rollback failed'); }
+                        try { await saveSettings(0, { strict: true }); } catch (rollbackError) { throw new AggregateError([error, rollbackError], 'Preset save failed and settings rollback failed'); }
                     }
                 }
                 throw error;

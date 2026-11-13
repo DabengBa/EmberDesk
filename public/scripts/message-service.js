@@ -1086,15 +1086,17 @@ export function cleanUpMessage({ getMessage, displayIncompleteSentences: _displa
  * @param {object} message Message object
  * @param {object} sources Image sources
  * @param {string[]} [sources.imageUrls] Image URLs
+ * @param {() => boolean} [sources.ownsRun] Live generation ownership, if applicable.
  *
  * @returns {Promise<void>}
  */
-export async function processImageAttachment(message, { imageUrls }) {
+export async function processImageAttachment(message, { imageUrls, ownsRun = () => true }) {
     if (!Array.isArray(imageUrls) || imageUrls.length === 0) {
         return;
     }
 
     for (const [index, imageUrl] of imageUrls.filter(onlyUnique).entries()) {
+        if (!ownsRun()) return;
         if (!imageUrl) {
             continue;
         }
@@ -1105,8 +1107,42 @@ export async function processImageAttachment(message, { imageUrls }) {
             const [mime, base64] = /^data:(.*?);base64,(.*)$/.exec(imageUrl).slice(1);
             url = await saveBase64AsFile(base64, message.name, fileName, mime.split('/')[1]);
         }
+        if (!ownsRun()) return;
         saveImageToMessage({ image: url, inline: true }, message);
     }
+}
+
+export async function replaceGenerationRecoveryMessage(messageId, { type, getMessage, title = '', reasoning = '', imageUrls = [], reasoningSignature = null, ownsRun = () => true, render }) {
+    const targetChat = state.chat;
+    const message = targetChat[messageId];
+    if (typeof messageId !== 'number' || messageId < 0 || !message || message.is_user || message.is_system) return null;
+    const isCurrent = () => ownsRun() && state.chat === targetChat && targetChat[messageId] === message;
+    if (!isCurrent()) return null;
+    const staged = {
+        ...message,
+        title,
+        mes: getMessage,
+        gen_started: state.generation_started,
+        gen_finished: new Date(),
+        send_date: getMessageTimeStamp(),
+        extra: {
+            ...message.extra,
+            ...(Array.isArray(message.extra?.media) ? { media: [...message.extra.media] } : {}),
+            api: getGeneratingApi(),
+            model: getGeneratingModel(),
+            reasoning: String(reasoning ?? ''),
+            reasoning_duration: null,
+            reasoning_signature: reasoningSignature,
+        },
+    };
+    await processImageAttachment(staged, { imageUrls, ownsRun: isCurrent });
+    if (!isCurrent()) return null;
+    Object.assign(message, staged);
+    render(message, messageId);
+    await eventSource.emit(event_types.MESSAGE_RECEIVED, messageId, type);
+    if (!isCurrent()) return null;
+    await eventSource.emit(event_types.CHARACTER_MESSAGE_RENDERED, messageId, type);
+    return { type, getMessage };
 }
 
 /**
@@ -1122,12 +1158,14 @@ export async function processImageAttachment(message, { imageUrls }) {
  * @property {string} [reasoning] Message reasoning
  * @property {string[]} [imageUrls] Links to images
  * @property {string?} [reasoningSignature] Encrypted signature of the reasoning text
+ * @property {() => boolean} [ownsRun] Live generation ownership, if applicable
+ * @property {(message: object) => void} [onMessageCreated] Receives the exact committed message, if any
  *
  * @typedef {object} SaveReplyResult
  * @property {string} type Type of generation
  * @property {string} getMessage Generated message
  */
-export async function saveReply({ type, getMessage, fromStreaming = false, title = '', reasoning = '', imageUrls = [], reasoningSignature = null }) {
+export async function saveReply({ type, getMessage, fromStreaming = false, title = '', reasoning = '', imageUrls = [], reasoningSignature = null, ownsRun = () => true, onMessageCreated }) {
     // Backward compatibility
     if (arguments.length > 1 && typeof arguments[0] !== 'object') {
         console.trace('saveReply called with positional arguments. Please use an object instead.');
@@ -1140,8 +1178,10 @@ export async function saveReply({ type, getMessage, fromStreaming = false, title
 
     const generationFinished = new Date();
     console.debug('entering chat update routine');
+    const targetChat = state.chat;
+    const isCurrent = () => state.chat === targetChat && ownsRun();
+    if (!isCurrent()) return { type, getMessage };
     const newMessage = {};
-    state.chat.push(newMessage);
     newMessage.extra = { id: uuidv4() };
     newMessage.name = state.name2;
     newMessage.is_user = false;
@@ -1158,11 +1198,15 @@ export async function saveReply({ type, getMessage, fromStreaming = false, title
     newMessage.gen_finished = generationFinished;
 
 
-    await processImageAttachment(newMessage, { imageUrls });
-    const chat_id = (state.chat.length - 1);
+    await processImageAttachment(newMessage, { imageUrls, ownsRun: isCurrent });
+    if (!isCurrent()) return { type, getMessage };
+    targetChat.push(newMessage);
+    const chat_id = targetChat.length - 1;
+    onMessageCreated?.(newMessage);
 
     if (!fromStreaming) await eventSource.emit(event_types.MESSAGE_RECEIVED, chat_id, type);
-    addOneMessage(state.chat[chat_id]);
+    if (!isCurrent() || targetChat[chat_id] !== newMessage) return { type, getMessage };
+    addOneMessage(newMessage);
     if (!fromStreaming) await eventSource.emit(event_types.CHARACTER_MESSAGE_RENDERED, chat_id, type);
 
     return { type, getMessage };

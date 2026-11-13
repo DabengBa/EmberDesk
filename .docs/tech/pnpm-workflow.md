@@ -17,6 +17,12 @@ topic: pnpm-workflow
 - `.npmrc` keeps lifecycle scripts disabled and rejects packages newer than seven days by default.
 - Existing test frameworks remain Jest and Playwright.
 
+### Native image processing
+
+- Server-side image conversion and avatar thumbnail generation use `sharp` and its platform-specific native dependencies; BMP decoding also uses `bmp-ts`. Keep optional dependencies enabled when installing from the lockfile, including production installs. The repository's `--ignore-scripts` policy remains in effect; it is not a reason to omit the platform packages.
+- Install dependencies for the actual runtime OS, CPU architecture and C library instead of copying a `node_modules` tree from a different platform. The supplied Dockerfile uses Alpine (musl) and performs both full and production installs inside the image.
+- After installation, a native-load smoke check is `node --input-type=module -e "import sharp from 'sharp'; console.log(sharp.versions)"`. A successful check on one platform does not validate another platform or a fresh Docker build. If the import fails, check that the matching optional packages were installed and that the runtime matches the install environment; do not simply enable all lifecycle scripts as a workaround.
+
 ## Commands
 
 Use pnpm for local install and task execution:
@@ -86,6 +92,7 @@ Validated migration surfaces should include:
 
 - `pnpm view @types/node version` before changing the Node type package.
 - Root `pnpm install --frozen-lockfile --ignore-scripts`.
+- The `sharp` native-load smoke check above on each release runtime, including inside the built image when Docker is part of the release proof.
 - `tests` `pnpm install --frozen-lockfile --ignore-scripts`.
 - `pnpm run docs:build`.
 - `pnpm run test:unit`.

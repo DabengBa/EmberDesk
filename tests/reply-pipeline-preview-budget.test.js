@@ -1,5 +1,5 @@
-import fs from 'node:fs';
 import { expect, jest, test } from '@jest/globals';
+import { loadTsModule } from './helpers/load-ts-module.mjs';
 
 // Same minimally-boundary mock set as the other generation-service tests: the
 // module under test is the real one, only the shell/provider edges are stubbed.
@@ -12,7 +12,7 @@ jest.unstable_mockModule('../public/scripts/openai.js', () => ({ oai_settings: {
 jest.unstable_mockModule('../public/scripts/feature-settings.js', () => ({ feature_settings: { tool_bindings: [{ name: 'analyze', enabled: true }] } }));
 jest.unstable_mockModule('../public/scripts/tool-bindings.js', () => ({ syncPipelineToolBindings: jest.fn() }));
 const { derivePreviewBudget } = await import('../public/scripts/generation-service.js');
-const serviceSource = fs.readFileSync(new URL('../public/scripts/generation-service.js', import.meta.url), 'utf8');
+const { createGenerationLifecycleService } = await loadTsModule('app/lib/generation/attempt-executor.ts');
 
 /**
  * The slice of ChatCompletion the preview reads: base assembly consumed
@@ -46,32 +46,43 @@ test('preview budget follows the appended step materials', () => {
 test('assembly failures keep their own warning and unassembled previews have no budget', () => {
     const budgetError = completionWithStepMaterials(1, 1);
     budgetError.error = Object.assign(new Error('budget'), { name: 'TokenBudgetExceeded' });
+
     expect(derivePreviewBudget({ chatCompletion: budgetError, contextTokens: 5000, responseTokens: 100 }).warning).toBe('budget-exceeded');
 
     const otherError = completionWithStepMaterials(1, 1);
     otherError.error = Object.assign(new Error('boom'), { name: 'IdentifierNotFoundError' });
+
     expect(derivePreviewBudget({ chatCompletion: otherError, contextTokens: 5000, responseTokens: 100 }).warning).toBe('assembly-error');
 
     expect(derivePreviewBudget({ chatCompletion: null, contextTokens: 5000, responseTokens: 100 })).toEqual({ budget: null, warning: null });
 });
 
-test('the preview result is built from that budget so the inspector sees the overflow', () => {
-    const start = serviceSource.indexOf('const previewBudget = derivePreviewBudget(');
-    const end = serviceSource.indexOf('warnings = [...warnings, previewBudget.warning];', start);
-    expect(start).toBeGreaterThan(-1);
-    expect(end).toBeGreaterThan(start);
-    const slice = `${serviceSource.slice(start, end)}warnings = [...warnings, previewBudget.warning];\n}`;
-    const runPreviewResult = new Function('derivePreviewBudget', 'chatCompletion', 'contextTokens', 'responseTokens', 'warnings',
-        `${slice}\nreturn { budget, warnings };`);
+test('the synchronous preview budget facade is the installed typed lifecycle policy', async () => {
+    const { createGenerationLifecycleService: createBrowserLifecycle } = await import('../public/scripts/generation-typed-runtime.js');
+    const lifecycle = createBrowserLifecycle(() => ({ chatId: 'chat', contextRevision: 0 }));
+    expect(lifecycle.derivePreviewBudget).toBe(derivePreviewBudget);
+});
+
+test('the typed preview result includes the real budget and warning for the inspector', async () => {
+    const lifecycle = createGenerationLifecycleService(() => ({ chatId: 'chat', contextRevision: 0 }));
+    const runPreviewResult = chatCompletion => lifecycle.buildPreviewResult({
+        type: 'normal', isOpenAI: true, data: { prompt: [] }, round: 0, warnings: [],
+        pending: null, pendingIdentifier: null, summarized: [], completion: chatCompletion,
+    }, {
+        ownsRun: () => true, previewModel: () => 'model',
+        build: async () => ({ generate_data: {}, stream: false }), shape: () => null,
+        canUseTools: () => false, responseTokens: () => 100, maxPromptTokens: () => 4900,
+        budget: (completion, contextTokens, responseTokens) => derivePreviewBudget({ chatCompletion: completion, contextTokens, responseTokens }),
+    });
     // Overflow only exists as a negative remainder: the step materials are
     // appended after assembly, so the completion carries no error of its own.
     const chatCompletion = { tokenBudget: 4900 - 1 - 6001, getTotalTokenCount: () => 6001, error: undefined };
-    const { budget, warnings } = runPreviewResult(derivePreviewBudget, chatCompletion, 5000, 100, []);
+    const { budget, warnings } = await runPreviewResult(chatCompletion);
     expect(budget).toEqual({ context: 5000, response: 100, remaining: -1102, used: 6002, totalTokens: 6001 });
     expect(warnings).toEqual(['budget-exceeded']);
     // A fitting request stays quiet, and an assembly failure keeps its own label.
-    expect(runPreviewResult(derivePreviewBudget, completionWithStepMaterials(1, 2), 5000, 100, []).warnings).toEqual([]);
+    expect((await runPreviewResult(completionWithStepMaterials(1, 2))).warnings).toEqual([]);
     const failed = completionWithStepMaterials(1, 2);
     failed.error = Object.assign(new Error('boom'), { name: 'IdentifierNotFoundError' });
-    expect(runPreviewResult(derivePreviewBudget, failed, 5000, 100, []).warnings).toEqual(['assembly-error']);
+    expect((await runPreviewResult(failed)).warnings).toEqual(['assembly-error']);
 });

@@ -93,6 +93,7 @@ export function normalizeToolBindings(list) {
 }
 
 /** Add missing pipeline carriers; only explicit authoring activates existing bindings. */
+/** @param {any[]} store @param {string[]} names @param {{activate?: boolean, registeredNames?: string[]}} [options] */
 export function ensurePipelineToolBindings(store, names, { activate = false, registeredNames = [] } = {}) {
     let changed = false;
     for (const rawName of names) {

@@ -2,6 +2,7 @@ import { describe, expect, test } from '@jest/globals';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { loadTsModule } from './helpers/load-ts-module.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -13,10 +14,13 @@ describe('legacy login page controller retirement', () => {
         expect(fs.existsSync(path.join(repoRoot, 'public', 'login.html'))).toBe(false);
     });
 
-    test('keeps shared login helpers for the React owner', () => {
-        const shared = fs.readFileSync(path.join(repoRoot, 'public', 'scripts', 'login-shared.js'), 'utf8');
-        expect(shared).toContain('export');
-        const helper = fs.readFileSync(path.join(repoRoot, 'app', 'lib', 'login-helpers.ts'), 'utf8');
-        expect(helper).toContain("from '../../public/scripts/login-shared.js'");
+    test('exposes working standalone React login helpers', async () => {
+        const { buildHomeRedirectUrl, getLoginErrorMessage, getPasswordVisibilityState, getRecoveryStep, loginMessages } = await loadTsModule('app/lib/login-helpers.ts');
+        expect(getLoginErrorMessage('Incorrect credentials')).toBe(loginMessages.incorrectCredentials);
+        expect(getLoginErrorMessage(null)).toBe(loginMessages.genericError);
+        expect(buildHomeRedirectUrl('https://example.test/login?noauto=1&next=chat')).toBe('https://example.test/?next=chat');
+        expect(getPasswordVisibilityState('password')).toMatchObject({ type: 'text', ariaPressed: 'true', ariaLabel: loginMessages.hidePassword });
+        expect(getRecoveryStep({ step1Display: 'none', step2Display: 'block' })).toBe(2);
+        expect(getRecoveryStep({ step1Display: 'block', step2Display: 'none' })).toBe(1);
     });
 });

@@ -287,14 +287,15 @@ describe('character avatar blobs', () => {
         fs.writeFileSync(sidecarPath, referenceV1.contentHash);
 
         // Make the compatibility file look newer than the cache: the file-mtime
-        // branch would regenerate (and fail on Jimp in this environment), so a
-        // cache hit here can only come from the blob-hash branch.
+        // branch would regenerate, so unchanged cached bytes confirm that a
+        // cache hit comes from the blob-hash branch.
         const future = new Date(Date.now() + 60_000);
         fs.utimesSync(path.join(directories.characters, 'eta.png'), future, future);
 
         // Matching hash → cache hit serves without regeneration.
         const hit = await generateThumbnail(directories, 'avatar', 'eta.png');
         expect(hit.path).toBe(cachedPath);
+        expect(fs.readFileSync(cachedPath)).toEqual(fs.readFileSync(REAL_AVATAR_PNG));
 
         // Blob content moves (avatar replaced) → hash mismatch → regeneration
         // is attempted instead of serving the stale cache.
@@ -309,7 +310,11 @@ describe('character avatar blobs', () => {
         expect(referenceV2.contentHash).not.toBe(referenceV1.contentHash);
 
         const stale = await generateThumbnail(directories, 'avatar', 'eta.png');
-        expect(stale.path).not.toBe(cachedPath);
+        expect(stale.path).toBe(cachedPath);
+        expect(fs.readFileSync(sidecarPath, 'utf8')).toBe(referenceV2.contentHash);
+        expect(fs.readFileSync(cachedPath)).not.toEqual(fs.readFileSync(REAL_AVATAR_PNG));
+        const sharp = (await import('sharp')).default;
+        expect(await sharp(fs.readFileSync(cachedPath)).metadata()).toMatchObject({ format: 'jpeg', width: 96, height: 144 });
     });
 
     test('deleted characters do not count as missing avatar blobs', async () => {

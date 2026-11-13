@@ -4,10 +4,45 @@ import { eventSource, event_types } from './events.js';
 
 import { requireDomHandlersShellContext } from './dom-handlers-shell-context.js';
 import { renameComposerDraftContext, setComposerDraftContext, requestComposerFocus } from './main-chat-composer-service.js';
+import { installWorkspaceInteractionCommands } from './workspace-interaction-commands.js';
 
 function shell() {
     return requireDomHandlersShellContext();
 }
+
+let historyRowCommands;
+let optionsMenuCommand;
+let dialoguePopupCommands;
+let deleteMessageCommands;
+let characterExportCommand;
+
+/** Invoke the same history actions used by the compatibility click adapter. */
+export function runHistoryRowCommand(command, ...args) {
+    if (!historyRowCommands?.[command]) throw new Error(`History command unavailable: ${command}`);
+    return historyRowCommands[command](...args);
+}
+
+export function runOptionsMenuCommand(id, customData) {
+    if (!optionsMenuCommand) throw new Error('Options menu command unavailable');
+    return optionsMenuCommand(id, customData);
+}
+
+export function runDialoguePopupCommand(command) {
+    if (!dialoguePopupCommands?.[command]) throw new Error(`Dialogue command unavailable: ${command}`);
+    return dialoguePopupCommands[command]();
+}
+
+export function runDeleteMessageCommand(command) {
+    if (!deleteMessageCommands?.[command]) throw new Error(`Delete message command unavailable: ${command}`);
+    return deleteMessageCommands[command]();
+}
+
+export function runCharacterExportCommand(format) {
+    if (!characterExportCommand) throw new Error('Character export command unavailable');
+    return characterExportCommand(format);
+}
+
+installWorkspaceInteractionCommands({ runHistoryRowCommand, runOptionsMenuCommand, runDialoguePopupCommand, runDeleteMessageCommand });
 
 const state = new Proxy({}, {
     get: (_, key) => shell().state[key],
@@ -30,7 +65,7 @@ const chooseBogusFolder = (...args) => shell().chooseBogusFolder(...args);
 const closeCharacterExportPopup = (...args) => shell().closeCharacterExportPopup(...args);
 const closeCurrentChat = (...args) => shell().closeCurrentChat(...args);
 const closeMessageEditor = (...args) => shell().closeMessageEditor(...args);
-const closeWorkspaceChildSlotHost = (...args) => shell().closeWorkspaceChildSlotHost(...args);
+const handleWorkspaceDrawerOutsidePointer = target => shell().handleWorkspaceDrawerOutsidePointer(target);
 const copyText = (...args) => shell().copyText(...args);
 const createChatMessageActionsController = (...args) => shell().createChatMessageActionsController(...args);
 const createOrEditCharacter = (...args) => shell().createOrEditCharacter(...args);
@@ -40,7 +75,7 @@ const delay = (...args) => shell().delay(...args);
 const deleteCharacter = (...args) => shell().deleteCharacter(...args);
 const deleteMessage = (...args) => shell().deleteMessage(...args);
 const displayPastChats = (...args) => shell().displayPastChats(...args);
-const doDrawerOpenClick = (...args) => shell().doDrawerOpenClick(...args);
+
 const doNewChat = (...args) => shell().doNewChat(...args);
 const download = (...args) => shell().download(...args);
 const duplicateCharacter = (...args) => shell().duplicateCharacter(...args);
@@ -69,7 +104,7 @@ const mountCharacterContextMenu = (...args) => shell().mountCharacterContextMenu
 const mountCharacterPopup = (...args) => shell().mountCharacterPopup(...args);
 const mountChatComposer = (...args) => shell().mountChatComposer(...args);
 const mountDialogueDelMesControls = (...args) => shell().mountDialogueDelMesControls(...args);
-const mountDialoguePopupControls = (...args) => shell().mountDialoguePopupControls(...args);
+
 const mountExportFormatPopup = (...args) => shell().mountExportFormatPopup(...args);
 const mountOptionsMenu = (...args) => shell().mountOptionsMenu(...args);
 const mountReactMainChatMessageListPanel = (...args) => shell().mountReactMainChatMessageListPanel(...args);
@@ -91,12 +126,11 @@ const regenerateLastReply = (...args) => shell().regenerateLastReply(...args);
 const renameCharacter = (...args) => shell().renameCharacter(...args);
 const renameChat = (...args) => shell().renameChat(...args);
 const renderTemplateAsync = (...args) => shell().renderTemplateAsync(...args);
-const resetMovableStyles = (...args) => shell().resetMovableStyles(...args);
-const resetScrollHeight = (...args) => shell().resetScrollHeight(...args);
+
 const runMainChatVisibleMessageActionsShellAction = (...args) => shell().runMainChatVisibleMessageActionsShellAction(...args);
 const saveCharacterDebounced = (...args) => shell().saveCharacterDebounced(...args);
 const saveChatConditional = (...args) => shell().saveChatConditional(...args);
-const saveSettingsDebounced = (...args) => shell().saveSettingsDebounced(...args);
+
 const selectCharacterById = (...args) => shell().selectCharacterById(...args);
 const selectImportedChar = (...args) => shell().selectImportedChar(...args);
 const select_rm_characters = (...args) => shell().select_rm_characters(...args);
@@ -111,7 +145,7 @@ const stopGeneration = (...args) => shell().stopGeneration(...args);
 const t = (...args) => shell().t(...args);
 const toggleCharacterExportPopup = (...args) => shell().toggleCharacterExportPopup(...args);
 const getVisibleCharacterExportTrigger = (...args) => shell().getVisibleCharacterExportTrigger(...args);
-const toggleDrawer = (...args) => shell().toggleDrawer(...args);
+
 const updateCharacterRow = (...args) => shell().updateCharacterRow(...args);
 const updateFavButtonState = (...args) => shell().updateFavButtonState(...args);
 
@@ -126,7 +160,8 @@ export async function bindLegacyShellHandlers() {
     await mountChatComposer();
     // React-owned static panels must exist before the direct $(...).on()
     // bindings below; bootstrapWorkspace re-invokes these mounts later, and
-    // each mount is idempotent via its dataset.react*Mounted guard.
+    // each mount is idempotent via its dataset.react*Mounted guard. Dialogue
+    // controls mount during bootstrap after their controller is initialized.
     await Promise.all([
         mountCharacterPopup(),
         mountRightNavPanel(),
@@ -134,7 +169,6 @@ export async function bindLegacyShellHandlers() {
         mountCharacterContextMenu(),
         mountOptionsMenu(),
         mountExportFormatPopup(),
-        mountDialoguePopupControls(),
         mountDialogueDelMesControls(),
     ]);
 
@@ -166,7 +200,11 @@ export async function bindLegacyShellHandlers() {
             state.selected_button = 'characters';
             select_rm_characters();
         }
-        $('#character_search_bar').val('').trigger('input');
+        const searchInput = document.getElementById('character_search_bar');
+        if (searchInput instanceof HTMLInputElement && searchInput.value !== '') {
+            searchInput.value = '';
+            searchInput.dispatchEvent(new Event('input', { bubbles: true }));
+        }
     });
 
     $(document).on('click', '.character_select', async function () {
@@ -219,80 +257,68 @@ export async function bindLegacyShellHandlers() {
     };
     chatElementScroll.addEventListener('scroll', chatScrollHandler, { passive: true });
 
+    function selectMessageForDeletion(index) {
+        const count = state.chat.length - index;
+        globalThis.__emberDeskBulkDeleteController.select(index, t`Delete ${count} messages, from message ${index + 1} through the end of this chat.`, t`Delete ${count} messages`);
+    }
+    globalThis.__emberDeskBulkDeleteController.setSelectionHandler(selectMessageForDeletion);
+
     $(document).on('click', '.mes', function () {
         //when a 'delete message' parent div is clicked
         // and we are in delete mode and del_checkbox is visible
         const row = $(this);
         const deleteCheckbox = row.find('.del_checkbox').first();
 
-        if (!state.is_delete_mode || !deleteCheckbox.is(':visible')) {
+        if (row.is('[data-main-chat-message-row-owner="react"]') || !state.is_delete_mode || !deleteCheckbox.is(':visible')) {
             return;
         }
-        $('.mes').each(function () {
-            const candidateRow = $(this);
-            candidateRow.find('.del_checkbox').first().prop('checked', false);
-            candidateRow.removeClass('selected');
+        globalThis.__emberDeskBulkDeleteController.selectLegacyRange(Number(row.attr('mesid')), state.chat.length, {
+            clear: () => $('.mes').each(function () {
+                const candidateRow = $(this);
+                candidateRow.find('.del_checkbox').first().prop('checked', false);
+                candidateRow.removeClass('selected');
+            }),
+            markClicked: () => row.addClass('selected'),
+            announce: selectMessageForDeletion,
+            select: index => {
+                const selectedRow = $(`.mes[mesid="${index}"]`);
+                selectedRow.addClass('selected');
+                selectedRow.find('.del_checkbox').first().prop('checked', true);
+            },
         });
-        row.addClass('selected'); //sets the bg of the mes selected for deletion
-        var i = Number($(this).attr('mesid')); //checks the message ID in the chat
-        state.this_del_mes = i;
-        const count = state.chat.length - i;
-        $('#dialogue_del_mes_summary').text(t`Delete ${count} messages, from message ${i + 1} through the end of this chat.`);
-        $('#dialogue_del_mes_ok').prop('disabled', false).attr('aria-label', t`Delete ${count} messages`);
-        //as long as the current message ID is less than the total chat length
-        while (i < state.chat.length) {
-            //sets the bg of the all msgs BELOW the selected .mes
-            const selectedRow = $(`.mes[mesid="${i}"]`);
-            selectedRow.addClass('selected');
-            selectedRow.find('.del_checkbox').first().prop('checked', true);
-            i++;
-        }
     });
 
-    /** Handles deletion of a character chat file. */
-    async function handleDeleteChat(chatFile) {
-        // Close past chat popup.
-        $('#select_chat_cross').trigger('click');
-
-        const loaderHandle = state.loader.show({
-            slug: 'chat-delete',
-            title: t`Delete Chat`,
-            message: t`Deleting chat…`,
-            toastMode: state.loader.ToastMode.STATIC,
-        });
-
-        try {
-            await delChat(`${chatFile}.jsonl`);
-        } catch (error) {
-            loaderHandle.hide();
-            throw error;
-        }
-
-        // Open the history view again after 2 seconds (delay to avoid edge cases for deleting last chat).
-        setTimeout(async function () {
-            $('#option_select_chat').trigger('click');
-            $('#options').hide();  // Hide option popup menu.
-            await loaderHandle.hide();
-        }, 2000);
+    function closeSelectChatPopup() {
+        document.getElementById('shadow_select_chat_popup').close();
     }
 
-    $(document).on('click', '.PastChat_cross', async function (e) {
-        e.stopPropagation();
-        const deleteFileName = $(this).attr('file_name');
+    async function deleteChatByFileName(deleteFileName) {
         console.debug('detected cross click for' + deleteFileName);
+        return shell().getHistoryCommands().deleteHistoryChat(deleteFileName, false, {
+            confirm: async () => {
+                const content = document.createElement('div');
+                const title = document.createElement('h3');
+                title.textContent = t`Delete the Chat File?`;
+                const file = document.createElement('p');
+                file.className = 'chat-file-name';
+                file.textContent = deleteFileName;
+                content.append(title, file);
+                const result = await callGenericPopup(content, state.POPUP_TYPE.CONFIRM, '', { okButton: t`Delete chat`, cancelButton: t`Cancel`, defaultResult: state.POPUP_RESULT.NEGATIVE });
+                return result === state.POPUP_RESULT.AFFIRMATIVE;
+            },
+            close: closeSelectChatPopup,
+            showLoader: () => state.loader.show({ slug: 'chat-delete', title: t`Delete Chat`, message: t`Deleting chat…`, toastMode: state.loader.ToastMode.STATIC }),
+            remove: delChat,
+            hideMenu: () => $('#options').hide(),
+            reopen: () => { void runOptionsMenuCommand('option_select_chat'); },
+            schedule: callback => setTimeout(callback, 2000),
+        });
+    }
 
-
-        const content = document.createElement('div');
-        const title = document.createElement('h3');
-        title.textContent = t`Delete the Chat File?`;
-        const file = document.createElement('p');
-        file.className = 'chat-file-name';
-        file.textContent = deleteFileName;
-        content.append(title, file);
-        const result = await callGenericPopup(content, state.POPUP_TYPE.CONFIRM, '', { okButton: t`Delete chat`, cancelButton: t`Cancel`, defaultResult: state.POPUP_RESULT.NEGATIVE });
-        if (result === state.POPUP_RESULT.AFFIRMATIVE) {
-            await handleDeleteChat(deleteFileName);
-        }
+    $(document).on('click', '.PastChat_cross', function (e) {
+        e.stopPropagation();
+        if (e.isTrigger) e.preventDefault();
+        return deleteChatByFileName($(this).attr('file_name'));
     });
 
 
@@ -311,51 +337,71 @@ export async function bindLegacyShellHandlers() {
         $('#character_popup').css('display', 'none');
     });
 
-    $('#dialogue_popup_ok').on('click', async function (_e) {
+    async function confirmDialoguePopup() {
         state.dialogueCloseStop = false;
-        $('#shadow_popup').transition({
-            opacity: 0,
-            duration: state.animation_duration,
-            easing: state.animation_easing,
-        });
-        setTimeout(function () {
-            if (state.dialogueCloseStop) return;
-            $('#shadow_popup').css('display', 'none');
-            $('#dialogue_popup').removeClass('large_dialogue_popup');
-            $('#dialogue_popup').removeClass('wide_dialogue_popup');
-        }, state.animation_duration);
-
-        if (state.dialogueResolve) {
-            if (state.popup_type == 'input') {
-                state.dialogueResolve($('#dialogue_popup_input').val());
-                $('#dialogue_popup_input').val('');
-            } else {
-                state.dialogueResolve(true);
-            }
-
-            state.dialogueResolve = null;
+        if (globalThis.__emberDeskDialoguePresentation) {
+            globalThis.__emberDeskDialoguePresentation.close('confirm');
+        } else {
+            $('#shadow_popup').transition({
+                opacity: 0,
+                duration: state.animation_duration,
+                easing: state.animation_easing,
+            });
+            setTimeout(function () {
+                if (state.dialogueCloseStop) return;
+                $('#shadow_popup').css('display', 'none');
+                $('#dialogue_popup').removeClass('large_dialogue_popup');
+                $('#dialogue_popup').removeClass('wide_dialogue_popup');
+            }, state.animation_duration);
         }
-    });
 
-    $('#dialogue_popup_cancel').on('click', function (_e) {
+        const controller = state.dialogueController;
+        if (controller?.getSnapshot().open) {
+            if (state.popup_type == 'input' && $('#dialogue_popup_input').attr('data-react-dialogue-input') !== 'true') {
+                controller.setInput(String($('#dialogue_popup_input').val() ?? ''));
+                $('#dialogue_popup_input').val('');
+            }
+            controller.confirmDialoguePopup();
+        }
+    }
+
+    function cancelDialoguePopup() {
         state.dialogueCloseStop = false;
-        $('#shadow_popup').transition({
-            opacity: 0,
-            duration: state.animation_duration,
-            easing: state.animation_easing,
-        });
-        setTimeout(function () {
-            if (state.dialogueCloseStop) return;
-            $('#shadow_popup').css('display', 'none');
-            $('#dialogue_popup').removeClass('large_dialogue_popup');
-        }, state.animation_duration);
+        if (globalThis.__emberDeskDialoguePresentation) {
+            globalThis.__emberDeskDialoguePresentation.close('cancel');
+        } else {
+            $('#shadow_popup').transition({
+                opacity: 0,
+                duration: state.animation_duration,
+                easing: state.animation_easing,
+            });
+            setTimeout(function () {
+                if (state.dialogueCloseStop) return;
+                $('#shadow_popup').css('display', 'none');
+                $('#dialogue_popup').removeClass('large_dialogue_popup');
+            }, state.animation_duration);
+        }
 
         state.popup_type = '';
 
-        if (state.dialogueResolve) {
-            state.dialogueResolve(false);
-            state.dialogueResolve = null;
+        const controller = state.dialogueController;
+        if (controller?.getSnapshot().open) {
+            controller.cancelDialoguePopup();
         }
+    }
+
+    dialoguePopupCommands = { confirmDialoguePopup, cancelDialoguePopup };
+    // Enter/Escape and third-party jQuery triggers retain their old entrypoint;
+    // native button clicks are owned by React.
+    $(document).on('click', '#dialogue_popup_ok', function (event) {
+        if (!event.isTrigger) return;
+        event.preventDefault();
+        return confirmDialoguePopup();
+    });
+    $(document).on('click', '#dialogue_popup_cancel', function (event) {
+        if (!event.isTrigger) return;
+        event.preventDefault();
+        return cancelDialoguePopup();
     });
 
     $('#add_avatar_button').on('change', function () {
@@ -494,9 +540,7 @@ export async function bindLegacyShellHandlers() {
 
     /* $("#renameCharButton").on('click', renameCharacter); */
 
-    $(document).on('click', '.select_chat_block', async function () {
-        const fileName = $(this).attr('file_name');
-
+    async function openHistoryChat(fileName, closeAfterLoad = true) {
         if (!fileName) {
             return;
         }
@@ -514,101 +558,92 @@ export async function bindLegacyShellHandlers() {
             await loaderHandle.hide();
         }
 
-        document.getElementById('shadow_select_chat_popup').close();
-    });
+        if (closeAfterLoad) closeSelectChatPopup();
+    }
 
-    $(document).on('click', '.renameChatButton', async function (e) {
-        e.stopPropagation();
-        const oldFileName = $(this).closest('.select_chat_block_wrapper').find('.select_chat_block_filename').text();
-
+    async function renameHistoryChat(oldFileName) {
         const popupText = $('<div></div>').html(await renderTemplateAsync('chatRename'));
         const errorText = $('<p role="alert" class="chat-rename-error" hidden></p>');
         popupText.append(errorText);
-        let renaming = false;
+        let currentPopup;
+        const rename = shell().getHistoryCommands().createHistoryRenameCommand(oldFileName, {
+            invalid: () => {
+                errorText.text(t`Enter a chat name.`).prop('hidden', false);
+                currentPopup.mainInput.setAttribute('aria-invalid', 'true');
+                currentPopup.mainInput.focus();
+            },
+            busy: value => {
+                if (value) currentPopup.dlg.setAttribute('aria-busy', 'true');
+                else currentPopup.dlg.removeAttribute('aria-busy');
+                currentPopup.mainInput.disabled = value;
+                currentPopup.buttonControls.querySelectorAll('button').forEach(button => { button.disabled = value; });
+                if (!value) currentPopup.mainInput.focus();
+            },
+            rename: name => renameChat(oldFileName, name),
+            failed: () => errorText.text(t`Chat was not renamed. Check the name and connection, then try again.`).prop('hidden', false),
+        });
         const result = await callGenericPopup(popupText, state.POPUP_TYPE.INPUT, oldFileName, {
             okButton: t`Rename chat`,
             cancelButton: t`Cancel`,
             onClosing: async popup => {
-                if (renaming) return false;
-                if (popup.result !== state.POPUP_RESULT.AFFIRMATIVE) return true;
-                const name = popup.mainInput.value.trim();
-                if (!name) {
-                    errorText.text(t`Enter a chat name.`).prop('hidden', false);
-                    popup.mainInput.setAttribute('aria-invalid', 'true');
-                    popup.mainInput.focus();
-                    return false;
-                }
-                if (name === oldFileName) return true;
-                renaming = true;
-                popup.dlg.setAttribute('aria-busy', 'true');
-                popup.mainInput.disabled = true;
-                popup.buttonControls.querySelectorAll('button').forEach(button => { button.disabled = true; });
-                try {
-                    const renamed = await renameChat(oldFileName, name);
-                    if (!renamed) {
-                        errorText.text(t`Chat was not renamed. Check the name and connection, then try again.`).prop('hidden', false);
-                        return false;
-                    }
-                    return true;
-                } finally {
-                    renaming = false;
-                    popup.dlg.removeAttribute('aria-busy');
-                    popup.mainInput.disabled = false;
-                    popup.buttonControls.querySelectorAll('button').forEach(button => { button.disabled = false; });
-                    popup.mainInput.focus();
-                }
+                currentPopup = popup;
+                return rename(popup.result === state.POPUP_RESULT.AFFIRMATIVE, popup.mainInput.value);
             },
         });
         if (result !== state.POPUP_RESULT.CANCELLED && result !== state.POPUP_RESULT.NEGATIVE) await displayPastChats();
+    }
+
+    async function exportHistoryChat(filename, format = 'txt', alreadySaved = false) {
+        return shell().getHistoryCommands().exportHistoryChat(format, alreadySaved, {
+            save: saveChatConditional,
+            request: async () => {
+                console.log(`exporting ${filename} in ${format} format`);
+                const body = { avatar_url: state.characters[state.this_chid]?.avatar, file: `${filename}.jsonl`, exportfilename: `${filename}.${format}`, format };
+                console.log(body);
+                const response = await fetch('/api/chats/export', { method: 'POST', body: JSON.stringify(body), headers: getRequestHeaders() });
+                return { ok: response.ok, data: await response.json() };
+            },
+            wait: () => delay(250),
+            log: data => console.log(data),
+            success: data => toastr.success(data.message),
+            failure: message => toastr.error(`Error: ${message}`),
+            download: (data, mime) => download(data, `${filename}.${format}`, mime),
+        });
+    }
+
+    historyRowCommands = {
+        close: closeSelectChatPopup,
+        newChat: async () => {
+            await doNewChat({ deleteCurrentChat: false });
+            closeSelectChatPopup();
+        },
+        openChat: openHistoryChat,
+        renameChat: renameHistoryChat,
+        exportChat: exportHistoryChat,
+        deleteChat: deleteChatByFileName,
+        importFiles: importHistoryFiles,
+    };
+    // Compatibility for programmatic jQuery triggers and non-React rows. React
+    // rows stop propagation and invoke the commands above directly.
+    $(document).on('click', '.select_chat_block', function (event) {
+        if (event.isTrigger) event.preventDefault();
+        return openHistoryChat($(this).attr('file_name'));
     });
-
-    $(document).on('click', '.exportChatButton, .exportRawChatButton', async function (e) {
-        e.stopPropagation();
-        const format = $(this).data('format') || 'txt';
-        await saveChatConditional();
-        const filename = $(this).closest('.select_chat_block_wrapper').find('.select_chat_block_filename').text();
-        console.log(`exporting ${filename} in ${format} format`);
-
-        const body = {
-            avatar_url: state.characters[state.this_chid]?.avatar,
-            file: `${filename}.jsonl`,
-            exportfilename: `${filename}.${format}`,
-            format: format,
-        };
-        console.log(body);
-        try {
-            const response = await fetch('/api/chats/export', {
-                method: 'POST',
-                body: JSON.stringify(body),
-                headers: getRequestHeaders(),
-            });
-            const data = await response.json();
-            if (!response.ok) {
-                // display error message
-                console.log(data.message);
-                await delay(250);
-                toastr.error(`Error: ${data.message}`);
-                return;
-            } else {
-                const mimeType = format == 'txt' ? 'text/plain' : 'application/octet-stream';
-                // success, handle response data
-                console.log(data);
-                await delay(250);
-                toastr.success(data.message);
-                download(data.result, body.exportfilename, mimeType);
-            }
-        } catch (error) {
-            // display error message
-            console.log(`An error has occurred: ${error.message}`);
-            await delay(250);
-            toastr.error(`Error: ${error.message}`);
-        }
+    $(document).on('click', '.renameChatButton', function (event) {
+        event.stopPropagation();
+        if (event.isTrigger) event.preventDefault();
+        return renameHistoryChat($(this).closest('.select_chat_block_wrapper').find('.select_chat_block_filename').text());
+    });
+    $(document).on('click', '.exportChatButton, .exportRawChatButton', function (event) {
+        event.stopPropagation();
+        if (event.isTrigger) event.preventDefault();
+        return exportHistoryChat($(this).closest('.select_chat_block_wrapper').find('.select_chat_block_filename').text(), $(this).data('format') || 'txt');
     });
 
 
     const button = $('#options_button');
     const menu = $('#options');
-    let isOptionsMenuVisible = false;
+
 
     function showMenu() {
         button.attr('aria-expanded', 'true');
@@ -616,197 +651,120 @@ export async function bindLegacyShellHandlers() {
         setOptionsMenuRegenerateAvailability(canRegenerateLastReply());
         menu.fadeIn(state.animation_duration);
         getOptionsPopper()?.update();
-        isOptionsMenuVisible = true;
     }
 
     function hideMenu() {
         button.attr('aria-expanded', 'false');
         menu.fadeOut(state.animation_duration);
         getOptionsPopper()?.update();
-        isOptionsMenuVisible = false;
     }
 
     function isMouseOverButtonOrMenu() {
         return menu.is(':hover, :focus-within') || button.is(':hover, :focus');
     }
 
-    button.on('click', function () {
-        if (isOptionsMenuVisible) {
-            hideMenu();
-        } else {
-            showMenu();
-        }
-    });
-    $(document).on('click', function () {
-        if (!isOptionsMenuVisible) return;
-        if (!isMouseOverButtonOrMenu()) { hideMenu(); }
-    });
-    $(document).on('keydown', function (e) {
-        if (e.key === 'Escape' && isOptionsMenuVisible && !e.originalEvent.isComposing) {
-            hideMenu();
-            button.trigger('focus');
-        }
-    });
+    const createMenuController = shell().getOptionsMenuControllerFactory();
+    const menuController = createMenuController({ show: showMenu, hide: hideMenu, focus: () => button.trigger('focus') });
+    menuController.attach(button[0], document, isMouseOverButtonOrMenu);
+    button.on('click', event => { if (event.isTrigger) { event.preventDefault(); menuController.toggle(); } });
 
     ///////////// OPTIMIZED LISTENERS FOR LEFT SIDE OPTIONS POPUP MENU //////////////////////
     // Delegated binding: the menu items are React-owned inside #options and can be
     // remounted; a document-level handler keeps jQuery-trigger compatibility.
-    $(document).on('click', '#options [id]', async function () {
-        var id = $(this).attr('id');
-
-        if (id == 'option_select_chat') {
-            if (state.this_chid !== undefined && !state.is_send_press) {
+    optionsMenuCommand = async function (id) {
+        return shell().getHistoryCommands().runHistoryMenuAction(id, false, {
+            hasCharacter: () => state.this_chid !== undefined,
+            isSending: () => Boolean(state.is_send_press),
+            canRegenerate: canRegenerateLastReply,
+            history: async () => {
                 await displayPastChats();
                 console.log('displaying shadow');
                 const historyDialog = document.getElementById('shadow_select_chat_popup');
                 if (!historyDialog.open) historyDialog.showModal();
                 document.getElementById('select_chat_search').focus();
-            }
-        } else if (id == 'option_start_new_chat') {
-            if (state.this_chid !== undefined && !state.is_send_press) {
+            },
+            confirmNew: async () => {
                 let deleteCurrentChat = false;
                 const result = await state.Popup.show.confirm(t`Start new chat?`, await renderTemplateAsync('newChatConfirm'), {
                     okButton: t`Start new chat`,
                     cancelButton: t`Cancel`,
                     onClose: () => { deleteCurrentChat = !!$('#del_chat_checkbox').prop('checked'); },
                 });
-                if (!result) {
-                    return;
-                }
-
-                await doNewChat({ deleteCurrentChat: deleteCurrentChat });
-            }
-            if (state.this_chid === undefined && !state.is_send_press) {
-                await newAssistantChat();
-            }
-        } else if (id == 'option_delete_mes') {
-            setTimeout(() => openMessageDelete(), state.animation_duration);
-        } else if (id == 'option_regenerate') {
-            if (canRegenerateLastReply()) {
-                void regenerateLastReply();
-            }
-        } else if (id == 'option_close_chat') {
-            await closeCurrentChat();
-        } else if (id == 'option_chat_memory') {
-            await openChatMemoryPanel();
-        } else if (id == 'option_wire_log') {
-            // Diagnostics overlay: independent of chat state, so it opens on a
-            // closed chat too (the panel then shows every session).
-            await openWireLogPanel();
-        }
-        hideMenu();
+                return result ? deleteCurrentChat : null;
+            },
+            newChat: deleteCurrentChat => doNewChat({ deleteCurrentChat }),
+            newAssistant: newAssistantChat,
+            deleteMessages: () => { setTimeout(() => openMessageDelete(), state.animation_duration); },
+            regenerate: () => { void regenerateLastReply(); },
+            closeChat: closeCurrentChat,
+            memory: openChatMemoryPanel,
+            wireLog: openWireLogPanel,
+            backToMain: () => { void shell().backToMainChat(); },
+            attachFile: () => shell().openFileAttachmentPicker(),
+            closeMenu: () => menuController.close(),
+        });
+    };
+    $(document).on('click', '#options [id]', function (event) {
+        const id = $(this).attr('id');
+        if (event.isTrigger && ['option_start_new_chat', 'option_close_chat', 'option_select_chat', 'option_regenerate', 'option_chat_memory', 'option_wire_log', 'option_delete_mes', 'option_back_to_main', 'attachFile'].includes(id)) event.preventDefault();
+        return optionsMenuCommand(id);
     });
 
-    $('#newChatFromManageScreenButton').on('click', async function () {
-        await doNewChat({ deleteCurrentChat: false });
-        $('#select_chat_cross').trigger('click');
+    $('#newChatFromManageScreenButton').on('click', function (event) {
+        if (event.isTrigger) { event.preventDefault(); return runHistoryRowCommand('newChat'); }
     });
 
     //////////////////////////////////////////////////////////////////////////////////////////////
 
     //functionality for the cancel delete messages button, reverts to normal display of input form
-    $('#dialogue_del_mes_cancel').on('click', function () {
+    function cancelMessageDeletion() {
+        globalThis.__emberDeskBulkDeleteController.finish();
         $('#dialogue_del_mes').css('display', 'none');
         $('#send_form').css('display', state.css_send_form_display);
         $('.del_checkbox').each(function () {
             const checkbox = $(this);
             const row = checkbox.closest('.mes');
+            if (row.is('[data-main-chat-message-row-owner="react"]')) return;
             checkbox.css('display', 'none');
             row.find('.for_checkbox').first().css('display', 'block');
             row.removeClass('selected');
             checkbox.prop('checked', false);
         });
-        state.this_del_mes = -1;
         state.is_delete_mode = false;
         requestComposerFocus();
-    });
+    }
 
     //confirms message deletion with the "ok" button
-    $('#dialogue_del_mes_ok').on('click', async function () {
-        if (this.disabled || state.this_del_mes < 0) return;
-        this.disabled = true;
-        $('#dialogue_del_mes_cancel').prop('disabled', true);
-        $('#dialogue_del_mes_summary').text(t`Deleting messages…`);
-        $('#dialogue_del_mes').attr('aria-busy', 'true');
-        $('.del_checkbox').each(function () {
-            const checkbox = $(this);
-            const row = checkbox.closest('.mes');
-            checkbox.css('display', 'none');
-            row.find('.for_checkbox').first().css('display', 'block');
-            row.removeClass('selected');
-            checkbox.prop('checked', false);
-        });
-
-        try {
-            if (state.this_del_mes >= 0) {
-                await shell().getChatMessageCommands().deleteFrom(state.this_del_mes);
-            } else {
-                console.log('this_del_mes is not >= 0, not deleting');
+    async function confirmMessageDeletion() {
+        const controller = globalThis.__emberDeskBulkDeleteController;
+        return controller.confirm(t`Deleting messages…`, async deletedFrom => {
+            try {
+                $('#dialogue_del_mes').attr('aria-busy', 'true');
+                $('.del_checkbox').each(function () {
+                    const checkbox = $(this);
+                    const row = checkbox.closest('.mes');
+                    if (row.is('[data-main-chat-message-row-owner="react"]')) return;
+                    checkbox.css('display', 'none');
+                    row.find('.for_checkbox').first().css('display', 'block');
+                    row.removeClass('selected');
+                    checkbox.prop('checked', false);
+                });
+                await shell().getChatMessageCommands().deleteFrom(deletedFrom);
+            } finally {
+                $('#dialogue_del_mes').css('display', 'none').removeAttr('aria-busy');
+                $('#send_form').css('display', state.css_send_form_display);
+                requestComposerFocus();
+                state.is_delete_mode = false;
             }
-        } finally {
-            $('#dialogue_del_mes').css('display', 'none').removeAttr('aria-busy');
-            $('#send_form').css('display', state.css_send_form_display);
-            $('#dialogue_del_mes_cancel').prop('disabled', false);
-            requestComposerFocus();
-            state.this_del_mes = -1;
-            state.is_delete_mode = false;
-        }
-    });
-
-    ////////////////// OPTIMIZED RANGE SLIDER LISTENERS////////////////
-
-    var sliderLocked = true;
-    var sliderTimer;
-
-    $('input[type=\'range\']').on('touchstart', function () {
-        // Unlock the slider after 300ms
-        sliderTimer = setTimeout(function () {
-            sliderLocked = false;
-            $(this).css('background-color', 'var(--SmartThemeQuoteColor)');
-        }.bind(this), 300);
-    });
-
-    $('input[type=\'range\']').on('touchend', function () {
-        clearTimeout(sliderTimer);
-        $(this).css('background-color', '');
-        sliderLocked = true;
-    });
-
-    $('input[type=\'range\']').on('touchmove', function (event) {
-        if (sliderLocked) {
-            event.preventDefault();
-        }
-    });
-
-    const sliders = [
-        {
-            sliderId: '#amount_gen',
-            counterId: '#amount_gen_counter',
-            format: (val) => `${val}`,
-            setValue: (val) => { state.amount_gen = Number(val); },
-        },
-        {
-            sliderId: '#max_context',
-            counterId: '#max_context_counter',
-            format: (val) => `${val}`,
-            setValue: (val) => { state.max_context = Number(val); },
-        },
-    ];
-
-    sliders.forEach(slider => {
-        $(document).on('input', slider.sliderId, function () {
-            const value = $(this).val();
-            const formattedValue = slider.format(value);
-            slider.setValue(value);
-            $(slider.counterId).val(formattedValue);
-            saveSettingsDebounced();
         });
-    });
+    }
+    deleteMessageCommands = { cancel: cancelMessageDeletion, confirm: confirmMessageDeletion };
+    $('#dialogue_del_mes_cancel').on('click', event => { if (event.isTrigger) { event.preventDefault(); return cancelMessageDeletion(); } });
+    $('#dialogue_del_mes_ok').on('click', event => { if (event.isTrigger) { event.preventDefault(); return confirmMessageDeletion(); } });
 
-    //////////////////////////////////////////////////////////////
 
-    $('#select_chat_cross').on('click', function () {
-        document.getElementById('shadow_select_chat_popup').close();
+    $('#select_chat_cross').on('click', function (event) {
+        if (event.isTrigger) { event.preventDefault(); closeSelectChatPopup(); }
     });
     document.getElementById('shadow_select_chat_popup').addEventListener('keydown', event => {
         if (event.key === 'Escape') event.stopPropagation();
@@ -961,177 +919,102 @@ export async function bindLegacyShellHandlers() {
         toggleCharacterExportPopup(this);
     });
 
+    const exportDismissal = shell().getHistoryCommands().createExportPopupDismissal({
+        isOpen: () => state.isExportPopupOpen,
+        close: restoreFocus => closeCharacterExportPopup({ restoreFocus }),
+    });
     $(document).on('keydown', function (event) {
-        if (state.isExportPopupOpen && event.key === 'Escape') {
+        if (exportDismissal.key(event.key)) {
             event.preventDefault();
             event.stopImmediatePropagation();
-            closeCharacterExportPopup();
         }
     });
 
-    $(document).on('click', '.export_format', async function () {
-        const format = $(this).data('format');
-
-        if (!format) {
-            return;
-        }
-
-        closeCharacterExportPopup();
-
-        try {
-            // Save before exporting
-            await createOrEditCharacter();
-            const body = { format, avatar_url: state.characters[state.this_chid].avatar };
-
-            const response = await fetch('/api/characters/export', {
-                method: 'POST',
-                headers: getRequestHeaders(),
-                body: JSON.stringify(body),
-            });
-
-            if (!response.ok) {
+    characterExportCommand = async function (format) {
+        return shell().getCharacterExportCommand()(format, {
+            close: closeCharacterExportPopup,
+            save: createOrEditCharacter,
+            request: async format => {
+                const body = { format, avatar_url: state.characters[state.this_chid].avatar };
+                const response = await fetch('/api/characters/export', {
+                    method: 'POST',
+                    headers: getRequestHeaders(),
+                    body: JSON.stringify(body),
+                });
+                if (!response.ok) return { ok: false, data: null };
+                const filename = state.characters[state.this_chid].avatar.replace('.png', `.${format}`);
+                return { ok: true, data: { filename, blob: await response.blob() } };
+            },
+            download: ({ filename, blob }) => {
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.setAttribute('download', filename);
+                document.body.appendChild(a);
+                toastr.success(t`Character export download started.`, t`Export and Download`);
+                a.click();
+                URL.revokeObjectURL(a.href);
+                document.body.removeChild(a);
+            },
+            failure: error => {
+                if (error) console.error('Character export failed', error);
                 toastr.error(t`Could not download file`, t`Export and Download`);
-                return;
-            }
-
-            const filename = state.characters[state.this_chid].avatar.replace('.png', `.${format}`);
-            const blob = await response.blob();
-            const a = document.createElement('a');
-            a.href = URL.createObjectURL(blob);
-            a.setAttribute('download', filename);
-            document.body.appendChild(a);
-            toastr.success(t`Character export download started.`, t`Export and Download`);
-            a.click();
-            URL.revokeObjectURL(a.href);
-            document.body.removeChild(a);
-        } catch (error) {
-            console.error('Character export failed', error);
-            toastr.error(t`Could not download file`, t`Export and Download`);
-        }
+            },
+        });
+    };
+    $(document).on('click', '.export_format', function (event) {
+        if (event.isTrigger) event.preventDefault();
+        return characterExportCommand($(this).data('format'));
     });
     //**************************CHAT IMPORT EXPORT*************************//
-    $('#chat_import_button').on('click', function () {
+    $('#chat_import_button').on('click', function (event) {
+        if (!event.isTrigger) return;
+        event.preventDefault();
         $('#chat_import_file').trigger('click');
     });
 
-    $('#chat_import_file').on('change', async function (e) {
-        const targetElement = e.target;
+    $('#chat_import_file').on('change', function (event) {
+        if (event.isTrigger) return importHistoryFiles(event.target);
+    });
+
+    async function importHistoryFiles(targetElement) {
         const formElement = document.getElementById('form_import_chat');
         if (!(targetElement instanceof HTMLInputElement) || !(formElement instanceof HTMLFormElement)) {
             return;
         }
 
-        const importedFileNames = [];
-
-        for (const file of targetElement.files) {
-            const ext = file.name.match(/\.(\w+)$/);
-            const format = ext?.[1]?.toLowerCase();
-
-            if (!['json', 'jsonl'].includes(format)) {
-                toastr.warning(t`Only JSON and JSONL files are supported for chat imports.`);
-                continue;
-            }
-
-            const formData = new FormData(formElement);
-            formData.set('file_type', format);
-            formData.set('avatar', file);
-            formData.set('user_name', state.name1);
-
-            const result = await importCharacterChat(formData, { refresh: false });
-            importedFileNames.push(...result);
-        }
-
-        if (importedFileNames.length > 0) {
-            toastr.success(t`Successfully imported ${importedFileNames.length} chat(s).`);
-        }
-
-        await displayPastChats(importedFileNames);
+        await shell().getHistoryImportCommand()(targetElement.files, {
+            invalid: () => toastr.warning(t`Only JSON and JSONL files are supported for chat imports.`),
+            importFile: (file, format) => {
+                const formData = new FormData(formElement);
+                formData.set('file_type', format);
+                formData.set('avatar', file);
+                formData.set('user_name', state.name1);
+                return importCharacterChat(formData, { refresh: false });
+            },
+            complete: async names => {
+                if (names.length > 0) toastr.success(t`Successfully imported ${names.length} chat(s).`);
+                await displayPastChats(names);
+            },
+        });
 
         targetElement.value = '';
-    });
+    }
 
     $('#dupe_button').on('click', async function () {
         await duplicateCharacter();
     });
 
-
-    $(document).on('click', '.drawer-opener', doDrawerOpenClick);
-
     $('html').on('touchstart mousedown', async function (e) {
         const clickTarget = $(e.target);
 
-        if (state.isExportPopupOpen
-            && clickTarget.closest('#export_button').length == 0
-            && clickTarget.closest('#export_format_popup').length == 0) {
-            closeCharacterExportPopup({ restoreFocus: false });
-        }
+        exportDismissal.pointer(Boolean(clickTarget.closest('#export_button').length), Boolean(clickTarget.closest('#export_format_popup').length));
 
-        const forbiddenTargets = [
-            '#character_cross',
-            '#avatar-and-name-block',
-            '#shadow_popup',
-            '.popup',
-            '#world_popup',
-            '.ui-widget',
-            '.text_pole',
-            '#toast-container',
-            '.select2-results',
-            '.wi-content-editor-modal',
-        ];
-
-        for (const id of forbiddenTargets) {
-            if (clickTarget.closest(id).length > 0) {
-                return;
-            }
-        }
-
-        // This autocloses open drawers that are not pinned if a click happens inside the app which does not target them.
-        // Route through closeWorkspaceChildSlotHost so persistence keys, close
-        // guards, and the dock-change notification all apply — a bare class
-        // toggle left stale "opened" keys that resurrected drawers on reload.
-        const targetParentHasOpenDrawer = clickTarget.parents('.openDrawer').length;
-        if (!clickTarget.hasClass('openDrawer')) {
-            const $openDrawers = $('.openDrawer').not('.pinnedOpen');
-            if ($openDrawers.length && targetParentHasOpenDrawer === 0) {
-                $openDrawers.each(function () {
-                    if (this.id) {
-                        closeWorkspaceChildSlotHost(this.id);
-                    }
-                });
-            }
-        }
+        // Drawer policy lives in the typed service; this listener remains for
+        // the separate export-popup compatibility behavior above.
+        const target = e.target instanceof Element ? e.target : e.target?.parentElement;
+        handleWorkspaceDrawerOutsidePointer(target);
     });
 
-    $(document).on('click', '.inline-drawer-toggle', async function (e) {
-        if ($(e.target).hasClass('text_pole')) {
-            return;
-        }
-        const drawer = $(this).closest('.inline-drawer');
-        const icon = drawer.find('>.inline-drawer-header .inline-drawer-icon');
-        const drawerContent = drawer.find('>.inline-drawer-content');
-        icon.toggleClass('down up');
-        icon.toggleClass('fa-circle-chevron-down fa-circle-chevron-up');
-        drawer.trigger('inline-drawer-toggle');
-        drawerContent.stop(true, true).css({ display: '', height: '' }).toggleClass('openInlineDrawer');
-        $(this).attr('aria-expanded', String(drawerContent.hasClass('openInlineDrawer')));
-
-        // Set the height of "autoSetHeight" textareas within the inline-drawer to their scroll height
-        if (!CSS.supports('field-sizing', 'content')) {
-            const textareas = drawerContent.find('textarea.autoSetHeight');
-            for (const textarea of textareas) {
-                await resetScrollHeight($(textarea));
-            }
-        }
-    });
-
-    $(document).on('click', '.inline-drawer-maximize', function () {
-        const icon = $(this).find('.inline-drawer-icon, .floating_panel_maximize');
-        icon.toggleClass('fa-window-maximize fa-window-restore');
-        const drawerContent = $(this).closest('.drawer-content');
-        drawerContent.toggleClass('maximized');
-        const drawerId = drawerContent.attr('id');
-        resetMovableStyles(drawerId);
-    });
 
     $(document).on('click', '.mes .avatar', function () {
         const messageElement = $(this).closest('.mes');
@@ -1200,18 +1083,6 @@ export async function bindLegacyShellHandlers() {
         }
     });
 
-    document.addEventListener('click', function (e) {
-        if (!(e.target instanceof HTMLElement)) return;
-        if (e.target.matches('#OpenAllWIEntries')) {
-            document.querySelectorAll('#world_popup_entries_list .inline-drawer').forEach((/** @type {HTMLElement} */ drawer) => {
-                delay(0).then(() => toggleDrawer(drawer, true));
-            });
-        } else if (e.target.matches('#CloseAllWIEntries')) {
-            document.querySelectorAll('#world_popup_entries_list .inline-drawer').forEach((/** @type {HTMLElement} */ drawer) => {
-                toggleDrawer(drawer, false);
-            });
-        }
-    });
 
     $(document).on('click', '.open_alternate_greetings', openAlternateGreetings);
     /* $('#set_character_world').on('click', openCharacterWorldPopup); */
@@ -1350,70 +1221,6 @@ export async function bindLegacyShellHandlers() {
         }
     });
 
-
-    var isManualInput = false;
-    var valueBeforeManualInput;
-
-    $(document).on('input', '.range-block-counter input, .neo-range-input', function () {
-        valueBeforeManualInput = $(this).val();
-        console.log(valueBeforeManualInput);
-    });
-
-    $(document).on('change', '.range-block-counter input, .neo-range-input', function (e) {
-        if (!(e.target instanceof HTMLElement)) {
-            return;
-        }
-        e.target.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true }));
-    });
-
-    $(document).on('keydown', '.range-block-counter input, .neo-range-input', function (e) {
-        const masterSelector = '#' + $(this).data('for');
-        const masterElement = $(masterSelector);
-        if (e.key === 'Enter') {
-            let manualInput = Number($(this).val());
-            if (isManualInput) {
-                //disallow manual inputs outside acceptable range
-                if (manualInput >= Number($(this).attr('min')) && manualInput <= Number($(this).attr('max'))) {
-                    //if value is ok, assign to slider and update handle text and position
-                    //newSlider.val(manualInput)
-                    //handleSlideEvent.call(newSlider, null, { value: parseFloat(manualInput) }, 'manual');
-                    valueBeforeManualInput = manualInput;
-                    $(masterElement).val($(this).val()).trigger('input', { forced: true });
-                } else {
-                    //if value not ok, warn and reset to last known valid value
-                    toastr.warning(`Invalid value. Must be between ${$(this).attr('min')} and ${$(this).attr('max')}`);
-                    //newSlider.val(valueBeforeManualInput)
-                    $(this).val(valueBeforeManualInput);
-                }
-            }
-        }
-    });
-
-    $(document).on('keyup', '.range-block-counter input, .neo-range-input', function () {
-        valueBeforeManualInput = $(this).val();
-        isManualInput = true;
-    });
-
-    //trigger slider changes when user clicks away
-    $(document).on('mouseup blur', '.range-block-counter input, .neo-range-input', function () {
-        const masterSelector = '#' + $(this).data('for');
-        const masterElement = $(masterSelector);
-        let manualInput = Number($(this).val());
-        if (isManualInput) {
-            //if value is between correct range for the slider
-            if (manualInput >= Number($(this).attr('min')) && manualInput <= Number($(this).attr('max'))) {
-                valueBeforeManualInput = manualInput;
-                //set the slider value to input value
-                $(masterElement).val($(this).val()).trigger('input', { forced: true });
-            } else {
-                //if value not ok, warn and reset to last known valid value
-                toastr.warning(`Invalid value. Must be between ${$(this).attr('min')} and ${$(this).attr('max')}`);
-                $(this).val(valueBeforeManualInput);
-            }
-        }
-        isManualInput = false;
-    });
-
     $(document).on('click', '.external_import_button, #external_import_button', async () => {
         const html = await renderTemplateAsync('importCharacters');
         const input = await callGenericPopup(html, state.POPUP_TYPE.INPUT, '', { allowVerticalScrolling: true, wider: true, okButton: $('#popup_template').attr('popup-button-import'), rows: 4 });
@@ -1442,7 +1249,7 @@ export async function bindLegacyShellHandlers() {
         const importFile = document.getElementById('chat_import_file');
         if (importFile instanceof HTMLInputElement) {
             importFile.files = event.originalEvent.dataTransfer.files;
-            $(importFile).trigger('change');
+            await importHistoryFiles(importFile);
         }
     });
 
@@ -1553,7 +1360,7 @@ function handleInputWheel() {
     document.addEventListener('wheel', (e) => {
         // Try to carefully narrow down if we even need to fire this handler
         const input = document.activeElement instanceof HTMLInputElement ? document.activeElement : null;
-        if (input && input.type === 'number' && input.hasAttribute('step')) {
+        if (input && input.type === 'number' && input.hasAttribute('step') && input.dataset.workspaceNumeric !== 'react') {
             const parent = input.closest('.range-block-range-and-counter') ?? input.closest('div') ?? input.parentElement;
             const slider = /** @type {HTMLInputElement} */ (parent?.querySelector('input[type="range"]'));
 

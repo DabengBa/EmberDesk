@@ -10,6 +10,7 @@ describe('Wave B React surfaces', () => {
     test('regex editor/settings/debugger/import-target markup is React-owned', () => {
         const editor = readRepoFile('app/components/regex/RegexEditor.tsx');
         const settings = readRepoFile('app/components/regex/RegexSettingsPanel.tsx');
+
         const debuggerPanel = readRepoFile('app/components/regex/RegexDebugger.tsx');
         const importTarget = readRepoFile('app/components/regex/RegexImportTargetControl.tsx');
         const indexJs = readRepoFile('public/scripts/extensions/regex/index.js');
@@ -96,6 +97,7 @@ describe('Wave B React surfaces', () => {
 
     test('tool bindings surface lives inside the regex drawer', () => {
         const settings = readRepoFile('app/components/regex/RegexSettingsPanel.tsx');
+        const panel = readRepoFile('app/components/regex/ToolBindingsPanel.tsx');
         const editor = readRepoFile('app/components/regex/ToolBindingEditor.tsx');
         const bindingsJs = readRepoFile('public/scripts/tool-bindings.js');
         const workspacePanels = readRepoFile('app/workspace-panels.tsx');
@@ -105,11 +107,15 @@ describe('Wave B React surfaces', () => {
         expect(settings).toContain('id="regex_tab_content"');
         expect(settings).toContain('id="tool_bindings_tab_content"');
         expect(settings).toContain('displayNone');
+        expect(settings).toContain('<ToolBindingsPanel bridge={toolBindings} />');
         for (const id of ['open_tool_binding_editor', 'saved_tool_bindings', 'tool_choice_required']) {
-            expect(settings).toContain(`id="${id}"`);
+            expect(panel).toContain(`id="${id}"`);
         }
+        expect(panel).toContain('useSyncExternalStore(service.subscribe, service.getSnapshot, service.getSnapshot)');
+        expect(panel).toContain('service.setForceTool(event.target.checked)');
+        expect(panel).toContain('bridge.openEditor(null)');
 
-        // Editor fields bound by tool-bindings.js.
+        // Controlled editor fields keep the legacy IDs and validation hooks.
         for (const token of [
             'id="tb_name"',
             'id="tb_display_name"',
@@ -125,9 +131,9 @@ describe('Wave B React surfaces', () => {
             expect(editor).toContain(token);
         }
 
-        expect(bindingsJs).toContain('workspacePanels.mountToolBindingEditor(host)');
-        expect(workspacePanels).toContain('export function mountToolBindingEditor(container: HTMLElement)');
-        expect(workspacePanels).toContain('mountSmallPanel(container, <ToolBindingEditor />)');
+        expect(bindingsJs).toContain('workspace.mountToolBindingEditor(host, { existing:');
+        expect(workspacePanels).toContain('export function mountToolBindingEditor(container: HTMLElement, options:');
+        expect(workspacePanels).toContain('<ToolBindingEditor {...options} />');
     });
 
     test('tag management popup content is React-owned', () => {

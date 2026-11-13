@@ -258,7 +258,6 @@ const default_settings = {
 };
 
 const oai_settings = structuredClone(default_settings);
-let _presetChangeGuard = false;
 
 export let openai_setting_names;
 export let openai_settings;
@@ -288,7 +287,6 @@ export function installOpenAIPresetService(factory) {
                 body: JSON.stringify({ apiId: 'openai', name }),
             });
             if (!response.ok) throw new Error('Failed to delete preset');
-
         },
         emit: async (event, payload) => {
             if (event === 'before') {
@@ -296,9 +294,7 @@ export function installOpenAIPresetService(factory) {
                     ...payload, settingsToUpdate, settings: oai_settings, savePreset: saveOpenAIPreset,
                 });
             } else if (event === 'after') {
-                _presetChangeGuard = true;
-                try { await eventSource.emit(event_types.OAI_PRESET_CHANGED_AFTER); }
-                catch (error) { _presetChangeGuard = false; throw error; }
+                await eventSource.emit(event_types.OAI_PRESET_CHANGED_AFTER);
             } else if (event === 'saveAfter') {
                 await eventSource.emit(event_types.OAI_PRESET_CHANGED_AFTER);
             } else if (event === 'renameBefore' || event === 'renamed') {
@@ -306,8 +302,7 @@ export function installOpenAIPresetService(factory) {
             } else if (event === 'deleted') {
                 await eventSource.emit(event_types.PRESET_DELETED, { apiId: 'openai', name: payload });
             } else {
-                try { await eventSource.emit(event_types.PRESET_CHANGED, { apiId: 'openai', name: payload }); }
-                finally { _presetChangeGuard = false; }
+                await eventSource.emit(event_types.PRESET_CHANGED, { apiId: 'openai', name: payload });
             }
         },
         changed: () => { updateFeatureSupportFlags(); saveSettingsDebounced(); },
@@ -515,7 +510,7 @@ export function formatWorldInfo(value, { wiFormat = null } = {}) {
  * @param {Object[]} messages - Array containing all messages.
  * @returns {Promise<Object[]>} - Array containing all messages with injections.
  */
-async function populationInjectionPrompts(prompts, messages) {
+async function populationInjectionPrompts(prompts, messages, extensionPrompts) {
     let totalInsertedMessages = 0;
 
     const roleTypes = {
@@ -561,7 +556,7 @@ async function populationInjectionPrompts(prompts, messages) {
 
                 // Get extension prompt
                 const extensionPrompt = order === extensionPromptsOrder
-                    ? await getExtensionPrompt(extension_prompt_types.IN_CHAT, i, separator, roleTypes[role], wrap)
+                    ? await getExtensionPrompt(extension_prompt_types.IN_CHAT, i, separator, roleTypes[role], wrap, extensionPrompts)
                     : '';
                 const jointPrompt = [rolePrompts, extensionPrompt].filter(x => x).map(x => x.trim()).join(separator);
 
@@ -955,7 +950,7 @@ export function getPromptRole(role) {
  * @param {object[]} options.messages - Array containing all messages.
  * @returns {Promise<void>}
  */
-async function populateChatCompletion(prompts, chatCompletion, { bias, quietPrompt: _quietPrompt, quietImage, type, messages, assemblySettings = oai_settings, pipelineHistory = false }) {
+async function populateChatCompletion(prompts, chatCompletion, { bias, quietPrompt: _quietPrompt, quietImage, type, messages, extensionPrompts, assemblySettings = oai_settings, pipelineHistory = false }) {
     // Helper function for preparing a prompt, that already exists within the prompt collection, for completion
     const addToChatCompletion = async (source, target = null) => {
         // We need the prompts array to determine a position for the source.
@@ -1076,7 +1071,7 @@ async function populateChatCompletion(prompts, chatCompletion, { bias, quietProm
     }
 
     // Add in-chat injections
-    messages = await populationInjectionPrompts(absolutePrompts, messages);
+    messages = await populationInjectionPrompts(absolutePrompts, messages, extensionPrompts);
 
     await populateChatHistory(messages, prompts, chatCompletion, assemblySettings, pipelineHistory);
 
@@ -1237,6 +1232,7 @@ export async function prepareOpenAIMessages({
     pipelineHistory = false,
     assemblyModel,
     pipelineStepModel,
+    pipelinePreviewBase,
 }, dryRun, { squash = null, bookkeep = true } = {}) {
     const run = !dryRun && type === 'normal' ? getPipelineRunState() : null;
     if (run) {
@@ -1257,6 +1253,7 @@ export async function prepareOpenAIMessages({
     if (!promptManager.activeCharacter && dryRun) return [null, false];
 
     const chatCompletion = new ChatCompletion();
+    let previewBaseReservation = 0;
 
 
     const userSettings = promptManager.serviceSettings;
@@ -1270,6 +1267,13 @@ export async function prepareOpenAIMessages({
                 : buildStepPrompt(run.steps[run.index], run.index, run.steps.length);
             const tail = [...run.stepPrompts, { role: 'system', content: instruction }];
             chatCompletion.reserveBudget(await countTokensOpenAIAsync(tail.map(normalizeMessageForTokenCount), true));
+        } else if (dryRun && type === 'normal' && pipelinePreviewBase?.step) {
+            // Every preview round derives history from the same first-round
+            // base that the live pipeline freezes before adding its step tail.
+            const baseTail = collectPipelineStepPrompts(pipelinePreviewBase.tag, type, pipelinePreviewBase.model);
+            const instruction = buildStepPrompt(pipelinePreviewBase.step, 0, pipelinePreviewBase.total);
+            previewBaseReservation = await countTokensOpenAIAsync([...baseTail, { role: 'system', content: instruction }].map(normalizeMessageForTokenCount), true);
+            chatCompletion.reserveBudget(previewBaseReservation);
         }
         // Merge markers and ordered user prompts with system prompts
         const prompts = await preparePromptsForChatCompletion({
@@ -1285,7 +1289,7 @@ export async function prepareOpenAIMessages({
         // Fill the chat completion with as much context as the budget allows
         const assemblySettings = assemblyModel ? { ...oai_settings, openai_model: assemblyModel } : oai_settings;
         await populateChatCompletion(prompts, chatCompletion, {
-            bias, quietPrompt, quietImage, type, messages, assemblySettings,
+            bias, quietPrompt, quietImage, type, messages, extensionPrompts, assemblySettings,
             pipelineHistory: type === 'normal' && !!(run || pipelineStepTag || pipelineHistory),
         });
     } catch (error) {
@@ -1317,6 +1321,7 @@ export async function prepareOpenAIMessages({
 
     // Step materials are appended through the ChatCompletion so the returned
     // preview carries the same entries, budget and overflow signal as a send.
+    chatCompletion.increaseTokenBudgetBy(previewBaseReservation);
     await chatCompletion.appendStepMaterials(previewStepTail);
     const chat = chatCompletion.getChat();
 
@@ -1444,8 +1449,6 @@ export function setOpenAIModel(model) {
     updateFeatureSupportFlags();
     eventSource.emit(event_types.CHATCOMPLETION_MODEL_CHANGED, value);
 }
-
-
 
 function getVerbosity(settings = null) {
     settings = settings ?? oai_settings;
@@ -2748,9 +2751,7 @@ function loadOpenAISettings(data, settings) {
 
     // Protect openai_max_context from being overridden by extensions on initial load
     const loadedMaxContext = oai_settings.openai_max_context;
-    _presetChangeGuard = true;
     eventSource.once(event_types.SETTINGS_UPDATED, () => {
-        _presetChangeGuard = false;
         if (oai_settings.openai_max_context !== loadedMaxContext) {
             oai_settings.openai_max_context = loadedMaxContext;
             refreshOpenAIPresetService();
@@ -2767,9 +2768,6 @@ function loadOpenAISettings(data, settings) {
     reconnectOpenAi();
     refreshOpenAIPresetService();
 }
-
-
-
 
 /**
  * Get OpenAI preset body from settings

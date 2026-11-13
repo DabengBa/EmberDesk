@@ -274,6 +274,7 @@ export async function createCharacterCard({
  * @param {string} options.avatarUrl
  * @param {string} options.targetFile
  * @param {string} options.characterData
+ * @param {string} [options.expectedCardJson] Canonical snapshot required for conditional edits
  * @param {import('express').Request} options.request
  * @param {import('express').Response} [options.response]
  * @param {object} [options.body]
@@ -291,6 +292,7 @@ export async function editCharacterCard({
     avatarUrl,
     targetFile,
     characterData,
+    expectedCardJson = undefined,
     file = null,
     uploadFile = null,
     crop = undefined,
@@ -319,6 +321,7 @@ export async function editCharacterCard({
         avatarName: prepared.avatarUrl,
         internalName: prepared.targetFile,
         characterData: prepared.characterData,
+        expectedCardJson,
         directories: userDirectories,
         request,
         response,

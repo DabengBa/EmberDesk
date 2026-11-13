@@ -1,4 +1,11 @@
 {
+    "Runtime settings could not be saved because settings changed elsewhere. Saving is paused in this tab. Download the local settings before reloading, then compare the file with the current settings and reapply your changes manually.": "其他位置已更改设置，运行时设置未能保存。此标签页已暂停保存。请先下载本地运行时设置，再重新加载，对照当前设置手动重新应用更改。",
+    "The file may contain sensitive settings. It does not include unsaved edits in this form; copy those separately before closing the form or reloading.": "文件可能包含敏感设置。它不包含此表单中未保存的编辑；关闭表单或重新加载前请另行复制这些内容。",
+    "Download runtime settings only": "仅下载运行时设置",
+    "Settings form saved; runtime changes remain unsaved.": "设置表单已保存；运行时更改仍未保存。",
+    "Settings were updated elsewhere. Open Settings and download your unsaved runtime settings before reloading.": "其他位置已更新设置。重新加载前，请打开设置并下载未保存的运行时设置。",
+    "Settings conflict": "设置冲突",
+    "Download your unsaved runtime settings before reloading. Saving is paused until reload.": "请在重新加载前下载未保存的运行时设置。重新加载前，保存操作已暂停。",
     "Import as-is": "直接导入",
     "Keep them": "保留",
     "Preset name already exists. Overwrite?": "预设名称已存在，是否覆盖？",

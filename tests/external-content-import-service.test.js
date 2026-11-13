@@ -2,6 +2,9 @@ import { Buffer } from 'node:buffer';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import zlib from 'node:zlib';
+import sharp from 'sharp';
+import { makeBmp } from './helpers/animated-image-fixtures.js';
+import { read as readCharacterCard } from '../src/character-card-parser.js';
 
 import { describe, expect, jest, test } from '@jest/globals';
 
@@ -244,6 +247,23 @@ describe('external content import service', () => {
             },
             trace: [],
         });
+    });
+
+    test('imports a Perchance BMP avatar through the real provider and PNG card conversion', async () => {
+        const downloaders = await getExternalContentDownloaders();
+        const metadata = zlib.gzipSync(JSON.stringify({ addCharacter: {
+            name: 'BMP Hero', avatar: { url: 'https://avatars.example/hero.bmp' }, roleInstruction: '', reminderMessage: '',
+        } }));
+        const responses = [createResponse({ buffer: metadata }), createResponse({ buffer: makeBmp(), contentType: 'image/bmp' })];
+        const result = await downloadExternalContentArtifact({
+            descriptor: { source: 'perchance_character', type: 'character', id: '6903e991c90fd1dba52c036d917e99c6.gz' },
+            downloaders, fetchImpl: async () => responses.shift(),
+        });
+        expect(result.ok).toBe(true);
+        const card = result.artifact.buffer;
+        expect(JSON.parse(readCharacterCard(card)).data.name).toBe('BMP Hero');
+        const pixel = await sharp(card).extract({ left: 0, top: 0, width: 1, height: 1 }).removeAlpha().raw().toBuffer();
+        expect([...pixel]).toEqual([255, 0, 0]);
     });
 
     test('routes real provider secondary downloads through the artifact wrapper trace', async () => {

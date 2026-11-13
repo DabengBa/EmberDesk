@@ -39,8 +39,8 @@ function getCurrentShellCharacterId() {
     return getWorldInfoShell().getCurrentCharacterId();
 }
 
-function getExtensionPromptByName(promptName) {
-    return getWorldInfoShell().getExtensionPromptByName(promptName);
+function getExtensionPromptByName(promptName, promptMap) {
+    return getWorldInfoShell().getExtensionPromptByName(promptName, promptMap);
 }
 
 function getCharaFilename(chid) {
@@ -459,8 +459,9 @@ async function getChatLore() {
     return entries;
 }
 
-export async function getSortedEntries() {
+export async function getSortedEntries({ ownsRun = () => true } = {}) {
     try {
+        if (!ownsRun()) return [];
         const [
             globalLore,
             characterLore,
@@ -471,7 +472,9 @@ export async function getSortedEntries() {
             getChatLore(),
         ]);
 
+        if (!ownsRun()) return [];
         await eventSource.emit(event_types.WORLDINFO_ENTRIES_LOADED, { globalLore, characterLore, chatLore });
+        if (!ownsRun()) return [];
 
         // Insertion strategy is fixed to "sorted evenly": global and
         // character lore merge into one list sorted by insertion order.
@@ -561,7 +564,9 @@ function parseDecorators(content) {
  * @returns {Promise<WIActivated>} The world info activated.
  */
 //MARK: checkWorldInfo
-export async function checkWorldInfo(chat, maxContext, isDryRun, globalScanData = defaultGlobalScanData) {
+export async function checkWorldInfo(chat, maxContext, isDryRun, globalScanData = defaultGlobalScanData, { ownsRun = () => true, promptMap } = {}) {
+    const emptyResult = () => ({ worldInfoBefore: '', worldInfoAfter: '', WIDepthEntries: [], outletEntries: {}, allActivatedEntries: new Set() });
+    if (!ownsRun()) return emptyResult();
     const context = getContext();
     const buffer = new WorldInfoBuffer(chat, globalScanData);
 
@@ -571,9 +576,11 @@ export async function checkWorldInfo(chat, maxContext, isDryRun, globalScanData 
 
     // Add the depth or AN if enabled
     // Put this code here since otherwise, the chat reference is modified
-    for (const key of Object.keys(context.extensionPrompts)) {
-        if (context.extensionPrompts[key]?.scan) {
-            const prompt = await getExtensionPromptByName(key);
+    const scanPrompts = promptMap ?? context.extensionPrompts;
+    for (const key of Object.keys(scanPrompts)) {
+        if (scanPrompts[key]?.scan) {
+            const prompt = await getExtensionPromptByName(key, promptMap);
+            if (!ownsRun()) return emptyResult();
             if (prompt) {
                 buffer.addInject(prompt);
             }
@@ -586,7 +593,8 @@ export async function checkWorldInfo(chat, maxContext, isDryRun, globalScanData 
     let allActivatedEntries = new Map();
     let failedProbabilityChecks = new Set();
 
-    const sortedEntries = await getSortedEntries();
+    const sortedEntries = await getSortedEntries({ ownsRun });
+    if (!ownsRun()) return emptyResult();
 
     if (sortedEntries.length === 0) {
         buffer.resetExternalEffects();
@@ -798,6 +806,7 @@ export async function checkWorldInfo(chat, maxContext, isDryRun, globalScanData 
             sortedEntries,
         };
         await eventSource.emit(event_types.WORLDINFO_SCAN_DONE, args);
+        if (!ownsRun()) return emptyResult();
 
         if (args.state.next !== scanState) {
             console.debug('[WI] Scan state changed from', scanState, 'to', args.state.next);
@@ -883,15 +892,15 @@ export async function checkWorldInfo(chat, maxContext, isDryRun, globalScanData 
  * @param {WIGlobalScanData} globalScanData Chat independent context to be scanned
  * @returns {Promise<WIPromptResult>} The world info string and depth.
  */
-export async function getWorldInfoPrompt(chat, maxContext, isDryRun, globalScanData) {
-    const activatedWorldInfo = await checkWorldInfo(chat, maxContext, isDryRun, globalScanData);
+export async function getWorldInfoPrompt(chat, maxContext, isDryRun, globalScanData, { ownsRun = () => true, promptMap } = {}) {
+    const activatedWorldInfo = await checkWorldInfo(chat, maxContext, isDryRun, globalScanData, { ownsRun, promptMap });
     const worldInfoBefore = activatedWorldInfo.worldInfoBefore;
     const worldInfoAfter = activatedWorldInfo.worldInfoAfter;
     // The single `worldInfo` prompt marker injects both legacy buckets,
     // before-entries first.
     const worldInfo = [worldInfoBefore, worldInfoAfter].filter(Boolean).join('\n');
 
-    if (!isDryRun && activatedWorldInfo.allActivatedEntries && activatedWorldInfo.allActivatedEntries.size > 0) {
+    if (ownsRun() && !isDryRun && activatedWorldInfo.allActivatedEntries && activatedWorldInfo.allActivatedEntries.size > 0) {
         const arg = Array.from(activatedWorldInfo.allActivatedEntries.values());
         await eventSource.emit(event_types.WORLD_INFO_ACTIVATED, arg);
     }

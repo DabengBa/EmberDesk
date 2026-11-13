@@ -3,6 +3,7 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { loadTsModule } from './helpers/load-ts-module.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -128,7 +129,7 @@ describe('wire log viewer contract', () => {
         expect(workspacePanels).toContain('export function unmountWireLogPanel(');
     });
 
-    test('opens from the chat workspace bottom-left menu', () => {
+    test('opens from the chat workspace bottom-left menu', async () => {
         const optionsMenu = sources['app/components/options-menu/OptionsMenu.tsx'];
         const script = sources['public/script.js'];
         const domHandlers = sources['public/scripts/dom-handlers.js'];
@@ -136,10 +137,15 @@ describe('wire log viewer contract', () => {
         expect(optionsMenu).toContain('id="option_wire_log"');
         // The menu passes the stable source key; ContractButton translates it.
         expect(optionsMenu).toContain('label="Wire Log"');
-        expect(domHandlers).toContain('id == \'option_wire_log\'');
-        expect(domHandlers).toContain('await openWireLogPanel();');
+        expect(domHandlers).toContain('wireLog: openWireLogPanel');
+        expect(domHandlers).toContain('runHistoryMenuAction(');
+        const { runHistoryMenuAction } = await loadTsModule('app/lib/history-panel-service.ts');
+        const calls = [];
+        await runHistoryMenuAction('option_wire_log', false, { wireLog: async () => calls.push('wire'), closeMenu: () => calls.push('close') });
+        expect(calls).toEqual(['wire', 'close']);
         expect(script).toContain('async function openWireLogPanel()');
-        expect(script).toContain('module.mountWireLogPanel(wireLogPanelHost, getWireLogPanelBridge());');
+        expect(script).toContain('module.mountWireLogPanel(host, getWireLogPanelBridge())');
+        expect(script).toContain('wireLogPanelController = workspace.createAuxiliaryPanelController({');
     });
 
     test('offers a real JSON download next to the clipboard copy', () => {

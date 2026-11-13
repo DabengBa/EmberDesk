@@ -17,12 +17,13 @@ Let users register real OpenAI-style function tools without writing an extension
 
 ## Ownership Direction
 
-`public/scripts/tool-bindings.js` owns loading, registration, and editor behavior; `public/scripts/tool-bindings-core.js` owns pure normalization/validation/action compilation. The tab markup and editor popup chrome are React-owned inside the Regex drawer (`ToolBindingEditor`, `mountToolBindingEditor`). `ToolManager` in `public/scripts/tool-calling.js` remains the sole tool-call pipeline; user bindings are registered through it and tracked separately from code-registered tools.
+The bindings list and editor are React-owned inside the Regex drawer; a typed bindings service owns the shared binding state and registration decisions, with normalization, validation, and action compilation supplied by the bindings core. `ToolManager` remains the sole tool-call pipeline; user bindings are registered through it and tracked separately from code-registered tools.
 
 ## User-Visible Contract
 
 - The Regex drawer carries two tabs: 正则 (the regex workbench; the rule list, editor, import, preset selection, debugger, and scope authorization controls are React-owned) and 工具绑定 (the bindings list and editor entry point).
 - The tool-binding settings include a keyboard-accessible `强制调用` switch. Its visible label is also exposed as the switch's accessible name, and the switch can be focused and toggled with the keyboard.
+- Each binding's enabled switch can also be reached and toggled by keyboard; its accessible name identifies the binding, and keyboard focus has a visible indicator.
 - Bindings persist globally in `feature_settings.tool_bindings` inside the user settings document — not inside preset files and not per character.
 - Each binding carries: name (API tool name, 1-64 chars of letters/digits/`_`/`-`), optional display name, model-facing description, parameters JSON Schema, action body, optional format-message body, enabled flag, and stealth flag.
 - The Reply Pipeline toggle controls tool calling: when it is off, subsequent generations send no `tools` payload even if bindings remain enabled. Enabling it again restores eligible bindings; an already-running pipeline finishes with its captured tools. At least one enabled binding and a compatible source are also required.

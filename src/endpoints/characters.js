@@ -10,10 +10,10 @@ import { sync as writeFileAtomicSync } from 'write-file-atomic';
 import yaml from 'yaml';
 import _ from 'lodash';
 import mime from 'mime-types';
-import { Jimp, JimpMime } from '../jimp.js';
+import { avatarToPng } from '../image-processing.js';
 import storage from 'node-persist';
 
-import { AVATAR_WIDTH, AVATAR_HEIGHT, DEFAULT_AVATAR_PATH } from '../constants.js';
+import { DEFAULT_AVATAR_PATH } from '../constants.js';
 import { default as validateAvatarUrlMiddleware, getFileNameValidationFunction, forbiddenRegExp } from '../middleware/validateFileName.js';
 import { deepMerge, humanizedDateTime, tryParse, MemoryLimitedMap, getConfigValue, mutateJsonString, clientRelativePath, getUniqueName, sanitizeSafeCharacterReplacements } from '../util.js';
 import { TavernCardValidator } from '../validator/TavernCardValidator.js';
@@ -57,6 +57,7 @@ import {
     renameCanonicalCharacter,
     scanCanonicalCharacterWorldBindings,
     upsertCanonicalCharacter,
+    assertCanonicalCharacterCardCurrent,
 } from './character-store.js';
 import { getCanonicalWorldInfoBook, normalizeCanonicalWorldInfoName } from './world-info-store.js';
 import { mutateCharacterMediaAuthorizationInTransaction } from './settings-store.js';
@@ -327,7 +328,7 @@ async function writeCharacterData(inputFile, data, outputFile, request, crop = u
             })();
             const outputImage = write(inputImage, data);
             recordCharacterAvatarBlobSafe(request.user.profile?.handle ?? null, request.user.directories, outputAvatarName, outputImage);
-            startThumbnailPregeneration(request.user.directories, 'avatar', outputAvatarName, false, shouldRegenerateThumbnail);
+            startThumbnailPregeneration(request.user.directories, 'avatar', outputAvatarName, null, shouldRegenerateThumbnail);
             return true;
         }
 
@@ -377,7 +378,7 @@ async function writeCharacterData(inputFile, data, outputFile, request, crop = u
         if (!options.skipCanonicalAuditInvalidation) {
             invalidateCanonicalCharacterAuditSafe(request.user.profile?.handle ?? null, request.user.directories, `character_write:${outputAvatarName}`);
         }
-        startThumbnailPregeneration(request.user.directories, 'avatar', outputAvatarName, false, shouldRegenerateThumbnail);
+        startThumbnailPregeneration(request.user.directories, 'avatar', outputAvatarName, null, shouldRegenerateThumbnail);
         return true;
     } catch (err) {
         console.error(err);
@@ -543,7 +544,7 @@ async function listCanonicalCharacterChatsSafe(request, ownerId) {
  * @param {string} ownerId Character internal name
  * @param {string} filePath Legacy chat file destination
  * @param {string} jsonlData Full chat JSONL payload
- * @returns {Promise<{ok: boolean, repairKey?: string}|null>} Write result
+ * @returns {Promise<object|null>} Canonical write result or null when unavailable
  */
 async function writeCanonicalChatSafe(request, ownerId, filePath, jsonlData) {
     const state = await getCanonicalChatsDbSafe(request, 'writes');
@@ -556,6 +557,7 @@ async function writeCanonicalChatSafe(request, ownerId, filePath, jsonlData) {
         locator: { ownerType: 'character', ownerId, sourcePath },
         payload: parseCanonicalChatJsonl(jsonlData),
         operation: 'import',
+        condition: { create: true },
         projection: getCanonicalStorageSlice('chats').getProjectionMode(),
         projectJsonl(projectedJsonl) {
             const dir = path.dirname(filePath);
@@ -563,7 +565,7 @@ async function writeCanonicalChatSafe(request, ownerId, filePath, jsonlData) {
             writeFileAtomicSync(filePath, projectedJsonl, 'utf8');
         },
     });
-    return { ok: result.ok, repairKey: result.repairKey };
+    return result;
 }
 
 /**
@@ -805,34 +807,12 @@ function startThumbnailPregeneration(directories, type, file, isKnownAnimated, s
 
 /**
  * Applies avatar crop and resize operations to an image.
- * I couldn't fix the type issue, so the first argument has {any} type.
- * @param {object} jimp Jimp image instance
+ * @param {Buffer|string} input Image bytes or path
  * @param {Crop|undefined} [crop] Crop parameters
  * @returns {Promise<Buffer>} Processed image buffer
  */
-export async function applyAvatarCropResize(jimp, crop) {
-    if (!(jimp instanceof Jimp)) {
-        throw new TypeError('Expected a Jimp instance');
-    }
-
-    const image = /** @type {InstanceType<typeof Jimp>} */ (jimp);
-    let finalWidth = image.bitmap.width, finalHeight = image.bitmap.height;
-
-    // Apply crop if defined
-    if (typeof crop == 'object' && [crop.x, crop.y, crop.width, crop.height].every(x => typeof x === 'number')) {
-        image.crop({ x: crop.x, y: crop.y, w: crop.width, h: crop.height });
-        // Apply standard resize if requested
-        if (crop.want_resize) {
-            finalWidth = AVATAR_WIDTH;
-            finalHeight = AVATAR_HEIGHT;
-        } else {
-            finalWidth = crop.width;
-            finalHeight = crop.height;
-        }
-    }
-
-    image.cover({ w: finalWidth, h: finalHeight });
-    return await image.getBuffer(JimpMime.png);
+export async function applyAvatarCropResize(input, crop) {
+    return await avatarToPng(input, crop);
 }
 
 /**
@@ -842,8 +822,7 @@ export async function applyAvatarCropResize(jimp, crop) {
  * @returns {Promise<Buffer>} Image buffer
  */
 async function parseImageBuffer(buffer, crop) {
-    const image = await Jimp.fromBuffer(buffer);
-    return await applyAvatarCropResize(image, crop);
+    return await applyAvatarCropResize(buffer, crop);
 }
 
 /**
@@ -854,8 +833,7 @@ async function parseImageBuffer(buffer, crop) {
  */
 async function tryReadImage(imgPath, crop) {
     try {
-        const rawImg = await Jimp.read(imgPath);
-        return await applyAvatarCropResize(rawImg, crop);
+        return await applyAvatarCropResize(imgPath, crop);
     } catch (error) {
         // If it's an unsupported type of image (APNG) - just read the file as buffer
         console.error(`Failed to read image: ${imgPath}`, error);
@@ -1092,6 +1070,9 @@ function createCharacterWriteDependencies({ bustCache = null } = {}) {
                     const shallowPayload = toShallow(fullPayload);
 
                     withCanonicalTransaction(db, txnDb => {
+                        if (payload.expectedCardJson !== undefined) {
+                            assertCanonicalCharacterCardCurrent(txnDb, payloadAvatar, payload.expectedCardJson);
+                        }
                         const existing = txnDb.prepare(`
                             SELECT id, created_at_ms FROM characters
                             WHERE avatar_filename = ? AND deleted_at_ms IS NULL
@@ -1107,6 +1088,7 @@ function createCharacterWriteDependencies({ bustCache = null } = {}) {
                     });
                 }
             } catch (error) {
+                if (error?.code === 'CHARACTER_CARD_CONFLICT') throw error;
                 // No file fallback exists anymore: a failed canonical commit
                 // must surface instead of silently writing files.
                 throw createCanonicalWriteBlockedError(`canonical_commit_failed:${error?.message ?? error}`);
@@ -1321,12 +1303,12 @@ async function importFromByaf(uploadPath, { request }, preservedFileName) {
             const filePath = path.join(request.user.directories.chats, path.basename(fileName), chatName);
             const jsonlData = ByafParser.getChatFromScenario(scenario, request.body.user_name, card.name, byafData.chatBackgrounds);
             const canonicalResult = await writeCanonicalChatSafe(request, path.basename(fileName), filePath, jsonlData);
-            if (canonicalResult) {
+            if (canonicalResult?.authorityCommitted) {
                 console.log(`Created ${chatName} chat from BYAF import (canonical)`);
                 return chatName;
             }
             // No file-only fallback: an uncommitted session would be invisible.
-            console.warn(`Skipped ${chatName} chat from BYAF import: canonical chats unavailable`);
+            console.warn(`Skipped ${chatName} chat from BYAF import: canonical create was not committed (${canonicalResult?.reason ?? 'chats unavailable'})`);
             return null;
         };
 

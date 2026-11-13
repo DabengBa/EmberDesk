@@ -45,6 +45,26 @@ async function setup(page, entry) {
 }
 
 for (const entry of ['page', 'drawer']) {
+    test(`${entry}: missing credentials are visible and neither action sends a request`, async ({ page }) => {
+        await page.route('**/api/backends/chat-completions/{status,generate}', route => route.fulfill({ json: { data: [] } }));
+        await page.route('**/api/secrets/read', route => route.fulfill({ json: {} }));
+        await testSetup.awaitST({ page });
+        if (entry === 'page') await page.goto('/settings?tab=providers');
+        else await page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: '设置' }).click();
+        const surface = page.locator(`[data-settings-surface="${entry}"]`);
+        await surface.locator('#settings-providers-customUrl').fill('');
+        await surface.locator('#settings-providers-openaiModel').fill('fixture-model');
+        let requests = 0;
+        page.on('request', request => {
+            if (/\/api\/backends\/chat-completions\/(status|generate)$/.test(new URL(request.url()).pathname)) requests++;
+        });
+        for (const id of ['provider-connect-button', 'provider-test-button']) {
+            await surface.locator(`#${id}`).click();
+            await expect(surface.getByRole('alert')).toContainText(/请先保存 API key|Save an API key/);
+        }
+        expect(requests).toBe(0);
+    });
+
     test(`${entry}: replacing and clearing a saved key invalidates connection feedback`, async ({ page }) => {
         const f = await setup(page, entry);
         await f.connect.click();

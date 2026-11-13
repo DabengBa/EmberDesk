@@ -18,6 +18,6 @@ describe('character route source contract', () => {
 
         expect(source).toContain('router.post(\'/rename\', validateAvatarUrlMiddleware');
         expect(source).toContain('const result = await renameCharacterCard({');
-        expect(source).toContain('return response.send({ avatar: result.avatarName });');
+        expect(source).toContain('return response.send({ avatar: result.avatarName, mediaAuthorization: result.mediaAuthorization, settings_revision: result.settingsRevision });');
     });
 });

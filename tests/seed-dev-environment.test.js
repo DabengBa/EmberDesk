@@ -4,6 +4,7 @@ import path from 'node:path';
 import process from 'node:process';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { DatabaseSync } from 'node:sqlite';
 
 import { afterEach, describe, expect, test } from '@jest/globals';
 import { parse as parseCharacterCard } from '../src/character-card-parser.js';
@@ -56,6 +57,15 @@ describe('seed-dev-environment', () => {
         expect(fs.existsSync(path.join(dataRoot, 'default-user', 'backgrounds'))).toBe(true);
         expect(fs.existsSync(path.join(dataRoot, 'default-user', 'settings.json'))).toBe(false);
         expect(fs.existsSync(path.join(dataRoot, 'default-user', 'storage', 'emberdesk.sqlite'))).toBe(true);
+        const db = new DatabaseSync(path.join(dataRoot, 'default-user', 'storage', 'emberdesk.sqlite'), { readOnly: true });
+        try {
+            const row = db.prepare('SELECT payload_json, source FROM preset_documents WHERE api_id = ? AND name = ?').get('openai', 'Default');
+            expect(row).toBeDefined();
+            expect(row.source).toBe('seed');
+            expect(JSON.parse(row.payload_json)).toEqual(JSON.parse(fs.readFileSync(path.join(repoRoot, 'default/content/presets/openai/Default.json'), 'utf8')));
+        } finally {
+            db.close();
+        }
         // Quick Replies are retired; dev seeds no longer ship a default preset.
         expect(fs.existsSync(path.join(dataRoot, 'default-user', 'QuickReplies', 'Default.json'))).toBe(false);
     });

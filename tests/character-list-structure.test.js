@@ -315,7 +315,7 @@ describe('character list structure', () => {
         expect(scriptSource).toContain('Legacy list fallback is retired');
         expect(renderStateSource).toMatch(/const displayCount = pageEntities\.filter\(entity => entity\.type === 'character'\)\.length;/);
         expect(renderStateSource).toMatch(/const hiddenCount = totalCharacters - displayCount;/);
-        expect(scriptSource).toContain('$(\'#character_search_bar\').val(\'\').trigger(\'input\')');
+        expect(scriptSource).toContain("searchInput.dispatchEvent(new Event('input', { bubbles: true }))");
         expect(scriptSource).toContain('onClearAllFiltersClick(entitiesFilter)');
         expect(statusBlockSource).toContain('className="empty_block_message"');
         expect(statusBlockSource).toContain('className="menu_button clear_character_filters"');

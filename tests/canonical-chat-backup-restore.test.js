@@ -15,9 +15,14 @@ import { readCanonicalChatPayload } from '../src/endpoints/canonical-chat-read-s
 import {
     createCanonicalChatBackup,
     getCanonicalChatRestoreStatus,
-    restoreCanonicalChatBackup,
+    restoreCanonicalChatBackup as restoreWithVersion,
+    getCanonicalChatRestoreVersion,
 } from '../src/endpoints/canonical-chat-backup-restore-service.js';
-import { writeCanonicalChatPayload } from '../src/endpoints/canonical-chat-write-service.js';
+
+function restoreCanonicalChatBackup(options) {
+    return restoreWithVersion({ expectedVersion: getCanonicalChatRestoreVersion(options.db), ...options });
+}
+import { deleteCanonicalChat, writeCanonicalChatPayload } from '../src/endpoints/canonical-chat-write-service.js';
 
 const roots = [];
 const managers = [];
@@ -54,6 +59,20 @@ afterEach(() => {
 });
 
 describe('canonical chat backup and restore service', () => {
+    test('restore rejects a stale database version without erasing a later chat edit', async () => {
+        const directories = makeDirectories();
+        const db = createManager().open({ handle: 'alice', directories, featureFlags: { enabled: true } });
+        const other = createManager().open({ handle: 'alice', directories, featureFlags: { enabled: true } });
+        runCanonicalMigrations(db);
+        const backup = createCanonicalChatBackup({ db });
+        const expectedVersion = backup.databaseRevision.version;
+        const locator = { ownerType: 'character', ownerId: 'alice', sourcePath: 'chats/alice/new.jsonl' };
+        const written = writeCanonicalChatPayload({ db: other, locator, payload: [{ chat_metadata: {} }, { mes: 'concurrent edit' }], projection: 'off', projectJsonl() {} });
+        expect(written.ok).toBe(true);
+        const result = await restoreCanonicalChatBackup({ db, backup, handle: 'alice', directories, expectedVersion });
+        expect(result).toEqual(expect.objectContaining({ ok: false, reasonCode: 'chat_conflict', commitState: 'not_committed' }));
+        expect(readCanonicalChatPayload(db, locator)[1].mes).toBe('concurrent edit');
+    });
     test('caller-provided IDs are claimed once and cannot overwrite another operation', async () => {
         const directories = makeDirectories();
         const db = createManager().open({ handle: 'alice', directories, featureFlags: { enabled: true } });
@@ -84,7 +103,7 @@ describe('canonical chat backup and restore service', () => {
         const sqlite = pathToFileURL(path.resolve(process.cwd(), '../src/canonical-sqlite.js')).href;
         const child = `
             import { createCanonicalSqliteManager } from ${JSON.stringify(sqlite)};
-            import { restoreCanonicalChatBackup } from ${JSON.stringify(service)};
+            import { restoreCanonicalChatBackup, getCanonicalChatRestoreVersion } from ${JSON.stringify(service)};
             const [directories, backup, restoreId, phase, nowMs] = JSON.parse(process.argv[1]);
             const manager = createCanonicalSqliteManager({ logger: { info() {}, warn() {} } });
             const db = manager.open({ handle: 'alice', directories, featureFlags: { enabled: true } });
@@ -92,7 +111,7 @@ describe('canonical chat backup and restore service', () => {
             db.exec(phase === 'before'
                 ? 'CREATE TEMP TRIGGER crash_restore BEFORE INSERT ON chat_sessions BEGIN SELECT exit_now(); END'
                 : "CREATE TEMP TRIGGER crash_restore BEFORE UPDATE ON chat_restore_operations WHEN NEW.status = 'restored' BEGIN SELECT exit_now(); END");
-            await restoreCanonicalChatBackup({ db, backup, restoreId, handle: 'alice', directories, nowMs });
+            await restoreCanonicalChatBackup({ db, backup, restoreId, handle: 'alice', directories, nowMs, expectedVersion: getCanonicalChatRestoreVersion(db) });
         `;
         const before = 'chat-restore-22222222-2222-4222-8222-222222222222';
         const after = 'chat-restore-33333333-3333-4333-8333-333333333333';
@@ -216,6 +235,213 @@ describe('canonical chat backup and restore service', () => {
             reasonCode: null,
             commitState: 'committed',
         }));
+    });
+
+    test('portable backups retain deleted-chat tombstones so stale projections cannot be reimported', async () => {
+        const sourceDirectories = makeDirectories();
+        const sourceDb = createManager().open({ handle: 'alice', directories: sourceDirectories, featureFlags: { enabled: true } });
+        runCanonicalMigrations(sourceDb);
+        const locator = {
+            ownerType: 'character',
+            ownerId: 'alice',
+            sourcePath: 'chats/alice/previously-deleted.jsonl',
+        };
+        const sourceProjection = path.join(sourceDirectories.root, locator.sourcePath);
+        const deletedPayload = [
+            { chat_metadata: { title: 'Deleted chat' } },
+            { name: 'User', mes: 'This was deleted before the backup.' },
+        ];
+        const written = writeCanonicalChatPayload({
+            db: sourceDb,
+            locator,
+            payload: deletedPayload,
+            condition: { create: true },
+            projectJsonl(jsonl) {
+                fs.writeFileSync(sourceProjection, jsonl, 'utf8');
+            },
+        });
+        expect(written).toEqual(expect.objectContaining({ ok: true, authorityCommitted: true }));
+        const deleted = deleteCanonicalChat({
+            db: sourceDb,
+            locator,
+            version: written.version,
+            projectDelete() {
+                fs.rmSync(sourceProjection, { force: true });
+            },
+        });
+        expect(deleted).toEqual(expect.objectContaining({ ok: true, authorityCommitted: true }));
+        expect(sourceDb.prepare('SELECT COUNT(*) AS count FROM chat_projection_tombstones').get().count).toBe(1);
+        const backup = createCanonicalChatBackup({ db: sourceDb });
+        expect(backup.sessions).toEqual([]);
+
+        const targetDirectories = makeDirectories();
+        const targetDb = createManager().open({ handle: 'alice', directories: targetDirectories, featureFlags: { enabled: true } });
+        runCanonicalMigrations(targetDb);
+        const staleProjection = path.join(targetDirectories.root, locator.sourcePath);
+        fs.writeFileSync(staleProjection, deletedPayload.map(line => JSON.stringify(line)).join('\n'), 'utf8');
+
+        const restored = await restoreCanonicalChatBackup({
+            db: targetDb,
+            backup,
+            handle: 'alice',
+            directories: targetDirectories,
+        });
+        expect(restored.commitState).toBe('committed');
+        await runCanonicalChatShadowImport({
+            handle: 'alice',
+            directories: targetDirectories,
+            db: targetDb,
+            featureFlags: { enabled: true, shadowImport: true, strict: false },
+        });
+        expect(targetDb.prepare('SELECT COUNT(*) AS count FROM chat_sessions').get().count).toBe(0);
+    });
+
+    test('captures the revision and session payload from one consistent SQLite snapshot', () => {
+        const directories = makeDirectories();
+        const db = createManager().open({ handle: 'alice', directories, featureFlags: { enabled: true } });
+        const writerDb = createManager().open({ handle: 'alice', directories, featureFlags: { enabled: true } });
+        runCanonicalMigrations(db);
+        const locator = {
+            ownerType: 'character',
+            ownerId: 'alice',
+            sourcePath: 'chats/alice/snapshot.jsonl',
+        };
+        const originalPayload = [{ chat_metadata: { version: 'before' } }, { mes: 'before' }];
+        const nextPayload = [{ chat_metadata: { version: 'after' } }, { mes: 'after' }];
+        const created = writeCanonicalChatPayload({
+            db,
+            locator,
+            payload: originalPayload,
+            condition: { create: true },
+            projection: 'off',
+            projectJsonl() {},
+        });
+        const initialRevision = getCanonicalChatRestoreVersion(db);
+        const sourceJsonl = originalPayload.map(line => JSON.stringify(line)).join('\n');
+        const originalPrepare = db.prepare.bind(db);
+        let writeInterleaved = false;
+        const revisionQuery = 'SELECT owner_type, owner_id, source_path, concurrency_token FROM chat_sessions ORDER BY owner_type, owner_id, source_path';
+        db.prepare = sql => {
+            const statement = originalPrepare(sql);
+            if (sql.trim() !== revisionQuery) return statement;
+            return new Proxy(statement, {
+                get(target, property) {
+                    if (property === 'all') {
+                        return (...args) => {
+                            const rows = target.all(...args);
+                            if (!writeInterleaved) {
+                                writeInterleaved = true;
+                                expect(writeCanonicalChatPayload({
+                                    db: writerDb,
+                                    locator,
+                                    payload: nextPayload,
+                                    condition: { version: created.version },
+                                    projection: 'off',
+                                    projectJsonl() {},
+                                }).ok).toBe(true);
+                            }
+                            return rows;
+                        };
+                    }
+                    const value = Reflect.get(target, property, target);
+                    return typeof value === 'function' ? value.bind(target) : value;
+                },
+            });
+        };
+
+        const backup = createCanonicalChatBackup({ db });
+        db.prepare = originalPrepare;
+
+        expect(writeInterleaved).toBe(true);
+        expect(backup.databaseRevision.version).toBe(initialRevision);
+        expect(backup.sessions).toEqual([expect.objectContaining({ jsonl: sourceJsonl })]);
+        expect(writerDb.prepare('SELECT source_jsonl FROM chat_sessions').get().source_jsonl)
+            .toBe(nextPayload.map(line => JSON.stringify(line)).join('\n'));
+    });
+
+    test('portable backups preserve committed operation receipts so old retries cannot recreate deleted chats', async () => {
+        const sourceDirectories = makeDirectories();
+        const sourceDb = createManager().open({ handle: 'alice', directories: sourceDirectories, featureFlags: { enabled: true } });
+        runCanonicalMigrations(sourceDb);
+        const locator = {
+            ownerType: 'character',
+            ownerId: 'alice',
+            sourcePath: 'chats/alice/retried-create.jsonl',
+        };
+        const payload = [{ chat_metadata: {} }, { name: 'User', mes: 'Already deleted' }];
+        const createOperation = { id: 'portable-create-1', fingerprint: 'a'.repeat(64) };
+        const deleteOperation = { id: 'portable-delete-1', fingerprint: 'b'.repeat(64) };
+        const created = writeCanonicalChatPayload({
+            db: sourceDb,
+            locator,
+            payload,
+            condition: { create: true },
+            operationIdentity: createOperation,
+            projection: 'off',
+            projectJsonl() {},
+        });
+        const deleted = deleteCanonicalChat({
+            db: sourceDb,
+            locator,
+            version: created.version,
+            operationIdentity: deleteOperation,
+            projection: 'off',
+            projectDelete() {},
+        });
+        expect(deleted).toEqual(expect.objectContaining({ ok: true, authorityCommitted: true }));
+        const backup = createCanonicalChatBackup({ db: sourceDb });
+
+        const targetDirectories = makeDirectories();
+        const targetDb = createManager().open({ handle: 'alice', directories: targetDirectories, featureFlags: { enabled: true } });
+        runCanonicalMigrations(targetDb);
+        const restored = await restoreCanonicalChatBackup({
+            db: targetDb,
+            backup,
+            handle: 'alice',
+            directories: targetDirectories,
+        });
+        expect(restored.commitState).toBe('committed');
+        const replay = writeCanonicalChatPayload({
+            db: targetDb,
+            locator,
+            payload,
+            condition: { create: true },
+            operationIdentity: createOperation,
+            projection: 'off',
+            projectJsonl() {},
+        });
+        expect(replay).toEqual(expect.objectContaining({ ok: true, authorityCommitted: true, replayed: true }));
+        expect(targetDb.prepare('SELECT COUNT(*) AS count FROM chat_sessions').get().count).toBe(0);
+    });
+
+    test('blocks a conflicting operation receipt without changing chats or tombstones', async () => {
+        const directories = makeDirectories();
+        const db = createManager().open({ handle: 'alice', directories, featureFlags: { enabled: true } });
+        runCanonicalMigrations(db);
+        const locator = { ownerType: 'character', ownerId: 'alice', sourcePath: 'chats/alice/existing.jsonl' };
+        writeCanonicalChatPayload({ db, locator, payload: [{ chat_metadata: {} }, { mes: 'retain' }], condition: { create: true }, projection: 'off', projectJsonl() {} });
+        const backup = createCanonicalChatBackup({ db });
+        backup.sessions = [];
+        backup.tombstones.push({ owner_type: 'character', owner_id: 'alice', source_path: 'chats/alice/other.jsonl' });
+        backup.operationResults.push({ operation_id: 'collision', fingerprint: 'old', result_json: '{}' });
+        db.prepare('INSERT INTO chat_operation_results VALUES (?, ?, ?)').run('collision', 'new', '{}');
+        const result = await restoreCanonicalChatBackup({ db, backup, handle: 'alice', directories });
+        expect(result).toEqual(expect.objectContaining({ ok: false, reasonCode: 'chat_operation_conflict', commitState: 'not_committed' }));
+        expect(readCanonicalChatPayload(db, locator)[1].mes).toBe('retain');
+        expect(db.prepare('SELECT COUNT(*) AS count FROM chat_projection_tombstones').get().count).toBe(0);
+        expect(db.prepare('SELECT fingerprint FROM chat_operation_results WHERE operation_id = ?').get('collision').fingerprint).toBe('new');
+    });
+
+    test('accepts legacy version one backups without claiming they contain deletion or operation history', async () => {
+        const directories = makeDirectories();
+        const db = createManager().open({ handle: 'alice', directories, featureFlags: { enabled: true } });
+        runCanonicalMigrations(db);
+        const backup = createCanonicalChatBackup({ db });
+        backup.manifestVersion = 1;
+        delete backup.tombstones;
+        delete backup.operationResults;
+        const result = await restoreCanonicalChatBackup({ db, backup, handle: 'alice', directories });
+        expect(result).toEqual(expect.objectContaining({ ok: true, commitState: 'committed' }));
     });
 
     test('blocks restore when the managed attachment manifest can no longer be satisfied and keeps current authority intact', async () => {

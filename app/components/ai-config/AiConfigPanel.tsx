@@ -1,10 +1,13 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import type { ChangeEvent, ComponentProps, ReactNode, SyntheticEvent } from 'react';
+import type { ChangeEvent, ComponentProps, ReactNode } from 'react';
 import type { PresetService } from '../../lib/preset-service';
 import { ContractIconButton } from '../contract/ContractIconButton';
 import { PresetActionsMenu } from './PresetActionsMenu';
 import { translate, useTranslated } from '@/compat/i18n.js';
 import { disposeLocalDialogScope } from '../local-dialogs/LocalDialog';
+import { numericWheelValue, useInlineDrawer } from '../../lib/workspace-drawer-service';
+
+let lastNumericWheel = 0;
 
 function NumericInput({ current, scale = 1, commit, unit, ...props }: Omit<ComponentProps<'input'>, 'value' | 'onChange' | 'type'> & { current: number; scale?: number; commit: (value: number) => boolean; unit?: string }) {
     const input = useRef<HTMLInputElement>(null);
@@ -23,8 +26,31 @@ function NumericInput({ current, scale = 1, commit, unit, ...props }: Omit<Compo
         if (Number.isFinite(next) && commit(next)) { lastCommitted.current = next; return true; }
         return false;
     };
+    useEffect(() => {
+        const element = input.current;
+        if (!element) return;
+        const onWheel = (event: WheelEvent) => {
+            if (document.activeElement !== element) return;
+            const parent = element.closest('.range-block-range-and-counter') ?? element.closest('div') ?? element.parentElement;
+            const slider = parent?.querySelector<HTMLInputElement>('input[type="range"]');
+            if (event.target !== element && event.target !== slider) return;
+            event.stopPropagation();
+            event.preventDefault();
+            const now = Date.now();
+            if (lastNumericWheel && now - lastNumericWheel < 25) return;
+            lastNumericWheel = now;
+            const next = numericWheelValue(parseFloat(element.value), parseFloat(element.step), parseFloat(element.min), parseFloat(element.max), event.deltaY);
+            if (next === null) return;
+            element.value = String(next);
+            if (slider) slider.value = String(next);
+            if (apply(element)) setError(false);
+            element.dispatchEvent(new Event('input', { bubbles: true }));
+        };
+        document.addEventListener('wheel', onWheel, { passive: false });
+        return () => document.removeEventListener('wheel', onWheel);
+    });
     const errorId = `${props.id}-error`;
-    const control = <input {...props} ref={input} type="number" inputMode="decimal" required defaultValue={current / scale} aria-invalid={error || undefined} aria-describedby={error ? errorId : undefined} onChange={event => {
+    const control = <input {...props} ref={input} data-workspace-numeric="react" type="number" inputMode="decimal" required defaultValue={current / scale} aria-invalid={error || undefined} aria-describedby={error ? errorId : undefined} onChange={event => {
         if (apply(event.currentTarget)) setError(false);
     }} onBlur={event => {
         event.stopPropagation();
@@ -39,6 +65,7 @@ function NumericInput({ current, scale = 1, commit, unit, ...props }: Omit<Compo
  * React-owned prompt list rendered inside #completion_prompt_manager.
  */
 export function AiConfigPanel({ presetService, promptList, presetSaveButton, promptHeaderActions }: { presetService: PresetService; promptList?: ReactNode; presetSaveButton?: (onSave: () => void, busy: boolean) => ReactNode; promptHeaderActions?: ReactNode }) {
+    const advanced = useInlineDrawer();
     useEffect(() => () => disposeLocalDialogScope('presets'), []);
     useTranslated('');
     const snapshot = useSyncExternalStore(presetService.subscribe, presetService.getSnapshot, presetService.getSnapshot);
@@ -62,10 +89,7 @@ export function AiConfigPanel({ presetService, promptList, presetSaveButton, pro
     } });
     const checkbox = (field: string) => ({ checked: Boolean(snapshot.settings[field]), onChange: (event: ChangeEvent<HTMLInputElement>) => set(field, event.target.checked) });
     const radio = (field: string, option: string) => ({ value: option, checked: value(field) === option, onChange: () => set(field, option) });
-    // The legacy document-wide counter handler also targets this CSS class.
-    // Keep the styling while preventing it from mutating the controlled slider.
-    const stopCounterEvent = (event: SyntheticEvent) => event.stopPropagation();
-    const controlledCounter = { onInput: stopCounterEvent, onKeyDown: stopCounterEvent, onKeyUp: stopCounterEvent, onMouseUp: stopCounterEvent, onBlur: stopCounterEvent };
+
     return (
         <>
                 <div id="left-nav-panelheader" className="fa-solid fa-grip drag-grabber" aria-hidden="true"></div>
@@ -147,11 +171,11 @@ export function AiConfigPanel({ presetService, promptList, presetSaveButton, pro
                             </div>
                         </section>
                         <div className="inline-drawer wide100p">
-                            <div className="inline-drawer-toggle inline-drawer-header">
+                            <div className="inline-drawer-toggle inline-drawer-header" data-workspace-inline="react" role="button" tabIndex={0} aria-expanded={advanced.open} onClick={advanced.onClick} onKeyDown={advanced.onKeyDown}>
                                 <b>{translate('Advanced')}</b>
-                                <div className="fa-solid fa-circle-chevron-down inline-drawer-icon down"></div>
+                                <div className={`fa-solid inline-drawer-icon ${advanced.open ? 'fa-circle-chevron-up up' : 'fa-circle-chevron-down down'}`}></div>
                             </div>
-                            <div className="inline-drawer-content">
+                            <div ref={advanced.content} className={`inline-drawer-content${advanced.open ? ' openInlineDrawer' : ''}`}>
                         <div className="config-section-header"><span>{translate('Features')}</span></div>
                         <div className="features-grid">
                             <div className="range-block" data-source="openai">
@@ -173,14 +197,14 @@ export function AiConfigPanel({ presetService, promptList, presetSaveButton, pro
                                 <div className="range-block-title" >{translate('Temperature')}</div>
                                 <div className="wide100p">
                                     <input className="neo-range-slider" type="range" id="temp_openai" min="0" max="2.0" step="0.01" {...number('temp_openai')} />
-                                    <NumericInput className="neo-range-input" id="temp_openai_counter" data-for="temp_openai" min="0" max="2" step="0.01" {...controlledCounter} {...numeric('temp_openai')} />
+                                    <NumericInput className="neo-range-input" id="temp_openai_counter" data-for="temp_openai" min="0" max="2" step="0.01" {...numeric('temp_openai')} />
                                 </div>
                             </div>
                             <div className="range-block">
                                 <div className="range-block-title" >{translate('Top P')}</div>
                                 <div className="wide100p">
                                     <input className="neo-range-slider" type="range" id="top_p_openai" min="0" max="1" step="0.01" {...number('top_p_openai')} />
-                                    <NumericInput className="neo-range-input" id="top_p_openai_counter" data-for="top_p_openai" min="0" max="1" step="0.01" {...controlledCounter} {...numeric('top_p_openai')} />
+                                    <NumericInput className="neo-range-input" id="top_p_openai_counter" data-for="top_p_openai" min="0" max="1" step="0.01" {...numeric('top_p_openai')} />
                                 </div>
                             </div>
                         </div>
