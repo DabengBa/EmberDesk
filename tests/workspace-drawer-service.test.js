@@ -95,7 +95,7 @@ test('outside pointer policy preserves excluded and inner targets, pins and guar
     const service = createWorkspaceDrawerService({ get: id => drawers.find(d => d.id === id), list: () => drawers, read: () => null, write: (...args) => writes.push(args), notify: () => {} });
     service.setCloseGuard('SettingsPanel', () => false);
     const target = match => ({ closest: selector => match(selector) ? {} : null });
-    for (const excluded of ['#character_cross', '#avatar-and-name-block', '#shadow_popup', '.popup', '#world_popup', '.ui-widget', '.text_pole', '#toast-container', '.select2-results', '.wi-content-editor-modal']) {
+    for (const excluded of ['#character_cross', '#avatar-and-name-block', '#shadow_popup', '.popup', '#world_popup', '.ui-widget', '.text_pole', '#toast-container', '.wi-content-editor-modal']) {
         service.handleOutsidePointer(target(selector => selector.split(',').map(part => part.trim()).includes(excluded)));
     }
     service.handleOutsidePointer(target(selector => selector === '.openDrawer'));

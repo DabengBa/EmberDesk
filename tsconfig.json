@@ -20,6 +20,7 @@
 
     // 输出控制
     "noEmit": true,
+    "allowImportingTsExtensions": true,
     "skipLibCheck": true,
 
     // React 支持

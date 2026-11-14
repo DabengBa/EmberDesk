@@ -1,4 +1,5 @@
 import libs from './lib';
+import type {} from 'jquery';
 import getContext from './scripts/st-context';
 import { getThemeObject } from './scripts/power-user';
 import { oai_settings } from './scripts/openai';
@@ -167,23 +168,6 @@ declare global {
         queue?: boolean;
     }
 
-    namespace Select2 {
-        interface Options<Result = DataFormat | GroupedDataFormat, RemoteResult = any> {
-            /**
-             * Extends Select2 v4 plugin by adding an option to set a placeholder for the 'search' input field
-             * [Custom Field]
-             * @default ''
-             */
-            searchInputPlaceholder?: string;
-
-            /**
-             * Extends select2 plugin by adding a custom css class for the 'search' input field
-             * [Custom Field]
-             * @default ''
-             */
-            searchInputCssClass?: string;
-        }
-    }
 
     /**
      * Translates a text to a target language using a translation provider.

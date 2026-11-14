@@ -17,8 +17,7 @@ import { Popup, POPUP_RESULT, POPUP_TYPE } from './popup.js';
 import { getTagsList } from './tags.js';
 import { getCurrentLocale, t, translate } from './i18n.js';
 import { importWorldInfo } from './world-info.js';
-import { getOptionId } from './util/primitives.js';
-export { getStringHash, setValueByPath, getOptionId as getSelect2OptionId, escapeRegex } from './util/primitives.js';
+export { getStringHash, setValueByPath, escapeRegex } from './util/primitives.js';
 
 export const shiftUpByOne = (e, i, a) => a[i] = e + 1;
 export const shiftDownByOne = (e, i, a) => a[i] = e - 1;
@@ -2201,128 +2200,6 @@ export function sortIgnoreCaseAndAccents(a, b) {
     return compareIgnoreCaseAndAccents(a, b, (a, b) => a?.localeCompare(b));
 }
 
-/**
- * @typedef {object} Select2Option The option object for select2 controls
- * @property {string} id - The unique ID inside this select
- * @property {string} text - The text for this option
- * @property {number?} [count] - Optionally show the count how often that option was chosen already
- */
-
-/**
- * Returns a unique hash as ID for a select2 option text
- *
- * @param {string} option - The option
- * @returns {string} A hashed version of that option
- */
-
-/**
- * Modifies the select2 options by adding not existing one and optionally selecting them
- *
- * @param {JQuery<HTMLElement>} element - The "select" element to add the options to
- * @param {string[]|Select2Option[]} items - The option items to build, add or select
- * @param {object} [options] - Optional arguments
- * @param {boolean} [options.select=false] - Whether the options should be selected right away
- * @param {object} [options.changeEventArgs=null] - Optional event args being passed into the "change" event when its triggered because a new options is selected
- */
-export function select2ModifyOptions(element, items, { select = false, changeEventArgs = null } = {}) {
-    if (!items.length) return;
-    /** @type {Select2Option[]} */
-    const dataItems = items.map(x => typeof x === 'string' ? { id: getOptionId(x), text: x } : x);
-
-    const optionsToSelect = [];
-    const newOptions = [];
-
-    dataItems.forEach(item => {
-        // Set the value, creating a new option if necessary
-        if (element.find('option[value=\'' + item.id + '\']').length) {
-            if (select) optionsToSelect.push(item.id);
-        } else {
-            // Create a DOM Option and optionally pre-select by default
-            var newOption = new Option(item.text, item.id, select, select);
-            // Append it to the select
-            newOptions.push(newOption);
-            if (select) optionsToSelect.push(item.id);
-        }
-    });
-
-    element.append(newOptions);
-    if (optionsToSelect.length) element.val(optionsToSelect).trigger('change', changeEventArgs);
-}
-
-/**
- * Returns the ajax settings that can be used on the select2 ajax property to dynamically get the data.
- * Can be used on a single global array, querying data from the server or anything similar.
- *
- * @param {function():Select2Option[]} dataProvider - The provider/function to retrieve the data - can be as simple as "() => myData" for arrays
- * @return {{transport: (params, success, failure) => any}} The ajax object with the transport function to use on the select2 ajax property
- */
-export function dynamicSelect2DataViaAjax(dataProvider) {
-    function dynamicSelect2DataTransport(params, success, failure) {
-        var items = dataProvider();
-        // fitering if params.data.q available
-        if (params.data && params.data.q) {
-            items = items.filter(function (item) {
-                return includesIgnoreCaseAndAccents(item.text, params.data.q);
-            });
-        }
-        var promise = new Promise(function (resolve, _reject) {
-            resolve({ results: items });
-        });
-        promise.then(success);
-        promise.catch(failure);
-    }
-    const ajax = {
-        transport: dynamicSelect2DataTransport,
-    };
-    return ajax;
-}
-
-/**
- * Checks whether a given control is a select2 choice element - meaning one of the results being displayed in the select multi select box
- * @param {JQuery<HTMLElement>|HTMLElement} element - The element to check
- * @returns {boolean} Whether this is a choice element
- */
-export function isSelect2ChoiceElement(element) {
-    const $element = $(element);
-    return ($element.hasClass('select2-selection__choice__display') || $element.parents('.select2-selection__choice__display').length > 0);
-}
-
-/**
- * Subscribes a 'click' event handler to the choice elements of a select2 multi-select control
- *
- * @param {JQuery<HTMLElement>} control The original control the select2 was applied to
- * @param {function(HTMLElement):void} action - The action to execute when a choice element is clicked
- * @param {object} options - Optional parameters
- * @param {boolean} [options.buttonStyle=false] - Whether the choices should be styles as a clickable button with color and hover transition, instead of just changed cursor
- * @param {boolean} [options.closeDrawer=false] - Whether the drawer should be closed and focus removed after the choice item was clicked
- * @param {boolean} [options.openDrawer=false] - Whether the drawer should be opened, even if this click would normally close it
- */
-export function select2ChoiceClickSubscribe(control, action, { buttonStyle = false, closeDrawer = false, openDrawer = false } = {}) {
-    // Add class for styling (hover color, changed cursor, etc)
-    control.addClass('select2_choice_clickable');
-    if (buttonStyle) control.addClass('select2_choice_clickable_buttonstyle');
-
-    // Get the real container below and create a click handler on that one
-    const select2Container = control.next('span.select2-container');
-    select2Container.on('click', function (event) {
-        const isChoice = isSelect2ChoiceElement(event.target);
-        if (isChoice) {
-            event.preventDefault();
-
-            // select2 still bubbles the event to open the dropdown. So we close it here and remove focus if we want that
-            if (closeDrawer) {
-                control.select2('close');
-                setTimeout(() => select2Container.find('textarea').trigger('blur'), debounce_timeout.quick);
-            }
-            if (openDrawer) {
-                control.select2('open');
-            }
-
-            // Now execute the actual action that was subscribed
-            action(event.target);
-        }
-    });
-}
 
 /**
  * Applies syntax highlighting to a given regex string by generating HTML with classes
@@ -2657,55 +2534,6 @@ export function arraysEqual(a, b) {
     return true;
 }
 
-/**
- * Provides a matcher function for select2 that matches both the text and value of options.
- * @param {import('select2').SearchOptions} params
- * @param {import('select2').OptGroupData|import('select2').OptionData} data
- * @return {import('select2').OptGroupData|import('select2').OptionData|null}
- */
-export function textValueMatcher(params, data) {
-    // Always return the object if there is nothing to compare
-    if (params.term == null || params.term.trim() === '') {
-        return data;
-    }
-
-    // Do a recursive check for options with children
-    if (data.children && data.children.length > 0) {
-        // Clone the data object if there are children
-        // This is required as we modify the object to remove any non-matches
-        const match = $.extend(true, {}, data);
-
-        // Check each child of the option
-        for (let c = data.children.length - 1; c >= 0; c--) {
-            const child = data.children[c];
-
-            const matches = textValueMatcher(params, child);
-
-            // If there wasn't a match, remove the object in the array
-            if (matches == null) {
-                match.children.splice(c, 1);
-            }
-        }
-
-        // If any children matched, return the new object
-        if (match.children.length > 0) {
-            return match;
-        }
-
-        // If there were no matching children, check just the plain object
-        return textValueMatcher(params, match);
-    }
-
-    const textMatch = compareIgnoreCaseAndAccents(data.text, params.term, (a, b) => a.indexOf(b) > -1);
-    const valueMatch = data.element instanceof HTMLOptionElement && compareIgnoreCaseAndAccents(data.element.value, params.term, (a, b) => a.indexOf(b) > -1);
-
-    if (textMatch || valueMatch) {
-        return data;
-    }
-
-    // If it doesn't contain the term, don't return anything
-    return null;
-}
 
 /**
  * Compares two version numbers, returning true if srcVersion >= minVersion

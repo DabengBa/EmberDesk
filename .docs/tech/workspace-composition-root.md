@@ -98,9 +98,9 @@ During `public/script.js` evaluation:
 | dialog-polyfill and jquery-cropper wrapper | Removed: React uses native dialog and the existing native Cropper constructor |
 | touch-punch | Removed: no jQuery UI mouse-widget consumers remain; workspace dragging uses its existing separate implementation |
 | izoomify | Removed with its unused data attributes: no initialization call remained |
-| jQuery and transit | Retained for other existing shell/drawer consumers; FE3 message actions, dialogue-mask opacity and CtrlShift chat scrolling no longer use them |
-| jQuery UI | Global resource retained outside FE1's local cleanup scope; the unused tag autocomplete exports, their keyboard/resize binding and dedicated CSS are removed, not retained as consumers |
-| Select2 | Shared dropdown helpers remain; the character World Info dialog no longer uses Select2 and its old template is removed |
+| jQuery and transit | Retained: the ActionLoader overlay writes `filter: blur(15px)` through jQuery, and transit registers a filter hook; other shell consumers still use jQuery |
+| jQuery UI | Retained: it registers color hooks used by tag color updates through jQuery; unused tag autocomplete exports and their dedicated bindings and CSS remain removed |
+| Select2 | Removed with its placeholder plugin, styles, types and unused helpers. Character World Info and the global selector use React; browser checks cover selection, synchronization, dialogs and menus. Dynamic paths cannot be exhaustively established by static search alone. |
 | Cropper | Retained as the native image-crop implementation used by the React popup |
 
 Character selection and duplication keep their established busy checks, confirmation, request, event and refresh order in the lifecycle service. Tags use live getters and existing domain operations rather than copying character, tag or bulk-selection state into the root or a new store. The unused `createTagInput`, `findTag`, `selectTag` and `onTagInputFocus` chain is removed; favorite-character hotswap resizing remains.
