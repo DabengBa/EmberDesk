@@ -1,7 +1,7 @@
-import { world_info, world_names, selected_world_info } from './world-info-state.js';
+import { world_info, world_names, selected_world_info, setWorldNames } from './world-info-state.js';
 
 /** Book lifecycle and character/chat reference operations. */
-export function createWorldInfoBookCommands({ POPUP_TYPE, showLocalDialog, t, equalsIgnoreCaseAndAccents, saveWorldInfo, getWIElement, selectWorldInfoEditorName, saveSettingsDebounced, characters, getRequestHeaders, getOneCharacter, getCurrentShellCharacterId, getCharacterWorldDraftIdentity, select_selected_character, setWorldInfoButtonClass, flushDeletedWorldsFromUI, getSanitizedFilename, checkOverwriteExistingData, updateWorldInfoList, hideWorldEditor, chat_metadata, METADATA_KEY, openWorldInfoEditor, renderTemplateAsync, getCurrentChatId, saveMetadata, callGenericPopup, loadWorldInfo, deleteWIOriginalDataValue, getSelectedWorldInfoEditorName, reloadEditor, getCurrentShellMenuType, create_save, createOrEditCharacter, getCharaFilename, normalizeArray }) {
+export function createWorldInfoBookCommands({ POPUP_TYPE, showLocalDialog, t, equalsIgnoreCaseAndAccents, saveWorldInfo, setWorldInfoGlobalActiveNames, selectWorldInfoEditorName, saveSettingsDebounced, characters, getRequestHeaders, getOneCharacter, getCurrentShellCharacterId, getCharacterWorldDraftIdentity, select_selected_character, setWorldInfoButtonClass, flushDeletedWorldsFromUI, getSanitizedFilename, checkOverwriteExistingData, updateWorldInfoList, hideWorldEditor, chat_metadata, METADATA_KEY, openWorldInfoEditor, renderTemplateAsync, getCurrentChatId, saveMetadata, callGenericPopup, loadWorldInfo, deleteWIOriginalDataValue, getSelectedWorldInfoEditorName, reloadEditor, getCurrentShellMenuType, create_save, createOrEditCharacter, getCharaFilename, normalizeArray }) {
     async function renameWorldInfo(name, data) {
         const oldName = name;
         const result = await showLocalDialog({ scope: 'world-info', title: t`Rename World Info`, fields: [{ type: 'text', name: 'name', label: t`Enter a new name:`, value: oldName }], actions: [{ id: 'rename', label: t`Rename`, variant: 'primary' }, { id: 'cancel', label: t`Cancel` }], initialFocus: 'name' });
@@ -31,17 +31,22 @@ export function createWorldInfoBookCommands({ POPUP_TYPE, showLocalDialog, t, eq
             return false;
         }
 
-        await updateWorldInfoLinks(oldName, newName);
+        // Both writes are confirmed. A failed optional list refresh must not
+        // hide the known new identity or prevent activation from following it.
+        if (!world_names.includes(newName)) {
+            setWorldNames([...world_names, newName]);
+        }
 
         if (entryPreviouslySelected !== -1) {
-            const wiElement = getWIElement(newName);
-            wiElement.prop('selected', true);
-            $('#world_info').trigger('change');
+            // Preserve activation edits made while awaiting I/O instead of
+            // restoring an obsolete whole list.
+            const active = selected_world_info.filter(name => name !== oldName && name !== newName);
+            active.splice(Math.min(entryPreviouslySelected, active.length), 0, newName);
+            setWorldInfoGlobalActiveNames(active);
         }
 
-        if (world_names.includes(newName)) {
-            await selectWorldInfoEditorName(newName);
-        }
+        await updateWorldInfoLinks(oldName, newName);
+        await selectWorldInfoEditorName(newName);
         return true;
     }
 

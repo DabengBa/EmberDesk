@@ -1,7 +1,7 @@
 import { world_names, selected_world_info, worldInfoCache, setWorldNames, setSelectedWorldInfo } from './world-info-state.js';
 
 /** Synchronize book lists and deleted references with the existing shell. */
-export function createWorldInfoBookSync({ getRequestHeaders, getSelectedWorldInfoEditorName, getWorldInfoWorkbenchSession, refreshGlobalWorldInfoSelectorLabels, syncWorldInfoEditorSelectorUi, hideWorldEditor, setWorldInfoButtonClass, getCurrentShellMenuType, saveCharacterDebounced, saveSettingsDebounced }) {
+export function createWorldInfoBookSync({ getRequestHeaders, getSelectedWorldInfoEditorName, getWorldInfoWorkbenchSession, hideWorldEditor, setWorldInfoButtonClass, getCurrentShellMenuType, saveCharacterDebounced, saveSettingsDebounced }) {
     async function updateWorldInfoList() {
         const result = await fetch('/api/settings/get', {
             method: 'POST',
@@ -9,34 +9,18 @@ export function createWorldInfoBookSync({ getRequestHeaders, getSelectedWorldInf
             body: JSON.stringify({}),
         });
 
-        if (result.ok) {
-            const data = await result.json();
-            const editorSelected = getSelectedWorldInfoEditorName();
-            setWorldNames(data.world_names?.length ? data.world_names : []);
-            const session = getWorldInfoWorkbenchSession();
-            session.setWorldNames(world_names);
-            session.setSelectedWorldInfo(selected_world_info);
-            $('#world_info').find('option[value!=""]').remove();
-            $('#world_editor_select').find('option[value!=""]').remove();
-
-            world_names.forEach((item) => {
-                const globalListOption = new Option(item, item);
-                globalListOption.selected = selected_world_info.includes(item);
-                const editorListOption = new Option(item, item);
-                editorListOption.selected = editorSelected === item;
-                $('#world_info').append(globalListOption);
-                $('#world_editor_select').append(editorListOption);
-            });
-            refreshGlobalWorldInfoSelectorLabels();
-            // Repaint the select2 widget so the hidden mirror doesn't render a
-            // stale book name after the option rebuild.
-            syncWorldInfoEditorSelectorUi(session.getSelectedWorldName());
-            if (editorSelected && !world_names.includes(editorSelected)) {
-                // The selected book vanished without a flush (e.g. external
-                // deletion); don't leave its stale entries rendered.
-                await hideWorldEditor();
-            }
+        if (!result.ok) return false;
+        const data = await result.json();
+        const editorSelected = getSelectedWorldInfoEditorName();
+        setWorldNames(Array.isArray(data.world_names) ? data.world_names : []);
+        setSelectedWorldInfo(selected_world_info.filter(name => world_names.includes(name)));
+        const session = getWorldInfoWorkbenchSession();
+        session.setWorldNames(world_names);
+        session.setSelectedWorldInfo(selected_world_info);
+        if (editorSelected && !world_names.includes(editorSelected)) {
+            await hideWorldEditor();
         }
+        return true;
     }
 
     /**
@@ -62,8 +46,12 @@ export function createWorldInfoBookSync({ getRequestHeaders, getSelectedWorldInf
             getSelectedWorldInfoEditorName(),
         );
 
-        await updateWorldInfoList();
-
+        // These deletions are already confirmed. Publish them and clean up
+        // references even if the subsequent server-list refresh is unavailable.
+        setWorldNames(world_names.filter(name => !names.has(name)));
+        const session = getWorldInfoWorkbenchSession();
+        session.setWorldNames(world_names);
+        session.setSelectedWorldInfo(selected_world_info);
         if (wasEditingDeletedWorld) {
             await hideWorldEditor();
         }
@@ -79,6 +67,13 @@ export function createWorldInfoBookSync({ getRequestHeaders, getSelectedWorldInf
 
         if (needsSave) {
             saveSettingsDebounced();
+        }
+        try {
+            await updateWorldInfoList();
+        } catch (error) {
+            // The delete already succeeded and local cleanup is complete.
+            // Do not report a failed delete because an optional refresh failed.
+            console.warn('Failed to refresh World Info list after confirmed deletion:', error);
         }
     }
     return { updateWorldInfoList, flushDeletedWorldsFromUI };

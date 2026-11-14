@@ -131,7 +131,7 @@ describe('world info import feedback', () => {
         const importEmbeddedSource = extractBlock(
             source,
             'async function importEmbeddedWorldInfo(skipPopup = false)',
-            'function onWorldInfoChange()',
+            '    return {\n        setWorldInfoButtonClass,',
         );
 
         expect(importEmbeddedSource).toContain('if (chid === undefined || chid === -1) {');
@@ -215,7 +215,7 @@ describe('world info import feedback', () => {
         const command = read('public/scripts/world-info-import-command.js');
         const panelInit = extractBlock(
             panel,
-            'if (!worldInfoPanelInitialized && document.querySelector(\'#world_editor_select\')) {',
+            'if (!worldInfoPanelInitialized && document.querySelector(\'#world_import_file\')) {',
             '// More menu toggle',
         );
         const batchSource = extractBlock(

@@ -1,5 +1,4 @@
-import { download, debounce, parseJsonFile, extractDataFromPng, getFileBuffer, getCharaFilename, select2ChoiceClickSubscribe, getSanitizedFilename, checkOverwriteExistingData, equalsIgnoreCaseAndAccents, normalizeArray, addLongPressEvent, escapeHtml } from './utils.js';
-import { isMobile } from './RossAscends-mods.js';
+import { download, debounce, parseJsonFile, extractDataFromPng, getFileBuffer, getCharaFilename, getSanitizedFilename, checkOverwriteExistingData, equalsIgnoreCaseAndAccents, normalizeArray, addLongPressEvent, escapeHtml } from './utils.js';
 import { FILTER_TYPES, FilterHelper } from './filters.js';
 import { debounce_timeout } from './constants.js';
 import { callGenericPopup, Popup, POPUP_TYPE } from './popup.js';
@@ -7,7 +6,6 @@ import { loadWorkspacePanelsModule } from './workspace-panels-react-bridge.js';
 import { renderTemplateAsync } from './templates.js';
 import { t, translate } from './i18n.js';
 import { accountStorage } from './util/AccountStorage.js';
-import { buildWorldInfoReplayState } from './deferred-panel-replays.js';
 import { ensurePanel } from './deferred-panels.js';
 import { showLocalDialog, beginLocalDialogOperation } from './local-dialogs.js';
 import { convertCharacterBook } from './world-info-converters.js';
@@ -157,6 +155,7 @@ export function updateWorldInfoSettings(settings, activeWorldInfo) {
         setSelectedWorldInfo(activeWorldInfo);
     }
 
+    syncWorldInfoSettingsUi();
     saveSettingsDebounced();
 }
 
@@ -167,47 +166,9 @@ export function setWorldInfoSettings(settings, data) {
     ensureWorldInfoRuntimeInitialized();
 }
 
-function refreshGlobalWorldInfoSelectorLabels() {
-    const worldInfoSelect = $('#world_info');
-    if (worldInfoSelect.data('select2')) {
-        worldInfoSelect.trigger('change.select2');
-    }
-    refreshGlobalWorldInfoSelectorState();
-}
-
-function refreshGlobalWorldInfoSelectorState() {
-    const worldInfoSelect = $('#world_info');
-    const selectedCount = worldInfoSelect.find('option:selected').length;
-    $('#wiGlobalCount').text(selectedCount === 1 ? t`1 active` : t`${selectedCount} active`);
-}
-
-function syncWorldInfoSettingsUi({ preserveEditorSelection = true, syncGlobalSelect = true, syncEditorSelect = true } = {}) {
-    const editorSelectedName = preserveEditorSelection
-        ? getSelectedWorldInfoEditorName()
-        : '';
-    const replayState = buildWorldInfoReplayState({
-        worldNames: world_names,
-        selectedWorldInfo: selected_world_info,
-        editorSelectedName,
-    });
-
-    if (syncGlobalSelect) {
-        $('#world_info').empty();
-        for (const option of replayState.globalOptions) {
-            $('#world_info').append(new Option(option.text, option.value, false, option.selected));
-        }
-        refreshGlobalWorldInfoSelectorLabels();
-    }
-
-    if (syncEditorSelect) {
-        const editorSelect = $('#world_editor_select');
-        editorSelect.find('option[value!=""]').remove();
-        for (const option of replayState.editorOptions) {
-            editorSelect.append(new Option(option.text, option.value, false, option.selected));
-        }
-        // Repaint the select2 widget after the option rebuild.
-        syncWorldInfoEditorSelectorUi(getWorldInfoWorkbenchSession().getSelectedWorldName());
-    }
+function syncWorldInfoSettingsUi() {
+    // The composition synchronizes live settings into the sole session.
+    getWorldInfoWorkbenchSession();
 }
 
 const ensureWorldInfoRuntimeInitialized = createWorldInfoRuntimeInitializer({
@@ -220,7 +181,8 @@ const ensureWorldInfoRuntimeInitialized = createWorldInfoRuntimeInitializer({
 });
 
 export function rehydrateWorldInfoPanel({ resetEmptyEditor = true } = {}) {
-    syncWorldInfoSettingsUi({ syncGlobalSelect: false });
+    syncWorldInfoSettingsUi();
+    void mountWorldInfoEditorMirror();
     const selectedName = getSelectedWorldInfoEditorName();
     if (selectedName && Array.isArray(world_names) && world_names.includes(selectedName)) {
         void showWorldEditor(selectedName);
@@ -246,27 +208,9 @@ function getSelectedWorldInfoEditorName() {
     return getWorldInfoWorkbenchSession().getSelectedWorldName();
 }
 
-// While true, change events on #world_editor_select are mirror repaints, not
-// user selection. jQuery's namespaced 'change.select2' already skips plain
-// handlers; the flag stays as a guard for any future non-namespaced repaint.
-let suppressEditorSelectMirrorEvent = false;
-
-function syncWorldInfoEditorSelectorUi(selectedName) {
-    const editorSelector = $('#world_editor_select');
-    editorSelector.val(selectedName);
-    if (editorSelector.data('select2')) {
-        suppressEditorSelectMirrorEvent = true;
-        try {
-            editorSelector.trigger('change.select2');
-        } finally {
-            suppressEditorSelectMirrorEvent = false;
-        }
-    }
-}
-
 /**
  * Selects a world book in the editor by file name. The workbench session holds
- * the canonical selection; the hidden legacy select is mirrored afterwards.
+ * the canonical selection; React subscribes to its read-only snapshot.
  * @param {string} worldName empty string clears the selection
  */
 export async function selectWorldInfoEditorName(worldName) {
@@ -274,11 +218,6 @@ export async function selectWorldInfoEditorName(worldName) {
     const session = getWorldInfoWorkbenchSession();
     const selection = session.selectWorldName(name);
     applyWorldInfoSearchQuery('');
-
-    // Mirror the resolved name only when it is a real book; an invalid name
-    // maps to the empty option instead of writing a nonexistent value.
-    const resolvedName = name && world_names?.includes(name) ? name : '';
-    syncWorldInfoEditorSelectorUi(resolvedName);
 
     await selection;
 }
@@ -475,12 +414,13 @@ export async function getWorldInfoWorkbenchFacadeSnapshot() {
  */
 export async function getWorldInfoReactPanelState(meta = {}) {
     const session = getWorldInfoWorkbenchSession();
-    return session.getReactPanelState({
+    const state = await session.getReactPanelState({
         worldNames: Array.isArray(world_names) ? world_names : [],
         importBusy: isWorldInfoImportBusy(),
         scanDepth: world_info_depth,
         ...meta,
     });
+    return { ...state, selectorRuntime: worldInfoSelectorRuntime };
 }
 
 
@@ -499,23 +439,13 @@ export async function showWorldEditor(name) {
     await selectWorldInfoEditorName(name);
 }
 
-const { setWorldInfoButtonClass, checkEmbeddedWorld, importEmbeddedWorldInfo, onWorldInfoChange } = createWorldInfoReferenceUi({ characters, accountStorage, callGenericPopup, POPUP_TYPE, Popup, t, convertCharacterBook, saveWorldInfo, updateWorldInfoList: (...args) => updateWorldInfoList(...args), getWorldInfoShell, selectWorldInfoEditorName, getWIElement, saveSettingsDebounced, eventSource, event_types });
+const { setWorldInfoButtonClass, checkEmbeddedWorld, importEmbeddedWorldInfo, onWorldInfoChange } = createWorldInfoReferenceUi({ characters, accountStorage, callGenericPopup, POPUP_TYPE, Popup, t, convertCharacterBook, saveWorldInfo, updateWorldInfoList: (...args) => updateWorldInfoList(...args), getWorldInfoShell, selectWorldInfoEditorName, setWorldInfoGlobalActiveNames });
 export { setWorldInfoButtonClass, checkEmbeddedWorld, importEmbeddedWorldInfo, onWorldInfoChange };
-const { updateWorldInfoList, flushDeletedWorldsFromUI } = createWorldInfoBookSync({ getRequestHeaders, getSelectedWorldInfoEditorName, getWorldInfoWorkbenchSession, refreshGlobalWorldInfoSelectorLabels, syncWorldInfoEditorSelectorUi, hideWorldEditor, setWorldInfoButtonClass, getCurrentShellMenuType, saveCharacterDebounced, saveSettingsDebounced });
+const { updateWorldInfoList, flushDeletedWorldsFromUI } = createWorldInfoBookSync({ getRequestHeaders, getSelectedWorldInfoEditorName, getWorldInfoWorkbenchSession, hideWorldEditor, setWorldInfoButtonClass, getCurrentShellMenuType, saveCharacterDebounced, saveSettingsDebounced });
 export { updateWorldInfoList, flushDeletedWorldsFromUI };
 
 async function hideWorldEditor() {
-    const selection = getWorldInfoWorkbenchSession().selectWorldName('');
-    syncWorldInfoEditorSelectorUi('');
-    await selection;
-}
-
-function getWIElement(name) {
-    const wiElement = $('#world_info').children().filter(function () {
-        return $(this).text().toLowerCase() === name.toLowerCase();
-    });
-
-    return wiElement;
+    await getWorldInfoWorkbenchSession().selectWorldName('');
 }
 
 /**
@@ -554,7 +484,7 @@ export async function saveWorldInfo(name, data, _immediately = false) {
 
 const { renameWorldInfo, deleteWorldInfo, getFreeWorldEntryUid, getFreeWorldName, createNewWorldInfo, assignLorebookToChat, moveWorldInfoEntry, charUpdatePrimaryWorld, charUpdateAddAuxWorld, charSetAuxWorlds } = createWorldInfoBookCommands({
     getCharacterWorldDraftIdentity: () => getWorldInfoShell().getCharacterWorldDraftIdentity(),
-    POPUP_TYPE, showLocalDialog, t, equalsIgnoreCaseAndAccents, saveWorldInfo, getWIElement, selectWorldInfoEditorName, saveSettingsDebounced, characters, getRequestHeaders, getOneCharacter, getCurrentShellCharacterId, select_selected_character, setWorldInfoButtonClass, flushDeletedWorldsFromUI, getSanitizedFilename, checkOverwriteExistingData, updateWorldInfoList, hideWorldEditor, chat_metadata, METADATA_KEY, openWorldInfoEditor, renderTemplateAsync, getCurrentChatId, saveMetadata, callGenericPopup, loadWorldInfo, deleteWIOriginalDataValue, getSelectedWorldInfoEditorName, reloadEditor, getCurrentShellMenuType, create_save, createOrEditCharacter, getCharaFilename, normalizeArray,
+    POPUP_TYPE, showLocalDialog, t, equalsIgnoreCaseAndAccents, saveWorldInfo, setWorldInfoGlobalActiveNames, selectWorldInfoEditorName, saveSettingsDebounced, characters, getRequestHeaders, getOneCharacter, getCurrentShellCharacterId, select_selected_character, setWorldInfoButtonClass, flushDeletedWorldsFromUI, getSanitizedFilename, checkOverwriteExistingData, updateWorldInfoList, hideWorldEditor, chat_metadata, METADATA_KEY, openWorldInfoEditor, renderTemplateAsync, getCurrentChatId, saveMetadata, callGenericPopup, loadWorldInfo, deleteWIOriginalDataValue, getSelectedWorldInfoEditorName, reloadEditor, getCurrentShellMenuType, create_save, createOrEditCharacter, getCharaFilename, normalizeArray,
 });
 export { deleteWorldInfo, getFreeWorldEntryUid, getFreeWorldName, createNewWorldInfo, assignLorebookToChat, moveWorldInfoEntry, charUpdatePrimaryWorld, charUpdateAddAuxWorld, charSetAuxWorlds };
 const { promptToCreateWorldInfo, exportCurrentWorldInfo, renameCurrentWorldInfo, duplicateCurrentWorldInfo, deleteCurrentWorldInfo } = createWorldInfoBookUi({ getFreeWorldName, showLocalDialog, t, createNewWorldInfo, getSelectedWorldInfoEditorName, loadWorldInfo, download, renameWorldInfo, saveWorldInfo, updateWorldInfoList, selectWorldInfoEditorName, hideWorldEditor, getRequestHeaders, flushDeletedWorldsFromUI, saveSettingsDebounced, deleteWorldInfo });
@@ -584,8 +514,35 @@ export async function openWorldInfoEditor(worldName) {
 }
 
 export const initWorldInfo = createWorldInfoPanelUi({
-    onWorldInfoChange, characters, checkEmbeddedWorld, openWorldInfoEditor, importEmbeddedWorldInfo, saveCharacterDebounced, addLongPressEvent, assignLorebookToChat, t, refreshGlobalWorldInfoSelectorState, refreshGlobalWorldInfoSelectorLabels, select2ChoiceClickSubscribe, getSelectedWorldInfoEditorName, selectWorldInfoEditorName, isWorldInfoImportBusy, importWorldInfoFiles, DragAndDropHandler, getFreeWorldName, Popup, createNewWorldInfo, isEditorSelectMirrorSuppressed: () => suppressEditorSelectMirrorEvent, isMobile,
+    characters, checkEmbeddedWorld, openWorldInfoEditor, importEmbeddedWorldInfo, saveCharacterDebounced, addLongPressEvent, assignLorebookToChat, t, isWorldInfoImportBusy, importWorldInfoFiles, DragAndDropHandler, getFreeWorldName, Popup, createNewWorldInfo,
 });
+
+// Created without touching the shell during circular module evaluation.
+// Both React surfaces subscribe to the same lazily resolved session.
+const worldInfoSelectorRuntime = {
+    getSnapshot: () => getWorldInfoWorkbenchSession().getSelectorSnapshot(),
+    subscribe: listener => getWorldInfoWorkbenchSession().subscribeSelectors(listener),
+    setGlobalActiveNames: names => { setWorldInfoGlobalActiveNames(names); },
+    async selectEditorName(name) {
+        await selectWorldInfoEditorName(name);
+        if (getSelectedWorldInfoEditorName() === name) {
+            await getWorldInfoShell().openWorldInfoPanel();
+        }
+    },
+};
+
+async function mountWorldInfoEditorMirror() {
+    const host = document.getElementById('world_info_editor_mirror_host');
+    if (!host || host.dataset.reactWorldInfoMirrorMounted === 'true') return;
+    try {
+        const module = await loadWorkspacePanelsModule();
+        if (!host.isConnected || host.dataset.reactWorldInfoMirrorMounted === 'true') return;
+        module.mountWorldInfoEditorMirror(host, worldInfoSelectorRuntime);
+        host.dataset.reactWorldInfoMirrorMounted = 'true';
+    } catch (error) {
+        console.error('Failed to mount world info editor mirror:', error);
+    }
+}
 
 /**
  * Mounts the React-owned World Info drawer markup.
@@ -610,6 +567,7 @@ export async function mountWorldInfoPanel() {
         const module = await loadWorkspacePanelsModule();
         module.mountWorldInfoPanel(host);
         drawerContent.dataset.reactWorldInfoMounted = 'true';
+        await mountWorldInfoEditorMirror();
     } catch (error) {
         console.error('Failed to mount world info panel:', error);
     }

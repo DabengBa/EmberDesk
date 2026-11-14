@@ -62,7 +62,7 @@ test('character embedded book and global selection adapters live outside the fac
     expect(facade).not.toContain('function onWorldInfoChange(');
     const adapter = fs.readFileSync(path.join(root, 'public/scripts/world-info-reference-ui.js'), 'utf8');
     expect(adapter).toContain('function checkEmbeddedWorld(');
-    expect(adapter).toContain('function onWorldInfoChange(');
+    expect(adapter).toContain('onWorldInfoChange: setWorldInfoGlobalActiveNames');
 });
 
 test('entry defaults and standalone entry commands have a separate owner', () => {

@@ -59,6 +59,8 @@ import { ToolBindingEditor } from './components/regex/ToolBindingEditor';
 import { RegexImportTargetControl } from './components/regex/RegexImportTargetControl';
 import { MacroBrowserPanel, type MacroBrowserProps } from './components/macros/MacroBrowser';
 import { WorldInfoPanel } from './components/panels/WorldInfoPanel';
+import { WorldInfoEditorMirror } from './components/panels/WorldInfoEditorMirror';
+import type { WorldInfoSelectorRuntime } from './components/panels/world-info-selector-types';
 import { WorkspacePanelShell } from './components/panels/WorkspacePanelShell';
 import { AuthoringWorkspacePanel } from './components/authoring/AuthoringWorkspacePanel';
 import { MainChatMessageListWorkspacePanel } from './components/main-chat/MainChatMessageListWorkspacePanel';
@@ -1098,6 +1100,10 @@ export function mountMacroBrowser(container: HTMLElement, props: MacroBrowserPro
  */
 export function mountWorldInfoPanel(container: HTMLElement) {
     mountSmallPanel(container, <WorldInfoPanel />);
+}
+
+export function mountWorldInfoEditorMirror(container: HTMLElement, runtime: WorldInfoSelectorRuntime) {
+    mountSmallPanel(container, <WorldInfoEditorMirror runtime={runtime} />);
 }
 
 /**

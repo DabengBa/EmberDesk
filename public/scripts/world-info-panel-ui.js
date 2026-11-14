@@ -1,7 +1,7 @@
 import { world_names } from './world-info-state.js';
 
 /** Bind the preserved shell controls without owning editor state. */
-export function createWorldInfoPanelUi({ onWorldInfoChange, characters, checkEmbeddedWorld, openWorldInfoEditor, importEmbeddedWorldInfo, saveCharacterDebounced, addLongPressEvent, assignLorebookToChat, t, refreshGlobalWorldInfoSelectorState, refreshGlobalWorldInfoSelectorLabels, select2ChoiceClickSubscribe, getSelectedWorldInfoEditorName, selectWorldInfoEditorName, isWorldInfoImportBusy, importWorldInfoFiles, DragAndDropHandler, getFreeWorldName, Popup, createNewWorldInfo, isEditorSelectMirrorSuppressed, isMobile }) {
+export function createWorldInfoPanelUi({ characters, checkEmbeddedWorld, openWorldInfoEditor, importEmbeddedWorldInfo, saveCharacterDebounced, addLongPressEvent, assignLorebookToChat, t, isWorldInfoImportBusy, importWorldInfoFiles, DragAndDropHandler, getFreeWorldName, Popup, createNewWorldInfo }) {
     let worldInfoCoreInitialized = false;
     let worldInfoPanelInitialized = false;
 
@@ -17,27 +17,8 @@ export function createWorldInfoPanelUi({ onWorldInfoChange, characters, checkEmb
         }
     }
 
-    function getWorldInfoSelect2Language() {
-        return {
-            removeAllItems: () => t`Remove all items`,
-            removeItem: () => t`Remove item`,
-        };
-    }
-
     function initWorldInfo() {
         if (!worldInfoCoreInitialized) {
-            const globalWorldInfoSelector = $('#world_info');
-
-            globalWorldInfoSelector.on('mousedown change', async function (e) {
-                // If there's no world names, don't do anything
-                if (world_names.length === 0) {
-                    e.preventDefault();
-                    return;
-                }
-
-                onWorldInfoChange();
-            });
-
             $('#world_button').on('click', async function (event) {
                 const openSetWorldMenu = () => $('#char-management-dropdown').val($('#set_character_world').val()).trigger('change');
                 const chid = $('#set_character_world').data('chid');
@@ -67,33 +48,10 @@ export function createWorldInfoPanelUi({ onWorldInfoChange, characters, checkEmb
                 assignLorebookToChat({ shiftKey: true, altKey: false });
             });
 
-            if (!globalWorldInfoSelector.data('select2')) {
-                globalWorldInfoSelector.select2({
-                    width: '100%',
-                    placeholder: globalWorldInfoSelector.attr('data-placeholder') || t`No global worlds active. Select one or more worlds.`,
-                    allowClear: true,
-                    closeOnSelect: false,
-                    language: getWorldInfoSelect2Language(),
-                });
-                globalWorldInfoSelector.on('select2:select select2:unselect', () => refreshGlobalWorldInfoSelectorState());
-                refreshGlobalWorldInfoSelectorLabels();
-
-                select2ChoiceClickSubscribe(globalWorldInfoSelector, target => {
-                    const name = $(target).text();
-                    const alreadySelectedInEditor = getSelectedWorldInfoEditorName() === name;
-                    if (world_names.includes(name) && !alreadySelectedInEditor) {
-                        void selectWorldInfoEditorName(name);
-                        console.log('Quick selection of world', name);
-                    } else {
-                        console.warn('lets not reload an already loaded list yes?');
-                    }
-                }, { buttonStyle: true, closeDrawer: true });
-            }
-
             worldInfoCoreInitialized = true;
         }
 
-        if (!worldInfoPanelInitialized && document.querySelector('#world_editor_select')) {
+        if (!worldInfoPanelInitialized && document.querySelector('#world_import_file')) {
             // More menu: import
             $('#world_import_menu_item').on('click', function () {
                 if (isWorldInfoImportBusy()) {
@@ -185,28 +143,6 @@ export function createWorldInfoPanelUi({ onWorldInfoChange, characters, checkEmb
                 }
                 closeMoreMenu();
             });
-
-            $('#world_editor_select').on('change', async () => {
-                if (isEditorSelectMirrorSuppressed()) {
-                    return;
-                }
-                // Funnel: any direct .val(...).trigger('change') write lands here and
-                // is resolved through the session-owned selection path.
-                const rawName = String($('#world_editor_select').val() ?? '');
-                await selectWorldInfoEditorName(rawName);
-            });
-
-
-            if (!isMobile()) {
-                $('#world_editor_select').select2({
-                    placeholder: t`--- Pick to Edit ---`,
-                    searchInputPlaceholder: t`Search...`,
-                    allowClear: true,
-                    closeOnSelect: true,
-                    multiple: false,
-                    language: getWorldInfoSelect2Language(),
-                });
-            }
 
             worldInfoPanelInitialized = true;
         }

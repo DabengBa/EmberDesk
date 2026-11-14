@@ -243,15 +243,16 @@ test.describe('world info workbench', () => {
         await expect(page.locator('[data-world-info-react-workflow="workbench"]')).toBeVisible();
         await expect(page.locator('[data-world-info-react-layout="split"]')).toBeVisible();
 
-        const globalWorldSelect = page.locator('[data-world-info-react-control="global-world-select"]');
+        const globalWorldSelect = page.locator('#world_info');
         await expect(globalWorldSelect).toBeVisible();
-        const firstGlobalWorld = globalWorldSelect.locator('[data-world-info-react-global-world]').first();
+        await globalWorldSelect.locator('summary').click();
+        const firstGlobalWorld = globalWorldSelect.getByRole('checkbox').first();
         await expect(firstGlobalWorld).toHaveCount(1);
-        // Pills toggle independently — a plain click never clears other books.
-        await firstGlobalWorld.click();
-        await expect(firstGlobalWorld).toHaveAttribute('aria-pressed', 'true');
-        await firstGlobalWorld.click();
-        await expect(firstGlobalWorld).toHaveAttribute('aria-pressed', 'false');
+        const checked = await firstGlobalWorld.isChecked();
+        await firstGlobalWorld.setChecked(!checked);
+        await expect(firstGlobalWorld).toBeChecked({ checked: !checked });
+        await firstGlobalWorld.setChecked(checked);
+        await expect(firstGlobalWorld).toBeChecked({ checked });
     });
 
     test('entry row toggle repaints immediately and persists the disable flag', async ({ page }) => {

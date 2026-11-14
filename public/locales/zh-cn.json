@@ -1,4 +1,12 @@
 {
+    "Select global World Info": "选择全局世界书",
+    "Search global World Info": "搜索全局世界书",
+    "Search World Info": "搜索世界书",
+    "No World Info found.": "暂无世界书。",
+    "No matching World Info.": "没有匹配的世界书。",
+    "Open ${0} in editor": "在编辑器中打开 ${0}",
+    "Remove ${0} from global World Info": "停用全局世界书 ${0}",
+    "Clear all": "全部清除",
     "Runtime settings could not be saved because settings changed elsewhere. Saving is paused in this tab. Download the local settings before reloading, then compare the file with the current settings and reapply your changes manually.": "其他位置已更改设置，运行时设置未能保存。此标签页已暂停保存。请先下载本地运行时设置，再重新加载，对照当前设置手动重新应用更改。",
     "The file may contain sensitive settings. It does not include unsaved edits in this form; copy those separately before closing the form or reloading.": "文件可能包含敏感设置。它不包含此表单中未保存的编辑；关闭表单或重新加载前请另行复制这些内容。",
     "Download runtime settings only": "仅下载运行时设置",
