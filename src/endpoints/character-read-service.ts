@@ -1,5 +1,38 @@
+import type { DatabaseSync } from 'node:sqlite';
+import type { UserDirectoryList } from '../users.js';
+
+type MaybePromise<T> = T | Promise<T>;
+export type CharacterReadFilter = { query?: string; tags?: string[]; sort?: string };
+export type CharacterReadPagination = { offset?: number; limit?: number };
+export type CharacterReadLatencyHint = 'instant' | 'fast' | 'slow';
+export type CharacterReadFlags = { enabled: boolean; reads: boolean; strict: boolean; chatStats?: boolean };
+type ReadContext = { handle: string | null; directories: UserDirectoryList; featureFlags: CharacterReadFlags };
+type CharacterPayload = object;
+export type CharacterReadDependencies = {
+    getCanonicalSqliteFeatureFlags?: () => CharacterReadFlags;
+    ensureCanonicalBackend?: (directories: UserDirectoryList, handle: string | null) => MaybePromise<unknown>;
+    getCanonicalStorageStatus?: (context: ReadContext) => { supported: boolean; disabledReason: string | null };
+    openCanonicalDatabase?: (context: ReadContext) => DatabaseSync | null | undefined;
+    runCanonicalMigrations?: (db: DatabaseSync, options: { strict: boolean }) => { ok: boolean };
+    getCanonicalAuditStatus?: (context: { handle: string | null; directories: UserDirectoryList; db: DatabaseSync }) => { blocking: boolean; reason: string | null };
+    listCanonicalCharacters: (db: DatabaseSync, options: { useShallowPayload: boolean; includeChatStats: boolean }) => MaybePromise<CharacterPayload[]>;
+    getCanonicalCharacter: (db: DatabaseSync, avatarUrl: string, options: { includeChatStats: boolean }) => MaybePromise<CharacterPayload | null | undefined>;
+    resolveCanonicalCharacterBooks?: (data: CharacterPayload | CharacterPayload[], context: { db: DatabaseSync; directories: UserDirectoryList; handle: string | null }) => MaybePromise<unknown>;
+    warn?: (message: string) => void;
+};
+type CanonicalReadState = { enabled: true; strict: boolean; readsRequested: true; fallbackReason: null; includeChatStats: boolean; db: DatabaseSync } | { enabled: false; strict: boolean; readsRequested: boolean; fallbackReason: string; safeReason?: string };
+type ReadOptions = { handle?: string | null; directories: UserDirectoryList; filter?: CharacterReadFilter; pagination?: CharacterReadPagination; dependencies: CharacterReadDependencies };
+export type CharacterListReadOptions = ReadOptions & { shallow: boolean };
+export type CharacterSummaryReadOptions = ReadOptions;
+export type CharacterFullReadOptions = Omit<ReadOptions, 'filter' | 'pagination'> & { avatarUrl: string };
+export type CharacterSnapshotResult = { result: { mode: 'snapshot'; data: CharacterPayload[] }; interactionPath?: string; latencyHint: CharacterReadLatencyHint; fallbackReason?: string; canonicalUnavailable?: string };
+export type CharacterFullReadResult = { status: 'found' | 'not_found'; result?: { mode: 'snapshot'; data: CharacterPayload }; interactionPath: string; latencyHint: CharacterReadLatencyHint; fallbackReason?: string; canonicalUnavailable?: string };
+
 export class CanonicalReadBlockedError extends Error {
-    constructor(reason, safeReason) {
+    declare readonly reason: string;
+    declare readonly safeReason: string;
+
+    constructor(reason: string, safeReason: string) {
         super(reason);
         this.name = 'CanonicalReadBlockedError';
         this.reason = reason;
@@ -8,19 +41,13 @@ export class CanonicalReadBlockedError extends Error {
 }
 
 /**
- * @typedef {{ query?: string, tags?: string[], sort?: string }} CharacterReadFilter
- * @typedef {{ offset?: number, limit?: number }} CharacterReadPagination
- * @typedef {'instant' | 'fast' | 'slow'} CharacterReadLatencyHint
- */
-
-/**
  * @param {object[]} data
  * @param {object} options
  * @param {string} [options.interactionPath]
  * @param {CharacterReadLatencyHint} options.latencyHint
  * @returns {{ result: { mode: 'snapshot', data: object[] }, interactionPath?: string, latencyHint: CharacterReadLatencyHint }}
  */
-function wrapSnapshot(data, { interactionPath, latencyHint }) {
+function wrapSnapshot(data: CharacterPayload[], { interactionPath, latencyHint }: { interactionPath?: string; latencyHint: CharacterReadLatencyHint }): CharacterSnapshotResult {
     return {
         result: { mode: 'snapshot', data },
         ...(interactionPath ? { interactionPath } : {}),
@@ -28,13 +55,13 @@ function wrapSnapshot(data, { interactionPath, latencyHint }) {
     };
 }
 
-function maybeAttachFallbackReason(result, fallbackReason) {
+function maybeAttachFallbackReason(result: CharacterSnapshotResult, fallbackReason: string | null): CharacterSnapshotResult {
     return fallbackReason
         ? { ...result, fallbackReason }
         : result;
 }
 
-async function getCanonicalReadState(handle, directories, dependencies) {
+async function getCanonicalReadState(handle: string | null, directories: UserDirectoryList, dependencies: CharacterReadDependencies): Promise<CanonicalReadState> {
     const featureFlags = dependencies.getCanonicalSqliteFeatureFlags?.() ?? {
         enabled: false,
         reads: false,
@@ -141,7 +168,7 @@ async function getCanonicalReadState(handle, directories, dependencies) {
     };
 }
 
-function maybeThrowCanonicalFallback(canonicalState) {
+function maybeThrowCanonicalFallback(canonicalState: CanonicalReadState): void {
     if (canonicalState.enabled || !canonicalState.strict) {
         return;
     }
@@ -170,7 +197,7 @@ export async function readCharacterListPayload({
     filter: _filter,
     pagination: _pagination,
     dependencies,
-}) {
+}: CharacterListReadOptions): Promise<CharacterSnapshotResult> {
     const canonicalState = await getCanonicalReadState(handle, directories, dependencies);
     if (canonicalState.enabled) {
         const data = await dependencies.listCanonicalCharacters(canonicalState.db, {
@@ -224,7 +251,7 @@ export async function readCharacterSummaryPayload({
     filter: _filter,
     pagination: _pagination,
     dependencies,
-}) {
+}: CharacterSummaryReadOptions): Promise<CharacterSnapshotResult> {
     const canonicalState = await getCanonicalReadState(handle, directories, dependencies);
     if (canonicalState.enabled) {
         const data = await dependencies.listCanonicalCharacters(canonicalState.db, {
@@ -265,7 +292,7 @@ export async function readCharacterFullPayload({
     directories,
     avatarUrl,
     dependencies,
-}) {
+}: CharacterFullReadOptions): Promise<CharacterFullReadResult> {
     const canonicalState = await getCanonicalReadState(handle, directories, dependencies);
     let fallbackReason = canonicalState.fallbackReason;
     if (canonicalState.enabled) {

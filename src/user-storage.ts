@@ -6,54 +6,41 @@ import { getConfigValue } from './util.js';
 
 export const KEY_PREFIX = 'user:';
 const AVATAR_PREFIX = 'avatar:';
-let _enableAccounts;
+let _enableAccounts: boolean | undefined;
 /**
  * Whether user accounts are enabled. Lazy because getConfigValue needs
  * the config file path to be set first (done during server startup).
- * @returns {boolean}
  */
-export function getEnableAccounts() {
+export function getEnableAccounts(): boolean {
     if (_enableAccounts === undefined) {
-        _enableAccounts = getConfigValue('enableUserAccounts', false, 'boolean');
+        _enableAccounts = getConfigValue('enableUserAccounts', false, 'boolean') as boolean;
     }
     return _enableAccounts;
 }
 
-/**
- * @typedef {Object} User
- * @property {string} handle - The user's short handle. Used for directories and other references
- * @property {string} name - The user's name. Displayed in the UI
- * @property {number} created - The timestamp when the user was created
- * @property {string} password - Scrypt hash of the user's password
- * @property {string} salt - Salt used for hashing the password
- * @property {boolean} enabled - Whether the user is enabled
- * @property {boolean} admin - Whether the user is an admin (can manage other users)
- */
+/** Existing persisted account shape; node-persist does not validate its values. */
+export type User = {
+    handle: string;
+    name: string;
+    created: number;
+    password: string;
+    salt: string;
+    enabled: boolean;
+    admin: boolean;
+};
 
-/**
- * Converts a user handle to a storage key.
- * @param {string} handle User handle
- * @returns {string} The key for the user storage
- */
-export function toKey(handle) {
+/** Converts a user handle to a storage key. */
+export function toKey(handle: string): string {
     return `${KEY_PREFIX}${handle}`;
 }
 
-/**
- * Converts a user handle to a storage key for avatars.
- * @param {string} handle User handle
- * @returns {string} The key for the avatar storage
- */
-export function toAvatarKey(handle) {
+/** Converts a user handle to a storage key for avatars. */
+export function toAvatarKey(handle: string): string {
     return `${AVATAR_PREFIX}${handle}`;
 }
 
-/**
- * Initializes the user storage.
- * @param {string} dataRoot The root directory for user data
- * @returns {Promise<void>}
- */
-export async function initUserStorage(dataRoot) {
+/** Initializes the user storage. */
+export async function initUserStorage(dataRoot: string): Promise<void> {
     console.log('Using data root:', dataRoot);
     await storage.init({
         dir: path.join(dataRoot, '_storage'),
@@ -75,58 +62,44 @@ export async function initUserStorage(dataRoot) {
  * Returns true when:
  * - user accounts are enabled and no users exist in storage (fresh deploy), OR
  * - the only user is the legacy default-user with no password (existing deploy upgrade)
- * @returns {Promise<boolean>}
  */
-export async function needsSetup() {
+export async function needsSetup(): Promise<boolean> {
     if (!getEnableAccounts()) return false;
     const handles = await getAllUserHandles();
     if (handles.length === 0) return true;
     if (handles.length === 1) {
-        const user = await storage.getItem(toKey(handles[0]));
+        const user: User | undefined = await storage.getItem(toKey(handles[0]));
         if (user && !user.password) return true;
     }
     return false;
 }
 
-/**
- * Gets a list of all user handles.
- * @returns {Promise<string[]>} - The list of user handles
- */
-export async function getAllUserHandles() {
+/** Gets a list of all user handles. */
+export async function getAllUserHandles(): Promise<string[]> {
     const keys = await storage.keys(x => x.key.startsWith(KEY_PREFIX));
     const handles = keys.map(x => x.replace(KEY_PREFIX, ''));
     return handles;
 }
 
-/**
- * Gets the account version tag for the provided user.
- * @param {User} user User account object
- * @returns {string} Account version tag
- */
-export function getAccountVersion(user) {
+/** Gets the account version tag for the provided user. */
+export function getAccountVersion(user: Pick<User, 'handle' | 'password' | 'salt'>): string {
     return crypto.createHash('shake256', { outputLength: 8 })
         .update(JSON.stringify([user.handle, user.password, user.salt]))
         .digest('hex');
 }
 
-/**
- * Gets all of the users.
- * @returns {Promise<User[]>}
- */
-async function getAllUsers() {
+/** Gets all of the users. */
+async function getAllUsers(): Promise<User[]> {
     if (!getEnableAccounts()) {
         return [];
     }
-    /** @type {User[]} */
-    const users = await storage.values();
+    // Preserve the existing unvalidated node-persist values and their behavior.
+    const users: User[] = await storage.values();
     return users;
 }
 
-/**
- * Gets all of the enabled users.
- * @returns {Promise<User[]>}
- */
-export async function getAllEnabledUsers() {
+/** Gets all of the enabled users. */
+export async function getAllEnabledUsers(): Promise<User[]> {
     const users = await getAllUsers();
     return users.filter(x => x.enabled);
 }

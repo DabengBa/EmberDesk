@@ -36,7 +36,7 @@ import {
     readCharacterFullPayload,
     readCharacterListPayload,
     readCharacterSummaryPayload,
-} from './character-read-service.js';
+} from './character-read-service.ts';
 import { getCanonicalStorageSlice } from '../canonical-storage-slice-registry.js';
 import { ensureCanonicalSliceBackend } from '../canonical-backend.js';
 import { CanonicalSqliteDisabledError, getCanonicalStorageStatus, openCanonicalDatabase, withCanonicalTransaction } from '../canonical-sqlite.js';
@@ -66,7 +66,7 @@ import {
     deleteCharacterCard,
     editCharacterCard,
     renameCharacterCard,
-} from './character-write-service.js';
+} from './character-write-service.ts';
 import { listCanonicalCharacterChatPayload } from './canonical-chat-query-service.js';
 import { reconcileCanonicalChatSources } from '../canonical-chat-shadow-import.js';
 import {
@@ -917,6 +917,7 @@ async function hydrateCanonicalCharacterBooks(payloads, { db, directories, handl
     }
 }
 
+/** @returns {import('./character-read-service.ts').CharacterReadDependencies} */
 function createCharacterReadDependencies() {
     return {
         getCanonicalSqliteFeatureFlags: getCanonicalCharacterFeatureFlags,
@@ -939,6 +940,10 @@ function createCharacterReadDependencies() {
     };
 }
 
+/**
+ * @param {{ bustCache?: import('./character-write-service.ts').CharacterWriteDependencies['bustCache'] }} [options]
+ * @returns {import('./character-write-service.ts').DeleteCharacterOptions['dependencies']}
+ */
 function createCharacterWriteDependencies({ bustCache = null } = {}) {
     return {
         defaultAvatarPath: DEFAULT_AVATAR_PATH,
@@ -2177,9 +2182,9 @@ function getPreservedName(request) {
  * @param {import('express').Request} options.request
  * @param {string} options.fileName
  * @param {string} options.characterData
- * @param {string|Buffer} [options.sourceImage]
- * @param {{ destination: string, filename: string }} [options.file]
- * @returns {Promise<{ ok: boolean, fileName?: string, avatarName?: string, reason?: string, message?: string, refreshHandled?: boolean }>}
+ * @param {string|Buffer|ArrayBuffer|ArrayBufferView} [options.sourceImage]
+ * @param {import('./character-write-service.ts').CreateCharacterOptions['file']} [options.file]
+ * @returns {Promise<import('./character-import-service.js').CharacterImportResult>}
  */
 async function persistImportedCharacter({ request, fileName, characterData, sourceImage = undefined, file = undefined }) {
     const normalizedSourceImage = Buffer.isBuffer(sourceImage)

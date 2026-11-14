@@ -1,7 +1,7 @@
 import path from 'node:path';
 import fs from 'node:fs';
 import { USER_DIRECTORY_TEMPLATE, PUBLIC_DIRECTORIES, UPLOADS_DIRECTORY } from './constants.js';
-import { getAllUserHandles, toAvatarKey } from './user-storage.js';
+import { getAllUserHandles, toAvatarKey } from './user-storage.ts';
 import storage from 'node-persist';
 
 const PUBLIC_USER_AVATAR = '/img/default-user.png';

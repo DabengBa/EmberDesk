@@ -1,3 +1,15 @@
+/**
+ * @typedef {object} CharacterImportResult
+ * @property {boolean} ok
+ * @property {string} [fileName]
+ * @property {string} [avatarName]
+ * @property {string} [reason]
+ * @property {string} [message]
+ * @property {boolean} [refreshHandled]
+ *
+ * @typedef {(uploadPath: string, context: { request: import('express').Request, response: import('express').Response }, preservedFileName?: string) => Promise<string | CharacterImportResult | null | undefined>} CharacterImportHandler
+ */
+
 function getAvatarName(fileName) {
     return fileName.endsWith('.png') ? fileName : `${fileName}.png`;
 }
@@ -47,6 +59,9 @@ function resolveCharacterImportHandler(format, importers) {
     return importerKey ? importers[importerKey] : null;
 }
 
+/**
+ * @param {{ importFromYaml: CharacterImportHandler, importFromJson: CharacterImportHandler, importFromPng: CharacterImportHandler, importFromCharX: CharacterImportHandler, importFromByaf: CharacterImportHandler }} importers
+ */
 export function createCharacterImportCoordinator({
     importFromYaml,
     importFromJson,
@@ -62,6 +77,10 @@ export function createCharacterImportCoordinator({
         importFromByaf,
     };
 
+    /**
+     * @param {{ uploadPath: string, format: string, preservedFileName?: string, request: import('express').Request, response: import('express').Response }} options
+     * @returns {Promise<CharacterImportResult>}
+     */
     return async function importCharacterUpload({
         uploadPath,
         format,

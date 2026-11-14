@@ -1,6 +1,6 @@
 import { getCanonicalStorageSlice } from '../canonical-storage-slice-registry.js';
 import { convertWorldInfoToCharacterBook } from './character-card-v2.js';
-import { editCharacterCard } from './character-write-service.js';
+import { editCharacterCard } from './character-write-service.ts';
 import { listCanonicalCharactersBoundToWorld } from './character-store.js';
 import {
     getCanonicalWorldInfoBook,
@@ -515,6 +515,23 @@ function errorResult(status, reason, extras = {}) {
 }
 
 /**
+ * @typedef {object} CharacterTextReplaceDependencies
+ * @property {(handle: string | null, directories: import('../users.js').UserDirectoryList, avatar: string) => Promise<string | null>} [getCanonicalCharacterCardJson]
+ * @property {() => import('./character-write-service.ts').CharacterWriteDependencies} [getCharacterWriteDependencies]
+ * @property {typeof editCharacterCard} [editCharacterCard]
+ * @property {typeof getCanonicalWorldInfoWriteState} [getWorldInfoWriteState]
+ * @property {typeof getCanonicalWorldInfoBook} [getCanonicalWorldInfoBook]
+ * @property {typeof commitWorldBookWithProjectionIntent} [commitWorldBookWithProjectionIntent]
+ * @property {typeof replayWorldProjection} [replayWorldProjection]
+ * @property {typeof listCanonicalCharactersBoundToWorld} [listCanonicalCharactersBoundToWorld]
+ * @property {typeof convertWorldInfoToCharacterBook} [convertWorldInfoToCharacterBook]
+ * @property {() => ReturnType<ReturnType<typeof getCanonicalStorageSlice>['getFeatureFlags']>} [getCharacterFeatureFlags]
+ * @property {typeof openCanonicalChatForTextReplace} [openChatSession]
+ * @property {typeof writeCanonicalChatForTextReplace} [writeChatSession]
+ * @property {typeof readCanonicalChatVersionedPayload} [readCanonicalChatVersionedPayload]
+ */
+
+/**
  * Runs preview or apply for the character-card text replace feature.
  *
  * Apply order is deliberate: world book first (bound books are shared and the
@@ -526,7 +543,7 @@ function errorResult(status, reason, extras = {}) {
  * @param {object} options
  * @param {import('express').Request} options.request
  * @param {boolean} options.apply
- * @param {object} options.dependencies Injected for tests
+ * @param {CharacterTextReplaceDependencies} [options.dependencies] Injected for tests
  * @returns {Promise<object>} Structured result; `ok:false` carries `status`/`reason`
  */
 export async function runCharacterTextReplace({ request, apply = false, dependencies = {} }) {

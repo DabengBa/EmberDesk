@@ -17,8 +17,8 @@ Primary current files:
 - `src/canonical-sqlite-rollout-contract.js`
 - `src/canonical-sqlite-operator.js`
 - `src/storage-feature-flags.js`
-- `src/endpoints/character-read-service.js`
-- `src/endpoints/character-write-service.js`
+- `src/endpoints/character-read-service.ts`
+- `src/endpoints/character-write-service.ts`
 - `src/endpoints/chats.js`
 - `src/endpoints/character-index.js` (retired helper; no normal runtime ownership)
 - `src/derived-cache-sqlite.js`
@@ -150,7 +150,7 @@ Goal: serve character list/get payloads from canonical SQLite behind a feature f
 
 Deliverables:
 
-- `character-read-service.js` DB-first read path for:
+- `character-read-service.ts` DB-first read path for:
   - `/api/characters/all`
   - `/api/characters/list`
   - `/api/characters/get`
@@ -169,8 +169,8 @@ Acceptance:
 Current delivered foundation:
 
 - `src/endpoints/character-store.js` now reconstructs `/api/characters/all`, `/api/characters/list`, and `/api/characters/get` payloads from canonical `characters` plus `character_chat_stats` rows while preserving existing avatar-filename identity and route payload shape.
-- `src/endpoints/character-read-service.js` now gates DB-first reads on the persisted canonical audit summary instead of inferring audit success from schema version parity.
-- Once canonical reads are requested, `src/endpoints/character-read-service.js` now falls back directly to compatibility files when canonical rows are blocked or missing instead of reviving `_cache/character-index.sqlite` as a second authority path.
+- `src/endpoints/character-read-service.ts` now gates DB-first reads on the persisted canonical audit summary instead of inferring audit success from schema version parity.
+- Once canonical reads are requested, `src/endpoints/character-read-service.ts` now falls back directly to compatibility files when canonical rows are blocked or missing instead of reviving `_cache/character-index.sqlite` as a second authority path.
 - `src/canonical-sqlite-migrations.js` phase-one schema now includes `canonical_audit_state` for the persisted audit gate contract.
 - `src/canonical-sqlite-shadow-import.js` now persists clean vs blocked audit summaries after successful audit runs, and `getPersistedCanonicalAuditStatus()` now fails closed as `audit_not_run` until that summary exists.
 - `src/endpoints/characters.js` and `src/endpoints/chats.js` now invalidate the persisted canonical audit state after successful file-backed character or chat mutations so DB-first reads cannot continue serving stale canonical rows after normal runtime writes.
@@ -196,7 +196,7 @@ Acceptance:
 
 Current delivered foundation:
 
-- `src/endpoints/character-write-service.js` now coordinates canonical-first create/edit/rename/delete flows, preserves compatibility projection behavior, and records `projection_repairs` instead of silently restoring file authority after DB-committed projection failures.
+- `src/endpoints/character-write-service.ts` now coordinates canonical-first create/edit/rename/delete flows, preserves compatibility projection behavior, and records `projection_repairs` instead of silently restoring file authority after DB-committed projection failures.
 - `src/endpoints/characters.js` now routes `/create`, `/edit`, `/rename`, `/edit-avatar`, `/edit-attribute`, `/merge-attributes`, `/delete`, `/duplicate`, and `/import` through the same DB-first write seam when `features.storage.canonicalSqlite.writes=true` and the persisted audit gate is clean.
 - `src/endpoints/character-store.js` now normalizes canonical row writes so shadow import, DB-first reads, and DB-first writes persist the same route-compatible payload shape.
 - `src/canonical-sqlite-rollout-contract.js` now centralizes legal flag combinations, unresolved repair visibility, and rollback-blocker derivation for the current slice instead of scattering those checks across route code.
@@ -223,7 +223,7 @@ Acceptance:
 Current delivered foundation:
 
 - With chat file projection `off`, `src/endpoints/canonical-chat-write-service.js` updates the existing active character's `character_chat_stats` inside the same transaction as each ordinary canonical chat save, import, rename, delete, or text replacement. A stats write failure rolls back that session change; multi-chat imports commit each item separately. Stats derive count, total `source_size_bytes`, and maximum `source_mtime_ms` from canonical sessions; unchanged saves and renames do not invent a newer last-chat time. Shadow import, backup restoration, historical backfill, and character lifecycle operations are outside this guarantee. With projection `sync`, the existing file-statistics path remains in use.
-- `src/endpoints/character-store.js` and `src/endpoints/character-read-service.js` now treat canonical chat stats as a separate runtime boundary: canonical reads only inject `chat_size` / `date_last_chat` when `features.storage.canonicalSqlite.chatStats=true`.
+- `src/endpoints/character-store.js` and `src/endpoints/character-read-service.ts` now treat canonical chat stats as a separate runtime boundary: canonical reads only inject `chat_size` / `date_last_chat` when `features.storage.canonicalSqlite.chatStats=true`.
 - `src/canonical-sqlite-operator.js` and `scripts/canonical-sqlite-repair.mjs` now provide an explicit `rebuild-chat-stats` operator path for the current slice.
 - Focused proof includes `tests/canonical-chat-stats-atomicity.test.js`, `tests/canonical-chat-route-authority.test.js`, `tests/interaction-performance-index.test.js`, `tests/character-read-service.test.js`, `tests/canonical-sqlite-operator.test.js`, `tests/canonical-sqlite-cli.test.js`, and `tests/chat-route-service.test.js`.
 
@@ -247,7 +247,7 @@ Acceptance:
 
 Current delivered foundation:
 
-- `src/endpoints/character-read-service.js` now skips `_cache/character-index.sqlite` in canonical DB-first mode and in compatibility fallback mode, so `/api/characters/all`, `/list`, and `/get` never take a normal indexed path.
+- `src/endpoints/character-read-service.ts` now skips `_cache/character-index.sqlite` in canonical DB-first mode and in compatibility fallback mode, so `/api/characters/all`, `/list`, and `/get` never take a normal indexed path.
 - Character create/edit/import/delete, chat save/rename/delete/import, and World Info delete-preflight/cascade no longer refresh, delete, dirty-mark, or query `_cache/character-index.sqlite`.
 - `src/server-main.js` no longer logs or disposes character-index sidecar state during normal startup/shutdown.
 - `src/endpoints/character-index.js` remains only as a retired helper for historical tests and interaction-performance report compatibility until a later cleanup deletes or archives it.
@@ -377,7 +377,7 @@ asset subdirectories (sprites, live2d) stay file-backed media, and only root-lev
 7. `read service cutover`
    - Depends on audit passing and read flag.
    - Switches character read service to DB-first with parity tests.
-   - Current status: delivered for `/api/characters/all`, `/api/characters/list`, and `/api/characters/get` in `src/endpoints/character-read-service.js`, backed by `src/endpoints/character-store.js`, with explicit fallback reasons and stale-audit invalidation on current file-backed mutation paths.
+   - Current status: delivered for `/api/characters/all`, `/api/characters/list`, and `/api/characters/get` in `src/endpoints/character-read-service.ts`, backed by `src/endpoints/character-store.js`, with explicit fallback reasons and stale-audit invalidation on current file-backed mutation paths.
 
 8. `write projection`
    - Depends on read cutover confidence.
@@ -570,7 +570,7 @@ decision — missing audit runs shadow import plus audit; file-side stale marker
 projection-side stale markers (`*_projection_failure`, `*_repair`) re-audit only so a lagging
 compatibility file can never roll back newer canonical rows; a completed audit (clean or
 blocking) is respected as-is, so a clean slice never re-imports out-of-band file edits.
-`src/config-init.js` strips the legacy all-`false` `canonicalSqlite` template block from
+`src/config-init.ts` strips the legacy all-`false` `canonicalSqlite` template block from
 existing `config.yaml` files so upgraded installs inherit the new defaults.
 
 The control plane resolves each descriptor's effective flags. For `characters`, `worldInfo`,
@@ -660,8 +660,8 @@ surfaces affected by later implementation remain:
 Code binding points:
 
 - `getUserDirectories(handle)` remains the source for per-user data roots.
-- `character-read-service.js` owns character read coordination.
-- `character-write-service.js` owns core character write sequencing.
+- `character-read-service.ts` owns character read coordination.
+- `character-write-service.ts` owns core character write sequencing.
 - `canonical-backend.js` owns lazy per-user slice activation (open/migrate/import/audit decision) shared by all slice gates.
 - `character-card-v2.js` owns the shared character-card V2 normalization chain so runtime routes and operator/CLI tooling produce byte-equivalent canonical snapshots; canonical rows store the card's native payload while linked World Info `character_book` content is re-injected from the canonical World Info store on canonical reads.
 - `chats.js` owns chat save/rename/delete/import route side effects.

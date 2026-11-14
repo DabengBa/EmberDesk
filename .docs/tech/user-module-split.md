@@ -13,7 +13,7 @@ This document covers the split of `src/users.js` (~1244 lines, ~40 exports) into
 Primary files:
 
 - `src/users.js` — re-export barrel, middleware, routes, backup, security verification
-- `src/user-storage.js` — `node-persist` CRUD and user record queries
+- `src/user-storage.ts` — `node-persist` CRUD and user record queries
 - `src/user-directories.js` — per-user filesystem layout and directory creation
 - `src/user-migrations.js` — startup data migrations
 - `src/user-auth.js` — credential verification, SSO, session crypto
@@ -25,27 +25,27 @@ The split follows a layered dependency graph with no back-edges:
 ```
 users.js (barrel + middleware + routes)
   ├── user-auth.js
-  │     └── user-storage.js
+  │     └── user-storage.ts
   ├── user-directories.js
-  │     └── user-storage.js
+  │     └── user-storage.ts
   ├── user-migrations.js
   │     └── user-directories.js
-  └── user-storage.js
+  └── user-storage.ts
 ```
 
 Constraints:
 
 - `src/users.js` re-exports all symbols from the four new modules. Existing importers (`server-main.js`, `server-startup.js`, `basicAuth.js`, `recover-password.js`, `settings.js`, `stats.js`, `characters.js`, `users-public.js`, `users-private.js`, `users-admin.js`) continue importing from `src/users.js` unchanged.
 - Path traversal protection (`isPathUnderParent` + `path.resolve`) remains in `createRouteHandler` and `createExtensionsRouteHandler` in `users.js`.
-- `node-persist` storage is initialized once via `initUserStorage()` in `user-storage.js`. SSO login functions in `user-auth.js` access `storage.getItem()` directly.
+- `node-persist` storage is initialized once via `initUserStorage()` in `user-storage.ts`. SSO login functions in `user-auth.js` access `storage.getItem()` directly.
 
 ### Lazy config reads
 
-`getEnableAccounts()` in `user-storage.js` uses lazy evaluation (first-call cache) instead of a module-level `const`. This avoids `process.exit(1)` at import time when the config file path has not been set yet (needed for testability).
+`getEnableAccounts()` in `user-storage.ts` uses lazy evaluation (first-call cache) instead of a module-level `const`. It reads configuration only on first use, after configuration initialization in the normal startup path.
 
 ## Core Implementation
 
-### user-storage.js
+### user-storage.ts
 
 | Symbol | Type | Notes |
 |---|---|---|

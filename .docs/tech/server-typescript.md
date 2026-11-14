@@ -87,7 +87,7 @@ graph in native Node and Jest, verify ESM mocks and original error locations,
 and exercise unsupported syntax and invalid specifiers. Node subprocesses
 run without a production loader or emitted graph.
 
-## First migrated slice
+## Migrated slices
 
 `src/endpoints/chat-backup-helpers.ts` is the sole backup-planning
 implementation. `src/endpoints/chats.js` imports it explicitly. The existing
@@ -117,5 +117,43 @@ TypeScript modules and imports the actual chats and canonical-query consumers
 without a loader, verifying that the mixed JavaScript/TypeScript graph resolves
 in Node independently of Jest.
 
+## Character read and write services
+
+`src/endpoints/character-read-service.ts` and
+`src/endpoints/character-write-service.ts` now own the existing character
+read and write flows. Their exported types describe service options,
+dependency ports, canonical outcomes, and projection repairs. The character
+router and text-replace service use explicit `.ts` imports; their dependency
+factories and import callbacks consume these types through JSDoc. The import
+coordinator remains JavaScript and uses the existing route callbacks.
+
+The migration preserves canonical availability and strict errors, conditional
+card replacement, authority-commit/projection/repair ordering, and upload
+cleanup. Focused read/write, replacement, import, and route tests cover those
+behaviors. `character-services-native.test.js` imports the real service and
+caller graphs in Node without a loader. `character-services-types.test.js`
+checks typed consumers and rejects invalid write and replacement contracts;
+it does not enable checking for all legacy JavaScript.
+
 This is internal execution and type-checking work. It changes no user-facing
 page, feature, or term, so no semantic documentation database update is needed.
+
+## User storage and configuration leaves
+
+`src/user-storage.ts` and `src/config-init.ts` are the sole implementations of
+their existing modules. Their JavaScript callers use explicit `.ts` imports;
+`src/users.js` retains its compatibility exports and exposes the storage
+module's `User` type through JSDoc. Account key prefixes, SHAKE256 account
+versions, lazy account configuration, default-user/setup behavior, deprecated
+configuration migrations, environment coercion, and lodash default merging
+retain their existing behavior. Types describe the existing trusted values;
+this migration adds no runtime validation or data format.
+
+`tests/user-config-native.test.js` runs the actual modules and JavaScript
+consumers in isolated Node subprocesses with accounts both enabled and
+disabled. It initializes temporary configuration and node-persist storage,
+checks account/setup behavior and the version fixture, and imports the
+pre-start configuration script with a temporary cwd. No loader, emitted
+server code, or listening server is used. The existing user/config suites
+also run directly against the production TypeScript files through the shared
+Jest adapter.

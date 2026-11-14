@@ -117,7 +117,7 @@ const RULES = [
         matches(input) {
             return matchesAny(input, [
                 /^src\/user-auth\.js$/,
-                /^src\/user-storage\.js$/,
+                /^src\/user-storage\.[jt]s$/,
                 /^src\/user-directories\.js$/,
                 /^src\/user-migrations\.js$/,
                 /^src\/users\.js$/,
@@ -140,8 +140,8 @@ const RULES = [
                 /^src\/canonical-storage-slice-registry\.js$/,
                 /^src\/canonical-sqlite-operator\.js$/,
                 /^src\/storage-feature-flags\.js$/,
-                /^src\/endpoints\/character-read-service\.js$/,
-                /^src\/endpoints\/character-write-service\.js$/,
+                /^src\/endpoints\/character-read-service\.ts$/,
+                /^src\/endpoints\/character-write-service\.ts$/,
                 /^src\/endpoints\/character-store\.js$/,
                 /^src\/endpoints\/characters\.js$/,
                 /^scripts\/canonical-sqlite-(?:audit|repair)\.mjs$/,

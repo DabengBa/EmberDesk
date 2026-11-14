@@ -6,7 +6,7 @@
 - Current code binding:
   - `src/endpoints/chats.js`
   - `src/endpoints/character-file-snapshot.js`
-  - `src/endpoints/character-read-service.js`
+  - `src/endpoints/character-read-service.ts`
   - `src/canonical-sqlite-operator.js`
   - `src/canonical-sqlite-shadow-import.js`
   - `tests/interaction-performance-index.test.js`

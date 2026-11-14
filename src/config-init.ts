@@ -6,7 +6,14 @@ import _ from 'lodash';
 import { serverDirectory } from './server-directory.js';
 import { keyToEnv, setConfigFilePath } from './util.js';
 
-const keyMigrationMap = [
+type KeyMigration = {
+    oldKey: string;
+    newKey: string;
+    migrate: (value: unknown) => unknown;
+    remove?: boolean;
+};
+
+const keyMigrationMap: KeyMigration[] = [
     {
         oldKey: 'disableThumbnails',
         newKey: 'thumbnails.enabled',
@@ -148,11 +155,11 @@ const LEGACY_CANONICAL_SQLITE_MANAGED_MEDIA_BLOCK = {
  * @param {unknown} block Value of features.storage.canonicalSqlite
  * @returns {boolean}
  */
-function isLegacyCanonicalSqliteBlock(block) {
+function isLegacyCanonicalSqliteBlock(block: unknown): boolean {
     if (block == null || typeof block !== 'object' || Array.isArray(block)) {
         return false;
     }
-    const { slices, ...rest } = block;
+    const { slices, ...rest } = block as Record<string, unknown>;
     const expectedTopLevel = Object.fromEntries(LEGACY_CANONICAL_SQLITE_FLAG_KEYS.map(key => [key, false]));
     if (!_.isEqual(rest, expectedTopLevel)) {
         return false;
@@ -167,15 +174,16 @@ function isLegacyCanonicalSqliteBlock(block) {
  * @param {string} prefix Prefix to prepend to all keys
  * @returns {string[]} Array of all keys in the object
  */
-function getAllKeys(obj, prefix = '') {
+function getAllKeys(obj: unknown, prefix = ''): string[] {
     if (typeof obj !== 'object' || Array.isArray(obj) || obj === null) {
         return [];
     }
 
-    return _.flatMap(Object.keys(obj), key => {
+    const record = obj as Record<string, unknown>;
+    return _.flatMap(Object.keys(record), key => {
         const newPrefix = prefix ? `${prefix}.${key}` : key;
-        if (typeof obj[key] === 'object' && !Array.isArray(obj[key])) {
-            return getAllKeys(obj[key], newPrefix);
+        if (typeof record[key] === 'object' && !Array.isArray(record[key])) {
+            return getAllKeys(record[key], newPrefix);
         } else {
             return [newPrefix];
         }
@@ -186,7 +194,7 @@ function getAllKeys(obj, prefix = '') {
  * Compares the current config.yaml with the default config.yaml and adds any missing values.
  * @param {string} configPath Path to config.yaml
  */
-export function addMissingConfigValues(configPath) {
+export function addMissingConfigValues(configPath: string): void {
     try {
         const defaultConfig = yaml.parse(fs.readFileSync(path.join(serverDirectory, './default/config.yaml'), 'utf8'));
 
@@ -207,7 +215,8 @@ export function addMissingConfigValues(configPath) {
             if (process.env[oldEnvKey] && !process.env[newEnvKey]) {
                 const oldValue = process.env[oldEnvKey];
                 const newValue = migrate(oldValue);
-                process.env[newEnvKey] = newValue;
+                // Node coerces non-string values on assignment; the assertion is erased.
+                process.env[newEnvKey] = newValue as string;
                 delete process.env[oldEnvKey];
                 console.warn(color.yellow(`Warning: Using a deprecated environment variable: ${oldEnvKey}. Please use ${newEnvKey} instead.`));
                 console.log(`Redirecting ${color.blue(oldEnvKey)}=${oldValue} -> ${color.blue(newEnvKey)}=${newValue}`);
@@ -285,7 +294,7 @@ export function addMissingConfigValues(configPath) {
  * Performs early initialization tasks before the server starts.
  * @param {string} configPath Path to config.yaml
  */
-export function initConfig(configPath) {
+export function initConfig(configPath: string): void {
     console.log('Using config path:', color.green(configPath));
     setConfigFilePath(configPath);
     addMissingConfigValues(configPath);
