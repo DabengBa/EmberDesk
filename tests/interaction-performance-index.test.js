@@ -34,7 +34,7 @@ import { parse as parseCharacterCard, write as writeCharacterCardPngData } from 
 import {
     markCanonicalWorldInfoBookDeleted,
     upsertCanonicalWorldInfoBook,
-} from '../src/endpoints/world-info-store.js';
+} from '../src/endpoints/world-info-store.ts';
 import encodePngChunks from '../src/png/encode.js';
 import { setConfigFilePath } from '../src/util.js';
 import { getCanonicalSettingsDocument, upsertCanonicalSettingsDocument } from '../src/endpoints/settings-store.js';

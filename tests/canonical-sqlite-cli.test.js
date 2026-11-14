@@ -16,7 +16,7 @@ import { recordProjectionRepair } from '../src/endpoints/character-store.js';
 import {
 
     upsertCanonicalWorldInfoBook,
-} from '../src/endpoints/world-info-store.js';
+} from '../src/endpoints/world-info-store.ts';
 import { recordWorldProjectionIntent } from '../src/canonical-world-info-projection.js';
 import {
     recordSecretProjectionRepair,

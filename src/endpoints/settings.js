@@ -6,7 +6,7 @@ import { getFileNameValidationFunction } from '../middleware/validateFileName.js
 import { getDefaultTemplateFile } from './content-manager.js';
 import { getCanonicalPresetsReadState } from './presets.js';
 import { getCanonicalWorldInfoReadState } from './worldinfo.js';
-import { listCanonicalWorldInfoBooks } from './world-info-store.js';
+import { listCanonicalWorldInfoBooks } from './world-info-store.ts';
 import { canonicalSqliteManager, withCanonicalTransaction } from '../canonical-sqlite.js';
 import { runCanonicalMigrations } from '../canonical-sqlite-migrations.js';
 import { getPersistedCanonicalAuditStatus } from '../canonical-sqlite-shadow-import.js';

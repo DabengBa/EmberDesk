@@ -681,7 +681,7 @@ describe('canonical settings route integration', () => {
         // Seed a DB-only world book: no worlds/*.json exists, so a directory
         // scan would produce an empty list while canonical storage has the row.
         const { canonicalSqliteManager } = await import('../src/canonical-sqlite.js');
-        const { upsertCanonicalWorldInfoBook } = await import('../src/endpoints/world-info-store.js');
+        const { upsertCanonicalWorldInfoBook } = await import('../src/endpoints/world-info-store.ts');
         const { persistCanonicalAuditStatus } = await import('../src/canonical-sqlite-shadow-import.js');
         const db = canonicalSqliteManager.open({
             handle: 'alice',

@@ -260,7 +260,7 @@ Full World Info is no longer an active planning question.
 Current delivered foundation:
 
 - `src/canonical-sqlite-migrations.js` now includes the `world_info_authority` migration with `world_books`, `world_book_entries`, and `world_info_projection_repairs`.
-- `src/endpoints/world-info-store.js` owns canonical World Info row normalization to projection-safe file ids, route-compatible list/get payload reconstruction, DB-first write helpers, and open projection-repair listing.
+- `src/endpoints/world-info-store.ts` owns canonical World Info row normalization to projection-safe file ids, route-compatible list/get payload reconstruction, DB-first write helpers, and open projection-repair listing.
 - `src/canonical-world-info-shadow-import.js` imports existing `worlds/*.json` files idempotently, audits DB/file projection drift, and persists `canonical_audit_state` scope `world_info` as the fail-closed read/write gate.
 - `src/endpoints/worldinfo.js` serves `/api/worldinfo/list` and `/get` from canonical SQLite; init-frozen or blocked slices return structured 503 `canonical_storage_unavailable` responses, and explicit operator file actions invalidate `world_info` audit state.
 - `/api/worldinfo/import`, `/edit`, and `/delete` can commit canonical SQLite first behind canonical write flags, then project compatibility JSON files; projection failure records `world_info_projection_repairs` rather than restoring JSON files as truth.
@@ -402,7 +402,7 @@ asset subdirectories (sprites, live2d) stay file-backed media, and only root-lev
 12. `full World Info canonical migration`
     - Depends on legacy-mode accelerator retirement.
     - Moves full World Info entries into canonical SQLite with compatibility-safe prompt, regex, import/export, and delete-cascade behavior.
-    - Current status: delivered via `src/endpoints/world-info-store.js`, `src/canonical-world-info-shadow-import.js`, `src/endpoints/worldinfo.js`, World Info projection repair support in `src/canonical-sqlite-operator.js`, and World Info audit/repair commands in the canonical SQLite scripts.
+    - Current status: delivered via `src/endpoints/world-info-store.ts`, `src/canonical-world-info-shadow-import.js`, `src/endpoints/worldinfo.js`, World Info projection repair support in `src/canonical-sqlite-operator.js`, and World Info audit/repair commands in the canonical SQLite scripts.
 
 13. `canonical storage control-plane generalization`
     - Depends on the delivered character and World Info patterns.

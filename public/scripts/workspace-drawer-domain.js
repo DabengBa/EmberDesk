@@ -15,7 +15,7 @@ const openedKeys                         = {
     WorldInfo: 'WINavOpened', RegexPanel: 'RegexNavOpened', SettingsPanel: 'SettingsNavOpened',
 };
 const lockedKeys                         = { 'left-nav-panel': 'LNavLockOn', 'right-nav-panel': 'NavLockOn' };
-const outsidePointerExclusions = '#character_cross, #avatar-and-name-block, #shadow_popup, .popup, #world_popup, .ui-widget, .text_pole, #toast-container, .wi-content-editor-modal';
+const outsidePointerExclusions = '#character_cross, #avatar-and-name-block, #shadow_popup, .popup, #world_popup, .ui-widget, .text_pole, #toast-container, .wi-content-editor-modal, dialog[data-local-dialog]';
 
 export function createWorkspaceDrawerService(ports                      ) {
     const guards = new Map                       ();

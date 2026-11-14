@@ -17,7 +17,7 @@ import { recordProjectionRepair } from '../src/endpoints/character-store.js';
 import {
     recordWorldInfoProjectionRepair,
     upsertCanonicalWorldInfoBook,
-} from '../src/endpoints/world-info-store.js';
+} from '../src/endpoints/world-info-store.ts';
 import { buildCharacterFileSnapshotRow } from '../src/endpoints/character-file-snapshot.js';
 import {
     explainCanonicalRolloutBlockers,

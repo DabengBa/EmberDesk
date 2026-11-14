@@ -47,6 +47,51 @@ test('format detection and conversion are owned by the import command', async ()
     expect(detectWorldInfoImportMetadata({ unrelated: true }).unsupported).toBe(true);
 });
 
+test('import acquires the shared owner before overwrite preparation or posting', async () => {
+    const { runWorldInfoFileImport } = await import('../public/scripts/world-info-import-command.js');
+    const run = jest.fn(async (_names, _operation, blocked) => blocked);
+    const prepare = jest.fn();
+    const post = jest.fn();
+    const result = await runWorldInfoFileImport({ name: 'book.json', size: 1 }, {}, {
+        parseJsonFile: async () => ({ entries: {} }), getWorldInfoImportBaseName: () => 'book',
+        getSanitizedFilename: async name => name, prepareWorldInfoImportOverwrite: prepare,
+        runDestructiveOperation: run, fetch: post, FormData: class { append() {} },
+        toastr: {}, t: (s, ...v) => String.raw({ raw: s }, ...v),
+    });
+    expect(result.status).toBe('cancelled');
+    expect(run).toHaveBeenCalledWith(['book'], expect.any(Function), expect.objectContaining({ status: 'cancelled' }));
+    expect(prepare).not.toHaveBeenCalled();
+    expect(post).not.toHaveBeenCalled();
+});
+
+
+test('overwrite keeps the session locked from deletion through failed import and releases it', async () => {
+    const { runWorldInfoFileImport } = await import('../public/scripts/world-info-import-command.js');
+    const { createWorldInfoWorkbenchSession } = await import('../public/scripts/world-info-workbench-service.js');
+    const session = createWorldInfoWorkbenchSession({ worldNames: ['book'], loadWorldInfo: async () => ({ entries: {} }) });
+    await session.selectWorldName('book');
+    const states = [];
+    session.setOperationListener(value => states.push(value));
+    let release, started;
+    const posted = new Promise(resolve => { started = resolve; });
+    const gate = new Promise(resolve => { release = resolve; });
+    const pending = runWorldInfoFileImport({ name: 'book.json', size: 1 }, {}, {
+        parseJsonFile: async () => ({ entries: {} }), getWorldInfoImportBaseName: () => 'book',
+        getSanitizedFilename: async name => name, prepareWorldInfoImportOverwrite: async () => 'deleted',
+        runDestructiveOperation: session.runDestructiveOperation,
+        fetch: async () => { started(); await gate; return { ok: false, status: 503 }; },
+        getRequestHeaders: () => ({}), FormData: class { append() {} },
+        toastr: { error: jest.fn() }, t: (s, ...v) => String.raw({ raw: s }, ...v),
+    });
+    await posted;
+    expect(states.at(-1)).toBe(true);
+    expect(await session.runDestructiveOperation(['book'], async () => true)).toBe(false);
+    release();
+    expect((await pending).status).toBe('failed');
+    expect(states.at(-1)).toBe(false);
+    expect(await session.runDestructiveOperation(['book'], async () => true)).toBe(true);
+});
+
 test('single import cancellation never posts and 413 reports a failed result', async () => {
     const { runWorldInfoFileImport } = await import('../public/scripts/world-info-import-command.js');
     const file = { name: 'book.json', size: 1 };

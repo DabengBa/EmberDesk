@@ -13,7 +13,7 @@ afterEach(() => {
     globalThis.toastr = originalToastr;
 });
 
-async function setup({ bound, deleteResult = true, responseOk = true }) {
+async function setup({ bound, deleteResult = true, responseOk = true, runDestructiveOperation }) {
     const { createWorldInfoBookUi } = await import('../public/scripts/world-info-book-ui.js');
     const { setWorldInfo } = await import('../public/scripts/world-info-state.js');
     const world_info = { charLore: [{ name: 'character', extraBooks: ['A'] }] };
@@ -36,11 +36,33 @@ async function setup({ bound, deleteResult = true, responseOk = true }) {
         Popup, POPUP_TYPE: { CONFIRM: 1 }, POPUP_RESULT: { NEGATIVE: 0, CUSTOM1: 2 },
         PopupUtils: { BuildTextWithHeader: () => '' }, buildCascadeSectionHtml: () => '',
         captureCascadeChoices: () => ({ deleteWorlds: ['A'] }),
-        showLocalDialog, flushDeletedWorldsFromUI: flush, saveSettingsDebounced: save, deleteWorldInfo: remove,
+        showLocalDialog, flushDeletedWorldsFromUI: flush, saveSettingsDebounced: save, deleteWorldInfo: remove, runDestructiveOperation,
     });
     return { ui, world_info, flush, save, remove, showLocalDialog };
 }
 
+test('cascade checks the shared owner for every selected book before the destructive request', async () => {
+    const run = jest.fn(async () => false);
+    const { ui, flush } = await setup({ bound: true, runDestructiveOperation: run });
+    expect(await ui.deleteCurrentWorldInfo()).toBe(false);
+    expect(run).toHaveBeenCalledWith(['A'], expect.any(Function));
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    expect(flush).not.toHaveBeenCalled();
+});
+
+test('duplicate cannot overwrite a book while the shared owner rejects the operation', async () => {
+    const { createWorldInfoBookUi } = await import('../public/scripts/world-info-book-ui.js');
+    const run = jest.fn(async () => false);
+    const save = jest.fn();
+    const ui = createWorldInfoBookUi({
+        getSelectedWorldInfoEditorName: () => 'A', loadWorldInfo: async () => ({ entries: {} }),
+        getFreeWorldName: () => 'copy', showLocalDialog: async () => ({ action: 'create', values: { name: 'B' } }),
+        saveWorldInfo: save, runDestructiveOperation: run, t,
+    });
+    expect(await ui.duplicateCurrentWorldInfo()).toBe(false);
+    expect(run).toHaveBeenCalledWith(['A', 'B'], expect.any(Function));
+    expect(save).not.toHaveBeenCalled();
+});
 test('cascade HTTP failure does not flush or report deletion success', async () => {
     const { ui, flush, remove } = await setup({ bound: true, responseOk: false });
     expect(await ui.deleteCurrentWorldInfo()).toBe(false);

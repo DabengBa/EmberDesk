@@ -17,6 +17,7 @@ export function TagChipInput({
     removeAriaLabel = (tag: string) => translate('Remove tag ${0}').replace('${0}', tag),
     inputProps,
     splitInput = (input: string) => input.split(','),
+    onPendingChange,
 }: {
     values: string[];
     onCommit: (values: string[]) => void;
@@ -26,10 +27,16 @@ export function TagChipInput({
     inputProps?: Record<string, string>;
     /** Complete tokens followed by the still-pending input. */
     splitInput?: (input: string) => string[];
+    onPendingChange?: (pending: string) => void;
 }) {
     useTranslated('');
     const [pending, setPending] = useState('');
     const inputRef = useRef<HTMLInputElement | null>(null);
+
+    const updatePending = (value: string) => {
+        onPendingChange?.(value);
+        setPending(value);
+    };
 
     const addValues = (parts: string[]) => {
         const next = [...values];
@@ -46,7 +53,7 @@ export function TagChipInput({
 
     const flushPending = () => {
         addValues([pending]);
-        setPending('');
+        updatePending('');
     };
 
     return (
@@ -83,16 +90,16 @@ export function TagChipInput({
                     const raw = event.target.value;
                     const nativeEvent = event.nativeEvent;
                     if ('isComposing' in nativeEvent && nativeEvent.isComposing) {
-                        setPending(raw);
+                        updatePending(raw);
                         return;
                     }
                     if (!raw.includes(',')) {
-                        setPending(raw);
+                        updatePending(raw);
                         return;
                     }
                     const pieces = splitInput(raw);
                     addValues(pieces.slice(0, -1));
-                    setPending((pieces[pieces.length - 1] ?? '').trimStart());
+                    updatePending((pieces[pieces.length - 1] ?? '').trimStart());
                 }}
                 onKeyDown={event => {
                     if (event.nativeEvent.isComposing) {

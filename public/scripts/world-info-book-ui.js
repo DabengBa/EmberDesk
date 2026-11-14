@@ -1,7 +1,7 @@
 import { world_info, world_names } from './world-info-state.js';
 
 /** Interactive book management and reference cascade feedback. */
-export function createWorldInfoBookUi({ getFreeWorldName, showLocalDialog, t, createNewWorldInfo, getSelectedWorldInfoEditorName, loadWorldInfo, download, renameWorldInfo, saveWorldInfo, updateWorldInfoList, selectWorldInfoEditorName, hideWorldEditor, getRequestHeaders, flushDeletedWorldsFromUI, saveSettingsDebounced, deleteWorldInfo }) {
+export function createWorldInfoBookUi({ getFreeWorldName, showLocalDialog, t, createNewWorldInfo, getSelectedWorldInfoEditorName, loadWorldInfo, download, renameWorldInfo, saveWorldInfo, updateWorldInfoList, selectWorldInfoEditorName, hideWorldEditor, getRequestHeaders, flushDeletedWorldsFromUI, saveSettingsDebounced, deleteWorldInfo, runDestructiveOperation = (_names, operation) => operation() }) {
     async function promptToCreateWorldInfo() {
         const tempName = getFreeWorldName();
         const result = await showLocalDialog({ scope: 'world-info', title: t`Create a new World Info`, fields: [{ name: 'name', type: 'text', label: t`Enter a name for the new file:`, value: tempName }], actions: [{ id: 'create', label: t`Create`, variant: 'primary' }, { id: 'cancel', label: t`Cancel` }], initialFocus: 'name' });
@@ -64,16 +64,20 @@ export function createWorldInfoBookUi({ getFreeWorldName, showLocalDialog, t, cr
             return false;
         }
 
-        await saveWorldInfo(finalName, data, true);
-        await updateWorldInfoList();
+        return runDestructiveOperation([worldName, finalName], async () => {
+            const latestData = await loadWorldInfo(worldName);
+            if (!latestData) return false;
+            await saveWorldInfo(finalName, latestData, true);
+            await updateWorldInfoList();
 
-        if (world_names.includes(finalName)) {
-            await selectWorldInfoEditorName(finalName);
-        } else {
-            await hideWorldEditor();
-        }
+            if (world_names.includes(finalName)) {
+                await selectWorldInfoEditorName(finalName);
+            } else {
+                await hideWorldEditor();
+            }
 
-        return true;
+            return true;
+        });
     }
 
     function removeDeletedWorldInfoAuxiliaryReferences(worldName) {
@@ -135,17 +139,19 @@ export function createWorldInfoBookUi({ getFreeWorldName, showLocalDialog, t, cr
             }
 
             if (result.values.clearReferences) {
-                const response = await fetch('/api/worldinfo/delete-cascade', {
-                    method: 'POST',
-                    headers: getRequestHeaders(),
-                    body: JSON.stringify({ worlds: deleteWorlds, clear_references: true }),
+                return runDestructiveOperation(deleteWorlds, async () => {
+                    const response = await fetch('/api/worldinfo/delete-cascade', {
+                        method: 'POST',
+                        headers: getRequestHeaders(),
+                        body: JSON.stringify({ worlds: deleteWorlds, clear_references: true }),
+                    });
+                    if (!response.ok) {
+                        toastr.error(t`Failed to delete World Info.`);
+                        return false;
+                    }
+                    await flushDeletedWorldsFromUI(deleteWorlds);
+                    return true;
                 });
-                if (!response.ok) {
-                    toastr.error(t`Failed to delete World Info.`);
-                    return false;
-                }
-                await flushDeletedWorldsFromUI(deleteWorlds);
-                return true;
             }
         } else {
             const confirmed = await showLocalDialog({ scope: 'world-info', title: t`Delete the World/Lorebook: "${worldName}"?`, message: t`This action is irreversible!`, actions: [{ id: 'delete', label: t`Delete`, variant: 'destructive' }, { id: 'cancel', label: t`Cancel` }], initialFocus: 'cancel' });

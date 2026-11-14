@@ -50,6 +50,8 @@ import {
     deleteCurrentWorldInfo,
     refreshCurrentWorldInfoEditor,
     selectWorldInfoWorkbenchEntry,
+    setWorldInfoSelectionBlocked,
+    setWorldInfoOperationListener,
     openWorldInfoEditor,
     updateWorldInfoWorkbenchEntryFields,
     getWorldInfoReactPanelState,
@@ -2945,6 +2947,8 @@ function getWorldInfoReactCommands() {
             deleteWorld: () => deleteCurrentWorldInfo(),
             refreshWorld: () => refreshCurrentWorldInfoEditor(),
             openEntry: uid => selectWorldInfoWorkbenchEntry(uid),
+            setSelectionBlocked: guard => setWorldInfoSelectionBlocked(guard),
+            setOperationListener: listener => setWorldInfoOperationListener(listener),
             updateEntryFields: (uid, fields, worldName) => updateWorldInfoWorkbenchEntryFields(uid, fields, worldName),
             clearSelectedEntry: () => selectWorldInfoWorkbenchEntry(''),
             setScanDepth: depth => updateWorldInfoScanDepth(depth),
@@ -2955,6 +2959,7 @@ function getWorldInfoReactCommands() {
             moveOrCopyEntry: uid => promptMoveOrCopyWorldInfoEntry(uid),
         },
         shouldRemount(result, commandName, args) {
+            if (commandName === 'setSelectionBlocked' || commandName === 'setOperationListener') return false;
             if (commandName === 'updateEntryFields') {
                 // The entry-row switch is the sole disable-only writer: remount so
                 // its state repaints from a fresh snapshot. Other field edits keep

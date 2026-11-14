@@ -2,7 +2,7 @@ import { runWorldInfoFileImport, runWorldInfoBatchImport } from './world-info-im
 import { createWorldInfoImportResult, summarizeWorldInfoBatchImport } from './world-info-import-results.js';
 
 /** World Info import presentation and command adapters; editor state remains in the session. */
-export function createWorldInfoImportUi({ getWorldNames, deleteWorldInfo, updateWorldInfoList, selectWorldInfoEditorName, eventSource, event_types, getSanitizedFilename, equalsIgnoreCaseAndAccents, checkOverwriteExistingData, escapeHtml, parseJsonFile, getFileBuffer, extractDataFromPng, getRequestHeaders, t, translate, showLocalDialog, beginLocalDialogOperation }) {
+export function createWorldInfoImportUi({ getWorldNames, deleteWorldInfo, updateWorldInfoList, selectWorldInfoEditorName, eventSource, event_types, getSanitizedFilename, equalsIgnoreCaseAndAccents, checkOverwriteExistingData, escapeHtml, parseJsonFile, getFileBuffer, extractDataFromPng, getRequestHeaders, t, translate, showLocalDialog, beginLocalDialogOperation, runDestructiveOperation }) {
     let worldInfoImportBusy = false;
     let worldInfoImportToast = null;
     function setWorldImportBusy(isBusy, { showToast = true } = {}) {
@@ -302,7 +302,8 @@ export function createWorldInfoImportUi({ getWorldNames, deleteWorldInfo, update
     async function importWorldInfo(file, options = {}) {
         return runWorldInfoFileImport(file, options, {
             parseJsonFile, getFileBuffer, extractDataFromPng, getWorldInfoImportBaseName,
-            getSanitizedFilename, prepareWorldInfoImportOverwrite, getRequestHeaders,
+            getSanitizedFilename, prepareWorldInfoImportOverwrite, getRequestHeaders, runDestructiveOperation,
+            getImportTargetNames: name => [...new Set([name, findExistingWorldInfoName(name)].filter(Boolean))],
             fetch, FormData, t, toastr,
             onImported: async (name, metadata) => {
                 await updateWorldInfoList();

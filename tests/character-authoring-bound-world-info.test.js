@@ -39,6 +39,11 @@ describe('bound World Info book resolution', () => {
 });
 
 describe('opening the bound book', () => {
+    test('does not report a bound book opened when the editor blocks selection', async () => {
+        await expect(openBoundWorldInfoBook({
+            boundName: 'Colony Lore', worldNames: ['Colony Lore'], openEditor: async () => false,
+        })).resolves.toBe('');
+    });
     test('opens exactly the selected book and reports it', async () => {
         const opened = [];
         const result = await openBoundWorldInfoBook({
@@ -94,10 +99,9 @@ describe('character authoring opens the currently bound World Info book', () => 
 
         expect(opener).toContain('await getWorldInfoShell().openWorldInfoPanel();');
         // The focused editor selection is what makes this "that book", not "the panel".
-        expect(opener).toContain('await selectWorldInfoEditorName(worldName);');
-        // Selection happens after the shell is open, and an unavailable book
-        // returns without selecting anything else.
-        expect(opener.indexOf('openWorldInfoPanel()')).toBeLessThan(opener.indexOf('selectWorldInfoEditorName(worldName)'));
+        expect(opener).toContain('if (!await selectWorldInfoEditorName(worldName)) return false;');
+        // A blocked selection must not reveal the wrong book.
+        expect(opener.indexOf('selectWorldInfoEditorName(worldName)')).toBeLessThan(opener.indexOf('openWorldInfoPanel()'));
         expect(opener).toContain('Lorebook \'${worldName}\' is not available in the world list.');
     });
 

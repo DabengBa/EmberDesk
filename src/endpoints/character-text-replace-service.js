@@ -5,7 +5,7 @@ import { listCanonicalCharactersBoundToWorld } from './character-store.js';
 import {
     getCanonicalWorldInfoBook,
     normalizeCanonicalWorldInfoName,
-} from './world-info-store.js';
+} from './world-info-store.ts';
 import {
     commitWorldBookWithProjectionIntent,
     replayWorldProjection,
