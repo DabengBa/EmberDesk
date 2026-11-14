@@ -38,7 +38,10 @@ TypeScript receives strict checking; this does not make all legacy server
 JavaScript type checked. The root tsconfig selects public/app/index.d.ts
 instead of broadly selecting src and root JavaScript. Real cross-boundary
 imports and JSDoc types can still bring server declarations into that graph;
-exclude rules do not cut transitive imports.
+exclude rules do not cut transitive imports. The frontend no-emit project also
+allows explicit `.ts` import extensions for those transitive server modules.
+`index.d.ts` explicitly imports the cookie-session type augmentation so its
+Express request fields are available independently of other entry points.
 
 ```bash
 pnpm run typecheck

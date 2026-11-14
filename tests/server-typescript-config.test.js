@@ -44,6 +44,33 @@ function compile(name, source, dependencies = {}) {
 }
 
 describe('server TypeScript compiler environment', () => {
+    test('the real frontend project checks transitive server TypeScript dependencies', () => {
+        const result = spawnSync(process.execPath, [compiler, '--project', path.join(repoRoot, 'tsconfig.json'), '--pretty', 'false'], {
+            cwd: repoRoot,
+            encoding: 'utf8',
+            timeout: 30_000,
+        });
+        if (result.error) {
+            throw result.error;
+        }
+        expect({ status: result.status, diagnostics: `${result.stdout}${result.stderr}` }).toEqual({ status: 0, diagnostics: '' });
+    });
+
+    test('server globals load cookie-session request and typed authentication fields independently', () => {
+        const result = compile('session', [
+            'declare const request: Express.Request;',
+            'if (request.session) {',
+            '  request.session.handle = "alice";',
+            '  request.session.version = null;',
+            '  request.session.touch = 123;',
+            '  // @ts-expect-error handle must not accept a number',
+            '  request.session.handle = 123;',
+            '}',
+        ].join('\n'));
+
+        expect(result).toEqual({ status: 0, diagnostics: '' });
+    });
+
     test('checks Node types and existing server globals without emitting files', () => {
         const result = compile('node', [
             "import { basename } from 'node:path';",

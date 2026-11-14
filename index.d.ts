@@ -1,4 +1,5 @@
 import { EventEmitter } from 'node:events';
+import type {} from 'cookie-session'; // Load its Express.Request augmentation.
 import { CsrfSyncedToken } from 'csrf-sync';
 import { UserDirectoryList, User } from './src/users.js';
 import { CommandLineArguments } from './src/command-line.js';
