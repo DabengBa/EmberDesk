@@ -127,7 +127,7 @@ describe('legacy tag association regression', () => {
     test('removing an absent tag does not delete the last association', () => {
         const source = fs.readFileSync(new URL('../public/scripts/tags.js', import.meta.url), 'utf8');
         const start = source.indexOf('function removeTagFromMap(');
-        const end = source.indexOf('\nfunction findTag(', start);
+        const end = source.indexOf('\n}', start) + 2;
         expect(start).toBeGreaterThanOrEqual(0);
         expect(end).toBeGreaterThan(start);
         const tagMap = { 'avatar.png': ['kept'] };
@@ -180,7 +180,7 @@ describe('folder navigation', () => {
             setCharacterTagFilterState: (...args) => calls.push(args),
             FILTER_STATES: { SELECTED: { key: 'SELECTED' } },
             DEFAULT_FILTER_STATE: 'UNDEFINED',
-            entitiesFilter: {},
+            requireCharacterTagsShellContext: () => ({ state: { entitiesFilter: {} } }),
         });
 
         choose(null, 'first');

@@ -1,19 +1,10 @@
 import { DOMPurify } from '../lib.js';
 
-import {
-    characters,
-    saveSettingsDebounced,
-    this_chid,
-    menu_type,
-    entitiesFilter,
-    printCharactersDebounced,
-    buildAvatarList,
-    DEFAULT_PRINT_TIMEOUT,
-} from '../script.js';
+import { requireCharacterTagsShellContext } from './character-tags-shell-context.js';
 import { eventSource, event_types } from './events.js';
 import { FILTER_TYPES, FILTER_STATES, DEFAULT_FILTER_STATE, isFilterState, FilterHelper } from './filters.js';
 
-import { download, parseJsonFile, uuidv4, equalsIgnoreCaseAndAccents, includesIgnoreCaseAndAccents, removeFromArray, getFreeName, findChar, escapeHtml } from './utils.js';
+import { download, parseJsonFile, uuidv4, equalsIgnoreCaseAndAccents, removeFromArray, getFreeName, findChar, escapeHtml } from './utils.js';
 import { power_user } from './power-user.js';
 
 import { POPUP_RESULT, POPUP_TYPE, Popup, callGenericPopup } from './popup.js';
@@ -73,7 +64,7 @@ function getFilterContext(_filterHelper) {
  * @returns {FilterHelper} The appropriate filter helper instance
  */
 function getFilterHelper(_listSelector) {
-    return entitiesFilter;
+    return requireCharacterTagsShellContext().state.entitiesFilter;
 }
 
 const ACTIONABLE_FILTER_STORAGE_KEYS = Object.freeze({
@@ -86,7 +77,7 @@ const ACTIONABLE_FILTER_STORAGE_KEYS = Object.freeze({
  * @returns {string|null} Storage key prefix or null if no persistence
  */
 function getFilterStorageKey(filterHelper) {
-    if (filterHelper === entitiesFilter) {
+    if (filterHelper === requireCharacterTagsShellContext().state.entitiesFilter) {
         return 'CharacterList';
     }
     return null;
@@ -98,7 +89,7 @@ function getFilterStorageKey(filterHelper) {
  * @returns {boolean} True if this is the main character list
  */
 function isMainCharacterList(filterHelper) {
-    return filterHelper === entitiesFilter;
+    return filterHelper === requireCharacterTagsShellContext().state.entitiesFilter;
 }
 
 /** @enum {number} */
@@ -238,13 +229,13 @@ let tagRevision = 0;
 const characterTagsService = createCharacterTagsService({
     getTags: () => tags,
     getMap: () => tag_map,
-    getCharacters: () => characters,
+    getCharacters: () => requireCharacterTagsShellContext().state.characters,
     equalNames: equalsIgnoreCaseAndAccents,
     newTag: name => newTag(name),
     changed: (messageTagsChanged) => {
         tagRevision++;
-        saveSettingsDebounced();
-        printCharactersDebounced();
+        requireCharacterTagsShellContext().saveSettingsDebounced();
+        requireCharacterTagsShellContext().printCharactersDebounced();
         if (messageTagsChanged) applyCharacterTagsToMessageDivs();
         for (const listener of tagListeners) listener();
     },
@@ -340,7 +331,7 @@ export function createTagManagementRuntime() {
         async pruneTags() {
             const assigned = new Set(Object.values(tag_map).flat());
             const unused = tags.filter(tag => !assigned.has(tag.id));
-            const avatars = new Set(characters.map(character => String(character.avatar)));
+            const avatars = new Set(requireCharacterTagsShellContext().state.characters.map(character => String(character.avatar)));
             const missing = Object.keys(tag_map).filter(key => !avatars.has(key));
             if (!unused.length && !missing.length) { toastr.info(t`No unused tags or references found.`); return; }
             const confirm = await Popup.show.confirm(t`Prune ${unused.length} tags and ${missing.length} references`, t`Are you sure you want to remove all unused tags and references to missing or deleted characters?`, { defaultResult: POPUP_RESULT.NEGATIVE });
@@ -377,13 +368,13 @@ export function createBulkTagEditorRuntime(avatarKeys) {
         },
         async importExistingTags() {
             for (const key of keys) {
-                const character = characters.find(item => item.avatar === key);
+                const character = requireCharacterTagsShellContext().state.characters.find(item => item.avatar === key);
                 if (character) await importTags(character, { importSetting: tag_import_setting.ONLY_EXISTING });
             }
         },
         async importAllTags() {
             for (const key of keys) {
-                const character = characters.find(item => item.avatar === key);
+                const character = requireCharacterTagsShellContext().state.characters.find(item => item.avatar === key);
                 if (character) await importTags(character, { importSetting: tag_import_setting.ALL });
             }
         },
@@ -412,10 +403,10 @@ let expanded_tags_cache = [];
  * @returns The filtered list of entities
  */
 function filterByTagState(entities, { globalDisplayFilters = false, subForEntity = undefined, filterHidden = true } = {}) {
-    return characterTagsService.filterEntities(entities, entitiesFilter.getFilterData(FILTER_TYPES.TAG), {
+    return characterTagsService.filterEntities(entities, requireCharacterTagsShellContext().state.entitiesFilter.getFilterData(FILTER_TYPES.TAG), {
         globalDisplayFilters, subForEntity, filterHidden,
-        search: entitiesFilter.getFilterData(FILTER_TYPES.SEARCH),
-        isTagged: (entity, id) => entitiesFilter.isElementTagged(entity, id),
+        search: requireCharacterTagsShellContext().state.entitiesFilter.getFilterData(FILTER_TYPES.SEARCH),
+        isTagged: (entity, id) => requireCharacterTagsShellContext().state.entitiesFilter.isElementTagged(entity, id),
     });
 }
 
@@ -435,7 +426,7 @@ function isBogusFolder(tag) {
  * @return {Tag[]} An array of open bogus folders
  */
 function getOpenBogusFolders() {
-    return entitiesFilter.getFilterData(FILTER_TYPES.TAG)?.selected
+    return requireCharacterTagsShellContext().state.entitiesFilter.getFilterData(FILTER_TYPES.TAG)?.selected
         .map(tagId => tags.find(x => x.id === tagId))
         .filter(isBogusFolder) ?? [];
 }
@@ -462,7 +453,7 @@ function chooseBogusFolder(source, tagId, remove = false) {
         tagId = getOpenBogusFolders().at(-1)?.id;
         remove = true;
     }
-    if (tagId) setCharacterTagFilterState(tagId, remove ? DEFAULT_FILTER_STATE : FILTER_STATES.SELECTED.key, entitiesFilter);
+    if (tagId) setCharacterTagFilterState(tagId, remove ? DEFAULT_FILTER_STATE : FILTER_STATES.SELECTED.key, requireCharacterTagsShellContext().state.entitiesFilter);
 }
 
 /**
@@ -490,7 +481,7 @@ function getTagBlock(tag, entities, hidden = 0, isUseless = false) {
     if (isUseless) template.addClass('useless');
 
     // Fill inline character images
-    buildAvatarList(template.find('.bogus_folder_avatars_block'), entities);
+    requireCharacterTagsShellContext().buildAvatarList(template.find('.bogus_folder_avatars_block'), entities);
 
     return template;
 }
@@ -577,7 +568,7 @@ function createTagMapFromList(listElement, key) {
 }
 
 export function getDraftTagIds() {
-    if (menu_type === 'create') return characterTagsService.getDraft();
+    if (requireCharacterTagsShellContext().state.menu_type === 'create') return characterTagsService.getDraft();
     const key = getTagKey();
     return key ? [...(tag_map[key] || [])] : [];
 }
@@ -613,8 +604,8 @@ function getTagsList(key, sort = true) {
  * Gets the current tag key based on the currently selected character
  */
 function getTagKey() {
-    if (this_chid !== undefined && menu_type === 'character_edit') {
-        return characters[this_chid].avatar;
+    if (requireCharacterTagsShellContext().state.this_chid !== undefined && requireCharacterTagsShellContext().state.menu_type === 'character_edit') {
+        return requireCharacterTagsShellContext().state.characters[requireCharacterTagsShellContext().state.this_chid].avatar;
     }
 
     return null;
@@ -637,9 +628,9 @@ export function getTagKeyForEntity(entityOrKey) {
 
     // Next lets check if its a valid character or character id, so we can swith it to its tag
     let character;
-    if (!character && characters.indexOf(x) >= 0) character = x; // Check for char object
-    if (!character && !isNaN(parseInt(entityOrKey))) character = characters[x]; // check if its a char id
-    if (!character) character = characters.find(y => y.avatar === x); // check if its a char key
+    if (!character && requireCharacterTagsShellContext().state.characters.indexOf(x) >= 0) character = x; // Check for char object
+    if (!character && !isNaN(parseInt(entityOrKey))) character = requireCharacterTagsShellContext().state.characters[x]; // check if its a char id
+    if (!character) character = requireCharacterTagsShellContext().state.characters.find(y => y.avatar === x); // check if its a char key
 
     if (character) {
         x = character.avatar;
@@ -695,7 +686,7 @@ export function getTagKeyForEntityElement(element) {
 export function searchCharByName(charName, { suppressLogging = false } = {}) {
     const entity = charName
         ? findChar({ name: charName })
-        : characters[this_chid];
+        : requireCharacterTagsShellContext().state.characters[requireCharacterTagsShellContext().state.this_chid];
     const key = getTagKeyForEntity(entity);
     if (!key) {
         if (!suppressLogging) toastr.warning(`Character ${charName} not found.`);
@@ -774,52 +765,6 @@ function removeTagFromMap(tagId, characterId = null) {
     return key ? characterTagsService.remove([key], [tagId], true) : false;
 }
 
-function findTag(request, resolve, listSelector) {
-    const skipIds = $(listSelector).find('.tag').map((_, el) => $(el).attr('id')).get();
-    const haystack = tags.filter(t => !skipIds.includes(t.id)).sort(compareTagsForSort).map(t => t.name);
-    const needle = request.term;
-    const hasExactMatch = haystack.findIndex(x => equalsIgnoreCaseAndAccents(x, needle)) !== -1;
-    const result = haystack.filter(x => includesIgnoreCaseAndAccents(x, needle));
-
-    if (request.term && !hasExactMatch) {
-        result.unshift(request.term);
-    }
-
-    resolve(result);
-}
-
-/**
- * Select a tag and add it to the list. This function is (mostly) used as an event handler for the tag selector control.
- *
- * @param {*} event - The event that fired on autocomplete select
- * @param {*} ui - An Object with label and value properties for the selected option
- * @param {*} listSelector - The selector of the list to print/add to
- * @param {object} param1 - Optional parameters for this method call
- * @param {PrintTagListOptions} [param1.tagListOptions] - Optional parameters for printing the tag list. Can be set to be consistent with the expected behavior of tags in the list that was defined before.
- * @returns {boolean} <c>false</c>, to keep the input clear
- */
-function selectTag(event, ui, listSelector, { tagListOptions = {} } = {}) {
-    let tagName = ui.item.value;
-    let tag = getTag(tagName);
-
-    // create new tag if it doesn't exist
-    if (!tag) {
-        tag = createNewTag(tagName);
-    }
-
-    // unfocus and clear the input
-    $(event.target).val('').trigger('input');
-
-    // Optional, check for multiple character ids being present.
-    const characterData = event.target.closest('#bulk_tags_div')?.dataset.characters;
-    const characterIds = characterData ? JSON.parse(characterData).characterIds : null;
-
-    addTagsToEntity(tag, characterIds, { tagListSelector: listSelector, tagListOptions: tagListOptions });
-
-    // need to return false to keep the input clear
-    return false;
-}
-
 /**
  * Get a list of existing tags matching a list of provided new tag names
  *
@@ -852,7 +797,7 @@ async function importTags(character, { importSetting = null } = {}) {
     const avatar = character.avatar;
     // Gather the tags to import based on the selected setting
     const tagNamesToImport = await handleTagImport(character, { importSetting });
-    if (!characters.some(item => item.avatar === avatar)) return false;
+    if (!requireCharacterTagsShellContext().state.characters.some(item => item.avatar === avatar)) return false;
     if (!tagNamesToImport?.length) {
         console.debug('No tags to import');
         return;
@@ -1231,7 +1176,7 @@ function onTagFilterClick(listElement) {
     // Update the tag's filter_state for the main character list (backward compatibility)
     if (existingTag && isMainCharacterList(filterHelper)) {
         existingTag.filter_state = state;
-        saveSettingsDebounced();
+        requireCharacterTagsShellContext().saveSettingsDebounced();
     }
 
     // Persist to storage for all contexts
@@ -1245,7 +1190,7 @@ function onTagFilterClick(listElement) {
     runTagFilters(listElement);
 
     // Focus the tag again we were at, if possible. To improve keyboard navigation
-    setTimeout(() => parent.find(`.tag[id="${tagId}"]`).trigger('focus'), DEFAULT_PRINT_TIMEOUT + 1);
+    setTimeout(() => parent.find(`.tag[id="${tagId}"]`).trigger('focus'), requireCharacterTagsShellContext().state.DEFAULT_PRINT_TIMEOUT + 1);
 
     updateTagFilterIndicator(listElement);
 }
@@ -1357,7 +1302,7 @@ function writeCharacterTagFilterState(tagId, nextState, filterHelper) {
  * @param {FilterHelper} [filterHelper] - Filter helper owning the list context
  * @returns {string} The applied filter state key
  */
-export function setCharacterTagFilterState(tagId, nextState, filterHelper = entitiesFilter) {
+export function setCharacterTagFilterState(tagId, nextState, filterHelper = requireCharacterTagsShellContext().state.entitiesFilter) {
     return writeCharacterTagFilterState(tagId, nextState, filterHelper);
 }
 
@@ -1368,7 +1313,7 @@ export function setCharacterTagFilterState(tagId, nextState, filterHelper = enti
  * @param {FilterHelper} [filterHelper] - Filter helper owning the list context
  * @returns {string} The resulting filter state key
  */
-export function cycleCharacterTagFilterState(tagId, filterHelper = entitiesFilter) {
+export function cycleCharacterTagFilterState(tagId, filterHelper = requireCharacterTagsShellContext().state.entitiesFilter) {
     const tagFilterData = filterHelper.getFilterData(FILTER_TYPES.TAG) ?? { selected: [], excluded: [] };
     const selected = Array.isArray(tagFilterData.selected) ? tagFilterData.selected : [];
     const excluded = Array.isArray(tagFilterData.excluded) ? tagFilterData.excluded : [];
@@ -1401,7 +1346,7 @@ export function openCharacterTagManager() {
  * @param {FilterHelper} [filterHelper] - Filter helper owning the list context
  * @returns {boolean} Whether an action was found and invoked
  */
-export function runCharacterTagFilterAction(tagId, filterHelper = entitiesFilter) {
+export function runCharacterTagFilterAction(tagId, filterHelper = requireCharacterTagsShellContext().state.entitiesFilter) {
     const actionableTags = [...Object.values(ACTIONABLE_TAGS), ...Object.values(InListActionable)];
     const tag = actionableTags.find(item => String(item.id) === String(tagId));
     if (!tag || typeof tag.action !== 'function') {
@@ -1529,35 +1474,12 @@ function updateTagFilterIndicator(filterSelector) {
 }
 
 
-function onTagInputFocus() {
-    // @ts-ignore
-    $(this).autocomplete('search', $(this).val());
-}
-
 function onCharacterCreateClick() {
     characterTagsService.setDraft([]);
 }
 
 export function applyTagsOnCharacterSelect(_chid = null) {
     // The legacy authoring form is hidden; React owns the visible editor.
-}
-
-/**
- * Create a tag input by enabling the autocomplete feature of a given input element. Tags will be added to the given list.
- *
- * @param {string} inputSelector - the selector for the tag input control
- * @param {string} listSelector - the selector for the list of the tags modified by the input control
- * @param {PrintTagListOptions} [tagListOptions] - Optional parameters for printing the tag list. Can be set to be consistent with the expected behavior of tags in the list that was defined before.
- */
-export function createTagInput(inputSelector, listSelector, tagListOptions = {}) {
-    $(inputSelector)
-        // @ts-ignore
-        .autocomplete({
-            source: (i, o) => findTag(i, o, listSelector),
-            select: (e, u) => selectTag(e, u, listSelector, { tagListOptions: tagListOptions }),
-            minLength: 0,
-        })
-        .on('focus', onTagInputFocus); // <== show tag list on click
 }
 
 async function onViewTagsListClick() {
@@ -1645,7 +1567,7 @@ function removeMissingTagFilters() {
     const openBogusFolderIds = new Set(getOpenBogusFolders().map(tag => tag.id));
     const isEmptyOpenBogusFolder = (tagId) => openBogusFolderIds.has(tagId) && !assignedTagIds.has(tagId);
 
-    for (const helper of [entitiesFilter]) {
+    for (const helper of [requireCharacterTagsShellContext().state.entitiesFilter]) {
         const { selected, excluded } = helper.getFilterData(FILTER_TYPES.TAG);
         let anyRemoved = false;
 
@@ -1833,7 +1755,7 @@ function extractCharacterAvatar(avatarSrc) {
 
 function restoreSavedTagFilters() {
     try {
-        loadFilterStatesForContext(entitiesFilter, 'CharacterList');
+        loadFilterStatesForContext(requireCharacterTagsShellContext().state.entitiesFilter, 'CharacterList');
     } catch (e) {
         console.warn('Failed to restore actionable filter states from account storage', e);
     }

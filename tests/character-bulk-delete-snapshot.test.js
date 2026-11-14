@@ -6,14 +6,10 @@ const fetchMock = jest.fn();
 const popupCalls = [];
 const captureCascadeChoices = jest.fn();
 const hideLoader = jest.fn();
+const waitUntilCondition = jest.fn();
 let popupResult = true;
 
-jest.unstable_mockModule('../public/script.js', () => ({
-    characterGroupOverlay: null, characters, getCharacters: jest.fn(), buildAvatarList: jest.fn(),
-    characterToEntity: jest.fn(), printCharactersDebounced: jest.fn(), deleteCharacter,
-    stopGeneration: jest.fn(), is_send_press: false, this_chid: undefined,
-    name2: 'neutral', neutralCharacterName: 'neutral', syncReactCharacterLibraryToolbarState: jest.fn(),
-}));
+
 jest.unstable_mockModule('../public/scripts/events.js', () => ({
     eventSource: { on: jest.fn(), emit: jest.fn(() => Promise.resolve()) }, event_types: {},
 }));
@@ -32,10 +28,11 @@ jest.unstable_mockModule('../public/scripts/popup.js', () => ({
 jest.unstable_mockModule('../public/scripts/world-cascade-dialog.js', () => ({
     buildCascadeSectionHtml: jest.fn(worldInfos => worldInfos.length ? '<div>worlds</div>' : null), captureCascadeChoices,
 }));
-jest.unstable_mockModule('../public/scripts/utils.js', () => ({ waitUntilCondition: jest.fn() }));
+jest.unstable_mockModule('../public/scripts/utils.js', () => ({ waitUntilCondition }));
 jest.unstable_mockModule('../public/scripts/constants.js', () => ({ debounce_timeout: { extended: 1 } }));
 jest.unstable_mockModule('../public/scripts/tags.js', () => ({
-    createTagInput: jest.fn(), getTagKeyForEntity: jest.fn(), getTagsList: jest.fn(), printTagList: jest.fn(),
+    createBulkTagEditorRuntime: jest.fn(), openCharacterTagManager: jest.fn(),
+    getTagKeyForEntity: jest.fn(), getTagsList: jest.fn(), printTagList: jest.fn(),
     tag_map: {}, compareTagsForSort: jest.fn(), removeTagFromMap: jest.fn(), importTags: jest.fn(), tag_import_setting: {},
 }));
 jest.unstable_mockModule('../public/scripts/i18n.js', () => ({
@@ -44,10 +41,15 @@ jest.unstable_mockModule('../public/scripts/i18n.js', () => ({
 }));
 
 const { BulkEditOverlay } = await import('../public/scripts/BulkEditOverlay.js');
+const { registerCharacterLifecycleShellContext } = await import('../public/scripts/character-lifecycle-shell-context.js');
 const { resolveCharacterAvatarsByIds } = await import('../public/scripts/character-list-state.js');
 const overlay = new BulkEditOverlay();
 
 beforeEach(() => {
+    registerCharacterLifecycleShellContext({
+        state: { get characters() { return characters; }, is_send_press: false, this_chid: undefined, name2: 'neutral', neutralCharacterName: 'neutral' },
+        deleteCharacter, stopGeneration: jest.fn(), syncReactCharacterLibraryToolbarState: jest.fn(),
+    });
     characters.splice(0, characters.length);
     overlay.selectedCharacters.length = 0;
     popupCalls.length = 0;
@@ -121,6 +123,29 @@ test('cancel confirmation never deletes', async () => {
     expect(popupCalls).toHaveLength(1);
     expect(deleteCharacter).not.toHaveBeenCalled();
     expect(hideLoader).not.toHaveBeenCalled();
+});
+
+test('wait condition observes the live send state before deleting', async () => {
+    let sending = true;
+    const stopGeneration = jest.fn();
+    const observed = [];
+    registerCharacterLifecycleShellContext({
+        state: { get characters() { return characters; }, get is_send_press() { return sending; }, this_chid: undefined, name2: 'neutral', neutralCharacterName: 'neutral' },
+        deleteCharacter, stopGeneration, syncReactCharacterLibraryToolbarState: jest.fn(),
+    });
+    waitUntilCondition.mockImplementation(async check => {
+        observed.push(check());
+        sending = false;
+        observed.push(check());
+    });
+    characters.push({ avatar: 'a.png', name: 'Alpha' });
+    overlay.selectedCharacters.push(0);
+    fetchMock.mockResolvedValue({ ok: true, json: async () => ({ worldInfos: [] }) });
+    await overlay.handleContextMenuDelete();
+    expect(stopGeneration).toHaveBeenCalledTimes(1);
+    expect(waitUntilCondition).toHaveBeenCalledTimes(1);
+    expect(observed).toEqual([false, true]);
+    expect(deleteCharacter).toHaveBeenCalledTimes(1);
 });
 
 test('preflight failure degrades gracefully and passes chat and world options to deletion', async () => {

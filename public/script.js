@@ -283,10 +283,12 @@ import {
 } from './scripts/generation-service.js';
 import {
     createOrEditCharacter,
+    duplicateCharacter as duplicateCharacterInLifecycle,
     deleteCharacter,
     openCharacterWorldPopup,
     renameCharacter,
     saveCharacterAuthoringFromPayload,
+    selectCharacterById as selectCharacterInLifecycle,
     select_selected_character,
 } from './scripts/character-lifecycle-service.js';
 import {
@@ -359,6 +361,7 @@ export {
 };
 import { createGenerationBootstrapAdmission, createGenerationRuntimeBootstrap, getGenerationLifecycleService, installGenerationLifecycleService, registerGenerationShellContext } from './scripts/generation-shell-context.js';
 import { registerCharacterLifecycleShellContext } from './scripts/character-lifecycle-shell-context.js';
+import { registerCharacterTagsShellContext } from './scripts/character-tags-shell-context.js';
 import {
     clearChat,
     closeCurrentChatForDelete,
@@ -526,6 +529,7 @@ registerWorldInfoShellContext({
     getRequestHeaders: (options) => getRequestHeaders(options),
     getChatMetadata: () => chat_metadata,
     getCurrentCharacterId: () => this_chid,
+    getCharacterWorldDraftIdentity: () => characterWorldDraftIdentity,
     getCharacters: () => characters,
     saveCharacterDebounced: () => saveCharacterDebounced(),
     getMenuType: () => menu_type,
@@ -782,6 +786,19 @@ registerChatOpsShellContext({
     get POPUP_TYPE() { return POPUP_TYPE; },
 });
 
+registerCharacterTagsShellContext({
+    state: {
+        get characters() { return characters; },
+        get this_chid() { return this_chid; },
+        get menu_type() { return menu_type; },
+        get entitiesFilter() { return entitiesFilter; },
+        get DEFAULT_PRINT_TIMEOUT() { return DEFAULT_PRINT_TIMEOUT; },
+    },
+    saveSettingsDebounced: (...args) => saveSettingsDebounced(...args),
+    printCharactersDebounced: (...args) => printCharactersDebounced(...args),
+    buildAvatarList: (...args) => buildAvatarList(...args),
+});
+
 registerCharacterLifecycleShellContext({
     state: {
         get settingsDocumentRevision() { return settingsDocumentRevision; },
@@ -790,8 +807,15 @@ registerCharacterLifecycleShellContext({
         get world_info() { return world_info; },
         get world_names() { return world_names; },
         get characters() { return characters; },
+        get characterGroupOverlay() { return characterGroupOverlay; },
+        get isChatSaving() { return isChatSaving; },
+        get selected_button() { return selected_button; },
+        set selected_button(value) { selected_button = value; },
+        get this_edit_mes_id() { return this_edit_mes_id; },
+        set this_edit_mes_id(value) { this_edit_mes_id = value; },
         get chat() { return chat; },
         get chat_metadata() { return chat_metadata; },
+        set chat_metadata(value) { chat_metadata = value; },
         get create_save() { return create_save; },
         get default_avatar() { return default_avatar; },
         get depth_prompt_depth_default() { return depth_prompt_depth_default; },
@@ -835,6 +859,16 @@ registerCharacterLifecycleShellContext({
     getCharacters: (...args) => getCharacters(...args),
     getCurrentCharacterAuthoringMode: (...args) => getCurrentCharacterAuthoringMode(...args),
     getCurrentCharacterAuthoringSource: (...args) => getCurrentCharacterAuthoringSource(...args),
+    getCharacterWorldDraftIdentity: () => characterWorldDraftIdentity,
+    setCharacterName: (...args) => setCharacterName(...args),
+    cancelTtsPlay: (...args) => cancelTtsPlay(...args),
+    getChat: (...args) => getChat(...args),
+    persistMainChatMessageListScrollSnapshotBeforeClear: (...args) => persistMainChatMessageListScrollSnapshotBeforeClear(...args),
+    closeWorkspaceChildSlotHost: (...args) => closeWorkspaceChildSlotHost(...args),
+    renderTemplateAsync: (...args) => renderTemplateAsync(...args),
+    deleteCharacter: (...args) => deleteCharacter(...args),
+    stopGeneration: (...args) => stopGeneration(...args),
+    syncReactCharacterLibraryToolbarState: (...args) => syncReactCharacterLibraryToolbarState(...args),
     getFirstMessage: (...args) => getFirstMessage(...args),
     getOneCharacter: (...args) => getOneCharacter(...args),
     getPastCharacterChats: (...args) => getPastCharacterChats(...args),
@@ -2249,6 +2283,10 @@ function getCurrentCharacterAuthoringMode() {
     return $('#form_create').attr('actiontype') === 'editcharacter' ? 'edit' : 'create';
 }
 
+// Session identity, not card object identity: card refreshes are allowed while
+// leaving and reopening the same editor invalidates its outstanding dialog.
+let characterWorldDraftIdentity = {};
+
 function getCurrentCharacterAuthoringSource() {
     return getCurrentCharacterAuthoringMode() === 'edit' && this_chid !== undefined && characters[this_chid]
         ? characters[this_chid]
@@ -2632,11 +2670,13 @@ function getCharacterAuthoringReactCommands() {
                 return false;
             },
             openWorldInfo: async payload => {
+                const identity = characterWorldDraftIdentity;
                 applyCharacterAuthoringSaveModel(payload, { submit: false });
                 // Popups operate on cloned templates + create_save/characters[chid].data
                 // and read the form via FormData — all fine while #form_create stays
                 // hidden. Unhiding would flash the legacy editor under the React panel.
                 await openCharacterWorldPopup();
+                if (identity !== characterWorldDraftIdentity) return false;
                 // The popup writes back to legacy stores; pull them into the React
                 // draft so the remount doesn't lose popup edits.
                 syncAuthoringDraftFromPopups(payload?.draft);
@@ -4626,44 +4666,8 @@ export function setActiveCharacter(entityOrKey) {
  * @param {boolean} [options.switchMenu=true] Whether to switch the right menu to the character edit menu if the character is already selected.
  * @returns {Promise<void>} A promise that resolves when the character is switched.
  */
-export async function selectCharacterById(id, { switchMenu = true } = {}) {
-    if (characters[id] === undefined) {
-        return;
-    }
-
-    if (isChatSaving) {
-        toastr.info(t`Please wait until the chat is saved before switching characters.`, t`Your chat is still saving...`);
-        return;
-    }
-
-    if (String(this_chid) !== String(id)) {
-        //if clicked on a different character from what was currently selected
-        if (!is_send_press) {
-            persistMainChatMessageListScrollSnapshotBeforeClear();
-            await clearChat({ clearData: true });
-            setCharacterId(undefined);
-            setCharacterName('');
-            cancelTtsPlay();
-            this_edit_mes_id = undefined;
-            selected_button = 'character_edit';
-            setCharacterId(id);
-            chat_metadata = {};
-            await getChat();
-            // On narrow screens the authoring drawer covers the chat surface
-            // after selecting a character. Leave the chat entry points usable;
-            // desktop keeps the existing authoring-panel behavior.
-            if (window.matchMedia('(max-width: 640px)').matches) {
-                closeWorkspaceChildSlotHost('right-nav-panel');
-            }
-        }
-    } else {
-        //if clicked on character that was already selected
-        if (switchMenu) {
-            selected_button = 'character_edit';
-        }
-        await unshallowCharacter(this_chid);
-        select_selected_character(this_chid, { switchMenu });
-    }
+export async function selectCharacterById(id, options) {
+    return selectCharacterInLifecycle(id, options);
 }
 
 /**
@@ -6978,53 +6982,8 @@ function addChatsSeparator(mesSendString) {
  * @param {boolean} [options.silent=false] - Whether to skip the confirmation popup
  * @returns {Promise<string>} The avatar key of the duplicated character, or empty string if cancelled/failed
  */
-export async function duplicateCharacter({ avatar = null, silent = false } = {}) {
-    // Determine the character to duplicate
-    let targetAvatar;
-    if (avatar) {
-        const character = characters.find(c => c.avatar === avatar);
-        if (!character) {
-            toastr.warning(t`Character not found: ${avatar}`);
-            return '';
-        }
-        targetAvatar = avatar;
-    } else {
-        if (this_chid === undefined || !characters[this_chid]) {
-            toastr.warning(t`You must first select a character to duplicate!`);
-            return '';
-        }
-        targetAvatar = characters[this_chid].avatar;
-    }
-
-    // Show confirmation unless silent
-    if (!silent) {
-        const confirmMessage = $(await renderTemplateAsync('duplicateConfirm'));
-        const confirm = await callGenericPopup(confirmMessage, POPUP_TYPE.CONFIRM);
-
-        if (!confirm) {
-            console.log('User cancelled duplication');
-            return '';
-        }
-    }
-
-    const body = { avatar_url: targetAvatar };
-    const response = await fetch('/api/characters/duplicate', {
-        method: 'POST',
-        headers: getRequestHeaders(),
-        body: JSON.stringify(body),
-    });
-
-    if (!response.ok) {
-        toastr.error(t`Failed to duplicate character`);
-        return '';
-    }
-
-    toastr.success(t`Character Duplicated`);
-    const data = await response.json();
-    await eventSource.emit(event_types.CHARACTER_DUPLICATED, { oldAvatar: targetAvatar, newAvatar: data.path });
-    await getCharacters();
-
-    return data.path;
+export async function duplicateCharacter(options) {
+    return duplicateCharacterInLifecycle(options);
 }
 
 function setInContextMessages(msgInContextCount, _type) {
@@ -7298,6 +7257,7 @@ function resetChatStateWithOptions({ clearCharacters = true } = {}) {
 
 /** @param {'characters' | 'character_edit' | 'create'} value */
 export function setMenuType(value) {
+    if (menu_type !== value) characterWorldDraftIdentity = {};
     menu_type = value;
     // Allow custom CSS to see which menu type is active
     document.getElementById('right-nav-panel').dataset.menuType = menu_type;
@@ -7312,6 +7272,7 @@ export function setExternalAbortController(controller) {
  * @param {number|string|undefined} value
  */
 export function setCharacterId(value) {
+    const previousId = this_chid;
     switch (typeof value) {
         case 'bigint':
         case 'number':
@@ -7330,6 +7291,7 @@ export function setCharacterId(value) {
             console.error('Invalid character ID type:', value);
             break;
     }
+    if (previousId !== this_chid) characterWorldDraftIdentity = {};
 }
 
 export function setCharacterName(value) {

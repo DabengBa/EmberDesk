@@ -553,22 +553,7 @@ export function forceCharacterEditorTokenize() {
 }
 
 jQuery(() => {
-    const adjustAutocompleteDebounced = debounce(() => {
-        $('.ui-autocomplete-input').each(function () {
-            const instance = $(this).autocomplete('instance');
-            if (!instance) {
-                return;
-            }
-
-            const isOpen = instance.widget()[0].style.display !== 'none';
-            if (isOpen) {
-                $(this).autocomplete('search');
-            }
-        });
-    });
-
     $(window).on('resize', async () => {
-        adjustAutocompleteDebounced();
         setHotswapsDebounced();
     });
 });

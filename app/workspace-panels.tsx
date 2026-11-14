@@ -65,6 +65,7 @@ import { MainChatMessageListWorkspacePanel } from './components/main-chat/MainCh
 import { WorkspacePanelChrome } from './components/panels/WorkspacePanelChrome';
 import { ChatComposer, type ChatComposerProps } from './components/composer/ChatComposer';
 import { CharacterPopup } from './components/character-popup/CharacterPopup';
+import { CharacterWorldInfoEditor, type CharacterWorldInfoEditorProps } from './components/character-world-info/CharacterWorldInfoEditor';
 import { RightNavPanel, type CharacterSortSelection } from './components/right-nav/RightNavPanel';
 export { createWorkspaceDrawerService, updateCharacterSearchSort } from './lib/workspace-drawer-service';
 export { createHistoryPanelController, createHistoryDisplayCommand, createExportPopupController, createExportPopupDismissal, projectHistoryChats, mergeAttachmentFiles } from './lib/history-panel-service';
@@ -985,6 +986,11 @@ export function mountBulkTagEditor(
             onOpenTagManager={options.onOpenTagManager}
         />,
     );
+    return () => unmountSmallPanel(container);
+}
+
+export function mountCharacterWorldInfoEditor(container: HTMLElement, props: CharacterWorldInfoEditorProps) {
+    mountSmallPanel(container, <CharacterWorldInfoEditor {...props} />);
     return () => unmountSmallPanel(container);
 }
 
