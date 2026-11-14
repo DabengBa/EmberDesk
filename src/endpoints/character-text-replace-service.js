@@ -15,7 +15,7 @@ import {
     openCanonicalChatForTextReplace,
     writeCanonicalChatForTextReplace,
 } from './chats.js';
-import { readCanonicalChatVersionedPayload } from './canonical-chat-read-service.js';
+import { readCanonicalChatVersionedPayload } from './canonical-chat-read-service.ts';
 
 const MAX_SAMPLE_COUNT = 3;
 const SAMPLE_CONTEXT_RADIUS = 40;
