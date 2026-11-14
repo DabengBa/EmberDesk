@@ -136,6 +136,11 @@ router and text-replace service use explicit `.ts` imports; their dependency
 factories and import callbacks consume these types through JSDoc. The import
 coordinator remains JavaScript and uses the existing route callbacks.
 
+`src/endpoints/character-store.ts` is the sole canonical character store
+implementation. Its JavaScript callers import the real `.ts` extension; its
+types describe existing SQLite rows and payload use without adding validation
+or changing canonical reads, statistics, writes, or projection repairs.
+
 The migration preserves canonical availability and strict errors, conditional
 card replacement, authority-commit/projection/repair ordering, and upload
 cleanup. Focused read/write, replacement, import, and route tests cover those

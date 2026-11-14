@@ -25,7 +25,7 @@ import {
 import {
     clearCanonicalCharacterWorldBinding,
     listCanonicalCharactersBoundToWorld,
-} from './character-store.js';
+} from './character-store.ts';
 
 function getRequestHandle(request) {
     return request.user?.profile?.handle ?? request.user?.handle ?? 'default-user';

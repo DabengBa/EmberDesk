@@ -58,7 +58,7 @@ import {
     scanCanonicalCharacterWorldBindings,
     upsertCanonicalCharacter,
     assertCanonicalCharacterCardCurrent,
-} from './character-store.js';
+} from './character-store.ts';
 import { getCanonicalWorldInfoBook, normalizeCanonicalWorldInfoName } from './world-info-store.js';
 import { mutateCharacterMediaAuthorizationInTransaction } from './settings-store.js';
 import {

@@ -16,7 +16,7 @@ import {
     persistCanonicalAuditStatus,
     runCanonicalShadowImport,
 } from '../src/canonical-sqlite-shadow-import.js';
-import { recordProjectionRepair } from '../src/endpoints/character-store.js';
+import { recordProjectionRepair } from '../src/endpoints/character-store.ts';
 import { buildCharacterFileSnapshotRow } from '../src/endpoints/character-file-snapshot.js';
 
 const tempRoots = [];

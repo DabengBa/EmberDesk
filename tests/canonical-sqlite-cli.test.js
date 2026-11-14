@@ -12,7 +12,7 @@ import { runCanonicalShadowImport } from '../src/canonical-sqlite-shadow-import.
 import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
 import { runCanonicalManagedMediaShadowImport } from '../src/canonical-managed-media-shadow-import.js';
 import { runCanonicalChatShadowImport } from '../src/canonical-chat-shadow-import.js';
-import { recordProjectionRepair } from '../src/endpoints/character-store.js';
+import { recordProjectionRepair } from '../src/endpoints/character-store.ts';
 import {
 
     upsertCanonicalWorldInfoBook,

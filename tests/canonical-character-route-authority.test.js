@@ -11,7 +11,7 @@ import { canonicalSqliteManager } from '../src/canonical-sqlite.js';
 import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
 import { auditCanonicalShadowImport } from '../src/canonical-sqlite-shadow-import.js';
 import { auditCanonicalChatShadowImport } from '../src/canonical-chat-shadow-import.js';
-import { markCanonicalCharacterDeleted, upsertCanonicalCharacter } from '../src/endpoints/character-store.js';
+import { markCanonicalCharacterDeleted, upsertCanonicalCharacter } from '../src/endpoints/character-store.ts';
 import {
     createCanonicalChatSessionRecord,
     upsertCanonicalChatSession,
