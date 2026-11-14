@@ -36,11 +36,9 @@
     }
   },
   "include": [
-    "src/**/*",
     "public/**/*",
     "app/**/*",
-    "*.js",
-    "*.ts"
+    "index.d.ts"
   ],
   "exclude": [
     "node_modules",

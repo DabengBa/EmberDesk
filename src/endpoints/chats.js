@@ -29,7 +29,7 @@ import {
     CHAT_IMPORT_UPLOAD_CLEANUP,
     createCharacterChatImportPlan,
 } from './chat-import-service.js';
-import { createChatBackupPlan } from './chat-backup-helpers.js';
+import { createChatBackupPlan } from './chat-backup-helpers.ts';
 import { getCanonicalStorageSlice } from '../canonical-storage-slice-registry.js';
 import { ensureCanonicalSliceBackend } from '../canonical-backend.js';
 import { getCanonicalStorageStatus, openCanonicalDatabase, withCanonicalTransaction } from '../canonical-sqlite.js';

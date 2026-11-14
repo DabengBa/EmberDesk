@@ -1069,10 +1069,8 @@ export async function bindLegacyShellHandlers() {
             if (messageElement.attr('is_user') == 'true' || (messageElement.attr('is_system') == 'true' && !isValidCharacter)) {
                 //handle user and system avatars
                 zoomedAvatarImgElement.attr('src', thumbURL);
-
             } else if (messageElement.attr('is_user') == 'false') { //handle char avatars
                 zoomedAvatarImgElement.attr('src', avatarSrc);
-
             }
             $(`.zoomed_avatar[forChar="${charname}"]`).css('display', 'flex');
 

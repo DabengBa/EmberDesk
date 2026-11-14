@@ -12,7 +12,7 @@ EmberDesk is a self-hosted browser LLM workspace forked from SillyTavern. The pr
 |---|---|
 | Runtime | Node.js 26.12.1 Current (`>=26.12.1 <27`) |
 | Package manager / scripts | pnpm 12.0.0-rc.5 (`packageManager`) |
-| Language | JavaScript ES modules (server `src/`) + TypeScript (frontend `app/`) |
+| Language | JavaScript ES modules with incremental native TypeScript (server `src/`) + TypeScript (frontend `app/`) |
 | Server | Express 5 |
 | Frontend | React 19 + TanStack Router/Query/Form + Zustand + Zod on a Vite-built app; legacy `public/` HTML/CSS/jQuery shell retained for not-yet-migrated surfaces |
 | Build | Vite 8 for `/lib.js`, React page app, and guarded React panel bundles |
@@ -25,6 +25,7 @@ EmberDesk is a self-hosted browser LLM workspace forked from SillyTavern. The pr
 - Read the relevant `.docs/tech/*.md` before changing accepted architecture.
 - Read `.docs/db/pages`, `.docs/db/features`, and `.docs/db/terms` before changing user-visible pages, features, or terms.
 - Read `.docs/tech/pnpm-workflow.md` for Node/pnpm/CI boundaries.
+- Read `.docs/tech/server-typescript.md` before migrating server modules or changing their Node/Jest execution path.
 - Read `.docs/tech/third-party-extension-compatibility.md` before touching regex, slash commands, world info regex editing, message rendering, or character-list DOM.
 
 ## Key Directories
@@ -59,6 +60,7 @@ pnpm run test:all
 pnpm run test:inventory
 pnpm run docs:check
 pnpm run docs:build
+pnpm run typecheck
 pnpm run lint
 ```
 

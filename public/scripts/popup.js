@@ -1,6 +1,5 @@
-
 import { shouldSendOnEnter } from './RossAscends-mods.js';
-import { t, translate } from './i18n.js';
+import { translate } from './i18n.js';
 import { toastPositionClasses } from './power-user.js';
 import { removeFromArray, runAfterAnimation, uuidv4 } from './utils.js';
 

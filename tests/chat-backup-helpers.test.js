@@ -4,7 +4,7 @@ import {
     createChatBackupPlan,
     normalizeChatBackupName,
     shouldApplyTotalChatBackupRetention,
-} from '../src/endpoints/chat-backup-helpers.js';
+} from '../src/endpoints/chat-backup-helpers.ts';
 
 describe('chat backup helpers', () => {
     test('normalizes backup names with the current sanitize and underscore policy', () => {

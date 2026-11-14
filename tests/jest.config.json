@@ -1,5 +1,6 @@
 {
     "verbose": true,
-    "transform": {},
+    "extensionsToTreatAsEsm": [".ts"],
+    "transform": { "^.+\\.ts$": "<rootDir>/helpers/jest-strip-typescript.cjs" },
     "testEnvironment": "node"
 }
