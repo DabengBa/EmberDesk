@@ -152,17 +152,15 @@ test('Popup crop keeps image selection and confirmed result', async ({ page }) =
     expect(await page.evaluate(() => window.cropPopupResult)).toMatch(/^data:image\/jpeg;base64,/);
     expect(await page.evaluate(() => window.cropPopup.cropData.want_resize)).toBe(true);
     await expect(page.locator('[data-react-popup-host]')).toHaveCount(0);
-    // A remaining compatibility consumer still needs a dropdown inside its popup.
+    // Character lore bindings now use React controls in the same popup runtime.
     await selectCharacter(page, 'Dev Character 044');
     await page.evaluate(async () => {
         const context = window.SillyTavern.getContext();
         window.$('#set_character_world').data('chid', context.characterId);
         window.lorebookPopup = (await import('/scripts/character-lifecycle-service.js')).openCharacterWorldPopup();
     });
-    await expect(page.locator('dialog[data-react-popup] .select2-container')).toBeVisible();
-    await page.locator('dialog[data-react-popup] .select2-selection').click();
-    await expect(page.locator('dialog[data-react-popup] .select2-dropdown')).toBeVisible();
-    await page.keyboard.press('Escape');
+    await expect(page.locator('dialog[data-react-popup]').getByRole('searchbox')).toBeVisible();
+    await expect(page.locator('dialog[data-react-popup] .select2-container')).toHaveCount(0);
     await page.keyboard.press('Escape');
     await page.evaluate(() => window.lorebookPopup);
     await expect(page.locator('[data-react-popup-host]')).toHaveCount(0);

@@ -1,19 +1,6 @@
 'use strict';
 
-import {
-    characterGroupOverlay,
-    characters,
-    getCharacters,
-    default_avatar,
-    getThumbnailUrl,
-    deleteCharacter,
-    stopGeneration,
-    is_send_press,
-    this_chid,
-    name2,
-    neutralCharacterName,
-    syncReactCharacterLibraryToolbarState,
-} from '../script.js';
+import { requireCharacterLifecycleShellContext } from './character-lifecycle-shell-context.js';
 
 import { eventSource, event_types } from './events.js';
 import { getRequestHeaders } from './request-context.js';
@@ -91,7 +78,7 @@ class CharacterContextMenu {
      * @param {Array<number>} selectedCharacters
      */
     static tag = (selectedCharacters) => {
-        characterGroupOverlay.bulkTagPopupHandler.show(selectedCharacters);
+        requireCharacterLifecycleShellContext().state.characterGroupOverlay.bulkTagPopupHandler.show(selectedCharacters);
     };
 
     /**
@@ -150,11 +137,11 @@ class CharacterContextMenu {
             mergeResponse.json().then(json => toastr.error(`Character not saved. Error: ${json.message}. Field: ${json.error}`));
             return;
         }
-        const current = characters.find(item => item?.avatar === data.avatar);
+        const current = requireCharacterLifecycleShellContext().state.characters.find(item => item?.avatar === data.avatar);
         if (current) {
             current.fav = newFavState;
             current.data.extensions.fav = newFavState;
-            void syncReactCharacterLibraryToolbarState();
+            void requireCharacterLifecycleShellContext().syncReactCharacterLibraryToolbarState();
         }
     };
 
@@ -167,10 +154,10 @@ class CharacterContextMenu {
      * @returns {Promise<void>}
      */
     static delete = async (characterKey, deleteChats = false) => {
-        await deleteCharacter(characterKey, { deleteChats: deleteChats });
+        await requireCharacterLifecycleShellContext().deleteCharacter(characterKey, { deleteChats: deleteChats });
     };
 
-    static #getCharacter = (characterId) => characters[characterId] ?? null;
+    static #getCharacter = (characterId) => requireCharacterLifecycleShellContext().state.characters[characterId] ?? null;
 
     /**
      * Show the context menu at the given position
@@ -291,14 +278,14 @@ class BulkTagPopupHandler {
 
     /** @param {number[]} characterIds */
     async show(characterIds) {
-        const selected = characterIds.map(id => ({ id, character: characters[id] })).filter(entry => entry.character?.avatar);
+        const selected = characterIds.map(id => ({ id, character: requireCharacterLifecycleShellContext().state.characters[id] })).filter(entry => entry.character?.avatar);
         if (!selected.length) return;
         this.hide();
         const generation = ++this.#generation;
         const avatarKeys = selected.map(entry => entry.character.avatar);
         const avatars = selected.map(({ id, character }) => ({
             id: String(id), name: character.name, isFav: Boolean(character.data?.extensions?.fav),
-            url: character.avatar === 'none' ? default_avatar : getThumbnailUrl('avatar', character.avatar),
+            url: character.avatar === 'none' ? requireCharacterLifecycleShellContext().state.default_avatar : requireCharacterLifecycleShellContext().getThumbnailUrl('avatar', character.avatar),
         }));
         this.#previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
         const popup = document.createElement('div');
@@ -723,7 +710,7 @@ class BulkEditOverlay {
      * @param {number} [countOverride] - optional override for a manual number to set
      */
     updateSelectedCount = () => {
-        void syncReactCharacterLibraryToolbarState();
+        void requireCharacterLifecycleShellContext().syncReactCharacterLibraryToolbarState();
     };
 
     /**
@@ -789,7 +776,7 @@ class BulkEditOverlay {
         }
 
         await Promise.allSettled(promises);
-        await getCharacters();
+        await requireCharacterLifecycleShellContext().getCharacters();
         await favsToHotswap();
         this.browseState();
     };
@@ -800,7 +787,7 @@ class BulkEditOverlay {
      * @returns {Promise<number>}
      */
     handleContextMenuDuplicate = () => Promise.all(this.selectedCharacters.map(async characterId => CharacterContextMenu.duplicate(characterId)))
-        .then(() => getCharacters())
+        .then(() => requireCharacterLifecycleShellContext().getCharacters())
         .then(() => this.browseState());
 
     /**
@@ -842,10 +829,10 @@ class BulkEditOverlay {
      * @returns {Promise<boolean>} Whether generation was stopped
      */
     static #stopGenerationAndWait = async () => {
-        if (is_send_press === false) return false;
-        stopGeneration();
+        if (requireCharacterLifecycleShellContext().state.is_send_press === false) return false;
+        requireCharacterLifecycleShellContext().stopGeneration();
         try {
-            await waitUntilCondition(() => is_send_press === false, debounce_timeout.extended, 10);
+            await waitUntilCondition(() => requireCharacterLifecycleShellContext().state.is_send_press === false, debounce_timeout.extended, 10);
         } catch {
             // Timeout — proceed anyway, the toastr in closeCurrentChatForDelete is non-blocking
         }
@@ -860,7 +847,7 @@ class BulkEditOverlay {
      */
     handleContextMenuDelete = async () => {
         const snapshot = this.selectedCharacters
-            .map(id => characters[id])
+            .map(id => requireCharacterLifecycleShellContext().state.characters[id])
             .filter(character => typeof character?.avatar === 'string' && character.avatar.length > 0)
             .map(character => ({ avatar: character.avatar, name: character.name }));
         const avatarList = snapshot.map(character => character.avatar);
@@ -870,7 +857,7 @@ class BulkEditOverlay {
         }
 
         // 1. Detect state before showing dialog
-        const inTempChat = this_chid === undefined && name2 === neutralCharacterName;
+        const inTempChat = requireCharacterLifecycleShellContext().state.this_chid === undefined && requireCharacterLifecycleShellContext().state.name2 === requireCharacterLifecycleShellContext().state.neutralCharacterName;
 
         // 2. Pre-fetch world info data (does NOT close chat or change state)
         let worldInfos = [];
@@ -951,7 +938,7 @@ class BulkEditOverlay {
 
         try {
             await BulkEditOverlay.#stopGenerationAndWait();
-            await deleteCharacter(avatarList, {
+            await requireCharacterLifecycleShellContext().deleteCharacter(avatarList, {
                 deleteChats,
                 deleteWorlds: capturedCascade.deleteWorlds,
                 clearWorldReferences: capturedCascade.clearWorldReferences,
@@ -981,7 +968,7 @@ class BulkEditOverlay {
      */
     clearSelectedCharacters = () => {
         this.selectedCharacters.length = 0;
-        void syncReactCharacterLibraryToolbarState();
+        void requireCharacterLifecycleShellContext().syncReactCharacterLibraryToolbarState();
     };
 }
 

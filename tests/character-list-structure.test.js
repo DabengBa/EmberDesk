@@ -184,7 +184,7 @@ describe('character list structure', () => {
 
     test('keeps character-detail management actions bridged through the legacy dropdown host', () => {
         const scriptSource = read('public/script.js');
-        const workspacePanelsSource = read('app/workspace-panels.tsx');
+        const workspacePanelsSource = read('app/components/authoring/AuthoringWorkspacePanel.tsx');
         const rightNavSource = read('app/components/right-nav/RightNavPanel.tsx');
         const commandsSource = read('app/compat/workspace-commands.ts');
 
@@ -245,13 +245,12 @@ describe('character list structure', () => {
         expect(resetSource).toContain('reactCharacterLibraryToolbarMounted = false;');
     });
 
-    test('keeps autocomplete resize handling safe before widgets finish initializing', () => {
+    test('removes retired autocomplete resize handling while retaining hotswap resizing', () => {
         const powerUserSource = read('public/scripts/power-user.js');
 
-        expect(powerUserSource).toContain('const instance = $(this).autocomplete(\'instance\');');
-        expect(powerUserSource).toContain('if (!instance) {');
-        expect(powerUserSource).toContain('const isOpen = instance.widget()[0].style.display !== \'none\';');
-        expect(powerUserSource).not.toContain('$(this).autocomplete(\'widget\')[0].style.display');
+        expect(powerUserSource).not.toContain('.autocomplete(');
+        expect(powerUserSource).not.toContain('.ui-autocomplete-input');
+        expect(powerUserSource).toContain('setHotswapsDebounced();');
     });
 
     test('keeps character-library runner samples aligned with measured repeats', () => {
@@ -550,9 +549,7 @@ describe('character list structure', () => {
         expect(scriptSource).toContain('setCharacterSearchBusy(false)');
         expect(scriptSource).toContain('renderCharacterListPageReact');
         expect(scriptSource).not.toContain('const desiredElementSet = new Set(desiredElements);');
-        expect(powerUserSource).toContain('const instance = $(this).autocomplete(\'instance\');');
-        expect(powerUserSource).toContain('if (!instance) {');
-        expect(powerUserSource).not.toContain('$(this).autocomplete(\'widget\')[0].style.display');
+        expect(powerUserSource).not.toContain('.autocomplete(');
         expect(rowSource).toContain('className="bulk_select_checkbox"');
         expect(rowSource).toContain('type="button"');
         expect(rowSource).toContain('aria-pressed={selected}');
@@ -567,7 +564,7 @@ describe('character list structure', () => {
         expect(overlaySource).not.toContain('character.setAttribute(\'aria-checked\'');
         expect(overlaySource).not.toContain('syncBulkSelectionDomState({');
         expect(overlaySource).toContain('this.state !== BulkEditOverlayState.select');
-        expect(overlaySource).toContain('void syncReactCharacterLibraryToolbarState();');
+        expect(overlaySource).toContain('void requireCharacterLifecycleShellContext().syncReactCharacterLibraryToolbarState();');
         expect(overlaySource).toContain('t`Delete ${count} characters?`');
         expect(overlaySource).toContain('deleteContext: { source: \'bulk\', selectedCount: count }');
         expect(overlaySource).not.toContain('${t`Delete`} ${count} ${t`characters?`}');
@@ -607,7 +604,7 @@ describe('character list structure', () => {
         expect(enableBulkSelectSource).toContain('$(\'#rm_print_characters_block\').addClass(\'bulk_select\')');
         expect(enableBulkSelectSource).toContain('$(document).off(\'click.bulkSelectCheckbox\').on(\'click.bulkSelectCheckbox\'');
         expect(bulkEditSource).toContain('if (is_bulk_edit) {');
-        expect(bulkEditSource).toContain('characterGroupOverlay.onPageLoad();');
+        expect(bulkEditSource).toContain('overlay().onPageLoad();');
         expect(bulkEditSource).toContain('$(\'#bulkSelectedCount\').css(\'display\', \'inline-flex\')');
         expect(disableBulkSelectSource).toContain('$(\'.bulk_select_checkbox\').remove()');
         expect(disableBulkSelectSource).toContain('$(\'#rm_print_characters_block .character_select\').removeAttr(\'role\')');
@@ -626,14 +623,14 @@ describe('character list structure', () => {
         const disableBulkEditSource = extractFunctionSource(bulkEditSource, 'disableBulkEdit');
 
         expect(overlaySource).toContain('static bulkDeleteButtonId = \'bulkDeleteButton\'');
-        expect(overlaySource).toContain('void syncReactCharacterLibraryToolbarState();');
+        expect(overlaySource).toContain('void requireCharacterLifecycleShellContext().syncReactCharacterLibraryToolbarState();');
         expect(toolbarSource).toContain('character-library-bulk-selected-count');
         expect(toolbarSource).toContain('disabled={state.bulkSelectedCount === 0}');
         expect(read('public/scripts/character-list-state.js')).toContain('deleteButton.setAttribute(\'tabindex\', \'0\')');
-        expect(enableBulkEditSource).toContain('characterGroupOverlay.updateSelectedCount(0)');
-        expect(enableBulkEditSource).not.toContain('characterGroupOverlay.updateBulkActionStates(0)');
-        expect(disableBulkEditSource).toContain('characterGroupOverlay.updateSelectedCount(0)');
-        expect(disableBulkEditSource).not.toContain('characterGroupOverlay.updateBulkActionStates(0)');
+        expect(enableBulkEditSource).toContain('overlay().updateSelectedCount(0)');
+        expect(enableBulkEditSource).not.toContain('overlay().updateBulkActionStates(0)');
+        expect(disableBulkEditSource).toContain('overlay().updateSelectedCount(0)');
+        expect(disableBulkEditSource).not.toContain('overlay().updateBulkActionStates(0)');
         expect(deleteButtonSource).toContain('if ($(\'#bulkDeleteButton\').hasClass(\'disabled\'))');
         expect(deleteButtonSource).toContain('return;');
         expect(deleteButtonSource).toContain('Reuse the overlay\'s delete flow; it also no-ops when selection is empty.');

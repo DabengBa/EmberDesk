@@ -10,7 +10,7 @@ topic: openai-helpers
 
 `public/scripts/openai-provider-capabilities.js` owns the first pure helper boundary for OpenAI-style chat-completion provider decisions. It accepts explicit settings-like inputs and returns derived values for model selection, reasoning effort, verbosity, media capability descriptors, and effective media inlining support.
 
-`public/scripts/openai.js` remains the compatibility layer. It owns global reads, DOM bindings, request assembly, feature flag updates, logs, UI side effects, and existing exported wrapper names.
+`public/scripts/openai.js` remains the compatibility layer for request assembly and existing exported wrapper names. Workspace state and actions are supplied through the installed live context. Capability queries remain available; the retired DOM feature-flag updates and provider input bindings no longer run here.
 
 ## Architecture And Constraints
 

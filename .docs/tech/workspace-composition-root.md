@@ -24,6 +24,11 @@ The frontend migration gap slice moves the following responsibilities to their d
 | Generation callers and session coordination | One `createGenerationCallerService(ports)` instance from `public/scripts/generation-caller-service.js` | Stable `Generate`, quiet/raw, regenerate and synchronous stop exports delegate to that instance; the existing generation executor remains the only execution owner |
 | Reasoning message access and formatting | `public/scripts/reasoning.js`, existing `message-service.js` and `message-shell-context.js` | Reasoning reads current chat/API/substitution/save capabilities lazily through the existing message context; formatter and message updater are imported from their domain owner, not the root |
 | Legacy message-action motion, dialogue masks and chat scrolling | `public/scripts/chat-ui-motion.js`, used by existing controllers | Native opacity animations and scrolling replace the FE3 jQuery/transit calls without taking ownership of React message rows |
+| Character selection and duplication | `public/scripts/character-lifecycle-service.js` | `/script.js` retains thin compatibility delegates and wires the existing live shell state and specific commands |
+| Character lorebook association dialog | `app/components/character-world-info/CharacterWorldInfoEditor.tsx`, coordinated by `character-lifecycle-service.js` | Cached workspace bundle mounts native React search/select/checkbox controls inside the existing Popup runtime |
+| Character tags and bulk operations | `public/scripts/tags.js`, `character-tags-service.js`, `BulkEditOverlay.js`, `bulk-edit.js` | Specific live ports in `character-tags-shell-context.js` and the existing lifecycle context replace their root imports; no additional state store |
+| Provider, prompt management and preset context | `public/scripts/openai.js`, `public/scripts/PromptManager.js`, `public/scripts/preset-manager.js` | Bootstrap installs narrow live context accessors and synchronous macro substitution; strict preset writes use the existing settings persistence owner |
+
 
 These extractions do not claim that all historical `script.js` domain code has been removed. Existing character, generation integration and compatibility responsibilities remain visible in that entry; this slice does not move the whole file into a replacement facade. Message formatting already belongs to `message-service.js`; the root keeps its compatibility re-export rather than another implementation.
 
@@ -38,7 +43,7 @@ The first extracted contract modules are:
 
 - Each mutable state has one owner. The composition root may wire owners together, but it must not introduce a second store, universal service locator, or broad shell context.
 - First-party modules under `public/scripts/`, excluding vendored `extensions/third-party/`, must not add reverse imports of `public/script.js`.
-- The existing exact first-party reverse-import snapshot records the remaining legacy compatibility surface, not a target architecture; future waves may only remove entries or narrow their imported names. FE3 removes the reasoning entry rather than adding a new snapshot or gate.
+- The exact first-party reverse-import snapshot records the remaining legacy compatibility surface, not a target architecture; future waves may only remove entries or narrow their imported names. FE1 removes the tags and two bulk-operation entries; provider, prompt manager, preset manager and FE3 reasoning no longer import the root at runtime. No additional snapshot or gate is introduced.
 - `eventSource` and `event_types` are imported directly from `public/scripts/events.js`. `getRequestHeaders()` is imported directly from `public/scripts/request-context.js`.
 - A first-party module must not import `eventSource`, `event_types`, or `getRequestHeaders` from `public/script.js`.
 - The public `/script.js` path remains an internal first-party compatibility boundary. There is no third-party extension runtime; this boundary does not permit new first-party reverse dependencies.
@@ -63,7 +68,7 @@ During `public/script.js` evaluation:
 
 1. Fetch the CSRF token. A failure shows a persistent error and rejects initialization before the main bootstrap stages continue.
 2. Load the cached workspace bundle and install its React popup factory, then create the splash overlay and initialization loader. This preparation precedes the first loader popup so synchronous dialog references are available to existing callers.
-3. Register DOM/browser compatibility helpers, library shims, Markdown/DOMPurify patches, and browser fixes.
+3. Install the Provider and preset live contexts and synchronous Prompt Manager domain; register DOM/browser compatibility helpers, library shims, Markdown/DOMPurify patches, and browser fixes.
 4. Initialize secrets, locale, core chat and OpenAI modules, presets, and system messages.
 5. Load settings and apply post-settings UI bindings.
 6. Load user avatars and characters, then initialize tokenizers.
@@ -94,11 +99,15 @@ During `public/script.js` evaluation:
 | touch-punch | Removed: no jQuery UI mouse-widget consumers remain; workspace dragging uses its existing separate implementation |
 | izoomify | Removed with its unused data attributes: no initialization call remained |
 | jQuery and transit | Retained for other existing shell/drawer consumers; FE3 message actions, dialogue-mask opacity and CtrlShift chat scrolling no longer use them |
-| jQuery UI | Retained for the exported tag autocomplete compatibility entry and its keyboard integration; this slice does not retire that entry |
-| Select2 | Retained for the character World Info dialog and shared dropdown helpers |
+| jQuery UI | Global resource retained outside FE1's local cleanup scope; the unused tag autocomplete exports, their keyboard/resize binding and dedicated CSS are removed, not retained as consumers |
+| Select2 | Shared dropdown helpers remain; the character World Info dialog no longer uses Select2 and its old template is removed |
 | Cropper | Retained as the native image-crop implementation used by the React popup |
 
-Focused proof covers actual user-message/settings services and their root delegates, World Info command forwarding, composer identity, Regex persistence failures and popup API forwarding. `tests/frontend-migration-gaps.e2e.js` exercises the real bundle, same-name character drafts through rename, chat shortcuts, nested asynchronous popups, crop controls and the retained Select2 consumer. `tests/local-dialogs.e2e.js` verifies the existing local-dialog owner alongside the compatibility bridge. Browser lanes use isolated data roots and do not reuse a user's server.
+Character selection and duplication keep their established busy checks, confirmation, request, event and refresh order in the lifecycle service. Tags use live getters and existing domain operations rather than copying character, tag or bulk-selection state into the root or a new store. The unused `createTagInput`, `findTag`, `selectTag` and `onTagInputFocus` chain is removed; favorite-character hotswap resizing remains.
+
+Character lorebook controls use book names as values, including numeric names, rather than list indexes. Primary changes keep the established immediate character save and embedded-book clearing semantics; auxiliaries remain local `world_info.charLore` associations saved through the existing settings debounce. Create-mode associations remain on the create draft. Each dialog captures the character avatar/file name or create session identity, rejects stale actions and checks identity again after awaits. Replacing a cached card object during a refresh is allowed when the selected character and editing session still match. An already submitted edit still refreshes its own card, but its late completion cannot change another selected chat, authoring session or World Info button. The root's post-dialog draft sync also refuses a different authoring session.
+
+Focused proof covers actual user-message/settings services and their root delegates, World Info command forwarding, composer identity, Regex persistence failures and popup API forwarding. `tests/frontend-migration-gaps.e2e.js` exercises the real bundle, same-name character drafts through rename, chat shortcuts, nested asynchronous popups, crop controls and the React character lorebook dialog. `tests/fe1-character-worldinfo-tags.e2e.js` covers named primary/auxiliary association, search, clearing, narrow screens and stale edit/create sessions; existing selection-race and tag suites cover the other FE1 workflows. `tests/local-dialogs.e2e.js` verifies the existing local-dialog owner alongside the compatibility bridge. Browser lanes use isolated data roots and do not reuse a user's server.
 
 ### FE3 caller and interaction boundaries
 

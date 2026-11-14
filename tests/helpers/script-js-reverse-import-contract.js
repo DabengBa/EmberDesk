@@ -20,8 +20,6 @@ export const FIRST_PARTY_SCRIPT_JS_IMPORT_CONTRACT = Object.freeze([
     contractEntry('action-loader.js', '../script.js', ['stopGeneration']),
     contractEntry('autocomplete/MacroAutoCompleteHelper.js', '/script.js', ['chat_metadata']),
     contractEntry('chat-branch.js', '../script.js', ['characters', 'saveChat', 'this_chid', 'openCharacterChat', 'chat_metadata', 'chat', 'getCurrentChatDetails', 'setOptionsMenuBranchVisibility']),
-    contractEntry('bulk-edit.js', '../script.js', ['characterGroupOverlay', 'syncReactCharacterLibraryToolbarState']),
-    contractEntry('BulkEditOverlay.js', '../script.js', ['characterGroupOverlay', 'characters', 'getCharacters', 'default_avatar', 'getThumbnailUrl', 'deleteCharacter', 'stopGeneration', 'is_send_press', 'this_chid', 'name2', 'neutralCharacterName', 'syncReactCharacterLibraryToolbarState']),
     contractEntry('chat-backups.js', '/script.js', ['displayPastChats', 'importCharacterChat']),
     contractEntry('chats.js', '../script.js', ['addCopyToCodeBlocks', 'appendMediaToMessage', 'characters', 'chat', 'getCurrentChatId', 'name2', 'this_chid', 'saveChatConditional', 'chat_metadata', 'neutralCharacterName', 'updateChatMetadata', 'system_message_types', 'converter', 'substituteParams', 'getSystemMessageByType', 'printMessages', 'clearChat', 'getMediaIndex', 'getMediaDisplay', 'chatElement']),
     contractEntry('custom-request.js', '../script.js', ['extractJsonFromData', 'extractMessageFromData']),
@@ -36,17 +34,14 @@ export const FIRST_PARTY_SCRIPT_JS_IMPORT_CONTRACT = Object.freeze([
     contractEntry('macros/definitions/env-macros.js', '../../../script.js', ['parseMesExamples']),
     contractEntry('macros/definitions/time-macros.js', '../../../script.js', ['chat']),
     contractEntry('macros/engine/MacroEnvBuilder.js', '../../../script.js', ['getCharacterCardFieldsLazy', 'getGeneratingModel', 'name1', 'name2']),
-    contractEntry('openai.js', '../script.js', ['abortStatusCheck', 'displayOnlineStatus', 'extension_prompt_roles', 'extension_prompt_types', 'getExtensionPrompt', 'getExtensionPromptMaxDepth', 'getMediaDisplay', 'getMediaIndex', 'main_api', 'name1', 'name2', 'saveSettingsDebounced', 'setOnlineStatus', 'substituteParams', 'system_message_types', 'withGeneratingModel']),
+
     contractEntry('power-user.js', '../script.js', ['ANIMATION_DURATION_DEFAULT', 'chat', 'entitiesFilter', 'extension_prompt_types', 'getFirstDisplayedMessageId', 'messageFormatting', 'printCharactersDebounced', 'reloadMarkdownProcessor', 'saveSettingsDebounced', 'scrollChatToBottom', 'setAnimationDuration', 'substituteParams']),
-    contractEntry('preset-manager.js', '../script.js', ['characters', 'main_api', 'saveSettings', 'this_chid']),
-    contractEntry('PromptManager.js', '../script.js', ['substituteParams']),
 
     contractEntry('RossAscends-mods.js', '../script.js', ['buildAvatarList', 'getEntitiesList', 'is_send_press', 'main_api', 'max_context', 'menu_type', 'online_status', 'openWorkspaceChildSlotHost', 'openWorkspaceShellPromptManager', 'openWorkspaceShellWorldInfo', 'saveSettingsDebounced', 'setActiveCharacter', 'substituteParams']),
     contractEntry('samplerSelect.js', '../script.js', ['main_api', 'saveSettingsDebounced']),
 
     contractEntry('st-context.js', '../script.js', ['activateSendButtons', 'addOneMessage', 'appendMediaToMessage', 'callPopup', 'characters', 'chat', 'chat_metadata', 'create_save', 'deactivateSendButtons', 'default_user_avatar', 'extension_prompts', 'extractMessageFromData', 'Generate', 'generateQuietPrompt', 'getCharacterAvatar', 'getCharacters', 'getCurrentChatId', 'getThumbnailUrl', 'main_api', 'max_context', 'menu_type', 'messageFormatting', 'name1', 'name2', 'online_status', 'openCharacterChat', 'reloadCurrentChat', 'renameChat', 'saveChatConditional', 'saveMetadata', 'saveReply', 'saveSettingsDebounced', 'selectCharacterById', 'sendGenerationRequest', 'sendStreamingRequest', 'sendSystemMessage', 'setExtensionPrompt', 'stopGeneration', 'streamingProcessor', 'substituteParams', 'substituteParamsExtended', 'this_chid', 'updateChatMetadata', 'updateMessageBlock', 'printMessages', 'clearChat', 'unshallowCharacter', 'deleteLastMessage', 'getCharacterCardFields', 'generateRaw', 'generateRawData', 'deleteMessage', 'ensureMessageMediaIsArray', 'getMediaDisplay', 'getMediaIndex', 'scrollChatToBottom', 'scrollOnMediaLoad', 'getOneCharacter', 'getCharacterSource']),
     contractEntry('system-messages.js', '../script.js', ['addOneMessage', 'chat', 'setSendButtonState', 'system_avatar', 'systemUserName']),
-    contractEntry('tags.js', '../script.js', ['characters', 'saveSettingsDebounced', 'this_chid', 'menu_type', 'entitiesFilter', 'printCharactersDebounced', 'buildAvatarList', 'DEFAULT_PRINT_TIMEOUT']),
     contractEntry('tokenizers.js', '../script.js', ['characters', 'main_api', 'this_chid']),
     contractEntry('tool-bindings.js', '../script.js', ['saveSettingsDebounced']),
     contractEntry('tool-calling.js', '../script.js', ['addOneMessage', 'chat', 'getGeneratingApi', 'getGeneratingModel', 'main_api', 'saveChatConditional', 'system_avatar', 'systemUserName']),
