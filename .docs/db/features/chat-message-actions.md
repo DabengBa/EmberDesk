@@ -29,6 +29,8 @@ Let users act on an already rendered chat message through discoverable row contr
 - React owns the visible message-action shell on message rows; user-facing controls, mobile reachability, and compatibility hooks remain the same while editing or live content is preserved on the same row.
 - Save, regenerate, retry, and swipe results persist as one complete chat result without changing action availability, row controls, or feature hooks. Regenerate, retry, and swipe use the same generation command path as composer actions. Storage compatibility repair and rollback remain maintainer workflows rather than visible message actions.
 - The main-chat React shell may coordinate composer/action-rail placement on the existing `#send_form` and `#nonQRFormItems` containers, but row action semantics, valid-action decisions, and compatibility hooks remain governed by the message-action surface.
+- With the empty composer focused at the start of its text, ArrowUp edits the last editable message and Ctrl+ArrowUp edits the last editable user message, loading older history when needed. Editing existing messages remains available without an API connection.
+- Ctrl+Enter confirms the current message edit and Escape cancels it; when body and reasoning edits coexist, the body edit has priority. With no active edit, Escape stops visible generation. An open modal, input-method composition, or a nonempty composer/selection takes priority over chat edit shortcuts.
 
 ## Generation Action Boundary
 
@@ -52,6 +54,7 @@ Visible message actions dispatch commands only. The shared generation service ow
 - As a user operating secondary message state, from a row with swipes, reasoning, branch, or media controls trigger the relevant action and then re-render or revisit the row; EmberDesk must show those controls only when valid and update the visible row state without hiding the message body, with failure signaled by inactive controls shown as usable or valid controls missing from the row.
 - As a user recovering from a failed generation after automatic recovery ends, from the failed assistant row press retry and wait for the retry to settle; EmberDesk must retry from the same row context without duplicating the already-rendered user message, keep the composer usable after success or failure, and failure is a new duplicate user row or a retry action before recovery has exhausted.
 - As a mobile or keyboard user on a React-owned row, from the same row action surface use common actions; EmberDesk must preserve role/name reachability when the row enters edit or live streaming state, and failure is a dual-owner menu, unreachable action, or missing compatibility hook.
+- As a keyboard user with an empty composer, press ArrowUp or Ctrl+ArrowUp, edit the selected message, then confirm with Ctrl+Enter or cancel with Escape; EmberDesk must target the correct message even outside the initially loaded history and must not send a duplicate user message. Repeat while disconnected and while a modal or input-method composition is active; editing remains possible offline and the modal or input method keeps priority.
 
 ## Feature-Specific Evidence
 

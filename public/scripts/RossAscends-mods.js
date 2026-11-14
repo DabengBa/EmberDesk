@@ -35,7 +35,7 @@ import { debounce_timeout } from './constants.js';
 import { Popup } from './popup.js';
 import { accountStorage } from './util/AccountStorage.js';
 import { getCurrentUserHandle } from './user.js';
-import { getComposerValue, setComposerValue, getComposerSnapshot, subscribeComposerValue, requestComposerFocus } from './main-chat-composer-service.js';
+import { getComposerValue, setComposerValue, subscribeComposerValue } from './main-chat-composer-service.js';
 
 // Populated in initRossMods: drawer/panel markup is React-mounted after module eval.
 // The settings drawer opener is injected by script.js — importing it here would
@@ -530,7 +530,11 @@ export function initRossMods({ openWorkspaceShellSettings = null, drawerService 
     restoreUserInput();
 
     $(document).on('keydown', async function (event) {
-        await processHotkeys(event.originalEvent);
+        if (event.key !== 'Escape') await processHotkeys(event.originalEvent);
+    });
+    // Let the React chat owner consume edit/stop Escape before legacy panels.
+    $(window).on('keydown', async function (event) {
+        if (event.key === 'Escape' && !event.originalEvent.defaultPrevented) await processHotkeys(event.originalEvent);
     });
 
     const hotkeyTargets = {
@@ -542,6 +546,7 @@ export function initRossMods({ openWorkspaceShellSettings = null, drawerService 
      * @param {KeyboardEvent} event
      */
     async function processHotkeys(event) {
+        if (event.defaultPrevented || event.isComposing || event.keyCode === 229) return;
         // Default hotkeys and shortcuts shouldn't work if any popup is currently open
         if (Popup.util.isPopupOpen()) {
             return;
@@ -574,67 +579,7 @@ export function initRossMods({ openWorkspaceShellSettings = null, drawerService 
             return;
         }
 
-        // Ctrl+Enter accepts the edits when a message or reasoning editor is open
-        if (event.ctrlKey && event.key == 'Enter') {
-            const editMesDone = $('.mes_edit_done:visible');
-            const reasoningMesDone = $('.mes_reasoning_edit_done:visible');
-            if (editMesDone.length > 0) {
-                console.debug('Accepting edits with Ctrl+Enter');
-                requestComposerFocus();
-                editMesDone.trigger('click');
-                return;
-            } else if (reasoningMesDone.length > 0) {
-                console.debug('Accepting edits with Ctrl+Enter');
-                requestComposerFocus();
-                reasoningMesDone.trigger('click');
-                return;
-            }
-        }
-
-        if (event.ctrlKey && event.key == 'ArrowUp') { //edits last USER message if chatbar is empty and focused
-            if (
-                getComposerValue() === '' &&
-                getComposerSnapshot().focused === true &&
-                $('.last_mes').attr('is_system') === 'true' &&
-                $('#character_popup').css('display') === 'none' &&
-                $('#shadow_select_chat_popup').css('display') === 'none'
-            ) {
-                const isUserMesList = document.querySelectorAll('div[is_user="true"]');
-                const lastIsUserMes = isUserMesList[isUserMesList.length - 1];
-                const editMes = lastIsUserMes.querySelector('.mes_block .mes_edit');
-                if (editMes !== null) {
-                    $(editMes).trigger('click');
-                    return;
-                }
-            }
-        }
-
-        if (event.key == 'ArrowUp') { //edits last message if chatbar is empty and focused
-            console.log('got uparrow input');
-            if (
-                getComposerValue() === '' &&
-                getComposerSnapshot().focused === true &&
-                $('.last_mes .mes_buttons').is(':visible') &&
-                $('#character_popup').css('display') === 'none' &&
-                $('#shadow_select_chat_popup').css('display') === 'none'
-            ) {
-                const lastMes = document.querySelector('.last_mes');
-                const editMes = lastMes.querySelector('.mes_block .mes_edit');
-                if (editMes !== null) {
-                    $(editMes).trigger('click');
-                    return;
-                }
-            }
-        }
-
         if (event.key == 'Escape') { //closes various panels
-            //dont override Escape hotkey functions from script.js
-            //"close edit box" and "cancel stream generation".
-            if ($('#curEditTextarea').is(':visible') || $('#mes_stop').is(':visible')) {
-                console.debug('escape key, but deferring to script.js routines');
-                return;
-            }
-
             if ($('#dialogue_popup').is(':visible')) {
                 if ($('#dialogue_popup_cancel').is(':visible')) {
                     runDialoguePopupCommand('cancelDialoguePopup');

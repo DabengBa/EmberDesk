@@ -29,7 +29,7 @@ export function RegexSettingsPanel({ list: listBridge, bridge, toolbar, presets,
         const setter = kind === 'scoped' ? setScopedAllowed : setPresetAllowed;
         const action = kind === 'scoped' ? toolbar?.setScopedAllowed : toolbar?.setPresetAllowed;
         setter(value);
-        Promise.resolve().then(() => action?.(value)).catch(error => { setter(!value); toolbar?.onError(error instanceof Error ? error.message : String(error)); });
+        (async () => action?.(value))().catch(error => { setter((kind === 'scoped' ? toolbar?.scopedAllowed : toolbar?.presetAllowed) ?? false); toolbar?.onError(error instanceof Error ? error.message : String(error)); });
     }
     return (
 <div className="regex_settings">

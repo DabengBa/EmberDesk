@@ -127,9 +127,15 @@ export function requestComposerFocus() {
     publish({ focusRequest: snapshot.focusRequest + 1 });
 }
 
-/** @param {string|number|null|undefined} contextKey */
+function scopedDraftKey(avatarId, chatId) {
+    return JSON.stringify([avatarId == null ? null : String(avatarId), chatId == null ? '' : String(chatId)]);
+}
+
+/** @param {string|number|null|undefined|{avatarId?: string|null, chatId?: string|number|null}} contextKey */
 export function setComposerDraftContext(contextKey) {
-    const nextKey = contextKey === null || contextKey === undefined ? '' : String(contextKey);
+    const nextKey = contextKey && typeof contextKey === 'object'
+        ? scopedDraftKey(contextKey.avatarId, contextKey.chatId)
+        : contextKey === null || contextKey === undefined ? '' : String(contextKey);
     if (!draftContextReady) {
         draftContextReady = true;
         publish({ contextKey: nextKey, revision: snapshot.revision + 1, contextRevision: snapshot.contextRevision + 1 });
@@ -152,10 +158,13 @@ export function setComposerDraftContext(contextKey) {
 /**
  * @param {string} oldFileName
  * @param {string} newFileName
+ * @param {string|null} [avatarId]
  */
-export function renameComposerDraftContext(oldFileName, newFileName) {
-    const from = String(oldFileName ?? '').replace(/\.jsonl$/i, '');
-    const to = String(newFileName ?? '').replace(/\.jsonl$/i, '');
+export function renameComposerDraftContext(oldFileName, newFileName, avatarId) {
+    const oldName = String(oldFileName ?? '').replace(/\.jsonl$/i, '');
+    const newName = String(newFileName ?? '').replace(/\.jsonl$/i, '');
+    const from = avatarId === undefined ? oldName : scopedDraftKey(avatarId, oldName);
+    const to = avatarId === undefined ? newName : scopedDraftKey(avatarId, newName);
     if (from === to) {
         return;
     }

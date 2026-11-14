@@ -293,15 +293,23 @@ export function buildMainChatSnapshotFromLegacyChat({
 
     const messagesById = {};
     const orderedMessageIds = [];
+    let lastUserIndex = -1;
     const requestedVisibleMessageIds = Array.isArray(window.visibleMessageIds)
         ? normalizeMessageIds(window.visibleMessageIds)
         : Array.isArray(visibleMessageIds)
             ? normalizeMessageIds(visibleMessageIds)
             : null;
 
-    chat.forEach((_message, messageId) => {
+    chat.forEach((message, messageId) => {
         orderedMessageIds.push(String(messageId));
+        if (message?.is_user) lastUserIndex = messageId;
     });
+
+    const targetAt = index => {
+        const uid = index < 0 ? '' : getMessageUid(chat[index]);
+        return uid ? { id: String(index), uid } : null;
+    };
+    const lastIndex = chat.length - 1;
 
     const knownMessageIdSet = new Set(orderedMessageIds);
     const visibleIds = (requestedVisibleMessageIds ?? orderedMessageIds)
@@ -354,6 +362,10 @@ export function buildMainChatSnapshotFromLegacyChat({
         chatId: normalizedChatId,
         messagesById,
         orderedMessageIds,
+        lastMessageTarget: targetAt(lastIndex),
+        lastUserMessageTarget: targetAt(lastUserIndex),
+        lastMessageEditable: lastIndex >= 0 && chat[lastIndex]?.extra?.type !== 'assistant_message',
+        lastUserMessageEditable: lastUserIndex >= 0 && chat[lastUserIndex]?.extra?.type !== 'assistant_message',
         composer: {
             value: normalizeString(composer.value),
             activeContext: composer.activeContext,

@@ -93,7 +93,7 @@
                     <button type="button" class="fa-fw fa-solid fa-circle-xmark dragClose" id="closeZoom" aria-label="Close avatar preview" title="Close avatar preview" data-i18n="[aria-label][title]Close avatar preview"></button>
                 </div>
                 <div class="zoomed_avatar_container">
-                    <img class="zoomed_avatar_img" src="img/No-Image-Placeholder.svg" data-izoomify-url="" data-izoomify-magnify="1.8" data-izoomify-duration="300" alt="">
+                    <img class="zoomed_avatar_img" src="img/No-Image-Placeholder.svg" alt="">
                 </div>
             </div>
         </div>
@@ -106,25 +106,7 @@
                 </div>
             </div>
         </template>
-        <template id="popup_template" data-i18n="[popup-button-save]popup-button-save;[popup-button-yes]popup-button-yes;[popup-button-no]popup-button-no;[popup-button-cancel]popup-button-cancel;[popup-button-import]popup-button-import;[popup-button-crop]popup-button-crop" popup-button-save="Save" popup-button-yes="Yes" popup-button-no="No" popup-button-cancel="Cancel" popup-button-import="Import" popup-button-crop="Crop"> <!-- localization data holder for popups -->
-            <dialog class="popup">
-                <div class="popup-body">
-                    <div class="popup-content">
-                        <h3 class="popup-header">text</h3>
-                    </div>
-                    <div class="popup-crop-wrap">
-                        <img class="popup-crop-image" src="img/No-Image-Placeholder.svg">
-                    </div>
-                    <textarea class="popup-input text_pole result-control auto-select" rows="1" data-result="1" data-result-event="submit"></textarea>
-                    <div class="popup-inputs"></div>
-                    <div class="popup-controls">
-                        <button type="button" class="popup-button-ok menu_button result-control" data-result="1" data-i18n="Delete">Delete</button>
-                        <button type="button" class="popup-button-cancel menu_button result-control" data-result="0" data-i18n="Cancel">Cancel</button>
-                    </div>
-                </div>
-                <button type="button" class="popup-button-close right_menu_button fa-solid fa-circle-xmark" data-result="0" title="Close popup" aria-label="Close popup" data-i18n="[title][aria-label]Close popup"></button>
-            </dialog>
-        </template>
+
         <div id="shadow_popup">
             <div id="dialogue_popup">
                 <div id="dialogue_popup_holder">
@@ -688,16 +670,14 @@
     <script src="lib/jquery-3.5.1.min.js"></script>
     <script src="lib/jquery-ui.min.js"></script>
     <script src="lib/jquery.transit.min.js"></script>
-    <script src="lib/jquery-cookie-1.4.1.min.js"></script>
-    <script src="lib/jquery.ui.touch-punch.min.js"></script>
+
     <script src="lib/cropper.min.js"></script>
-    <script src="lib/jquery-cropper.min.js"></script>
+
     <script src="lib/toastr.min.js"></script>
     <script src="lib/select2.min.js"></script>
     <script src="lib/select2-search-placeholder.js"></script>
-    <script src="lib/pagination.js"></script>
     <script src="lib/toolcool-color-picker.js"></script>
-    <script src="lib/jquery.izoomify.js"></script>
+
     <script type="module" src="lib/structured-clone/monkey-patch.js"></script>
     <script type="module" src="lib/eventemitter.js"></script>
     <script type="module" src="scripts/i18n.js"></script>

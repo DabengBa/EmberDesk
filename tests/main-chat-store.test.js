@@ -24,6 +24,15 @@ function runStoreProbe(source) {
 }
 
 describe('main chat store', () => {
+    test('preserves immutable lightweight targets outside the visible window', () => {
+        const result = runStoreProbe(`
+            const store = createMainChatStore();
+            store.getState().replaceSnapshot({ orderedMessageIds: ['0', '1'], messagesById: { '1': { id: '1' } }, lastMessageTarget: { id: '1', uid: 'last' }, lastUserMessageTarget: { id: '0', uid: 'user' } });
+            const snapshot = store.getState().getSnapshot();
+            console.log(JSON.stringify({ last: snapshot.lastMessageTarget, user: snapshot.lastUserMessageTarget, frozen: Object.isFrozen(snapshot.lastUserMessageTarget) }));
+        `);
+        expect(result).toEqual({ last: { id: '1', uid: 'last' }, user: { id: '0', uid: 'user' }, frozen: true });
+    });
     test('defines a DOM-free browser state owner', () => {
         const source = fs.readFileSync(storePath, 'utf8');
 
@@ -289,14 +298,15 @@ describe('main chat store', () => {
 
     test('is subscribed by the React main-chat panel instead of remaining an unused store', () => {
         const workspaceSource = fs.readFileSync(
-            path.join(repoRoot, 'app', 'workspace-panels.tsx'),
+            path.join(repoRoot, 'app', 'components', 'main-chat', 'MainChatMessageListWorkspacePanel.tsx'),
             'utf8',
         );
+        const entrySource = fs.readFileSync(path.join(repoRoot, 'app', 'workspace-panels.tsx'), 'utf8');
 
         expect(workspaceSource).toContain('useSyncExternalStore');
-        expect(workspaceSource).toContain("from './stores/main-chat-store'");
-        expect(workspaceSource).toContain('function syncMainChatStoreSnapshot(state: unknown)');
-        expect(workspaceSource).toContain('syncMainChatStoreSnapshot(mount.state);');
+        expect(workspaceSource).toContain("from '../../stores/main-chat-store'");
+        expect(entrySource).toContain('function syncMainChatStoreSnapshot(state: unknown)');
+        expect(entrySource).toContain('syncMainChatStoreSnapshot(mount.state);');
         expect(workspaceSource).toContain('mainChatStoreSnapshot.window.visibleMessageIds');
         expect(workspaceSource).toContain('mainChatStoreSnapshot.messagesById');
         expect(workspaceSource).toContain('<MainChatMessageRow');

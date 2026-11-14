@@ -5,6 +5,54 @@ async function importFreshService() {
 }
 
 describe('main chat composer service', () => {
+    test('isolates same-name drafts by avatar and renames only the owning avatar', async () => {
+        const service = await importFreshService();
+        const context = (avatarId, chatId) => service.setComposerDraftContext({ avatarId, chatId });
+        context('alice.png', 'Shared');
+        service.setComposerValue('alice draft');
+        const pending = service.getComposerSnapshot();
+        context('bob.png', 'Shared');
+        expect(service.getComposerValue()).toBe('');
+        service.setComposerValue('bob draft');
+        service.renameComposerDraftContext('Shared.jsonl', 'Renamed.jsonl', 'alice.png');
+        expect(service.getComposerValue()).toBe('bob draft');
+        expect(service.clearComposerValue({ expected: pending })).toBe(false);
+        context('alice.png', 'Renamed');
+        expect(service.getComposerValue()).toBe('alice draft');
+        context('bob.png', 'Shared');
+        expect(service.getComposerValue()).toBe('bob draft');
+        const beforeEdit = service.getComposerSnapshot();
+        service.setComposerValue('new input');
+        expect(service.clearComposerValue({ expected: beforeEdit })).toBe(false);
+        expect(service.getComposerValue()).toBe('new input');
+    });
+
+    test('separates empty and deleted-character contexts from named characters', async () => {
+        const service = await importFreshService();
+        service.setComposerValue('initial');
+        service.setComposerDraftContext({ avatarId: null, chatId: null });
+        expect(service.getComposerValue()).toBe('initial');
+        service.setComposerDraftContext({ avatarId: 'alice.png', chatId: null });
+        expect(service.getComposerValue()).toBe('');
+        service.setComposerValue('alice empty chat');
+        service.setComposerDraftContext({ avatarId: null, chatId: null });
+        expect(service.getComposerValue()).toBe('initial');
+        service.setComposerDraftContext({ avatarId: 'alice.png', chatId: null });
+        expect(service.getComposerValue()).toBe('alice empty chat');
+    });
+
+    test('active scoped rename retains its draft and invalidates the old submission snapshot', async () => {
+        const service = await importFreshService();
+        service.setComposerDraftContext({ avatarId: 'alice.png', chatId: 'Shared' });
+        service.setComposerValue('pending');
+        const beforeRename = service.getComposerSnapshot();
+        service.renameComposerDraftContext('Shared.jsonl', 'Renamed.jsonl', 'alice.png');
+        expect(service.getComposerValue()).toBe('pending');
+        expect(service.clearComposerValue({ expected: beforeRename })).toBe(false);
+        service.setComposerDraftContext({ avatarId: 'alice.png', chatId: 'Renamed' });
+        expect(service.getComposerValue()).toBe('pending');
+    });
+
     test('operates without a DOM and keeps a stable snapshot until state changes', async () => {
         const service = await importFreshService();
 

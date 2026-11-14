@@ -6,7 +6,7 @@ import { ensureMessageMediaIsArray, scrollChatToBottom, updateMessageElement } f
 import { runDeleteCharacterClosePreflight } from './delete-character-preflight.js';
 import { requireChatOpsShellContext } from './chat-ops-shell-context.js';
 import { buildGreetingOptions, canSwitchGreeting, replaceGreeting } from './main-chat-greetings.js';
-import { getComposerSnapshot, requestComposerFocus, subscribeComposerState } from './main-chat-composer-service.js';
+import { getComposerSnapshot, renameComposerDraftContext, requestComposerFocus, subscribeComposerState } from './main-chat-composer-service.js';
 import { runDeleteMessageCommand } from './workspace-interaction-commands.js';
 
 
@@ -1079,6 +1079,9 @@ export async function renameCharacterChat({ characterId, oldFileName, newFileNam
         if (data.sanitizedFileName) {
             newFileName = data.sanitizedFileName;
         }
+
+        // Move the draft before the reload publishes CHAT_CHANGED for the new name.
+        renameComposerDraftContext(oldFileName, newFileName, body.avatar_url);
 
         if (characterId !== undefined && String(characterId) === String(state.this_chid) && state.characters[characterId]?.chat === oldFileName) {
             state.characters[characterId].chat = newFileName;

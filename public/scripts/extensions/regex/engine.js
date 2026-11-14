@@ -183,18 +183,57 @@ export function getScriptsForTarget(target) {
     return Array.isArray(scripts) ? scripts : [];
 }
 
-/** @param {object} target Captured target @returns {Promise<void>} */
-export async function authorizeRegexTarget(target) {
+// Pending authorizations are tracked per target, not per settings document.
+const pendingRegexAuthorizations = new Map();
+
+/** @param {object} target Captured target @param {boolean} [allowed] Desired authorization @returns {Promise<void>} */
+export async function authorizeRegexTarget(target, allowed = true) {
     const resolved = resolveRegexTarget(target);
     if (resolved.type === SCRIPT_TYPES.GLOBAL) return;
-    if (resolved.type === SCRIPT_TYPES.SCOPED) {
-        if (!Array.isArray(feature_settings.character_allowed_regex)) feature_settings.character_allowed_regex = [];
-        if (!feature_settings.character_allowed_regex.includes(resolved.avatar)) feature_settings.character_allowed_regex.push(resolved.avatar);
-    } else {
-        if (!Array.isArray(feature_settings?.preset_allowed_regex?.[resolved.apiId])) lodash.set(feature_settings, ['preset_allowed_regex', resolved.apiId], []);
-        if (!feature_settings.preset_allowed_regex[resolved.apiId].includes(resolved.name)) feature_settings.preset_allowed_regex[resolved.apiId].push(resolved.name);
+    const scoped = resolved.type === SCRIPT_TYPES.SCOPED;
+    const id = scoped ? resolved.avatar : resolved.name;
+    const key = JSON.stringify(scoped ? [resolved.type, id] : [resolved.type, resolved.apiId, id]);
+    const getList = () => scoped ? feature_settings.character_allowed_regex : feature_settings.preset_allowed_regex?.[resolved.apiId];
+    const existing = getList();
+    const beforeIndex = Array.isArray(existing) ? existing.indexOf(id) : -1;
+    const before = beforeIndex !== -1;
+    if (!Array.isArray(existing)) {
+        if (scoped) feature_settings.character_allowed_regex = [];
+        else lodash.set(feature_settings, ['preset_allowed_regex', resolved.apiId], []);
     }
-    await saveSettingsStrict();
+    const list = getList();
+    const previous = pendingRegexAuthorizations.get(key);
+    const token = {
+        list, allowed, beforeIndex, failed: false, committed: false,
+        previous: previous?.list === list && previous.allowed === before ? previous : null,
+    };
+    pendingRegexAuthorizations.set(key, token);
+    if (allowed && !before) list.push(id);
+    if (!allowed && before) list.splice(list.indexOf(id), 1);
+    try {
+        await saveSettingsStrict();
+    } catch (error) {
+        token.failed = true;
+        const current = getList();
+        if (pendingRegexAuthorizations.get(key) === token) {
+            // A failed optimistic change is not a confirmed rollback point.
+            // Keep an older pending write responsible if it settles later.
+            let rollback = token;
+            while (rollback.previous?.failed) rollback = rollback.previous;
+            if (current === list && current.includes(id) === allowed) {
+                const restoreAllowed = rollback.beforeIndex !== -1;
+                if (restoreAllowed && !current.includes(id)) current.splice(Math.min(rollback.beforeIndex, current.length), 0, id);
+                if (!restoreAllowed && current.includes(id)) current.splice(current.indexOf(id), 1);
+                if (rollback.previous && !rollback.previous.committed) pendingRegexAuthorizations.set(key, rollback.previous);
+                else pendingRegexAuthorizations.delete(key);
+            } else {
+                pendingRegexAuthorizations.delete(key);
+            }
+        }
+        throw error;
+    }
+    token.committed = true;
+    if (pendingRegexAuthorizations.get(key) === token) pendingRegexAuthorizations.delete(key);
     resolveRegexTarget(target);
 }
 
@@ -273,6 +312,7 @@ export function allowScopedScripts(character) {
     if (!avatar) {
         return;
     }
+    pendingRegexAuthorizations.delete(JSON.stringify([SCRIPT_TYPES.SCOPED, avatar]));
     if (!Array.isArray(feature_settings?.character_allowed_regex)) {
         feature_settings.character_allowed_regex = [];
     }
@@ -292,6 +332,7 @@ export function disallowScopedScripts(character) {
     if (!avatar) {
         return;
     }
+    pendingRegexAuthorizations.delete(JSON.stringify([SCRIPT_TYPES.SCOPED, avatar]));
     if (!Array.isArray(feature_settings?.character_allowed_regex)) {
         return;
     }
@@ -325,6 +366,7 @@ export function allowPresetScripts(apiId, presetName) {
     if (!apiId || !presetName) {
         return;
     }
+    pendingRegexAuthorizations.delete(JSON.stringify([SCRIPT_TYPES.PRESET, apiId, presetName]));
     if (!Array.isArray(feature_settings?.preset_allowed_regex?.[apiId])) {
         lodash.set(feature_settings, ['preset_allowed_regex', apiId], []);
     }
@@ -344,6 +386,7 @@ export function disallowPresetScripts(apiId, presetName) {
     if (!apiId || !presetName) {
         return;
     }
+    pendingRegexAuthorizations.delete(JSON.stringify([SCRIPT_TYPES.PRESET, apiId, presetName]));
     if (!Array.isArray(feature_settings?.preset_allowed_regex?.[apiId])) {
         return;
     }

@@ -221,7 +221,7 @@ import {
 } from './scripts/preset-manager.js';
 import { getLastMessageId, initMacros } from './scripts/macros.js';
 import { getCurrentUserHandle, setUserControls } from './scripts/user.js';
-import { POPUP_RESULT, POPUP_TYPE, Popup, callGenericPopup, fixToastrForDialogs } from './scripts/popup.js';
+import { POPUP_RESULT, POPUP_TYPE, Popup, callGenericPopup, fixToastrForDialogs, installPopupRuntime } from './scripts/popup.js';
 import { renderTemplate, renderTemplateAsync } from './scripts/templates.js';
 import { initCustomSelectedSamplers, validateDisabledSamplers } from './scripts/samplerSelect.js';
 import { DragAndDropHandler } from './scripts/dragdrop.js';
@@ -240,6 +240,8 @@ import {
 import { getStreamingControlState } from './scripts/chat-streaming-control-state.js';
 import { getMainChatComposerState } from './scripts/main-chat-composer-state.js';
 import { getComposerValue, setComposerValue, getComposerSnapshot, subscribeComposerState, updateComposerInteraction, requestComposerFocus } from './scripts/main-chat-composer-service.js';
+import { createUserMessageService } from './scripts/user-message-service.js';
+import { createRuntimeSettingsPersistence } from './scripts/runtime-settings-persistence.js';
 import { getMainChatStreamingTransportState } from './scripts/main-chat-streaming-transport-state.js';
 import { buildGreetingOptions, canSwitchGreeting } from './scripts/main-chat-greetings.js';
 import { createChatMessageActionsController } from './scripts/chat-message-actions-controller.js';
@@ -4433,6 +4435,8 @@ async function bootstrapWorkspace() {
         throw new Error('Initialization failed');
     }
 
+    const workspace = await loadWorkspacePanelsModule();
+    installPopupRuntime(workspace.createPopupRuntime);
     const initLoaderOverlay = loader.createOverlay();
     initLoaderOverlay.classList.add('splash-screen');
 
@@ -4458,7 +4462,6 @@ async function bootstrapWorkspace() {
     });
 
     await measureStartupStage('bootstrapUi', async () => {
-        const workspace = await loadWorkspacePanelsModule();
         optionsMenuModuleRef = workspace;
         dialogueController = workspace.createDialogueController();
         globalThis.__emberDeskDialogueController = dialogueController;
@@ -6876,65 +6879,29 @@ export function removeMacros(str) {
  * @param {string} [options.name] Sender name.
  * @returns {Promise<object>} The normalized (but not attached/saved) message.
  */
+const userMessageService = createUserMessageService({
+    getChat: () => chat,
+    getComposerSnapshot,
+    regexUserInput: text => getRegexedString(text, regex_placement.USER_INPUT),
+    timestamp: getMessageTimeStamp,
+    substitute: text => substituteParams(text),
+    uuid: uuidv4,
+    removeMacros,
+    populateAttachment: (message, isCurrent) => populateFileAttachment(message, 'file_form_input', { isCurrent }),
+    taint: () => { chat_metadata.tainted = true; },
+    save: isCurrent => saveChatConditional(isCurrent),
+    emitSent: id => eventSource.emit(event_types.MESSAGE_SENT, id),
+    emitRendered: id => eventSource.emit(event_types.USER_MESSAGE_RENDERED, id),
+    reload: () => reloadCurrentChat(),
+    addMessage: message => addOneMessage(message),
+});
+
 export async function buildUserMessage(messageText, messageBias, { compact = false, name = name1 } = {}) {
-    messageText = getRegexedString(messageText, regex_placement.USER_INPUT);
-
-    const message = {
-        name: name,
-        is_user: true,
-        is_system: false,
-        send_date: getMessageTimeStamp(),
-        mes: substituteParams(messageText),
-        extra: {
-            id: uuidv4(),
-            isSmallSys: compact,
-        },
-    };
-
-    if (messageBias) {
-        message.extra.bias = messageBias;
-        message.mes = removeMacros(message.mes);
-    }
-
-    return message;
+    return userMessageService.buildUserMessage(messageText, messageBias, { compact, name });
 }
 
 export async function sendMessageAsUser(messageText, messageBias, insertAt = null, compact = false, name = name1, { signal } = {}) {
-    const submittedChat = chat;
-    const { contextKey, contextRevision } = getComposerSnapshot();
-    const isCurrent = () => {
-        const current = getComposerSnapshot();
-        return chat === submittedChat && current.contextKey === contextKey && current.contextRevision === contextRevision && !signal?.aborted;
-    };
-    const message = await buildUserMessage(messageText, messageBias, { compact, name });
-    if (!isCurrent()) return;
-
-    await populateFileAttachment(message, 'file_form_input', { isCurrent });
-    if (!isCurrent()) return;
-
-    chat_metadata.tainted = true;
-
-    if (typeof insertAt === 'number' && insertAt >= 0 && insertAt <= chat.length) {
-        chat.splice(insertAt, 0, message);
-        await saveChatConditional(isCurrent);
-        if (!isCurrent()) return message;
-        await eventSource.emit(event_types.MESSAGE_SENT, insertAt);
-        if (!isCurrent()) return message;
-        await reloadCurrentChat();
-        if (!isCurrent()) return message;
-        await eventSource.emit(event_types.USER_MESSAGE_RENDERED, insertAt);
-    } else {
-        chat.push(message);
-        await saveChatConditional(isCurrent);
-        if (!isCurrent()) return message;
-        const chat_id = (chat.length - 1);
-        await eventSource.emit(event_types.MESSAGE_SENT, chat_id);
-        if (!isCurrent()) return message;
-        addOneMessage(message);
-        await eventSource.emit(event_types.USER_MESSAGE_RENDERED, chat_id);
-    }
-
-    return message;
+    return userMessageService.sendMessageAsUser(messageText, messageBias, insertAt, compact, name, { signal });
 }
 
 /**
@@ -7731,115 +7698,40 @@ export async function getSettings(initLoaderHandle = null) {
 }
 
 //MARK: saveSettings()
+const runtimeSettingsPersistence = createRuntimeSettingsPersistence({
+    conflict: runtimeSettingsConflict,
+    isReady: () => settingsReady,
+    schedule: (...args) => saveSettingsDebounced(...args),
+    isResponseCustomized: () => TempResponseLength.isCustomized(),
+    restoreResponse: () => TempResponseLength.restore(null),
+    version: () => currentVersion,
+    ensureVersion: () => deferredVersionTask.ensure(),
+    persistedCurrentVersion: () => resolvePersistedCurrentVersion({ currentVersion, settingsVersion: settings?.currentVersion ?? null }),
+    accountStorage: () => accountStorage.getState(), activeCharacter: () => active_character,
+    amountGen: () => amount_gen, maxContext: () => max_context, mainApi: () => main_api,
+    worldInfoSettings: () => getWorldInfoSettings(), powerUser: () => power_user,
+    featureSettings: () => feature_settings, tags: () => tags, tagMap: () => tag_map,
+    oaiSettings: () => oai_settings, background: () => background_settings,
+    getRevision: () => settingsDocumentRevision,
+    setRevision: value => { settingsDocumentRevision = value; },
+    setDocument: value => { settings = value; },
+    beginSnapshot: beginSettingsSaveSnapshot,
+    finishSnapshot: finishSettingsSaveSnapshot,
+    compress: compressRequest,
+    headers: getRequestHeaders,
+    post: request => fetch('/api/settings/save', request),
+    onConflict: () => {
+        window.dispatchEvent(new Event('emberdesk:runtime-settings-conflict'));
+        toastr.warning(t`Settings were updated elsewhere. Open Settings and download your unsaved runtime settings before reloading.`, t`Settings conflict`, { timeOut: 0, extendedTimeOut: 0, closeButton: true });
+    },
+    onError: () => toastr.error(t`Check the server connection and reload the page to prevent data loss.`, t`Settings could not be saved`),
+    emitUpdated: () => eventSource.emit(event_types.SETTINGS_UPDATED),
+});
 function buildRuntimeSettingsPayload() {
-    const persistedCurrentVersion = resolvePersistedCurrentVersion({
-        currentVersion,
-        settingsVersion: settings?.currentVersion ?? null,
-    });
-    return {
-        accountStorage: accountStorage.getState(),
-        currentVersion: persistedCurrentVersion ?? undefined,
-        active_character: active_character,
-        amount_gen: amount_gen,
-        max_context: max_context,
-        main_api: main_api,
-        world_info_settings: getWorldInfoSettings(),
-        power_user: power_user,
-        feature_settings: feature_settings,
-        tags: tags,
-        tag_map: tag_map,
-        oai_settings: oai_settings,
-        background: background_settings,
-        ...(settingsDocumentRevision != null ? { settings_revision: settingsDocumentRevision } : {}),
-    };
+    return runtimeSettingsPersistence.buildRuntimeSettingsPayload();
 }
-
 export async function saveSettings(loopCounter = 0) {
-    // The opt-in caller needs an acknowledgement rather than a scheduled save.
-    const strict = arguments[1]?.strict === true;
-    if (runtimeSettingsConflict.hasConflict()) {
-        if (strict) runtimeSettingsConflict.assertWritable();
-        return;
-    }
-    if (!settingsReady) {
-        console.warn('Settings not ready, scheduling another save');
-        saveSettingsDebounced();
-        if (strict) throw new Error('Settings save is queued: settings not ready');
-        return;
-    }
-
-    const MAX_RETRIES = 3;
-    if (TempResponseLength.isCustomized()) {
-        if (loopCounter < MAX_RETRIES) {
-            console.warn('Response length is currently being overridden, scheduling another save');
-            saveSettingsDebounced(++loopCounter);
-            if (strict) throw new Error('Settings save is queued: response length is overridden');
-            return;
-        }
-        console.error('Response length is currently being overridden, but the save loop has reached the maximum number of retries');
-        TempResponseLength.restore(null);
-    }
-
-    if (currentVersion === '0.0.0') {
-        try {
-            await deferredVersionTask.ensure();
-        } catch (error) {
-            console.warn('Saving settings before client version resolved.', error);
-        }
-    }
-
-    const payload = buildRuntimeSettingsPayload();
-
-    const sortSaveSnapshot = beginSettingsSaveSnapshot(payload.settings_revision);
-    let savedRevision;
-    let sortSaveFinished = false;
-    try {
-        const saveSettingsRequest = await compressRequest({
-            method: 'POST',
-            headers: getRequestHeaders(),
-            body: JSON.stringify(payload),
-            cache: 'no-cache',
-        });
-        const result = await runtimeSettingsConflict.saveRuntime({
-            post: () => fetch('/api/settings/save', saveSettingsRequest),
-            onConflict: () => {
-                window.dispatchEvent(new Event('emberdesk:runtime-settings-conflict'));
-                toastr.warning(t`Settings were updated elsewhere. Open Settings and download your unsaved runtime settings before reloading.`, t`Settings conflict`, { timeOut: 0, extendedTimeOut: 0, closeButton: true });
-            },
-        });
-
-        if (!result.ok) {
-            throw new Error(`Failed to save settings: ${result.statusText}`);
-        }
-
-        try {
-            const saveResult = await result.json();
-            if (Number.isFinite(Number(saveResult?.settings_revision))) {
-                settingsDocumentRevision = Math.max(settingsDocumentRevision ?? 0, Number(saveResult.settings_revision));
-                if (saveResult?.result === 'ok' && Number.isSafeInteger(saveResult.settings_revision) && saveResult.settings_revision > 0) {
-                    savedRevision = saveResult.settings_revision;
-                }
-            }
-        } catch {
-            // older file-backed responses may not be JSON objects
-        }
-
-        // Do not persist the protocol field into the in-memory settings document.
-        const documentPayload = { ...payload };
-        delete documentPayload.settings_revision;
-        settings = documentPayload;
-        if (savedRevision !== undefined) {
-            finishSettingsSaveSnapshot(sortSaveSnapshot, savedRevision);
-            sortSaveFinished = true;
-        }
-        await eventSource.emit(event_types.SETTINGS_UPDATED);
-    } catch (error) {
-        console.error('Error saving settings:', error);
-        if (!runtimeSettingsConflict.hasConflict()) toastr.error(t`Check the server connection and reload the page to prevent data loss.`, t`Settings could not be saved`);
-        if (strict && savedRevision === undefined) throw error;
-    } finally {
-        if (!sortSaveFinished) finishSettingsSaveSnapshot(sortSaveSnapshot, savedRevision);
-    }
+    return runtimeSettingsPersistence.saveSettings(loopCounter, arguments[1]);
 }
 
 /**

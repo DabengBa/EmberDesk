@@ -87,17 +87,19 @@ const DEBUG_GROUP_ORDER = [
  * @returns {{key:string,label:string,type:number,rules:{id:string,name:string,enabled:boolean,pattern:string}[]}[]}
  */
 function getDebugGroups() {
-    return DEBUG_GROUP_ORDER.map(({ key, label, type }) => ({
-        key,
-        label,
-        type,
-        rules: getScriptsByType(type).map(script => ({
-            id: script.id,
-            name: script.scriptName,
-            enabled: !script.disabled,
-            pattern: script.findRegex,
-        })),
-    }));
+    return DEBUG_GROUP_ORDER.map(({ key, label, type }) => {
+        let target = null;
+        try { target = captureRegexTarget(type); } catch { /* An unavailable empty scope has no target. */ }
+        return {
+            key, label, type, snapshot: { target },
+            rules: (target ? getScriptsForTarget(target) : getScriptsByType(type)).map(script => ({
+                id: script.id,
+                name: script.scriptName,
+                enabled: !script.disabled,
+                pattern: script.findRegex,
+            })),
+        };
+    });
 }
 
 /**
@@ -151,17 +153,18 @@ function runForDebug(groups, input, { displayMode, renderMode }) {
  * Persists a rule order dragged in the debugger for a single scope.
  * @param {string} groupKey Debug group key
  * @param {string[]} ids Rule ids in the desired order
+ * @param {{target:object|null}} [snapshot] Target captured when the group was read
  * @returns {Promise<'saved'>}
  */
-async function saveDebugOrder(groupKey, ids) {
+async function saveDebugOrder(groupKey, ids, snapshot) {
     const group = DEBUG_GROUP_ORDER.find(entry => entry.key === groupKey);
     if (!group) throw new Error(`Unknown regex scope: ${groupKey}`);
 
 
     // Bind the scope identity before writes so a mid-save context switch
     // cannot persist the order to a different character/preset.
-    let target = null;
-    if (group.type !== SCRIPT_TYPES.GLOBAL) {
+    let target = snapshot?.target ?? null;
+    if (!snapshot) {
         try {
             target = captureRegexTarget(group.type);
         } catch (error) {
@@ -170,19 +173,17 @@ async function saveDebugOrder(groupKey, ids) {
             throw error;
         }
     }
-    const live = target ? getScriptsForTarget(target) : getScriptsByType(group.type);
+    if (!target) {
+        if (ids.length === 0 && getScriptsByType(group.type).length === 0) return 'saved';
+        throw new Error('Regex scope was unavailable when the debugger opened');
+    }
+    const live = getScriptsForTarget(target);
     if (ids.length !== live.length || !ids.every(id => live.some(script => script.id === id))) {
         throw new Error('Regex rules changed while saving order');
     }
 
     const next = ids.map(id => live.find(script => script.id === id));
-    if (group.type === SCRIPT_TYPES.GLOBAL) {
-        feature_settings.regex = next;
-    } else {
-        await saveScriptsByType(next, group.type, target);
-    }
-
-    await saveSettingsStrict();
+    await saveScriptsByType(next, group.type, target);
     regexListBridge.refresh();
     return 'saved';
 }
@@ -285,26 +286,14 @@ const regexToolbar = {
     },
     openDebugger: () => onRegexDebuggerOpenClick(),
     importFiles: (files) => importRegexFiles(files),
-    setScopedAllowed: (value) => {
+    setScopedAllowed: async (value) => {
         if (this_chid === undefined) throw new Error(t`No character selected.`);
-        const character = characters[this_chid];
-        if (value) {
-            allowScopedScripts(character);
-        } else {
-            disallowScopedScripts(character);
-        }
-        saveSettingsDebounced();
-        reloadCurrentChat();
+        await authorizeRegexTarget(captureRegexTarget(SCRIPT_TYPES.SCOPED), value);
+        await reloadCurrentChat();
     },
-    setPresetAllowed: (value) => {
-        const name = getCurrentPresetName();
-        if (value) {
-            allowPresetScripts(getCurrentPresetAPI(), name);
-        } else {
-            disallowPresetScripts(getCurrentPresetAPI(), name);
-        }
-        saveSettingsDebounced();
-        reloadCurrentChat();
+    setPresetAllowed: async (value) => {
+        await authorizeRegexTarget(captureRegexTarget(SCRIPT_TYPES.PRESET), value);
+        await reloadCurrentChat();
     },
     get scopedAllowed() {
         return isScopedScriptsAllowed(characters?.[this_chid]);
