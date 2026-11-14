@@ -193,11 +193,13 @@ function KeywordField({
     values,
     field,
     onCommit,
+    onPendingChange,
 }: {
     label: string;
     values: string[];
     field: string;
     onCommit: (values: string[]) => void;
+    onPendingChange: (pending: string) => void;
 }) {
     useTranslated('');
     return (
@@ -211,6 +213,7 @@ function KeywordField({
                 inputProps={{ 'data-world-info-react-field': field }}
                 splitInput={splitKeywordInput}
                 onCommit={onCommit}
+                onPendingChange={onPendingChange}
             />
         </div>
     );
@@ -394,25 +397,34 @@ function EntryRowContent({
 }
 
 function EntryEditor({
-    entry,
+    entry: incomingEntry,
     worldName,
     commands,
     onBack,
+    saveGuard,
     emptyMessage = translate('Select an entry to start editing'),
 }: {
     entry: WorldInfoWorkbenchEntryDetail | null;
     worldName: string;
     commands: WorldInfoCommands;
     onBack?: () => void;
+    saveGuard: { current: { dirty: boolean; keyword: boolean } };
     emptyMessage?: string;
 }) {
     useTranslated('');
-    const [draft, setDraft] = useState(entry);
-    const [draftEntry, setDraftEntry] = useState(entry);
+    const [draft, setDraft] = useState(incomingEntry);
+    const [draftEntry, setDraftEntry] = useState(incomingEntry);
     const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+    const [keywordPending, setKeywordPending] = useState(false);
     const saveSeqRef = useRef(0);
     const titleInputRef = useRef<HTMLInputElement>(null);
     const pendingFieldsRef = useRef<Record<string, unknown>>({});
+    const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+    const inFlightRef = useRef(0);
+    const latestSucceededRef = useRef(false);
+    // A missing detail with the same selection is not proof of deletion. Keep
+    // the editor, including its draft, until the session changes selection.
+    const entry = incomingEntry ?? draftEntry;
     const entryUid = entry?.uid;
     const focusTitleOnOpen = Boolean(onBack);
     const regexKeywordCount = countRegexKeywords(draft?.key ?? []);
@@ -439,6 +451,8 @@ function EntryEditor({
         return () => cancelAnimationFrame(frame);
     }, [entryUid, focusTitleOnOpen]);
 
+    useEffect(() => () => clearTimeout(timerRef.current), []);
+
     if (!entry || !draft) {
         return (
             <div {...stylex.props(s.editor, s.editorEmpty)} data-world-info-react-editor="empty">
@@ -448,25 +462,52 @@ function EntryEditor({
         );
     }
 
-    const saveFields = (fields: Record<string, unknown>) => {
+    const markFields = (fields: Record<string, unknown>) => {
         setDraft(current => current ? { ...current, ...fields } as WorldInfoWorkbenchEntryDetail : current);
         pendingFieldsRef.current = { ...pendingFieldsRef.current, ...fields };
-        const seq = ++saveSeqRef.current;
+        ++saveSeqRef.current;
+        latestSucceededRef.current = false;
+        saveGuard.current.dirty = true;
         setSaveState('saving');
-        Promise.resolve(commands.updateEntryFields(entry.uid, { ...pendingFieldsRef.current }, worldName))
+    };
+
+    const flush = () => {
+        clearTimeout(timerRef.current);
+        timerRef.current = undefined;
+        if (!Object.keys(pendingFieldsRef.current).length) return;
+        const seq = ++saveSeqRef.current;
+        const fields = { ...pendingFieldsRef.current };
+        latestSucceededRef.current = false;
+        inFlightRef.current++;
+        setSaveState('saving');
+        Promise.resolve().then(() => commands.updateEntryFields(entry.uid, fields, worldName))
             .then(result => {
                 if (seq === saveSeqRef.current) {
-                    if (result !== false) {
-                        pendingFieldsRef.current = {};
-                    }
-                    setSaveState(result === false ? 'error' : 'saved');
+                    latestSucceededRef.current = result !== false;
+                    if (result === false) setSaveState('error');
                 }
             })
             .catch(() => {
-                if (seq === saveSeqRef.current) {
-                    setSaveState('error');
+                if (seq === saveSeqRef.current) setSaveState('error');
+            })
+            .finally(() => {
+                inFlightRef.current--;
+                if (inFlightRef.current === 0 && latestSucceededRef.current) {
+                    pendingFieldsRef.current = {};
+                    saveGuard.current.dirty = false;
+                    setSaveState('saved');
                 }
             });
+    };
+
+    const saveFields = (fields: Record<string, unknown>) => {
+        markFields(fields);
+        flush();
+    };
+    const debounceFields = (fields: Record<string, unknown>) => {
+        markFields(fields);
+        clearTimeout(timerRef.current);
+        timerRef.current = setTimeout(flush, 400);
     };
 
     return (<>
@@ -476,7 +517,7 @@ function EntryEditor({
                     type="button"
                     className={buttonClass(s.button, s.buttonGhost)}
                     data-world-info-react-action="back-to-list"
-                    onClick={onBack}
+                    onClick={() => { if (saveGuard.current.dirty || saveGuard.current.keyword) { flush(); return; } onBack(); }}
                 >
                     <i className={iconClass('fa-arrow-left', s.buttonIconSlot)} aria-hidden="true" />
                     {translate('Back to entry list')}
@@ -491,8 +532,8 @@ function EntryEditor({
                         ref={titleInputRef}
                         value={draft.comment}
                         data-world-info-react-field="comment"
-                        onChange={event => setDraft({ ...draft, comment: event.target.value })}
-                        onBlur={event => saveFields({ comment: event.target.value })}
+                        onChange={event => debounceFields({ comment: event.target.value })}
+                        onBlur={() => { if (timerRef.current) flush(); }}
                     />
                 </label>
                 <div {...stylex.props(s.switchRow)}>
@@ -518,6 +559,10 @@ function EntryEditor({
                             values={draft.key ?? []}
                             field="key"
                             onCommit={values => saveFields({ key: values })}
+                            onPendingChange={value => {
+                                saveGuard.current.keyword = Boolean(value.trim());
+                                setKeywordPending(saveGuard.current.keyword);
+                            }}
                         />
 
                         {regexKeywordCount > 0 ? (
@@ -543,8 +588,8 @@ function EntryEditor({
                     value={draft.content}
                     data-world-info-react-field="content"
                     rows={12}
-                    onChange={event => setDraft({ ...draft, content: event.target.value })}
-                    onBlur={event => saveFields({ content: event.target.value })}
+                    onChange={event => debounceFields({ content: event.target.value })}
+                    onBlur={() => { if (timerRef.current) flush(); }}
                 />
             </section>
 
@@ -575,15 +620,10 @@ function EntryEditor({
                             onChange={event => {
                                 const value = parseFiniteNumber(event.target.value);
                                 if (value !== undefined) {
-                                    setDraft({ ...draft, depth: value });
+                                    debounceFields({ depth: value });
                                 }
                             }}
-                            onBlur={event => {
-                                const value = parseFiniteNumber(event.target.value);
-                                if (value !== undefined) {
-                                    saveFields({ depth: value });
-                                }
-                            }}
+                            onBlur={() => { if (timerRef.current) flush(); }}
                         />
                     </label>
                     <label {...stylex.props(s.field)}>
@@ -595,15 +635,10 @@ function EntryEditor({
                             onChange={event => {
                                 const value = parseFiniteNumber(event.target.value);
                                 if (value !== undefined) {
-                                    setDraft({ ...draft, order: value });
+                                    debounceFields({ order: value });
                                 }
                             }}
-                            onBlur={event => {
-                                const value = parseFiniteNumber(event.target.value);
-                                if (value !== undefined) {
-                                    saveFields({ order: value });
-                                }
-                            }}
+                            onBlur={() => { if (timerRef.current) flush(); }}
                         />
                     </label>
                     <label {...stylex.props(s.field)}>
@@ -619,15 +654,10 @@ function EntryEditor({
                                 onChange={event => {
                                     const value = parseFiniteNumber(event.target.value);
                                     if (value !== undefined) {
-                                        setDraft({ ...draft, probability: value });
+                                        debounceFields({ probability: value, useProbability: true });
                                     }
                                 }}
-                                onBlur={event => {
-                                    const value = parseFiniteNumber(event.target.value);
-                                    if (value !== undefined) {
-                                        saveFields({ probability: value, useProbability: true });
-                                    }
-                                }}
+                                onBlur={() => { if (timerRef.current) flush(); }}
                             />
                             <span {...stylex.props(s.probUnit)} aria-hidden="true">%</span>
                         </span>
@@ -641,7 +671,7 @@ function EntryEditor({
                 type="button"
                 className={buttonClass(s.button, s.buttonGhost)}
                 data-world-info-react-action="move-copy-entry"
-                onClick={() => void commands.moveOrCopyEntry(entry.uid)}
+                onClick={() => { if (saveGuard.current.dirty || saveGuard.current.keyword) { flush(); return; } void commands.moveOrCopyEntry(entry.uid); }}
             >
                 <i className={iconClass('fa-folder-tree', s.buttonIconSlot)} aria-hidden="true" />
                 {translate('Move / copy')}
@@ -651,6 +681,7 @@ function EntryEditor({
                 className={buttonClass(s.button, s.buttonDanger)}
                 data-world-info-react-action="delete-entry"
                 onClick={() => {
+                    if (saveGuard.current.dirty || saveGuard.current.keyword) { flush(); return; }
                     void Promise.resolve(commands.bulkDeleteEntries([entry.uid])).then(deleted => {
                         if (deleted) {
                             onBack?.();
@@ -667,9 +698,9 @@ function EntryEditor({
                     aria-hidden="true"
                 />
                 UID {entry.uid} · {translate('${0} characters').replace('${0}', String((draft.content ?? '').length))}
-                {saveState !== 'idle' ? (
+                {keywordPending || saveState !== 'idle' ? (
                     <span {...stylex.props(saveState === 'error' ? s.saveStateError : null)}>
-                        {' · '}{saveState === 'saving' ? translate('Saving…') : saveState === 'error' ? translate('Save failed') : translate('Saved')}
+                        {' · '}{saveState === 'error' ? translate('Save failed') : keywordPending ? translate('Unsaved change') : saveState === 'saving' ? translate('Saving…') : translate('Saved')}
                     </span>
                 ) : null}
             </span>
@@ -700,6 +731,23 @@ export function WorldInfoWorkbenchPanel({
         children: ReactNode;
     }) => ReactNode;
 }) {
+    const saveGuard = useRef({ dirty: false, keyword: false });
+    const [operationBusy, setOperationBusy] = useState(false);
+    useEffect(() => {
+        void commands.setSelectionBlocked?.(() => saveGuard.current.dirty || saveGuard.current.keyword);
+        void commands.setOperationListener?.(setOperationBusy);
+        return () => { void commands.setSelectionBlocked?.(null); void commands.setOperationListener?.(null); };
+    }, [commands]);
+    useEffect(() => {
+        const beforeUnload = (event: BeforeUnloadEvent) => {
+            if (saveGuard.current.dirty || saveGuard.current.keyword) {
+                event.preventDefault();
+                event.returnValue = true;
+            }
+        };
+        window.addEventListener('beforeunload', beforeUnload);
+        return () => window.removeEventListener('beforeunload', beforeUnload);
+    }, []);
     useEffect(() => () => disposeLocalDialogScope('world-info'), []);
     useTranslated('');
     const bridgeState = useMemo(
@@ -865,6 +913,7 @@ export function WorldInfoWorkbenchPanel({
     };
 
     const handleEntryClick = (uid: string) => {
+        if (operationBusy || saveGuard.current.dirty || saveGuard.current.keyword) return;
         if (multiSelectMode) {
             toggleEntrySelected(uid);
             return;
@@ -905,8 +954,15 @@ export function WorldInfoWorkbenchPanel({
         status,
         recoveryActions,
         children: (
+            <fieldset disabled={operationBusy} style={{ display: 'contents' }}>
             <div
                 {...stylex.props(s.root)}
+                onClickCapture={event => {
+                    if ((saveGuard.current.dirty || saveGuard.current.keyword) && !(event.target as Element).closest('[data-world-info-react-pane="editor"]')) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                    }
+                }}
                 data-world-info-react-workflow="workbench"
                 data-world-info-react-mobile-view={mobileView}
                 data-doc-id="feature.world_info_panel"
@@ -958,8 +1014,13 @@ export function WorldInfoWorkbenchPanel({
                                     aria-label={translate('Select a world book to edit')}
                                     value={field.state.value}
                                     onChange={event => {
+                                        if (saveGuard.current.dirty || saveGuard.current.keyword) {
+                                            event.target.value = field.state.value;
+                                            return;
+                                        }
                                         const worldIndex = event.target.value;
-                                        field.handleChange(worldIndex);
+                                        // The session remains authoritative while the book loads.
+                                        // A draft made meanwhile can veto the switch.
                                         worldInfoCommandMutation.mutate(() => commands.selectWorld(worldIndex));
                                         setMobileView('list');
                                     }}
@@ -1219,7 +1280,7 @@ export function WorldInfoWorkbenchPanel({
                                 <div
                                     key={entry.uid}
                                     role="button"
-                                    tabIndex={0}
+                                    tabIndex={operationBusy ? -1 : 0}
                                     {...stylex.props(
                                         s.entryRow,
                                         bridgeState.selectedEntryUid === entry.uid && !multiSelectMode ? s.entryRowSelected : null,
@@ -1227,6 +1288,7 @@ export function WorldInfoWorkbenchPanel({
                                         multiSelectMode && selectedUids.has(entry.uid) ? s.entryRowChecked : null,
                                     )}
                                     data-world-info-react-entry={entry.uid}
+                                    aria-disabled={operationBusy || undefined}
                                     aria-current={!multiSelectMode && bridgeState.selectedEntryUid === entry.uid ? 'true' : undefined}
                                     aria-pressed={multiSelectMode ? selectedUids.has(entry.uid) : undefined}
                                     data-world-info-react-selected={multiSelectMode && selectedUids.has(entry.uid) ? 'true' : undefined}
@@ -1303,16 +1365,18 @@ export function WorldInfoWorkbenchPanel({
                         data-world-info-react-editor-visible={showEditorPane || undefined}
                     >
                         <EntryEditor
-                            key={JSON.stringify([selectedWorldName, bridgeState.selectedEntry?.uid ?? ''])}
+                            key={JSON.stringify([selectedWorldName, bridgeState.selectedEntryUid ?? ''])}
                             entry={bridgeState.selectedEntry ?? null}
                             worldName={selectedWorldName}
                             commands={commands}
+                            saveGuard={saveGuard}
                             onBack={isNarrow && mobileView === 'editor' ? backToList : undefined}
                             emptyMessage={selectedWorldName ? translate('Select an entry to start editing') : translate('Select or create a world book first')}
                         />
                     </div>
                 </div>
             </div>
+            </fieldset>
         ),
     });
 }

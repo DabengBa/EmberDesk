@@ -81,6 +81,8 @@ export interface WorldInfoCommands {
     deleteWorld(): CommandResult;
     refreshWorld(): CommandResult;
     openEntry(uid: string): CommandResult;
+    setSelectionBlocked?(guard: (() => boolean) | null): CommandResult;
+    setOperationListener?(listener: ((busy: boolean) => void) | null): CommandResult;
     updateEntryFields(uid: string, fields: Record<string, unknown>, worldName?: string): CommandResult;
     clearSelectedEntry(): CommandResult;
     setScanDepth(depth: number): CommandResult;

@@ -2,6 +2,71 @@ import { expect, jest, test } from '@jest/globals';
 
 jest.unstable_mockModule('../public/scripts/i18n.js', () => ({ translate: text => text }));
 
+test.each(['delete', 'rename', 'move', 'create overwrite'])('%s enters the shared operation owner before writes', async kind => {
+    const { createWorldInfoBookCommands } = await import('../public/scripts/world-info-book-commands.js');
+    const state = await import('../public/scripts/world-info-state.js');
+    const previousFetch = globalThis.fetch;
+    state.setWorldNames(['A', 'B']);
+    globalThis.fetch = jest.fn();
+    const run = jest.fn(async () => false);
+    const save = jest.fn();
+    const commands = createWorldInfoBookCommands({
+        runDestructiveOperation: run, getRequestHeaders: () => ({}), saveWorldInfo: save,
+        showLocalDialog: async () => ({ action: 'rename', values: { name: 'C' } }),
+        t: (s, ...v) => String.raw({ raw: s }, ...v), equalsIgnoreCaseAndAccents: (a, b) => a === b,
+        getSanitizedFilename: async n => n, checkOverwriteExistingData: async () => true,
+        loadWorldInfo: async () => ({ entries: { 1: { uid: 1 } } }),
+    });
+    try {
+        const result = kind === 'delete' ? await commands.deleteWorldInfo('A')
+            : kind === 'rename' ? await commands.renameWorldInfo('A', { entries: {} })
+                : kind === 'move' ? await commands.moveWorldInfoEntry('A', 'B', 1)
+                    : await commands.createNewWorldInfo('A');
+        expect(result).toBe(false);
+        expect(run).toHaveBeenCalledWith(kind === 'move' ? ['A', 'B'] : kind === 'rename' ? ['A', 'C'] : ['A'], expect.any(Function));
+        expect(save).not.toHaveBeenCalled();
+        expect(globalThis.fetch).not.toHaveBeenCalled();
+    } finally { globalThis.fetch = previousFetch; state.setWorldNames([]); }
+});
+
+test('rename reads the latest book after its dialog, inside the operation owner', async () => {
+    const { createWorldInfoBookCommands } = await import('../public/scripts/world-info-book-commands.js');
+    const state = await import('../public/scripts/world-info-state.js');
+    const previousFetch = globalThis.fetch;
+    state.setWorldInfo({}); state.setWorldNames(['A']); state.setSelectedWorldInfo([]);
+    let owned = false;
+    const save = jest.fn();
+    const commands = createWorldInfoBookCommands({
+        showLocalDialog: async () => ({ action: 'rename', values: { name: 'B' } }),
+        t: (s, ...v) => String.raw({ raw: s }, ...v), equalsIgnoreCaseAndAccents: (a, b) => a === b,
+        runDestructiveOperation: async (_names, op) => { owned = true; try { return await op(); } finally { owned = false; } },
+        loadWorldInfo: async () => { expect(owned).toBe(true); return { entries: { 1: { content: 'new draft saved during dialog' } } }; },
+        saveWorldInfo: save, getRequestHeaders: () => ({}), flushDeletedWorldsFromUI: async () => {},
+        selectWorldInfoEditorName: async () => {}, characters: [],
+    });
+    globalThis.fetch = jest.fn(async () => ({ ok: true }));
+    try {
+        expect(await commands.renameWorldInfo('A', { entries: { 1: { content: 'stale' } } })).toBe(true);
+        expect(save.mock.calls[0][1].entries[1].content).toBe('new draft saved during dialog');
+    } finally { globalThis.fetch = previousFetch; state.setWorldNames([]); }
+});
+
+test('deleting a book with a guarded editor does not send a destructive request', async () => {
+    const { createWorldInfoBookCommands } = await import('../public/scripts/world-info-book-commands.js');
+    const state = await import('../public/scripts/world-info-state.js');
+    const previousFetch = globalThis.fetch;
+    state.setWorldNames(['A']);
+    globalThis.fetch = jest.fn(async () => ({ ok: false }));
+    try {
+        const commands = createWorldInfoBookCommands({ isWorldInfoDeletionBlocked: name => name === 'A', getRequestHeaders: () => ({}) });
+        expect(await commands.deleteWorldInfo('A')).toBe(false);
+        expect(globalThis.fetch).not.toHaveBeenCalled();
+    } finally {
+        globalThis.fetch = previousFetch;
+        state.setWorldNames([]);
+    }
+});
+
 test('rename restores the active slot through the state command, retaining other edits while awaiting deletion', async () => {
     const { createWorldInfoBookCommands } = await import('../public/scripts/world-info-book-commands.js');
     const state = await import('../public/scripts/world-info-state.js');
@@ -133,6 +198,32 @@ test('moving an entry keeps target-first save order and uses live book names', a
         setWorldNames(['A']);
         expect(await commands.moveWorldInfoEntry('A', 'B', 1)).toBe(false);
         expect(saves).toHaveLength(2);
+    } finally {
+        globalThis.toastr = previousToastr;
+        setWorldNames([]);
+    }
+});
+
+test('moving or copying refuses to overwrite a book that became dirty while loading', async () => {
+    const { createWorldInfoBookCommands } = await import('../public/scripts/world-info-book-commands.js');
+    const { setWorldNames } = await import('../public/scripts/world-info-state.js');
+    const previousToastr = globalThis.toastr;
+    globalThis.toastr = { success: jest.fn(), error: jest.fn() };
+    const save = jest.fn();
+    let dirty = false;
+    setWorldNames(['A', 'B']);
+    try {
+        const commands = createWorldInfoBookCommands({
+            isWorldInfoDeletionBlocked: name => name === 'A' && dirty,
+            loadWorldInfo: async name => {
+                if (name === 'B') dirty = true;
+                return name === 'A' ? { entries: { 1: { uid: 1, comment: 'entry' } } } : { entries: {} };
+            },
+            saveWorldInfo: save, deleteWIOriginalDataValue: jest.fn(), getSelectedWorldInfoEditorName: () => '',
+            t: strings => strings.join(''),
+        });
+        expect(await commands.moveWorldInfoEntry('A', 'B', 1, { deleteOriginal: false })).toBe(false);
+        expect(save).not.toHaveBeenCalled();
     } finally {
         globalThis.toastr = previousToastr;
         setWorldNames([]);

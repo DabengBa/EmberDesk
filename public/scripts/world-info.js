@@ -217,9 +217,12 @@ export async function selectWorldInfoEditorName(worldName) {
     const name = String(worldName ?? '');
     const session = getWorldInfoWorkbenchSession();
     const selection = session.selectWorldName(name);
-    applyWorldInfoSearchQuery('');
-
-    await selection;
+    const selected = await selection;
+    if ((selected || name === '') && session.getSelectedWorldName() === name) {
+        applyWorldInfoSearchQuery('');
+        return true;
+    }
+    return false;
 }
 
 /**
@@ -234,7 +237,7 @@ export async function selectWorldInfoEditorIndex(worldIndex) {
     const name = selectedValue === ''
         ? ''
         : (world_names?.includes(selectedValue) ? selectedValue : indexedName ?? selectedValue);
-    await selectWorldInfoEditorName(name);
+    return await selectWorldInfoEditorName(name);
 }
 
 export function applyWorldInfoSearchQuery(searchQuery) {
@@ -368,6 +371,14 @@ export async function selectWorldInfoWorkbenchEntry(uid) {
     return session.selectEntry(uid);
 }
 
+export function setWorldInfoSelectionBlocked(guard) {
+    getWorldInfoWorkbenchSession().setSelectionBlocked(guard);
+}
+
+export function setWorldInfoOperationListener(listener) {
+    getWorldInfoWorkbenchSession().setOperationListener(listener);
+}
+
 /**
  * Update editable entry fields through the World Info facade and preserve compatibility fields.
  * @param {string|number} uid
@@ -482,17 +493,23 @@ export async function saveWorldInfo(name, data, _immediately = false) {
     return worldInfoRepository.save(name, data);
 }
 
-const { renameWorldInfo, deleteWorldInfo, getFreeWorldEntryUid, getFreeWorldName, createNewWorldInfo, assignLorebookToChat, moveWorldInfoEntry, charUpdatePrimaryWorld, charUpdateAddAuxWorld, charSetAuxWorlds } = createWorldInfoBookCommands({
+const runWorldInfoDestructiveOperation = (names, operation, blockedResult) => getWorldInfoWorkbenchSession().runDestructiveOperation(names, operation, blockedResult);
+const { renameWorldInfo, deleteWorldInfo, deleteWorldInfoUnlocked, getFreeWorldEntryUid, getFreeWorldName, createNewWorldInfo, assignLorebookToChat, moveWorldInfoEntry, charUpdatePrimaryWorld, charUpdateAddAuxWorld, charSetAuxWorlds } = createWorldInfoBookCommands({
+    runDestructiveOperation: runWorldInfoDestructiveOperation,
+    isWorldInfoDeletionBlocked: name => {
+        const session = getWorldInfoWorkbenchSession();
+        return session.getSelectedWorldName() === name && session.isSelectionBlocked();
+    },
     getCharacterWorldDraftIdentity: () => getWorldInfoShell().getCharacterWorldDraftIdentity(),
     POPUP_TYPE, showLocalDialog, t, equalsIgnoreCaseAndAccents, saveWorldInfo, setWorldInfoGlobalActiveNames, selectWorldInfoEditorName, saveSettingsDebounced, characters, getRequestHeaders, getOneCharacter, getCurrentShellCharacterId, select_selected_character, setWorldInfoButtonClass, flushDeletedWorldsFromUI, getSanitizedFilename, checkOverwriteExistingData, updateWorldInfoList, hideWorldEditor, chat_metadata, METADATA_KEY, openWorldInfoEditor, renderTemplateAsync, getCurrentChatId, saveMetadata, callGenericPopup, loadWorldInfo, deleteWIOriginalDataValue, getSelectedWorldInfoEditorName, reloadEditor, getCurrentShellMenuType, create_save, createOrEditCharacter, getCharaFilename, normalizeArray,
 });
 export { deleteWorldInfo, getFreeWorldEntryUid, getFreeWorldName, createNewWorldInfo, assignLorebookToChat, moveWorldInfoEntry, charUpdatePrimaryWorld, charUpdateAddAuxWorld, charSetAuxWorlds };
-const { promptToCreateWorldInfo, exportCurrentWorldInfo, renameCurrentWorldInfo, duplicateCurrentWorldInfo, deleteCurrentWorldInfo } = createWorldInfoBookUi({ getFreeWorldName, showLocalDialog, t, createNewWorldInfo, getSelectedWorldInfoEditorName, loadWorldInfo, download, renameWorldInfo, saveWorldInfo, updateWorldInfoList, selectWorldInfoEditorName, hideWorldEditor, getRequestHeaders, flushDeletedWorldsFromUI, saveSettingsDebounced, deleteWorldInfo });
+const { promptToCreateWorldInfo, exportCurrentWorldInfo, renameCurrentWorldInfo, duplicateCurrentWorldInfo, deleteCurrentWorldInfo } = createWorldInfoBookUi({ getFreeWorldName, showLocalDialog, t, createNewWorldInfo, getSelectedWorldInfoEditorName, loadWorldInfo, download, renameWorldInfo, saveWorldInfo, updateWorldInfoList, selectWorldInfoEditorName, hideWorldEditor, getRequestHeaders, flushDeletedWorldsFromUI, saveSettingsDebounced, deleteWorldInfo, runDestructiveOperation: runWorldInfoDestructiveOperation });
 export { promptToCreateWorldInfo, exportCurrentWorldInfo, renameCurrentWorldInfo, duplicateCurrentWorldInfo, deleteCurrentWorldInfo };
 const { createWorldInfoEntryFromEditor, backfillWorldInfoMemosFromWorkbench, promptApplyWorldInfoCurrentSorting, bulkDeleteWorldInfoEntries, bulkSetWorldInfoEntriesEnabled, promptMoveOrCopyWorldInfoEntry } = createWorldInfoEditorUi({ getWorldInfoWorkbenchSession, worldInfoRepository, loadWorldInfo, createWorldInfoEntry, showLocalDialog, t, moveWorldInfoEntry });
 export { createWorldInfoEntryFromEditor, backfillWorldInfoMemosFromWorkbench, promptApplyWorldInfoCurrentSorting, bulkDeleteWorldInfoEntries, bulkSetWorldInfoEntriesEnabled, promptMoveOrCopyWorldInfoEntry };
 const { importWorldInfo, importWorldInfoFiles, isWorldInfoImportBusy } = createWorldInfoImportUi({
-    getWorldNames: () => world_names, deleteWorldInfo, updateWorldInfoList, selectWorldInfoEditorName,
+    getWorldNames: () => world_names, deleteWorldInfo: deleteWorldInfoUnlocked, updateWorldInfoList, selectWorldInfoEditorName, runDestructiveOperation: runWorldInfoDestructiveOperation,
     eventSource, event_types, getSanitizedFilename, equalsIgnoreCaseAndAccents, checkOverwriteExistingData,
     escapeHtml, parseJsonFile, getFileBuffer, extractDataFromPng, getRequestHeaders, t, translate, showLocalDialog, beginLocalDialogOperation,
 });
@@ -505,12 +522,13 @@ export async function openWorldInfoEditor(worldName) {
     console.log(`Opening lorebook for ${worldName}`);
     if (!world_names?.includes(worldName)) {
         console.warn(`Lorebook '${worldName}' is not available in the world list.`);
-        return;
+        return false;
     }
+    if (!await selectWorldInfoEditorName(worldName)) return false;
     if (!$('#WorldInfo').hasClass('openDrawer')) {
         await getWorldInfoShell().openWorldInfoPanel();
     }
-    await selectWorldInfoEditorName(worldName);
+    return true;
 }
 
 export const initWorldInfo = createWorldInfoPanelUi({

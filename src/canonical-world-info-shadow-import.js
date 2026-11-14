@@ -19,7 +19,7 @@ import {
     getCanonicalWorldInfoBook,
     listCanonicalWorldInfoBookRows,
     upsertCanonicalWorldInfoBookInTransaction,
-} from './endpoints/world-info-store.js';
+} from './endpoints/world-info-store.ts';
 
 export const WORLD_INFO_AUDIT_SCOPE = 'world_info';
 

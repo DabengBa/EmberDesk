@@ -20,7 +20,7 @@ import {
     listOpenProjectionRepairs,
     registerDefaultCanonicalStorageSliceRegistry,
 } from './canonical-sqlite-rollout-contract.js';
-import { listOpenWorldInfoProjectionRepairs } from './endpoints/world-info-store.js';
+import { listOpenWorldInfoProjectionRepairs } from './endpoints/world-info-store.ts';
 import { listOpenSettingsProjectionRepairs } from './endpoints/settings-store.js';
 import { listOpenSecretProjectionRepairs } from './endpoints/canonical-secrets-store.js';
 import { listOpenCanonicalManagedMediaRepairs } from './endpoints/canonical-managed-media-store.js';

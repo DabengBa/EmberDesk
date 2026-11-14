@@ -21,7 +21,7 @@ import {
     normalizeCanonicalWorldInfoName,
 
     upsertCanonicalWorldInfoBookInTransaction,
-} from './world-info-store.js';
+} from './world-info-store.ts';
 import {
     clearCanonicalCharacterWorldBinding,
     listCanonicalCharactersBoundToWorld,

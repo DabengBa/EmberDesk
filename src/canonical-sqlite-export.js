@@ -14,7 +14,7 @@ import { getCanonicalManagedMediaReference, listCanonicalManagedMediaReferences 
 import { getCanonicalSecretsProjection } from './canonical-secrets-shadow-import.js';
 import { getCanonicalSettingsDocument } from './endpoints/settings-store.js';
 import { listCanonicalPresets } from './endpoints/presets-store.js';
-import { listCanonicalWorldInfoBookRows } from './endpoints/world-info-store.js';
+import { listCanonicalWorldInfoBookRows } from './endpoints/world-info-store.ts';
 import { withCanonicalTransaction } from './canonical-sqlite.js';
 
 const DEFAULT_AVATAR_FILE = fileURLToPath(new URL('../public/img/ai4.png', import.meta.url));

@@ -31,6 +31,6 @@ export async function openBoundWorldInfoBook({ boundName, worldNames, openEditor
     if (!worldName) {
         return '';
     }
-    await openEditor(worldName);
+    if (await openEditor(worldName) === false) return '';
     return worldName;
 }

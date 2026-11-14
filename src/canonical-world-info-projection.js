@@ -11,7 +11,7 @@ import {
     recordWorldInfoProjectionRepair,
     resolveWorldInfoProjectionRepair,
     upsertCanonicalWorldInfoBookInTransaction,
-} from './endpoints/world-info-store.js';
+} from './endpoints/world-info-store.ts';
 
 export const WORLD_PROJECTION_INTENT_PREFIX = 'world-path-v1:';
 const PREFIX = WORLD_PROJECTION_INTENT_PREFIX;

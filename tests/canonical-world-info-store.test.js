@@ -6,7 +6,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, jest, test } from '@jest/globals';
 
 import { createCanonicalSqliteManager, withCanonicalTransaction } from '../src/canonical-sqlite.js';
-import * as worldStore from '../src/endpoints/world-info-store.js';
+import * as worldStore from '../src/endpoints/world-info-store.ts';
 import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
 import {
     getCanonicalWorldInfoBook,
@@ -14,7 +14,7 @@ import {
     normalizeCanonicalWorldInfoName,
     recordWorldInfoProjectionRepair,
     upsertCanonicalWorldInfoBook,
-} from '../src/endpoints/world-info-store.js';
+} from '../src/endpoints/world-info-store.ts';
 import {
     auditCanonicalWorldInfoShadowImport,
     runCanonicalWorldInfoShadowImport,

@@ -40,7 +40,7 @@ import {
 } from './endpoints/character-store.ts';
 import {
     listOpenWorldInfoProjectionRepairs,
-} from './endpoints/world-info-store.js';
+} from './endpoints/world-info-store.ts';
 import {
     listOpenSettingsProjectionRepairs,
     resolveSettingsProjectionRepair,

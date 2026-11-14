@@ -48,38 +48,42 @@ export async function runWorldInfoFileImport(file, { overwriteMode = 'confirm', 
     const worldName = getWorldInfoImportBaseName(file);
     const sanitizedWorldName = await getSanitizedFilename(worldName);
     if (signal?.aborted) return createWorldInfoImportResult('cancelled', file, sanitizedWorldName);
-    let allowed;
-    try { allowed = await prepareWorldInfoImportOverwrite(sanitizedWorldName, metadata, overwriteMode, signal); } catch (error) {
-        console.error('Error preparing World Info overwrite:', error);
-        toastr.error(t`Import failed. Please check your connection and try again.`);
-        return createWorldInfoImportResult('failed', file, sanitizedWorldName);
-    }
-    if (!allowed) return createWorldInfoImportResult('cancelled', file, sanitizedWorldName);
-    // Once deletion has succeeded, finish the matching import to avoid losing the original.
-    if (signal?.aborted && allowed !== 'deleted') return createWorldInfoImportResult('cancelled', file, sanitizedWorldName);
-    try {
-        const result = await fetch('/api/worldinfo/import', {
-            method: 'POST', headers: getRequestHeaders({ omitContentType: true }), body: formData, cache: 'no-cache',
-        });
-        if (!result.ok) {
-            if (result.status === 413) {
-                console.error('Error importing world info: file too large', result.status, result.statusText);
-                toastr.error(t`File is too large. Please check the file contents or compress it before retrying.`);
-                return createWorldInfoImportResult('failed', file);
+    const run = deps.runDestructiveOperation ?? ((_names, operation) => operation());
+    const targetNames = deps.getImportTargetNames?.(sanitizedWorldName) ?? [sanitizedWorldName];
+    return run(targetNames, async () => {
+        let allowed;
+        try { allowed = await prepareWorldInfoImportOverwrite(sanitizedWorldName, metadata, overwriteMode, signal); } catch (error) {
+            console.error('Error preparing World Info overwrite:', error);
+            toastr.error(t`Import failed. Please check your connection and try again.`);
+            return createWorldInfoImportResult('failed', file, sanitizedWorldName);
+        }
+        if (!allowed) return createWorldInfoImportResult('cancelled', file, sanitizedWorldName);
+        // Once deletion has succeeded, finish the matching import to avoid losing the original.
+        if (signal?.aborted && allowed !== 'deleted') return createWorldInfoImportResult('cancelled', file, sanitizedWorldName);
+        try {
+            const result = await fetch('/api/worldinfo/import', {
+                method: 'POST', headers: getRequestHeaders({ omitContentType: true }), body: formData, cache: 'no-cache',
+            });
+            if (!result.ok) {
+                if (result.status === 413) {
+                    console.error('Error importing world info: file too large', result.status, result.statusText);
+                    toastr.error(t`File is too large. Please check the file contents or compress it before retrying.`);
+                    return createWorldInfoImportResult('failed', file);
+                }
+                throw new Error(`Failed to import world info: ${result.statusText}`);
             }
-            throw new Error(`Failed to import world info: ${result.statusText}`);
+            const data = await result.json();
+            if (data.name) {
+                await deps.onImported(data.name, metadata);
+                return createWorldInfoImportResult('success', file, data.name);
+            }
+            return createWorldInfoImportResult('failed', file);
+        } catch (error) {
+            console.error('Error importing world info:', error);
+            toastr.error(t`Import failed. Please check your connection and try again.`);
+            return createWorldInfoImportResult('failed', file);
         }
-        const data = await result.json();
-        if (data.name) {
-            await deps.onImported(data.name, metadata);
-            return createWorldInfoImportResult('success', file, data.name);
-        }
-        return createWorldInfoImportResult('failed', file);
-    } catch (error) {
-        console.error('Error importing world info:', error);
-        toastr.error(t`Import failed. Please check your connection and try again.`);
-        return createWorldInfoImportResult('failed', file);
-    }
+    }, createWorldInfoImportResult('cancelled', file, sanitizedWorldName));
 }
 
 export function countWorldInfoEntries(data) {

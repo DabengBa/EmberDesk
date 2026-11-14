@@ -154,7 +154,7 @@ describe('default content seeding', () => {
 
         const { canonicalSqliteManager } = await import('../src/canonical-sqlite.js');
         const { runCanonicalMigrations } = await import('../src/canonical-sqlite-migrations.js');
-        const { upsertCanonicalWorldInfoBook, markCanonicalWorldInfoBookDeleted } = await import('../src/endpoints/world-info-store.js');
+        const { upsertCanonicalWorldInfoBook, markCanonicalWorldInfoBookDeleted } = await import('../src/endpoints/world-info-store.ts');
         const db = canonicalSqliteManager.open({
             handle: 'seed-tombstone-user',
             directories,
@@ -185,7 +185,7 @@ describe('default content seeding', () => {
         const directories = getUserDirectories('seed-live-authority');
         await checkForNewContent([directories], [], { freshUser: true });
         const { canonicalSqliteManager } = await import('../src/canonical-sqlite.js');
-        const { upsertCanonicalWorldInfoBook } = await import('../src/endpoints/world-info-store.js');
+        const { upsertCanonicalWorldInfoBook } = await import('../src/endpoints/world-info-store.ts');
         const db = canonicalSqliteManager.open({ handle: 'seed-live-authority', directories, featureFlags: { enabled: true, strict: false } });
         upsertCanonicalWorldInfoBook(db, { name: 'Eldoria', payload: { entries: { one: { content: 'authority' } } } });
         canonicalSqliteManager.close(directories);
@@ -219,7 +219,7 @@ describe('default content seeding', () => {
 
         // Reset the world so only this test decides whether it comes back.
         const { canonicalSqliteManager } = await import('../src/canonical-sqlite.js');
-        const { upsertCanonicalWorldInfoBook } = await import('../src/endpoints/world-info-store.js');
+        const { upsertCanonicalWorldInfoBook } = await import('../src/endpoints/world-info-store.ts');
         const seededDb = canonicalSqliteManager.open({
             handle: 'seed-delete-race-user',
             directories,

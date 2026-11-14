@@ -92,6 +92,15 @@ run without a production loader or emitted graph.
 
 ## Migrated slices
 
+`src/endpoints/world-info-store.ts` is the sole implementation of the
+canonical World Info store. Its JavaScript callers use the real `.ts` path,
+including projection and shadow import. SQLite remains authoritative;
+transactions, entry normalization, soft deletion and projection repair retain
+their existing behavior. Local JSON views describe unchecked existing reads,
+not new validation. The focused SQLite and projection recovery integration
+tests cover behavior, and a native Node import of the real caller graph checks
+runtime resolution independently of Jest.
+
 `src/endpoints/chat-backup-helpers.ts` is the sole backup-planning
 implementation. `src/endpoints/chats.js` imports it explicitly. The existing
 deterministic helper tests keep their unit classification; native import

@@ -35,6 +35,142 @@ async function fixture() {
 }
 
 describe('workbench async identity', () => {
+    test.each(['selectWorldName', 'selectWorldIndex'])('slow %s keeps the old book until it can switch without losing a draft', async method => {
+        const { session, saves, delayNext } = await fixture();
+        await session.selectWorldName('Alpha');
+        await session.selectEntry('1');
+        let dirty = false;
+        session.setSelectionBlocked(() => dirty);
+        const gate = delayNext();
+        const pending = session[method](method === 'selectWorldIndex' ? '1' : 'Beta');
+        dirty = true;
+        expect(session.getSelectedWorldName()).toBe('Alpha');
+        expect(await session.updateEntryFields('1', { content: 'draft' }, 'Alpha')).toBe(true);
+        gate.resolve();
+        expect(await pending).toBe(false);
+        expect(session.getSelectedWorldName()).toBe('Alpha');
+        expect(session.getSelectedEntryUid()).toBe('1');
+        expect(saves[0].data.entries['1'].content).toBe('draft');
+        dirty = false;
+        await session.selectWorldName('Beta');
+        expect(session.getSelectedWorldName()).toBe('Beta');
+    });
+
+    test('a later selection cancels a slow switch, and a failed load leaves the current book intact', async () => {
+        const { createWorldInfoWorkbenchSession } = await import('../public/scripts/world-info-workbench-service.js');
+        const gate = deferred();
+        const session = createWorldInfoWorkbenchSession({
+            worldNames: ['Alpha', 'Beta', 'Missing'],
+            loadWorldInfo: async name => {
+                if (name === 'Beta') await gate.promise;
+                return name === 'Missing' ? null : { entries: {} };
+            },
+        });
+        await session.selectWorldName('Alpha');
+        const pending = session.selectWorldName('Beta');
+        expect(await session.selectWorldName('Alpha')).toBe(true);
+        gate.resolve();
+        expect(await pending).toBe(false);
+        expect(await session.selectWorldName('Missing')).toBe(false);
+        expect(session.getSelectedWorldName()).toBe('Alpha');
+    });
+
+    test('snapshot retains a filtered selection but clears an entry removed from the underlying book', async () => {
+        const { createWorldInfoWorkbenchSession } = await import('../public/scripts/world-info-workbench-service.js');
+        const data = { entries: { 1: { uid: 1, comment: 'Alpha', key: [], content: '' } } };
+        const session = createWorldInfoWorkbenchSession({ worldNames: ['Alpha'], loadWorldInfo: async () => structuredClone(data) });
+        await session.selectWorldName('Alpha');
+        await session.selectEntry('1');
+        session.applySearchQuery('not a match');
+        const filtered = await session.getFacadeSnapshot();
+        expect(filtered.entrySummaries).toHaveLength(0);
+        expect(filtered.selectedEntryUid).toBe('1');
+        expect(filtered.selectedEntry?.comment).toBe('Alpha');
+        delete data.entries[1];
+        const removed = await session.getFacadeSnapshot();
+        expect(removed.selectedEntryUid).toBe('');
+        expect(removed.selectedEntry).toBeNull();
+        expect(session.getSelectedEntryUid()).toBe('');
+    });
+
+    test('a failed book read is not evidence that the selected entry was deleted', async () => {
+        const { createWorldInfoWorkbenchSession } = await import('../public/scripts/world-info-workbench-service.js');
+        let failed = false;
+        const session = createWorldInfoWorkbenchSession({ worldNames: ['Alpha'], loadWorldInfo: async () => failed ? null : { entries: { 1: { uid: 1, key: [] } } } });
+        await session.selectWorldName('Alpha');
+        await session.selectEntry('1');
+        failed = true;
+        expect((await session.getFacadeSnapshot()).selectedEntryUid).toBe('1');
+        expect(session.getSelectedEntryUid()).toBe('1');
+    });
+
+    test('an entry missing from a successful read remains selected while its draft is dirty', async () => {
+        const { createWorldInfoWorkbenchSession } = await import('../public/scripts/world-info-workbench-service.js');
+        const data = { entries: { 1: { uid: 1, key: [] } } };
+        const session = createWorldInfoWorkbenchSession({ worldNames: ['Alpha'], loadWorldInfo: async () => structuredClone(data) });
+        await session.selectWorldName('Alpha');
+        await session.selectEntry('1');
+        let dirty = true;
+        session.setSelectionBlocked(() => dirty);
+        delete data.entries[1];
+        const blocked = await session.getFacadeSnapshot();
+        expect(blocked.selectedEntryUid).toBe('1');
+        expect(blocked.selectedEntry).toBeNull();
+        dirty = false;
+        expect((await session.getFacadeSnapshot()).selectedEntryUid).toBe('');
+    });
+
+    test('destructive operation locks editing until failure and refuses dirty or concurrent operations', async () => {
+        const { session } = await fixture();
+        await session.selectWorldName('Alpha');
+        const states = [];
+        session.setOperationListener(busy => states.push(busy));
+        session.setSelectionBlocked(() => true);
+        expect(await session.runDestructiveOperation(['Alpha'], async () => true)).toBe(false);
+        session.setSelectionBlocked(null);
+        const gate = deferred();
+        const pending = session.runDestructiveOperation(['Alpha'], async () => { await gate.promise; throw new Error('write failed'); });
+        expect(states.at(-1)).toBe(true);
+        expect(await session.runDestructiveOperation(['Beta'], async () => true)).toBe(false);
+        gate.resolve();
+        await expect(pending).rejects.toThrow('write failed');
+        expect(states.at(-1)).toBe(false);
+        expect(await session.runDestructiveOperation(['Alpha'], async () => true)).toBe(true);
+    });
+    test('a list refresh missing the selected book cannot discard a guarded draft', async () => {
+        const { session } = await fixture();
+        await session.selectWorldName('Alpha');
+        await session.selectEntry('1');
+        session.setSelectionBlocked(() => true);
+        session.setWorldNames(['Beta']);
+        expect(session.getSelectedWorldName()).toBe('Alpha');
+        expect(session.getSelectedEntryUid()).toBe('1');
+        expect((await session.getFacadeSnapshot()).selectedEntry?.comment).toBe('Alpha');
+    });
+
+    test('same indexed book and rejected missing entry leave selection intact', async () => {
+        const { session } = await fixture();
+        await session.selectWorldName('Alpha');
+        await session.selectEntry('1');
+        session.setSelectionBlocked(() => true);
+        expect(await session.selectWorldIndex('0')).not.toBe(false);
+        session.setSelectionBlocked(null);
+        expect(await session.selectEntry('missing')).toBe(false);
+        expect(session.getSelectedEntryUid()).toBe('1');
+    });
+
+    test('queued deletion cannot delete a selected entry that became dirty while loading', async () => {
+        const { session, saves, delayNext } = await fixture();
+        await session.selectWorldName('Alpha');
+        await session.selectEntry('1');
+        const gate = delayNext();
+        const pending = session.deleteEntries(['1']);
+        session.setSelectionBlocked(() => true);
+        gate.resolve();
+        expect(await pending).toBe(0);
+        expect(saves).toHaveLength(0);
+        expect(session.getSelectedEntryUid()).toBe('1');
+    });
     test('mounts complete in request order even when a snapshot is delayed', async () => {
         const { createWorldInfoMountScheduler } = await import('../public/scripts/world-info-workbench-service.js');
         const gate = deferred();

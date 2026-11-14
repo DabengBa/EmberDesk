@@ -1,34 +1,42 @@
 import sanitize from 'sanitize-filename';
+import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
 
 import { withCanonicalTransaction } from '../canonical-sqlite.js';
 import { uuidv4 } from '../util.js';
 
-function cloneJson(payload) {
+// Views describe the existing unchecked JSON access, not runtime validation.
+type EntryView = { uid?: unknown; key?: unknown; keysecondary?: unknown; content?: unknown; comment?: unknown; order?: unknown; enabled?: unknown; selective?: unknown; constant?: unknown; position?: unknown; role?: unknown; probability?: unknown; depth?: unknown; extensions?: unknown };
+type BookView = { name?: unknown; entries?: Record<string, unknown>; extensions?: unknown };
+type UpsertOptions = { name: unknown; payload?: unknown; sourceMtimeMs?: unknown; sourceSizeBytes?: unknown; nowMs?: unknown };
+type EntryOptions = { worldBookId: SQLInputValue; entryKey: string; entry: unknown; nowMs?: unknown };
+
+function cloneJson(payload: unknown): unknown {
     return structuredClone(payload ?? {});
 }
 
-function parseRequiredJson(value, fieldName) {
+function parseRequiredJson(value: unknown, fieldName: string): unknown {
     try {
         return JSON.parse(String(value ?? '{}'));
     } catch (error) {
-        throw new Error(`Canonical World Info row has invalid ${fieldName}: ${String(error?.message ?? error ?? '')}`);
+        const caught = error as { message?: unknown } | null | undefined;
+        throw new Error(`Canonical World Info row has invalid ${fieldName}: ${String(caught?.message ?? caught ?? '')}`);
     }
 }
 
-function getRouteVisibleName(name, payload) {
+function getRouteVisibleName(name: string, payload: BookView) {
     return String(payload?.name || name);
 }
 
-function getExtensions(payload) {
+function getExtensions(payload: EntryView | BookView) {
     const extensions = payload?.extensions;
     return extensions && typeof extensions === 'object' && !Array.isArray(extensions) ? cloneJson(extensions) : {};
 }
 
-export function normalizeCanonicalWorldInfoName(name) {
+export function normalizeCanonicalWorldInfoName(name: unknown) {
     return sanitize(String(name ?? '').trim()).trim();
 }
 
-function getExistingWorldBookRow(db, name) {
+function getExistingWorldBookRow(db: DatabaseSync, name: string) {
     return db.prepare(`
         SELECT id, name, payload_json, metadata_json, deleted_at_ms
         FROM world_books
@@ -36,13 +44,13 @@ function getExistingWorldBookRow(db, name) {
     `).get(name);
 }
 
-function normalizeEntryRecord({ worldBookId, entryKey, entry, nowMs }) {
-    const payload = cloneJson(entry);
+function normalizeEntryRecord({ worldBookId, entryKey, entry, nowMs }: EntryOptions) {
+    const payload = cloneJson(entry) as EntryView;
     return {
         id: uuidv4(),
         world_book_id: worldBookId,
         entry_key: String(entryKey),
-        uid: Number.isInteger(payload.uid) ? payload.uid : null,
+        uid: Number.isInteger(payload.uid) ? payload.uid as number : null,
         key_json: JSON.stringify(Array.isArray(payload.key) ? payload.key : []),
         keysecondary_json: JSON.stringify(Array.isArray(payload.keysecondary) ? payload.keysecondary : []),
         content: String(payload.content ?? ''),
@@ -62,7 +70,7 @@ function normalizeEntryRecord({ worldBookId, entryKey, entry, nowMs }) {
     };
 }
 
-function replaceWorldBookEntries(db, { worldBookId, entries, nowMs }) {
+function replaceWorldBookEntries(db: DatabaseSync, { worldBookId, entries, nowMs }: { worldBookId: SQLInputValue; entries: Record<string, unknown>; nowMs?: unknown }) {
     db.prepare('DELETE FROM world_book_entries WHERE world_book_id = ?').run(worldBookId);
 
     const insert = db.prepare(`
@@ -117,19 +125,19 @@ function replaceWorldBookEntries(db, { worldBookId, entries, nowMs }) {
     }
 }
 
-export function upsertCanonicalWorldInfoBookInTransaction(db, {
+export function upsertCanonicalWorldInfoBookInTransaction(db: DatabaseSync, {
     name,
     payload,
     sourceMtimeMs = 0,
     sourceSizeBytes = 0,
     nowMs = Date.now(),
-}) {
+}: UpsertOptions) {
     const normalizedName = normalizeCanonicalWorldInfoName(name);
     if (!normalizedName) {
         throw new Error('Canonical World Info book name is required');
     }
 
-    const normalizedPayload = cloneJson(payload);
+    const normalizedPayload = cloneJson(payload) as BookView;
     if (!normalizedPayload.entries || typeof normalizedPayload.entries !== 'object' || Array.isArray(normalizedPayload.entries)) {
         normalizedPayload.entries = {};
     }
@@ -179,11 +187,11 @@ export function upsertCanonicalWorldInfoBookInTransaction(db, {
     return { id: worldBookId, name: normalizedName };
 }
 
-export function upsertCanonicalWorldInfoBook(db, options) {
-    return withCanonicalTransaction(db, txnDb => upsertCanonicalWorldInfoBookInTransaction(txnDb, options));
+export function upsertCanonicalWorldInfoBook(db: DatabaseSync, options: UpsertOptions) {
+    return withCanonicalTransaction(db, (txnDb: DatabaseSync) => upsertCanonicalWorldInfoBookInTransaction(txnDb, options));
 }
 
-export function getCanonicalWorldInfoBook(db, name) {
+export function getCanonicalWorldInfoBook(db: DatabaseSync, name: unknown) {
     const row = db.prepare(`
         SELECT payload_json
         FROM world_books
@@ -198,7 +206,7 @@ export function getCanonicalWorldInfoBook(db, name) {
     return parseRequiredJson(row.payload_json, 'payload_json');
 }
 
-export function listCanonicalWorldInfoBooks(db) {
+export function listCanonicalWorldInfoBooks(db: DatabaseSync) {
     const rows = db.prepare(`
         SELECT name, payload_json, metadata_json
         FROM world_books
@@ -207,8 +215,8 @@ export function listCanonicalWorldInfoBooks(db) {
     `).all();
 
     return rows.map(row => {
-        const payload = parseRequiredJson(row.payload_json, 'payload_json');
-        const metadata = parseRequiredJson(row.metadata_json, 'metadata_json');
+        const payload = parseRequiredJson(row.payload_json, 'payload_json') as BookView;
+        const metadata = parseRequiredJson(row.metadata_json, 'metadata_json') as { routeName?: unknown; extensions?: unknown };
         return {
             file_id: String(row.name),
             name: String(metadata.routeName || payload.name || row.name),
@@ -219,7 +227,7 @@ export function listCanonicalWorldInfoBooks(db) {
     });
 }
 
-export function listCanonicalWorldInfoBookRows(db) {
+export function listCanonicalWorldInfoBookRows(db: DatabaseSync) {
     return db.prepare(`
         SELECT
             id,
@@ -246,10 +254,10 @@ export function listCanonicalWorldInfoBookRows(db) {
     }));
 }
 
-export function markCanonicalWorldInfoBookDeleted(db, {
+export function markCanonicalWorldInfoBookDeleted(db: DatabaseSync, {
     name,
     deletedAtMs = Date.now(),
-}) {
+}: { name: unknown; deletedAtMs?: unknown }) {
     return db.prepare(`
         UPDATE world_books
         SET deleted_at_ms = ?,
@@ -263,13 +271,13 @@ export function markCanonicalWorldInfoBookDeleted(db, {
     );
 }
 
-export function recordWorldInfoProjectionRepair(db, {
+export function recordWorldInfoProjectionRepair(db: DatabaseSync, {
     repairKey,
     worldName,
     reason,
     details = {},
     nowMs = Date.now(),
-}) {
+}: { repairKey: SQLInputValue; worldName: unknown; reason: unknown; details?: unknown; nowMs?: unknown }) {
     const normalizedWorldName = normalizeCanonicalWorldInfoName(worldName);
     const row = getExistingWorldBookRow(db, normalizedWorldName);
     db.prepare(`
@@ -302,10 +310,10 @@ export function recordWorldInfoProjectionRepair(db, {
     );
 }
 
-export function resolveWorldInfoProjectionRepair(db, {
+export function resolveWorldInfoProjectionRepair(db: DatabaseSync, {
     repairKey,
     resolvedAtMs = Date.now(),
-}) {
+}: { repairKey: SQLInputValue; resolvedAtMs?: unknown }) {
     return db.prepare(`
         UPDATE world_info_projection_repairs
         SET resolved_at_ms = ?,
@@ -320,8 +328,8 @@ export function resolveWorldInfoProjectionRepair(db, {
     );
 }
 
-export function listOpenWorldInfoProjectionRepairs(db) {
-    let rows = [];
+export function listOpenWorldInfoProjectionRepairs(db: DatabaseSync) {
+    let rows: ReturnType<ReturnType<DatabaseSync['prepare']>['all']> = [];
     try {
         rows = db.prepare(`
             SELECT
@@ -339,7 +347,8 @@ export function listOpenWorldInfoProjectionRepairs(db) {
             ORDER BY created_at_ms ASC, repair_key ASC
         `).all();
     } catch (error) {
-        if (String(error?.message ?? '').includes('no such table: world_info_projection_repairs')) {
+        const caught = error as { message?: unknown } | null | undefined;
+        if (String(caught?.message ?? '').includes('no such table: world_info_projection_repairs')) {
             return [];
         }
         throw error;

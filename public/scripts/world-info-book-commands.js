@@ -1,7 +1,7 @@
 import { world_info, world_names, selected_world_info, setWorldNames } from './world-info-state.js';
 
 /** Book lifecycle and character/chat reference operations. */
-export function createWorldInfoBookCommands({ POPUP_TYPE, showLocalDialog, t, equalsIgnoreCaseAndAccents, saveWorldInfo, setWorldInfoGlobalActiveNames, selectWorldInfoEditorName, saveSettingsDebounced, characters, getRequestHeaders, getOneCharacter, getCurrentShellCharacterId, getCharacterWorldDraftIdentity, select_selected_character, setWorldInfoButtonClass, flushDeletedWorldsFromUI, getSanitizedFilename, checkOverwriteExistingData, updateWorldInfoList, hideWorldEditor, chat_metadata, METADATA_KEY, openWorldInfoEditor, renderTemplateAsync, getCurrentChatId, saveMetadata, callGenericPopup, loadWorldInfo, deleteWIOriginalDataValue, getSelectedWorldInfoEditorName, reloadEditor, getCurrentShellMenuType, create_save, createOrEditCharacter, getCharaFilename, normalizeArray }) {
+export function createWorldInfoBookCommands({ POPUP_TYPE, showLocalDialog, t, equalsIgnoreCaseAndAccents, saveWorldInfo, setWorldInfoGlobalActiveNames, selectWorldInfoEditorName, saveSettingsDebounced, characters, getRequestHeaders, getOneCharacter, getCurrentShellCharacterId, getCharacterWorldDraftIdentity, select_selected_character, setWorldInfoButtonClass, flushDeletedWorldsFromUI, getSanitizedFilename, checkOverwriteExistingData, updateWorldInfoList, hideWorldEditor, chat_metadata, METADATA_KEY, openWorldInfoEditor, renderTemplateAsync, getCurrentChatId, saveMetadata, callGenericPopup, loadWorldInfo, deleteWIOriginalDataValue, getSelectedWorldInfoEditorName, reloadEditor, getCurrentShellMenuType, create_save, createOrEditCharacter, getCharaFilename, normalizeArray, isWorldInfoDeletionBlocked, runDestructiveOperation = (_names, operation) => operation() }) {
     async function renameWorldInfo(name, data) {
         const oldName = name;
         const result = await showLocalDialog({ scope: 'world-info', title: t`Rename World Info`, fields: [{ type: 'text', name: 'name', label: t`Enter a new name:`, value: oldName }], actions: [{ id: 'rename', label: t`Rename`, variant: 'primary' }, { id: 'cancel', label: t`Cancel` }], initialFocus: 'name' });
@@ -15,39 +15,45 @@ export function createWorldInfoBookCommands({ POPUP_TYPE, showLocalDialog, t, eq
             toastr.warning(t`Name not accepted, as it is the same as before (ignoring case and accents).`, t`Rename World Info`);
             return false;
         }
+        if (isWorldInfoDeletionBlocked?.(oldName)) return false;
 
-        const entryPreviouslySelected = selected_world_info.findIndex((e) => e === oldName);
+        return runDestructiveOperation([oldName, newName], async () => {
+            const entryPreviouslySelected = selected_world_info.findIndex((e) => e === oldName);
 
-        const renamedData = 'name' in data ? { ...data, name: newName } : data;
-        await saveWorldInfo(newName, renamedData, true);
-        let deleted = false;
-        try {
-            deleted = await deleteWorldInfo(oldName);
-        } catch (error) {
-            console.error('Failed to delete the original World Info after renaming:', error);
-        }
-        if (!deleted) {
-            toastr.error(t`The new World Info was saved, but the original could not be deleted.`);
-            return false;
-        }
+            // The confirmation dialog may have been open while a draft was saved.
+            const latestData = loadWorldInfo ? await loadWorldInfo(oldName) : data;
+            if (!latestData) return false;
+            const renamedData = 'name' in latestData ? { ...latestData, name: newName } : latestData;
+            await saveWorldInfo(newName, renamedData, true);
+            let deleted = false;
+            try {
+                deleted = await deleteWorldInfoUnlocked(oldName);
+            } catch (error) {
+                console.error('Failed to delete the original World Info after renaming:', error);
+            }
+            if (!deleted) {
+                toastr.error(t`The new World Info was saved, but the original could not be deleted.`);
+                return false;
+            }
 
-        // Both writes are confirmed. A failed optional list refresh must not
-        // hide the known new identity or prevent activation from following it.
-        if (!world_names.includes(newName)) {
-            setWorldNames([...world_names, newName]);
-        }
+            // Both writes are confirmed. A failed optional list refresh must not
+            // hide the known new identity or prevent activation from following it.
+            if (!world_names.includes(newName)) {
+                setWorldNames([...world_names, newName]);
+            }
 
-        if (entryPreviouslySelected !== -1) {
+            if (entryPreviouslySelected !== -1) {
             // Preserve activation edits made while awaiting I/O instead of
             // restoring an obsolete whole list.
-            const active = selected_world_info.filter(name => name !== oldName && name !== newName);
-            active.splice(Math.min(entryPreviouslySelected, active.length), 0, newName);
-            setWorldInfoGlobalActiveNames(active);
-        }
+                const active = selected_world_info.filter(name => name !== oldName && name !== newName);
+                active.splice(Math.min(entryPreviouslySelected, active.length), 0, newName);
+                setWorldInfoGlobalActiveNames(active);
+            }
 
-        await updateWorldInfoLinks(oldName, newName);
-        await selectWorldInfoEditorName(newName);
-        return true;
+            await updateWorldInfoLinks(oldName, newName);
+            await selectWorldInfoEditorName(newName);
+            return true;
+        });
     }
 
     /**
@@ -138,7 +144,12 @@ export function createWorldInfoBookCommands({ POPUP_TYPE, showLocalDialog, t, eq
      * @returns {Promise<boolean>} A promise that resolves to true if the world info was successfully deleted, false otherwise
      */
     async function deleteWorldInfo(worldInfoName) {
-        if (!world_names.includes(worldInfoName)) {
+        return runDestructiveOperation([worldInfoName], () => deleteWorldInfoUnlocked(worldInfoName));
+    }
+
+    // Only called by operations already holding the session owner.
+    async function deleteWorldInfoUnlocked(worldInfoName) {
+        if (!world_names.includes(worldInfoName) || isWorldInfoDeletionBlocked?.(worldInfoName)) {
             return false;
         }
 
@@ -224,28 +235,30 @@ export function createWorldInfoBookCommands({ POPUP_TYPE, showLocalDialog, t, eq
             return false;
         }
 
-        if (existingName) {
-            try {
-                if (!await deleteWorldInfo(existingName)) {
-                    throw new Error(`Failed to delete existing World Info '${existingName}' before overwrite.`);
+        return runDestructiveOperation([existingName || sanitizedWorldName], async () => {
+            if (existingName) {
+                try {
+                    if (!await deleteWorldInfoUnlocked(existingName)) {
+                        throw new Error(`Failed to delete existing World Info '${existingName}' before overwrite.`);
+                    }
+                } catch (error) {
+                    toastr.error(t`Failed to delete World Info.`);
+                    console.error('Failed to delete existing World Info before overwrite:', error);
+                    return false;
                 }
-            } catch (error) {
-                toastr.error(t`Failed to delete World Info.`);
-                console.error('Failed to delete existing World Info before overwrite:', error);
-                return false;
             }
-        }
 
-        await saveWorldInfo(worldName, worldInfoTemplate, true);
-        await updateWorldInfoList();
+            await saveWorldInfo(worldName, worldInfoTemplate, true);
+            await updateWorldInfoList();
 
-        if (world_names.includes(worldName)) {
-            await selectWorldInfoEditorName(worldName);
-        } else {
-            await hideWorldEditor();
-        }
+            if (world_names.includes(worldName)) {
+                await selectWorldInfoEditorName(worldName);
+            } else {
+                await hideWorldEditor();
+            }
 
-        return true;
+            return true;
+        });
     }
 
     async function assignLorebookToChat({ shiftKey, altKey }) {
@@ -314,75 +327,80 @@ export function createWorldInfoBookCommands({ POPUP_TYPE, showLocalDialog, t, eq
             return false;
         }
 
-        const entryUidString = String(uid);
+        return runDestructiveOperation([sourceName, targetName], async () => {
+            const entryUidString = String(uid);
 
-        try {
-            const sourceData = await loadWorldInfo(sourceName);
-            const targetData = await loadWorldInfo(targetName);
+            try {
+                const sourceData = await loadWorldInfo(sourceName);
+                const targetData = await loadWorldInfo(targetName);
 
-            if (!sourceData || !sourceData.entries) {
-                toastr.error(t`Failed to load data for source lorebook '${sourceName}'.`);
-                console.error(`[WI Move] Could not load source data for '${sourceName}'.`);
+                // Both books are written below, including the source for a copy.
+                if (isWorldInfoDeletionBlocked?.(sourceName) || isWorldInfoDeletionBlocked?.(targetName)) return false;
+
+                if (!sourceData || !sourceData.entries) {
+                    toastr.error(t`Failed to load data for source lorebook '${sourceName}'.`);
+                    console.error(`[WI Move] Could not load source data for '${sourceName}'.`);
+                    return false;
+                }
+                if (!targetData || !targetData.entries) {
+                    toastr.error(t`Failed to load data for target lorebook '${targetName}'.`);
+                    console.error(`[WI Move] Could not load target data for '${targetName}'.`);
+                    return false;
+                }
+
+                if (!sourceData.entries[entryUidString]) {
+                    toastr.error(t`Entry not found in source lorebook '${sourceName}'.`);
+                    console.error(`[WI Move] Entry UID ${entryUidString} not found in '${sourceName}'.`);
+                    return false;
+                }
+
+                const entryToMove = structuredClone(sourceData.entries[entryUidString]);
+
+                const newUid = getFreeWorldEntryUid(targetData);
+                if (newUid === null) {
+                    console.error(`[WI Move] Failed to get a free UID in '${targetName}'.`);
+                    return false;
+                }
+
+                entryToMove.uid = newUid;
+                // Place the entry at the end of the target lorebook
+                const maxDisplayIndex = Object.values(targetData.entries).reduce((max, entry) => Math.max(max, entry.displayIndex ?? -1), -1);
+                entryToMove.displayIndex = maxDisplayIndex + 1;
+
+                targetData.entries[newUid] = entryToMove;
+
+                if (deleteOriginal) {
+                    delete sourceData.entries[entryUidString];
+                    // Remove from originalData if it exists
+                    deleteWIOriginalDataValue(sourceData, entryUidString);
+                    // TODO: setWIOriginalDataValue
+                    console.debug(`[WI Move] Removed entry UID ${entryUidString} from source '${sourceName}'.`);
+                }
+
+                await saveWorldInfo(targetName, targetData, true);
+                console.debug(`[WI Move] Saved target lorebook '${targetName}'.`);
+                await saveWorldInfo(sourceName, sourceData, true);
+                console.debug(`[WI Move] Saved source lorebook '${sourceName}'.`);
+
+                console.log(`[WI Move] ${entryToMove.comment} ${deleteOriginal ? 'moved' : 'copied'} successfully to '${targetName}'.`);
+
+                // Check if the currently viewed book in the editor is the source or target and reload it
+                const currentEditorBookName = getSelectedWorldInfoEditorName();
+                if (currentEditorBookName === sourceName || currentEditorBookName === targetName) {
+                    await reloadEditor(currentEditorBookName);
+                }
+
+                toastr.success(deleteOriginal
+                    ? t`Entry moved successfully from '${sourceName}' to '${targetName}'.`
+                    : t`Entry copied successfully to '${targetName}'.`);
+
+                return true;
+            } catch (error) {
+                toastr.error(t`An unexpected error occurred while moving the entry: ${error.message}`);
+                console.error('[WI Move] Unexpected error:', error);
                 return false;
             }
-            if (!targetData || !targetData.entries) {
-                toastr.error(t`Failed to load data for target lorebook '${targetName}'.`);
-                console.error(`[WI Move] Could not load target data for '${targetName}'.`);
-                return false;
-            }
-
-            if (!sourceData.entries[entryUidString]) {
-                toastr.error(t`Entry not found in source lorebook '${sourceName}'.`);
-                console.error(`[WI Move] Entry UID ${entryUidString} not found in '${sourceName}'.`);
-                return false;
-            }
-
-            const entryToMove = structuredClone(sourceData.entries[entryUidString]);
-
-            const newUid = getFreeWorldEntryUid(targetData);
-            if (newUid === null) {
-                console.error(`[WI Move] Failed to get a free UID in '${targetName}'.`);
-                return false;
-            }
-
-            entryToMove.uid = newUid;
-            // Place the entry at the end of the target lorebook
-            const maxDisplayIndex = Object.values(targetData.entries).reduce((max, entry) => Math.max(max, entry.displayIndex ?? -1), -1);
-            entryToMove.displayIndex = maxDisplayIndex + 1;
-
-            targetData.entries[newUid] = entryToMove;
-
-            if (deleteOriginal) {
-                delete sourceData.entries[entryUidString];
-                // Remove from originalData if it exists
-                deleteWIOriginalDataValue(sourceData, entryUidString);
-                // TODO: setWIOriginalDataValue
-                console.debug(`[WI Move] Removed entry UID ${entryUidString} from source '${sourceName}'.`);
-            }
-
-            await saveWorldInfo(targetName, targetData, true);
-            console.debug(`[WI Move] Saved target lorebook '${targetName}'.`);
-            await saveWorldInfo(sourceName, sourceData, true);
-            console.debug(`[WI Move] Saved source lorebook '${sourceName}'.`);
-
-            console.log(`[WI Move] ${entryToMove.comment} ${deleteOriginal ? 'moved' : 'copied'} successfully to '${targetName}'.`);
-
-            // Check if the currently viewed book in the editor is the source or target and reload it
-            const currentEditorBookName = getSelectedWorldInfoEditorName();
-            if (currentEditorBookName === sourceName || currentEditorBookName === targetName) {
-                await reloadEditor(currentEditorBookName);
-            }
-
-            toastr.success(deleteOriginal
-                ? t`Entry moved successfully from '${sourceName}' to '${targetName}'.`
-                : t`Entry copied successfully to '${targetName}'.`);
-
-            return true;
-        } catch (error) {
-            toastr.error(t`An unexpected error occurred while moving the entry: ${error.message}`);
-            console.error('[WI Move] Unexpected error:', error);
-            return false;
-        }
+        });
     }
 
 
@@ -472,5 +490,5 @@ export function createWorldInfoBookCommands({ POPUP_TYPE, showLocalDialog, t, eq
         Object.assign(world_info, { charLore });
         saveSettingsDebounced();
     }
-    return { renameWorldInfo, deleteWorldInfo, getFreeWorldEntryUid, getFreeWorldName, createNewWorldInfo, assignLorebookToChat, moveWorldInfoEntry, charUpdatePrimaryWorld, charUpdateAddAuxWorld, charSetAuxWorlds };
+    return { renameWorldInfo, deleteWorldInfo, deleteWorldInfoUnlocked, getFreeWorldEntryUid, getFreeWorldName, createNewWorldInfo, assignLorebookToChat, moveWorldInfoEntry, charUpdatePrimaryWorld, charUpdateAddAuxWorld, charSetAuxWorlds };
 }

@@ -20,7 +20,7 @@ import {
     markCanonicalWorldInfoBookDeleted,
     recordWorldInfoProjectionRepair,
     upsertCanonicalWorldInfoBook,
-} from '../src/endpoints/world-info-store.js';
+} from '../src/endpoints/world-info-store.ts';
 import { explainCanonicalRolloutBlockers, getCanonicalStorageControlPlaneStatus } from '../src/canonical-sqlite-operator.js';
 import { runCanonicalWorldInfoAudit, repairCanonicalWorldInfoProjection } from '../src/canonical-sqlite-operator.js';
 import { runCharacterTextReplace } from '../src/endpoints/character-text-replace-service.js';
@@ -29,7 +29,7 @@ import { runCanonicalWorldInfoShadowImport } from '../src/canonical-world-info-s
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const sqliteUrl = pathToFileURL(path.join(repoRoot, 'src/canonical-sqlite.js')).href;
-const storeUrl = pathToFileURL(path.join(repoRoot, 'src/endpoints/world-info-store.js')).href;
+const storeUrl = pathToFileURL(path.join(repoRoot, 'src/endpoints/world-info-store.ts')).href;
 const projectionUrl = pathToFileURL(path.join(repoRoot, 'src/canonical-world-info-projection.js')).href;
 
 const tempRoots = [];

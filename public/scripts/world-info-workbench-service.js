@@ -197,6 +197,27 @@ export function createWorldInfoWorkbenchSession(deps) {
     // Invalidates in-flight selection and snapshots without creating another
     // source of selection state.
     let selectionRevision = 0;
+    /** @type {(() => boolean) | null} */
+    let selectionBlocked = null;
+    let operationBusy = false;
+    let operationListener = null;
+
+    function setOperationListener(listener) {
+        operationListener = listener;
+        listener?.(operationBusy);
+    }
+
+    async function runDestructiveOperation(names, operation, blockedResult = false) {
+        if (operationBusy || (names.includes(selectedWorldName) && isSelectionBlocked())) return blockedResult;
+        operationBusy = true;
+        operationListener?.(true);
+        try {
+            return await operation();
+        } finally {
+            operationBusy = false;
+            operationListener?.(false);
+        }
+    }
     /** @type {string} */
     let searchQuery = typeof deps.initialSearchQuery === 'string' ? deps.initialSearchQuery : '';
     /** @type {string} */
@@ -239,6 +260,14 @@ export function createWorldInfoWorkbenchSession(deps) {
         return selectedEntryUid;
     }
 
+    function setSelectionBlocked(guard) {
+        selectionBlocked = guard;
+    }
+
+    function isSelectionBlocked() {
+        return Boolean(selectionBlocked?.());
+    }
+
     function captureSelectionGuard() {
         const revision = selectionRevision;
         return () => revision === selectionRevision;
@@ -246,7 +275,7 @@ export function createWorldInfoWorkbenchSession(deps) {
 
     function setWorldNames(nextNames) {
         worldNames = Array.isArray(nextNames) ? [...nextNames] : [];
-        if (selectedWorldName && !worldNames.includes(selectedWorldName)) {
+        if (selectedWorldName && !worldNames.includes(selectedWorldName) && !isSelectionBlocked()) {
             selectionRevision++;
             selectedWorldName = '';
             selectedEntryUid = '';
@@ -264,43 +293,12 @@ export function createWorldInfoWorkbenchSession(deps) {
      */
     async function selectWorldIndex(worldIndex) {
         const selectedValue = String(worldIndex ?? '');
-        if (selectedValue === '') {
-            selectionRevision++;
-            selectedWorldName = '';
-            selectedEntryUid = '';
-            searchQuery = '';
-            publishSelectors();
-            return;
-        }
-
         // Names win over indexes so integer-named books keep resolving to
         // themselves; fall back to positional index for legacy callers.
         const asIndex = Number(selectedValue);
-        const indexedName = Number.isInteger(asIndex) && asIndex >= 0 ? worldNames[asIndex] : null;
-        const worldName = worldNames.includes(selectedValue) ? selectedValue : indexedName;
-
-        if (!worldName) {
-            selectionRevision++;
-            selectedWorldName = '';
-            selectedEntryUid = '';
-            searchQuery = '';
-            publishSelectors();
-            return;
-        }
-
-        if (worldName === selectedWorldName) {
-            return;
-        }
-
-        selectionRevision++;
-        selectedWorldName = worldName;
-        selectedEntryUid = '';
-        // Preserve legacy editor semantics: selecting another book starts with
-        // an unfiltered entry list instead of carrying a query across books.
-        searchQuery = '';
-        publishSelectors();
-        // Warm cache via repository; ignore payload.
-        await deps.loadWorldInfo(worldName);
+        const indexedName = selectedValue && Number.isInteger(asIndex) && asIndex >= 0 ? worldNames[asIndex] : null;
+        const worldName = worldNames.includes(selectedValue) ? selectedValue : indexedName || '';
+        return selectWorldName(worldName);
     }
 
     /**
@@ -309,23 +307,28 @@ export function createWorldInfoWorkbenchSession(deps) {
      */
     async function selectWorldName(worldName) {
         const name = String(worldName ?? '');
+        if (selectionBlocked?.() && name !== selectedWorldName) return false;
+        if (name && name === selectedWorldName) {
+            selectionRevision++;
+            return true;
+        }
         if (!name || !worldNames.includes(name)) {
             selectionRevision++;
             selectedWorldName = '';
             selectedEntryUid = '';
+            searchQuery = '';
             publishSelectors();
             return false;
         }
-        // Reselecting the same book is a no-op: keep entry selection and
-        // skip the redundant cache warm.
-        if (name === selectedWorldName) {
-            return true;
-        }
-        selectionRevision++;
+        // Keep the old editor authoritative while the next book loads: it can
+        // still receive edits, and a dirty draft must cancel this transition.
+        const revision = ++selectionRevision;
+        const data = await deps.loadWorldInfo(name);
+        if (revision !== selectionRevision || isSelectionBlocked() || !worldNames.includes(name) || !data) return false;
         selectedWorldName = name;
         selectedEntryUid = '';
+        searchQuery = '';
         publishSelectors();
-        await deps.loadWorldInfo(name);
         return true;
     }
 
@@ -333,6 +336,7 @@ export function createWorldInfoWorkbenchSession(deps) {
      * @param {string|number} uid
      */
     async function selectEntry(uid) {
+        if (selectionBlocked?.() && String(uid ?? '') !== selectedEntryUid) return false;
         const revision = ++selectionRevision;
         const worldName = selectedWorldName;
         const normalizedUid = String(uid ?? '');
@@ -342,17 +346,15 @@ export function createWorldInfoWorkbenchSession(deps) {
         }
 
         const data = await deps.loadWorldInfo(worldName);
-        if (revision !== selectionRevision) {
+        if (revision !== selectionRevision || (selectionBlocked?.() && normalizedUid !== selectedEntryUid)) {
             return false;
         }
         if (!data?.entries) {
-            selectedEntryUid = '';
             return false;
         }
 
         const entry = data.entries[normalizedUid] ?? data.entries[Number(normalizedUid)];
         if (!entry) {
-            selectedEntryUid = '';
             return false;
         }
 
@@ -459,7 +461,6 @@ export function createWorldInfoWorkbenchSession(deps) {
      */
     async function updateEntryFields(uid, fields = {}, sourceWorldName = selectedWorldName) {
         const worldName = String(sourceWorldName ?? '');
-        const revision = selectionRevision;
         if (!worldName || worldName !== selectedWorldName || !fields || typeof fields !== 'object') {
             return false;
         }
@@ -518,9 +519,6 @@ export function createWorldInfoWorkbenchSession(deps) {
             }
 
             await save(data);
-            if (revision === selectionRevision) {
-                selectedEntryUid = String(entry.uid);
-            }
             return true;
         };
         return typeof deps.runWorldInfoMutation === 'function'
@@ -629,6 +627,8 @@ export function createWorldInfoWorkbenchSession(deps) {
                 return 0;
             }
 
+            if (worldName === selectedWorldName && uids.map(String).includes(selectedEntryUid) && isSelectionBlocked()) return 0;
+
             let deleted = 0;
             for (const uid of uids) {
                 const key = data.entries[String(uid)] !== undefined ? String(uid) : String(Number(uid));
@@ -650,7 +650,7 @@ export function createWorldInfoWorkbenchSession(deps) {
             }
             return deleted;
         };
-        return typeof deps.runWorldInfoMutation === 'function' ? deps.runWorldInfoMutation(worldName, mutate) : mutate();
+        return runDestructiveOperation([worldName], () => typeof deps.runWorldInfoMutation === 'function' ? deps.runWorldInfoMutation(worldName, mutate) : mutate(), 0);
     }
 
     /**
@@ -706,18 +706,20 @@ export function createWorldInfoWorkbenchSession(deps) {
             return getFacadeSnapshot();
         }
         let nextSelectedUid = selectedEntryUid;
-
-        if (nextSelectedUid && !entrySummaries.some(entry => entry.uid === nextSelectedUid)) {
-            nextSelectedUid = '';
-            selectedEntryUid = '';
-        }
-
-        const selectedEntry = nextSelectedUid
-            ? await getSelectedEntryDetail(nextSelectedUid)
-            : null;
+        const data = nextSelectedUid ? await deps.loadWorldInfo(editorWorldName) : null;
 
         if (revision !== selectionRevision) {
             return getFacadeSnapshot();
+        }
+
+        const selectedEntry = data?.entries && nextSelectedUid
+            ? buildWorldInfoWorkbenchEntryDetail(data.entries[nextSelectedUid] ?? data.entries[Number(nextSelectedUid)])
+            : null;
+        // Filtering affects summaries only; clear the selection only when a
+        // successful underlying book read proves the entry is really gone.
+        if (nextSelectedUid && data?.entries && !selectedEntry && !isSelectionBlocked()) {
+            nextSelectedUid = '';
+            selectedEntryUid = '';
         }
 
         return {
@@ -748,6 +750,10 @@ export function createWorldInfoWorkbenchSession(deps) {
         getSelectedWorldName,
         captureSelectionGuard,
         getSelectedEntryUid,
+        setSelectionBlocked,
+        setOperationListener,
+        runDestructiveOperation,
+        isSelectionBlocked,
         getSearchQuery,
         getSortValue,
         setWorldNames,

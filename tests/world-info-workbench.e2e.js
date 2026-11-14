@@ -419,6 +419,437 @@ test.describe('World Info ownership', () => {
         await expect(page.locator('[data-world-info-react-field="comment"]')).toHaveValue(`${name} entry 0`);
     }
 
+    for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
+        test(`failed save status and retry remain readable at ${viewport.width}px`, async ({ page }, testInfo) => {
+            await page.setViewportSize(viewport);
+            const [book] = await importBooks(page, `save-status-layout-${viewport.width}`);
+            await selectEntry(page, book);
+            await page.route('**/api/worldinfo/edit', route => route.fulfill({ status: 503, body: 'unavailable' }));
+            await page.locator('[data-world-info-react-field="content"]').fill('Recovery draft: keep this after the server returns.');
+
+            const footer = page.locator('[data-world-info-react-section="ops"]');
+            const status = footer.locator('[aria-live="polite"]');
+            const retry = footer.locator('[data-world-info-react-action="retry-save"]');
+            await expect(status).toContainText('保存失败');
+            await expect(status).toBeVisible();
+            await expect(retry).toBeVisible();
+            await expect.poll(() => status.evaluate(element => {
+                const statusBox = element.getBoundingClientRect();
+                const errorBox = element.lastElementChild.getBoundingClientRect();
+                const footerBox = element.parentElement.getBoundingClientRect();
+                const retryBox = element.parentElement.querySelector('[data-world-info-react-action="retry-save"]').getBoundingClientRect();
+                return element.scrollWidth <= element.clientWidth + 1
+                    && errorBox.left >= statusBox.left - 1 && errorBox.right <= statusBox.right + 1
+                    && statusBox.left >= footerBox.left - 1 && statusBox.right <= footerBox.right + 1
+                    && (errorBox.right <= retryBox.left || errorBox.left >= retryBox.right
+                        || errorBox.bottom <= retryBox.top || errorBox.top >= retryBox.bottom);
+            }), { message: `save status must fit without clipping or overlapping retry at ${viewport.width}px` }).toBe(true);
+            await page.screenshot({ path: testInfo.outputPath('save-failure.png') });
+
+            await page.unroute('**/api/worldinfo/edit');
+            await retry.click();
+            await expect(status).toContainText('已保存');
+        });
+    }
+
+    test('slow book switch preserves edits started while the destination loads', async ({ page }) => {
+        const [a, b] = await importBooks(page, 'slow-book-switch');
+        await selectEntry(page, a);
+        await page.evaluate(async name => (await import('/scripts/world-info-state.js')).worldInfoCache.delete(name), b);
+        let release;
+        const gate = new Promise(resolve => { release = resolve; });
+        let reads = 0;
+        await page.route('**/api/worldinfo/get', async route => {
+            if (route.request().postDataJSON()?.name === b && ++reads === 1) await gate;
+            await route.continue();
+        });
+        let writes = 0;
+        await page.route('**/api/worldinfo/edit', async route => {
+            if (++writes === 1) await route.fulfill({ status: 503, body: 'unavailable' });
+            else await route.continue();
+        });
+        await page.locator('[data-world-info-react-control="world-select"]').selectOption(b);
+        await expect.poll(() => reads).toBeGreaterThan(0);
+        const content = page.locator('[data-world-info-react-field="content"]');
+        await content.fill('draft during slow book switch');
+        await expect(page.locator('[data-world-info-react-section="ops"]')).toContainText('保存失败');
+        const loaded = page.waitForResponse(response => response.url().includes('/api/worldinfo/get') && response.request().postDataJSON()?.name === b);
+        release();
+        await loaded;
+        await expect.poll(() => page.evaluate(async name => (await import('/scripts/world-info-state.js')).worldInfoCache.has(name), b)).toBe(true);
+        await expect(page.locator('[data-world-info-react-control="world-select"]')).toHaveValue(a);
+        await expect(content).toHaveValue('draft during slow book switch');
+        await expect(page.locator('[data-world-info-react-section="ops"]')).toContainText('保存失败');
+        await page.locator('[data-world-info-react-action="retry-save"]').click();
+        await expect(page.locator('[data-world-info-react-section="ops"]')).toContainText('已保存');
+        await expect(page.locator('[data-world-info-react-control="world-select"]')).toHaveValue(a);
+        await page.locator('[data-world-info-react-control="world-select"]').selectOption(b);
+        await expect(page.locator('[data-world-info-react-control="world-select"]')).toHaveValue(b);
+        await page.reload();
+        await testSetup.awaitST({ page });
+        await openWorldInfo(page);
+        await selectEntry(page, a);
+        await expect(content).toHaveValue('draft during slow book switch');
+    });
+
+    test('mobile move returns to the source list after removing the selected entry', async ({ page }) => {
+        await page.setViewportSize({ width: 390, height: 844 });
+        const [a, b] = await importBooks(page, 'mobile-move');
+        await selectEntry(page, a);
+        await page.locator('[data-world-info-react-action="move-copy-entry"]').click();
+        const dialog = page.locator('dialog[data-local-dialog]');
+        await dialog.locator('[data-local-focus="target"]').selectOption(b);
+        await dialog.locator('[data-local-focus="move"]').click();
+        await expect(page.locator('.toast-success').filter({ hasText: /移动|moved/ }).last()).toBeVisible();
+        await expect(page.locator('#WorldInfo.openDrawer')).toBeVisible();
+        await expect(page.locator('[data-world-info-react-pane="list"]')).toBeVisible();
+        await expect(page.locator('[data-world-info-react-entry="0"]')).toHaveCount(0);
+        await expect(page.locator('[data-world-info-react-entry="1"]')).toBeVisible();
+        await page.locator('[data-world-info-react-entry="1"]').click();
+        await expect(page.locator('[data-world-info-react-field="comment"]')).toHaveValue(`${a} entry 1`);
+    });
+
+    test('entry deletion in flight does not accept a draft that will be discarded', async ({ page }) => {
+        const [a] = await importBooks(page, 'delete-in-flight');
+        await selectEntry(page, a);
+        const content = page.locator('[data-world-info-react-field="content"]');
+        let release;
+        const gate = new Promise(resolve => { release = resolve; });
+        let writes = 0;
+        await page.route('**/api/worldinfo/edit', async route => {
+            writes++;
+            await gate;
+            await route.continue();
+        });
+        await page.locator('[data-world-info-react-action="delete-entry"]').click();
+        await page.locator('dialog[data-local-dialog] [data-local-focus="delete"]').click();
+        await expect.poll(() => writes).toBe(1);
+        const acceptsTyping = await content.isEnabled();
+        if (acceptsTyping) await content.fill('draft typed while deletion is in flight');
+        release();
+        if (acceptsTyping) {
+            await expect(content).toHaveValue('draft typed while deletion is in flight');
+        } else {
+            await expect(content).toHaveCount(0);
+        }
+    });
+
+    for (const multiSelect of [false, true]) {
+        for (const input of ['mouse', 'Enter', 'Space']) {
+            test(`entry selection blocked during deletion: ${multiSelect ? 'multi' : 'single'} ${input}`, async ({ page }) => {
+                const [a] = await importBooks(page, `busy-${multiSelect ? 'multi' : 'single'}-${input}`);
+                await selectEntry(page, a);
+                if (multiSelect) await page.locator('[data-world-info-react-action="toggle-multi-select"]').click();
+                const row = page.locator('[data-world-info-react-entry="1"]');
+                let release;
+                const gate = new Promise(resolve => { release = resolve; });
+                let writes = 0;
+                await page.route('**/api/worldinfo/edit', async route => {
+                    writes++;
+                    await gate;
+                    await route.continue();
+                });
+                try {
+                    await page.locator('[data-world-info-react-action="delete-entry"]').click();
+                    await page.locator('dialog[data-local-dialog] [data-local-focus="delete"]').click();
+                    await expect.poll(() => writes).toBe(1);
+                    await expect(page.locator('[data-world-info-react-control="world-select"]')).toBeDisabled();
+                    if (input === 'mouse') {
+                        const box = await row.boundingBox();
+                        await page.mouse.click(box.x + 15, box.y + box.height / 2);
+                    } else {
+                        await row.focus();
+                        await page.keyboard.press(input);
+                    }
+                    if (multiSelect) {
+                        await expect(row).toHaveAttribute('aria-pressed', 'false');
+                    } else {
+                        await expect(page.locator('[data-world-info-react-field="comment"]')).toHaveValue(`${a} entry 0`);
+                        await expect(row).not.toHaveAttribute('aria-current', 'true');
+                    }
+                    await expect(row).toHaveAttribute('aria-disabled', 'true');
+                    await expect(row).toHaveAttribute('tabindex', '-1');
+                } finally {
+                    release();
+                }
+                await expect(page.locator('[data-world-info-react-control="world-select"]')).toBeEnabled();
+                await expect(row).toHaveAttribute('tabindex', '0');
+                await row.click();
+                if (multiSelect) {
+                    await expect(row).toHaveAttribute('aria-pressed', 'true');
+                } else {
+                    await expect(page.locator('[data-world-info-react-field="comment"]')).toHaveValue(`${a} entry 1`);
+                }
+            });
+        }
+    }
+
+    test('focused content autosaves without claiming older writes saved the latest text', async ({ page }) => {
+        const [a] = await importBooks(page, 'focused-autosave');
+        await selectEntry(page, a);
+        const content = page.locator('[data-world-info-react-field="content"]');
+        const status = page.locator('[data-world-info-react-section="ops"]');
+        await page.locator('[data-world-info-react-field="order"]').fill('101');
+        await content.focus();
+        await expect(status).toContainText('已保存');
+        let release;
+        const gate = new Promise(resolve => { release = resolve; });
+        let writes = 0;
+        await page.route('**/api/worldinfo/edit', async route => {
+            if (++writes === 1) await gate;
+            await route.continue();
+        });
+        await content.fill('first focused edit');
+        await expect(status).not.toContainText('已保存');
+        await expect.poll(() => writes, { timeout: 5000 }).toBe(1);
+        await content.fill('latest focused edit');
+        await expect(content).toBeFocused();
+        await expect(status).not.toContainText('已保存');
+        release();
+        await expect(status).toContainText('已保存');
+        await expect(content).toBeFocused();
+        await page.reload();
+        await testSetup.awaitST({ page });
+        await openWorldInfo(page);
+        await selectEntry(page, a);
+        await expect(content).toHaveValue('latest focused edit');
+    });
+
+    test('dirty and failed drafts guard unload and block switching until retry succeeds', async ({ page }) => {
+        const [a, b] = await importBooks(page, 'guarded-autosave');
+        await selectEntry(page, a);
+        const content = page.locator('[data-world-info-react-field="content"]');
+        const status = page.locator('[data-world-info-react-section="ops"]');
+        const unloadBlocked = () => page.evaluate(() => {
+            const event = new Event('beforeunload', { cancelable: true });
+            window.dispatchEvent(event);
+            return event.defaultPrevented;
+        });
+        let release;
+        const gate = new Promise(resolve => { release = resolve; });
+        let writes = 0;
+        await page.route('**/api/worldinfo/edit', async route => {
+            if (++writes === 1) {
+                await gate;
+                await route.fulfill({ status: 500, body: 'failed' });
+            } else await route.continue();
+        });
+        await content.fill('keep this draft');
+        expect(await unloadBlocked()).toBe(true);
+        await expect.poll(() => writes).toBe(1);
+        await page.locator('[data-world-info-react-entry="1"]').click();
+        await expect(content).toHaveValue('keep this draft');
+        await page.locator('[data-world-info-react-entry="1"]').focus();
+        await page.keyboard.press('Enter');
+        await expect(content).toHaveValue('keep this draft');
+        expect(await unloadBlocked()).toBe(true);
+        release();
+        await expect(status).toContainText('保存失败');
+        await page.locator('[data-world-info-react-control="world-select"]').selectOption(b);
+        await expect(content).toHaveValue('keep this draft');
+        await expect(status).toContainText('保存失败');
+        expect(await unloadBlocked()).toBe(true);
+        await page.locator('[data-world-info-react-action="retry-save"]').click();
+        await expect(status).toContainText('已保存');
+        expect(await unloadBlocked()).toBe(false);
+        await page.locator('[data-world-info-react-entry="1"]').click();
+        await expect(page.locator('[data-world-info-react-field="comment"]')).toHaveValue(`${a} entry 1`);
+        await page.locator('[data-world-info-react-entry="0"]').click();
+        await expect(content).toHaveValue('keep this draft');
+    });
+
+    test('switching immediately after typing cannot discard a debounced draft', async ({ page }) => {
+        const [a] = await importBooks(page, 'switch-autosave');
+        await selectEntry(page, a);
+        const content = page.locator('[data-world-info-react-field="content"]');
+        const status = page.locator('[data-world-info-react-section="ops"]');
+        let release;
+        const gate = new Promise(resolve => { release = resolve; });
+        let writes = 0;
+        await page.route('**/api/worldinfo/edit', async route => {
+            writes++;
+            await gate;
+            await route.continue();
+        });
+        await content.fill('draft before switch');
+        await page.locator('[data-world-info-react-entry="1"]').click();
+        await expect(content).toHaveValue('draft before switch');
+        await expect.poll(() => writes).toBe(1);
+        release();
+        await expect(status).toContainText('已保存');
+        await page.locator('[data-world-info-react-entry="1"]').click();
+        await expect(page.locator('[data-world-info-react-field="comment"]')).toHaveValue(`${a} entry 1`);
+        await page.locator('[data-world-info-react-entry="0"]').click();
+        await expect(content).toHaveValue('draft before switch');
+    });
+
+    test('a delayed entry selection cannot discard edits started while it loads', async ({ page }) => {
+        const [a] = await importBooks(page, 'selection-race');
+        await selectEntry(page, a);
+        await page.evaluate(async name => (await import('/scripts/world-info-state.js')).worldInfoCache.delete(name), a);
+        let release;
+        const gate = new Promise(resolve => { release = resolve; });
+        let reads = 0;
+        await page.route('**/api/worldinfo/get', async route => {
+            if (++reads === 1) await gate;
+            await route.continue();
+        });
+        await page.locator('[data-world-info-react-entry="1"]').click();
+        await expect.poll(() => reads).toBeGreaterThan(0);
+        const content = page.locator('[data-world-info-react-field="content"]');
+        await content.fill('typed during selection');
+        release();
+        await expect(page.locator('[data-world-info-react-section="ops"]')).toContainText('已保存');
+        await expect(content).toHaveValue('typed during selection');
+        await expect(page.locator('[data-world-info-react-field="comment"]')).toHaveValue(`${a} entry 0`);
+        await page.reload();
+        await testSetup.awaitST({ page });
+        await openWorldInfo(page);
+        await selectEntry(page, a);
+        await expect(content).toHaveValue('typed during selection');
+    });
+
+    test('uncommitted keywords guard unload and external book selection', async ({ page }) => {
+        const [a, b] = await importBooks(page, 'keyword-guard');
+        await selectEntry(page, a);
+        const keyword = page.locator('[data-world-info-react-field="key"]');
+        await keyword.fill('unfinished keyword');
+        await expect(page.locator('[data-world-info-react-section="ops"]')).toContainText('未保存的修改');
+        const prevented = await page.evaluate(() => {
+            const event = new Event('beforeunload', { cancelable: true });
+            window.dispatchEvent(event);
+            return event.defaultPrevented;
+        });
+        expect(prevented).toBe(true);
+        const opened = await page.evaluate(async name => (await import('/scripts/world-info.js')).openWorldInfoEditor(name), b);
+        expect(opened).toBe(false);
+        expect(await page.evaluate(async () => (await (await import('/scripts/world-info.js')).getWorldInfoReactPanelState()).selectedWorldName)).toBe(a);
+        await expect(keyword).toHaveValue('unfinished keyword');
+        await keyword.press('Enter');
+        await expect(page.locator('[data-world-info-react-section="ops"]')).toContainText('已保存');
+        expect(await page.evaluate(async name => (await import('/scripts/world-info.js')).openWorldInfoEditor(name), b)).toBe(true);
+        expect(await page.evaluate(async () => (await (await import('/scripts/world-info.js')).getWorldInfoReactPanelState()).selectedWorldName)).toBe(b);
+        await page.reload();
+        await testSetup.awaitST({ page });
+        await openWorldInfo(page);
+        await selectEntry(page, a);
+        await expect(page.locator('[data-world-info-react-section="trigger"]')).toContainText('unfinished keyword');
+    });
+
+    test('keyword blur commits before attempting to switch entries', async ({ page }) => {
+        const [a] = await importBooks(page, 'keyword-blur');
+        await selectEntry(page, a);
+        let release;
+        const gate = new Promise(resolve => { release = resolve; });
+        let writes = 0;
+        await page.route('**/api/worldinfo/edit', async route => {
+            writes++;
+            await gate;
+            await route.continue();
+        });
+        await page.locator('[data-world-info-react-field="key"]').fill('blur keyword');
+        await page.locator('[data-world-info-react-entry="1"]').click();
+        await expect.poll(() => writes).toBe(1);
+        await expect(page.locator('[data-world-info-react-field="comment"]')).toHaveValue(`${a} entry 0`);
+        release();
+        await expect(page.locator('[data-world-info-react-section="ops"]')).toContainText('已保存');
+        await page.locator('[data-world-info-react-entry="1"]').click();
+        await page.locator('[data-world-info-react-entry="0"]').click();
+        await expect(page.locator('[data-world-info-react-section="trigger"]')).toContainText('blur keyword');
+    });
+
+    test('filtering out an entry preserves its failed draft and retry', async ({ page }) => {
+        const [a] = await importBooks(page, 'filter-draft');
+        await selectEntry(page, a);
+        let writes = 0;
+        await page.route('**/api/worldinfo/edit', async route => {
+            if (++writes === 1) await route.fulfill({ status: 500, body: 'failed' });
+            else await route.continue();
+        });
+        const content = page.locator('[data-world-info-react-field="content"]');
+        await content.fill('draft survives search');
+        await expect(page.locator('[data-world-info-react-section="ops"]')).toContainText('保存失败');
+        await page.getByLabel('搜索条目').fill('nothing matches this query');
+        await expect(content).toHaveValue('draft survives search');
+        await page.locator('[data-world-info-react-action="retry-save"]').click();
+        await expect(page.locator('[data-world-info-react-section="ops"]')).toContainText('已保存');
+        await page.reload();
+        await testSetup.awaitST({ page });
+        await openWorldInfo(page);
+        await selectEntry(page, a);
+        await expect(content).toHaveValue('draft survives search');
+    });
+
+    test('a failed current-book read preserves the failed draft and retry', async ({ page }) => {
+        const [a] = await importBooks(page, 'failed-current-read');
+        await selectEntry(page, a);
+        let writes = 0;
+        await page.route('**/api/worldinfo/edit', async route => {
+            if (++writes === 1) await route.fulfill({ status: 500, body: 'failed' });
+            else await route.continue();
+        });
+        const content = page.locator('[data-world-info-react-field="content"]');
+        await content.fill('draft survives failed book read');
+        await expect(page.locator('[data-world-info-react-section="ops"]')).toContainText('保存失败');
+        await page.evaluate(async name => (await import('/scripts/world-info-state.js')).worldInfoCache.delete(name), a);
+        await page.route('**/api/worldinfo/get', route => route.fulfill({ status: 503, body: 'unavailable' }));
+        const failedRead = page.waitForResponse(response => response.url().endsWith('/api/worldinfo/get') && response.status() === 503);
+        await page.getByLabel('搜索条目').fill('not a match');
+        await failedRead;
+        // The clear button comes from the refreshed bridge snapshot, rather
+        // than the search input's optimistic local value.
+        await expect(page.locator('[data-world-info-react-action="clear-search"]')).toBeVisible();
+        await expect(content).toHaveValue('draft survives failed book read');
+        await expect(page.locator('[data-world-info-react-action="retry-save"]')).toBeVisible();
+        await page.locator('[data-world-info-react-action="retry-save"]').click();
+        await expect(page.locator('[data-world-info-react-section="ops"]')).toContainText('保存失败');
+        await expect(content).toHaveValue('draft survives failed book read');
+        await page.unroute('**/api/worldinfo/get');
+        await page.locator('[data-world-info-react-action="retry-save"]').click();
+        await expect(page.locator('[data-world-info-react-section="ops"]')).toContainText('已保存');
+        await page.reload();
+        await testSetup.awaitST({ page });
+        await openWorldInfo(page);
+        await selectEntry(page, a);
+        await expect(content).toHaveValue('draft survives failed book read');
+    });
+
+    test('filtering out a saved selection keeps its editor open', async ({ page }) => {
+        const [a] = await importBooks(page, 'filter-saved');
+        await selectEntry(page, a);
+        await page.getByLabel('搜索条目').fill('nothing matches this query');
+        await expect(page.locator('[data-world-info-react-entry]')).toHaveCount(0);
+        await expect(page.locator('[data-world-info-react-field="comment"]')).toHaveValue(`${a} entry 0`);
+        await page.locator('[data-world-info-react-action="clear-search"]').click();
+        await expect(page.locator('[data-world-info-react-entry="0"]')).toBeVisible();
+        await expect(page.locator('[data-world-info-react-field="comment"]')).toHaveValue(`${a} entry 0`);
+    });
+
+    test('a slow row toggle cannot replace the entry being edited', async ({ page }) => {
+        const [a] = await importBooks(page, 'toggle-draft');
+        await selectEntry(page, a);
+        let release;
+        const gate = new Promise(resolve => { release = resolve; });
+        let writes = 0;
+        await page.route('**/api/worldinfo/edit', async route => {
+            if (++writes === 1) await gate;
+            await route.continue();
+        });
+        await page.locator('[data-world-info-react-entry-toggle="1"]').click();
+        await expect.poll(() => writes).toBe(1);
+        const content = page.locator('[data-world-info-react-field="content"]');
+        await content.fill('draft during other toggle');
+        release();
+        await expect(page.locator('[data-world-info-react-section="ops"]')).toContainText('已保存');
+        await expect(page.locator('[data-world-info-react-field="comment"]')).toHaveValue(`${a} entry 0`);
+        await expect(content).toHaveValue('draft during other toggle');
+        await page.reload();
+        await testSetup.awaitST({ page });
+        await openWorldInfo(page);
+        await selectEntry(page, a);
+        await expect(content).toHaveValue('draft during other toggle');
+    });
+
     test('late editor blur cannot edit another book with the same UID', async ({ page }) => {
         const [a, b] = await importBooks(page, 'ownership-late');
         await selectEntry(page, a);
