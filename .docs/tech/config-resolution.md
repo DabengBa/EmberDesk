@@ -15,7 +15,7 @@ For the server boot pipeline that consumes the resolved config, see [server-star
 Primary files:
 
 - `src/command-line.js` — three-phase pipeline: `parseArgv`, `prepareConfigFilesystem` / `prepareDataRoot`, `resolveConfig`
-- `src/config-init.js` — config-file migration, deprecated-key rewriting, default-fill logic
+- `src/config-init.ts` — config-file migration, deprecated-key rewriting, default-fill logic
 - `src/util.js` — `getConfigValue`, `stringToBool`, `setConfigFilePath`, `keyToEnv`
 - `default/config.yaml` — canonical default values
 
@@ -38,14 +38,14 @@ Phase boundaries:
 
 1. **`parseArgv`** — reads argv via yargs, detects global mode (`globalThis.FORCE_GLOBAL_MODE` or `--global`), derives `configPath`. Returns nullable raw values. Does NOT call `getConfigValue`, `initConfig`, or touch the filesystem. Deprecated CLI aliases (`--autorun` → `browserLaunchEnabled`, etc.) are mapped here.
 
-2. **`prepareConfigFilesystem` + `prepareDataRoot`** — the only side-effect seam. Creates config parent directory in global mode, calls `initConfig` (which triggers `addMissingConfigValues` from `config-init.js`), creates data root directory. After this phase, `getConfigValue()` is safe to call because `setConfigFilePath` has been invoked.
+2. **`prepareConfigFilesystem` + `prepareDataRoot`** — the only side-effect seam. Creates config parent directory in global mode, calls `initConfig` (which triggers `addMissingConfigValues` from `config-init.ts`), creates data root directory. After this phase, `getConfigValue()` is safe to call because `setConfigFilePath` has been invoked.
 
 3. **`resolveConfig`** — merges CLI overrides with config-file values via `getConfigValue`. Applies `stringToBool` to protocol fields, validates against `[true, false, 'auto']`, attaches URL helper methods (`getIPv4ListenUrl`, `getIPv6ListenUrl`, `getBrowserLaunchHostname`, `getBrowserLaunchUrl`).
 
 Constraints:
 
 - `server.js` is the sole caller of `CommandLineParser.parse()`. The return type shape is the external API contract.
-- `config-init.js` is unchanged. Its `initConfig` → `setConfigFilePath` → `addMissingConfigValues` chain remains the config-file initialization path.
+- `config-init.ts` preserves the existing initialization behavior. Its `initConfig` → `setConfigFilePath` → `addMissingConfigValues` chain remains the config-file initialization path; the TypeScript migration adds no runtime validation or configuration schema.
 - `setConfigFilePath` in `util.js` is a module-level singleton (`CONFIG_PATH`). It logs an error if called more than once but still updates the path.
 - `CACHED_CONFIG` in `util.js` is populated on first `getConfig()` call and persists for the process lifetime. `addMissingConfigValues` writes the file but does not clear this cache.
 

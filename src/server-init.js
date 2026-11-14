@@ -3,7 +3,7 @@
  */
 import path from 'node:path';
 import process from 'node:process';
-import { addMissingConfigValues } from './config-init.js';
+import { addMissingConfigValues } from './config-init.ts';
 
 try {
     addMissingConfigValues(path.join(process.cwd(), './config.yaml'));
