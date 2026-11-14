@@ -12,7 +12,7 @@ import {
     runCanonicalChatShadowImport,
 } from '../src/canonical-chat-shadow-import.js';
 import { readCanonicalChatPayload } from '../src/endpoints/canonical-chat-read-service.js';
-import { searchCanonicalChatPayload, readCanonicalRecentChatPayload } from '../src/endpoints/canonical-chat-query-service.js';
+import { searchCanonicalChatPayload, readCanonicalRecentChatPayload } from '../src/endpoints/canonical-chat-query-service.ts';
 import { writeCanonicalChatPayload } from '../src/endpoints/canonical-chat-write-service.js';
 import { createCanonicalChatBackup } from '../src/endpoints/canonical-chat-backup-restore-service.js';
 

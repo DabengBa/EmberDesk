@@ -17,7 +17,7 @@ import {
 import {
     readCanonicalRecentChatPayload,
     searchCanonicalChatPayload,
-} from '../src/endpoints/canonical-chat-query-service.js';
+} from '../src/endpoints/canonical-chat-query-service.ts';
 import {
     readRecentChatPayload,
     searchChatPayload,

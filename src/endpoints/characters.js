@@ -67,7 +67,7 @@ import {
     editCharacterCard,
     renameCharacterCard,
 } from './character-write-service.ts';
-import { listCanonicalCharacterChatPayload } from './canonical-chat-query-service.js';
+import { listCanonicalCharacterChatPayload } from './canonical-chat-query-service.ts';
 import { reconcileCanonicalChatSources } from '../canonical-chat-shadow-import.js';
 import {
     deleteCanonicalChatSessionsForOwner,

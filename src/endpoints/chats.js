@@ -46,7 +46,7 @@ import { reconcileCanonicalChatSources } from '../canonical-chat-shadow-import.j
 import {
     readCanonicalRecentChatPayload,
     searchCanonicalChatPayload,
-} from './canonical-chat-query-service.js';
+} from './canonical-chat-query-service.ts';
 import {
     deleteCanonicalChat,
     parseCanonicalChatJsonl,
