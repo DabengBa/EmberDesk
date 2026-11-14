@@ -32,21 +32,20 @@ describe('World Info drawer React surface', () => {
         expect(block).not.toContain('id="world_info"');
     });
 
-    test('React component preserves all legacy IDs and contract classes', () => {
+    test('React shell preserves editor anchors without duplicating the migrated global selector', () => {
         // The drawer header is shared chrome (WorkspacePanelChrome); the
         // grabber id arrives as a prop value rather than raw markup.
         expect(panel).toContain('grabberId="WorldInfoheader"');
         const ids = [
             'wi-holder',
-            'wiGlobalPanel', 'wiGlobalPanelTitle', 'wiGlobalCount', 'wiTopBlock',
-            'WIMultiSelector', 'world_info',
             'wiEditorPanel', 'wiEditorPanelTitle', 'world_popup',
         ];
         for (const id of ids) {
             expect(panel).toContain(`id="${id}"`);
         }
-        expect(panel).toContain('className="wi-section wi-global-panel"');
-        expect(panel).toContain('className="wi-global-grid inline-drawer wide100p"');
+        expect(panel).not.toContain('id="world_info"');
+        const workbench = readRepoFile('app/world-info-workbench.tsx');
+        expect(workbench).toContain('<WorldInfoGlobalSelector runtime={bridgeState.selectorRuntime} />');
     });
 
     test('activation rules drawer and retired global controls are gone', () => {
@@ -71,6 +70,8 @@ describe('World Info drawer React surface', () => {
         expect(worldInfoJs).toContain('loadWorkspacePanelsModule');
         expect(worldInfoJs).toContain('module.mountWorldInfoPanel(host)');
         expect(worldInfoJs).toContain('export async function mountWorldInfoPanel()');
+        expect(workspace).toContain('export function mountWorldInfoEditorMirror(');
+        expect(worldInfoJs).toContain('module.mountWorldInfoEditorMirror(host, worldInfoSelectorRuntime)');
     });
 
     test('mount runs before initWorldInfo bindings in startup order', () => {

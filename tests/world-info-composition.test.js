@@ -1,4 +1,5 @@
 import { expect, jest, test } from '@jest/globals';
+jest.unstable_mockModule('../public/scripts/i18n.js', () => ({ translate: text => text }));
 
 test('editor composition owns one session and synchronizes live world lists', async () => {
     const { createWorldInfoEditorComposition } = await import('../public/scripts/world-info-editor-composition.js');
@@ -45,35 +46,11 @@ test('runtime composition registers events once without a command subsystem', as
     expect(activations.has('book.1')).toBe(true);
 });
 
-test('world selection updates state, saves, and emits without a command subsystem', async () => {
-    let selected;
-    jest.unstable_mockModule('../public/scripts/world-info-state.js', () => ({
-        world_names: ['book'],
-        setSelectedWorldInfo: value => { selected = value; },
-    }));
+test('reference UI forwards explicit names to the existing global command without reading DOM', async () => {
     const { createWorldInfoReferenceUi } = await import('../public/scripts/world-info-reference-ui.js');
-    const previousDollar = globalThis.$;
-    const previousToastr = globalThis.toastr;
-    const updates = [];
-    const errors = [];
-
-    globalThis.$ = () => ({ val: () => ['book', 'missing'] });
-    globalThis.toastr = { error: value => errors.push(value) };
-    try {
-        const ui = createWorldInfoReferenceUi({
-            t: (parts, ...values) => parts.reduce((result, part, index) => result + part + (values[index] ?? ''), ''),
-            getWIElement: name => ({ prop: (...args) => updates.push([name, ...args]) }),
-            saveSettingsDebounced: () => updates.push('save'),
-            eventSource: { emit: event => updates.push(event) },
-            event_types: { WORLDINFO_SETTINGS_UPDATED: 'updated' },
-        });
-        ui.onWorldInfoChange();
-        expect(selected).toEqual(['book']);
-        expect(updates).toEqual([['missing', 'selected', false], 'save', 'updated']);
-        expect(errors).toHaveLength(1);
-    } finally {
-        globalThis.$ = previousDollar;
-        globalThis.toastr = previousToastr;
-
-    }
+    const setGlobal = jest.fn(names => names);
+    const ui = createWorldInfoReferenceUi({ setWorldInfoGlobalActiveNames: setGlobal });
+    expect(ui.onWorldInfoChange(['book', 'missing'])).toEqual(['book', 'missing']);
+    expect(setGlobal).toHaveBeenCalledTimes(1);
+    expect(setGlobal).toHaveBeenCalledWith(['book', 'missing']);
 });

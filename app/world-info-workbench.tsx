@@ -19,6 +19,8 @@ import type { WorldInfoCommands } from './compat/workspace-commands';
 import { translate, useTranslated } from './compat/i18n.js';
 import { customTokenizer } from '../public/scripts/world-info-keywords.js';
 import { disposeLocalDialogScope } from './components/local-dialogs/LocalDialog';
+import { WorldInfoGlobalSelector } from './components/panels/WorldInfoGlobalSelector';
+import type { WorldInfoSelectorRuntime } from './components/panels/world-info-selector-types';
 
 function splitKeywordInput(input: string): string[] {
     const tokens: string[] = [];
@@ -109,6 +111,7 @@ export interface WorldInfoWorkbenchEntryDetail {
 }
 
 export interface WorldInfoWorkspacePanelState {
+    selectorRuntime?: WorldInfoSelectorRuntime;
     globalSelectorPresent?: boolean;
     editorSelectorPresent?: boolean;
     selectorsSeparated?: boolean;
@@ -762,7 +765,7 @@ export function WorldInfoWorkbenchPanel({
     const selectedWorldName = bridgeState.selectedWorldName || '';
     const activeSearchQuery = String(bridgeState.searchQuery ?? '').trim();
     const globalNames = bridgeState.globalActiveNames ?? [];
-    const globalCount = bridgeState.globalActiveCount ?? globalNames.length;
+
     const isBookGlobal = Boolean(selectedWorldName) && globalNames.includes(selectedWorldName);
 
     // Drop optimistic overrides once the refreshed snapshot agrees with them.
@@ -916,42 +919,9 @@ export function WorldInfoWorkbenchPanel({
                     <div {...stylex.props(s.globalField)}>
                         <div {...stylex.props(s.globalLabelRow)}>
                             <span {...stylex.props(s.globalLabel)}>{translate('Globally enabled')}</span>
-                            <span {...stylex.props(s.globalCount, globalCount === 0 ? s.globalCountMuted : null)}>
-                                {translate('${0} active').replace('${0}', String(globalCount))}
-                            </span>
+
                         </div>
-                        <div
-                            {...stylex.props(s.globalPills)}
-                            role="group"
-                            aria-label={translate('Globally enabled world books')}
-                            data-world-info-react-control="global-world-select"
-                        >
-                            {worldNames.length > 0 ? worldNames.map(world => {
-                                const worldName = world.label;
-                                const active = globalNames.includes(worldName);
-                                return (
-                                    <button
-                                        key={world.value}
-                                        type="button"
-                                        {...stylex.props(s.globalPill, active ? s.globalPillOn : null)}
-                                        aria-pressed={active}
-                                        data-world-info-react-global-world={worldName}
-                                        title={active
-                            ? translate('Disable globally for \u201c${0}\u201d').replace('${0}', worldName)
-                            : translate('Enable globally for \u201c${0}\u201d').replace('${0}', worldName)}
-                                        onClick={() => worldInfoCommandMutation.mutate(() => commands.setGlobalWorlds(
-                                            active
-                                                ? globalNames.filter(name => name !== worldName)
-                                                : [...globalNames, worldName],
-                                        ))}
-                                    >
-                                        {worldName}
-                                    </button>
-                                );
-                            }) : (
-                                <span {...stylex.props(s.globalEmpty)}>{translate('No world books yet')}</span>
-                            )}
-                        </div>
+                        {bridgeState.selectorRuntime && <WorldInfoGlobalSelector runtime={bridgeState.selectorRuntime} />}
                     </div>
                     <div {...stylex.props(s.globalMeta)}>
                         <label {...stylex.props(s.scanDepthField)}>

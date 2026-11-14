@@ -125,48 +125,30 @@ describe('world info card rendering', () => {
         expect(read('app/world-info-workbench.tsx')).toContain('data-world-info-react-entry-toggle');
     });
 
-    test('world info panel separates global activation from entry editing', () => {
-        const panelTsx = read('app/components/panels/WorldInfoPanel.tsx');
-        const panelHtml = read('public/panels/world-info-body.html');
-        const css = read('public/css/world-info.css');
-
-        expect(panelTsx).toContain('id="wiGlobalPanel"');
-        expect(panelTsx).toContain("translate('Global World Info')");
-        expect(panelTsx).not.toContain('data-i18n="Enabled worlds"');
-        expect(panelTsx).toContain('id="wiGlobalCount"');
-        expect(panelTsx).not.toContain('data-i18n="Activation Rules"');
-        expect(panelTsx).toContain('id="wiEditorPanel"');
-        expect(panelTsx).toContain("translate('World Info Editor')");
-        expect(panelTsx).toContain('id="wiTopBlock" className="wi-global-grid inline-drawer wide100p"');
-        expect(panelTsx).not.toContain('wi-global-rules-content');
-        expect(panelHtml).toContain('id="world_editor_select"');
-        expect(css).toContain('.wi-global-grid');
-        expect(css).toContain('.wi-global-count');
-        expect(css).not.toContain('.wi-global-rules-content');
-        expect(css).not.toContain('.wi-settings-toggle');
+    test('React owns global activation separately from editor selection', () => {
+        const selector = read('app/components/panels/WorldInfoGlobalSelector.tsx');
+        const mirror = read('app/components/panels/WorldInfoEditorMirror.tsx');
+        const workbench = read('app/world-info-workbench.tsx');
+        const html = read('public/panels/world-info-body.html');
+        expect(selector).toContain('id="world_info"');
+        expect(selector).toContain('id="wiGlobalCount"');
+        expect(selector).toContain('useSyncExternalStore(runtime.subscribe, runtime.getSnapshot, runtime.getSnapshot)');
+        expect(selector).toContain('type="checkbox"');
+        expect(selector).toContain('runtime.setGlobalActiveNames(');
+        expect(selector).toContain('runtime.selectEditorName(name)');
+        expect(workbench).toContain('<WorldInfoGlobalSelector runtime={bridgeState.selectorRuntime} />');
+        expect(mirror).toContain('id="world_editor_select" hidden');
+        expect(html).toContain('id="world_info_editor_mirror_host"');
     });
 
-    test('global world selector refreshes selected Select2 labels after option replay', () => {
-        const source = read('public/scripts/world-info.js');
-
-        expect(source).toContain('function refreshGlobalWorldInfoSelectorLabels()');
-        expect(source).toContain('worldInfoSelect.trigger(\'change.select2\');');
-        expect(source).not.toContain('worldInfoSelect.trigger(\'change\');');
-    });
-
-    test('global world selector exposes a clear empty prompt and keeps multi-select open for consecutive choices', () => {
-        const panelTsx = read('app/components/panels/WorldInfoPanel.tsx');
-        const source = read('public/scripts/world-info.js') + read('public/scripts/world-info-panel-ui.js');
-
-        expect(panelTsx).toContain('aria-label="Global World Info active in all chats"');
-        expect(panelTsx).toContain('data-placeholder="No global worlds active. Select one or more worlds."');
-        expect(source).toContain('const globalWorldInfoSelector = $(\'#world_info\');');
-        expect(source).toContain('function refreshGlobalWorldInfoSelectorState()');
-        expect(source).toContain('$(\'#wiGlobalCount\').text');
-        expect(source).toContain('placeholder: globalWorldInfoSelector.attr(\'data-placeholder\')');
-        expect(source).toContain('globalWorldInfoSelector.on(\'select2:select select2:unselect\', () => refreshGlobalWorldInfoSelectorState());');
-        expect(source).not.toContain('globalWorldInfoSelector.select2(\'close\');');
-        expect(source).not.toContain('globalWorldInfoSelector.next(\'span.select2-container\').find(\'textarea\').trigger(\'blur\');');
+    test('global selector replay has no Select2 or DOM-authority path', () => {
+        for (const file of ['public/scripts/world-info.js', 'public/scripts/world-info-panel-ui.js', 'public/scripts/world-info-book-sync.js']) {
+            const source = read(file);
+            expect(source).not.toContain('.select2(');
+            expect(source).not.toContain('change.select2');
+            expect(source).not.toContain("$('#world_info')");
+            expect(source).not.toContain("$('#world_editor_select')");
+        }
     });
 
     test('empty editor state makes new-entry prerequisite visible', () => {
@@ -177,15 +159,12 @@ describe('world info card rendering', () => {
         expect(workbench).toContain('disabled={!bridgeState.canCreateEntry}');
     });
 
-    test('world info editor localizes page-size and clear-selection labels', () => {
-        const source = read('public/scripts/world-info-panel-ui.js');
-        const locale = read('public/locales/zh-cn.json');
-
-        expect(source).not.toContain('function localizeWorldInfoPagination()');
-        expect(source).toContain('function getWorldInfoSelect2Language()');
-        expect(source).toContain('language: getWorldInfoSelect2Language(),');
-        expect(locale).toContain('"/ page": "/ 页"');
-        expect(locale).toContain('"Remove all items": "移除全部项目"');
+    test('React global selector uses translated controls instead of Select2 language callbacks', () => {
+        const source = read('app/components/panels/WorldInfoGlobalSelector.tsx');
+        expect(source).toContain("translate('Select global World Info')");
+        expect(source).toContain("translate('Clear all')");
+        expect(source).toContain("translate('No matching World Info.')");
+        expect(read('public/scripts/world-info-panel-ui.js')).not.toContain('getWorldInfoSelect2Language');
     });
 
     test('world info panel rehydrates selected editor after drawer remount', () => {
@@ -196,7 +175,8 @@ describe('world info card rendering', () => {
 
         expect(rehydrateStart).toBeGreaterThanOrEqual(0);
         expect(rehydrateEnd).toBeGreaterThan(rehydrateStart);
-        expect(rehydrateSource).toContain('syncWorldInfoSettingsUi({ syncGlobalSelect: false });');
+        expect(rehydrateSource).toContain('syncWorldInfoSettingsUi();');
+        expect(rehydrateSource).toContain('void mountWorldInfoEditorMirror();');
         expect(rehydrateSource).toContain('Array.isArray(world_names) && world_names.includes(selectedName)');
         expect(rehydrateSource).toContain('void showWorldEditor(selectedName);');
         expect(rehydrateSource).toContain('resetEmptyEditor = true');
@@ -318,9 +298,8 @@ describe('world info card rendering', () => {
         expect(wiEditorOpen).toBeGreaterThan(wiHolderOpen);
 
         const betweenHolderAndEditor = panelTsx.slice(wiHolderOpen, wiEditorOpen);
-        // wiGlobalPanel must close before editor opens; wi-holder must not close early.
-        expect(betweenHolderAndEditor).toContain('id="wiGlobalPanel"');
-        expect(betweenHolderAndEditor).toMatch(/<\/section>/);
+        // The global selector belongs to the visible React workbench, not this inert shell.
+        expect(betweenHolderAndEditor).not.toContain('id="wiGlobalPanel"');
         expect(betweenHolderAndEditor).not.toMatch(/id="wi-holder"[\s\S]*<\/div>\s*<section id="wiEditorPanel"/);
 
         const afterEditorStart = panelTsx.slice(wiEditorOpen, wiEditorOpen + 2500);

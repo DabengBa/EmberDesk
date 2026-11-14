@@ -202,6 +202,35 @@ export function createWorldInfoWorkbenchSession(deps) {
     /** @type {string} */
     let sortValue = typeof deps.initialSortValue === 'string' ? deps.initialSortValue : '0';
 
+    const selectorListeners = new Set();
+    let selectorSnapshot = {
+        worldNames: [...worldNames],
+        globalActiveNames: [...selectedWorldInfo],
+        editorWorldName: selectedWorldName,
+    };
+    const sameNames = (left, right) => left.length === right.length && left.every((name, index) => name === right[index]);
+
+    function publishSelectors() {
+        if (sameNames(selectorSnapshot.worldNames, worldNames)
+            && sameNames(selectorSnapshot.globalActiveNames, selectedWorldInfo)
+            && selectorSnapshot.editorWorldName === selectedWorldName) return;
+        selectorSnapshot = {
+            worldNames: [...worldNames],
+            globalActiveNames: [...selectedWorldInfo],
+            editorWorldName: selectedWorldName,
+        };
+        for (const listener of selectorListeners) listener();
+    }
+
+    function getSelectorSnapshot() {
+        return selectorSnapshot;
+    }
+
+    function subscribeSelectors(listener) {
+        selectorListeners.add(listener);
+        return () => selectorListeners.delete(listener);
+    }
+
     function getSelectedWorldName() {
         return selectedWorldName;
     }
@@ -222,10 +251,12 @@ export function createWorldInfoWorkbenchSession(deps) {
             selectedWorldName = '';
             selectedEntryUid = '';
         }
+        publishSelectors();
     }
 
     function setSelectedWorldInfo(nextActive) {
         selectedWorldInfo = Array.isArray(nextActive) ? [...nextActive] : [];
+        publishSelectors();
     }
 
     /**
@@ -238,6 +269,7 @@ export function createWorldInfoWorkbenchSession(deps) {
             selectedWorldName = '';
             selectedEntryUid = '';
             searchQuery = '';
+            publishSelectors();
             return;
         }
 
@@ -252,6 +284,7 @@ export function createWorldInfoWorkbenchSession(deps) {
             selectedWorldName = '';
             selectedEntryUid = '';
             searchQuery = '';
+            publishSelectors();
             return;
         }
 
@@ -265,6 +298,7 @@ export function createWorldInfoWorkbenchSession(deps) {
         // Preserve legacy editor semantics: selecting another book starts with
         // an unfiltered entry list instead of carrying a query across books.
         searchQuery = '';
+        publishSelectors();
         // Warm cache via repository; ignore payload.
         await deps.loadWorldInfo(worldName);
     }
@@ -279,6 +313,7 @@ export function createWorldInfoWorkbenchSession(deps) {
             selectionRevision++;
             selectedWorldName = '';
             selectedEntryUid = '';
+            publishSelectors();
             return false;
         }
         // Reselecting the same book is a no-op: keep entry selection and
@@ -289,6 +324,7 @@ export function createWorldInfoWorkbenchSession(deps) {
         selectionRevision++;
         selectedWorldName = name;
         selectedEntryUid = '';
+        publishSelectors();
         await deps.loadWorldInfo(name);
         return true;
     }
@@ -707,6 +743,8 @@ export function createWorldInfoWorkbenchSession(deps) {
     }
 
     return {
+        getSelectorSnapshot,
+        subscribeSelectors,
         getSelectedWorldName,
         captureSelectionGuard,
         getSelectedEntryUid,

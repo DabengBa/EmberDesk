@@ -1,7 +1,7 @@
-import { world_names, setSelectedWorldInfo } from './world-info-state.js';
+import { world_names } from './world-info-state.js';
 
 /** Character embedded-book and global-selection shell UI compatibility. */
-export function createWorldInfoReferenceUi({ characters, accountStorage, callGenericPopup, POPUP_TYPE, Popup, t, convertCharacterBook, saveWorldInfo, updateWorldInfoList, getWorldInfoShell, selectWorldInfoEditorName, getWIElement, saveSettingsDebounced, eventSource, event_types }) {
+export function createWorldInfoReferenceUi({ characters, accountStorage, callGenericPopup, POPUP_TYPE, Popup, t, convertCharacterBook, saveWorldInfo, updateWorldInfoList, getWorldInfoShell, selectWorldInfoEditorName, setWorldInfoGlobalActiveNames }) {
     function setWorldInfoButtonClass(chid, forceValue = undefined) {
         if (forceValue !== undefined) {
             $('#set_character_world, #world_button').toggleClass('world_set', forceValue);
@@ -92,26 +92,10 @@ export function createWorldInfoReferenceUi({ characters, accountStorage, callGen
         setWorldInfoButtonClass(chid, true);
     }
 
-    function onWorldInfoChange() {
-        const tempWorldInfo = [];
-        const val = $('#world_info').val();
-        const selectedWorlds = (Array.isArray(val) ? val : val ? [val] : []).map((e) => String(e)).filter(Boolean);
-        if (selectedWorlds.length > 0) {
-            selectedWorlds.forEach((existingWorldName) => {
-                if (world_names.includes(existingWorldName)) {
-                    tempWorldInfo.push(existingWorldName);
-                } else {
-                    const wiElement = getWIElement(existingWorldName);
-                    wiElement.prop('selected', false);
-                    toastr.error(t`The world with ${existingWorldName} is invalid or corrupted.`);
-                }
-            });
-        }
-        setSelectedWorldInfo(tempWorldInfo);
-
-        saveSettingsDebounced();
-        eventSource.emit(event_types.WORLDINFO_SETTINGS_UPDATED);
-        return '';
-    }
-    return { setWorldInfoButtonClass, checkEmbeddedWorld, importEmbeddedWorldInfo, onWorldInfoChange };
+    return {
+        setWorldInfoButtonClass,
+        checkEmbeddedWorld,
+        importEmbeddedWorldInfo,
+        onWorldInfoChange: setWorldInfoGlobalActiveNames,
+    };
 }
