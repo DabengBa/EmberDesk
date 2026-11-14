@@ -25,6 +25,18 @@ const longName = 'Selector Long ' + '世界书标题'.repeat(12);
 const fixtureBooks = ['Selector Created', 'Selector Renamed', 'Selector Imported', '1', longName];
 
 test.describe('World Info global selector', () => {
+    test('workspace loads World Info without the retired Select2 assets', async ({ page }) => {
+        const assets = [];
+        page.on('request', request => {
+            if (/\/select2(?:[.-]|\/)/i.test(new URL(request.url()).pathname)) assets.push(request.url());
+        });
+        await openWorldInfo(page);
+        await openPicker(page);
+        await expect(page.locator('#world_info input[type="search"]')).toBeVisible();
+        expect(assets).toEqual([]);
+        expect(await page.evaluate(() => typeof window.jQuery?.fn?.select2)).toBe('undefined');
+    });
+
     test.afterEach(async ({ page }) => {
         if (page.isClosed()) return;
         await page.unroute('**/api/settings/get');
