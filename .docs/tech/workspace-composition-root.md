@@ -98,8 +98,8 @@ During `public/script.js` evaluation:
 | dialog-polyfill and jquery-cropper wrapper | Removed: React uses native dialog and the existing native Cropper constructor |
 | touch-punch | Removed: no jQuery UI mouse-widget consumers remain; workspace dragging uses its existing separate implementation |
 | izoomify | Removed with its unused data attributes: no initialization call remained |
-| jQuery and transit | Retained: the ActionLoader overlay writes `filter: blur(15px)` through jQuery, and transit registers a filter hook; other shell consumers still use jQuery |
-| jQuery UI | Retained: it registers color hooks used by tag color updates through jQuery; unused tag autocomplete exports and their dedicated bindings and CSS remain removed |
+| jQuery and transit | Retained: shell consumers still use jQuery. ActionLoader now writes its blur and opacity directly to the native style; transit's filter hook is not required by that path. Removing transit needs broader evidence for remaining implicit or dynamic consumers. |
+| jQuery UI | Retained pending broader compatibility verification: tag and folder color writes now use native styles rather than its color hooks; unused tag autocomplete exports and their dedicated bindings and CSS remain removed. |
 | Select2 | Removed with its placeholder plugin, styles, types and unused helpers. Character World Info and the global selector use React; browser checks cover selection, synchronization, dialogs and menus. Dynamic paths cannot be exhaustively established by static search alone. |
 | Cropper | Retained as the native image-crop implementation used by the React popup |
 
