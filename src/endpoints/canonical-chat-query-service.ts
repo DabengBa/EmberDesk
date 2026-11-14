@@ -1,22 +1,60 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import type { Dirent } from 'node:fs';
+import type { DatabaseSync } from 'node:sqlite';
 
 import { formatBytes } from '../util.js';
 import { createTextMatcher, getPreviewMessage } from './chat-route-service.ts';
+import type { ChatInfo } from './chats.js';
+import type { UserDirectoryList } from '../users.js';
 
-function parseCanonicalPayload(payloadJson, fieldName) {
+type ChatDirectories = Pick<UserDirectoryList, 'chats' | 'characters'>;
+type Dependencies = {
+    fs?: typeof fs;
+    path?: typeof path;
+    getChatInfo?: (filePath: string, additionalData?: object, metadata?: boolean) => Promise<ChatInfo>;
+    warn?: (...args: unknown[]) => void;
+};
+type Summary = {
+    id: string;
+    ownerType: string;
+    ownerId: string;
+    sourcePath: string;
+    displayName: string;
+    headerPayloadJson: string;
+    sourceSizeBytes: number;
+    sourceMtimeMs: number;
+    messageCount: number;
+    lastPayloadJson: string | null;
+};
+// These describe the existing unchecked reads, not validation of stored JSON fields.
+type PayloadView = { mes?: string | null; send_date?: string | number | null; chat_metadata?: object | null };
+type RecentChat = ChatInfo & { avatar?: string };
+type PinnedChat = { file_name?: string; avatar?: string };
+type SearchOptions = { db: DatabaseSync; query?: string; avatarUrl?: string };
+type RecentOptions = {
+    db: DatabaseSync;
+    directories: ChatDirectories;
+    pinned?: PinnedChat[];
+    max?: number | string | null;
+    metadata?: boolean;
+    dependencies?: Dependencies;
+};
+
+function parseCanonicalPayload(payloadJson: unknown, fieldName: string): PayloadView {
     try {
         const payload = JSON.parse(String(payloadJson));
         if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
             throw new Error('payload must be an object');
         }
-        return payload;
+        return payload as PayloadView;
     } catch (error) {
-        throw new Error(`Canonical chat ${fieldName} is invalid: ${String(error?.message ?? error ?? '')}`);
+        const caught = error as { message?: unknown } | null | undefined;
+        throw new Error(`Canonical chat ${fieldName} is invalid: ${String(caught?.message ?? caught ?? '')}`);
     }
 }
 
-function normalizeDependencies(dependencies = {}) {
+function normalizeDependencies(dependencies: Dependencies = {}) {
     return {
         fs: dependencies.fs ?? fs,
         path: dependencies.path ?? path,
@@ -25,12 +63,12 @@ function normalizeDependencies(dependencies = {}) {
     };
 }
 
-function listCanonicalChatSummaries(db, {
+function listCanonicalChatSummaries(db: DatabaseSync, {
     ownerType = null,
     ownerIds = null,
-} = {}) {
-    const where = [];
-    const params = [];
+}: { ownerType?: string | null; ownerIds?: string[] | null } = {}): Summary[] {
+    const where: string[] = [];
+    const params: string[] = [];
 
     if (ownerType) {
         where.push('owner_type = ?');
@@ -85,7 +123,7 @@ function listCanonicalChatSummaries(db, {
     }));
 }
 
-function getCanonicalChatMessageTexts(db, sessionId) {
+function getCanonicalChatMessageTexts(db: DatabaseSync, sessionId: string): string[] {
     return db.prepare(`
         SELECT payload_json
         FROM chat_messages
@@ -97,7 +135,7 @@ function getCanonicalChatMessageTexts(db, sessionId) {
     });
 }
 
-function buildSearchPayload(summary) {
+function buildSearchPayload(summary: Summary) {
     const lastPayload = summary.lastPayloadJson
         ? parseCanonicalPayload(summary.lastPayloadJson, 'message payload')
         : null;
@@ -110,10 +148,10 @@ function buildSearchPayload(summary) {
     };
 }
 
-function buildRecentPayload(summary, {
+function buildRecentPayload(summary: Summary, {
     metadata = false,
     avatar = undefined,
-} = {}) {
+}: { metadata?: boolean; avatar?: string } = {}): RecentChat {
     const lastPayload = summary.lastPayloadJson
         ? parseCanonicalPayload(summary.lastPayloadJson, 'message payload')
         : null;
@@ -136,7 +174,7 @@ function buildRecentPayload(summary, {
     };
 }
 
-function readCharacterNames(directories, deps) {
+function readCharacterNames(directories: ChatDirectories, deps: ReturnType<typeof normalizeDependencies>): Set<string> {
     try {
         return new Set(deps.fs.readdirSync(directories.characters, { withFileTypes: true })
             .filter(entry => entry.isFile() && deps.path.extname(entry.name) === '.png')
@@ -150,13 +188,14 @@ async function readRootRecentPayload({
     directories,
     metadata = false,
     dependencies,
-}) {
+}: { directories: ChatDirectories; metadata?: boolean; dependencies?: Dependencies }): Promise<{ payload: RecentChat; mtime: number }[]> {
     const deps = normalizeDependencies(dependencies);
     if (typeof deps.getChatInfo !== 'function') {
         return [];
     }
+    const depsWithChatInfo = deps as typeof deps & { getChatInfo: NonNullable<typeof deps.getChatInfo> };
 
-    let dirents = [];
+    let dirents: Dirent[] = [];
     try {
         dirents = await deps.fs.promises.readdir(directories.chats, { withFileTypes: true });
     } catch {
@@ -169,7 +208,7 @@ async function readRootRecentPayload({
 
     const results = await Promise.allSettled(rootChatFiles.map(async filePath => {
         const stats = await deps.fs.promises.stat(filePath);
-        const payload = await deps.getChatInfo(filePath, {}, !!metadata);
+        const payload = await depsWithChatInfo.getChatInfo(filePath, {}, !!metadata);
         if (!payload?.file_name) {
             return null;
         }
@@ -180,7 +219,7 @@ async function readRootRecentPayload({
     }));
 
     return results
-        .filter(result => result.status === 'fulfilled' && result.value)
+        .filter((result): result is PromiseFulfilledResult<{ payload: ChatInfo; mtime: number }> => result.status === 'fulfilled' && !!result.value)
         .map(result => result.value);
 }
 
@@ -192,7 +231,7 @@ export async function searchCanonicalChatPayload({
     db,
     query = '',
     avatarUrl = '',
-}) {
+}: SearchOptions) {
     const matcher = createTextMatcher(query);
 
     const characterName = String(avatarUrl ?? '').replace('.png', '');
@@ -229,7 +268,7 @@ export async function searchCanonicalChatPayload({
  * @param {boolean} [options.metadata] Include chat_metadata payloads
  * @returns {object[]} Chat info payloads ordered by source path
  */
-export function listCanonicalCharacterChatPayload({ db, ownerId, metadata = false }) {
+export function listCanonicalCharacterChatPayload({ db, ownerId, metadata = false }: { db: DatabaseSync; ownerId: string; metadata?: boolean }): RecentChat[] {
     return listCanonicalChatSummaries(db, {
         ownerType: 'character',
         ownerIds: [String(ownerId ?? '')],
@@ -247,7 +286,7 @@ export async function readCanonicalRecentChatPayload({
     max = Number.MAX_SAFE_INTEGER,
     metadata = false,
     dependencies = {},
-}) {
+}: RecentOptions): Promise<RecentChat[]> {
     const deps = normalizeDependencies(dependencies);
     const allowedCharacters = readCharacterNames(directories, deps);
     const characterSummaries = listCanonicalChatSummaries(db, { ownerType: 'character' })
@@ -266,8 +305,8 @@ export async function readCanonicalRecentChatPayload({
         dependencies: deps,
     });
     const pinnedChats = Array.isArray(pinned) ? pinned : [];
-    const maxWithPinned = parseInt(max ?? Number.MAX_SAFE_INTEGER) + pinnedChats.length;
-    const isPinned = chat => pinnedChats.some(entry => (
+    const maxWithPinned = parseInt((max ?? Number.MAX_SAFE_INTEGER) as string) + pinnedChats.length;
+    const isPinned = (chat: { payload: RecentChat }) => pinnedChats.some(entry => (
         entry.file_name === chat.payload.file_name
         && entry.avatar === chat.payload.avatar
     ));

@@ -66,7 +66,7 @@ Key module structure:
 - `canonical-storage-slice-registry.js` — registered canonical storage slices (`characters`, `world_info`, `settings`, `secrets`, `managed_media`) with descriptor-owned flag keys and isolated audit/repair/rollback/backup capabilities; omitted slice fields retain global compatibility behavior, while managed media keeps its independent no-global-fallback flags
 - `canonical-sqlite-rollout-contract.js` — shared flag legality and per-slice rollback-blocker builders, plus character compatibility helpers
 - `canonical-sqlite-operator.js` — multi-slice operator status, audit/repair routing, projection replay, blocker explanation, chat-stats rebuild, and backup/restore readiness reporting
-- `src/endpoints/canonical-chat-query-service.js` — canonical chat search/recent summary/query owner for character/group chats with root-chat compatibility fallback kept at the route edge
+- `src/endpoints/canonical-chat-query-service.ts` — canonical character chat search/recent summary/query owner with a root-chat compatibility fallback for recent chats
 - `src/endpoints/canonical-chat-backup-restore-service.js` — canonical chat backup bundle and validated restore owner that binds attachment manifests and records restore-journal state
 - `src/endpoints/character-store.js` — canonical character row helper that reconstructs route-compatible read payloads and now also normalizes DB-backed character metadata writes
 - `public/lib.js` — browser shared-library boundary for first-party modules; it preserves both source imports and bundled `/lib.js` output (see [frontend-shared-library-boundary](tech/frontend-shared-library-boundary.md))
