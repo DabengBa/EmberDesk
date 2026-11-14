@@ -1,9 +1,11 @@
 import path from 'node:path';
 
+import type { UserDirectoryList } from '../users.js';
+
 import {
     flattenChubChat,
     getJsonChatImportConverter,
-} from './chat-import-converters.js';
+} from './chat-import-converters.ts';
 
 export const CHAT_IMPORT_ERROR_KINDS = Object.freeze({
     INVALID_JSONL_FORMAT: 'invalid-jsonl-format',
@@ -18,7 +20,41 @@ export const CHAT_IMPORT_UPLOAD_CLEANUP = Object.freeze({
     NONE: 'none',
 });
 
-function createImportedChatFileName(characterName, timestampLabel) {
+type ChatImportErrorKind = typeof CHAT_IMPORT_ERROR_KINDS[keyof typeof CHAT_IMPORT_ERROR_KINDS];
+type ChatImportUploadCleanup = typeof CHAT_IMPORT_UPLOAD_CLEANUP[keyof typeof CHAT_IMPORT_UPLOAD_CLEANUP];
+
+type AtomicChatWrite = { kind: 'atomic-write'; filePath: string; contents: string };
+type ChatImportWrite = AtomicChatWrite | { kind: 'copy-upload'; filePath: string; uploadPath: string };
+
+type FailedChatImportPlan = {
+    ok: false;
+    errorKind: ChatImportErrorKind;
+    uploadCleanup: ChatImportUploadCleanup;
+    error?: unknown;
+};
+type SuccessfulChatImportPlan = {
+    ok: true;
+    fileNames: string[];
+    shouldMarkChatStatsDirty: true;
+    uploadCleanup: ChatImportUploadCleanup;
+    writes: ChatImportWrite[];
+};
+type ChatImportPlan = FailedChatImportPlan | SuccessfulChatImportPlan;
+
+type ChatImportOptions = {
+    format: string;
+    data: string;
+    directories: Pick<UserDirectoryList, 'chats'>;
+    avatarUrl: string;
+    characterName: string;
+    userName: string;
+    timestampLabel: () => string;
+    uploadPath: string;
+    warn?: (message: string, error: unknown) => void;
+};
+type ChatWritePlanOptions = Pick<ChatImportOptions, 'directories' | 'avatarUrl' | 'characterName' | 'timestampLabel'> & { contents: string };
+
+function createImportedChatFileName(characterName: string, timestampLabel: () => string): string {
     return `${characterName} - ${timestampLabel()} imported.jsonl`;
 }
 
@@ -28,7 +64,7 @@ function createChatWritePlan({
     characterName,
     timestampLabel,
     contents,
-}) {
+}: ChatWritePlanOptions): { fileName: string; write: AtomicChatWrite } {
     const fileName = createImportedChatFileName(characterName, timestampLabel);
     return {
         fileName,
@@ -40,8 +76,8 @@ function createChatWritePlan({
     };
 }
 
-function createFailedImportPlan(errorKind, uploadCleanup, error) {
-    const plan = {
+function createFailedImportPlan(errorKind: ChatImportErrorKind, uploadCleanup: ChatImportUploadCleanup, error?: unknown): FailedChatImportPlan {
+    const plan: FailedChatImportPlan = {
         ok: false,
         errorKind,
         uploadCleanup,
@@ -54,7 +90,7 @@ function createFailedImportPlan(errorKind, uploadCleanup, error) {
     return plan;
 }
 
-function parseChatImportJson(data, uploadCleanup) {
+function parseChatImportJson(data: string, uploadCleanup: ChatImportUploadCleanup): { ok: true; jsonData: unknown } | FailedChatImportPlan {
     try {
         return {
             ok: true,
@@ -72,7 +108,7 @@ function createJsonChatImportPlan({
     characterName,
     userName,
     timestampLabel,
-}) {
+}: ChatImportOptions): ChatImportPlan {
     const parsed = parseChatImportJson(data, CHAT_IMPORT_UPLOAD_CLEANUP.ALREADY_CLEANED);
     if (!parsed.ok) {
         return parsed;
@@ -105,8 +141,10 @@ function createJsonChatImportPlan({
     };
 }
 
-function isJsonlChatHeader(jsonData) {
-    return jsonData.user_name !== undefined || jsonData.name !== undefined || jsonData.chat_metadata !== undefined;
+function isJsonlChatHeader(jsonData: unknown): boolean {
+    // Preserve legacy property access, including a TypeError for a null header.
+    const header = jsonData as { user_name?: unknown; name?: unknown; chat_metadata?: unknown };
+    return header.user_name !== undefined || header.name !== undefined || header.chat_metadata !== undefined;
 }
 
 function createJsonlChatImportPlan({
@@ -118,7 +156,7 @@ function createJsonlChatImportPlan({
     timestampLabel,
     uploadPath,
     warn = console.warn,
-}) {
+}: ChatImportOptions): ChatImportPlan {
     const lines = data.split('\n');
     const parsed = parseChatImportJson(lines[0], CHAT_IMPORT_UPLOAD_CLEANUP.NONE);
     if (!parsed.ok) {
@@ -141,7 +179,7 @@ function createJsonlChatImportPlan({
 
     const fileName = createImportedChatFileName(characterName, timestampLabel);
     const filePath = path.join(directories.chats, avatarUrl, fileName);
-    const write = flattenedChat !== data
+    const write: ChatImportWrite = flattenedChat !== data
         ? {
             kind: 'atomic-write',
             filePath,
@@ -162,7 +200,7 @@ function createJsonlChatImportPlan({
     };
 }
 
-export function createCharacterChatImportPlan(options) {
+export function createCharacterChatImportPlan(options: ChatImportOptions): ChatImportPlan {
     if (options.format === 'json') {
         return createJsonChatImportPlan(options);
     }

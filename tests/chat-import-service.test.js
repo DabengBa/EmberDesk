@@ -6,7 +6,7 @@ import {
     CHAT_IMPORT_ERROR_KINDS,
     CHAT_IMPORT_UPLOAD_CLEANUP,
     createCharacterChatImportPlan,
-} from '../src/endpoints/chat-import-service.js';
+} from '../src/endpoints/chat-import-service.ts';
 
 const FIXED_ISO_DATE = '2026-06-30T08:00:00.000Z';
 
@@ -126,6 +126,30 @@ describe('chat import service', () => {
             errorKind: CHAT_IMPORT_ERROR_KINDS.UNSUPPORTED_FORMAT,
             uploadCleanup: CHAT_IMPORT_UPLOAD_CLEANUP.NONE,
         });
+    });
+
+    test('keeps malformed decoded shapes as synchronous converter errors', () => {
+        for (const jsonData of [null, { savedsettings: {} }, { histories: null }, { type: 'risuChat' }]) {
+            expect(() => createCharacterChatImportPlan(makeBaseOptions({
+                format: 'json',
+                data: JSON.stringify(jsonData),
+            }))).toThrow(TypeError);
+        }
+
+        expect(() => createCharacterChatImportPlan(makeBaseOptions({
+            format: 'jsonl',
+            data: 'null',
+        }))).toThrow(TypeError);
+
+        for (const jsonData of [true, 1, 'text', []]) {
+            expect(createCharacterChatImportPlan(makeBaseOptions({
+                format: 'json',
+                data: JSON.stringify(jsonData),
+            }))).toMatchObject({
+                ok: false,
+                errorKind: CHAT_IMPORT_ERROR_KINDS.UNSUPPORTED_JSON_FORMAT,
+            });
+        }
     });
 
     test('plans valid JSONL imports as upload copies and cleans up only after success', () => {

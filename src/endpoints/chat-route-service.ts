@@ -1,18 +1,47 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-/**
- * @typedef {import('./chats.js').ChatInfo} ChatInfo
- * @typedef {(pathToFile: string, additionalData?: object, withMetadata?: boolean, matcher?: ((textArray: string[]) => boolean) | null) => Promise<ChatInfo>} GetChatInfo
- * @typedef {{ fs?: typeof fs, path?: typeof path, getChatInfo: GetChatInfo, warn?: (...args: unknown[]) => void }} ChatRouteServiceDependencies
- */
+import type { ChatInfo } from './chats.js';
+import type { UserDirectoryList } from '../users.js';
+
+type TextMatcher = (textArray: string[]) => boolean;
+type GetChatInfo = (pathToFile: string, additionalData?: object, withMetadata?: boolean, matcher?: TextMatcher | null) => Promise<ChatInfo>;
+type ChatRouteServiceDependencies = {
+    fs?: typeof fs;
+    path?: typeof path;
+    getChatInfo: GetChatInfo;
+    warn?: (...args: unknown[]) => void;
+};
+type ChatDirectories = Pick<UserDirectoryList, 'chats' | 'characters'>;
+type SearchChatOptions = {
+    directories: Pick<ChatDirectories, 'chats'>;
+    query?: string;
+    avatarUrl?: string;
+    dependencies: ChatRouteServiceDependencies;
+};
+type SearchChatResult = {
+    file_name: ChatInfo['file_id'];
+    file_size: ChatInfo['file_size'];
+    message_count: ChatInfo['chat_items'];
+    last_mes: ChatInfo['last_mes'];
+    preview_message: string;
+};
+type ChatFile = { pngFile?: string; filePath: string; mtime: number };
+type PinnedChat = { file_name?: string; avatar?: string };
+type RecentChatOptions = {
+    directories: ChatDirectories;
+    pinned?: PinnedChat[];
+    max?: number | string;
+    metadata?: boolean;
+    dependencies: ChatRouteServiceDependencies;
+};
 
 /**
  * Gets a preview message from a chat message string.
  * @param {string} [lastMessage] The message to truncate.
  * @returns {string} A truncated preview of the last message or empty string if no messages.
  */
-export function getPreviewMessage(lastMessage) {
+export function getPreviewMessage(lastMessage?: string): string {
     const strlen = 400;
 
     if (!lastMessage) {
@@ -24,10 +53,7 @@ export function getPreviewMessage(lastMessage) {
         : lastMessage;
 }
 
-/**
- * @param {ChatRouteServiceDependencies} dependencies
- */
-function normalizeDependencies(dependencies) {
+function normalizeDependencies(dependencies: ChatRouteServiceDependencies): Required<ChatRouteServiceDependencies> {
     return {
         fs: dependencies.fs ?? fs,
         path: dependencies.path ?? path,
@@ -36,11 +62,7 @@ function normalizeDependencies(dependencies) {
     };
 }
 
-/**
- * @param {string} query
- * @returns {(textArray: string[]) => boolean}
- */
-export function createTextMatcher(query) {
+export function createTextMatcher(query?: string): TextMatcher {
     const fragments = query ? query.trim().toLowerCase().split(/\s+/).filter(x => x) : [];
 
     return (textArray) => {
@@ -56,27 +78,19 @@ export function createTextMatcher(query) {
                     return normalizedText.includes(fragment);
                 }
 
-                const numericTokens = normalizedText.match(/\d+/g) ?? [];
+                const numericTokens: string[] = normalizedText.match(/\d+/g) ?? [];
                 return numericTokens.includes(fragment);
             });
         });
     };
 }
 
-/**
- * @param {object} options
- * @param {import('../users.js').UserDirectoryList} options.directories
- * @param {string} [options.query]
- * @param {string} [options.avatarUrl]
- * @param {ChatRouteServiceDependencies} options.dependencies
- * @returns {Promise<object[]>}
- */
 export async function searchChatPayload({
     directories,
     query = '',
     avatarUrl = '',
     dependencies,
-}) {
+}: SearchChatOptions): Promise<SearchChatResult[]> {
     const deps = normalizeDependencies(dependencies);
     const characterName = String(avatarUrl ?? '').replace('.png', '');
     if (!characterName) {
@@ -92,7 +106,7 @@ export async function searchChatPayload({
         .filter(file => deps.path.extname(file) === '.jsonl')
         .map(fileName => deps.path.join(directoryPath, fileName));
 
-    const results = [];
+    const results: SearchChatResult[] = [];
     const hasTextMatch = createTextMatcher(query);
 
     for (const chatFile of chatFiles) {
@@ -122,30 +136,16 @@ export async function searchChatPayload({
     return results;
 }
 
-/**
- * @typedef {{pngFile?: string, filePath: string, mtime: number}} ChatFile
- */
-
-/**
- * @param {object} options
- * @param {import('../users.js').UserDirectoryList} options.directories
- * @param {object[]} [options.pinned]
- * @param {number|string} [options.max]
- * @param {boolean} [options.metadata]
- * @param {ChatRouteServiceDependencies} options.dependencies
- * @returns {Promise<object[]>}
- */
 export async function readRecentChatPayload({
     directories,
     pinned = [],
     max = Number.MAX_SAFE_INTEGER,
     metadata = false,
     dependencies,
-}) {
+}: RecentChatOptions): Promise<ChatInfo[]> {
     const deps = normalizeDependencies(dependencies);
-    /** @type {ChatFile[]} */
-    const allChatFiles = [];
-    const pinnedChats = Array.isArray(pinned) ? pinned : [];
+    const allChatFiles: ChatFile[] = [];
+    const pinnedChats: PinnedChat[] = Array.isArray(pinned) ? pinned : [];
 
     const getCharacterChatFiles = async () => {
         const pngDirents = await deps.fs.promises.readdir(directories.characters, { withFileTypes: true });
@@ -184,8 +184,8 @@ export async function readRecentChatPayload({
 
     await Promise.allSettled([getCharacterChatFiles(), getRootChatFiles()]);
 
-    const maxWithPinned = parseInt(max ?? Number.MAX_SAFE_INTEGER) + pinnedChats.length;
-    const isPinned = (/** @type {ChatFile} */ chatFile) => pinnedChats.some(p => p.file_name === deps.path.basename(chatFile.filePath) && p.avatar === chatFile.pngFile);
+    const maxWithPinned = parseInt(`${max ?? Number.MAX_SAFE_INTEGER}`) + pinnedChats.length;
+    const isPinned = (chatFile: ChatFile) => pinnedChats.some(p => p.file_name === deps.path.basename(chatFile.filePath) && p.avatar === chatFile.pngFile);
     const recentChats = allChatFiles.sort((a, b) => {
         const isAPinned = isPinned(a);
         const isBPinned = isPinned(b);

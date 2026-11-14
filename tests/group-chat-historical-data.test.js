@@ -21,7 +21,7 @@ import {
 import {
     readRecentChatPayload,
     searchChatPayload,
-} from '../src/endpoints/chat-route-service.js';
+} from '../src/endpoints/chat-route-service.ts';
 import { setConfigFilePath } from '../src/util.js';
 
 const configRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-group-historical-config-'));

@@ -18,7 +18,7 @@ import {
 import {
     readRecentChatPayload,
     searchChatPayload,
-} from '../src/endpoints/chat-route-service.js';
+} from '../src/endpoints/chat-route-service.ts';
 
 const tempRoots = [];
 const managers = [];

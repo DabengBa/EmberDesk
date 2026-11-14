@@ -28,7 +28,7 @@ import {
     CHAT_IMPORT_ERROR_KINDS,
     CHAT_IMPORT_UPLOAD_CLEANUP,
     createCharacterChatImportPlan,
-} from './chat-import-service.js';
+} from './chat-import-service.ts';
 import { createChatBackupPlan } from './chat-backup-helpers.ts';
 import { getCanonicalStorageSlice } from '../canonical-storage-slice-registry.js';
 import { ensureCanonicalSliceBackend } from '../canonical-backend.js';
