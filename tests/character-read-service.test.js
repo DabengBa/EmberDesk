@@ -8,7 +8,7 @@ import {
     readCharacterFullPayload,
     readCharacterListPayload,
     readCharacterSummaryPayload,
-} from '../src/endpoints/character-read-service.js';
+} from '../src/endpoints/character-read-service.ts';
 
 /**
  * @param {string} prefix

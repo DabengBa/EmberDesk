@@ -132,6 +132,11 @@ describe('validation gate selector', () => {
         expect(commands).toContain('pnpm --dir tests run test:unit -- canonical-storage-slice-registry.test.js canonical-sqlite-cli.test.js canonical-sqlite-operator.test.js canonical-sqlite-rollout-contract.test.js canonical-sqlite-shadow-import.test.js character-read-service.test.js character-write-service.test.js --runInBand');
     });
 
+    test.each(['character-read-service.ts', 'character-write-service.ts'])('selects canonical validation for migrated %s', filename => {
+        expect(selectValidationGates([`src/endpoints/${filename}`]).commands.map(command => command.id))
+            .toContain('canonical-storage-rollout');
+    });
+
     test('selects the derived-cache gate for owning tech docs and retirement wording', () => {
         const commands = commandsFor([
             '.docs/tech/derived-cache-sqlite.md',

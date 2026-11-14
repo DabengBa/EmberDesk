@@ -16,7 +16,7 @@ code:
     - public/scripts/world-info-workbench-service.js
     - src/endpoints/characters.js
     - src/endpoints/character-text-replace-service.js
-    - src/endpoints/character-write-service.js
+    - src/endpoints/character-write-service.ts
     - src/endpoints/canonical-chat-write-service.js
     - src/canonical-sqlite-migrations.js
     - tests/character-text-replace.e2e.js
@@ -49,7 +49,7 @@ code:
 | `public/scripts/chat-ops-service.js`、`public/scripts/feature-settings.js` | 聊天与 metadata 有独立 debounce。`saveChatConditional()` 的等待、取消和布尔结果不足以证明一个失败请求在服务端已结束。`getChat({ strictReload: true })` 仍会在空响应时清空状态。 |
 | `public/scripts/world-info.js` | `saveWorldDebounced` 是独立定时器；`saveWorldInfo(..., false)` 安排保存后即返回，不能把其 Promise 完成当作写入完成。`_save()` 对 `WORLDINFO_UPDATED` 使用 fire-and-forget，写请求结束也不证明订阅者已结束。React 世界书工作台也调用这一保存路径。 |
 | `src/endpoints/character-text-replace-service.js` | `runCharacterTextReplace()` 按世界书、角色卡、聊天顺序异步处理，各区域独立提交；世界书成功后可刷新卡的嵌入快照。卡和聊天写入结果当前只以 `writeResult?.ok` 判定。 |
-| `src/endpoints/character-write-service.js`、`src/endpoints/canonical-chat-write-service.js` | 兼容文件投影失败时，可能返回 `authorityCommitted: true`；这不是 canonical 写入失败。 |
+| `src/endpoints/character-write-service.ts`、`src/endpoints/canonical-chat-write-service.js` | 兼容文件投影失败时，可能返回 `authorityCommitted: true`；这不是 canonical 写入失败。 |
 | `src/endpoints/characters.js` | `/text-replace/apply` 捕获异常后返回通用 500；不能据此推断此前各区域没有提交。 |
 | `src/canonical-sqlite.js` | `withCanonicalTransaction(db, fn)` 只接受同步回调。不能把现有跨 `await` 的替换过程直接包进该事务并宣称所有区域原子。 |
 
