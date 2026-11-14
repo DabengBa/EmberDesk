@@ -457,6 +457,18 @@ function chooseBogusFolder(source, tagId, remove = false) {
 }
 
 /**
+ * Writes tag colors without invoking jQuery color hooks. Missing values leave the template unchanged.
+ * @param {JQuery<HTMLElement>} elements
+ * @param {Tag} tag
+ */
+function applyTagColors(elements, tag) {
+    elements.each(function () {
+        if (tag.color != null) this.style.backgroundColor = tag.color;
+        if (tag.color2 != null) this.style.color = tag.color2;
+    });
+}
+
+/**
  * Builds the tag block for the specified item.
  *
  * @param {Tag} tag The tag item
@@ -473,7 +485,9 @@ function getTagBlock(tag, entities, hidden = 0, isUseless = false) {
     const template = FOLDER_TEMPLATE.clone();
     template.addClass(tagFolder.class);
     template.attr({ 'tagid': tag.id, 'id': `BogusFolder${tag.id}` });
-    template.find('.avatar').css({ 'background-color': tag.color, 'color': tag.color2 }).attr('title', `[Folder] ${tag.name}`);
+    const avatars = template.find('.avatar');
+    applyTagColors(avatars, tag);
+    avatars.attr('title', `[Folder] ${tag.name}`);
     template.find('.ch_name').text(tag.name).attr('title', `[Folder] ${tag.name}`);
     template.find('.bogus_folder_hidden_counter').text(hidden > 0 ? `${hidden} hidden` : '');
     template.find('.bogus_folder_counter').text(`${count} ` + (count != 1 ? t`characters` : t`character`));
@@ -1107,9 +1121,7 @@ function appendTagToList(listElement, tag, { removable = false, isFilter = false
     let tagElement = TAG_TEMPLATE.clone();
     tagElement.attr('id', tag.id);
 
-    //tagElement.css('color', 'var(--SmartThemeBodyColor)');
-    tagElement.css('background-color', tag.color);
-    tagElement.css('color', tag.color2);
+    applyTagColors(tagElement, tag);
 
     tagElement.find('.tag_name').text(tag.name);
     const removeButton = tagElement.find('.tag_remove');
