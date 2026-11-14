@@ -5,7 +5,7 @@ import {
     deleteCharacterCard,
     editCharacterCard,
     renameCharacterCard,
-} from '../src/endpoints/character-write-service.js';
+} from '../src/endpoints/character-write-service.ts';
 
 function makeRequest(directories) {
     return {

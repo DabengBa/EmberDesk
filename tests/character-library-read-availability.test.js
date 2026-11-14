@@ -9,7 +9,7 @@ import { canonicalSqliteManager } from '../src/canonical-sqlite.js';
 import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
 import { upsertCanonicalCharacter } from '../src/endpoints/character-store.js';
 import { getPersistedCanonicalAuditStatus, persistCanonicalAuditStatus } from '../src/canonical-sqlite-shadow-import.js';
-import { readCharacterFullPayload } from '../src/endpoints/character-read-service.js';
+import { readCharacterFullPayload } from '../src/endpoints/character-read-service.ts';
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'character-read-http-'));
 fs.writeFileSync(path.join(root, 'config.yaml'), 'enableUserAccounts: true\n');
@@ -146,8 +146,8 @@ test('non-strict blocking audit is distinguishable from an absent row with the s
     dependencies.getCanonicalAuditStatus = () => getPersistedCanonicalAuditStatus(db);
     const blocked = await readCharacterFullPayload(options);
     expect(missing).not.toHaveProperty('canonicalUnavailable');
-    expect(blocked.canonicalUnavailable).toBe('canonical_storage_unavailable');
     const { canonicalUnavailable, ...unchangedFields } = blocked;
+    expect(canonicalUnavailable).toBe('canonical_storage_unavailable');
     expect(unchangedFields).toEqual(missing);
     expect(blocked).toMatchObject({ status: 'not_found', fallbackReason: 'canonical_db_row_missing' });
 });

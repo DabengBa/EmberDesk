@@ -87,13 +87,29 @@ graph in native Node and Jest, verify ESM mocks and original error locations,
 and exercise unsupported syntax and invalid specifiers. Node subprocesses
 run without a production loader or emitted graph.
 
-## First migrated slice
+## Migrated slices
 
 `src/endpoints/chat-backup-helpers.ts` is the sole backup-planning
 implementation. `src/endpoints/chats.js` imports it explicitly. The existing
 deterministic helper tests keep their unit classification; native import
 and actual chat-router module tests provide integration proof. The naming,
 retention rules, synchronous API, and backup data format are preserved.
+
+`src/endpoints/character-read-service.ts` and
+`src/endpoints/character-write-service.ts` now own the existing character
+read and write flows. Their exported types describe service options,
+dependency ports, canonical outcomes, and projection repairs. The character
+router and text-replace service use explicit `.ts` imports; their dependency
+factories and import callbacks consume these types through JSDoc. The import
+coordinator remains JavaScript and uses the existing route callbacks.
+
+The migration preserves canonical availability and strict errors, conditional
+card replacement, authority-commit/projection/repair ordering, and upload
+cleanup. Focused read/write, replacement, import, and route tests cover those
+behaviors. `character-services-native.test.js` imports the real service and
+caller graphs in Node without a loader. `character-services-types.test.js`
+checks typed consumers and rejects invalid write and replacement contracts;
+it does not enable checking for all legacy JavaScript.
 
 This is internal execution and type-checking work. It changes no user-facing
 page, feature, or term, so no semantic documentation database update is needed.

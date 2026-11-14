@@ -14,8 +14,8 @@ Primary files:
 
 - `src/endpoints/character-index.js` (retired from normal runtime; retained as historical/helper-level proof)
 - `src/derived-cache-sqlite.js`
-- `src/endpoints/character-read-service.js`
-- `src/endpoints/character-write-service.js`
+- `src/endpoints/character-read-service.ts`
+- `src/endpoints/character-write-service.ts`
 - `src/endpoints/character-import-service.js`
 - `src/endpoints/characters.js`
 - `src/endpoints/thumbnails.js`
@@ -46,7 +46,7 @@ The historical interaction-performance slice originally aimed to:
 - keep the indexed fast path self-healing when derived rows or SQLite state became inconsistent
 - add a reproducible local A/B runner that can prove whether the current SQLite slice is helping enough to justify its maintenance cost
 
-This tech note now treats the index details below as historical/helper-level context. Current runtime ownership lives in `src/endpoints/character-read-service.js`, `src/endpoints/character-write-service.js`, `src/endpoints/character-import-service.js`, `src/endpoints/chats.js`, and `src/endpoints/worldinfo.js`, none of which use `_cache/character-index.sqlite` as a normal path.
+This tech note now treats the index details below as historical/helper-level context. Current runtime ownership lives in `src/endpoints/character-read-service.ts`, `src/endpoints/character-write-service.ts`, `src/endpoints/character-import-service.js`, `src/endpoints/chats.js`, and `src/endpoints/worldinfo.js`, none of which use `_cache/character-index.sqlite` as a normal path.
 
 Separate from the SQLite slice, EmberDesk now also applies a short browser cache policy on non-Firefox `/thumbnail` responses:
 
@@ -99,7 +99,7 @@ Separate from SQLite, thumbnail HTTP caching, lazy image fetch behavior, placeho
 - mutation success responses do not wait for thumbnail pregeneration to finish
 - if pregeneration fails or loses a race with a very fast follow-up request, the existing `/thumbnail` route remains the fallback source of truth for derived regeneration
 
-Separate from the read-side character route service, EmberDesk now also routes single-card character writes through `src/endpoints/character-write-service.js`:
+Separate from the read-side character route service, EmberDesk now also routes single-card character writes through `src/endpoints/character-write-service.ts`:
 
 - `/api/characters/create` delegates canonical card formatting, target avatar naming, chats-directory creation, and optional upload cleanup to `createCharacterCard`
 - `/api/characters/edit` delegates metadata-only writes with `shouldRegenerateThumbnail: false`, replacement-avatar upload cleanup, and cache busting to `editCharacterCard`
@@ -228,7 +228,7 @@ So the precise answer is:
 
 ### Current `/api/characters/all` path
 
-`src/endpoints/characters.js` routes `POST /api/characters/all` through `src/endpoints/character-read-service.js`. The service now returns canonical rows when the canonical read gate is available and audit-clean, otherwise it falls back directly to compatibility files. It does not call the retired derived sidecar in either mode, and the Express route unwraps the internal snapshot envelope before sending the unchanged array response.
+`src/endpoints/characters.js` routes `POST /api/characters/all` through `src/endpoints/character-read-service.ts`. The service now returns canonical rows when the canonical read gate is available and audit-clean, otherwise it falls back directly to compatibility files. It does not call the retired derived sidecar in either mode, and the Express route unwraps the internal snapshot envelope before sending the unchanged array response.
 
 Build source for each row:
 
@@ -252,7 +252,7 @@ Failure behavior:
 
 ### Character read service boundary
 
-`src/endpoints/character-read-service.js` owns read coordination for:
+`src/endpoints/character-read-service.ts` owns read coordination for:
 
 - `POST /api/characters/all`
 - `POST /api/characters/list`
@@ -279,7 +279,7 @@ In canonical DB-first read mode, the service now uses the derived character inde
 
 ### Current `/api/characters/get` path
 
-`src/endpoints/characters.js` routes `POST /api/characters/get` through `src/endpoints/character-read-service.js`. The current compatibility fallback is direct file-backed parsing:
+`src/endpoints/characters.js` routes `POST /api/characters/get` through `src/endpoints/character-read-service.ts`. The current compatibility fallback is direct file-backed parsing:
 
 1. validate the avatar path
 2. confirm the PNG still exists
