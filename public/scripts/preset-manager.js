@@ -1,11 +1,5 @@
 import { lodash } from '../lib.js';
 
-import {
-    characters,
-    main_api,
-    saveSettings,
-    this_chid,
-} from '../script.js';
 import { eventSource, event_types } from './events.js';
 import { getRequestHeaders } from './request-context.js';
 import { t } from './i18n.js';
@@ -13,6 +7,20 @@ import { getOpenAIPresetService, oai_settings, openai_setting_names, openai_sett
 import { Popup } from './popup.js';
 
 import { ensurePlainObject } from './utils.js';
+
+let presetManagerContext;
+
+/**
+ * Install composition-root accessors before preset initialization or use.
+ * @param {{main_api: string, characters: Array, this_chid: number, saveSettings: Function}} context Live state accessors and the existing settings writer.
+ */
+export function installPresetManagerContext(context) {
+    presetManagerContext = context;
+}
+
+function saveSettings(...args) {
+    return presetManagerContext.saveSettings(...args);
+}
 
 const presetManagers = {};
 
@@ -23,14 +31,14 @@ function autoSelectPreset() {
     const presetManager = getPresetManager();
 
     if (!presetManager) {
-        console.debug(`Preset Manager not found for API: ${main_api}`);
+        console.debug(`Preset Manager not found for API: ${presetManagerContext.main_api}`);
         return;
     }
 
-    const name = characters[this_chid]?.name;
+    const name = presetManagerContext.characters[presetManagerContext.this_chid]?.name;
 
     if (!name) {
-        console.debug(`Preset candidate not found for API: ${main_api}`);
+        console.debug(`Preset candidate not found for API: ${presetManagerContext.main_api}`);
         return;
     }
 
@@ -38,12 +46,12 @@ function autoSelectPreset() {
     const selectedPreset = presetManager.getSelectedPreset();
 
     if (preset === selectedPreset) {
-        console.debug(`Preset already selected for API: ${main_api}, name: ${name}`);
+        console.debug(`Preset already selected for API: ${presetManagerContext.main_api}, name: ${name}`);
         return;
     }
 
     if (preset !== undefined && preset !== null) {
-        console.log(`Preset found for API: ${main_api}, name: ${name}`);
+        console.log(`Preset found for API: ${presetManagerContext.main_api}, name: ${name}`);
         presetManager.selectPreset(preset);
     }
 }
@@ -55,7 +63,7 @@ function autoSelectPreset() {
  */
 export function getPresetManager(apiId = '') {
     if (!apiId) {
-        apiId = main_api;
+        apiId = presetManagerContext.main_api;
     }
 
     if (!Object.keys(presetManagers).includes(apiId)) {

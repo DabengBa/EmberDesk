@@ -84,6 +84,17 @@ export function AiConfigPanel({ presetService, promptList, presetSaveButton, pro
     const numeric = (field: string, scale = 1) => ({ key: `${snapshot.selected}:${field}`, current: Number(snapshot.settings[field] ?? 0), scale, commit: (next: number) => set(field, next) });
     const value = (field: string) => String(snapshot.settings[field] ?? '');
     const text = (field: string) => ({ value: value(field), onChange: (event: ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => set(field, event.target.value) });
+    const autoHeightText = (field: string) => ({
+        value: value(field),
+        onChange: (event: ChangeEvent<HTMLTextAreaElement>) => {
+            const element = event.currentTarget;
+            if (!CSS.supports('field-sizing', 'content')) {
+                element.style.height = '0px';
+                element.style.height = `${element.scrollHeight + 3}px`;
+            }
+            set(field, element.value);
+        },
+    });
     const number = (field: string, scale = 1) => ({ value: Number(snapshot.settings[field] ?? 0) / scale, onChange: (event: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         if (event.target.value !== '') set(field, Math.round(Number(event.target.value) * scale * 100) / 100);
     } });
@@ -283,7 +294,7 @@ export function AiConfigPanel({ presetService, promptList, presetSaveButton, pro
                                 <ContractIconButton id="wi_format_restore" onClick={() => presetService.restore('wi_format')} className="right_menu_button" label="Restore default format" nativeTitle title="Restore default format" icon={<i className="fa-solid fa-clock-rotate-left" aria-hidden="true" />} />
                             </div>
                             <div className="wide100p">
-                                <textarea id="wi_format_textarea" className="text_pole textarea_compact autoSetHeight" rows={3} placeholder={"2014"} {...text('wi_format')}></textarea>
+                                <textarea id="wi_format_textarea" className="text_pole textarea_compact autoSetHeight" rows={3} placeholder={"2014"} {...autoHeightText('wi_format')}></textarea>
                             </div>
                         </div>
                         <div className="range-block">
@@ -292,7 +303,7 @@ export function AiConfigPanel({ presetService, promptList, presetSaveButton, pro
                                 <ContractIconButton id="description_format_restore" onClick={() => presetService.restore('description_format')} className="right_menu_button" label="Restore default format" nativeTitle title="Restore default format" icon={<i className="fa-solid fa-clock-rotate-left" aria-hidden="true" />} />
                             </div>
                             <div className="wide100p">
-                                <textarea id="description_format_textarea" className="text_pole textarea_compact autoSetHeight" rows={3} placeholder={"2014"} {...text('description_format')}></textarea>
+                                <textarea id="description_format_textarea" className="text_pole textarea_compact autoSetHeight" rows={3} placeholder={"2014"} {...autoHeightText('description_format')}></textarea>
                             </div>
                         </div>
                         <div className="range-block">
@@ -301,14 +312,14 @@ export function AiConfigPanel({ presetService, promptList, presetSaveButton, pro
                                 <ContractIconButton id="newchat_prompt_restore" onClick={() => presetService.restore('new_chat_prompt')} className="right_menu_button" label="Restore new chat prompt" nativeTitle title="Restore new chat prompt" icon={<i className="fa-solid fa-clock-rotate-left" aria-hidden="true" />} />
                             </div>
                             <div className="wide100p">
-                                <textarea id="newchat_prompt_textarea" className="text_pole textarea_compact autoSetHeight" name="new_chat" rows={3} placeholder={"2014"} {...text('new_chat_prompt')}></textarea>
+                                <textarea id="newchat_prompt_textarea" className="text_pole textarea_compact autoSetHeight" name="new_chat" rows={3} placeholder={"2014"} {...autoHeightText('new_chat_prompt')}></textarea>
                             </div>
                         </div>
                         <div className="config-section-header"><span>{translate('Other')}</span></div>
                         <div className="range-block">
                             <div className="range-block-title" >{translate('Empty Message Fallback')}</div>
                             <div className="wide100p">
-                                <textarea id="send_if_empty_textarea" className="text_pole textarea_compact autoSetHeight" name="send_if_empty" rows={3} placeholder={"2014"} {...text('send_if_empty')}></textarea>
+                                <textarea id="send_if_empty_textarea" className="text_pole textarea_compact autoSetHeight" name="send_if_empty" rows={3} placeholder={"2014"} {...autoHeightText('send_if_empty')}></textarea>
                             </div>
                         </div>
                             </div>

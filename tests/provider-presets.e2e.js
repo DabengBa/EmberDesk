@@ -43,6 +43,24 @@ async function presetMenu(page, selector) {
     await page.locator(selector).click();
 }
 
+test('preset textareas resize without field-sizing support', async ({ page }) => {
+
+    await page.addInitScript(() => {
+        const supports = CSS.supports.bind(CSS);
+        CSS.supports = (...args) => args[0] === 'field-sizing' ? false : supports(...args);
+    });
+    await page.route('**/api/backends/chat-completions/status', route => route.fulfill({ json: { data: [] } }));
+    await testSetup.awaitST({ page });
+    await openPrompt(page);
+    await page.evaluate(() => window.jQuery(document).off('input', '#openai_settings .autoSetHeight'));
+    await page.locator('#ai_response_configuration .inline-drawer-toggle').click();
+    const textarea = page.locator('#wi_format_textarea');
+    await textarea.evaluate(element => { element.style.height = ''; });
+    await textarea.fill(Array(16).fill('long line of prompt content').join('\n'));
+    await expect.poll(() => textarea.evaluate(element => ({ height: element.style.height, scrollHeight: element.scrollHeight })))
+        .toMatchObject({ height: expect.stringMatching(/^[1-9]\d*px$/) });
+});
+
 for (const entry of ['page', 'drawer']) {
     test(`${entry}: connection and test use the draft, expose failure and recover without saving`, async ({ page }) => {
         // Intercept every provider probe, including startup, so no real provider is contacted.

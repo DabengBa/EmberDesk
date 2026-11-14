@@ -4,25 +4,6 @@
 * https://github.com/CncAnon1/TavernAITurbo
 */
 
-import {
-    abortStatusCheck,
-    extension_prompt_roles,
-    extension_prompt_types,
-    getExtensionPrompt,
-    getExtensionPromptMaxDepth,
-    getMediaDisplay,
-    getMediaIndex,
-
-    main_api,
-    name1,
-    name2,
-    displayOnlineStatus,
-    saveSettingsDebounced,
-    setOnlineStatus,
-    substituteParams,
-    withGeneratingModel,
-    system_message_types,
-} from '../script.js';
 import { eventSource, event_types } from './events.js';
 import { getRequestHeaders } from './request-context.js';
 
@@ -51,7 +32,7 @@ import {
     getVideoDurationFromDataURL,
     isDataURL,
 
-    resetScrollHeight,
+
     stringFormat,
 } from './utils.js';
 import { countTokensOpenAIAsync } from './tokenizers.js';
@@ -74,6 +55,17 @@ import {
     resolveVerbosity,
 } from './openai-provider-capabilities.js';
 import { buildStepPrompt, createPipelineToolCompatibilityError, getActivePipelineRunId, getPipelineRunState, PIPELINE_FALLBACK_PROMPT, PIPELINE_STORY_TOOL, pipelineModelRemovesTools } from './reply-pipeline-core.js';
+
+// Installed by the workspace composition root before any domain initialization.
+// State properties must be getters: the shell can replace them after startup.
+let openAIContext;
+export function installOpenAIContext(context) {
+    openAIContext = context;
+}
+
+function saveSettingsDebounced() {
+    return openAIContext.saveSettingsDebounced();
+}
 
 const presetDialogs = createPresetDialogs({ showLocalDialog, t });
 
@@ -305,10 +297,9 @@ export function installOpenAIPresetService(factory) {
                 await eventSource.emit(event_types.PRESET_CHANGED, { apiId: 'openai', name: payload });
             }
         },
-        changed: () => { updateFeatureSupportFlags(); saveSettingsDebounced(); },
+        changed: () => { saveSettingsDebounced(); },
         normalize: value => { migrateChatCompletionSettings(value); return value; },
         afterApply: () => {
-            updateFeatureSupportFlags();
             eventSource.emit(event_types.CHATCOMPLETION_MODEL_CHANGED, oai_settings.openai_model);
             reconnectOpenAi();
         },
@@ -367,7 +358,7 @@ function setOpenAIMessages(chat, model = null) {
         }
 
         // 100% legal way to send a message as system
-        if (chat[j].extra?.type === system_message_types.NARRATOR) {
+        if (chat[j].extra?.type === openAIContext.system_message_types.NARRATOR) {
             role = 'system';
         }
 
@@ -376,12 +367,12 @@ function setOpenAIMessages(chat, model = null) {
             case character_names_behavior.NONE:
                 break;
             case character_names_behavior.DEFAULT:
-                if (chat[j].force_avatar && chat[j].name !== name1 && chat[j].extra?.type !== system_message_types.NARRATOR) {
+                if (chat[j].force_avatar && chat[j].name !== openAIContext.name1 && chat[j].extra?.type !== openAIContext.system_message_types.NARRATOR) {
                     content = `${chat[j].name}: ${content}`;
                 }
                 break;
             case character_names_behavior.CONTENT:
-                if (chat[j].extra?.type !== system_message_types.NARRATOR) {
+                if (chat[j].extra?.type !== openAIContext.system_message_types.NARRATOR) {
                     content = `${chat[j].name}: ${content}`;
                 }
                 break;
@@ -396,8 +387,8 @@ function setOpenAIMessages(chat, model = null) {
 
         const name = chat[j].name;
         const media = chat[j]?.extra?.media;
-        const mediaDisplay = getMediaDisplay(chat[j]);
-        const mediaIndex = getMediaIndex(chat[j]);
+        const mediaDisplay = openAIContext.getMediaDisplay(chat[j]);
+        const mediaIndex = openAIContext.getMediaIndex(chat[j]);
         const invocations = chat[j]?.extra?.tool_invocations?.slice();
 
         // Folded pipeline markup is display-only — never send it as content.
@@ -478,7 +469,7 @@ function setupChatCompletionPromptManager(openAiSettings) {
     };
 
     promptManager.saveServiceSettings = () => {
-        saveSettingsDebounced();
+        openAIContext.saveSettingsDebounced();
         return new Promise((resolve) => eventSource.once(event_types.SETTINGS_UPDATED, resolve));
     };
 
@@ -514,12 +505,12 @@ async function populationInjectionPrompts(prompts, messages, extensionPrompts) {
     let totalInsertedMessages = 0;
 
     const roleTypes = {
-        'system': extension_prompt_roles.SYSTEM,
-        'user': extension_prompt_roles.USER,
-        'assistant': extension_prompt_roles.ASSISTANT,
+        'system': openAIContext.extension_prompt_roles.SYSTEM,
+        'user': openAIContext.extension_prompt_roles.USER,
+        'assistant': openAIContext.extension_prompt_roles.ASSISTANT,
     };
 
-    const maxDepth = getExtensionPromptMaxDepth();
+    const maxDepth = openAIContext.getExtensionPromptMaxDepth();
     for (let i = 0; i <= maxDepth; i++) {
         // Get prompts for current depth
         const depthPrompts = prompts.filter(prompt => prompt.injection_depth === i && prompt.content);
@@ -556,7 +547,7 @@ async function populationInjectionPrompts(prompts, messages, extensionPrompts) {
 
                 // Get extension prompt
                 const extensionPrompt = order === extensionPromptsOrder
-                    ? await getExtensionPrompt(extension_prompt_types.IN_CHAT, i, separator, roleTypes[role], wrap, extensionPrompts)
+                    ? await openAIContext.getExtensionPrompt(openAIContext.extension_prompt_types.IN_CHAT, i, separator, roleTypes[role], wrap, extensionPrompts)
                     : '';
                 const jointPrompt = [rolePrompts, extensionPrompt].filter(x => x).map(x => x.trim()).join(separator);
 
@@ -595,7 +586,7 @@ async function populateChatHistory(messages, prompts, chatCompletion, assemblySe
         chatCompletion.add(new MessageCollection('chatHistory'), prompts.index('chatHistory'));
     }
 
-    const newChatMessage = await Message.createAsync('system', substituteParams(oai_settings.new_chat_prompt), 'newMainChat');
+    const newChatMessage = await Message.createAsync('system', openAIContext.substituteParams(oai_settings.new_chat_prompt), 'newMainChat');
     chatCompletion.reserveBudget(newChatMessage);
 
     const lastChatPrompt = messages[messages.length - 1];
@@ -604,9 +595,9 @@ async function populateChatHistory(messages, prompts, chatCompletion, assemblySe
         chatCompletion.insert(message, 'chatHistory');
     }
 
-    const imageInlining = isImageInliningSupportedForSettings(assemblySettings, { mainApi: main_api });
-    const videoInlining = isVideoInliningSupportedForSettings(assemblySettings, { mainApi: main_api });
-    const audioInlining = isAudioInliningSupportedForSettings(assemblySettings, { mainApi: main_api });
+    const imageInlining = isImageInliningSupportedForSettings(assemblySettings, { mainApi: openAIContext.main_api });
+    const videoInlining = isVideoInliningSupportedForSettings(assemblySettings, { mainApi: openAIContext.main_api });
+    const audioInlining = isAudioInliningSupportedForSettings(assemblySettings, { mainApi: openAIContext.main_api });
     const assemblyModel = getChatCompletionModel(assemblySettings);
     const canUseTools = ToolManager.isToolCallingSupported(assemblySettings, assemblyModel);
     const projectPipelineHistory = pipelineHistory && canUseTools && !pipelineModelRemovesTools({
@@ -908,11 +899,11 @@ async function populateChatHistory(messages, prompts, chatCompletion, assemblySe
  * @returns {string|false} - The prompt position for prompt collection.
  */
 export function getPromptPosition(position) {
-    if (position == extension_prompt_types.BEFORE_PROMPT) {
+    if (position == openAIContext.extension_prompt_types.BEFORE_PROMPT) {
         return 'start';
     }
 
-    if (position == extension_prompt_types.IN_PROMPT) {
+    if (position == openAIContext.extension_prompt_types.IN_PROMPT) {
         return 'end';
     }
 
@@ -926,11 +917,11 @@ export function getPromptPosition(position) {
  */
 export function getPromptRole(role) {
     switch (role) {
-        case extension_prompt_roles.SYSTEM:
+        case openAIContext.extension_prompt_roles.SYSTEM:
             return 'system';
-        case extension_prompt_roles.USER:
+        case openAIContext.extension_prompt_roles.USER:
             return 'user';
-        case extension_prompt_roles.ASSISTANT:
+        case openAIContext.extension_prompt_roles.ASSISTANT:
             return 'assistant';
         default:
             return 'system';
@@ -988,7 +979,7 @@ async function populateChatCompletion(prompts, chatCompletion, { bias, quietProm
     // This should always be last, even in control prompts. Add all further control prompts BEFORE this prompt
     const quietPromptMessage = await Message.fromPromptAsync(prompts.get('quietPrompt')) ?? null;
     if (quietPromptMessage && quietPromptMessage.content) {
-        if (isImageInliningSupportedForSettings(assemblySettings, { mainApi: main_api }) && quietImage) {
+        if (isImageInliningSupportedForSettings(assemblySettings, { mainApi: openAIContext.main_api }) && quietImage) {
             await quietPromptMessage.addImage(quietImage);
         }
 
@@ -1109,7 +1100,7 @@ async function preparePromptsForChatCompletion({ name2: _name2, worldInfo, charD
             const prompt = extensionPrompts[key];
             if (['QUIET_PROMPT', 'DEPTH_PROMPT'].includes(key)) continue;
             if (!extensionPrompts[key].value) continue;
-            if (![extension_prompt_types.BEFORE_PROMPT, extension_prompt_types.IN_PROMPT].includes(prompt.position)) continue;
+            if (![openAIContext.extension_prompt_types.BEFORE_PROMPT, openAIContext.extension_prompt_types.IN_PROMPT].includes(prompt.position)) continue;
 
             const hasFilter = typeof prompt.filter === 'function';
             if (hasFilter && !await prompt.filter()) continue;
@@ -1163,7 +1154,7 @@ async function preparePromptsForChatCompletion({ name2: _name2, worldInfo, charD
  * @returns {{role: string, content: string}[]}
  */
 function collectPipelineStepPrompts(pipelineStepTag, type, model) {
-    return withGeneratingModel(model, () => {
+    return openAIContext.withGeneratingModel(model, () => {
         const stepPrompts = [];
         for (const entry of promptManager.getPromptOrderForCharacter(promptManager.activeCharacter)) {
             const prompt = promptManager.getPromptById(entry.identifier);
@@ -1445,8 +1436,7 @@ export function setOpenAIModel(model) {
         return;
     }
     oai_settings.openai_model = value;
-    saveSettingsDebounced();
-    updateFeatureSupportFlags();
+    openAIContext.saveSettingsDebounced();
     eventSource.emit(event_types.CHATCOMPLETION_MODEL_CHANGED, value);
 }
 
@@ -1502,8 +1492,8 @@ export async function createGenerationParameters(settings, model, type, messages
         'stream': stream,
         'stop': getCustomStoppingStrings(openai_max_stop_strings),
         'chat_completion_source': settings.chat_completion_source,
-        'user_name': name1,
-        'char_name': name2,
+        'user_name': openAIContext.name1,
+        'char_name': openAIContext.name2,
         'include_reasoning': Boolean(settings.show_thoughts),
         'reasoning_effort': getReasoningEffort(settings, model),
         'verbosity': getVerbosity(settings),
@@ -2760,7 +2750,6 @@ function loadOpenAISettings(data, settings) {
 
     // Provider form is React-owned; loading settings still needs the side
     // effects the retired #chat_completion_source change handler produced.
-    updateFeatureSupportFlags();
     if (oai_settings.openai_model !== previousModel) {
         eventSource.emit(event_types.CHATCOMPLETION_MODEL_CHANGED, oai_settings.openai_model);
     }
@@ -2955,20 +2944,19 @@ async function runProviderAction(kind, input = committedProviderInput()) {
     const wasCommitted = matchesCommittedProvider(input);
     try {
         const result = await providerConnectionService[kind](input, {
-            fetch, requestHeaders: getRequestHeaders, signal: abortStatusCheck.signal,
+            fetch, requestHeaders: getRequestHeaders, signal: openAIContext.abortStatusCheck.signal,
         });
         if (wasCommitted && matchesCommittedProvider(input)) {
             // Discovery must not silently replace the configured model.
             if (result.models) model_list = result.models;
-            setOnlineStatus(result.status);
-            updateFeatureSupportFlags();
-            displayOnlineStatus();
+            openAIContext.setOnlineStatus(result.status);
+            openAIContext.displayOnlineStatus();
         }
         return result;
     } catch (error) {
         if (wasCommitted && matchesCommittedProvider(input)) {
-            setOnlineStatus('no_connection');
-            displayOnlineStatus();
+            openAIContext.setOnlineStatus('no_connection');
+            openAIContext.displayOnlineStatus();
         }
         throw error;
     }
@@ -2983,9 +2971,9 @@ export function testProviderConnection(input) {
 }
 
 function reconnectOpenAi() {
-    if (main_api == 'openai') {
-        setOnlineStatus('no_connection');
-        displayOnlineStatus();
+    if (openAIContext.main_api == 'openai') {
+        openAIContext.setOnlineStatus('no_connection');
+        openAIContext.displayOnlineStatus();
         void connectProviderConnection().catch(error => console.warn('Provider reconnect failed:', error.message));
     }
 }
@@ -2995,7 +2983,7 @@ function reconnectOpenAi() {
  * @returns {boolean} True if the model supports image inlining
  */
 export function isImageInliningSupported() {
-    return isImageInliningSupportedForSettings(oai_settings, { mainApi: main_api });
+    return isImageInliningSupportedForSettings(oai_settings, { mainApi: openAIContext.main_api });
 }
 
 /**
@@ -3003,7 +2991,7 @@ export function isImageInliningSupported() {
  * @returns {boolean} True if the model supports video inlining
  */
 export function isVideoInliningSupported() {
-    return isVideoInliningSupportedForSettings(oai_settings, { mainApi: main_api });
+    return isVideoInliningSupportedForSettings(oai_settings, { mainApi: openAIContext.main_api });
 }
 
 /**
@@ -3011,7 +2999,7 @@ export function isVideoInliningSupported() {
  * @returns {boolean} True if the model supports audio inlining
  */
 export function isAudioInliningSupported() {
-    return isAudioInliningSupportedForSettings(oai_settings, { mainApi: main_api });
+    return isAudioInliningSupportedForSettings(oai_settings, { mainApi: openAIContext.main_api });
 }
 
 /**
@@ -3050,45 +3038,7 @@ export function isReasoningSignatureSupported() {
     return false;
 }
 
-function updateFeatureSupportFlags() {
-    const featureFlags = {
-        openai_image_inlining_supported: isImageInliningSupported(),
-        openai_video_inlining_supported: isVideoInliningSupported(),
-        openai_audio_inlining_supported: isAudioInliningSupported(),
-    };
-
-    for (const [key, value] of Object.entries(featureFlags)) {
-        const element = document.getElementById(key);
-        if (element) {
-            element.dataset.ccToggle = String(value ?? false);
-        }
-    }
-}
-
 export function initOpenAI() {
-    $('#azure_base_url').on('input', function () {
-        oai_settings.azure_base_url = String($(this).val());
-        saveSettingsDebounced();
-    });
-
-    $('#azure_deployment_name').on('input', function () {
-        oai_settings.azure_deployment_name = String($(this).val());
-        saveSettingsDebounced();
-    });
-
-    $('#azure_api_version').on('input change', function () {
-        oai_settings.azure_api_version = String($(this).val());
-        saveSettingsDebounced();
-    });
-
-
-    if (!CSS.supports('field-sizing', 'content')) {
-        $(document).on('input', '#openai_settings .autoSetHeight', function () {
-            resetScrollHeight($(this));
-        });
-    }
-
-
     // Retired provider contract: the fallback model reuses the primary key, so the
     // dedicated fallback secret must not linger. Lazy cleanup once per session.
     if (secret_state.api_key_openai_fallback) {

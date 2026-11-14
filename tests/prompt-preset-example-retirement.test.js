@@ -14,7 +14,7 @@ const { PromptManager, Prompt, PromptCollection, installPromptManagerDomain, cha
     { on() {} }, {}, text => text, class {}, () => 'uuid',
 );
 const { createPromptManagerDomain } = await loadTsModule('app/lib/prompt-manager.ts');
-installPromptManagerDomain(createPromptManagerDomain);
+installPromptManagerDomain(createPromptManagerDomain, text => text);
 
 describe('retired example-dialogue preset data', () => {
     test('facade constructors preserve Prompt instanceof across the typed domain', () => {
