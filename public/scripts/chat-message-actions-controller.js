@@ -1,3 +1,5 @@
+import { cancelOpacity, transitionOpacity } from './chat-ui-motion.js';
+
 export const MESSAGE_ACTION_TIERS = Object.freeze({
     highFrequency: ['extraMesButtonsHint', 'mes_copy', 'mes_edit'],
     secondary: ['mes_reasoning_copy', 'mes_translate', 'mes_narrate', 'mes_hide'],
@@ -111,19 +113,6 @@ export function buildMessageActionSnapshot(messageRow, dependencyOverrides = {})
     };
 }
 
-function defaultTransitionElement(element, options) {
-    const transition = globalThis.$?.(element)?.transition;
-
-    if (typeof transition === 'function') {
-        globalThis.$(element).transition(options);
-        return;
-    }
-
-    if (options.opacity !== undefined) {
-        element.style.opacity = String(options.opacity);
-    }
-    options.complete?.call(element);
-}
 
 function findExtraButtonsForHint(hint) {
     return hint.closest?.('.mes_buttons')?.querySelector?.(EXTRA_ACTIONS_SELECTOR)
@@ -150,7 +139,7 @@ export function createChatMessageActionsController(root = globalThis.document, d
 
     const dependencies = {
         getExpandMessageActions: () => false,
-        transitionElement: defaultTransitionElement,
+        transitionElement: transitionOpacity,
         animationDuration: 0,
         animationEasing: 'linear',
         onStateChanged: () => {},
@@ -159,25 +148,58 @@ export function createChatMessageActionsController(root = globalThis.document, d
     };
     let abortController = null;
     let initialized = false;
+    let epoch = 0;
+    const versions = new WeakMap();
+    const animated = new Set();
+    const pendingHints = new Set();
+
+    function isLegacyElement(element) {
+        return root.contains?.(element) !== false && !element.closest?.('[data-main-chat-message-row-owner="react"]');
+    }
+
+    function invalidate(element) {
+        versions.set(element, (versions.get(element) ?? 0) + 1);
+        cancelOpacity(element);
+        animated.delete(element);
+    }
 
     function transitionElement(element, options) {
+        invalidate(element);
+        const version = versions.get(element);
+        const currentEpoch = epoch;
+        animated.add(element);
         dependencies.transitionElement(element, {
             duration: dependencies.animationDuration,
             easing: dependencies.animationEasing,
             ...options,
+            isCurrent: () => currentEpoch === epoch && versions.get(element) === version && isLegacyElement(element),
+            complete() {
+                if (currentEpoch !== epoch || versions.get(element) !== version || !isLegacyElement(element)) return;
+                animated.delete(element);
+                options.complete?.call(element);
+            },
+            settled() {
+                if (versions.get(element) !== version) return;
+                animated.delete(element);
+                pendingHints.delete(element);
+            },
         });
     }
 
     function openExtraActions(hint) {
         const buttons = findExtraButtonsForHint(hint);
 
-        if (!buttons) {
+        if (!buttons || hint.closest?.('[data-main-chat-message-row-owner="react"]')) {
             return;
         }
 
+        invalidate(buttons);
+        pendingHints.add(hint);
         transitionElement(hint, {
             opacity: 0,
             complete() {
+                pendingHints.delete(hint);
+                if (!isLegacyElement(buttons) || findExtraButtonsForHint(hint) !== buttons) return;
                 hint.style.display = 'none';
                 buttons.classList.add('visible');
                 buttons.style.opacity = '0';
@@ -189,6 +211,11 @@ export function createChatMessageActionsController(root = globalThis.document, d
     }
 
     function closeExtraActions() {
+        for (const hint of pendingHints) {
+            invalidate(hint);
+            if (isLegacyElement(hint)) hint.style.opacity = '';
+        }
+        pendingHints.clear();
         const visibleButtons = Array.from(root.querySelectorAll?.(EXTRA_ACTIONS_OPEN_SELECTOR) ?? [])
             .filter(button => !button.closest?.('[data-main-chat-message-row-owner="react"]'));
 
@@ -211,6 +238,7 @@ export function createChatMessageActionsController(root = globalThis.document, d
                     buttons.classList.remove('visible');
 
                     for (const hint of hiddenHints) {
+                        if (!isLegacyElement(hint)) continue;
                         hint.style.display = '';
                         transitionElement(hint, {
                             opacity: 0.3,
@@ -267,6 +295,9 @@ export function createChatMessageActionsController(root = globalThis.document, d
             initialized = true;
         },
         cleanup() {
+            epoch++;
+            for (const element of animated) invalidate(element);
+            pendingHints.clear();
             abortController?.abort();
             abortController = null;
             initialized = false;

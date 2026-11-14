@@ -182,6 +182,115 @@ async function importFreshControllerModule() {
 }
 
 describe('chat message actions controller', () => {
+    test.each(['hint', 'buttons'].flatMap(phase => ['detached', 'react'].map(owner => [phase, owner])))(
+        'releases settled %s bookkeeping when the row becomes %s', async (phase, owner) => {
+            const { createChatMessageActionsController } = await importFreshControllerModule();
+            const { root, row, hint, buttons } = createMessageActionsRoot();
+            root.contains = element => root.querySelectorAll('.extraMesButtons, .extraMesButtonsHint').includes(element);
+            const animations = [];
+            for (const element of [hint, buttons]) {
+                element.animate = () => {
+                    let resolve;
+                    const animation = { finished: new Promise(done => { resolve = done; }), cancel: jest.fn(), resolve };
+                    animations.push(animation);
+                    return animation;
+                };
+            }
+            // Capture the controller's strong sets to prove it releases DOM references,
+            // rather than merely suppressing writes to a stale row.
+            const NativeSet = globalThis.Set;
+            const trackingSets = [];
+            let controller;
+            globalThis.Set = class extends NativeSet {
+                constructor(...args) { super(...args); trackingSets.push(this); }
+            };
+            try {
+                controller = createChatMessageActionsController(root, { animationDuration: 100 });
+            } finally {
+                globalThis.Set = NativeSet;
+            }
+            controller.openExtraActions(hint);
+            if (phase === 'buttons') {
+                animations[0].resolve();
+                await Promise.resolve();
+            }
+            const target = phase === 'hint' ? hint : buttons;
+            expect(trackingSets.some(set => set.has(target))).toBe(true);
+            if (owner === 'react') row.setAttribute('data-main-chat-message-row-owner', 'react');
+            else root.children = [];
+            animations.at(-1).resolve();
+            await Promise.resolve();
+            expect(trackingSets.every(set => !set.has(target))).toBe(true);
+            controller.cleanup();
+        },
+    );
+
+    test('reopening during close prevents stale close from hiding the menu', async () => {
+        const { createChatMessageActionsController } = await importFreshControllerModule();
+        const { root, hint, buttons, outside } = createMessageActionsRoot();
+        const animations = [];
+        for (const element of [hint, buttons]) {
+            element.animate = () => {
+                let resolve;
+                const animation = { finished: new Promise(done => { resolve = done; }), cancel: jest.fn(), resolve };
+                animations.push(animation);
+                return animation;
+            };
+        }
+        const controller = createChatMessageActionsController(root, { animationDuration: 100 });
+        controller.init();
+        root.dispatchClick(hint);
+        animations[0].resolve();
+        await Promise.resolve();
+        root.dispatchClick(outside, { isTrusted: true });
+        controller.openExtraActions(hint);
+        animations[2].resolve(); // stale close, even if a canceled finished promise resolves
+        await Promise.resolve();
+        animations[3].resolve();
+        await Promise.resolve();
+        expect(buttons.classList.contains('visible')).toBe(true);
+        expect(buttons.style.display).toBe('flex');
+        expect(hint.style.display).toBe('none');
+    });
+    test('does not finish a pending legacy open after its row becomes React-owned', async () => {
+        const { createChatMessageActionsController } = await importFreshControllerModule();
+        const { root, row, hint, buttons } = createMessageActionsRoot();
+        let resolve;
+        hint.animate = () => ({ finished: new Promise(done => { resolve = done; }), cancel: jest.fn() });
+        const controller = createChatMessageActionsController(root, { animationDuration: 100 });
+        controller.init();
+        root.dispatchClick(hint);
+        row.setAttribute('data-main-chat-message-row-owner', 'react');
+        resolve();
+        await Promise.resolve();
+        expect(hint.style.display).toBe('');
+        expect(buttons.classList.contains('visible')).toBe(false);
+    });
+    test('outside close cancels a pending open and cleanup prevents stale completion', async () => {
+        const { createChatMessageActionsController } = await importFreshControllerModule();
+        const { root, hint, buttons, outside } = createMessageActionsRoot();
+        const pending = [];
+        hint.animate = jest.fn(() => {
+            let resolve;
+            const finished = new Promise(done => { resolve = done; });
+            const animation = { finished, cancel: jest.fn(), resolve };
+            pending.push(animation);
+            return animation;
+        });
+        const controller = createChatMessageActionsController(root, { animationDuration: 100 });
+        controller.init();
+        root.dispatchClick(hint);
+        expect(pending).toHaveLength(1);
+        root.dispatchClick(outside, { isTrusted: true });
+        pending[0].resolve();
+        await Promise.resolve();
+        expect(buttons.classList.contains('visible')).toBe(false);
+        root.dispatchClick(hint);
+        controller.cleanup();
+        pending[1].resolve();
+        await Promise.resolve();
+        expect(buttons.classList.contains('visible')).toBe(false);
+    });
     test('declares task-based action tiers for core, secondary, and danger actions', async () => {
         const { MESSAGE_ACTION_TIERS } = await importFreshControllerModule();
 

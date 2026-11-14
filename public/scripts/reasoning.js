@@ -1,8 +1,9 @@
 import {
+    DOMPurify,
     moment,
 } from '../lib.js';
 import { REASONING_PREFIX, REASONING_SUFFIX, REASONING_SEPARATOR } from './constants.js';
-import { chat, main_api, messageFormatting, saveChatDebounced, substituteParams, updateMessageBlock } from '../script.js';
+import { messageFormatting, updateMessageBlock } from './message-service.js';
 import { requireMessageShellContext } from './message-shell-context.js';
 import { eventSource, event_types } from './events.js';
 import { getRegexedString, regex_placement } from './extensions/regex/engine.js';
@@ -45,6 +46,7 @@ export const ReasoningType = {
  * @returns {{messageId: number, message: object, messageBlock: JQuery<HTMLElement>}}
  */
 function getMessageFromJquery(element) {
+    const chat = requireMessageShellContext().state.chat;
     const messageBlock = $(element).closest('.mes');
     const messageId = Number(messageBlock.attr('mesid'));
     const message = chat[messageId];
@@ -62,7 +64,7 @@ export function extractReasoningFromData(data, {
     textGenType: _textGenType = null,
     chatCompletionSource = null,
 } = {}) {
-    switch (mainApi ?? main_api) {
+    switch (mainApi ?? requireMessageShellContext().state.main_api) {
         case 'openai':
             if (!ignoreShowThoughts && !oai_settings.show_thoughts) break;
 
@@ -107,7 +109,7 @@ export function extractReasoningFromData(data, {
 export function extractReasoningSignatureFromData(data, {
     mainApi = null,
 } = {}) {
-    if ((mainApi ?? main_api) !== 'openai') {
+    if ((mainApi ?? requireMessageShellContext().state.main_api) !== 'openai') {
         return null;
     }
 
@@ -129,7 +131,7 @@ export function extractReasoningSignatureFromData(data, {
  * @returns {boolean} True if the model supports reasoning
  */
 export function isHiddenReasoningModel() {
-    if (main_api !== 'openai') {
+    if (requireMessageShellContext().state.main_api !== 'openai') {
         return false;
     }
 
@@ -250,6 +252,7 @@ export class ReasoningHandler {
      * @param {boolean} [options.reset=false] - Whether to reset state of the handler, and not take the current mess properties (for example when swiping)
      */
     initHandleMessage(messageIdOrElement, { reset = false } = {}) {
+        const chat = requireMessageShellContext().state.chat;
         /** @type {HTMLElement} */
         const messageElement = typeof messageIdOrElement === 'number'
             ? document.querySelector(`#chat [mesid="${messageIdOrElement}"]`)
@@ -321,6 +324,7 @@ export class ReasoningHandler {
      * @returns {boolean} - Returns true if the reasoning was changed, otherwise false
      */
     updateReasoning(messageId, reasoning = null, { persist = false, allowReset = false } = {}) {
+        const chat = requireMessageShellContext().state.chat;
         if (messageId == -1 || !chat[messageId]) {
             return false;
         }
@@ -387,6 +391,7 @@ export class ReasoningHandler {
      * @returns {boolean} Whether the message has changed after reasoning parsing
      */
     #autoParseReasoningFromMessage(messageId, mesChanged, promptReasoning) {
+        const chat = requireMessageShellContext().state.chat;
         /** @type {ChatMessage} */
         const message = chat[messageId];
         if (!message) return mesChanged;
@@ -482,7 +487,18 @@ export class ReasoningHandler {
         const reasoning = trimSpaces(this.reasoningDisplayText ?? this.reasoning);
         const displayReasoning = messageFormatting(reasoning, '', false, false, messageId, {}, true);
 
-        this.messageReasoningContentDom.innerHTML = displayReasoning;
+        // Keep the formatter's scoped styles while mounting only sanitized nodes.
+        const fragment = DOMPurify.sanitize(displayReasoning, {
+            RETURN_DOM_FRAGMENT: true,
+            ADD_TAGS: ['style'],
+            ADD_ATTR: ['target'],
+        });
+        for (const anchor of fragment.querySelectorAll('a[target]')) {
+            if (anchor.getAttribute('target')?.toLowerCase() === '_blank') {
+                anchor.relList.add('noopener');
+            }
+        }
+        this.messageReasoningContentDom.replaceChildren(fragment);
 
         // Update tooltip for hidden reasoning edit
         /** @type {HTMLElement} */
@@ -849,6 +865,7 @@ export function formatReasoning(reasoning, content, template = null) {
     }
 
     // Substitute macros in template parts
+    const { substituteParams } = requireMessageShellContext();
     const prefix = substituteParams(template.prefix || '');
     const suffix = substituteParams(template.suffix || '');
     const separator = substituteParams(template.separator || '');
@@ -863,7 +880,7 @@ function registerReasoningAppEvents() {
     const eventHandler = (/** @type {string} */ type, /** @type {number} */ idx) => {
         console.debug('[Reasoning] Auto-parsing reasoning block for message', idx);
         const prefix = type === event_types.MESSAGE_RECEIVED ? PromptReasoning.getLatestPrefix() : '';
-        const message = chat[idx];
+        const message = requireMessageShellContext().state.chat[idx];
 
         if (!message) {
             console.warn('[Reasoning] Message not found', idx);
@@ -906,7 +923,7 @@ function registerReasoningAppEvents() {
         }
 
         if (contentUpdated) {
-            saveChatDebounced();
+            requireMessageShellContext().saveChatDebounced();
 
             // Find if a message already exists in DOM and must be updated
             const messageRendered = document.querySelector(`.mes[mesid="${idx}"]`) !== null;

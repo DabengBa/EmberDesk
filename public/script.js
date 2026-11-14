@@ -195,8 +195,7 @@ import {
     createGenerationRequestEnvelope,
     installGenerationAttemptExecutor,
 } from './scripts/chat-generation-command-service.js';
-import { collectRegenerateTurn } from './scripts/chat-regenerate.js';
-import { canRegenerateLastReply as canRegenerateFromState, runGenerationEntry, runQuietGeneration } from './scripts/generation-shared-state.js';
+import { buildRawGenerationPrompt, createGenerationCallerService } from './scripts/generation-caller-service.js';
 import { markdownUnderscoreExt } from './scripts/showdown-underscore.js';
 
 import { installPromptManagerDomain, registerPromptManagerMigration } from './scripts/PromptManager.js';
@@ -245,6 +244,7 @@ import { createRuntimeSettingsPersistence } from './scripts/runtime-settings-per
 import { getMainChatStreamingTransportState } from './scripts/main-chat-streaming-transport-state.js';
 import { buildGreetingOptions, canSwitchGreeting } from './scripts/main-chat-greetings.js';
 import { createChatMessageActionsController } from './scripts/chat-message-actions-controller.js';
+import { transitionOpacity } from './scripts/chat-ui-motion.js';
 import { ToolManager } from './scripts/tool-calling.js';
 import { addShowdownPatch } from './scripts/util/showdown-patch.js';
 import { applyBrowserFixes } from './scripts/browser-fixes.js';
@@ -723,7 +723,7 @@ registerChatOpsShellContext({
         set chatSaveTimeout(value) { chatSaveTimeout = value; },
         get isChatSaving() { return isChatSaving; },
         set isChatSaving(value) { isChatSaving = value; },
-        get generationPending() { return generationEntryPending || regenerateRequestInFlight; },
+        get generationPending() { return generationCaller.generationEntryPending || generationCaller.regenerateRequestInFlight; },
         get mainChatMessageRenderGeneration() { return mainChatMessageRenderGeneration; },
         set mainChatMessageRenderGeneration(value) { mainChatMessageRenderGeneration = value; },
         get reactMainChatProjectionCleared() { return reactMainChatProjectionCleared; },
@@ -872,6 +872,7 @@ registerCharacterLifecycleShellContext({
 
 registerMessageShellContext({
     getChatMessageCommands: () => getChatMessageCommands(),
+    saveChatDebounced: (...args) => saveChatDebounced(...args),
     state: {
         get chat() { return chat; },
         get chat_metadata() { return chat_metadata; },
@@ -3244,7 +3245,7 @@ function getMainChatMessageListReactCommands() {
                 Number.isInteger(Number(messagesToLoad)) ? Number(messagesToLoad) : null,
             ),
             selectGreeting: async (index, characterId, chatId) => {
-                if (greetingSelectionPending || generationEntryPending || regenerateRequestInFlight) return false;
+                if (greetingSelectionPending || generationCaller.generationEntryPending || generationCaller.regenerateRequestInFlight) return false;
                 greetingSelectionPending = true;
                 try {
                     return await selectChatGreeting({ index, characterId, chatId });
@@ -5704,7 +5705,7 @@ export function sendTextareaMessage(composerSubmission = getComposerSnapshot()) 
 async function submitComposerMessage(composerSubmission) {
     if (greetingSelectionPending) return;
     if (is_send_press) return;
-    if (regenerateRequestInFlight || generationEntryPending) return;
+    if (generationCaller.regenerateRequestInFlight || generationCaller.generationEntryPending) return;
 
     const textareaText = composerSubmission.value;
     const currentComposer = getComposerSnapshot();
@@ -5844,27 +5845,7 @@ export function getStoppingStrings(_api = main_api) {
  * @returns {Promise<string>} Generated text. If using structured output, will contain a serialized JSON object.
  */
 export async function generateQuietPrompt({ quietPrompt = '', quietToLoud = false, skipWIAN = false, quietImage = null, quietName = null, responseLength = null, jsonSchema = null, backgroundGeneration = false, removeReasoning = true, trimToSentence = false, onOwnedCompletion } = {}) {
-    if (arguments.length > 0 && typeof arguments[0] !== 'object') {
-        console.trace('generateQuietPrompt called with positional arguments. Please use an object instead.');
-        [quietPrompt, quietToLoud, skipWIAN, quietImage, quietName, responseLength, jsonSchema] = arguments;
-    }
-
-    return runQuietGeneration({ quietPrompt, quietToLoud, skipWIAN, quietImage, quietName, responseLength, jsonSchema, backgroundGeneration, removeReasoning, trimToSentence, onOwnedCompletion }, {
-        snapshot: (kind, loud, background) => ({
-            ...createGenerationCommand({ kind, mainApi: main_api, quietPrompt: true, quietToLoud: loud, backgroundGeneration: background }),
-            ...createQuietGenerationLifecycleContract({ quietToLoud: loud, backgroundGeneration: background }),
-        }),
-        remember: rememberMainChatQuietTransportSnapshot,
-        saveLength: length => TempResponseLength.save(main_api, length),
-        setupLengthHook: () => TempResponseLength.setupEventHook(main_api),
-        isLengthCustomized: () => TempResponseLength.isCustomized(),
-        restoreLength: () => TempResponseLength.restore(main_api),
-        removeLengthHook: hook => TempResponseLength.removeEventHook(main_api, hook),
-        generate: options => Generate('quiet', options),
-        trim: trimToEndSentence,
-        removeReasoning: removeReasoningFromString,
-        isStopped: isMainChatQuietTransportStopException,
-    });
+    return generationCaller.generateQuietPrompt(...arguments);
 }
 
 
@@ -6198,34 +6179,7 @@ function hideStopButton() {
  * @returns {string | object[]} Prompt ready for use in generation. If using TC, this will be a string. If using CC, this will be an array of chat-style messages.
  */
 export function createRawPrompt(prompt, api, instructOverride, quietToLoud, systemPrompt, prefill) {
-    // If the prompt was given as a string, convert to a message-style object assuming user role
-    if (typeof prompt === 'string') {
-        const message = { role: 'user', content: prompt.trim() };
-        prompt = [message];
-    } else {  // checks for message-style object
-        if (prompt.length === 0 && !systemPrompt) throw Error('No messages provided');
-    }
-
-    // Substitute the prefill if provided
-    prefill = substituteParams(prefill ?? '');
-
-    // Format each message in the prompt, accounting for the provided roles
-    for (const message of prompt) {
-        message.content = substituteParams(message.content ?? '');
-    }
-
-    // prepend system prompt, if provided
-    if (systemPrompt) {
-        systemPrompt = substituteParams(systemPrompt).trim();
-        prompt.unshift({ role: 'system', content: systemPrompt });
-    }
-
-    // with Chat Completion, the prefill is an additional assistant message at the end.
-    if (prefill) {
-        prompt.push({ role: 'assistant', content: prefill });
-    }
-
-    return prompt;
+    return buildRawGenerationPrompt(prompt, systemPrompt, prefill, substituteParams);
 }
 
 /**
@@ -6248,78 +6202,7 @@ export function createRawPrompt(prompt, api, instructOverride, quietToLoud, syst
  * @returns {Promise<object | string>} Raw API response data, or a JSON string extracted from the response when `jsonSchema` is provided.
  */
 export async function generateRawData({ prompt = '', api = null, instructOverride = false, quietToLoud = false, systemPrompt = '', responseLength = null, prefill = '', jsonSchema = null } = {}) {
-    const trace = { type: 'quiet', chatId: getCurrentChatId() ?? null, charName: name2 };
-    if (!api) {
-        api = main_api;
-    }
-
-    const abortController = new AbortController();
-    const responseLengthCustomized = typeof responseLength === 'number' && responseLength > 0;
-    let eventHook = () => { };
-
-    // construct final prompt from the input. Can either be a string or an array of chat-style messages.
-    prompt = createRawPrompt(prompt, api, instructOverride, quietToLoud, systemPrompt, prefill);
-
-    // Allow extensions to stop generation before it happens
-    const eventAbortController = new AbortController();
-    const abortHook = () => {
-        abortController.abort(new Error('Cancelled by stop event'));
-        eventAbortController.abort(new Error('Cancelled by extension'));
-    };
-    eventSource.on(event_types.GENERATION_STOPPED, abortHook);
-
-    try {
-        if (responseLengthCustomized) {
-            TempResponseLength.save(api, responseLength);
-        }
-        /** @type {object|any[]} */
-        let generateData = {};
-
-        // Allow extensions to modify the prompt before generation
-        // 1. for text completion
-        if (typeof prompt === 'string') {
-            const eventData = { prompt: prompt, dryRun: false };
-            await eventSource.emit(event_types.GENERATE_AFTER_COMBINE_PROMPTS, eventData);
-            prompt = eventData.prompt;
-        }
-        // 2. for chat completion
-        if (Array.isArray(prompt)) {
-            const eventData = { chat: prompt, dryRun: false };
-            await eventSource.emit(event_types.CHAT_COMPLETION_PROMPT_READY, eventData);
-            prompt = eventData.chat;
-        }
-
-        // Check if the generation was aborted during the event
-        eventAbortController.signal.throwIfAborted();
-
-        switch (api) {
-            case 'openai': {
-                generateData = prompt;  // generateData is just the chat message object
-                eventHook = TempResponseLength.setupEventHook(api);
-            } break;
-        }
-
-        const data = await sendOpenAIRequest('quiet', generateData, abortController.signal, { jsonSchema, trace });
-
-        // should only happen for text completions
-        // other frontend paths do not return data if calling the backend fails,
-        // they throw things instead
-        if (data.error) {
-            throw new Error(data.response);
-        }
-
-        if (jsonSchema) {
-            return extractJsonFromData(data, { mainApi: api, returnInvalidJson: jsonSchema.returnInvalid });
-        }
-
-        return data;
-    } finally {
-        eventSource.removeListener(event_types.GENERATION_STOPPED, abortHook);
-        if (responseLengthCustomized && TempResponseLength.isCustomized()) {
-            TempResponseLength.restore(api);
-            TempResponseLength.removeEventHook(api, eventHook);
-        }
-    }
+    return generationCaller.generateRawData(...arguments);
 }
 
 /**
@@ -6329,122 +6212,9 @@ export async function generateRawData({ prompt = '', api = null, instructOverrid
  * @returns {Promise<string>} Generated output: a cleaned-up message string when `jsonSchema` is not provided, or an extracted JSON string conforming to `jsonSchema` when it is.
  */
 export async function generateRaw({ prompt = '', api = null, instructOverride = false, quietToLoud = false, systemPrompt = '', responseLength = null, trimNames = true, prefill = '', jsonSchema = null } = {}) {
-    if (arguments.length > 0 && typeof arguments[0] !== 'object') {
-        console.trace('generateRaw called with positional arguments. Please use an object instead.');
-        [prompt, api, instructOverride, quietToLoud, systemPrompt, responseLength, trimNames, prefill, jsonSchema] = arguments;
-    }
-
-    const data = await generateRawData({ prompt, api, instructOverride, quietToLoud, systemPrompt, responseLength, prefill, jsonSchema });
-
-    // JSON string (matching the provided schema) will already be extracted.
-    if (jsonSchema) {
-        return data;
-    }
-
-    // format result, exclude user prompt bias
-    const message = cleanUpMessage({
-        getMessage: extractMessageFromData(data, api),
-        displayIncompleteSentences: true,
-        trimNames: trimNames,
-        trimWrongNames: trimNames,
-    });
-
-    if (!message) {
-        throw new Error('No message generated');
-    }
-
-    return message;
+    return generationCaller.generateRaw(...arguments);
 }
 
-class TempResponseLength {
-    static #originalResponseLength = -1;
-    static #lastApi = null;
-
-    static isCustomized() {
-        return this.#originalResponseLength > -1;
-    }
-
-    /**
-     * Save the current response length for the specified API.
-     * @param {string} api API identifier
-     * @param {number} responseLength New response length
-     */
-    static save(api, responseLength) {
-        if (api === 'openai') {
-            this.#originalResponseLength = oai_settings.openai_max_tokens;
-            oai_settings.openai_max_tokens = responseLength;
-        } else {
-            this.#originalResponseLength = amount_gen;
-            amount_gen = responseLength;
-        }
-
-        this.#lastApi = api;
-        console.log('[TempResponseLength] Saved original response length:', TempResponseLength.#originalResponseLength);
-    }
-
-    /**
-     * Restore the original response length for the specified API.
-     * @param {string|null} api API identifier
-     * @returns {void}
-     */
-    static restore(api) {
-        if (this.#originalResponseLength === -1) {
-            return;
-        }
-        if (!api && this.#lastApi) {
-            api = this.#lastApi;
-        }
-        if (api === 'openai') {
-            oai_settings.openai_max_tokens = this.#originalResponseLength;
-        } else {
-            amount_gen = this.#originalResponseLength;
-        }
-
-        console.log('[TempResponseLength] Restored original response length:', this.#originalResponseLength);
-        this.#originalResponseLength = -1;
-        this.#lastApi = null;
-    }
-
-    /**
-     * Sets up an event hook to restore the original response length when the event is emitted.
-     * @param {string} api API identifier
-     * @returns {function(): void} Event hook function
-     */
-    static setupEventHook(api) {
-        const eventHook = () => {
-            if (this.isCustomized()) {
-                this.restore(api);
-            }
-        };
-
-        switch (api) {
-            case 'openai':
-                eventSource.once(event_types.CHAT_COMPLETION_SETTINGS_READY, eventHook);
-                break;
-            default:
-                eventSource.once(event_types.GENERATE_AFTER_DATA, eventHook);
-                break;
-        }
-
-        return eventHook;
-    }
-
-    /**
-     * Removes the event hook for the specified API.
-     * @param {string} api API identifier
-     * @param {function(): void} eventHook Previously set up event hook
-     */
-    static removeEventHook(api, eventHook) {
-        switch (api) {
-            case 'openai':
-                eventSource.removeListener(event_types.CHAT_COMPLETION_SETTINGS_READY, eventHook);
-                break;
-            default:
-                eventSource.removeListener(event_types.GENERATE_AFTER_DATA, eventHook);
-                break;
-        }
-    }
-}
 
 /**
  * Removes last message from the chat DOM.
@@ -6494,28 +6264,7 @@ function removeLastMessage() {
  * @returns {Promise<any>} Returns a promise that resolves when the text is done generating.
  */
 export async function Generate(type, options = {}, dryRun = false) {
-    return runGenerationEntry(type, options, dryRun, {
-        greetingPending: () => greetingSelectionPending,
-        captureComposer: current => ({ ...current, composerSubmission: getComposerSnapshot() }),
-        envelope: (entryType, entryOptions, entryDryRun, regenerate) => createGenerationRequestEnvelope({
-            type: entryType, options: entryOptions, dryRun: entryDryRun, mainApi: main_api, kind: regenerate ? 'regenerate' : '',
-        }),
-        enter: () => generationBootstrapAdmission.enter(),
-        setPending: value => { generationEntryPending = value; },
-        clearRestore: () => { pendingRegenerateRestore = null; },
-        identity: getCurrentGenerationContextIdentity,
-        bootstrap: ensureGenerationRuntime,
-        execute: executeGenerationRequestInShell,
-        takeRestore: () => { const snapshot = pendingRegenerateRestore; pendingRegenerateRestore = null; return snapshot; },
-        isStopped: isUserStoppedGeneration,
-        restore: restoreRegenerateTurnTail,
-        reportRestore: restored => {
-            if (restored) toastr.warning(t`Regeneration failed — the previous reply was restored.`, t`Regenerate`);
-            else toastr.error(t`Regeneration failed — the previous reply could not be restored.`, t`Regenerate`);
-        },
-        endPipeline: endPipelineRun,
-        unblock: unblockGeneration,
-    });
+    return generationCaller.Generate(...arguments);
 }
 
 const generationBootstrapAdmission = createGenerationBootstrapAdmission();
@@ -6524,6 +6273,67 @@ const ensureGenerationRuntime = createGenerationRuntimeBootstrap({
     readIdentity: getCurrentGenerationContextIdentity,
     installLifecycle: installGenerationLifecycleService,
     installAttempt: installGenerationAttemptExecutor,
+});
+
+const generationCaller = createGenerationCallerService({
+    events: event_types,
+    greetingPending: () => greetingSelectionPending,
+    getComposerSnapshot: () => getComposerSnapshot(),
+    createEnvelope: (...args) => createGenerationRequestEnvelope(...args),
+    enterBootstrap: () => generationBootstrapAdmission.enter(),
+    getIdentity: () => getCurrentGenerationContextIdentity(),
+    ensureRuntime: () => ensureGenerationRuntime(),
+    execute: (...args) => executeGenerationRequestInShell(...args),
+    isUserStopped: (...args) => isUserStoppedGeneration(...args),
+    reportRestore: restored => {
+        if (restored) toastr.warning(t`Regeneration failed — the previous reply was restored.`, t`Regenerate`);
+        else toastr.error(t`Regeneration failed — the previous reply could not be restored.`, t`Regenerate`);
+    },
+    endPipeline: (...args) => endPipelineRun(...args),
+    unblock: (...args) => unblockGeneration(...args),
+    getMainApi: () => main_api,
+    createCommand: (...args) => createGenerationCommand(...args),
+    createQuietContract: (...args) => createQuietGenerationLifecycleContract(...args),
+    rememberQuiet: (...args) => rememberMainChatQuietTransportSnapshot(...args),
+    trim: (...args) => trimToEndSentence(...args),
+    removeReasoning: (...args) => removeReasoningFromString(...args),
+    isQuietStopped: (...args) => isMainChatQuietTransportStopException(...args),
+    getResponseLength: api => api === 'openai' ? oai_settings.openai_max_tokens : amount_gen,
+    setResponseLength: (api, length) => { if (api === 'openai') oai_settings.openai_max_tokens = length; else amount_gen = length; },
+    onceEvent: (...args) => eventSource.once(...args),
+    onEvent: (...args) => eventSource.on(...args),
+    removeEventListener: (...args) => eventSource.removeListener(...args),
+    emitEvent: (...args) => eventSource.emit(...args),
+    getChatId: () => getCurrentChatId(),
+    getCharacterName: () => name2,
+    createRawPrompt: (prompt, _api, _instruct, _quiet, systemPrompt, prefill) => buildRawGenerationPrompt(prompt, systemPrompt, prefill, substituteParams),
+    sendOpenAIRequest: (...args) => sendOpenAIRequest(...args),
+    extractJson: (...args) => extractJsonFromData(...args),
+    extractMessage: (...args) => extractMessageFromData(...args),
+    cleanMessage: (...args) => cleanUpMessage(...args),
+    getChat: () => chat,
+    getNarratorType: () => system_message_types.NARRATOR,
+    getLifecycle: () => getGenerationLifecycleService(),
+    getAbortController: () => abortController,
+    isReactOwner: () => isReactMainChatOwner(),
+    clearMessageUi: index => clearMainChatMessageUiState(index),
+    clearVisibleStart: chatId => mainChatVisibleStartIndices.delete(chatId),
+    getEditId: () => this_edit_mes_id,
+    clearEditId: () => { this_edit_mes_id = undefined; },
+    markTainted: () => { chat_metadata.tainted = true; },
+    saveDebounced: ownsChat => saveChatDebounced(ownsChat),
+    saveConditional: ownsRestore => saveChatConditional(ownsRestore),
+    redisplay: (...args) => redisplayChat(...args),
+    scrollToBottom: (...args) => scrollChatToBottom(...args),
+    isSending: () => is_send_press,
+    isConnected: () => online_status !== 'no_connection',
+    hasCharacter: () => this_chid !== undefined || Boolean(String(name2 ?? '').trim()),
+    stopBootstrap: () => generationBootstrapAdmission.stop(),
+    getStreamingProcessor: () => streamingProcessor,
+    rememberProcessorTerminal: (...args) => rememberMainChatStreamingTransportProcessorTerminal(...args),
+    hideStopButton: () => hideStopButton(),
+    rememberVisibleTerminal: (...args) => rememberMainChatStreamingTransportVisibleTerminal(...args),
+    mountMessageList: () => mountReactMainChatMessageListPanel(),
 });
 
 //MARK: Generate() ends
@@ -6541,35 +6351,7 @@ const ensureGenerationRuntime = createGenerationRuntimeBootstrap({
  *          user message — regenerate then fills in the missing reply).
  */
 export function removeRegenerateTurnTail(signal) {
-    const snapshot = collectRegenerateTurn(chat, {
-        chatId: getCurrentChatId() ?? null,
-        narratorType: system_message_types.NARRATOR,
-    });
-    if (snapshot.messages.length === 0) {
-        pendingRegenerateRestore = null;
-        return null;
-    }
-
-    // Generate installs the runtime before a non-empty synchronous removal.
-    const lifecycle = getGenerationLifecycleService();
-    const saveChatReference = chat;
-    const saveChatId = getCurrentChatId() ?? null;
-    return lifecycle.removeRegenerateTail(snapshot, {
-        capture: () => lifecycle.captureContextGuard(abortController?.signal, signal),
-        clearView: start => {
-            if (isReactMainChatOwner()) {
-                for (let index = chat.length - 1; index >= start; index--) clearMainChatMessageUiState(index);
-                mainChatVisibleStartIndices.delete(getCurrentChatId());
-            }
-        },
-        clearEditing: start => { if (this_edit_mes_id !== undefined && this_edit_mes_id >= start) this_edit_mes_id = undefined; },
-        chat,
-        markTainted: () => { chat_metadata.tainted = true; },
-        save: () => saveChatDebounced(() => chat === saveChatReference && (getCurrentChatId() ?? null) === saveChatId),
-        deleted: length => { void eventSource.emit(event_types.MESSAGE_DELETED, length); },
-        render: startIndex => { void redisplayChat({ startIndex }); },
-        register: value => { pendingRegenerateRestore = value; },
-    });
+    return generationCaller.removeRegenerateTurnTail(...arguments);
 }
 
 /**
@@ -6579,62 +6361,10 @@ export function removeRegenerateTurnTail(signal) {
  * @returns {Promise<boolean>} Whether the snapshot was restored
  */
 export async function restoreRegenerateTurnTail(snapshot) {
-    if (pendingRegenerateRestore === snapshot) pendingRegenerateRestore = null;
-    // Preserve the public no-op before the generation runtime has been installed.
-    if (!snapshot || !Array.isArray(snapshot.messages) || snapshot.messages.length === 0) return false;
-    const preparation = getGenerationLifecycleService().prepareRegenerateRestore(snapshot, {
-        chatId: getCurrentChatId() ?? null,
-        collect: () => collectRegenerateTurn(chat, {
-            chatId: getCurrentChatId() ?? null,
-            narratorType: system_message_types.NARRATOR,
-        }),
-    });
-    if (preparation.kind === 'empty') return false;
-    if (preparation.kind === 'stale') {
-        console.warn('Regenerate restore skipped: chat changed during generation');
-        return false;
-    }
-    if (preparation.kind === 'changed') {
-        console.warn('Regenerate restore skipped: chat tail changed shape');
-        return false;
-    }
-    const attemptTail = preparation.tail;
-
-    return getGenerationLifecycleService().restoreRegenerateTurn(snapshot, {
-        commit() {
-            // Remove what the failed attempt produced (same removable-tail rule).
-            if (isReactMainChatOwner()) {
-                for (let index = chat.length - 1; index >= attemptTail.insertIndex; index--) {
-                    clearMainChatMessageUiState(index);
-                }
-            }
-            if (this_edit_mes_id !== undefined && this_edit_mes_id >= attemptTail.insertIndex) {
-                this_edit_mes_id = undefined;
-            }
-            const removedAttemptRows = chat.length - attemptTail.insertIndex;
-            chat.length = attemptTail.insertIndex;
-            if (removedAttemptRows > 0) {
-                void eventSource.emit(event_types.MESSAGE_DELETED, chat.length);
-            }
-            chat.splice(snapshot.insertIndex, 0, ...snapshot.messages);
-            chat_metadata.tainted = true;
-            mainChatVisibleStartIndices.delete(getCurrentChatId());
-        },
-        save: ownsRestore => saveChatConditional(ownsRestore),
-        render: () => redisplayChat({ startIndex: snapshot.insertIndex }),
-        scroll: () => scrollChatToBottom({ waitForFrame: true }),
-    });
+    return generationCaller.restoreRegenerateTurnTail(...arguments);
 }
 
-let regenerateRequestInFlight = false;
-// Snapshot of the tail removed by the in-flight regenerate, kept here so a
-// failure that bypasses the service dispatch boundary can still undo the
-// removal. Only a regenerate envelope ever writes it.
-let pendingRegenerateRestore = null;
-// Set while a visible normal generation runs — including the early awaits
-// before the service flips is_send_press — so send and regenerate guards
-// cannot overlap.
-let generationEntryPending = false;
+// Character greeting selection remains owned by character selection.
 let greetingSelectionPending = false;
 
 /**
@@ -6642,12 +6372,7 @@ let greetingSelectionPending = false;
  * @returns {boolean}
  */
 export function canRegenerateLastReply() {
-    return canRegenerateFromState({
-        busy: Boolean(greetingSelectionPending || is_send_press || regenerateRequestInFlight || generationEntryPending || this_edit_mes_id !== undefined),
-        connected: online_status !== 'no_connection',
-        hasCharacter: this_chid !== undefined || Boolean(String(name2 ?? '').trim()),
-        chat,
-    });
+    return generationCaller.canRegenerateLastReply(...arguments);
 }
 
 /**
@@ -6658,21 +6383,7 @@ export function canRegenerateLastReply() {
  * @returns {Promise<boolean>}
  */
 export async function regenerateLastReply() {
-    if (!canRegenerateLastReply()) {
-        return false;
-    }
-    regenerateRequestInFlight = true;
-    try {
-        await Generate('normal', { regenerate: true });
-        return true;
-    } catch (error) {
-        // The failure already surfaced to the user (restore toast / error
-        // row); resolving false keeps the fire-and-forget callers quiet.
-        console.warn('Regenerate failed:', error?.message ?? error);
-        return false;
-    } finally {
-        regenerateRequestInFlight = false;
-    }
+    return generationCaller.regenerateLastReply(...arguments);
 }
 
 /**
@@ -6688,31 +6399,7 @@ export function setOptionsMenuRegenerateAvailability(canRegenerate) {
  * Stops the generation and any streaming if it is currently running.
  */
 export function stopGeneration() {
-    const bootstrapStopped = generationBootstrapAdmission.stop();
-    let stopped = false;
-    if (streamingProcessor) {
-        rememberMainChatStreamingTransportProcessorTerminal(streamingProcessor, 'stopped');
-        streamingProcessor.onStopStreaming();
-        stopped = true;
-    }
-    if (abortController) {
-        abortController.abort('Clicked stop button');
-        hideStopButton();
-        if (!stopped) {
-            rememberMainChatStreamingTransportVisibleTerminal('stopped', {
-                activeMessageId: null,
-                observedTokenCount: 0,
-                observedChunkCount: 0,
-            });
-        }
-        stopped = true;
-    }
-    stopped ||= bootstrapStopped;
-    if (stopped) {
-        void mountReactMainChatMessageListPanel();
-    }
-    eventSource.emit(event_types.GENERATION_STOPPED);
-    return stopped;
+    return generationCaller.stopGeneration(...arguments);
 }
 
 /**
@@ -7702,8 +7389,8 @@ const runtimeSettingsPersistence = createRuntimeSettingsPersistence({
     conflict: runtimeSettingsConflict,
     isReady: () => settingsReady,
     schedule: (...args) => saveSettingsDebounced(...args),
-    isResponseCustomized: () => TempResponseLength.isCustomized(),
-    restoreResponse: () => TempResponseLength.restore(null),
+    isResponseCustomized: () => generationCaller.TempResponseLength.isCustomized(),
+    restoreResponse: () => generationCaller.TempResponseLength.restore(null),
     version: () => currentVersion,
     ensureVersion: () => deferredVersionTask.ensure(),
     persistedCurrentVersion: () => resolvePersistedCurrentVersion({ currentVersion, settingsVersion: settings?.currentVersion ?? null }),
@@ -8375,7 +8062,7 @@ export function callPopup(text, type, inputValue = '', { okButton, rows, wide, w
     }
 
     if (!presentation) {
-        $shadowPopup.transition({
+        transitionOpacity($shadowPopup[0], {
             opacity: 1,
             duration: animation_duration,
             easing: animation_easing,
@@ -9776,16 +9463,22 @@ async function mountDialoguePopupControls() {
         presentationHost.hidden = true;
         controls.append(presentationHost);
         try {
+            const shadow = document.getElementById('shadow_popup');
+            let fadeOutFinished = Promise.resolve();
             const presentation = module.createDialoguePresentationController({
-                show: () => $('#shadow_popup').css('display', 'block'),
-                fadeIn: () => $('#shadow_popup').stop(true, false).transition({ opacity: 1, duration: animation_duration, easing: animation_easing }),
-                fadeOut: () => $('#shadow_popup').stop(true, false).transition({ opacity: 0, duration: animation_duration, easing: animation_easing }),
+                show: () => { shadow.style.display = 'block'; },
+                fadeIn: () => transitionOpacity(shadow, { opacity: 1, duration: animation_duration, easing: animation_easing }),
+                fadeOut: () => {
+                    fadeOutFinished = new Promise(resolve => transitionOpacity(shadow, {
+                        opacity: 0, duration: animation_duration, easing: animation_easing, complete: resolve,
+                    }));
+                },
                 hide: kind => {
                     $('#shadow_popup').css('display', 'none');
                     $('#dialogue_popup').removeClass('large_dialogue_popup');
                     if (kind === 'confirm') $('#dialogue_popup').removeClass('wide_dialogue_popup');
                 },
-                schedule: callback => setTimeout(callback, animation_duration),
+                schedule: callback => { void fadeOutFinished.then(callback); },
             });
             module.mountDialoguePopupContent(presentationHost, presentation, content => $('#dialogue_popup_text').empty().append(content));
             globalThis.__emberDeskDialoguePresentation = {

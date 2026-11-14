@@ -1,5 +1,5 @@
-import { readFileSync } from 'node:fs';
 import { expect, jest, test } from '@jest/globals';
+import { createGenerationCallerService } from '../public/scripts/generation-caller-service.js';
 
 async function fixture() {
     const shared = await import('../public/scripts/generation-shared-state.js');
@@ -7,14 +7,14 @@ async function fixture() {
         ...shared,
         greetingSelectionPending: false, main_api: 'openai', generationEntryPending: false,
         pendingRegenerateRestore: null,
-        chat: [], chatId: 'same', revision: 1,
+        chat: [{ is_user: false, is_system: false, mes: 'reply', extra: { api: 'openai' } }], chatId: 'same', revision: 1,
         getComposerSnapshot: () => ({ value: 'draft', contextRevision: env.revision }),
         createGenerationRequestEnvelope: input => input,
         generationBootstrapAdmission: { enter: () => ({ signal: new AbortController().signal, release: jest.fn() }) },
         getCurrentGenerationContextIdentity: () => ({ chatId: env.chatId, chatReference: env.chat, contextRevision: env.revision }),
         ensureGenerationRuntime: jest.fn(async () => {}),
         executeGenerationRequestInShell: jest.fn(async () => {
-            env.pendingRegenerateRestore = { messages: ['old'] };
+            env.setSnapshot({ messages: ['old'] });
             throw new Error('transport failed');
         }),
         isUserStoppedGeneration: () => false,
@@ -22,12 +22,26 @@ async function fixture() {
         toastr: { warning: jest.fn(), error: jest.fn() },
         t: strings => strings[0], endPipelineRun: jest.fn(), unblockGeneration: jest.fn(),
     };
-    const source = readFileSync(new URL('../public/script.js', import.meta.url), 'utf8');
-    const start = source.indexOf('export async function Generate(type, options = {}, dryRun = false) {');
-    const end = source.indexOf('\nconst generationBootstrapAdmission =', start);
-    if (start < 0 || end < 0) throw new Error('Generate implementation not found');
-    const implementation = source.slice(start, end).replace('export async function Generate', 'async function Generate');
-    const generate = new Function('env', `with (env) { ${implementation}; return Generate; }`)(env);
+    let nextSnapshot;
+    const lifecycle = {
+        removeRegenerateTail: (_snapshot, ports) => { ports.register(nextSnapshot); return nextSnapshot; },
+        prepareRegenerateRestore: () => ({ kind: 'ready', tail: { insertIndex: 0 } }),
+        restoreRegenerateTurn: snapshot => env.restoreRegenerateTurnTail(snapshot),
+    };
+    const service = createGenerationCallerService({
+        greetingPending: () => env.greetingSelectionPending, getComposerSnapshot: () => env.getComposerSnapshot(),
+        createEnvelope: input => env.createGenerationRequestEnvelope(input), getMainApi: () => env.main_api,
+        enterBootstrap: () => env.generationBootstrapAdmission.enter(), getIdentity: () => env.getCurrentGenerationContextIdentity(),
+        ensureRuntime: () => env.ensureGenerationRuntime(), execute: envelope => env.executeGenerationRequestInShell(envelope),
+        isUserStopped: error => env.isUserStoppedGeneration(error),
+        reportRestore: restored => restored ? env.toastr.warning() : env.toastr.error(),
+        endPipeline: () => env.endPipelineRun(), unblock: (...args) => env.unblockGeneration(...args),
+        getChat: () => env.chat, getChatId: () => env.chatId, getNarratorType: () => 'narrator', getLifecycle: () => lifecycle,
+    });
+    env.setSnapshot = snapshot => { nextSnapshot = snapshot; service.removeRegenerateTurnTail(); };
+    Object.defineProperty(env, 'generationEntryPending', { get: () => service.generationEntryPending });
+    Object.defineProperty(env, 'pendingRegenerateRestore', { get: () => service.pendingRegenerateRestore });
+    const generate = service.Generate;
     return { env, generate };
 }
 
@@ -87,9 +101,9 @@ test('a late failure from an old chat does not consume the newer regenerate snap
     const request = generate('normal', { regenerate: true });
     const failure = request.catch(error => error);
     await executing;
-    env.chat = [];
+    env.chat = [{ is_user: false, is_system: false, mes: 'new', extra: { api: 'openai' } }];
     const newerSnapshot = { messages: ['new chat reply'] };
-    env.pendingRegenerateRestore = newerSnapshot;
+    env.setSnapshot(newerSnapshot);
     fail(new Error('old failure'));
     expect(await failure).toEqual(new Error('old failure'));
     expect(env.pendingRegenerateRestore).toBe(newerSnapshot);
@@ -160,14 +174,23 @@ async function quietFixture() {
         isMainChatQuietTransportStopException: error => error?.name === 'AbortError',
         Generate: jest.fn(),
     };
-    const source = readFileSync(new URL('../public/script.js', import.meta.url), 'utf8');
-    const start = source.indexOf('export async function generateQuietPrompt(');
-    // Stop at this top-level function's closing brace, not the documentation
-    // of an unrelated neighbouring function (which may be removed or moved).
-    const end = source.indexOf('\n}\n', start);
-    if (start < 0 || end < 0) throw new Error('quiet implementation not found');
-    const implementation = source.slice(start, end + 2).replace('export async function generateQuietPrompt', 'async function generateQuietPrompt');
-    const generateQuietPrompt = new Function('env', `with (env) { ${implementation}; return generateQuietPrompt; }`)(env);
+    const identity = { chatId: 'chat', chatReference: [], contextRevision: 1 };
+    const service = createGenerationCallerService({
+        getMainApi: () => env.main_api, createCommand: input => env.createGenerationCommand(input),
+        createQuietContract: input => env.createQuietGenerationLifecycleContract(input), rememberQuiet: value => env.rememberMainChatQuietTransportSnapshot(value),
+        getResponseLength: () => 100, setResponseLength: () => {}, onceEvent: () => {}, removeEventListener: () => {},
+        events: { CHAT_COMPLETION_SETTINGS_READY: 'ready' },
+        trim: value => env.trimToEndSentence(value), removeReasoning: value => env.removeReasoningFromString(value), isQuietStopped: error => env.isMainChatQuietTransportStopException(error),
+        greetingPending: () => false, createEnvelope: input => input, enterBootstrap: () => ({ signal: new AbortController().signal, release() {} }),
+        getIdentity: () => identity, ensureRuntime: async () => {}, execute: envelope => env.Generate(envelope.type, envelope.options),
+    });
+    env.TempResponseLength = service.TempResponseLength;
+    jest.spyOn(env.TempResponseLength, 'save');
+    jest.spyOn(env.TempResponseLength, 'restore');
+    jest.spyOn(env.TempResponseLength, 'removeEventHook');
+    // Keep the legacy fixture's observable event hook identity.
+    jest.spyOn(env.TempResponseLength, 'setupEventHook').mockImplementation(() => hook);
+    const generateQuietPrompt = service.generateQuietPrompt;
     return { env, generateQuietPrompt, hook };
 }
 
