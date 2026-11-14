@@ -123,7 +123,7 @@ describe('canonical sqlite flag defaults', () => {
 
 describe('legacy canonical sqlite config migration', () => {
     test('strips the untouched all-false rollout block so defaults turn on', async () => {
-        const { addMissingConfigValues } = await import('../src/config-init.js');
+        const { addMissingConfigValues } = await import('../src/config-init.ts');
         const root = makeRoot();
         const target = path.join(root, 'config.yaml');
         fs.writeFileSync(target, [
@@ -176,7 +176,7 @@ describe('legacy canonical sqlite config migration', () => {
     });
 
     test('keeps a customized canonical block instead of overwriting user choice', async () => {
-        const { addMissingConfigValues } = await import('../src/config-init.js');
+        const { addMissingConfigValues } = await import('../src/config-init.ts');
         const root = makeRoot();
         const target = path.join(root, 'config.yaml');
         fs.writeFileSync(target, [

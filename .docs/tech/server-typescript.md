@@ -97,3 +97,23 @@ retention rules, synchronous API, and backup data format are preserved.
 
 This is internal execution and type-checking work. It changes no user-facing
 page, feature, or term, so no semantic documentation database update is needed.
+
+## User storage and configuration leaves
+
+`src/user-storage.ts` and `src/config-init.ts` are the sole implementations of
+their existing modules. Their JavaScript callers use explicit `.ts` imports;
+`src/users.js` retains its compatibility exports and exposes the storage
+module's `User` type through JSDoc. Account key prefixes, SHAKE256 account
+versions, lazy account configuration, default-user/setup behavior, deprecated
+configuration migrations, environment coercion, and lodash default merging
+retain their existing behavior. Types describe the existing trusted values;
+this migration adds no runtime validation or data format.
+
+`tests/user-config-native.test.js` runs the actual modules and JavaScript
+consumers in isolated Node subprocesses with accounts both enabled and
+disabled. It initializes temporary configuration and node-persist storage,
+checks account/setup behavior and the version fixture, and imports the
+pre-start configuration script with a temporary cwd. No loader, emitted
+server code, or listening server is used. The existing user/config suites
+also run directly against the production TypeScript files through the shared
+Jest adapter.

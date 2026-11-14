@@ -570,7 +570,7 @@ decision — missing audit runs shadow import plus audit; file-side stale marker
 projection-side stale markers (`*_projection_failure`, `*_repair`) re-audit only so a lagging
 compatibility file can never roll back newer canonical rows; a completed audit (clean or
 blocking) is respected as-is, so a clean slice never re-imports out-of-band file edits.
-`src/config-init.js` strips the legacy all-`false` `canonicalSqlite` template block from
+`src/config-init.ts` strips the legacy all-`false` `canonicalSqlite` template block from
 existing `config.yaml` files so upgraded installs inherit the new defaults.
 
 The control plane resolves each descriptor's effective flags. For `characters`, `worldInfo`,

@@ -10,7 +10,7 @@ export {
     getAllEnabledUsers,
     needsSetup,
     getAccountVersion,
-} from './user-storage.js';
+} from './user-storage.ts';
 
 export {
     getUserDirectories,
@@ -48,20 +48,13 @@ import archiver from 'archiver';
 import { DEFAULT_USER } from './constants.js';
 import { getConfigValue, color, generateTimestamp, isPathUnderParent, invalidateFirefoxCache } from './util.js';
 import { allowKeysExposure, SECRETS_FILE } from './endpoints/secrets.js';
-import { getEnableAccounts, toKey, getAccountVersion, getAllEnabledUsers, needsSetup } from './user-storage.js';
+import { getEnableAccounts, toKey, getAccountVersion, getAllEnabledUsers, needsSetup } from './user-storage.ts';
 import { getUserDirectories } from './user-directories.js';
 import { shouldRedirectToLogin, tryAutoLogin } from './user-auth.js';
 import { hasReactLoginBuild, sendReactLoginIndex } from './middleware/react-login-serve.js';
 
 /**
- * @typedef {Object} User
- * @property {string} handle - The user's short handle. Used for directories and other references
- * @property {string} name - The user's name. Displayed in the UI
- * @property {number} created - The timestamp when the user was created
- * @property {string} password - Scrypt hash of the user's password
- * @property {string} salt - Salt used for hashing the password
- * @property {boolean} enabled - Whether the user is enabled
- * @property {boolean} admin - Whether the user is an admin (can manage other users)
+ * @typedef {import('./user-storage.ts').User} User
  */
 
 /**

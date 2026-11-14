@@ -117,7 +117,7 @@ const RULES = [
         matches(input) {
             return matchesAny(input, [
                 /^src\/user-auth\.js$/,
-                /^src\/user-storage\.js$/,
+                /^src\/user-storage\.[jt]s$/,
                 /^src\/user-directories\.js$/,
                 /^src\/user-migrations\.js$/,
                 /^src\/users\.js$/,

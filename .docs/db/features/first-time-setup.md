@@ -40,7 +40,7 @@ Force a new or legacy passwordless deployment through a visible account-hardenin
 ## Feature-Specific Evidence
 
 - Visible redirect behavior, setup mode, form fields, inline errors, and final workspace navigation are primary evidence.
-- `needsSetup()` in `src/user-storage.js`, setup public endpoints, setup middleware, and the React `/setup` route are implementation evidence for the same user-facing contract.
+- `needsSetup()` in `src/user-storage.ts`, setup public endpoints, setup middleware, and the React `/setup` route are implementation evidence for the same user-facing contract.
 - Storage state and password hashes are supporting evidence, not substitutes for proving the operator cannot access the workspace before setup.
 
 ## Failure Signals

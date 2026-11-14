@@ -52,7 +52,7 @@ Current architectural boundaries:
 Key module structure:
 
 - `users.js` — barrel re-export plus middleware, routes, backup, security verification. Delegates to:
-  - `user-storage.js` — `node-persist` CRUD, lazy `getEnableAccounts()` config read
+  - `user-storage.ts` — `node-persist` CRUD, lazy `getEnableAccounts()` config read
   - `user-directories.js` — per-user filesystem layout under `DATA_ROOT/<handle>/`
   - `user-migrations.js` — three self-contained idempotent migration functions
   - `user-auth.js` — credential verification, SSO (Authelia/Authentik/basic), session crypto
@@ -98,7 +98,7 @@ Current delivered storage scope is narrow; the accepted successor roadmap is com
 
 - canonical SQLite is the default runtime authority for all seven delivered slices (character metadata + chat stats, full World Info, settings document, secret records, managed media, chats, and generation presets); compatibility files are projections/export formats kept for import, export, and rollback
 - the canonical store lives at per-user `storage/emberdesk.sqlite`; `src/canonical-backend.js` lazily activates each slice on first canonical touch — shadow import plus audit when no persisted audit exists, re-import plus audit when a compatibility-file write staled it, audit-only after projection-failure markers so a lagging file can never roll back newer canonical rows, and no-op after a completed audit
-- `src/config-init.js` strips the legacy all-`false` `canonicalSqlite` template block from existing `config.yaml` files so upgraded installs inherit the default-on behavior uniformly
+- `src/config-init.ts` strips the legacy all-`false` `canonicalSqlite` template block from existing `config.yaml` files so upgraded installs inherit the default-on behavior uniformly
 - DB-first character writes preserve PNG/avatar/chat-directory compatibility projection, record durable repair intents when projection fails after the canonical commit, and invalidate rollback readiness until unresolved projection repairs are cleared
 - canonical character snapshots are deterministic and built from the shared `character-card-v2.js` normalization chain so runtime routes and operator/CLI tooling produce byte-equivalent rows; linked World Info `character_book` content is not frozen into `card_json` but re-injected from the canonical World Info store on reads
 - character chat save/rename/delete/import routes update `character_chat_stats` directly while chat bodies are canonical rows projected to JSONL files and group chats stay outside character stat authority

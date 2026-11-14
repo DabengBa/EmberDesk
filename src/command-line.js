@@ -5,7 +5,7 @@ import { hideBin } from 'yargs/helpers';
 import ipRegex from 'ip-regex';
 import envPaths from 'env-paths';
 import { color, getConfigValue, stringToBool } from './util.js';
-import { initConfig } from './config-init.js';
+import { initConfig } from './config-init.ts';
 
 /**
  * @typedef {object} ParsedArgv Raw CLI arguments, nullable where not provided.

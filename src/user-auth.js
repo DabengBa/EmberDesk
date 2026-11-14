@@ -6,7 +6,7 @@ import { Buffer } from 'node:buffer';
 import storage from 'node-persist';
 import { sync as writeFileAtomicSync } from 'write-file-atomic';
 import ipMatching from 'ip-matching';
-import { getEnableAccounts, toKey, getAllUserHandles, getAccountVersion } from './user-storage.js';
+import { getEnableAccounts, toKey, getAllUserHandles, getAccountVersion } from './user-storage.ts';
 import { getConfigValue, color } from './util.js';
 import { readSecret, writeSecret } from './endpoints/secrets.js';
 import { filterValidIpPatterns, getIpFromRequest } from './express-common.js';
