@@ -21,6 +21,7 @@ The frontend migration gap slice moves the following responsibilities to their d
 | Main-chat list and shortcuts | `app/components/main-chat/MainChatMessageListWorkspacePanel.tsx`, `useMainChatHotkeys.ts` | One stable list owner subscribes to the existing store, including an empty chat |
 | Panel shell layout | `app/components/panels/WorkspacePanelShell.tsx` | Workspace entry supplies each panel's content |
 | Popup lifecycle and cropping | `app/components/local-dialogs/PopupRuntime.tsx` | Cached workspace bundle exports `createPopupRuntime`; bootstrap installs it into the thin JS `Popup` bridge |
+| Provider, prompt management and preset context | `public/scripts/openai.js`, `public/scripts/PromptManager.js`, `public/scripts/preset-manager.js` | Bootstrap installs narrow live context accessors and synchronous macro substitution; strict preset writes use the existing settings persistence owner |
 
 These extractions do not claim that all historical `script.js` domain code has been removed. Existing character, formatting, generation integration and compatibility responsibilities remain visible in that entry; this slice does not move the whole file into a replacement facade.
 
@@ -35,7 +36,7 @@ The first extracted contract modules are:
 
 - Each mutable state has one owner. The composition root may wire owners together, but it must not introduce a second store, universal service locator, or broad shell context.
 - First-party modules under `public/scripts/`, excluding vendored `extensions/third-party/`, must not add reverse imports of `public/script.js`.
-- The current static snapshot contains 70 exact first-party reverse-import entries. This is a frozen legacy compatibility snapshot, not a target architecture; future waves may only remove entries or narrow their imported names.
+- The current static snapshot records the remaining first-party reverse-import entries. It is a legacy compatibility snapshot, not a target architecture; future waves may only remove entries or narrow their imported names. Provider, prompt manager and preset manager no longer import the root at runtime.
 - `eventSource` and `event_types` are imported directly from `public/scripts/events.js`. `getRequestHeaders()` is imported directly from `public/scripts/request-context.js`.
 - A first-party module must not import `eventSource`, `event_types`, or `getRequestHeaders` from `public/script.js`.
 - The public `/script.js` path remains an internal first-party compatibility boundary. There is no third-party extension runtime; this boundary does not permit new first-party reverse dependencies.
@@ -60,7 +61,7 @@ During `public/script.js` evaluation:
 
 1. Fetch the CSRF token. A failure shows a persistent error and rejects initialization before the main bootstrap stages continue.
 2. Load the cached workspace bundle and install its React popup factory, then create the splash overlay and initialization loader. This preparation precedes the first loader popup so synchronous dialog references are available to existing callers.
-3. Register DOM/browser compatibility helpers, library shims, Markdown/DOMPurify patches, and browser fixes.
+3. Install the Provider and preset live contexts and synchronous Prompt Manager domain; register DOM/browser compatibility helpers, library shims, Markdown/DOMPurify patches, and browser fixes.
 4. Initialize secrets, locale, core chat and OpenAI modules, presets, and system messages.
 5. Load settings and apply post-settings UI bindings.
 6. Load user avatars and characters, then initialize tokenizers.

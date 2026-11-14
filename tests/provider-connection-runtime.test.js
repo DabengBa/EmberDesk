@@ -11,9 +11,9 @@ function runtime() {
     const status = jest.fn();
     const scope = vm.createContext({
         oai_settings: settings, secret_state: {}, SECRET_KEYS: { OPENAI: 'openai' },
-        getRequestHeaders: () => ({}), abortStatusCheck: new AbortController(), fetch: jest.fn(),
-        setOnlineStatus: status, displayOnlineStatus: jest.fn(), updateFeatureSupportFlags: jest.fn(),
-        model_list: [], main_api: 'openai', console,
+        getRequestHeaders: () => ({}), fetch: jest.fn(),
+        openAIContext: { abortStatusCheck: new AbortController(), main_api: 'openai', setOnlineStatus: status, displayOnlineStatus: jest.fn() },
+        model_list: [], console,
     });
     vm.runInContext(source.slice(start, end).replaceAll('export ', '') + '\nglobalThis.api = { installProviderConnectionService, connectProviderConnection, testProviderConnection };', scope);
     const connectProvider = jest.fn();

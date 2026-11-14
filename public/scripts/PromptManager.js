@@ -1,7 +1,6 @@
 'use strict';
 
 import { eventSource, event_types } from './events.js';
-import { substituteParams } from '../script.js';
 import { TokenHandler } from './openai.js';
 import { uuidv4 } from './utils.js';
 
@@ -53,7 +52,11 @@ const registerPromptManagerMigration = () => {
 /** Install the typed domain before manager initialization; defaults remain synchronous. */
 let promptDomain = null;
 
-export function installPromptManagerDomain(createDomain) {
+/**
+ * @param {Function} createDomain Typed domain factory.
+ * @param {Function} substituteParams Synchronous substitution from the existing owner.
+ */
+export function installPromptManagerDomain(createDomain, substituteParams) {
     if (promptDomain) return;
     promptDomain = createDomain({
         defaults: chatCompletionDefaultPrompts,
