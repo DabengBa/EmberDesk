@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { formatBytes } from '../util.js';
-import { createTextMatcher, getPreviewMessage } from './chat-route-service.js';
+import { createTextMatcher, getPreviewMessage } from './chat-route-service.ts';
 
 function parseCanonicalPayload(payloadJson, fieldName) {
     try {

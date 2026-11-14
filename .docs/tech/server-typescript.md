@@ -95,5 +95,27 @@ deterministic helper tests keep their unit classification; native import
 and actual chat-router module tests provide integration proof. The naming,
 retention rules, synchronous API, and backup data format are preserved.
 
+## Chat import and route helpers
+
+The next slice migrates `chat-import-converters.ts`, `chat-import-service.ts`,
+and `chat-route-service.ts`, in that order. Each replaces its JavaScript
+implementation. `chats.js` imports the typed import planner, and
+`canonical-chat-query-service.js` imports the typed matcher and preview helper.
+All consumers use the actual `.ts` extension; there is no JavaScript shim.
+
+The import planner describes success/failure and atomic-write/copy-upload
+results with discriminated unions. Directory and chat-info types reuse
+`UserDirectoryList` and `ChatInfo`. External JSON stays `unknown`; local format
+views describe the original unchecked field reads. They are not validators.
+The accepted input shapes, converter selection order, synchronous exceptions,
+JSONL handling, upload cleanup, search rules, sorting and filesystem tolerance
+remain unchanged.
+
+Existing converter/planner unit tests and route/canonical-query integration
+tests cover behavior. The native test above also executes the three real
+TypeScript modules and imports the actual chats and canonical-query consumers
+without a loader, verifying that the mixed JavaScript/TypeScript graph resolves
+in Node independently of Jest.
+
 This is internal execution and type-checking work. It changes no user-facing
 page, feature, or term, so no semantic documentation database update is needed.

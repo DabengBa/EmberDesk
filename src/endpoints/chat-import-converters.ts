@@ -1,21 +1,52 @@
 import { tryParse } from '../util.js';
 
+type OobaChatImport = { data_visible: [unknown?, unknown?][] };
+type AgnaiChatImport = { messages: { userId?: unknown; msg?: unknown }[] };
+type CaiHistory = { msgs: { src: { is_human: unknown }; text?: unknown }[] };
+type CaiChatImport = { histories: { histories?: CaiHistory[] | null } };
+type KoboldLiteChatImport = {
+    savedsettings?: { chatname?: unknown; chatopponent?: unknown } | null;
+    actions: string[];
+    prompt?: string;
+};
+type RisuChatImport = {
+    data: { message: { role?: unknown; name?: unknown; time?: unknown; data?: unknown }[] };
+};
+type JsonChatImportSelectors = {
+    savedsettings?: unknown;
+    histories?: unknown;
+    data_visible?: unknown;
+    messages?: unknown;
+    type?: unknown;
+};
+type ChubChatLine = {
+    mes?: { message?: unknown };
+    swipes?: unknown;
+    swipe_id?: unknown;
+    swipe_info?: unknown;
+};
+type JsonChatImportConverter = (userName: string, characterName: string, jsonData: unknown) => string | string[];
+
+// These views describe the existing format reads, not validated payloads. Keep the
+// unchecked boundary: malformed shapes must still throw in the selected converter
+// rather than becoming parse errors or unsupported-format results.
+
 /**
  * Imports a chat from Ooba's format.
  * @param {string} userName User name
  * @param {string} characterName Character name
- * @param {object} jsonData JSON data
+ * @param {unknown} jsonData JSON data
  * @returns {string} Chat data
  */
-export function importOobaChat(userName, characterName, jsonData) {
-    /** @type {object[]} */
-    const chat = [{
+export function importOobaChat(userName: string, characterName: string, jsonData: unknown): string {
+    const data = jsonData as OobaChatImport;
+    const chat: Record<string, unknown>[] = [{
         chat_metadata: {},
         user_name: 'unused',
         character_name: 'unused',
     }];
 
-    for (const arr of jsonData.data_visible) {
+    for (const arr of data.data_visible) {
         if (arr[0]) {
             const userMessage = {
                 name: userName,
@@ -45,18 +76,18 @@ export function importOobaChat(userName, characterName, jsonData) {
  * Imports a chat from Agnai's format.
  * @param {string} userName User name
  * @param {string} characterName Character name
- * @param {object} jsonData Chat data
+ * @param {unknown} jsonData Chat data
  * @returns {string} Chat data
  */
-export function importAgnaiChat(userName, characterName, jsonData) {
-    /** @type {object[]} */
-    const chat = [{
+export function importAgnaiChat(userName: string, characterName: string, jsonData: unknown): string {
+    const data = jsonData as AgnaiChatImport;
+    const chat: Record<string, unknown>[] = [{
         chat_metadata: {},
         user_name: 'unused',
         character_name: 'unused',
     }];
 
-    for (const message of jsonData.messages) {
+    for (const message of data.messages) {
         const isUser = !!message.userId;
         chat.push({
             name: isUser ? userName : characterName,
@@ -74,16 +105,17 @@ export function importAgnaiChat(userName, characterName, jsonData) {
  * Imports a chat from CAI Tools format.
  * @param {string} userName User name
  * @param {string} characterName Character name
- * @param {object} jsonData JSON data
+ * @param {unknown} jsonData JSON data
  * @returns {string[]} Converted data
  */
-export function importCAIChat(userName, characterName, jsonData) {
+export function importCAIChat(userName: string, characterName: string, jsonData: unknown): string[] {
+    const data = jsonData as CaiChatImport;
     /**
      * Converts the chat data to suitable format.
      * @param {object} history Imported chat data
      * @returns {object[]} Converted chat data
      */
-    function convert(history) {
+    function convert(history: CaiHistory): Record<string, unknown>[] {
         const starter = {
             chat_metadata: {},
             user_name: 'unused',
@@ -101,7 +133,7 @@ export function importCAIChat(userName, characterName, jsonData) {
         return [starter, ...historyData];
     }
 
-    const newChats = (jsonData.histories.histories ?? []).map(history => convert(history).map(obj => JSON.stringify(obj)).join('\n'));
+    const newChats = (data.histories.histories ?? []).map(history => convert(history).map(obj => JSON.stringify(obj)).join('\n'));
     return newChats;
 }
 
@@ -109,15 +141,15 @@ export function importCAIChat(userName, characterName, jsonData) {
  * Imports a chat from Kobold Lite format.
  * @param {string} _userName User name
  * @param {string} _characterName Character name
- * @param {object} data JSON data
+ * @param {unknown} jsonData JSON data
  * @returns {string} Chat data
  */
-export function importKoboldLiteChat(_userName, _characterName, data) {
+export function importKoboldLiteChat(_userName: string, _characterName: string, jsonData: unknown): string {
+    const data = jsonData as KoboldLiteChatImport;
     const inputToken = '{{[INPUT]}}';
     const outputToken = '{{[OUTPUT]}}';
 
-    /** @type {function(string): object} */
-    function processKoboldMessage(msg) {
+    function processKoboldMessage(msg: string): Record<string, unknown> {
         const isUser = msg.includes(inputToken);
         return {
             name: isUser ? userName : characterName,
@@ -152,12 +184,13 @@ export function importKoboldLiteChat(_userName, _characterName, data) {
  * Only changes enough to make it compatible with the standard chat serialization format.
  * @param {string} userName User name
  * @param {string} characterName Character name
- * @param {string[]} lines serialised JSONL data
+ * @param {string[]|null|undefined} lines serialised JSONL data
  * @returns {string} Converted data
  */
-export function flattenChubChat(userName, characterName, lines) {
-    function convert(line) {
-        const lineData = tryParse(line);
+export function flattenChubChat(userName: string, characterName: string, lines: string[] | null | undefined): string {
+    function convert(line: string): string {
+        const parsed: unknown = tryParse(line);
+        const lineData = parsed as ChubChatLine | null;
         if (!lineData) return line;
 
         if (lineData.mes && lineData.mes.message) {
@@ -178,18 +211,18 @@ export function flattenChubChat(userName, characterName, lines) {
  * Imports a chat from RisuAI format.
  * @param {string} userName User name
  * @param {string} characterName Character name
- * @param {object} jsonData Imported chat data
+ * @param {unknown} jsonData Imported chat data
  * @returns {string} Chat data
  */
-export function importRisuChat(userName, characterName, jsonData) {
-    /** @type {object[]} */
-    const chat = [{
+export function importRisuChat(userName: string, characterName: string, jsonData: unknown): string {
+    const data = jsonData as RisuChatImport;
+    const chat: Record<string, unknown>[] = [{
         chat_metadata: {},
         user_name: 'unused',
         character_name: 'unused',
     }];
 
-    for (const message of jsonData.data.message) {
+    for (const message of data.data.message) {
         const isUser = message.role === 'user';
         chat.push({
             name: message.name ?? (isUser ? userName : characterName),
@@ -205,23 +238,24 @@ export function importRisuChat(userName, characterName, jsonData) {
 
 /**
  * Selects the JSON chat import converter using the existing branch order.
- * @param {object} jsonData JSON import payload
- * @returns {((userName: string, characterName: string, jsonData: object) => string|string[])|null} Converter function
+ * @param {unknown} jsonData JSON import payload
+ * @returns {JsonChatImportConverter|null} Converter function
  */
-export function getJsonChatImportConverter(jsonData) {
-    if (jsonData.savedsettings !== undefined) { // Kobold Lite format
+export function getJsonChatImportConverter(jsonData: unknown): JsonChatImportConverter | null {
+    const data = jsonData as JsonChatImportSelectors;
+    if (data.savedsettings !== undefined) { // Kobold Lite format
         return importKoboldLiteChat;
     }
-    if (jsonData.histories !== undefined) { // CAI Tools format
+    if (data.histories !== undefined) { // CAI Tools format
         return importCAIChat;
     }
-    if (Array.isArray(jsonData.data_visible)) { // oobabooga's format
+    if (Array.isArray(data.data_visible)) { // oobabooga's format
         return importOobaChat;
     }
-    if (Array.isArray(jsonData.messages)) { // Agnai's format
+    if (Array.isArray(data.messages)) { // Agnai's format
         return importAgnaiChat;
     }
-    if (jsonData.type === 'risuChat') { // RisuAI format
+    if (data.type === 'risuChat') { // RisuAI format
         return importRisuChat;
     }
     return null;

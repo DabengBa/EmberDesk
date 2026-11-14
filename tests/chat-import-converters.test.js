@@ -8,7 +8,7 @@ import {
     importKoboldLiteChat,
     importOobaChat,
     importRisuChat,
-} from '../src/endpoints/chat-import-converters.js';
+} from '../src/endpoints/chat-import-converters.ts';
 
 const FIXED_ISO_DATE = '2026-06-02T00:00:00.000Z';
 
@@ -165,6 +165,11 @@ describe('chat import converters', () => {
             { name: 'Custom Bot', is_user: false, send_date: FIXED_ISO_DATE, mes: 'from bot', extra: {} },
             { name: 'Bot', is_user: false, send_date: FIXED_ISO_DATE, mes: '', extra: {} },
         ]);
+    });
+
+    test('preserves primitive and array JSONL values without imposing an object schema', () => {
+        const lines = ['null', 'false', '0', 'true', '1', '"text"', '[]'];
+        expect(flattenChubChat('User', 'Bot', lines)).toBe(lines.join('\n'));
     });
 
     test('selects JSON import converters in the existing branch order', () => {
