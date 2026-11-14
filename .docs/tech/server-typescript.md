@@ -123,8 +123,15 @@ in Node independently of Jest.
 The canonical chat query service is the sole TypeScript implementation for
 search, character chat lists and recent chats. The chats and characters routers
 and the benchmark import it with its actual `.ts` extension. Canonical chat
-reads remain in the independent JavaScript read service. Existing SQLite query
+reads are owned by the independent TypeScript read service. Existing SQLite query
 tests and native Node imports of both routers cover the migrated boundary.
+
+`src/endpoints/canonical-chat-read-service.ts` is the sole canonical chat read
+implementation. It preserves raw JSONL rows, opaque object payloads, and the
+nullable version read with its payload in one SQLite transaction. The chats
+router, text-replace service, and benchmark import the actual `.ts` file.
+SQLite integration tests cover the transaction and serialization contracts;
+native Node tests import the service and its production callers without a loader.
 
 ## Character read and write services
 
