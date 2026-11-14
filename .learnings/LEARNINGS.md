@@ -2,6 +2,45 @@
 
 Corrections, insights, and knowledge gaps captured during development.
 
+## [LRN-20261114-001] knowledge_gap
+
+**Logged**: 2026-11-14T11:50:00+08:00
+**Priority**: medium
+**Status**: resolved
+**Area**: tests
+
+### Summary
+Jest 29 的默认转换缓存键不包含 transformer 和其共享 helper 的实现内容。
+
+### Details
+复用同一缓存目录时，修改剥离 helper 后 TypeScript 输入仍执行旧输出；关闭缓存才执行新输出。默认测试 lane 每次分配临时目录，掩盖了直接运行 Jest 或固定测试根目录时的问题。当前适配器通过 Jest 的 getCacheKey 接口纳入两个实现的源码和 Node 版本，继续使用 Jest 自己的缓存。
+
+### Suggested Action
+改动测试转换器或其依赖时，用同一缓存目录连续启动独立 Jest 进程，实际修改依赖和转换器并验证输出更新；不要只在新临时目录运行回归。
+
+### Metadata
+- Source: code review and verified regression
+- Related Files: tests/helpers/jest-strip-typescript.cjs, tests/helpers/strip-typescript.cjs, tests/server-typescript-runtime.test.js, .docs/tech/server-typescript.md
+- Tags: jest, typescript, transform, cache
+- Pattern-Key: tests.jest-transform.dependency-cache-invalidation
+- Recurrence-Count: 1
+- First-Seen: 2026-11-14
+- Last-Seen: 2026-11-14
+
+### Context Maintenance
+- Decay-Type: dependency
+- Decay-Rate: medium (recheck when Jest, Node stripping, or the transformer changes)
+- Authority: Jest 29.7 ScriptTransformer and the reusable-cache regression; Owner: repository test maintainers
+- Revalidation: run the focused runtime suite after relevant dependency or adapter changes; if unavailable, retain the limitation without claiming verification.
+- Validation: verified; Last-Validated: 2026-11-14; Evidence: the same-cache regression failed with stale output and passed after both helper and transformer changes.
+- Disposition: retain; Application: applied
+
+### Resolution
+- **Resolved**: 2026-11-14T11:50:00+08:00
+- **Notes**: Existing Jest cache keys now include the stripping implementations; no additional dependency or cache layer was added.
+
+---
+
 ## [LRN-20261112-002] best_practice
 
 **Logged**: 2026-11-12T12:39:00+08:00

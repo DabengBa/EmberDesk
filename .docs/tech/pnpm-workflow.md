@@ -34,6 +34,8 @@ pnpm run build:react
 pnpm run build:react:character-library
 pnpm run build:react:workspace-panels
 pnpm run docs:build
+pnpm run typecheck
+pnpm run lint
 pnpm run test:unit
 pnpm run test:component
 pnpm run test:integration
@@ -63,6 +65,11 @@ identity is included in the Playwright run root. The inventory report keeps
 not expose those phases, rather than treating suite wall time as a fake phase.
 
 Use Vite build scripts for frontend build proof:
+
+Server TypeScript uses native Node execution and separate type checking; see
+[server-typescript.md](server-typescript.md) for module conventions and the
+Node/Jest proof boundary. `pnpm run typecheck` checks both frontend and server
+projects, and `pnpm run lint` includes migrated server TypeScript.
 
 - `pnpm run build:lib` builds the shared `/lib.js` browser library.
 - `pnpm run build:react` builds the shared React page app used by `/login`, `/setup`, and `/settings`.

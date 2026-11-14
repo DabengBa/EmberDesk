@@ -1,6 +1,7 @@
 module.exports = {
     rootDir: __dirname,
-    transform: {},
+    extensionsToTreatAsEsm: ['.ts'],
+    transform: { '^.+\\.ts$': '<rootDir>/helpers/jest-strip-typescript.cjs' },
     // No DOM-backed Jest component tests exist yet; keep non-UI execution on node.
     testEnvironment: 'node',
     testMatch: ['<rootDir>/__emberdesk_component_tests__/**/*.test.js'],

@@ -1,8 +1,8 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { stripTypeScriptTypes } from 'node:module';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import stripTypeScript from './strip-typescript.cjs';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 
@@ -31,7 +31,7 @@ function emitModuleGraph(entryFile, outRoot, seen = new Map()) {
     seen.set(real, dest);
 
     const raw = fs.readFileSync(real, 'utf8');
-    const js = real.endsWith('.ts') ? stripTypeScriptTypes(raw) : raw;
+    const js = real.endsWith('.ts') ? stripTypeScript(raw) : raw;
     const rewritten = js.replace(
         /\b((?:import|export)\s+(?:[^'"]*?\s+from\s+)?|import\s*\(\s*)(['"])([^'"]+)\2/g,
         (full, prefix, quote, specifier) => {

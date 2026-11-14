@@ -28,6 +28,11 @@ The current Component lane is intentionally empty. Source-contract tests that
 read React or browser source files remain Integration tests; they do not become
 Component tests merely because the source contains DOM tokens.
 
+Native server TypeScript, its Jest adapter, and the distinction between native
+Node module resolution and the frontend TS helper are documented in
+[server-typescript.md](server-typescript.md). Test entry files remain `.test.js`;
+module fixtures may use `.ts`.
+
 ## Commands
 
 ```bash
