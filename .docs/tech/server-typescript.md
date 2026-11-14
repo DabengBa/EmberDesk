@@ -100,7 +100,7 @@ retention rules, synchronous API, and backup data format are preserved.
 The next slice migrates `chat-import-converters.ts`, `chat-import-service.ts`,
 and `chat-route-service.ts`, in that order. Each replaces its JavaScript
 implementation. `chats.js` imports the typed import planner, and
-`canonical-chat-query-service.js` imports the typed matcher and preview helper.
+`canonical-chat-query-service.ts` imports the typed matcher and preview helper.
 All consumers use the actual `.ts` extension; there is no JavaScript shim.
 
 The import planner describes success/failure and atomic-write/copy-upload
@@ -116,6 +116,12 @@ tests cover behavior. The native test above also executes the three real
 TypeScript modules and imports the actual chats and canonical-query consumers
 without a loader, verifying that the mixed JavaScript/TypeScript graph resolves
 in Node independently of Jest.
+
+The canonical chat query service is the sole TypeScript implementation for
+search, character chat lists and recent chats. The chats and characters routers
+and the benchmark import it with its actual `.ts` extension. Canonical chat
+reads remain in the independent JavaScript read service. Existing SQLite query
+tests and native Node imports of both routers cover the migrated boundary.
 
 ## Character read and write services
 
@@ -157,3 +163,12 @@ pre-start configuration script with a temporary cwd. No loader, emitted
 server code, or listening server is used. The existing user/config suites
 also run directly against the production TypeScript files through the shared
 Jest adapter.
+
+## User authentication
+
+`src/user-auth.ts` is the sole implementation of credential, SSO, CSRF and
+session helpers; the `src/users.js` compatibility barrel imports it directly.
+SSO and trusted-proxy configuration is still read at module load time. The
+native user/config test exercises the real barrel and auth module, trusted and
+untrusted SSO clients, anonymous and user CSRF secrets, and cookie-secret
+migration. This internal migration changes no user-visible semantic contract.

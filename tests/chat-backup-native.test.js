@@ -9,7 +9,8 @@ const converters = new URL('../src/endpoints/chat-import-converters.ts', import.
 const imports = new URL('../src/endpoints/chat-import-service.ts', import.meta.url).href;
 const routes = new URL('../src/endpoints/chat-route-service.ts', import.meta.url).href;
 const chats = new URL('../src/endpoints/chats.js', import.meta.url).href;
-const queries = new URL('../src/endpoints/canonical-chat-query-service.js', import.meta.url).href;
+const characters = new URL('../src/endpoints/characters.js', import.meta.url).href;
+const queries = new URL('../src/endpoints/canonical-chat-query-service.ts', import.meta.url).href;
 const util = new URL('../src/util.js', import.meta.url).href;
 
 function runNode(source, ...args) {
@@ -58,7 +59,7 @@ test('Node executes the real chat import and route helpers without a loader', ()
     expect(result.stdout.trim()).toBe('chat-foundation:ok');
 });
 
-test('Node imports the real chats and canonical query callers with their TypeScript dependencies', () => {
+test('Node imports the real chats and characters callers and canonical query TypeScript without a loader', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-chat-backup-native-'));
     try {
         const config = path.join(root, 'config.yaml');
@@ -69,13 +70,16 @@ test('Node imports the real chats and canonical query callers with their TypeScr
             setConfigFilePath(process.argv[2]);
             const { router } = await import(process.argv[3]);
             const { searchCanonicalChatPayload } = await import(process.argv[4]);
+            const { router: characterRouter } = await import(process.argv[5]);
             assert.deepEqual(await searchCanonicalChatPayload({ query: '42 native', avatarUrl: '' }), []);
             console.log('chats-router:' + typeof router);
+            console.log('characters-router:' + typeof characterRouter);
             console.log('canonical-query:ok');
         `;
-        const result = runNode(source, util, config, chats, queries);
+        const result = runNode(source, util, config, chats, queries, characters);
         expect({ status: result.status, stderr: result.status === 0 ? '' : result.stderr }).toEqual({ status: 0, stderr: '' });
         expect(result.stdout).toContain('chats-router:function');
+        expect(result.stdout).toContain('characters-router:function');
         expect(result.stdout).toContain('canonical-query:ok');
     } finally {
         fs.rmSync(root, { recursive: true, force: true });
