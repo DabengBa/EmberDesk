@@ -151,9 +151,9 @@ describe('reasoning row event ownership', () => {
         const f = fixture();
         const tag = (strings, ...values) => strings.reduce((s, part, i) => s + part + (values[i] ?? ''), '');
         const mock = (path, factory) => jest.unstable_mockModule(path, factory);
-        mock('../public/lib.js', () => ({ moment: {} }));
-        mock('../public/script.js', () => ({ chat: f.chat, main_api: '', messageFormatting: jest.fn(), saveChatDebounced: jest.fn(), substituteParams: x => x, updateMessageBlock: jest.fn() }));
-        mock('../public/scripts/message-shell-context.js', () => ({ requireMessageShellContext: () => ({ getChatMessageCommands: () => f.commands }) }));
+        mock('../public/lib.js', () => ({ moment: {}, DOMPurify: { sanitize: jest.fn() } }));
+        mock('../public/scripts/message-service.js', () => ({ messageFormatting: jest.fn(), updateMessageBlock: jest.fn() }));
+        mock('../public/scripts/message-shell-context.js', () => ({ requireMessageShellContext: () => ({ state: { get chat() { return f.chat; }, get main_api() { return ''; } }, saveChatDebounced: jest.fn(), substituteParams: x => x, getChatMessageCommands: () => f.commands }) }));
         mock('../public/scripts/events.js', () => ({ eventSource: { on: jest.fn() }, event_types: {} }));
         mock('../public/scripts/extensions/regex/engine.js', () => ({ getRegexedString: x => x, regex_placement: {} }));
         mock('../public/scripts/i18n.js', () => ({ getCurrentLocale: jest.fn(), t: tag, translate: x => x }));

@@ -1,6 +1,7 @@
 import { describe, expect, jest, test } from '@jest/globals';
-import { readFileSync } from 'node:fs';
+
 import { loadTsModule } from './helpers/load-ts-module.mjs';
+import { createGenerationCallerService } from '../public/scripts/generation-caller-service.js';
 
 async function importFreshCore() {
     return import(`../public/scripts/chat-regenerate.js?cacheBust=${Date.now()}-${Math.random()}`);
@@ -31,12 +32,18 @@ async function restoreFixture() {
     };
     const lifecycle = createGenerationLifecycleService(env.getCurrentGenerationContextIdentity);
     env.getGenerationLifecycleService = () => lifecycle;
-    const source = readFileSync(new URL('../public/script.js', import.meta.url), 'utf8');
-    const start = source.indexOf('export function removeRegenerateTurnTail(');
-    const end = source.indexOf('\nlet regenerateRequestInFlight = false;', start);
-    if (start < 0 || end < 0) throw new Error('Regenerate implementation not found');
-    const functions = source.slice(start, end).replaceAll('export function ', 'function ').replaceAll('export async function ', 'async function ');
-    const entry = new Function('env', `with (env) { ${functions}; return { removeRegenerateTurnTail, restoreRegenerateTurnTail }; }`)(env);
+    const entry = createGenerationCallerService({
+        getChat: () => env.chat, getChatId: () => env.chatId, getNarratorType: () => env.system_message_types.NARRATOR,
+        getLifecycle: () => env.getGenerationLifecycleService(), getAbortController: () => env.abortController,
+        isReactOwner: () => env.isReactMainChatOwner(), clearMessageUi: () => {},
+        clearVisibleStart: id => env.mainChatVisibleStartIndices.delete(id),
+        getEditId: () => env.this_edit_mes_id, clearEditId: () => { env.this_edit_mes_id = undefined; },
+        markTainted: () => { env.chat_metadata.tainted = true; }, saveDebounced: predicate => env.saveChatDebounced(predicate),
+        emitEvent: (...args) => env.eventSource.emit(...args), events: env.event_types,
+        redisplay: (...args) => env.redisplayChat(...args), saveConditional: (...args) => env.saveChatConditional(...args),
+        scrollToBottom: (...args) => env.scrollChatToBottom(...args),
+    });
+    Object.defineProperty(env, 'pendingRegenerateRestore', { configurable: true, get: () => entry.pendingRegenerateRestore });
     return { env, ...entry };
 }
 
@@ -100,8 +107,11 @@ test('regenerate tail save carries live chat identity without treating stop as a
 
 test('a user-ended turn remains a synchronous no-op before runtime installation', async () => {
     const f = await restoreFixture();
+    f.removeRegenerateTurnTail();
+    expect(f.env.pendingRegenerateRestore).not.toBeNull();
+    f.env.saveChatDebounced.mockClear();
     f.env.chat = [userMessage()];
-    f.env.pendingRegenerateRestore = { old: true };
+
     f.env.getGenerationLifecycleService = () => { throw new Error('runtime not installed'); };
     expect(f.removeRegenerateTurnTail()).toBeNull();
     expect(f.env.pendingRegenerateRestore).toBeNull();

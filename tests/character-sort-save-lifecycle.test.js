@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import { createSortSaveGuard } from '../public/scripts/character-sort-save-guard.js';
 import { createRuntimeSettingsConflictGuard } from '../public/scripts/react-runtime-provider.js';
+import { createRuntimeSettingsPersistence } from '../public/scripts/runtime-settings-persistence.js';
 
 function setup() {
     const source = readFileSync(new URL('../public/script.js', import.meta.url), 'utf8');
@@ -13,20 +14,23 @@ function setup() {
     const requests = [];
     const power_user = { sort_field: 'name', sort_order: 'asc', sort_rule: 'string' };
     const context = {
-        settingsReady: true, TempResponseLength: { isCustomized: () => false }, currentVersion: '1', settings: {},
+        settingsReady: true, generationCaller: { TempResponseLength: { isCustomized: () => false } }, currentVersion: '1', settings: {},
         resolvePersistedCurrentVersion: () => '1', accountStorage: { getState: () => ({}) },
         active_character: null, amount_gen: 1, max_context: 1, main_api: 'x', getWorldInfoSettings: () => ({}),
         power_user, feature_settings: {}, tags: [], tag_map: {}, oai_settings: {}, background_settings: {}, settingsDocumentRevision: 1,
-        beginSettingsSaveSnapshot: revision => guard.begin(revision), finishSettingsSaveSnapshot: (s, r) => guard.finish(s, r),
+        beginSettingsSaveSnapshot: revision => guard.begin(revision), finishSettingsSaveSnapshot: jest.fn((s, r) => guard.finish(s, r)),
         compressRequest: async request => request, getRequestHeaders: () => ({}),
         fetch: (_, request) => new Promise(resolve => requests.push({ request, resolve })),
         eventSource: { emit: async () => {} }, event_types: { SETTINGS_UPDATED: 'updated' },
         toastr: { error: jest.fn(), warning: jest.fn() }, t: strings => strings[0], console: { error: jest.fn(), warn: jest.fn() },
         runtimeSettingsConflict: createRuntimeSettingsConflictGuard(), window: { dispatchEvent: jest.fn() }, Event: class Event {},
     };
-    const helperStart = source.indexOf('function buildRuntimeSettingsPayload()');
-    context.buildRuntimeSettingsPayload = runInNewContext(`(${source.slice(helperStart, start)})`, context);
-    const saveSettings = runInNewContext(`(${source.slice(start, end).replace('export ', '')})`, context);
+    const helperStart = source.indexOf('const runtimeSettingsPersistence = createRuntimeSettingsPersistence({');
+    context.createRuntimeSettingsPersistence = createRuntimeSettingsPersistence;
+    const { saveSettings, buildRuntimeSettingsPayload } = runInNewContext(
+        `(() => { ${source.slice(helperStart, end).replace('export async function', 'async function')}; return { saveSettings, buildRuntimeSettingsPayload }; })()`, context,
+    );
+    context.buildRuntimeSettingsPayload = buildRuntimeSettingsPayload;
     return { saveSettings, guard, listeners, requests, power_user, context };
 }
 
@@ -77,7 +81,7 @@ test('confirmed save releases the warning while SETTINGS_UPDATED is still pendin
     const { saveSettings, guard, listeners, requests, context } = setup();
     let finishEvent;
     context.eventSource.emit = jest.fn(() => new Promise(resolve => { finishEvent = resolve; }));
-    const finishSnapshot = jest.spyOn(context, 'finishSettingsSaveSnapshot');
+    const finishSnapshot = context.finishSettingsSaveSnapshot;
     guard.changed();
     const save = saveSettings();
     await new Promise(setImmediate);
@@ -96,7 +100,7 @@ test('confirmed save releases the warning while SETTINGS_UPDATED is still pendin
 test('a rejected SETTINGS_UPDATED callback does not undo a confirmed save or finish twice', async () => {
     const { saveSettings, guard, listeners, requests, context } = setup();
     context.eventSource.emit = jest.fn(async () => { throw new Error('listener failed'); });
-    const finishSnapshot = jest.spyOn(context, 'finishSettingsSaveSnapshot');
+    const finishSnapshot = context.finishSettingsSaveSnapshot;
     guard.changed();
     const save = saveSettings();
     await new Promise(setImmediate);

@@ -76,7 +76,7 @@ async function fixture() {
     const shellEnv = {
         createRuntimeSettingsPersistence, runtimeSettingsConflict: owner, installPresetManagerContext: manager.installPresetManagerContext,
         fetch, eventSource, event_types, oai_settings: settings, main_api: 'openai', characters: [], this_chid: 0,
-        saveSettingsDebounced: jest.fn(), TempResponseLength: { isCustomized: () => false, restore() {} },
+        saveSettingsDebounced: jest.fn(), generationCaller: { TempResponseLength: { isCustomized: () => false, restore() {} } },
         currentVersion: '1', deferredVersionTask: { ensure: async () => {} }, resolvePersistedCurrentVersion: () => '1',
         accountStorage: { getState: () => ({}) }, active_character: '', amount_gen: 80, max_context: 2048,
         getWorldInfoSettings: () => ({}), power_user: {}, feature_settings: {}, tags: [], tag_map: {}, background_settings: {},

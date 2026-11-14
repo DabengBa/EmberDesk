@@ -1,6 +1,7 @@
 import { test, expect } from '@jest/globals';
 import { readFile } from 'node:fs/promises';
 import { loadTsModule } from './helpers/load-ts-module.mjs';
+import { createGenerationCallerService } from '../public/scripts/generation-caller-service.js';
 
 const { createGenerationLifecycleService } = await loadTsModule('app/lib/generation/attempt-executor.ts');
 const lifecycle = createGenerationLifecycleService(() => ({}));
@@ -93,17 +94,14 @@ test('a closing round without a current step still belongs to its pipeline run',
 });
 
 test('raw quiet generation snapshots its conversation before async prompt listeners', async () => {
-    const shellSource = await readFile(new URL('../public/script.js', import.meta.url), 'utf8');
-    const start = shellSource.indexOf('export async function generateRawData(');
-    const end = shellSource.indexOf('\n}\n', start) + 2;
     let chatId = 'chat-a';
     let sentOptions;
-    const raw = new Function('main_api', 'getCurrentChatId', 'name2', 'createRawPrompt', 'eventSource', 'event_types', 'TempResponseLength', 'sendOpenAIRequest',
-        `return (${shellSource.slice(start, end).replace('export ', '')});`)(
-        'openai', () => chatId, 'Alice', value => value,
-        { on() {}, removeListener() {}, async emit() { chatId = 'chat-b'; } }, {},
-        { setupEventHook: () => () => {} }, async (_type, _data, _signal, options) => { sentOptions = options; return {}; },
-    );
-    await raw({ prompt: [] });
+    const service = createGenerationCallerService({
+        events: {}, getMainApi: () => 'openai', getChatId: () => chatId, getCharacterName: () => 'Alice',
+        createRawPrompt: value => value, onEvent() {}, onceEvent() {}, removeEventListener() {},
+        async emitEvent() { chatId = 'chat-b'; },
+        async sendOpenAIRequest(_type, _data, _signal, options) { sentOptions = options; return {}; },
+    });
+    await service.generateRawData({ prompt: [] });
     expect(sentOptions.trace).toEqual({ type: 'quiet', chatId: 'chat-a', charName: 'Alice' });
 });

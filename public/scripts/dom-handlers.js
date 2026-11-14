@@ -5,6 +5,7 @@ import { eventSource, event_types } from './events.js';
 import { requireDomHandlersShellContext } from './dom-handlers-shell-context.js';
 import { renameComposerDraftContext, setComposerDraftContext, requestComposerFocus } from './main-chat-composer-service.js';
 import { installWorkspaceInteractionCommands } from './workspace-interaction-commands.js';
+import { transitionOpacity } from './chat-ui-motion.js';
 
 function shell() {
     return requireDomHandlersShellContext();
@@ -323,12 +324,13 @@ export async function bindLegacyShellHandlers() {
 
     $('#character_cross').on('click', function () {
         state.is_advanced_char_open = false;
-        $('#character_popup').transition({
+        const popup = document.getElementById('character_popup');
+        transitionOpacity(popup, {
             opacity: 0,
             duration: state.animation_duration,
             easing: state.animation_easing,
+            complete() { popup.style.display = 'none'; },
         });
-        setTimeout(function () { $('#character_popup').css('display', 'none'); }, state.animation_duration);
     });
 
     $('#character_popup_ok').on('click', function () {
@@ -341,17 +343,17 @@ export async function bindLegacyShellHandlers() {
         if (globalThis.__emberDeskDialoguePresentation) {
             globalThis.__emberDeskDialoguePresentation.close('confirm');
         } else {
-            $('#shadow_popup').transition({
+            transitionOpacity(document.getElementById('shadow_popup'), {
                 opacity: 0,
                 duration: state.animation_duration,
                 easing: state.animation_easing,
+                complete() {
+                    if (state.dialogueCloseStop) return;
+                    $('#shadow_popup').css('display', 'none');
+                    $('#dialogue_popup').removeClass('large_dialogue_popup');
+                    $('#dialogue_popup').removeClass('wide_dialogue_popup');
+                },
             });
-            setTimeout(function () {
-                if (state.dialogueCloseStop) return;
-                $('#shadow_popup').css('display', 'none');
-                $('#dialogue_popup').removeClass('large_dialogue_popup');
-                $('#dialogue_popup').removeClass('wide_dialogue_popup');
-            }, state.animation_duration);
         }
 
         const controller = state.dialogueController;
@@ -369,16 +371,16 @@ export async function bindLegacyShellHandlers() {
         if (globalThis.__emberDeskDialoguePresentation) {
             globalThis.__emberDeskDialoguePresentation.close('cancel');
         } else {
-            $('#shadow_popup').transition({
+            transitionOpacity(document.getElementById('shadow_popup'), {
                 opacity: 0,
                 duration: state.animation_duration,
                 easing: state.animation_easing,
+                complete() {
+                    if (state.dialogueCloseStop) return;
+                    $('#shadow_popup').css('display', 'none');
+                    $('#dialogue_popup').removeClass('large_dialogue_popup');
+                },
             });
-            setTimeout(function () {
-                if (state.dialogueCloseStop) return;
-                $('#shadow_popup').css('display', 'none');
-                $('#dialogue_popup').removeClass('large_dialogue_popup');
-            }, state.animation_duration);
         }
 
         state.popup_type = '';

@@ -104,7 +104,7 @@ function extract(path, start, end, context) {
 function settingsSetup() {
     const requests = [];
     const context = {
-        settingsReady: true, TempResponseLength: { isCustomized: () => false }, currentVersion: '1', settings: {},
+        settingsReady: true, generationCaller: { TempResponseLength: { isCustomized: () => false } }, currentVersion: '1', settings: {},
         resolvePersistedCurrentVersion: () => '1', accountStorage: { getState: () => ({}) }, active_character: null,
         amount_gen: 1, max_context: 1, main_api: 'x', getWorldInfoSettings: () => ({}), power_user: {},
         feature_settings: {}, tags: [], tag_map: {}, oai_settings: {}, background_settings: {}, settingsDocumentRevision: 1,
@@ -159,7 +159,7 @@ test('queued settings and temporary override never report strict success', async
     await expect(s.save(0, { strict: true })).rejects.toThrow('queued');
     await expect(s.save()).resolves.toBeUndefined();
     s.context.settingsReady = true;
-    s.context.TempResponseLength.isCustomized = () => true;
+    s.context.generationCaller.TempResponseLength.isCustomized = () => true;
     await expect(s.save(0, { strict: true })).rejects.toThrow('queued');
     expect(s.requests).toHaveLength(0);
     expect(s.context.saveSettingsDebounced).toHaveBeenCalledTimes(3);

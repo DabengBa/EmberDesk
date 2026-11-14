@@ -522,15 +522,18 @@ describe('React workspace panels bridge helpers', () => {
 
     test('routes quiet/background requests through the generation service without owner markers', () => {
         const scriptSource = read('public/script.js');
+        const callerSource = read('public/scripts/generation-caller-service.js');
         const generationOwner = read('app/lib/generation/shared-state.ts');
         const workspacePanelSource = read('app/workspace-panels.tsx');
 
-        expect(scriptSource).toContain('createGenerationCommand({');
-        expect(scriptSource).toContain('createQuietGenerationLifecycleContract');
+        expect(scriptSource).toContain('createCommand: (...args) => createGenerationCommand(...args)');
+        expect(scriptSource).toContain('createQuietContract: (...args) => createQuietGenerationLifecycleContract(...args)');
         expect(scriptSource).toContain('function getMainChatQuietTransportStore()');
         expect(scriptSource).toContain('function getMainChatQuietTransportBridgeState()');
-        expect(scriptSource).toContain('return runQuietGeneration(');
-        expect(scriptSource).toContain('remember: rememberMainChatQuietTransportSnapshot');
+        expect(scriptSource).toContain('generationCaller.generateQuietPrompt(...arguments)');
+        expect(scriptSource).toContain('rememberQuiet: (...args) => rememberMainChatQuietTransportSnapshot(...args)');
+        expect(callerSource).toContain('return runQuietGeneration(');
+        expect(callerSource).toContain('remember: ports.rememberQuiet');
         expect(generationOwner).toContain('phase: \'running\'');
         expect(generationOwner).toContain('phase: \'completed\'');
         expect(generationOwner).toContain('phase: ports.isStopped(error) ? \'stopped\' : \'error\'');

@@ -36,6 +36,7 @@ import { Popup } from './popup.js';
 import { accountStorage } from './util/AccountStorage.js';
 import { getCurrentUserHandle } from './user.js';
 import { getComposerValue, setComposerValue, subscribeComposerValue } from './main-chat-composer-service.js';
+import { scrollChatTo } from './chat-ui-motion.js';
 
 // Populated in initRossMods: drawer/panel markup is React-mounted after module eval.
 // The settings drawer opener is injected by script.js — importing it here would
@@ -562,20 +563,18 @@ export function initRossMods({ openWorkspaceShellSettings = null, drawerService 
         //ctrl+shift+up to scroll to context line
         if (event.shiftKey && event.ctrlKey && event.key == 'ArrowUp') {
             event.preventDefault();
-            let contextLine = $('.lastInContext');
-            if (contextLine.length !== 0) {
-                $('#chat').animate({
-                    scrollTop: contextLine.offset().top - $('#chat').offset().top + $('#chat').scrollTop(),
-                }, 300);
+            const contextLine = document.querySelector('.lastInContext');
+            const chat = document.getElementById('chat');
+            if (contextLine) {
+                if (chat) scrollChatTo(chat, contextLine.getBoundingClientRect().top - chat.getBoundingClientRect().top + chat.scrollTop);
             } else { toastr.warning('Context line not found, send a message first!'); }
             return;
         }
         //ctrl+shift+down to scroll to bottom of chat
         if (event.shiftKey && event.ctrlKey && event.key == 'ArrowDown') {
             event.preventDefault();
-            $('#chat').animate({
-                scrollTop: $('#chat').prop('scrollHeight'),
-            }, 300);
+            const chat = document.getElementById('chat');
+            if (chat) scrollChatTo(chat, chat.scrollHeight);
             return;
         }
 

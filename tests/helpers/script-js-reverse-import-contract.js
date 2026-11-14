@@ -37,7 +37,6 @@ export const FIRST_PARTY_SCRIPT_JS_IMPORT_CONTRACT = Object.freeze([
 
     contractEntry('power-user.js', '../script.js', ['ANIMATION_DURATION_DEFAULT', 'chat', 'entitiesFilter', 'extension_prompt_types', 'getFirstDisplayedMessageId', 'messageFormatting', 'printCharactersDebounced', 'reloadMarkdownProcessor', 'saveSettingsDebounced', 'scrollChatToBottom', 'setAnimationDuration', 'substituteParams']),
 
-    contractEntry('reasoning.js', '../script.js', ['chat', 'main_api', 'messageFormatting', 'saveChatDebounced', 'substituteParams', 'updateMessageBlock']),
     contractEntry('RossAscends-mods.js', '../script.js', ['buildAvatarList', 'getEntitiesList', 'is_send_press', 'main_api', 'max_context', 'menu_type', 'online_status', 'openWorkspaceChildSlotHost', 'openWorkspaceShellPromptManager', 'openWorkspaceShellWorldInfo', 'saveSettingsDebounced', 'setActiveCharacter', 'substituteParams']),
     contractEntry('samplerSelect.js', '../script.js', ['main_api', 'saveSettingsDebounced']),
 

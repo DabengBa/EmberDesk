@@ -55,7 +55,9 @@ Listener audit for this path: the reply-pipeline and generation-type macro start
 - `getGenerationSuccessFinalization()` describes successful finalization state
 - `hasFallbackProviderForGeneration()` delegates fallback readiness to `hasFallbackProviderSettings()`
 
-`public/script.js` keeps compatibility entry points such as `Generate()`, which creates a request envelope and delegates to the service-owned attempt loop. React composer and message actions dispatch visible commands directly; quiet, background, dry-run and nested callers reach the same command/lifecycle boundary. Slash-prefixed input is ordinary message text. The React composer calls `stopGeneration()` from its stop button. Regenerate preserves its assistant-turn baseline, while failed intermediate attempts clear the attempt row before retrying. Continue and swipe are retired from the current command surface.
+`public/script.js` keeps thin compatibility entry points backed by one `createGenerationCallerService(ports)` instance from `public/scripts/generation-caller-service.js`. That caller owns request-envelope admission, quiet/raw orchestration, temporary response length and its event cleanup, regenerate admission/restore state, and synchronous stop. Ports read current chat, API and abort state rather than capturing a stale session. The caller still delegates visible execution to the same service-owned attempt loop and raw requests to the existing provider transport; it is not another executor.
+
+React composer and message actions dispatch visible commands directly; quiet, background, dry-run and nested callers reach the same command/lifecycle boundary. Slash-prefixed input is ordinary message text. The React composer calls the same synchronous `stopGeneration()` compatibility entry from its stop button, including before the workspace bundle finishes loading. Regenerate preserves its assistant-turn baseline, while failed intermediate attempts clear the attempt row before retrying. Continue and swipe are retired from the current command surface.
 
 ### Composer input ownership
 
