@@ -68,6 +68,7 @@ jest.unstable_mockModule('../public/scripts/feature-settings.js', () => ({ featu
 jest.unstable_mockModule('../public/scripts/tool-bindings.js', () => ({ syncPipelineToolBindings: jest.fn() }));
 const openai = await import('../public/scripts/openai.js');
 const scriptPorts = await import('../public/script.js');
+openai.installOpenAIContext(scriptPorts);
 const initialChatMemoryEnabled = openai.oai_settings.chat_memory_enabled;
 const runtime = await import('../public/scripts/reply-pipeline.js');
 const core = await import('../public/scripts/reply-pipeline-core.js');

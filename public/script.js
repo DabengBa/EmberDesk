@@ -96,6 +96,7 @@ import {
     getOpenAIModelList,
     isOpenAIPresetDirty,
     initOpenAI,
+    installOpenAIContext,
     connectProviderConnection,
     testProviderConnection,
     installOpenAIPresetService,
@@ -218,6 +219,7 @@ import { appendFileContent, hasPendingFileAttachment, populateFileAttachment, de
 import {
     getPresetManager,
     initPresetManager,
+    installPresetManagerContext,
 } from './scripts/preset-manager.js';
 import { getLastMessageId, initMacros } from './scripts/macros.js';
 import { getCurrentUserHandle, setUserControls } from './scripts/user.js';
@@ -4507,7 +4509,31 @@ async function bootstrapWorkspace() {
         globalThis.__emberDeskDialogueController = dialogueController;
         installChatRecovery(workspace);
 
-        installPromptManagerDomain(workspace.createPromptManagerDomain);
+        installOpenAIContext({
+            get abortStatusCheck() { return abortStatusCheck; },
+            get main_api() { return main_api; },
+            get name1() { return name1; },
+            get name2() { return name2; },
+            get extension_prompt_roles() { return extension_prompt_roles; },
+            get extension_prompt_types() { return extension_prompt_types; },
+            get system_message_types() { return system_message_types; },
+            getExtensionPrompt: (...args) => getExtensionPrompt(...args),
+            getExtensionPromptMaxDepth: (...args) => getExtensionPromptMaxDepth(...args),
+            getMediaDisplay: (...args) => getMediaDisplay(...args),
+            getMediaIndex: (...args) => getMediaIndex(...args),
+            displayOnlineStatus: (...args) => displayOnlineStatus(...args),
+            saveSettingsDebounced: (...args) => saveSettingsDebounced(...args),
+            setOnlineStatus: (...args) => setOnlineStatus(...args),
+            substituteParams: (...args) => substituteParams(...args),
+            withGeneratingModel: (...args) => withGeneratingModel(...args),
+        });
+        installPresetManagerContext({
+            get main_api() { return main_api; },
+            get characters() { return characters; },
+            get this_chid() { return this_chid; },
+            saveSettings: (...args) => saveSettings(...args),
+        });
+        installPromptManagerDomain(workspace.createPromptManagerDomain, (...args) => substituteParams(...args));
         installToolBindingsServiceFactory(workspace.createToolBindingsService);
         registerPromptManagerMigration();
         initDomHandlers();
