@@ -192,7 +192,7 @@ describe('React workspace panels bridge helpers', () => {
         expect(workspacePanelSource).toContain('panelKind?: WorkspaceDockPanelKind;');
         expect(workspacePanelSource).toContain('function useWorkspacePanelDockSnapshot()');
         expect(workspacePanelSource).toContain('function normalizeWorkspacePanelDockStatus(');
-        expect(workspacePanelSource).toContain('function getWorkspacePanelVisibleStatusLabel(');
+        expect(read('app/components/panels/WorkspacePanelShell.tsx')).toContain('function getWorkspacePanelVisibleStatusLabel(');
         expect(workspacePanelSource).toContain('const dockSnapshot = useWorkspacePanelDockSnapshot();');
         expect(workspacePanelSource).toContain('const panelDispatchSequenceRef = useRef(0);');
         expect(workspacePanelSource).toContain('const dispatchSequence = panelDispatchSequenceRef.current + 1;');
@@ -363,7 +363,7 @@ describe('React workspace panels bridge helpers', () => {
     });
 
     test('ships React authoring form fields and legacy write-through action bridge', () => {
-        const workspacePanelSource = read('app/workspace-panels.tsx');
+        const workspacePanelSource = read('app/components/authoring/AuthoringWorkspacePanel.tsx');
         const scriptSource = read('public/script.js');
         const workspaceCommandsSource = read('app/compat/workspace-commands.ts');
 
@@ -376,7 +376,7 @@ describe('React workspace panels bridge helpers', () => {
         expect(fs.existsSync(path.join(repoRoot, 'public/scripts/group-authoring.js'))).toBe(false);
 
         expect(workspacePanelSource).toContain('createCharacterAuthoringSession');
-        expect(workspacePanelSource).toContain("../public/scripts/character-authoring.js");
+        expect(workspacePanelSource).toContain("../../../public/scripts/character-authoring.js");
         expect(workspacePanelSource).not.toContain('group_chat_feature_removed');
         expect(workspacePanelSource).not.toContain("../public/scripts/group-authoring.js");
         expect(workspacePanelSource).toContain('react-authoring-field');
@@ -482,7 +482,7 @@ describe('React workspace panels bridge helpers', () => {
 
     test('keeps authoring action hierarchy visible through the StyleX module', () => {
         const styleSource = read('app/styles/workspace-panels.styles.ts');
-        const panelSource = read('app/workspace-panels.tsx');
+        const panelSource = read('app/components/authoring/AuthoringWorkspacePanel.tsx');
 
         expect(styleSource).toContain('saveButton');
         expect(styleSource).toContain('footerStatus');
@@ -500,7 +500,7 @@ describe('React workspace panels bridge helpers', () => {
         const lifecycleSource = read('public/scripts/character-lifecycle-service.js');
         const scriptSource = read('public/script.js');
         const domHandlersSource = read('public/scripts/dom-handlers.js');
-        const workspacePanelSource = read('app/workspace-panels.tsx');
+        const workspacePanelSource = read('app/components/authoring/AuthoringWorkspacePanel.tsx');
 
         // React submits the session's dirty draft keys so the service can tell
         // content edits from display-affecting edits.
@@ -755,21 +755,23 @@ describe('React workspace panels bridge helpers', () => {
 
     test('uses a shared Query-backed workspace panel shell with safe legacy slot markers', () => {
         const workspacePanelSource = read('app/workspace-panels.tsx');
+        const shellSource = read('app/components/panels/WorkspacePanelShell.tsx');
 
-        expect(workspacePanelSource).toContain('import { QueryClient, QueryClientProvider, useMutation, useQuery } from \'@tanstack/react-query\';');
+        expect(workspacePanelSource).toContain('import { QueryClient, QueryClientProvider, useQuery } from \'@tanstack/react-query\';');
         expect(workspacePanelSource).toContain('function workspacePanelStateQueryKey(kind: WorkspacePanelKind)');
         expect(workspacePanelSource).toContain('queryKey: workspacePanelStateQueryKey(kind)');
         expect(workspacePanelSource).toContain('queryClient.setQueryData(workspacePanelStateQueryKey(mount.kind), mount.state ?? null);');
-        expect(workspacePanelSource).toContain('function WorkspacePanelShell');
-        expect(workspacePanelSource).toContain('data-react-workspace-panel-shell={kind}');
-        expect(workspacePanelSource).toContain('data-workspace-panel-status={status}');
-        expect(workspacePanelSource).toContain('getWorkspacePanelVisibleStatusLabel(status)');
-        expect(workspacePanelSource).toContain('data-workspace-panel-recovery-state={status}');
-        expect(workspacePanelSource).toContain('data-workspace-panel-recovery-action={action.id}');
-        expect(workspacePanelSource).toContain('data-workspace-panel-diagnostics={kind}');
-        expect(workspacePanelSource).toContain('panelShellStyles.diagnostics');
-        expect(workspacePanelSource).toContain('Diagnostics</summary>');
-        expect(workspacePanelSource).toContain('data-workspace-legacy-slot={slot.id}');
+        expect(workspacePanelSource).toContain('import { WorkspacePanelShell }');
+        expect(shellSource).toContain('function WorkspacePanelShell');
+        expect(shellSource).toContain('data-react-workspace-panel-shell={kind}');
+        expect(shellSource).toContain('data-workspace-panel-status={status}');
+        expect(shellSource).toContain('getWorkspacePanelVisibleStatusLabel(status)');
+        expect(shellSource).toContain('data-workspace-panel-recovery-state={status}');
+        expect(shellSource).toContain('data-workspace-panel-recovery-action={action.id}');
+        expect(shellSource).toContain('data-workspace-panel-diagnostics={kind}');
+        expect(shellSource).toContain('panelShellStyles.diagnostics');
+        expect(shellSource).toContain('Diagnostics</summary>');
+        expect(shellSource).toContain('data-workspace-legacy-slot={slot.id}');
         expect(workspacePanelSource).not.toContain('extensions-settings');
         expect(workspacePanelSource).not.toContain('React workspace panel host');
         expect(workspacePanelSource).not.toContain('is ready for its legacy bridge');
@@ -980,6 +982,7 @@ describe('React workspace panels bridge helpers', () => {
     test('mounts the React main-chat owner directly into #chat', () => {
         const scriptSource = read('public/script.js');
         const workspacePanelSource = read('app/workspace-panels.tsx');
+        const mainChatSource = read('app/components/main-chat/MainChatMessageListWorkspacePanel.tsx');
 
         expect(scriptSource).toContain('function ensureMainChatMessageListReactHost()');
         expect(scriptSource).toContain("const chatContainer = document.getElementById('chat');");
@@ -991,14 +994,18 @@ describe('React workspace panels bridge helpers', () => {
         expect(mainChatHostSource).not.toContain('host.hidden = true;');
         expect(mainChatHostSource).not.toContain("document.createElement('div')");
 
-        expect(workspacePanelSource).toContain('function MainChatMessageListWorkspacePanel');
+        expect(workspacePanelSource).toContain('import { MainChatMessageListWorkspacePanel }');
+        expect(mainChatSource).toContain('function MainChatMessageListWorkspacePanel');
+        expect(mainChatSource).toContain("import { useMainChatHotkeys } from './useMainChatHotkeys';");
+        expect(mainChatSource).toContain('useMainChatHotkeys({ snapshot, commands });');
+        expect(mainChatSource.indexOf('useMainChatHotkeys({ snapshot, commands });')).toBeLessThan(mainChatSource.indexOf('\n    return ('));
         expect(workspacePanelSource).not.toContain('LegacyMainChatMessageListWorkspacePanel');
         expect(workspacePanelSource).not.toContain('MainChatMessageListRestoreController');
-        const mainChatPanelSource = workspacePanelSource.match(
+        const mainChatPanelSource = mainChatSource.match(
             /function MainChatMessageListWorkspacePanel[\s\S]*?\n\}/,
         )?.[0] ?? '';
         expect(mainChatPanelSource).not.toContain('createPortal');
-        expect(workspacePanelSource).toContain('<MainChatMessageRow');
+        expect(mainChatSource).toContain('<MainChatMessageRow');
     });
 
     test('passes only a typed main-chat snapshot into the React store', () => {
@@ -1026,11 +1033,9 @@ describe('React workspace panels bridge helpers', () => {
     });
 
     test('renders compatible message rows from store records without DOM reparenting', () => {
-        const workspacePanelSource = read('app/workspace-panels.tsx');
+        const workspacePanelSource = read('app/components/main-chat/MainChatMessageListWorkspacePanel.tsx');
         const rowSource = read('app/components/main-chat/MainChatMessageRow.tsx');
-        const panelBlock = workspacePanelSource.match(
-            /function MainChatMessageListWorkspacePanel\([\s\S]*?\n\}\n\nfunction renderPanel/,
-        )?.[0] ?? '';
+        const panelBlock = workspacePanelSource;
 
         expect(panelBlock).toContain('mainChatStoreSnapshot.messagesById');
         // Rows key on the stable message uid so array splices cannot remount
@@ -1141,9 +1146,10 @@ describe('React workspace panels bridge helpers', () => {
 
     test('world info keeps internal panel diagnostics out of the user-visible drawer', () => {
         const workspacePanelSource = read('app/workspace-panels.tsx');
+        const shellSource = read('app/components/panels/WorkspacePanelShell.tsx');
 
-        expect(workspacePanelSource).toContain('hideDiagnostics = false');
-        expect(workspacePanelSource).toContain('{!hideDiagnostics && (slots.length > 0 || status !== \'idle\') ? (');
+        expect(shellSource).toContain('hideDiagnostics = false');
+        expect(shellSource).toContain('{!hideDiagnostics && (slots.length > 0 || status !== \'idle\') ? (');
         expect(workspacePanelSource).toContain('hideDiagnostics={true}');
     });
 

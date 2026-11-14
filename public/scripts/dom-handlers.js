@@ -64,7 +64,6 @@ const cancelTtsPlay = (...args) => shell().cancelTtsPlay(...args);
 const chooseBogusFolder = (...args) => shell().chooseBogusFolder(...args);
 const closeCharacterExportPopup = (...args) => shell().closeCharacterExportPopup(...args);
 const closeCurrentChat = (...args) => shell().closeCurrentChat(...args);
-const closeMessageEditor = (...args) => shell().closeMessageEditor(...args);
 const handleWorkspaceDrawerOutsidePointer = target => shell().handleWorkspaceDrawerOutsidePointer(target);
 const copyText = (...args) => shell().copyText(...args);
 const createChatMessageActionsController = (...args) => shell().createChatMessageActionsController(...args);
@@ -1068,10 +1067,10 @@ export async function bindLegacyShellHandlers() {
             if (messageElement.attr('is_user') == 'true' || (messageElement.attr('is_system') == 'true' && !isValidCharacter)) {
                 //handle user and system avatars
                 zoomedAvatarImgElement.attr('src', thumbURL);
-                zoomedAvatarImgElement.attr('data-izoomify-url', thumbURL);
+
             } else if (messageElement.attr('is_user') == 'false') { //handle char avatars
                 zoomedAvatarImgElement.attr('src', avatarSrc);
-                zoomedAvatarImgElement.attr('data-izoomify-url', avatarSrc);
+
             }
             $(`.zoomed_avatar[forChar="${charname}"]`).css('display', 'flex');
 
@@ -1086,20 +1085,6 @@ export async function bindLegacyShellHandlers() {
 
     $(document).on('click', '.open_alternate_greetings', openAlternateGreetings);
     /* $('#set_character_world').on('click', openCharacterWorldPopup); */
-
-    $(document).on('keydown', function (e) {
-        if (e.key === 'Escape' && !e.originalEvent.isComposing) {
-            const isEditVisible = $('#curEditTextarea').is(':visible') || $('.reasoning_edit_textarea').length > 0;
-            if (isEditVisible) {
-                closeMessageEditor('all');
-                requestComposerFocus();
-                return;
-            }
-            if (state.this_edit_mes_id === undefined && $('#mes_stop').is(':visible')) {
-                $('#mes_stop').trigger('click');
-            }
-        }
-    });
 
     $('#char-management-dropdown').on('change', async (e) => {
         const targetElement = /** @type {HTMLSelectElement} */ (e.target);
@@ -1274,13 +1259,13 @@ export async function bindLegacyShellHandlers() {
     // Draft restore runs first in this handler: later CHAT_CHANGED subscribers
     // must not overwrite it with text belonging to the outgoing chat.
     eventSource.on(event_types.CHAT_CHANGED, (chatId) => {
-        setComposerDraftContext(chatId);
+        setComposerDraftContext({ avatarId: state.characters[state.this_chid]?.avatar ?? null, chatId });
         void mountReactWorkspaceShellChromeHost();
         void mountReactMainChatMessageListPanel();
     });
 
-    eventSource.on(event_types.CHAT_RENAMED, ({ oldFileName, newFileName }) => {
-        renameComposerDraftContext(oldFileName, newFileName);
+    eventSource.on(event_types.CHAT_RENAMED, ({ avatarId, oldFileName, newFileName }) => {
+        renameComposerDraftContext(oldFileName, newFileName, avatarId ?? null);
     });
 
     eventSource.on(event_types.CHAT_LOADED, () => {

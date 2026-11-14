@@ -119,11 +119,8 @@ describe('chat workspace structure', () => {
     });
 
     test('lets React own main-chat outer layout without wrapping protected rows', () => {
-        const workspacePanelSource = readRepoFile('app/workspace-panels.tsx');
+        const panelBlock = readRepoFile('app/components/main-chat/MainChatMessageListWorkspacePanel.tsx');
         const rowSource = readRepoFile('app/components/main-chat/MainChatMessageRow.tsx');
-        const panelBlock = workspacePanelSource.match(
-            /function MainChatMessageListWorkspacePanel\([\s\S]*?\n\}\n\nfunction renderPanel/,
-        )?.[0] ?? '';
 
         expect(panelBlock).toContain('<MainChatMessageRow');
         expect(panelBlock).not.toContain('createPortal');
@@ -319,7 +316,7 @@ describe('chat workspace structure', () => {
     });
 
     test('keeps workspace message projections stable for memoized summary work', () => {
-        const source = readRepoFile('app/workspace-panels.tsx');
+        const source = readRepoFile('app/components/main-chat/MainChatMessageListWorkspacePanel.tsx');
         expect(source).toContain('const EMPTY_TURN_SUMMARIES: NonNullable<MainChatSnapshot[\'turnSummaries\']> = [];');
         expect(source).toMatch(/const messages = useMemo\(\(\) =>[\s\S]*?\[messageIds, mainChatStoreSnapshot\]\);/);
         expect(source).toContain('const turnSummaries = mainChatStoreSnapshot.turnSummaries ?? EMPTY_TURN_SUMMARIES;');
@@ -327,7 +324,7 @@ describe('chat workspace structure', () => {
 
     test('keeps React message rows compatible with last-message and reasoning/edit selectors', () => {
         const rowSource = readRepoFile('app/components/main-chat/MainChatMessageRow.tsx');
-        const panelSource = readRepoFile('app/workspace-panels.tsx');
+        const panelSource = readRepoFile('app/components/main-chat/MainChatMessageListWorkspacePanel.tsx');
 
         expect(rowSource).toContain('isLast?: boolean;');
         expect(rowSource).toContain("...(isLast ? ['last_mes'] : [])");

@@ -54,13 +54,13 @@ export function createRegexPresetController({
 
     async function applyPresetList({ presetList, targetList, saveFunction }) {
         if (!Array.isArray(targetList) || !Array.isArray(presetList)) return;
-        targetList.forEach(script => { script.disabled = !presetList.some(p => p.id === script.id); });
-        targetList.sort((a, b) => {
+        const next = targetList.map(script => ({ ...script, disabled: !presetList.some(p => p.id === script.id) }));
+        next.sort((a, b) => {
             const aIndex = presetList.findIndex(p => p.id === a.id);
             const bIndex = presetList.findIndex(p => p.id === b.id);
-            return aIndex - bIndex || targetList.indexOf(a) - targetList.indexOf(b);
+            return aIndex - bIndex;
         });
-        await saveFunction(targetList);
+        await saveFunction(next);
     }
 
     async function applyPreset(presetId) {

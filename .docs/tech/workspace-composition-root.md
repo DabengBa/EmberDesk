@@ -1,5 +1,5 @@
 ---
-description: "public/script.js is the browser workspace's composition root and public compatibility entry. It currently assembles the legacy workspace, installs extracted browser contracts, preserves approved /script.js exports, and invokes the..."
+description: "Workspace entry wiring, extracted domain owners, React popup runtime, and retained browser compatibility boundaries."
 kind: technical
 topic: workspace-composition-root
 ---
@@ -9,6 +9,20 @@ topic: workspace-composition-root
 ## Module Responsibility
 
 `public/script.js` is the browser workspace's composition root and public compatibility entry. It currently assembles the legacy workspace, installs extracted browser contracts, preserves approved `/script.js` exports, and invokes the workspace bootstrap. It is not yet an assembly-only file: domain state, DOM handlers, chat/generation behavior, and React bridge coordination remain in the file until separately verified extraction waves move their owners.
+
+The frontend migration gap slice moves the following responsibilities to their domain owners. The roots keep explicit wiring and stable exports; no domain imports either root to use these extracted capabilities.
+
+| Responsibility | Runtime owner | Entry wiring |
+| --- | --- | --- |
+| User message construction, attachments, guarded insertion and save/events | `public/scripts/user-message-service.js` | `sendMessageAsUser()` delegates through a narrow message port |
+| Runtime settings payload, conflict/retry and strict save behavior | `public/scripts/runtime-settings-persistence.js`, using the existing settings write owner | `saveSettings()` and payload exports delegate; existing debounce and revision state are retained |
+| World Info search, sort, global activation and scan-depth commands | `public/scripts/world-info-workbench-service.js` | `public/scripts/world-info.js` forwards these commands |
+| Character Authoring and text replacement | `app/components/authoring/AuthoringWorkspacePanel.tsx`, `CharacterAuthoringTextReplaceDialog.tsx` | `app/workspace-panels.tsx` mounts the domain components |
+| Main-chat list and shortcuts | `app/components/main-chat/MainChatMessageListWorkspacePanel.tsx`, `useMainChatHotkeys.ts` | One stable list owner subscribes to the existing store, including an empty chat |
+| Panel shell layout | `app/components/panels/WorkspacePanelShell.tsx` | Workspace entry supplies each panel's content |
+| Popup lifecycle and cropping | `app/components/local-dialogs/PopupRuntime.tsx` | Cached workspace bundle exports `createPopupRuntime`; bootstrap installs it into the thin JS `Popup` bridge |
+
+These extractions do not claim that all historical `script.js` domain code has been removed. Existing character, formatting, generation integration and compatibility responsibilities remain visible in that entry; this slice does not move the whole file into a replacement facade.
 
 The first extracted contract modules are:
 
@@ -24,7 +38,7 @@ The first extracted contract modules are:
 - The current static snapshot contains 70 exact first-party reverse-import entries. This is a frozen legacy compatibility snapshot, not a target architecture; future waves may only remove entries or narrow their imported names.
 - `eventSource` and `event_types` are imported directly from `public/scripts/events.js`. `getRequestHeaders()` is imported directly from `public/scripts/request-context.js`.
 - A first-party module must not import `eventSource`, `event_types`, or `getRequestHeaders` from `public/script.js`.
-- Third-party extensions may continue to use the public `/script.js` path until an equivalent replacement contract is proven. This exception does not permit new first-party reverse dependencies.
+- The public `/script.js` path remains an internal first-party compatibility boundary. There is no third-party extension runtime; this boundary does not permit new first-party reverse dependencies.
 - When an owner moves out of `script.js`, the old implementation is deleted in the same wave. A compatibility re-export or thin adapter is allowed only when the public path remains part of the approved contract.
 - Rollback is a previous application version or a reverted change. The current version must not retain a second runtime owner as an in-process fallback.
 
@@ -45,7 +59,7 @@ During `public/script.js` evaluation:
 `bootstrapWorkspace()` currently performs the following ordered stages:
 
 1. Fetch the CSRF token. A failure shows a persistent error and rejects initialization before the main bootstrap stages continue.
-2. Create the splash overlay and initialization loader.
+2. Load the cached workspace bundle and install its React popup factory, then create the splash overlay and initialization loader. This preparation precedes the first loader popup so synchronous dialog references are available to existing callers.
 3. Register DOM/browser compatibility helpers, library shims, Markdown/DOMPurify patches, and browser fixes.
 4. Initialize secrets, locale, core chat and OpenAI modules, presets, and system messages.
 5. Load settings and apply post-settings UI bindings.
@@ -63,6 +77,25 @@ During `public/script.js` evaluation:
 `request-context.js` preserves the existing request shape: JSON requests receive `Content-Type: application/json` and the current `X-CSRF-Token`; callers may omit the content type for requests such as `pingServer()`. `loadCsrfToken()` rejects its caller on fetch or response failure, so the bootstrap owner decides how initialization fails.
 
 `public-api.js` has no module-evaluation side effect. The root calls `installPublicBrowserApi()` explicitly, which keeps public-global installation testable and prevents an imported helper from unexpectedly mutating the browser global.
+
+### React popup ownership and retained resources
+
+`public/scripts/popup.js` retains the public constructor, synchronous `dlg`/content/button references, result helpers and utilities. It forwards construction and lifecycle to the installed React factory and fails explicitly if that factory is missing. React creates the native dialog and owns open/close/cancel, focus restoration, asynchronous confirmation, custom controls and Cropper effects. HTML, DOM and jQuery content are opaque consumer subtrees; their callers may still mount an existing editor or dropdown inside the React-owned dialog. There is no legacy dialog-controller fallback or hidden popup template.
+
+`flushSync` at construction is intentional: ActionLoader, World Cascade and chat consumers read or modify references before `show()`. Popup preparation occurs after CSRF success without moving settings, locale or application-ready events. The cropper's ready state controls React button props, so changing the native disabled attribute cannot leave React suppressing a click.
+
+| Resource | Disposition and consumer evidence |
+| --- | --- |
+| jQuery cookie and pagination | Removed: no first-party calls remained |
+| dialog-polyfill and jquery-cropper wrapper | Removed: React uses native dialog and the existing native Cropper constructor |
+| touch-punch | Removed: no jQuery UI mouse-widget consumers remain; workspace dragging uses its existing separate implementation |
+| izoomify | Removed with its unused data attributes: no initialization call remained |
+| jQuery and transit | Retained for existing shell, drawer and message-action consumers |
+| jQuery UI | Retained for the exported tag autocomplete compatibility entry and its keyboard integration; this slice does not retire that entry |
+| Select2 | Retained for the character World Info dialog and shared dropdown helpers |
+| Cropper | Retained as the native image-crop implementation used by the React popup |
+
+Focused proof covers actual user-message/settings services and their root delegates, World Info command forwarding, composer identity, Regex persistence failures and popup API forwarding. `tests/frontend-migration-gaps.e2e.js` exercises the real bundle, same-name character drafts through rename, chat shortcuts, nested asynchronous popups, crop controls and the retained Select2 consumer. `tests/local-dialogs.e2e.js` verifies the existing local-dialog owner alongside the compatibility bridge. Browser lanes use isolated data roots and do not reuse a user's server.
 
 ## Static Contract And Proof
 

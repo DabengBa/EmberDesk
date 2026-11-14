@@ -42,9 +42,10 @@ describe('React runtime boundary', () => {
         const stateBlock = workspaceSource.match(
             /interface MainChatMessageListWorkspacePanelState \{[\s\S]*?\n\}/,
         )?.[0] ?? '';
-        const panelBlock = workspaceSource.match(
-            /function MainChatMessageListWorkspacePanel\([\s\S]*?\n\}\n\nfunction /,
-        )?.[0] ?? '';
+        const panelBlock = fs.readFileSync(
+            path.join(repoRoot, 'app', 'components', 'main-chat', 'MainChatMessageListWorkspacePanel.tsx'),
+            'utf8',
+        );
         const bridgeStateBlock = scriptSource.match(
             /function getMainChatMessageListReactBridgeState\(\) \{[\s\S]*?\n\}\n\nfunction getMainChatMessageListReactCommands/,
         )?.[0] ?? '';

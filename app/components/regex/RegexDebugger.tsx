@@ -7,7 +7,7 @@ import type { RegexDebugGroup, RegexDebugResult, RegexDebuggerHandle } from './r
 
 type Props = {
     getGroups?: () => RegexDebugGroup[];
-    reorder?: (key: string, ids: string[]) => Promise<'saved'>;
+    reorder?: (key: string, ids: string[], snapshot?: { target: unknown }) => Promise<'saved'>;
     runForDebug?: (groups: RegexDebugGroup[], input: string, options: { displayMode: 'replace' | 'highlight'; renderMode: 'text' | 'message' }) => RegexDebugResult;
     openEditor?: (type: RegexScriptType, id?: string) => void;
     commands?: { openStepsPopup(html: string): void; openFinalPopup(result: { text: string; html?: string }): void };
@@ -35,7 +35,7 @@ export const RegexDebugger = forwardRef<RegexDebuggerHandle, Props>(function Reg
     async function save() {
         if (!reorder || pending) return;
         setPending(true); setStatus('');
-        try { for (const group of groups) await reorder(group.key, group.rules.map(rule => rule.id)); setStatus(translate('Order saved')); }
+        try { for (const group of groups) await reorder(group.key, group.rules.map(rule => rule.id), group.snapshot); setStatus(translate('Order saved')); }
         catch (error) { setStatus(`${translate('Order not saved')}: ${error instanceof Error ? error.message : String(error)}`); }
         finally { setPending(false); }
     }

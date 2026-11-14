@@ -11,7 +11,7 @@ jest.unstable_mockModule('../public/scripts/message-service.js', () => ({ ensure
 jest.unstable_mockModule('../public/scripts/delete-character-preflight.js', () => ({ runDeleteCharacterClosePreflight: jest.fn() }));
 jest.unstable_mockModule('../public/scripts/chat-ops-shell-context.js', () => ({ requireChatOpsShellContext: () => shell }));
 jest.unstable_mockModule('../public/scripts/main-chat-greetings.js', () => ({ buildGreetingOptions: jest.fn(), canSwitchGreeting: jest.fn(), replaceGreeting: jest.fn() }));
-jest.unstable_mockModule('../public/scripts/main-chat-composer-service.js', () => ({ getComposerSnapshot: () => ({}), requestComposerFocus: jest.fn(), subscribeComposerState: () => () => {} }));
+jest.unstable_mockModule('../public/scripts/main-chat-composer-service.js', () => ({ getComposerSnapshot: () => ({}), renameComposerDraftContext: jest.fn(), requestComposerFocus: jest.fn(), subscribeComposerState: () => () => {} }));
 const { getChat, saveChatConditional, saveChatDebounced } = await import('../public/scripts/chat-ops-service.js');
 
 test('checks session guard after waiting and before save reads the live chat', async () => {

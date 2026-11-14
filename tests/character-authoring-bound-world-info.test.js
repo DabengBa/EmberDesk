@@ -114,7 +114,7 @@ describe('character authoring opens the currently bound World Info book', () => 
     });
 
     test('the bound-world field owns the button and disables it without a valid binding', () => {
-        const panels = readRepoFile('app/workspace-panels.tsx');
+        const panels = readRepoFile('app/components/authoring/AuthoringWorkspacePanel.tsx');
         const fieldStart = panels.indexOf('data-react-authoring-field="characterWorld"');
         expect(fieldStart).toBeGreaterThan(-1);
         const field = panels.slice(fieldStart, fieldStart + 4300);

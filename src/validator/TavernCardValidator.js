@@ -109,7 +109,9 @@ export class TavernCardValidator {
             return false;
         }
 
-        const requiredFields = ['name', 'description', 'scenario', 'first_mes', 'mes_example', 'creator_notes', 'system_prompt', 'post_history_instructions', 'alternate_greetings', 'tags', 'creator', 'character_version', 'extensions'];
+        // Native edits omit retired prompt fields. Extension merges validate
+        // the current card shape without recreating those legacy fields.
+        const requiredFields = ['name', 'description', 'scenario', 'first_mes', 'creator_notes', 'alternate_greetings', 'tags', 'creator', 'character_version', 'extensions'];
         const isAllRequiredFieldsPresent = requiredFields.every(field => {
             if (!Object.hasOwn(data, field)) {
                 this.#lastValidationError = `data.${field}`;

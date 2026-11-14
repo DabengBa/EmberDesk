@@ -5,6 +5,7 @@ import { stripTypeScriptTypes } from 'node:module';
 import { createRegexListBridge } from '../public/scripts/extensions/regex/regex-list-bridge.js';
 import { setValueByPath } from '../public/scripts/util/primitives.js';
 import { createRuntimeSettingsConflictGuard } from '../public/scripts/react-runtime-provider.js';
+import { createRuntimeSettingsPersistence } from '../public/scripts/runtime-settings-persistence.js';
 
 // Unit proof: production functions with controlled browser and persistence boundaries.
 // The lane creates isolated data/tmp roots; the invoking worker owns cleanup. Budget: 10s.
@@ -114,8 +115,14 @@ function settingsSetup() {
         saveSettingsDebounced: jest.fn(),
         runtimeSettingsConflict: createRuntimeSettingsConflictGuard(), window: { dispatchEvent: jest.fn() }, Event: class Event {},
     };
-    context.buildRuntimeSettingsPayload = extract('public/script.js', 'function buildRuntimeSettingsPayload()', 'export async function saveSettings(', context);
-    const save = extract('public/script.js', 'export async function saveSettings(loopCounter = 0)', '\n/**', context);
+    context.createRuntimeSettingsPersistence = createRuntimeSettingsPersistence;
+    const source = readFileSync(new URL('../public/script.js', import.meta.url), 'utf8');
+    const start = source.indexOf('const runtimeSettingsPersistence = createRuntimeSettingsPersistence({');
+    const end = source.indexOf('\n/**', source.indexOf('export async function saveSettings(', start));
+    const { saveSettings: save, buildRuntimeSettingsPayload } = runInNewContext(
+        `(() => { ${source.slice(start, end).replace('export async function', 'async function')}; return { saveSettings, buildRuntimeSettingsPayload }; })()`, context,
+    );
+    context.buildRuntimeSettingsPayload = buildRuntimeSettingsPayload;
     context.saveSettings = save;
     return { save, context, requests };
 }
@@ -233,9 +240,178 @@ test('preset authorization uses captured API and name after selection changes', 
     s.select('two');
     s.context.saveSettingsStrict.mockRejectedValueOnce(new Error('offline'));
     await expect(s.authorizeRegexTarget(target)).rejects.toThrow('offline');
-    expect(s.context.feature_settings.preset_allowed_regex.api).toEqual(['one']);
+    expect(s.context.feature_settings.preset_allowed_regex.api ?? []).toEqual([]);
     await s.authorizeRegexTarget(target);
     expect(s.context.saveSettingsStrict).toHaveBeenCalledTimes(2);
+});
+
+// Focused unit proofs: controlled persistence, no external resources; 10s budget.
+test.each([true, false])('authorization %s rolls back failure without losing unrelated authorization', async allowed => {
+    const s = setup();
+    s.context.feature_settings.character_allowed_regex = allowed ? [] : ['alice.png'];
+    const target = s.captureRegexTarget(1);
+    let reject;
+    s.context.saveSettingsStrict.mockImplementationOnce(() => new Promise((_, fail) => { reject = fail; }));
+    const pending = s.authorizeRegexTarget(target, allowed);
+    s.context.feature_settings.character_allowed_regex.push('bob.png');
+    reject(new Error('offline'));
+    await expect(pending).rejects.toThrow('offline');
+    expect(s.context.feature_settings.character_allowed_regex.includes('alice.png')).toBe(!allowed);
+    expect(s.context.feature_settings.character_allowed_regex).toContain('bob.png');
+});
+
+test('older authorization failure does not undo newer authorization for the same target', async () => {
+    const s = setup();
+    const target = s.captureRegexTarget(1);
+    let reject;
+    s.context.saveSettingsStrict.mockImplementationOnce(() => new Promise((_, fail) => { reject = fail; }));
+    const pending = s.authorizeRegexTarget(target);
+    await s.authorizeRegexTarget(target);
+    reject(new Error('offline'));
+    await expect(pending).rejects.toThrow('offline');
+    expect(s.context.feature_settings.character_allowed_regex).toContain('alice.png');
+});
+
+test.each([1, 2].flatMap(type => [false, true].flatMap(initial => [false, true].map(newerFirst => ({ type, initial, newerFirst })))))
+('two failed authorization changes restore confirmed state: %j', async ({ type, initial, newerFirst }) => {
+    const s = setup();
+    const id = type === 1 ? 'alice.png' : 'one';
+    const list = initial ? [id, 'unrelated'] : ['unrelated'];
+    if (type === 1) s.context.feature_settings.character_allowed_regex = list;
+    else s.context.feature_settings.preset_allowed_regex = { api: list };
+    const target = s.captureRegexTarget(type);
+    const rejects = [];
+    s.context.saveSettingsStrict.mockImplementation(() => new Promise((_, reject) => rejects.push(reject)));
+    const older = s.authorizeRegexTarget(target, !initial).catch(error => error.message);
+    const newer = s.authorizeRegexTarget(target, initial).catch(error => error.message);
+    list.push('added while saving');
+    const first = newerFirst ? 1 : 0;
+    rejects[first](new Error('offline'));
+    await (newerFirst ? newer : older);
+    rejects[1 - first](new Error('offline'));
+    expect(await Promise.all([older, newer])).toEqual(['offline', 'offline']);
+    expect(list.includes(id)).toBe(initial);
+    expect(list).toEqual(expect.arrayContaining(['unrelated', 'added while saving']));
+});
+
+test.each([false, true].flatMap(newerFirst => [false, true].map(olderFails => ({ newerFirst, olderFails }))))
+('overlapping authorization failure preserves the successful change: %j', async ({ newerFirst, olderFails }) => {
+    const s = setup();
+    const target = s.captureRegexTarget(1);
+    const saves = [];
+    s.context.saveSettingsStrict.mockImplementation(() => new Promise((resolve, reject) => saves.push({ resolve, reject })));
+    const pending = [s.authorizeRegexTarget(target, true), s.authorizeRegexTarget(target, false)]
+        .map(save => save.catch(error => error.message));
+    for (const index of newerFirst ? [1, 0] : [0, 1]) {
+        if ((index === 0) === olderFails) saves[index].reject(new Error('offline'));
+        else saves[index].resolve();
+        await pending[index];
+    }
+    expect(s.context.feature_settings.character_allowed_regex.includes('alice.png')).toBe(!olderFails);
+});
+
+test.each([true, false])('preset authorization %s rolls back only the captured name after selection changes', async allowed => {
+    const s = setup();
+    s.context.feature_settings.preset_allowed_regex = { api: allowed ? ['other'] : ['one', 'other'] };
+    const target = s.captureRegexTarget(2);
+    let reject;
+    s.context.saveSettingsStrict.mockImplementationOnce(() => new Promise((_, fail) => { reject = fail; }));
+    const pending = s.authorizeRegexTarget(target, allowed);
+    s.select('two');
+    s.context.feature_settings.preset_allowed_regex.api.push('two');
+    reject(new Error('offline'));
+    await expect(pending).rejects.toThrow('offline');
+    expect(s.context.feature_settings.preset_allowed_regex.api.includes('one')).toBe(!allowed);
+    expect(s.context.feature_settings.preset_allowed_regex.api).toEqual(expect.arrayContaining(['other', 'two']));
+});
+
+test('toolbar propagates strict authorization errors and does not undo a committed authorization on refresh failure', async () => {
+    const s = setup();
+    const source = readFileSync(new URL('../public/scripts/extensions/regex/index.js', import.meta.url), 'utf8');
+    const start = source.indexOf('const regexToolbar = {') + 'const regexToolbar = '.length;
+    const end = source.indexOf('\n};', start) + 2;
+    const context = { ...s.context, captureRegexTarget: s.captureRegexTarget, authorizeRegexTarget: s.authorizeRegexTarget,
+        reloadCurrentChat: jest.fn(async () => { throw new Error('refresh failed'); }), t: text => text[0] };
+    const toolbar = runInNewContext(`(${source.slice(start, end)})`, context);
+    s.context.saveSettingsStrict.mockRejectedValueOnce(new Error('offline'));
+    await expect(toolbar.setScopedAllowed(true)).rejects.toThrow('offline');
+    expect(s.context.feature_settings.character_allowed_regex).toEqual([]);
+    expect(context.reloadCurrentChat).not.toHaveBeenCalled();
+    await expect(toolbar.setScopedAllowed(true)).rejects.toThrow('refresh failed');
+    expect(s.context.feature_settings.character_allowed_regex).toEqual(['alice.png']);
+});
+
+function presetControllerSetup() {
+    const s = setup();
+    s.context.feature_settings.regex = [{ id: 'a', disabled: false }, { id: 'b', disabled: true }];
+    s.context.feature_settings.regex_presets = [{ id: 'p', name: 'P', isSelected: true, global: [{ id: 'b' }, { id: 'a' }], scoped: [], preset: [] }];
+    const source = readFileSync(new URL('../public/scripts/extensions/regex/regex-preset-controller.js', import.meta.url), 'utf8');
+    const create = runInNewContext(`(${source.slice(source.indexOf('export function')).replace('export ', '')})`, { t: x => x[0] });
+    const controller = create({ getScriptsByType: type => type === 0 ? s.context.feature_settings.regex : [],
+        getScriptsForTarget: s.getScriptsForTarget, captureTarget: type => type === 0 ? s.captureRegexTarget(type) : null,
+        saveScriptsByType: s.saveScriptsByType, featureSettings: s.context.feature_settings,
+        saveSettings: jest.fn(), afterChange: jest.fn(), confirmUnsaved: jest.fn(), confirmDelete: jest.fn(),
+        promptName: jest.fn(), notify: { error: jest.fn(), success: jest.fn() }, uuid: jest.fn(), SCRIPT_TYPES: { GLOBAL: 0, SCOPED: 1, PRESET: 2 } });
+    return { ...s, controller };
+}
+
+test('preset apply failure preserves rule enablement and order', async () => {
+    const s = presetControllerSetup();
+    s.context.saveSettingsStrict.mockRejectedValueOnce(new Error('offline'));
+    await expect(s.controller.apply()).rejects.toThrow('offline');
+    expect(s.context.feature_settings.regex).toEqual([{ id: 'a', disabled: false }, { id: 'b', disabled: true }]);
+});
+
+test('preset apply late failure leaves newer rule edits intact', async () => {
+    const s = presetControllerSetup();
+    let reject;
+    s.context.saveSettingsStrict.mockImplementationOnce(() => new Promise((_, fail) => { reject = fail; }));
+    const pending = s.controller.apply();
+    s.context.feature_settings.regex = [{ id: 'later', disabled: false }];
+    reject(new Error('offline'));
+    await expect(pending).rejects.toThrow('offline');
+    expect(s.context.feature_settings.regex).toEqual([{ id: 'later', disabled: false }]);
+});
+
+function debugOrderSetup() {
+    const s = setup();
+    s.context.feature_settings.regex = [{ id: 'a' }, { id: 'b' }];
+    const context = { ...s.context, DEBUG_GROUP_ORDER: [{ key: 'global', type: 0 }, { key: 'scoped', type: 1 }, { key: 'preset', type: 2 }],
+        captureRegexTarget: s.captureRegexTarget, getScriptsForTarget: s.getScriptsForTarget,
+        getScriptsByType: type => type === 0 ? s.context.feature_settings.regex : [],
+        saveScriptsByType: s.saveScriptsByType, regexListBridge: { refresh: jest.fn() } };
+    const save = extract('public/scripts/extensions/regex/index.js', 'async function saveDebugOrder(', '\n/**', context);
+    const getGroups = extract('public/scripts/extensions/regex/index.js', 'function getDebugGroups()', '\n/**', context);
+    return { ...s, save, getGroups };
+}
+
+test('debugger order failure restores the old global order', async () => {
+    const s = debugOrderSetup();
+    s.context.saveSettingsStrict.mockRejectedValueOnce(new Error('offline'));
+    await expect(s.save('global', ['b', 'a'])).rejects.toThrow('offline');
+    expect(s.context.feature_settings.regex.map(rule => rule.id)).toEqual(['a', 'b']);
+});
+
+test('debugger late failure preserves a newer global edit', async () => {
+    const s = debugOrderSetup();
+    let reject;
+    s.context.saveSettingsStrict.mockImplementationOnce(() => new Promise((_, fail) => { reject = fail; }));
+    const pending = s.save('global', ['b', 'a']);
+    s.context.feature_settings.regex = [{ id: 'later' }];
+    reject(new Error('offline'));
+    await expect(pending).rejects.toThrow('offline');
+    expect(s.context.feature_settings.regex.map(rule => rule.id)).toEqual(['later']);
+});
+
+test('debugger snapshot saves the captured character after selection changes, even with matching rule ids', async () => {
+    const s = debugOrderSetup();
+    s.alice.data.extensions.regex_scripts = [{ id: 'a' }, { id: 'b' }];
+    s.bob.data.extensions.regex_scripts = [{ id: 'a' }, { id: 'b' }];
+    const snapshot = s.getGroups().find(group => group.key === 'scoped').snapshot;
+    s.context.this_chid = 1;
+    await expect(s.save('scoped', ['b', 'a'], snapshot)).resolves.toBe('saved');
+    expect(s.context.writeExtensionField).toHaveBeenCalledWith(0, 'regex_scripts', [{ id: 'b' }, { id: 'a' }], { strict: true });
+    expect(s.bob.data.extensions.regex_scripts.map(rule => rule.id)).toEqual(['a', 'b']);
 });
 
 // Unit/integration: real preset service, regex manager/engine and list bridge with

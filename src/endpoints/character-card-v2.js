@@ -230,8 +230,8 @@ export function charaFormatData(data, directories) {
  * @param {object} entries Entries object
  */
 export function convertWorldInfoToCharacterBook(name, entries) {
-    /** @type {{ entries: object[]; name: string }} */
-    const result = { entries: [], name };
+    /** @type {{ entries: object[]; name: string; extensions: object }} */
+    const result = { entries: [], name, extensions: {} };
 
     for (const index in entries) {
         const entry = entries[index];

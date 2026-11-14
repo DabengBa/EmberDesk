@@ -15,6 +15,46 @@ import {
 
 const WORKBENCH_COMMENT_MAX_LENGTH = 100;
 
+/** Commands over the existing session and settings owners; no state is duplicated. */
+export function createWorldInfoWorkbenchCommands(deps) {
+    function applySearchQuery(searchQuery) {
+        const query = String(searchQuery ?? '');
+        const session = deps.getSession();
+        session.applySearchQuery(query);
+        session.applySortOption(query ? '14' : String(deps.readSort() || '0'));
+        deps.setSearchFilter(query);
+    }
+
+    function applySortOption(sortValue) {
+        const value = String(sortValue ?? '');
+        deps.getSession().applySortOption(value);
+        if (value !== 'search' && value !== '14') deps.writeSort(value);
+    }
+
+    function setGlobalActiveNames(names) {
+        const worldNames = deps.getWorldNames();
+        const validNames = new Set(Array.isArray(worldNames) ? worldNames : []);
+        deps.setSelectedNames(Array.from(new Set(
+            (Array.isArray(names) ? names : []).map(name => String(name ?? '')).filter(name => validNames.has(name)),
+        )));
+        deps.getSession().setSelectedWorldInfo(deps.getSelectedNames());
+        deps.save();
+        deps.emitUpdated();
+        return [...deps.getSelectedNames()];
+    }
+
+    function updateScanDepth(value) {
+        const parsed = Math.floor(Number(value));
+        const depth = Number.isFinite(parsed) ? Math.min(Math.max(parsed, 0), deps.maxDepth) : deps.getDepth();
+        deps.setDepth(depth);
+        deps.save();
+        deps.emitUpdated();
+        return deps.getDepth();
+    }
+
+    return { applySearchQuery, applySortOption, setGlobalActiveNames, updateScanDepth };
+}
+
 /** Serialize asynchronous World Info mounts so an older snapshot cannot mount last. */
 export function createWorldInfoMountScheduler(mount) {
     let pending = Promise.resolve();

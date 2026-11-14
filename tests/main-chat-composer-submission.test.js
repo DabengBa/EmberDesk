@@ -1,6 +1,7 @@
 import { beforeEach, expect, jest, test } from '@jest/globals';
 import { readFileSync } from 'node:fs';
 import { loadTsModule } from './helpers/load-ts-module.mjs';
+import { createUserMessageService } from '../public/scripts/user-message-service.js';
 
 const events = { emit: jest.fn(async () => {}) };
 jest.unstable_mockModule('../public/scripts/events.js', () => ({ eventSource: events, event_types: { GENERATION_STARTED: 'started', GENERATION_AFTER_COMMANDS: 'commands' } }));
@@ -391,21 +392,40 @@ test('switching away and back during assembly cancels the old submission', async
     expect(composer.getComposerValue()).toBe('submitted text');
 });
 
+test('switching between avatars with the same chat name during assembly preserves the new draft', async () => {
+    composer.setComposerDraftContext({ avatarId: 'alice.png', chatId: 'Shared' });
+    composer.setComposerValue('alice submission');
+    submission = composer.getComposerSnapshot();
+    context.unshallowCharacter.mockImplementation(async () => {
+        composer.setComposerDraftContext({ avatarId: 'bob.png', chatId: 'Shared' });
+        composer.setComposerValue('bob draft');
+    });
+    await generate();
+    expect(context.sendMessageAsUser).not.toHaveBeenCalled();
+    expect(composer.getComposerValue()).toBe('bob draft');
+    composer.setComposerDraftContext({ avatarId: 'alice.png', chatId: 'Shared' });
+    expect(composer.getComposerValue()).toBe('alice submission');
+});
+
+function userMessageFixture({ chat, populateAttachment = async () => {}, save = async () => {}, emit = async () => {} }) {
+    return createUserMessageService({
+        getChat: () => chat, getComposerSnapshot: composer.getComposerSnapshot,
+        regexUserInput: text => text, timestamp: () => 'time', substitute: text => text,
+        uuid: () => 'id', removeMacros: text => text, populateAttachment, taint: () => {}, save,
+        emitSent: id => emit('sent', id), emitRendered: id => emit('rendered', id),
+        reload: async () => {}, addMessage: () => {},
+    });
+}
+
 test('attachment completion after switching away and back cannot append the old message', async () => {
-    const source = readFileSync(new URL('../public/script.js', import.meta.url), 'utf8');
-    const start = source.indexOf('export async function sendMessageAsUser(');
-    const end = source.indexOf('\n/**\n * Gets the maximum context token limit', start);
     let release;
+    let entered;
     const wait = new Promise(resolve => { release = resolve; });
+    const attachmentStarted = new Promise(resolve => { entered = resolve; });
     const chat = [];
-    const run = new Function('chat', 'chat_metadata', 'name1', 'getComposerSnapshot', 'buildUserMessage', 'populateFileAttachment',
-        'saveChatConditional', 'eventSource', 'event_types', 'reloadCurrentChat', 'addOneMessage',
-        `${source.slice(start, end).replace('export async', 'async')}\nreturn sendMessageAsUser;`)(
-        chat, {}, 'user', composer.getComposerSnapshot, async () => ({ mes: 'old' }), async () => wait,
-        async () => {}, { emit: async () => {} }, {}, async () => {}, () => {},
-    );
-    const pending = run('old', '');
-    await Promise.resolve();
+    const service = userMessageFixture({ chat, populateAttachment: async () => { entered(); await wait; } });
+    const pending = service.sendMessageAsUser('old', '', null, false, 'user');
+    await attachmentStarted;
     composer.setComposerDraftContext('other-chat');
     composer.setComposerDraftContext('submission-chat');
     chat.splice(0, chat.length);
@@ -415,9 +435,6 @@ test('attachment completion after switching away and back cannot append the old 
 });
 
 test.each([['switch', null], ['stop', null], ['switch', 0], ['stop', 0]])('queued user message save is cancelled after %s (insertAt=%s)', async (action, insertAt) => {
-    const source = readFileSync(new URL('../public/script.js', import.meta.url), 'utf8');
-    const start = source.indexOf('export async function sendMessageAsUser(');
-    const end = source.indexOf('\n/**\n * Gets the maximum context token limit', start);
     let release;
     let queued;
     const waiting = new Promise(resolve => { release = resolve; });
@@ -430,13 +447,8 @@ test.each([['switch', null], ['stop', null], ['switch', 0], ['stop', 0]])('queue
         await waiting;
         if (predicate()) saved.push([...chat]);
     };
-    const run = new Function('chat', 'chat_metadata', 'name1', 'getComposerSnapshot', 'buildUserMessage', 'populateFileAttachment',
-        'saveChatConditional', 'eventSource', 'event_types', 'reloadCurrentChat', 'addOneMessage',
-        `${source.slice(start, end).replace('export async', 'async')}\nreturn sendMessageAsUser;`)(
-        chat, {}, 'user', composer.getComposerSnapshot, async () => ({ mes: 'old' }), async () => {},
-        save, { emit: async () => {} }, {}, async () => {}, () => {},
-    );
-    const pending = run('old', '', insertAt, false, 'user', { signal: controller.signal });
+    const service = userMessageFixture({ chat, save });
+    const pending = service.sendMessageAsUser('old', '', insertAt, false, 'user', { signal: controller.signal });
     await entered;
     if (action === 'switch') {
         composer.setComposerDraftContext('other-chat');
@@ -448,21 +460,12 @@ test.each([['switch', null], ['stop', null], ['switch', 0], ['stop', 0]])('queue
 });
 
 test.each([null, 0])('current user message is saved and published (insertAt=%s)', async insertAt => {
-    const source = readFileSync(new URL('../public/script.js', import.meta.url), 'utf8');
-    const start = source.indexOf('export async function sendMessageAsUser(');
-    const end = source.indexOf('\n/**\n * Gets the maximum context token limit', start);
     const chat = [];
     const saved = [];
     const emit = jest.fn(async () => {});
-    const run = new Function('chat', 'chat_metadata', 'name1', 'getComposerSnapshot', 'buildUserMessage', 'populateFileAttachment',
-        'saveChatConditional', 'eventSource', 'event_types', 'reloadCurrentChat', 'addOneMessage',
-        `${source.slice(start, end).replace('export async', 'async')}\nreturn sendMessageAsUser;`)(
-        chat, {}, 'user', composer.getComposerSnapshot, async () => ({ mes: 'hello' }), async () => {},
-        async predicate => { if (predicate()) saved.push([...chat]); }, { emit },
-        { MESSAGE_SENT: 'sent', USER_MESSAGE_RENDERED: 'rendered' }, async () => {}, () => {},
-    );
-    await run('hello', '', insertAt);
-    expect(saved).toEqual([[{ mes: 'hello' }]]);
+    const service = userMessageFixture({ chat, save: async predicate => { if (predicate()) saved.push([...chat]); }, emit });
+    await service.sendMessageAsUser('hello', '', insertAt, false, 'user');
+    expect(saved).toEqual([[expect.objectContaining({ mes: 'hello' })]]);
     expect(emit.mock.calls.map(([name]) => name)).toEqual(['sent', 'rendered']);
 });
 

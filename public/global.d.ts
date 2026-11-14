@@ -159,10 +159,7 @@ declare global {
     interface JQuery {
         nanogallery2(options?: any): JQuery;
         nanogallery2(method: string, options?: any): JQuery;
-        pagination(method: 'getCurrentPageNum'): number;
-        pagination(method: string, options?: any): JQuery;
-        pagination(options?: any): JQuery;
-        izoomify(options?: any): JQuery;
+
     }
 
     // NPM package doesn't have the 'queue' property in the type definition

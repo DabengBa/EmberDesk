@@ -109,6 +109,11 @@ export interface MainChatGreetingsSnapshot {
     readonly chatId: string | null;
 }
 
+export interface MainChatMessageTarget {
+    readonly id: string;
+    readonly uid: string;
+}
+
 export type MainChatWindowSnapshotInput = Partial<Omit<MainChatWindowSnapshot, 'scrollRestore'>> & {
     scrollRestore?: Partial<MainChatScrollRestoreSnapshot> | null;
 };
@@ -117,6 +122,10 @@ export interface MainChatSnapshot {
     readonly chatId: string | null;
     readonly messagesById: Readonly<Record<string, MainChatMessageRecord>>;
     readonly orderedMessageIds: readonly string[];
+    readonly lastMessageTarget: MainChatMessageTarget | null;
+    readonly lastUserMessageTarget: MainChatMessageTarget | null;
+    readonly lastMessageEditable: boolean;
+    readonly lastUserMessageEditable: boolean;
     readonly composer: MainChatComposerSnapshot;
     readonly generation: MainChatGenerationSnapshot;
     readonly streaming: MainChatStreamingSnapshot;
@@ -129,6 +138,10 @@ export type MainChatSnapshotInput = Partial<{
     chatId: unknown;
     messagesById: Record<string, Partial<MainChatMessageRecord> & { id?: unknown }>;
     orderedMessageIds: readonly unknown[];
+    lastMessageTarget: MainChatMessageTarget | null;
+    lastUserMessageTarget: MainChatMessageTarget | null;
+    lastMessageEditable: boolean;
+    lastUserMessageEditable: boolean;
     composer: Partial<MainChatComposerSnapshot>;
     generation: Partial<MainChatGenerationSnapshot>;
     streaming: Partial<MainChatStreamingSnapshot>;
@@ -418,11 +431,20 @@ function normalizeSnapshot(input: MainChatSnapshotInput = {}, previousMessages?:
     const window = input.window ?? {};
     const scrollRestore = window.scrollRestore;
     const turnSummaries = normalizeTurnSummaries(input.turnSummaries);
+    const normalizeTarget = (target: MainChatMessageTarget | null | undefined): MainChatMessageTarget | null => {
+        const id = normalizeNullableString(target?.id);
+        const uid = normalizeNullableString(target?.uid);
+        return id && uid && knownMessageIds.has(id) ? { id, uid } : null;
+    };
 
     return deepFreeze({
         chatId: normalizeNullableString(input.chatId),
         messagesById,
         orderedMessageIds: completeOrderedMessageIds,
+        lastMessageTarget: normalizeTarget(input.lastMessageTarget),
+        lastUserMessageTarget: normalizeTarget(input.lastUserMessageTarget),
+        lastMessageEditable: input.lastMessageEditable === true,
+        lastUserMessageEditable: input.lastUserMessageEditable === true,
         composer: {
             value: normalizeString(composer.value),
             activeContext: normalizeContext(composer.activeContext),

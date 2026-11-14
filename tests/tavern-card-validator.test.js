@@ -4,8 +4,7 @@ import { TavernCardValidator } from '../src/validator/TavernCardValidator';
 const V1_FIELDS = ['name', 'description', 'scenario', 'first_mes', 'mes_example'];
 
 const V2_DATA_FIELDS = [
-    'name', 'description', 'scenario', 'first_mes', 'mes_example',
-    'creator_notes', 'system_prompt', 'post_history_instructions',
+    'name', 'description', 'scenario', 'first_mes', 'creator_notes',
     'alternate_greetings', 'tags', 'creator', 'character_version', 'extensions',
 ];
 
@@ -19,6 +18,9 @@ function makeV2Card() {
         spec_version: '2.0',
         data: {
             ...Object.fromEntries(V2_DATA_FIELDS.map(f => [f, ''])),
+            mes_example: '',
+            system_prompt: '',
+            post_history_instructions: '',
             alternate_greetings: [],
             tags: [],
             extensions: {},
@@ -90,6 +92,16 @@ describe('TavernCardValidator', () => {
         test('accepts valid V2 card', () => {
             const v = new TavernCardValidator(makeV2Card());
             expect(v.validateV2()).toBe(true);
+        });
+
+        test('accepts an edited V2 card without retired prompt fields before a scoped extension merge', () => {
+            const card = makeV2Card();
+            delete card.data.mes_example;
+            delete card.data.system_prompt;
+            delete card.data.post_history_instructions;
+            card.data.extensions.regex_scripts = [{ id: 'scoped', findRegex: '/before/g', replaceString: 'after' }];
+
+            expect(new TavernCardValidator(card).validate()).toBe(2);
         });
 
         test('rejects wrong spec string', () => {

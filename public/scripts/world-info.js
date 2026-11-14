@@ -45,7 +45,7 @@ export {
     splitKeywordsAndRegexes,
     parseRegexFromString,
 };
-import { createWorldInfoWorkbenchSession, resolveWorldInfoSortOption } from './world-info-workbench-service.js';
+import { createWorldInfoWorkbenchCommands, createWorldInfoWorkbenchSession, resolveWorldInfoSortOption } from './world-info-workbench-service.js';
 export { createWorldInfoWorkbenchSession };
 export {
     buildWorldInfoReactPanelState,
@@ -299,21 +299,11 @@ export async function selectWorldInfoEditorIndex(worldIndex) {
 }
 
 export function applyWorldInfoSearchQuery(searchQuery) {
-    const normalizedQuery = String(searchQuery ?? '');
-    const session = getWorldInfoWorkbenchSession();
-    session.applySearchQuery(normalizedQuery);
-    session.applySortOption(normalizedQuery ? '14' : String(accountStorage.getItem(SORT_ORDER_KEY) || '0'));
-    getWorldInfoFilter().setFilterData(FILTER_TYPES.WORLD_INFO_SEARCH, normalizedQuery);
+    return worldInfoWorkbenchCommands.applySearchQuery(searchQuery);
 }
 
 export function applyWorldInfoSortOption(sortValue) {
-    const normalizedSortValue = String(sortValue ?? '');
-    const session = getWorldInfoWorkbenchSession();
-    session.applySortOption(normalizedSortValue);
-
-    if (normalizedSortValue !== 'search' && normalizedSortValue !== '14') {
-        accountStorage.setItem(SORT_ORDER_KEY, normalizedSortValue);
-    }
+    return worldInfoWorkbenchCommands.applySortOption(sortValue);
 }
 
 /**
@@ -322,16 +312,7 @@ export function applyWorldInfoSortOption(sortValue) {
  * @returns {string[]}
  */
 export function setWorldInfoGlobalActiveNames(names) {
-    const validNames = new Set(Array.isArray(world_names) ? world_names : []);
-    setSelectedWorldInfo(Array.from(new Set(
-        (Array.isArray(names) ? names : [])
-            .map(name => String(name ?? ''))
-            .filter(name => validNames.has(name)),
-    )));
-    getWorldInfoWorkbenchSession().setSelectedWorldInfo(selected_world_info);
-    saveSettingsDebounced();
-    void eventSource.emit(event_types.WORLDINFO_SETTINGS_UPDATED);
-    return [...selected_world_info];
+    return worldInfoWorkbenchCommands.setGlobalActiveNames(names);
 }
 
 /**
@@ -341,14 +322,7 @@ export function setWorldInfoGlobalActiveNames(names) {
  * @returns {number} The applied depth
  */
 export function updateWorldInfoScanDepth(value) {
-    const parsed = Math.floor(Number(value));
-    const depth = Number.isFinite(parsed)
-        ? Math.min(Math.max(parsed, 0), MAX_SCAN_DEPTH)
-        : world_info_depth;
-    setWorldInfoSetting('world_info_depth', depth);
-    saveSettingsDebounced();
-    void eventSource.emit(event_types.WORLDINFO_SETTINGS_UPDATED);
-    return world_info_depth;
+    return worldInfoWorkbenchCommands.updateScanDepth(value);
 }
 
 export function requestWorldInfoImportSelection() {
@@ -396,6 +370,20 @@ const getWorldInfoWorkbenchSession = createWorldInfoEditorComposition({
         setOriginalDataValue: setWIOriginalDataValue,
         deleteOriginalDataValue: deleteWIOriginalDataValue,
     }),
+});
+const worldInfoWorkbenchCommands = createWorldInfoWorkbenchCommands({
+    getSession: getWorldInfoWorkbenchSession,
+    readSort: () => accountStorage.getItem(SORT_ORDER_KEY),
+    writeSort: value => accountStorage.setItem(SORT_ORDER_KEY, value),
+    setSearchFilter: value => getWorldInfoFilter().setFilterData(FILTER_TYPES.WORLD_INFO_SEARCH, value),
+    getWorldNames: () => world_names,
+    getSelectedNames: () => selected_world_info,
+    setSelectedNames: setSelectedWorldInfo,
+    getDepth: () => world_info_depth,
+    setDepth: value => setWorldInfoSetting('world_info_depth', value),
+    maxDepth: MAX_SCAN_DEPTH,
+    save: saveSettingsDebounced,
+    emitUpdated: () => { void eventSource.emit(event_types.WORLDINFO_SETTINGS_UPDATED); },
 });
 /**
  * Human-readable injection position for workbench list/editor display.

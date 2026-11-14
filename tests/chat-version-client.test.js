@@ -15,7 +15,7 @@ jest.unstable_mockModule('../public/scripts/message-service.js', () => ({ ensure
 jest.unstable_mockModule('../public/scripts/delete-character-preflight.js', () => ({ runDeleteCharacterClosePreflight: jest.fn() }));
 jest.unstable_mockModule('../public/scripts/chat-ops-shell-context.js', () => ({ requireChatOpsShellContext: () => shell }));
 jest.unstable_mockModule('../public/scripts/main-chat-greetings.js', () => ({ buildGreetingOptions: jest.fn(), canSwitchGreeting: jest.fn(), replaceGreeting: jest.fn() }));
-jest.unstable_mockModule('../public/scripts/main-chat-composer-service.js', () => ({ getComposerSnapshot: () => ({}), requestComposerFocus: jest.fn(), subscribeComposerState: () => () => {} }));
+const { getComposerSnapshot, setComposerDraftContext, setComposerValue } = await import('../public/scripts/main-chat-composer-service.js');
 const { getChat, saveChat, withCurrentChatDeleteVersion, renamePastChats, deleteCharacterChatByName, renameCharacterChat } = await import('../public/scripts/chat-ops-service.js');
 const response = (data, version) => ({ ok: true, headers: new Headers(version ? { 'X-Chat-Version': version } : {}), json: async () => structuredClone(data) });
 
@@ -269,6 +269,27 @@ test('renaming a non-current chat reads its own version', async () => {
     });
     expect(await renameCharacterChat({ characterId: 0, oldFileName: 'past', newFileName: 'renamed', loader: false })).toBe(true);
     expect(state.characters[0].chat).toBe('first');
+});
+
+test('renaming the open chat preserves its avatar-scoped draft before the reload changes context', async () => {
+    shell.getCurrentChatId = () => state.characters[0].chat;
+    shell.equalsIgnoreCaseAndAccents = () => false;
+    shell.reloadCurrentChat = async () => {
+        setComposerDraftContext({ avatarId: 'a.png', chatId: state.characters[0].chat });
+    };
+    globalThis.$ = () => ({ val: () => {} });
+    globalThis.fetch = jest.fn(async url => url.endsWith('/get')
+        ? response([{ chat_metadata: {} }], 'a'.repeat(32))
+        : response({ version: 'b'.repeat(32), sanitizedFileName: 'renamed' }));
+    setComposerDraftContext({ avatarId: 'a.png', chatId: 'first' });
+    setComposerValue('Alice draft');
+    await getChat();
+    expect(await renameCharacterChat({ characterId: 0, oldFileName: 'first', newFileName: 'renamed', loader: false })).toBe(true);
+    expect(getComposerSnapshot()).toMatchObject({ contextKey: '["a.png","renamed"]', value: 'Alice draft' });
+    setComposerDraftContext({ avatarId: 'b.png', chatId: 'renamed' });
+    expect(getComposerSnapshot().value).toBe('');
+    setComposerDraftContext({ avatarId: 'a.png', chatId: 'renamed' });
+    expect(getComposerSnapshot().value).toBe('Alice draft');
 });
 
 test('late rename completion does not change or reload a switched chat', async () => {

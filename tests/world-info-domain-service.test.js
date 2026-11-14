@@ -16,6 +16,39 @@ function read(relativePath) {
 }
 
 describe('world info domain and workbench services', () => {
+    test('workbench commands preserve search, sort, global selection and depth effects', async () => {
+        const { createWorldInfoWorkbenchCommands } = await import('../public/scripts/world-info-workbench-service.js');
+        const calls = [];
+        let selected = [];
+        let depth = 3;
+        const session = {
+            applySearchQuery: value => calls.push(['search', value]),
+            applySortOption: value => calls.push(['sort', value]),
+            setSelectedWorldInfo: value => calls.push(['selected', value]),
+        };
+        const commands = createWorldInfoWorkbenchCommands({
+            getSession: () => session,
+            readSort: () => '2', writeSort: value => calls.push(['persist-sort', value]),
+            setSearchFilter: value => calls.push(['filter', value]),
+            getWorldNames: () => ['a', 'b'], getSelectedNames: () => selected,
+            setSelectedNames: value => { selected = value; },
+            getDepth: () => depth, setDepth: value => { depth = value; }, maxDepth: 10,
+            save: () => calls.push('save'), emitUpdated: () => calls.push('emit'),
+        });
+        commands.applySearchQuery('word');
+        commands.applySearchQuery('');
+        commands.applySortOption('14');
+        commands.applySortOption('1');
+        expect(commands.setGlobalActiveNames(['b', 'invalid', 'a', 'b'])).toEqual(['b', 'a']);
+        expect(commands.updateScanDepth(99)).toBe(10);
+        expect(commands.updateScanDepth('invalid')).toBe(10);
+        expect(calls).toEqual([
+            ['search', 'word'], ['sort', '14'], ['filter', 'word'],
+            ['search', ''], ['sort', '2'], ['filter', ''],
+            ['sort', '14'], ['sort', '1'], ['persist-sort', '1'],
+            ['selected', ['b', 'a']], 'save', 'emit', 'save', 'emit', 'save', 'emit',
+        ]);
+    });
     test.each([
         ['alpha,/beta/gi,gamma', ['alpha', '/beta/gi'], 'gamma'],
         ['alpha,/beta,gamma/gi,delta', ['alpha', '/beta,gamma/gi'], 'delta'],
