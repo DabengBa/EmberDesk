@@ -1,4 +1,7 @@
-import { characterGroupOverlay, syncReactCharacterLibraryToolbarState } from '../script.js';
+import { requireCharacterLifecycleShellContext } from './character-lifecycle-shell-context.js';
+
+const overlay = () => requireCharacterLifecycleShellContext().state.characterGroupOverlay;
+const syncReactCharacterLibraryToolbarState = () => requireCharacterLifecycleShellContext().syncReactCharacterLibraryToolbarState();
 
 function isReactCharacterLibraryOwner() {
     return document.getElementById('rm_print_characters_block')?.dataset.reactCharacterLibraryOwner === 'react';
@@ -10,22 +13,22 @@ let is_bulk_edit = false;
 
 const enableBulkEdit = () => {
     enableBulkSelect();
-    characterGroupOverlay.selectState();
+    overlay().selectState();
     // show the bulk edit option buttons
     $('.bulkEditOptionElement').not('#bulkSelectedCount').show();
     $('#bulkSelectedCount').css('display', 'inline-flex');
     is_bulk_edit = true;
-    characterGroupOverlay.updateSelectedCount(0);
+    overlay().updateSelectedCount(0);
     void syncReactCharacterLibraryToolbarState();
 };
 
 const disableBulkEdit = () => {
     disableBulkSelect();
-    characterGroupOverlay.browseState();
+    overlay().browseState();
     // hide the bulk edit option buttons
     $('.bulkEditOptionElement').hide();
     is_bulk_edit = false;
-    characterGroupOverlay.updateSelectedCount(0);
+    overlay().updateSelectedCount(0);
     void syncReactCharacterLibraryToolbarState();
 };
 
@@ -55,7 +58,7 @@ function onSelectAllButtonClick() {
     for (const character of characters) {
         const checked = $(character).find('.bulk_select_checkbox:checked').length > 0;
         if (!checked && character instanceof HTMLElement) {
-            characterGroupOverlay.toggleSingleCharacter(character);
+            overlay().toggleSingleCharacter(character);
             atLeastOneSelected = true;
         }
     }
@@ -65,7 +68,7 @@ function onSelectAllButtonClick() {
         for (const character of characters) {
             const checked = $(character).find('.bulk_select_checkbox:checked').length > 0;
             if (checked && character instanceof HTMLElement) {
-                characterGroupOverlay.toggleSingleCharacter(character);
+                overlay().toggleSingleCharacter(character);
             }
         }
     }
@@ -81,7 +84,7 @@ async function onDeleteButtonClick() {
     }
 
     // Reuse the overlay's delete flow; it also no-ops when selection is empty.
-    await characterGroupOverlay.handleContextMenuDelete();
+    await overlay().handleContextMenuDelete();
 }
 
 /**
@@ -147,7 +150,7 @@ function disableBulkSelect() {
  * Entry point that runs on page load.
  */
 export function initBulkEdit() {
-    characterGroupOverlay.addStateChangeCallback((state) => {
+    overlay().addStateChangeCallback((state) => {
         if (state === BulkEditOverlayState.select) enableBulkEdit();
         if (state === BulkEditOverlayState.browse) disableBulkEdit();
     });
@@ -156,12 +159,12 @@ export function initBulkEdit() {
     $('#bulkSelectAllButton').on('click', onSelectAllButtonClick);
     $('#bulkDeleteButton').on('click', onDeleteButtonClick);
 
-    const characterContextMenu = new CharacterContextMenu(characterGroupOverlay);
+    const characterContextMenu = new CharacterContextMenu(overlay());
     eventSource.on(event_types.CHARACTER_PAGE_LOADED, () => {
         if (is_bulk_edit) {
             enableBulkSelect();
         }
-        characterGroupOverlay.onPageLoad();
+        overlay().onPageLoad();
         void syncReactCharacterLibraryToolbarState();
     });
     console.debug('Character context menu initialized', characterContextMenu);

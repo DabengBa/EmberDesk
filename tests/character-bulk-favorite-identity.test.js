@@ -6,12 +6,7 @@ const getCharacters = jest.fn();
 const favsToHotswap = jest.fn();
 const emit = jest.fn(() => Promise.resolve());
 
-jest.unstable_mockModule('../public/script.js', () => ({
-    characterGroupOverlay: null, characters, getCharacters, buildAvatarList: jest.fn(),
-    characterToEntity: jest.fn(), printCharactersDebounced: jest.fn(), deleteCharacter: jest.fn(),
-    stopGeneration: jest.fn(), is_send_press: false, this_chid: undefined,
-    name2: 'neutral', neutralCharacterName: 'neutral', syncReactCharacterLibraryToolbarState: jest.fn(),
-}));
+
 jest.unstable_mockModule('../public/scripts/events.js', () => ({ eventSource: { on: jest.fn(), emit }, event_types: {} }));
 jest.unstable_mockModule('../public/scripts/request-context.js', () => ({ getRequestHeaders: () => ({ 'Content-Type': 'application/json' }) }));
 jest.unstable_mockModule('../public/scripts/RossAscends-mods.js', () => ({ favsToHotswap }));
@@ -21,12 +16,14 @@ jest.unstable_mockModule('../public/scripts/world-cascade-dialog.js', () => ({ b
 jest.unstable_mockModule('../public/scripts/utils.js', () => ({ waitUntilCondition: jest.fn() }));
 jest.unstable_mockModule('../public/scripts/constants.js', () => ({ debounce_timeout: { extended: 1 } }));
 jest.unstable_mockModule('../public/scripts/tags.js', () => ({
-    createTagInput: jest.fn(), getTagKeyForEntity: jest.fn(), getTagsList: jest.fn(), printTagList: jest.fn(),
+    createBulkTagEditorRuntime: jest.fn(), openCharacterTagManager: jest.fn(),
+    getTagKeyForEntity: jest.fn(), getTagsList: jest.fn(), printTagList: jest.fn(),
     tag_map: {}, compareTagsForSort: jest.fn(), removeTagFromMap: jest.fn(), importTags: jest.fn(), tag_import_setting: {},
 }));
 jest.unstable_mockModule('../public/scripts/i18n.js', () => ({ t: parts => parts.join(''), translate: text => text }));
 
 const { BulkEditOverlay, BulkEditOverlayState, CharacterContextMenu } = await import('../public/scripts/BulkEditOverlay.js');
+const { registerCharacterLifecycleShellContext } = await import('../public/scripts/character-lifecycle-shell-context.js');
 const overlay = new BulkEditOverlay();
 const character = (name, avatar, fav = false) => ({ name, avatar, fav, data: { extensions: { fav } } });
 const deferred = () => {
@@ -36,6 +33,10 @@ const deferred = () => {
 };
 
 beforeEach(async () => {
+    registerCharacterLifecycleShellContext({
+        state: { get characters() { return characters; } },
+        getCharacters, syncReactCharacterLibraryToolbarState: jest.fn(),
+    });
     characters.splice(0);
     overlay.selectedCharacters.splice(0);
     fetchMock.mockReset();

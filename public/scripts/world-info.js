@@ -553,6 +553,7 @@ export async function saveWorldInfo(name, data, _immediately = false) {
 }
 
 const { renameWorldInfo, deleteWorldInfo, getFreeWorldEntryUid, getFreeWorldName, createNewWorldInfo, assignLorebookToChat, moveWorldInfoEntry, charUpdatePrimaryWorld, charUpdateAddAuxWorld, charSetAuxWorlds } = createWorldInfoBookCommands({
+    getCharacterWorldDraftIdentity: () => getWorldInfoShell().getCharacterWorldDraftIdentity(),
     POPUP_TYPE, showLocalDialog, t, equalsIgnoreCaseAndAccents, saveWorldInfo, getWIElement, selectWorldInfoEditorName, saveSettingsDebounced, characters, getRequestHeaders, getOneCharacter, getCurrentShellCharacterId, select_selected_character, setWorldInfoButtonClass, flushDeletedWorldsFromUI, getSanitizedFilename, checkOverwriteExistingData, updateWorldInfoList, hideWorldEditor, chat_metadata, METADATA_KEY, openWorldInfoEditor, renderTemplateAsync, getCurrentChatId, saveMetadata, callGenericPopup, loadWorldInfo, deleteWIOriginalDataValue, getSelectedWorldInfoEditorName, reloadEditor, getCurrentShellMenuType, create_save, createOrEditCharacter, getCharaFilename, normalizeArray,
 });
 export { deleteWorldInfo, getFreeWorldEntryUid, getFreeWorldName, createNewWorldInfo, assignLorebookToChat, moveWorldInfoEntry, charUpdatePrimaryWorld, charUpdateAddAuxWorld, charSetAuxWorlds };

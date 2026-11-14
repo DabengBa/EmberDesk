@@ -1,7 +1,7 @@
 import { world_info, world_names, selected_world_info } from './world-info-state.js';
 
 /** Book lifecycle and character/chat reference operations. */
-export function createWorldInfoBookCommands({ POPUP_TYPE, showLocalDialog, t, equalsIgnoreCaseAndAccents, saveWorldInfo, getWIElement, selectWorldInfoEditorName, saveSettingsDebounced, characters, getRequestHeaders, getOneCharacter, getCurrentShellCharacterId, select_selected_character, setWorldInfoButtonClass, flushDeletedWorldsFromUI, getSanitizedFilename, checkOverwriteExistingData, updateWorldInfoList, hideWorldEditor, chat_metadata, METADATA_KEY, openWorldInfoEditor, renderTemplateAsync, getCurrentChatId, saveMetadata, callGenericPopup, loadWorldInfo, deleteWIOriginalDataValue, getSelectedWorldInfoEditorName, reloadEditor, getCurrentShellMenuType, create_save, createOrEditCharacter, getCharaFilename, normalizeArray }) {
+export function createWorldInfoBookCommands({ POPUP_TYPE, showLocalDialog, t, equalsIgnoreCaseAndAccents, saveWorldInfo, getWIElement, selectWorldInfoEditorName, saveSettingsDebounced, characters, getRequestHeaders, getOneCharacter, getCurrentShellCharacterId, getCharacterWorldDraftIdentity, select_selected_character, setWorldInfoButtonClass, flushDeletedWorldsFromUI, getSanitizedFilename, checkOverwriteExistingData, updateWorldInfoList, hideWorldEditor, chat_metadata, METADATA_KEY, openWorldInfoEditor, renderTemplateAsync, getCurrentChatId, saveMetadata, callGenericPopup, loadWorldInfo, deleteWIOriginalDataValue, getSelectedWorldInfoEditorName, reloadEditor, getCurrentShellMenuType, create_save, createOrEditCharacter, getCharaFilename, normalizeArray }) {
     async function renameWorldInfo(name, data) {
         const oldName = name;
         const result = await showLocalDialog({ scope: 'world-info', title: t`Rename World Info`, fields: [{ type: 'text', name: 'name', label: t`Enter a new name:`, value: oldName }], actions: [{ id: 'rename', label: t`Rename`, variant: 'primary' }, { id: 'cancel', label: t`Cancel` }], initialFocus: 'name' });
@@ -387,6 +387,9 @@ export function createWorldInfoBookCommands({ POPUP_TYPE, showLocalDialog, t, eq
      * @param {string} name - The name of the world info to link to the character.
      */
     async function charUpdatePrimaryWorld(name) {
+        const characterId = getCurrentShellCharacterId?.();
+        const avatar = characters?.[characterId]?.avatar;
+        const draftIdentity = getCharacterWorldDraftIdentity?.();
         const previousValue = $('#character_world').val();
         $('#character_world').val(name);
 
@@ -415,6 +418,7 @@ export function createWorldInfoBookCommands({ POPUP_TYPE, showLocalDialog, t, eq
 
         await createOrEditCharacter();
 
+        if (getCurrentShellCharacterId?.() !== characterId || characters?.[characterId]?.avatar !== avatar || getCurrentShellMenuType() === 'create' || getCharacterWorldDraftIdentity?.() !== draftIdentity) return;
         setWorldInfoButtonClass(undefined, !!name);
     }
 

@@ -4890,15 +4890,6 @@ h5 {
 
 
 
-body .ui-autocomplete {
-    max-height: 300px;
-    overflow-y: auto;
-}
-
-body .ui-front {
-    z-index: 10000;
-}
-
 
 body .ui-slider-handle {
     background-color: var(--SmartThemeBlurTintColor);

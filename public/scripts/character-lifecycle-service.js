@@ -4,6 +4,7 @@ import { getCharacterDeleteCandidates, shouldRefreshCharacterAfterEdit } from '.
 import { getRequestHeaders } from './request-context.js';
 import { requireCharacterLifecycleShellContext } from './character-lifecycle-shell-context.js';
 import { captureCharacterAuthorizationClock, characterAuthorizationChangedSince, hasPendingCharacterAuthorizationRevoke, invalidateCharacterExternalMediaAuthorization, isCharacterAuthorizationRetired, reconcileCharacterAuthorizationBaseline } from './character-external-media-authorization.js';
+import { loadWorkspacePanelsModule } from './workspace-panels-react-bridge.js';
 
 function shell() {
     return requireCharacterLifecycleShellContext();
@@ -53,7 +54,7 @@ const getFirstMessage = (...args) => shell().getFirstMessage(...args);
 const getOneCharacter = (...args) => shell().getOneCharacter(...args);
 const getPastCharacterChats = (...args) => shell().getPastCharacterChats(...args);
 const getThumbnailUrl = (...args) => shell().getThumbnailUrl(...args);
-const isMobile = (...args) => shell().isMobile(...args);
+
 const markPerfInteractionMetric = (...args) => shell().markPerfInteractionMetric(...args);
 const printMessages = (...args) => shell().printMessages(...args);
 const queueReactCharacterAuthoringRemount = (...args) => shell().queueReactCharacterAuthoringRemount(...args);
@@ -64,7 +65,12 @@ const renameTagKey = (...args) => shell().renameTagKey(...args);
 const cancelCharacterSave = () => shell().cancelCharacterSave();
 const saveChatConditional = (...args) => shell().saveChatConditional(...args);
 const saveSettingsDebounced = (...args) => shell().saveSettingsDebounced(...args);
-const selectCharacterById = (...args) => shell().selectCharacterById(...args);
+const setCharacterName = (...args) => shell().setCharacterName(...args);
+const cancelTtsPlay = (...args) => shell().cancelTtsPlay(...args);
+const getChat = (...args) => shell().getChat(...args);
+const persistMainChatMessageListScrollSnapshotBeforeClear = (...args) => shell().persistMainChatMessageListScrollSnapshotBeforeClear(...args);
+const closeWorkspaceChildSlotHost = (...args) => shell().closeWorkspaceChildSlotHost(...args);
+const renderTemplateAsync = (...args) => shell().renderTemplateAsync(...args);
 const select_rm_characters = (...args) => shell().select_rm_characters(...args);
 const select_rm_create = (...args) => shell().select_rm_create(...args);
 const select_rm_info = (...args) => shell().select_rm_info(...args);
@@ -74,6 +80,95 @@ const setTemporaryChatStatus = (...args) => shell().setTemporaryChatStatus(...ar
 const timestampToMoment = (...args) => shell().timestampToMoment(...args);
 const unshallowCharacter = (...args) => shell().unshallowCharacter(...args);
 const updateFavButtonState = (...args) => shell().updateFavButtonState(...args);
+
+export async function selectCharacterById(id, { switchMenu = true } = {}) {
+    if (state.characters[id] === undefined) {
+        return;
+    }
+
+    if (state.isChatSaving) {
+        toastr.info(t`Please wait until the chat is saved before switching characters.`, t`Your chat is still saving...`);
+        return;
+    }
+
+    if (String(state.this_chid) !== String(id)) {
+        //if clicked on a different character from what was currently selected
+        if (!state.is_send_press) {
+            persistMainChatMessageListScrollSnapshotBeforeClear();
+            await clearChat({ clearData: true });
+            setCharacterId(undefined);
+            setCharacterName('');
+            cancelTtsPlay();
+            state.this_edit_mes_id = undefined;
+            state.selected_button = 'character_edit';
+            setCharacterId(id);
+            state.chat_metadata = {};
+            await getChat();
+            // On narrow screens the authoring drawer covers the chat surface
+            // after selecting a character. Leave the chat entry points usable;
+            // desktop keeps the existing authoring-panel behavior.
+            if (window.matchMedia('(max-width: 640px)').matches) {
+                closeWorkspaceChildSlotHost('right-nav-panel');
+            }
+        }
+    } else {
+        //if clicked on character that was already selected
+        if (switchMenu) {
+            state.selected_button = 'character_edit';
+        }
+        await unshallowCharacter(state.this_chid);
+        select_selected_character(state.this_chid, { switchMenu });
+    }
+}
+
+export async function duplicateCharacter({ avatar = null, silent = false } = {}) {
+    // Determine the character to duplicate
+    let targetAvatar;
+    if (avatar) {
+        const character = state.characters.find(c => c.avatar === avatar);
+        if (!character) {
+            toastr.warning(t`Character not found: ${avatar}`);
+            return '';
+        }
+        targetAvatar = avatar;
+    } else {
+        if (state.this_chid === undefined || !state.characters[state.this_chid]) {
+            toastr.warning(t`You must first select a character to duplicate!`);
+            return '';
+        }
+        targetAvatar = state.characters[state.this_chid].avatar;
+    }
+
+    // Show confirmation unless silent
+    if (!silent) {
+        const confirmMessage = $(await renderTemplateAsync('duplicateConfirm'));
+        const confirm = await callGenericPopup(confirmMessage, POPUP_TYPE.CONFIRM);
+
+        if (!confirm) {
+            console.log('User cancelled duplication');
+            return '';
+        }
+    }
+
+    const body = { avatar_url: targetAvatar };
+    const response = await fetch('/api/characters/duplicate', {
+        method: 'POST',
+        headers: getRequestHeaders(),
+        body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+        toastr.error(t`Failed to duplicate character`);
+        return '';
+    }
+
+    toastr.success(t`Character Duplicated`);
+    const data = await response.json();
+    await eventSource.emit(event_types.CHARACTER_DUPLICATED, { oldAvatar: targetAvatar, newAvatar: data.path });
+    await getCharacters();
+
+    return data.path;
+}
 
 function hasKnownGreetingIdentity(chat) {
     if (chat.length !== 1 || chat[0]?.is_user || chat[0]?.is_system) return false;
@@ -607,76 +702,60 @@ export function select_selected_character(chid, { switchMenu = true } = {}) {
 
 export async function openCharacterWorldPopup() {
     const chid = $('#set_character_world').data('chid');
-    if (state.menu_type != 'create' && chid === undefined) {
+    const creating = state.menu_type === 'create';
+    if (!creating && chid === undefined) {
         toastr.error('Does not have an Id for this character in world select menu.');
         return;
     }
-
-    if (state.menu_type !== 'create') {
-        await unshallowCharacter(String(chid));
+    const draft = creating ? state.create_save : null;
+    let draftIdentity;
+    let character = creating ? null : state.characters[chid];
+    const avatar = character?.avatar;
+    const stale = () => new Error('Character changed. Close this dialog and reopen it.');
+    const guard = () => {
+        if (shell().getCharacterWorldDraftIdentity?.() !== draftIdentity) throw stale();
+        if (creating) {
+            if (state.menu_type !== 'create' || getCurrentCharacterAuthoringMode() !== 'create' || state.create_save !== draft || shell().getCharacterWorldDraftIdentity() !== draftIdentity) throw stale();
+        } else {
+            const current = state.characters[chid];
+            if (state.menu_type === 'create' || String(state.this_chid) !== String(chid) || !avatar || current?.avatar !== avatar || getCurrentCharacterAuthoringSource() !== current) throw stale();
+            character = current;
+        }
+    };
+    try {
+        draftIdentity = shell().getCharacterWorldDraftIdentity?.();
+        if (creating) {
+            if (draftIdentity == null) throw new Error('Character draft identity is unavailable. Close this dialog and reopen it.');
+        }
+        guard();
+        if (!creating) {
+            await unshallowCharacter(String(chid));
+            guard();
+        }
+        const fileName = creating ? '' : getCharaFilename(chid);
+        const workspacePanels = await loadWorkspacePanelsModule();
+        guard();
+        const host = document.createElement('div');
+        const existingCharLore = state.world_info.charLore?.find(entry => entry.name === fileName);
+        const props = {
+            characterName: (creating ? draft.name : character?.data?.name) || 'Nameless',
+            primaryWorld: (creating ? draft.world : character?.data?.extensions?.world) || '',
+            auxWorlds: [...(creating ? draft.extra_books ?? [] : existingCharLore?.extraBooks ?? [])],
+            worldNames: [...state.world_names],
+            onPrimaryChange: async name => { guard(); await charUpdatePrimaryWorld(name); guard(); },
+            onAuxChange: async names => { guard(); charSetAuxWorlds(fileName, names); },
+        };
+        const popup = new Popup(host, POPUP_TYPE.TEXT, '', { allowVerticalScrolling: true });
+        let cleanup = () => {};
+        try {
+            cleanup = workspacePanels.mountCharacterWorldInfoEditor(host, props);
+            await popup.show();
+        } finally {
+            cleanup();
+        }
+    } catch (error) {
+        toastr.error(String(error?.message ?? error));
     }
-
-    // TODO: Maybe make this utility function not use the window context?
-    const fileName = getCharaFilename(chid);
-    const charName = (state.menu_type == 'create' ? state.create_save.name : state.characters[chid]?.data?.name) || 'Nameless';
-    const worldId = (state.menu_type == 'create' ? state.create_save.world : state.characters[chid]?.data?.extensions?.world) || '';
-    const template = $('#character_world_template .character_world').clone();
-    template.find('.character_name').text(charName);
-
-    // --- Event Handlers ---
-    async function handlePrimaryWorldSelect() {
-        const selectedValue = $(this).val();
-        const worldIndex = selectedValue !== '' ? Number(selectedValue) : NaN;
-        const name = !isNaN(worldIndex) ? state.world_names[worldIndex] : '';
-        await charUpdatePrimaryWorld(name);
-    }
-
-    function handleExtrasWorldSelect(evt) {
-        const el = evt?.currentTarget ?? this;
-        const selectedValues = $(el).val();
-        const selected = Array.isArray(selectedValues) ? selectedValues : [];
-        const fileName = getCharaFilename(null, {});
-        const nextList = selected.map(i => state.world_names[i]).filter(Boolean);
-        charSetAuxWorlds(fileName, nextList);
-    }
-
-    // --- Populate Dropdowns ---
-    // Append to primary dropdown.
-    const primarySelect = template.find('.character_world_info_selector');
-    state.world_names.forEach((item, i) => {
-        primarySelect.append(new Option(item, String(i), item === worldId, item === worldId));
-    });
-
-    // Append to extras dropdown.
-    const extrasSelect = template.find('.character_extra_world_info_selector');
-    const existingCharLore = state.world_info.charLore?.find((e) => e.name === fileName);
-    state.world_names.forEach((item, i) => {
-        const array = (state.menu_type == 'create' ? state.create_save.extra_books : existingCharLore?.extraBooks);
-        const isSelected = !!array?.includes(item);
-        extrasSelect.append(new Option(item, String(i), isSelected, isSelected));
-    });
-
-    const popup = new Popup(template, POPUP_TYPE.TEXT, '', {
-        onOpen: function (popup) {
-            const popupDialog = $(popup.dlg);
-
-            primarySelect.on('change', handlePrimaryWorldSelect);
-            extrasSelect.on('change', handleExtrasWorldSelect);
-
-            // Not needed on mobile.
-            if (!isMobile()) {
-                extrasSelect.select2({
-                    width: '100%',
-                    placeholder: t`No auxiliary Lorebooks set. Click here to select.`,
-                    allowClear: true,
-                    closeOnSelect: false,
-                    dropdownParent: popupDialog,
-                });
-            }
-        },
-    });
-
-    await popup.show();
 }
 
 
@@ -693,6 +772,15 @@ export async function createOrEditCharacter(e) {
     const draftTagIds = getDraftTagIds();
     $('#rm_info_avatar').html('');
     const formData = new FormData(/** @type {HTMLFormElement} */($('#form_create').get(0)));
+    const editTarget = {
+        id: String(state.this_chid), avatar: formData.get('avatar_url'),
+        identity: shell().getCharacterWorldDraftIdentity?.(),
+        chat: state.chat, metadata: state.chat_metadata,
+    };
+    const isCurrentEdit = () => String(state.this_chid) === editTarget.id
+        && state.characters[state.this_chid]?.avatar === editTarget.avatar
+        && shell().getCharacterWorldDraftIdentity?.() === editTarget.identity
+        && state.chat === editTarget.chat && state.chat_metadata === editTarget.metadata;
     const finishSave = beginCharacterSave($('#form_create').attr('actiontype') === 'createcharacter' ? '' : String(formData.get('avatar_url') || ''));
     if (!finishSave) return;
     try {
@@ -837,6 +925,9 @@ export async function createOrEditCharacter(e) {
                 }
 
                 await getOneCharacter(editedAvatar);
+                // The card refresh belongs to the saved avatar. Form, greeting,
+                // and chat completion effects belong only to its original session.
+                if (!isCurrentEdit()) return;
                 state.favsToHotswap(); // Update fav state
 
                 $('#add_avatar_button').replaceWith(
@@ -845,6 +936,7 @@ export async function createOrEditCharacter(e) {
                 $('#create_button').attr('value', 'Save');
                 state.crop_data = undefined;
                 await eventSource.emit(event_types.CHARACTER_EDITED, { detail: { id: state.this_chid, character: state.characters[state.this_chid] } });
+                if (!isCurrentEdit()) return;
 
                 // Recreate the chat if it hasn't been used at least once (i.e. with continue).
                 const message = getFirstMessage(undefined, { recordGreetingIdentity: hasKnownGreetingIdentity(state.chat) });
@@ -859,9 +951,13 @@ export async function createOrEditCharacter(e) {
                     state.chat.splice(0, state.chat.length, message);
                     const messageId = (state.chat.length - 1);
                     await eventSource.emit(event_types.MESSAGE_RECEIVED, messageId, 'first_message');
+                    if (!isCurrentEdit()) return;
                     await clearChat();
+                    if (!isCurrentEdit()) return;
                     await printMessages();
+                    if (!isCurrentEdit()) return;
                     await eventSource.emit(event_types.CHARACTER_MESSAGE_RENDERED, messageId, 'first_message');
+                    if (!isCurrentEdit()) return;
                     await saveChatConditional();
                 }
             } catch (error) {
