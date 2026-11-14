@@ -11,7 +11,7 @@ fs.writeFileSync(tmpConfig, 'port: 8000\n', 'utf8');
 setConfigFilePath(tmpConfig);
 
 // Dynamic import after config is set
-const { getPasswordHash, getCookieSessionName, getSessionCookieAge, getCookieSecret } = await import('../src/user-auth.js');
+const { getPasswordHash, getCookieSessionName, getSessionCookieAge, getCookieSecret } = await import('../src/user-auth.ts');
 
 afterAll(() => {
     fs.rmSync(tmpDir, { recursive: true, force: true });

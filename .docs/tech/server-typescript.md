@@ -163,3 +163,12 @@ pre-start configuration script with a temporary cwd. No loader, emitted
 server code, or listening server is used. The existing user/config suites
 also run directly against the production TypeScript files through the shared
 Jest adapter.
+
+## User authentication
+
+`src/user-auth.ts` is the sole implementation of credential, SSO, CSRF and
+session helpers; the `src/users.js` compatibility barrel imports it directly.
+SSO and trusted-proxy configuration is still read at module load time. The
+native user/config test exercises the real barrel and auth module, trusted and
+untrusted SSO clients, anonymous and user CSRF secrets, and cookie-secret
+migration. This internal migration changes no user-visible semantic contract.

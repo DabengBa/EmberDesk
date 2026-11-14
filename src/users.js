@@ -34,7 +34,7 @@ export {
     getCsrfSecret,
     shouldRedirectToLogin,
     tryAutoLogin,
-} from './user-auth.js';
+} from './user-auth.ts';
 
 // Native Node Modules
 import path from 'node:path';
@@ -50,7 +50,7 @@ import { getConfigValue, color, generateTimestamp, isPathUnderParent, invalidate
 import { allowKeysExposure, SECRETS_FILE } from './endpoints/secrets.js';
 import { getEnableAccounts, toKey, getAccountVersion, getAllEnabledUsers, needsSetup } from './user-storage.ts';
 import { getUserDirectories } from './user-directories.js';
-import { shouldRedirectToLogin, tryAutoLogin } from './user-auth.js';
+import { shouldRedirectToLogin, tryAutoLogin } from './user-auth.ts';
 import { hasReactLoginBuild, sendReactLoginIndex } from './middleware/react-login-serve.js';
 
 /**

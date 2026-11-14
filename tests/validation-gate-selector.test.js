@@ -28,7 +28,7 @@ describe('validation gate selector', () => {
             'src/endpoints/characters.js',
             'src/canonical-sqlite-operator.js',
             'src/command-line.js',
-            'src/user-auth.js',
+            'src/user-auth.ts',
             'src/derived-cache-sqlite.js',
             'public/lib.js',
             '.docs/db/pages/chat-workspace.md',
