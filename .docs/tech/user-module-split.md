@@ -16,7 +16,7 @@ Primary files:
 - `src/user-storage.ts` — `node-persist` CRUD and user record queries
 - `src/user-directories.js` — per-user filesystem layout and directory creation
 - `src/user-migrations.js` — startup data migrations
-- `src/user-auth.js` — credential verification, SSO, session crypto
+- `src/user-auth.ts` — credential verification, SSO, session crypto
 
 ## Architecture And Constraints
 
@@ -24,7 +24,7 @@ The split follows a layered dependency graph with no back-edges:
 
 ```
 users.js (barrel + middleware + routes)
-  ├── user-auth.js
+  ├── user-auth.ts
   │     └── user-storage.ts
   ├── user-directories.js
   │     └── user-storage.ts
@@ -37,7 +37,7 @@ Constraints:
 
 - `src/users.js` re-exports all symbols from the four new modules. Existing importers (`server-main.js`, `server-startup.js`, `basicAuth.js`, `recover-password.js`, `settings.js`, `stats.js`, `characters.js`, `users-public.js`, `users-private.js`, `users-admin.js`) continue importing from `src/users.js` unchanged.
 - Path traversal protection (`isPathUnderParent` + `path.resolve`) remains in `createRouteHandler` and `createExtensionsRouteHandler` in `users.js`.
-- `node-persist` storage is initialized once via `initUserStorage()` in `user-storage.ts`. SSO login functions in `user-auth.js` access `storage.getItem()` directly.
+- `node-persist` storage is initialized once via `initUserStorage()` in `user-storage.ts`. SSO login functions in `user-auth.ts` access `storage.getItem()` directly.
 
 ### Lazy config reads
 
@@ -79,7 +79,7 @@ Constraints:
 
 Each migration is self-contained with its own idempotency mechanism.
 
-### user-auth.js
+### user-auth.ts
 
 | Symbol | Type | Notes |
 |---|---|---|

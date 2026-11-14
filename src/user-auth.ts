@@ -10,6 +10,7 @@ import { getEnableAccounts, toKey, getAllUserHandles, getAccountVersion } from '
 import { getConfigValue, color } from './util.js';
 import { readSecret, writeSecret } from './endpoints/secrets.js';
 import { filterValidIpPatterns, getIpFromRequest } from './express-common.js';
+import type { Request } from 'express';
 
 const AUTHELIA_AUTH = getConfigValue('sso.autheliaAuth', false, 'boolean');
 const AUTHENTIK_AUTH = getConfigValue('sso.authentikAuth', false, 'boolean');
@@ -32,7 +33,7 @@ const COOKIE_SECRET_PATH = 'cookie-secret.txt';
  * @param {string} dataRoot The root directory for user data
  * @returns {string} The cookie secret
  */
-export function getCookieSecret(dataRoot) {
+export function getCookieSecret(dataRoot: string) {
     const cookieSecretPath = path.join(dataRoot, COOKIE_SECRET_PATH);
 
     if (fs.existsSync(cookieSecretPath)) {
@@ -99,7 +100,7 @@ export function getSessionCookieAge() {
  * @param {string} salt Salt to use for hashing
  * @returns {string} Hashed password
  */
-export function getPasswordHash(password, salt) {
+export function getPasswordHash(password: string, salt: string) {
     return crypto.scryptSync(password.normalize(), salt, 64).toString('base64');
 }
 
@@ -108,7 +109,7 @@ export function getPasswordHash(password, salt) {
  * @param {import('express').Request} [request] HTTP request object
  * @returns {string} The CSRF secret
  */
-export function getCsrfSecret(request) {
+export function getCsrfSecret(request?: Request) {
     if (!request || !request.user) {
         return ANON_CSRF_SECRET;
     }
@@ -128,7 +129,7 @@ export function getCsrfSecret(request) {
  * @param {import('express').Request} request Request object
  * @returns {boolean} Whether the user should be redirected to the login page
  */
-export function shouldRedirectToLogin(request) {
+export function shouldRedirectToLogin(request: Request) {
     return getEnableAccounts() && !request.user;
 }
 
@@ -139,7 +140,7 @@ export function shouldRedirectToLogin(request) {
  * @param {boolean} basicAuthMode If Basic auth mode is enabled
  * @returns {Promise<boolean>} Whether auto-login was performed
  */
-export async function tryAutoLogin(request, basicAuthMode) {
+export async function tryAutoLogin(request: Request, basicAuthMode: boolean) {
     if (!getEnableAccounts() || request.user || !request.session) {
         return false;
     }
@@ -170,7 +171,7 @@ export async function tryAutoLogin(request, basicAuthMode) {
  * @param {import('express').Request} request Request object
  * @returns {Promise<boolean>} Whether auto-login was performed
  */
-async function singleUserLogin(request) {
+async function singleUserLogin(request: Request) {
     if (!request.session) {
         return false;
     }
@@ -193,7 +194,7 @@ async function singleUserLogin(request) {
  * @param {import('express').Request} request Request object
  * @returns {Promise<boolean>} Whether auto-login was performed
  */
-async function autheliaUserLogin(request) {
+async function autheliaUserLogin(request: Request) {
     return headerUserLogin(request, 'Remote-User');
 }
 
@@ -203,7 +204,7 @@ async function autheliaUserLogin(request) {
  * @param {import('express').Request} request Request object
  * @returns {Promise<boolean>} Whether auto-login was performed
  */
-async function authentikUserLogin(request) {
+async function authentikUserLogin(request: Request) {
     return headerUserLogin(request, 'X-Authentik-Username');
 }
 
@@ -212,7 +213,7 @@ async function authentikUserLogin(request) {
  * @param {string} ip The IP address of the request
  * @return {boolean} If the request is from a trusted proxy based on the configuration
  */
-function isRequestFromTrustedProxy(ip) {
+function isRequestFromTrustedProxy(ip: string) {
     if (!Array.isArray(TRUSTED_PROXIES)) {
         console.warn(color.yellow('sso.trustedProxies is not an array. Please check your config.yaml. SSO auto-login will not work.'));
         return false;
@@ -251,7 +252,7 @@ function isRequestFromTrustedProxy(ip) {
  * @param {string} [header='Remote-User'] The header to use for the trusted user
  * @returns {Promise<boolean>} Whether auto-login was performed
  */
-async function headerUserLogin(request, header = 'Remote-User') {
+async function headerUserLogin(request: Request, header = 'Remote-User') {
     if (!request.session) {
         return false;
     }
@@ -288,7 +289,7 @@ async function headerUserLogin(request, header = 'Remote-User') {
  * @param {import('express').Request} request Request object
  * @returns {Promise<boolean>} Whether auto-login was performed
  */
-async function basicUserLogin(request) {
+async function basicUserLogin(request: Request) {
     if (!request.session) {
         return false;
     }
