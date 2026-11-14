@@ -13,7 +13,7 @@ import { createCanonicalSqliteManager } from '../src/canonical-sqlite.js';
 import { recordWorldProjectionIntent } from '../src/canonical-world-info-projection.js';
 import { runCanonicalShadowImport, getPersistedCanonicalAuditStatus, persistCanonicalAuditStatus } from '../src/canonical-sqlite-shadow-import.js';
 import { runCanonicalChatShadowImport } from '../src/canonical-chat-shadow-import.js';
-import { recordProjectionRepair } from '../src/endpoints/character-store.js';
+import { recordProjectionRepair } from '../src/endpoints/character-store.ts';
 import {
     recordWorldInfoProjectionRepair,
     upsertCanonicalWorldInfoBook,

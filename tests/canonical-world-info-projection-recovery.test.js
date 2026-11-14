@@ -24,7 +24,7 @@ import {
 import { explainCanonicalRolloutBlockers, getCanonicalStorageControlPlaneStatus } from '../src/canonical-sqlite-operator.js';
 import { runCanonicalWorldInfoAudit, repairCanonicalWorldInfoProjection } from '../src/canonical-sqlite-operator.js';
 import { runCharacterTextReplace } from '../src/endpoints/character-text-replace-service.js';
-import * as characterStore from '../src/endpoints/character-store.js';
+import * as characterStore from '../src/endpoints/character-store.ts';
 import { runCanonicalWorldInfoShadowImport } from '../src/canonical-world-info-shadow-import.js';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');

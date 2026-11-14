@@ -37,7 +37,7 @@ import {
 import {
     getCanonicalCharacter,
     resolveProjectionRepair,
-} from './endpoints/character-store.js';
+} from './endpoints/character-store.ts';
 import {
     listOpenWorldInfoProjectionRepairs,
 } from './endpoints/world-info-store.js';
