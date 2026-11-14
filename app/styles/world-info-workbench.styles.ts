@@ -856,6 +856,7 @@ export const worldInfoWorkbenchStyles = stylex.create({
         zIndex: 3,
         flex: '0 0 auto',
         display: 'flex',
+        flexWrap: 'wrap',
         alignItems: 'center',
         gap: '10px',
         padding: '6px 12px',
@@ -866,6 +867,8 @@ export const worldInfoWorkbenchStyles = stylex.create({
         backdropFilter: 'blur(4px)',
     },
     statusMeta: {
+        flex: '0 0 auto',
+        maxWidth: '100%',
         marginLeft: 'auto',
         marginRight: 'auto',
         display: 'inline-flex',
@@ -874,9 +877,7 @@ export const worldInfoWorkbenchStyles = stylex.create({
         fontSize: 'calc(var(--mainFontSize) * 0.72)',
         color: 'color-mix(in srgb, var(--SmartThemeBodyColor) 55%, transparent)',
         fontVariantNumeric: 'tabular-nums',
-        whiteSpace: 'nowrap',
-        overflow: 'hidden',
-        textOverflow: 'ellipsis',
+        overflowWrap: 'anywhere',
     },
     statusDotConstant: {
         backgroundColor: 'var(--SmartThemeQuoteColor)',

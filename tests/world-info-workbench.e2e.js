@@ -419,6 +419,39 @@ test.describe('World Info ownership', () => {
         await expect(page.locator('[data-world-info-react-field="comment"]')).toHaveValue(`${name} entry 0`);
     }
 
+    for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
+        test(`failed save status and retry remain readable at ${viewport.width}px`, async ({ page }, testInfo) => {
+            await page.setViewportSize(viewport);
+            const [book] = await importBooks(page, `save-status-layout-${viewport.width}`);
+            await selectEntry(page, book);
+            await page.route('**/api/worldinfo/edit', route => route.fulfill({ status: 503, body: 'unavailable' }));
+            await page.locator('[data-world-info-react-field="content"]').fill('Recovery draft: keep this after the server returns.');
+
+            const footer = page.locator('[data-world-info-react-section="ops"]');
+            const status = footer.locator('[aria-live="polite"]');
+            const retry = footer.locator('[data-world-info-react-action="retry-save"]');
+            await expect(status).toContainText('保存失败');
+            await expect(status).toBeVisible();
+            await expect(retry).toBeVisible();
+            await expect.poll(() => status.evaluate(element => {
+                const statusBox = element.getBoundingClientRect();
+                const errorBox = element.lastElementChild.getBoundingClientRect();
+                const footerBox = element.parentElement.getBoundingClientRect();
+                const retryBox = element.parentElement.querySelector('[data-world-info-react-action="retry-save"]').getBoundingClientRect();
+                return element.scrollWidth <= element.clientWidth + 1
+                    && errorBox.left >= statusBox.left - 1 && errorBox.right <= statusBox.right + 1
+                    && statusBox.left >= footerBox.left - 1 && statusBox.right <= footerBox.right + 1
+                    && (errorBox.right <= retryBox.left || errorBox.left >= retryBox.right
+                        || errorBox.bottom <= retryBox.top || errorBox.top >= retryBox.bottom);
+            }), { message: `save status must fit without clipping or overlapping retry at ${viewport.width}px` }).toBe(true);
+            await page.screenshot({ path: testInfo.outputPath('save-failure.png') });
+
+            await page.unroute('**/api/worldinfo/edit');
+            await retry.click();
+            await expect(status).toContainText('已保存');
+        });
+    }
+
     test('slow book switch preserves edits started while the destination loads', async ({ page }) => {
         const [a, b] = await importBooks(page, 'slow-book-switch');
         await selectEntry(page, a);
