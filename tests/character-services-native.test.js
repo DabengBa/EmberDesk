@@ -46,15 +46,27 @@ test('Node resolves the real character router, replacement and import graphs', (
             const { setConfigFilePath } = await import(process.argv[1]);
             setConfigFilePath(process.argv[2]);
             globalThis.DATA_ROOT = process.argv[3];
+            const store = await import(process.argv[7]);
             const { router } = await import(process.argv[4]);
             const { runCharacterTextReplace } = await import(process.argv[5]);
             const { createCharacterImportCoordinator } = await import(process.argv[6]);
+            const worldinfo = await import(process.argv[8]);
+            const shadow = await import(process.argv[9]);
+            const operator = await import(process.argv[10]);
+            const { DatabaseSync } = await import('node:sqlite');
+            const db = new DatabaseSync(':memory:');
+            db.exec('CREATE TABLE characters (id TEXT, avatar_filename TEXT, card_json TEXT, shallow_json TEXT, deleted_at_ms INTEGER); CREATE TABLE character_chat_stats (character_id TEXT, chat_size_bytes INTEGER, date_last_chat_ms INTEGER)');
+            assert.deepEqual(store.listCanonicalCharacters(db, { useShallowPayload: false }), []);
+            db.close();
             assert.equal(typeof router, 'function');
             assert.equal(typeof runCharacterTextReplace, 'function');
             assert.equal(typeof createCharacterImportCoordinator, 'function');
+            assert.ok(worldinfo && shadow && operator);
             console.log('character-callers:native');
         `, moduleUrl('util.js'), config, root, moduleUrl('endpoints/characters.js'),
-        moduleUrl('endpoints/character-text-replace-service.js'), moduleUrl('endpoints/character-import-service.js'));
+        moduleUrl('endpoints/character-text-replace-service.js'), moduleUrl('endpoints/character-import-service.js'),
+        moduleUrl('endpoints/character-store.ts'), moduleUrl('endpoints/worldinfo.js'),
+        moduleUrl('canonical-sqlite-shadow-import.js'), moduleUrl('canonical-sqlite-operator.js'));
         expect({ status: result.status, stderr: result.status === 0 ? '' : result.stderr })
             .toEqual({ status: 0, stderr: '' });
         expect(result.stdout).toContain('character-callers:native');

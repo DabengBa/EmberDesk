@@ -40,7 +40,7 @@ test('strict consumers can compose reads, writes, text replacement and import ca
         import { readCharacterListPayload, readCharacterSummaryPayload, readCharacterFullPayload } from ${modulePath('character-read-service.ts')};
         import type { CharacterReadDependencies } from ${modulePath('character-read-service.ts')};
         import { createCharacterCard, editCharacterCard, renameCharacterCard, deleteCharacterCard } from ${modulePath('character-write-service.ts')};
-        import { listCanonicalCharacters, getCanonicalCharacter } from ${modulePath('character-store.js')};
+        import { listCanonicalCharacters, getCanonicalCharacter } from ${modulePath('character-store.ts')};
         import { runCharacterTextReplace } from ${modulePath('character-text-replace-service.js')};
         import type { CharacterTextReplaceDependencies } from ${modulePath('character-text-replace-service.js')};
         import { createCharacterImportCoordinator } from ${modulePath('character-import-service.js')};

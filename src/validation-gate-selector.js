@@ -142,7 +142,7 @@ const RULES = [
                 /^src\/storage-feature-flags\.js$/,
                 /^src\/endpoints\/character-read-service\.ts$/,
                 /^src\/endpoints\/character-write-service\.ts$/,
-                /^src\/endpoints\/character-store\.js$/,
+                /^src\/endpoints\/character-store\.ts$/,
                 /^src\/endpoints\/characters\.js$/,
                 /^scripts\/canonical-sqlite-(?:audit|repair)\.mjs$/,
                 /^tests\/canonical-sqlite-(?:cli|operator|rollout-contract|shadow-import|migrations|test)\.test\.js$/,

@@ -11,7 +11,7 @@ import {
     getCanonicalFlagContractStatus,
     listOpenProjectionRepairs,
 } from '../src/canonical-sqlite-rollout-contract.js';
-import { recordProjectionRepair, resolveProjectionRepair } from '../src/endpoints/character-store.js';
+import { recordProjectionRepair, resolveProjectionRepair } from '../src/endpoints/character-store.ts';
 
 const tempRoots = [];
 const managers = [];
