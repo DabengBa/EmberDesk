@@ -11,7 +11,7 @@ import { calculateCanonicalCharacterChatStats } from './endpoints/canonical-chat
 import { getCanonicalSliceProjectionMode } from './storage-feature-flags.js';
 import { countMissingCharacterAvatarBlobs } from './canonical-avatar-blobs.js';
 import { listOpenProjectionRepairs } from './canonical-sqlite-rollout-contract.js';
-import { normalizeCanonicalCharacterPayload } from './endpoints/character-store.js';
+import { normalizeCanonicalCharacterPayload } from './endpoints/character-store.ts';
 import {
     classifyImportCandidate,
     recordImportLedgerEntry,

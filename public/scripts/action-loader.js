@@ -621,10 +621,8 @@ async function hideOverlay({ immediate = false } = {}) {
         }
 
         // Apply the blur styles to the entire loader element
-        loaderElement.css({
-            'filter': 'blur(15px)',
-            'opacity': '0',
-        });
+        loaderElement[0].style.filter = 'blur(15px)';
+        loaderElement[0].style.opacity = '0';
     });
 }
 

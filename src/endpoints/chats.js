@@ -41,7 +41,7 @@ import {
 import {
     readCanonicalChatPayload,
     serializeCanonicalChatPayload,
-} from './canonical-chat-read-service.js';
+} from './canonical-chat-read-service.ts';
 import { reconcileCanonicalChatSources } from '../canonical-chat-shadow-import.js';
 import {
     readCanonicalRecentChatPayload,

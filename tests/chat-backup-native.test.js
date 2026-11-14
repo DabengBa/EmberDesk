@@ -11,6 +11,8 @@ const routes = new URL('../src/endpoints/chat-route-service.ts', import.meta.url
 const chats = new URL('../src/endpoints/chats.js', import.meta.url).href;
 const characters = new URL('../src/endpoints/characters.js', import.meta.url).href;
 const queries = new URL('../src/endpoints/canonical-chat-query-service.ts', import.meta.url).href;
+const reads = new URL('../src/endpoints/canonical-chat-read-service.ts', import.meta.url).href;
+const textReplace = new URL('../src/endpoints/character-text-replace-service.js', import.meta.url).href;
 const util = new URL('../src/util.js', import.meta.url).href;
 
 function runNode(source, ...args) {
@@ -81,6 +83,44 @@ test('Node imports the real chats and characters callers and canonical query Typ
         expect(result.stdout).toContain('chats-router:function');
         expect(result.stdout).toContain('characters-router:function');
         expect(result.stdout).toContain('canonical-query:ok');
+    } finally {
+        fs.rmSync(root, { recursive: true, force: true });
+    }
+});
+
+test('Node executes canonical TypeScript reads and imports both production callers without a loader', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-chat-read-native-'));
+    try {
+        const config = path.join(root, 'config.yaml');
+        fs.writeFileSync(config, 'backups:\n  chat:\n    enabled: false\n', 'utf8');
+        const source = `
+            import assert from 'node:assert/strict';
+            import { DatabaseSync } from 'node:sqlite';
+            const { setConfigFilePath } = await import(process.argv[1]);
+            setConfigFilePath(process.argv[2]);
+            const { readCanonicalChatPayload, readCanonicalChatVersionedPayload, serializeCanonicalChatPayload } = await import(process.argv[3]);
+            const { router } = await import(process.argv[4]);
+            const { runCharacterTextReplace } = await import(process.argv[5]);
+            const db = new DatabaseSync(':memory:');
+            try {
+                db.exec('CREATE TABLE chat_sessions (id TEXT, owner_type TEXT, owner_id TEXT, source_path TEXT, header_payload_json TEXT, concurrency_token TEXT); CREATE TABLE chat_messages (id TEXT, session_id TEXT, message_order INTEGER, payload_json TEXT)');
+                const header = ' { "opaque": true } ';
+                const message = '{"mes":"native"}';
+                db.prepare('INSERT INTO chat_sessions VALUES (?, ?, ?, ?, ?, ?)').run('id', 'character', 'alice', 'chat', header, null);
+                db.prepare('INSERT INTO chat_messages VALUES (?, ?, ?, ?)').run('message', 'id', 0, message);
+                const locator = { ownerType: 'character', ownerId: 'alice', sourcePath: 'chat' };
+                const payload = [{ opaque: true }, { mes: 'native' }];
+                assert.deepEqual(readCanonicalChatPayload(db, locator), payload);
+                assert.deepEqual(readCanonicalChatVersionedPayload(db, locator), { version: null, payload });
+                assert.equal(serializeCanonicalChatPayload(db, locator), header + '\\n' + message);
+                assert.equal(typeof router, 'function');
+                assert.equal(typeof runCharacterTextReplace, 'function');
+                console.log('canonical-read:ok');
+            } finally { db.close(); }
+        `;
+        const result = runNode(source, util, config, reads, chats, textReplace);
+        expect({ status: result.status, stderr: result.status === 0 ? '' : result.stderr }).toEqual({ status: 0, stderr: '' });
+        expect(result.stdout.trim()).toBe('canonical-read:ok');
     } finally {
         fs.rmSync(root, { recursive: true, force: true });
     }
