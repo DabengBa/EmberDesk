@@ -72,7 +72,7 @@ import { reconcileCanonicalChatSources } from '../canonical-chat-shadow-import.j
 import {
     deleteCanonicalChatSessionsForOwner,
     retargetCanonicalChatSessionsOwner,
-} from './canonical-chat-store.js';
+} from './canonical-chat-store.ts';
 import {
     parseCanonicalChatJsonl,
     writeCanonicalChatPayload,

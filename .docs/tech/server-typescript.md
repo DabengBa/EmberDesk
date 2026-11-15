@@ -103,6 +103,14 @@ existing unchecked JSON access; they do not claim to validate nested inputs.
 Focused SQLite integration tests and `tests/settings-store-native.test.js`
 exercise the real router/store graph and native Node resolution without a loader.
 
+`src/endpoints/canonical-chat-store.ts` is the sole canonical chat store
+implementation. Its callers use the actual `.ts` extension. Existing SQLite
+transactions, conditional versions and operation replay, projection tombstones,
+opaque chat payloads, attachments, repair records and character statistics
+retain their prior behavior. Focused SQLite tests cover these contracts; a
+native Node subprocess exercises the real write consumer and migrated store.
+
+
 `src/endpoints/canonical-secrets-store.ts` is the sole canonical secrets store
 implementation. Existing callers use its real `.ts` path; the SecretManager
 access boundary and the synchronous SQLite transactions, active-record

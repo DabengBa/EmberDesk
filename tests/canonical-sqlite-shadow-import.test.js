@@ -1033,7 +1033,7 @@ describe('canonical sqlite shadow import', () => {
             // A canonical chat session exists while the stored stats claim zero:
             // DB-side drift must stay blocking even with both projections off.
             const { createCanonicalChatSessionRecord, upsertCanonicalChatSession } =
-                await import('../src/endpoints/canonical-chat-store.js');
+                await import('../src/endpoints/canonical-chat-store.ts');
             upsertCanonicalChatSession(db, createCanonicalChatSessionRecord(db, {
                 locator: {
                     ownerType: 'character',

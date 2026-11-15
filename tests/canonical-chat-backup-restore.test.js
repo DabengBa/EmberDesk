@@ -10,7 +10,7 @@ import { createCanonicalSqliteManager } from '../src/canonical-sqlite.js';
 import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
 import { runCanonicalChatShadowImport } from '../src/canonical-chat-shadow-import.js';
 import { repairCanonicalChatProjection } from '../src/canonical-sqlite-operator.js';
-import { listOpenCanonicalChatProjectionRepairs } from '../src/endpoints/canonical-chat-store.js';
+import { listOpenCanonicalChatProjectionRepairs } from '../src/endpoints/canonical-chat-store.ts';
 import { readCanonicalChatPayload } from '../src/endpoints/canonical-chat-read-service.ts';
 import {
     createCanonicalChatBackup,

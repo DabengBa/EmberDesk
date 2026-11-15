@@ -17,7 +17,7 @@ import {
     upsertCanonicalChatSession,
     saveCanonicalChatSessionIfCurrent,
     syncCanonicalCharacterChatStats,
-} from './canonical-chat-store.js';
+} from './canonical-chat-store.ts';
 
 function buildRepairKey(locator, operation) {
     return [

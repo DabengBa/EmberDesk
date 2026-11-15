@@ -14,7 +14,7 @@ import {
 import {
     getCanonicalChatSession,
     serializeCanonicalChatSession,
-} from '../src/endpoints/canonical-chat-store.js';
+} from '../src/endpoints/canonical-chat-store.ts';
 
 const roots = [];
 
