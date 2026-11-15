@@ -10,7 +10,7 @@ import { write as writeCharacterCard } from './character-card-parser.js';
 import { listImportLedgerEntries, recordImportLedgerEntry } from './canonical-import-ledger.js';
 import { resolveCanonicalChatProjectionPath } from './endpoints/canonical-chat-projection-path.js';
 import { listCanonicalChatSessions } from './endpoints/canonical-chat-store.ts';
-import { getCanonicalManagedMediaReference, listCanonicalManagedMediaReferences } from './endpoints/canonical-managed-media-store.js';
+import { getCanonicalManagedMediaReference, listCanonicalManagedMediaReferences } from './endpoints/canonical-managed-media-store.ts';
 import { getCanonicalSecretsProjection } from './canonical-secrets-shadow-import.js';
 import { getCanonicalSettingsDocument } from './endpoints/settings-store.ts';
 import { listCanonicalPresets } from './endpoints/presets-store.ts';

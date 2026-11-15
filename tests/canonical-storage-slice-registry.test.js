@@ -23,7 +23,7 @@ import {
 } from '../src/canonical-sqlite-rollout-contract.js';
 import { recordProjectionRepair } from '../src/endpoints/character-store.ts';
 import { recordCanonicalChatProjectionRepair } from '../src/endpoints/canonical-chat-store.ts';
-import { recordCanonicalManagedMediaRepair } from '../src/endpoints/canonical-managed-media-store.js';
+import { recordCanonicalManagedMediaRepair } from '../src/endpoints/canonical-managed-media-store.ts';
 import { MANAGED_MEDIA_AUDIT_SCOPE } from '../src/canonical-managed-media-shadow-import.js';
 import { CANONICAL_CHAT_AUDIT_SCOPE } from '../src/canonical-chat-shadow-import.js';
 import { recordWorldInfoProjectionRepair, upsertCanonicalWorldInfoBook } from '../src/endpoints/world-info-store.ts';

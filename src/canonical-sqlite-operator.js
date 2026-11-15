@@ -49,7 +49,7 @@ import {
     listOpenSecretProjectionRepairs,
     resolveSecretProjectionRepair,
 } from './endpoints/canonical-secrets-store.ts';
-import { listOpenCanonicalManagedMediaRepairs } from './endpoints/canonical-managed-media-store.js';
+import { listOpenCanonicalManagedMediaRepairs } from './endpoints/canonical-managed-media-store.ts';
 import {
     calculateCanonicalCharacterChatStats,
     listOpenCanonicalChatProjectionRepairs,

@@ -11,7 +11,7 @@ import {
     writeCanonicalManagedMedia,
 } from './canonical-managed-media-write-service.js';
 import { getCanonicalManagedMediaReadState } from './canonical-managed-media-read-service.js';
-import { getCanonicalManagedMediaReference } from './canonical-managed-media-store.js';
+import { getCanonicalManagedMediaReference } from './canonical-managed-media-store.ts';
 import { ensureCanonicalSliceBackend } from '../canonical-backend.js';
 
 export const router = express.Router();

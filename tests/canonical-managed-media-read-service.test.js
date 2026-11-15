@@ -14,7 +14,7 @@ import {
 } from '../src/endpoints/canonical-managed-media-read-service.js';
 import {
     upsertCanonicalManagedMediaReference,
-} from '../src/endpoints/canonical-managed-media-store.js';
+} from '../src/endpoints/canonical-managed-media-store.ts';
 
 const tempRoots = [];
 const managers = [];

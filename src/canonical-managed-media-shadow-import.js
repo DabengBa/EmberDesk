@@ -14,7 +14,7 @@ import { persistCanonicalAuditStatus } from './canonical-sqlite-shadow-import.js
 import {
     listCanonicalManagedMediaReferences,
     upsertCanonicalManagedMediaReference,
-} from './endpoints/canonical-managed-media-store.js';
+} from './endpoints/canonical-managed-media-store.ts';
 import { isVirtualAvatarReference } from './canonical-avatar-blobs.js';
 import { isPathUnderParent } from './util.js';
 

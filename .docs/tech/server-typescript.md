@@ -128,6 +128,13 @@ selection, migration markers and projection-repair behavior remain unchanged.
 Focused SQLite integration and existing native Node caller tests cover this
 internal migration; no user-visible semantic documentation changes are needed.
 
+`src/endpoints/canonical-managed-media-store.ts` is the sole managed-media
+store implementation. JavaScript consumers import its actual `.ts` path; the
+read and write services remain JavaScript. Blob identity, references, soft
+deletion, synchronous transaction callbacks and repair records retain their
+existing behavior. Type annotations describe existing inputs and SQLite rows,
+not additional runtime validation.
+
 `src/endpoints/world-info-store.ts` is the sole implementation of the
 canonical World Info store. Its JavaScript callers use the real `.ts` path,
 including projection and shadow import. SQLite remains authoritative;

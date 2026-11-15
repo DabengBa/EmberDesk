@@ -11,7 +11,7 @@ import { getCanonicalStorageSlice } from '../canonical-storage-slice-registry.js
 import {
     getCanonicalManagedMediaReference,
     listCanonicalManagedMediaReferences,
-} from './canonical-managed-media-store.js';
+} from './canonical-managed-media-store.ts';
 
 function getDefaultDependencies() {
     const slice = getCanonicalStorageSlice('managed_media');

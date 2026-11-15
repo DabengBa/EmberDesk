@@ -11,7 +11,7 @@ import { expectCanonicalDomainSchema } from './helpers/canonical-domain-schema.j
 import {
     listCanonicalManagedMediaReferences,
     upsertCanonicalManagedMediaReference,
-} from '../src/endpoints/canonical-managed-media-store.js';
+} from '../src/endpoints/canonical-managed-media-store.ts';
 import {
     MANAGED_MEDIA_AUDIT_SCOPE,
     auditCanonicalManagedMediaShadowImport,

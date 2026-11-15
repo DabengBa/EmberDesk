@@ -23,7 +23,7 @@ import {
 import { listOpenWorldInfoProjectionRepairs } from './endpoints/world-info-store.ts';
 import { listOpenSettingsProjectionRepairs } from './endpoints/settings-store.ts';
 import { listOpenSecretProjectionRepairs } from './endpoints/canonical-secrets-store.ts';
-import { listOpenCanonicalManagedMediaRepairs } from './endpoints/canonical-managed-media-store.js';
+import { listOpenCanonicalManagedMediaRepairs } from './endpoints/canonical-managed-media-store.ts';
 import { listOpenCanonicalChatProjectionRepairs } from './endpoints/canonical-chat-write-service.ts';
 
 const REQUIRED_SLICE_FIELDS = Object.freeze([
