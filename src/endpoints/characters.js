@@ -47,7 +47,7 @@ import {
     renameCharacterAvatarBlobReference,
     retireCharacterAvatarBlobReference,
 } from '../canonical-avatar-blobs.js';
-import { getCharacterAvatarBlobContents, recordCharacterAvatarBlob } from '../canonical-avatar-blob-service.js';
+import { getCharacterAvatarBlobContents, recordCharacterAvatarBlob } from '../canonical-avatar-blob-service.ts';
 import { getCanonicalFlagContractStatus } from '../canonical-sqlite-rollout-contract.js';
 import {
     getCanonicalCharacter,
@@ -77,9 +77,9 @@ import {
     parseCanonicalChatJsonl,
     writeCanonicalChatPayload,
 } from './canonical-chat-write-service.ts';
-import { writeCanonicalManagedMedia } from './canonical-managed-media-write-service.js';
+import { writeCanonicalManagedMedia } from './canonical-managed-media-write-service.ts';
 import { createCharacterImportCoordinator } from './character-import-service.ts';
-import { runCharacterTextReplace } from './character-text-replace-service.js';
+import { runCharacterTextReplace } from './character-text-replace-service.ts';
 import { coordinateWorkspaceWrite } from './coordinate-workspace-write.js';
 import { coordinateReplaceIntent } from './coordinate-workspace-write.js';
 

@@ -17,7 +17,7 @@ import {
 import {
     deleteCanonicalManagedMediaReference,
     writeCanonicalManagedMedia,
-} from './canonical-managed-media-write-service.js';
+} from './canonical-managed-media-write-service.ts';
 import { ensureCanonicalSliceBackend } from '../canonical-backend.js';
 
 const VALID_CATEGORIES = ['bgm', 'ambient', 'blip', 'live2d', 'vrm', 'character', 'temp'];

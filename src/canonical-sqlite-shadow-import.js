@@ -370,8 +370,8 @@ export function invalidateCanonicalAuditStatus(db, {
     scope = 'character_metadata_and_chat_stats',
     auditedAtMs = Date.now(),
     reason = 'projection_stale',
-    source = null,
-    handle = null,
+    source = /** @type {string | null} */ (null),
+    handle = /** @type {string | null} */ (null),
 } = {}) {
     return persistCanonicalAuditStatus(db, {
         ok: false,

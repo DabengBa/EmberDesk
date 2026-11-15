@@ -533,7 +533,7 @@ function createCharacterRouteHandler() {
                 try {
                     const handle = directories.handle ?? path.basename(path.resolve(directories.root));
                     // Lazy import keeps this barrel's eval-time surface unchanged.
-                    const { getCharacterAvatarBlobContents } = await import('./canonical-avatar-blob-service.js');
+                    const { getCharacterAvatarBlobContents } = await import('./canonical-avatar-blob-service.ts');
                     blob = await getCharacterAvatarBlobContents({
                         handle,
                         directories,

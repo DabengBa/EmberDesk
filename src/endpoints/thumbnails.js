@@ -118,7 +118,7 @@ async function getBlobSource(directories, type, file) {
     try {
         // Dynamic import keeps this route's module surface unchanged for tests
         // that mock ../util.js — the canonical chain pulls many util exports.
-        const { getCharacterAvatarBlobContents } = await import('../canonical-avatar-blob-service.js');
+        const { getCharacterAvatarBlobContents } = await import('../canonical-avatar-blob-service.ts');
         const handle = directories?.handle ?? path.basename(path.resolve(directories?.root ?? 'default-user'));
         return await getCharacterAvatarBlobContents({ handle, directories, avatarFilename: file });
     } catch {

@@ -18,7 +18,7 @@ import {
 import {
     backfillCharacterAvatarBlobs,
     recordCharacterAvatarBlob,
-} from '../src/canonical-avatar-blob-service.js';
+} from '../src/canonical-avatar-blob-service.ts';
 import { resetCanonicalBackendsForTests } from '../src/canonical-backend.js';
 import { createCanonicalSqliteManager } from '../src/canonical-sqlite.js';
 import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';

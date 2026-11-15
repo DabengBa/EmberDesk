@@ -1,6 +1,9 @@
 import fs from 'node:fs';
 import crypto, { randomUUID } from 'node:crypto';
 import path from 'node:path';
+import type { DatabaseSync } from 'node:sqlite';
+import type { CanonicalChatLocator } from './canonical-chat-read-service.ts';
+import type { CanonicalChatProjectionPathInput } from './canonical-chat-projection-path.ts';
 
 import { sync as writeFileAtomicSync } from 'write-file-atomic';
 
@@ -25,7 +28,30 @@ export const CANONICAL_CHAT_BACKUP_MANIFEST_VERSION = 2;
 export const CANONICAL_CHAT_ATTACHMENT_MANIFEST_VERSION = 1;
 const RESTORE_ID_PATTERN = /^chat-restore-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
-function listAttachmentManifestEntries(db) {
+type Directories = CanonicalChatProjectionPathInput['directories'];
+type ChatRecord = ReturnType<typeof createCanonicalChatSessionRecord>;
+type SessionRow = ReturnType<typeof listCanonicalChatSessions>[number];
+type ErrorView = { message?: unknown; code?: string } | null | undefined;
+// These views describe the existing unchecked JSON property accesses. Shape
+// and path checks below remain the runtime authority; this is not a parser.
+type BackupView = {
+    manifestVersion: number;
+    createdAtMs: number;
+    databaseRevision: unknown;
+    projectionState: { repairKeys: unknown[]; openRepairCount: number };
+    attachmentManifest: { version: number; entries: { blobId: unknown; compatibilityPath: unknown }[] };
+    sessions: { ownerType: unknown; ownerId: unknown; sourcePath: unknown; jsonl: unknown; sourceMtimeMs: unknown }[];
+    projectionRepairs: { repairKey: unknown; sessionId: unknown; ownerType: unknown; ownerId: unknown; sourcePath: unknown; operation: unknown; reason: unknown; details: object }[];
+    tombstones: { owner_type: string; owner_id: string; source_path: string }[];
+    operationResults: { operation_id: string; fingerprint: string; result_json: string }[];
+};
+type RestoreStatusOptions = {
+    restoreId: string; manifestVersion: number; backupCreatedAtMs?: number | null;
+    status: string; reasonCode?: string | null; details?: object; commitState?: string;
+    claim?: boolean; nowMs: number; finishedAtMs?: number | null;
+};
+
+function listAttachmentManifestEntries(db: DatabaseSync) {
     return db.prepare(`
         SELECT DISTINCT
             reference.blob_id,
@@ -42,7 +68,7 @@ function listAttachmentManifestEntries(db) {
     }));
 }
 
-function getCanonicalChatDatabaseRevision(db) {
+function getCanonicalChatDatabaseRevision(db: DatabaseSync) {
     const row = db.prepare(`
         SELECT
             COUNT(*) AS session_count,
@@ -56,12 +82,12 @@ function getCanonicalChatDatabaseRevision(db) {
     };
 }
 
-export function getCanonicalChatRestoreVersion(db) {
+export function getCanonicalChatRestoreVersion(db: DatabaseSync) {
     const rows = db.prepare('SELECT owner_type, owner_id, source_path, concurrency_token FROM chat_sessions ORDER BY owner_type, owner_id, source_path').all();
     return crypto.createHash('sha256').update(JSON.stringify(rows)).digest('hex');
 }
 
-function createBackupSessionRows(db) {
+function createBackupSessionRows(db: DatabaseSync) {
     return listCanonicalChatSessions(db).map(session => ({
         ownerType: String(session.owner_type),
         ownerId: String(session.owner_id),
@@ -71,7 +97,7 @@ function createBackupSessionRows(db) {
     }));
 }
 
-function ensureRestoreJournalTable(db) {
+function ensureRestoreJournalTable(db: DatabaseSync) {
     db.exec(`
         CREATE TABLE IF NOT EXISTS chat_restore_operations (
             restore_id TEXT PRIMARY KEY,
@@ -87,7 +113,7 @@ function ensureRestoreJournalTable(db) {
     `);
 }
 
-function writeRestoreStatus(db, {
+function writeRestoreStatus(db: DatabaseSync, {
     restoreId,
     manifestVersion,
     backupCreatedAtMs = null,
@@ -98,7 +124,7 @@ function writeRestoreStatus(db, {
     claim = false,
     nowMs,
     finishedAtMs = null,
-}) {
+}: RestoreStatusOptions) {
     ensureRestoreJournalTable(db);
     return db.prepare(`
         INSERT INTO chat_restore_operations (
@@ -133,7 +159,7 @@ function writeRestoreStatus(db, {
     );
 }
 
-function validateBackupShape(backup) {
+function validateBackupShape(backup: BackupView) {
     if (!backup || typeof backup !== 'object') {
         return { ok: false, reasonCode: 'invalid_backup_manifest' };
     }
@@ -166,7 +192,7 @@ function validateBackupShape(backup) {
     return { ok: true };
 }
 
-function validateAttachmentManifest(db, attachmentManifest) {
+function validateAttachmentManifest(db: DatabaseSync, attachmentManifest: BackupView['attachmentManifest']) {
     for (const entry of attachmentManifest.entries) {
         if (!entry?.blobId || !entry?.compatibilityPath) {
             return { ok: false, reasonCode: 'incomplete_attachment_manifest' };
@@ -197,7 +223,7 @@ function validateAttachmentManifest(db, attachmentManifest) {
     return { ok: true };
 }
 
-function stageBackupSessions(db, backup, directories, nowMs) {
+function stageBackupSessions(db: DatabaseSync, backup: BackupView, directories: Directories, nowMs: number) {
     return backup.sessions.map(session => {
         const locator = {
             ownerType: String(session.ownerType),
@@ -210,7 +236,7 @@ function stageBackupSessions(db, backup, directories, nowMs) {
         });
         const payload = parseCanonicalChatJsonl(session.jsonl);
         const record = createCanonicalChatSessionRecord(db, {
-            locator,
+            locator: locator as CanonicalChatLocator,
             payload,
             nowMs,
         });
@@ -222,13 +248,13 @@ function stageBackupSessions(db, backup, directories, nowMs) {
     });
 }
 
-function recordRestoreProjectionFailure(db, {
+function recordRestoreProjectionFailure(db: DatabaseSync, {
     record,
     restoreId,
     operation,
     error,
     nowMs,
-}) {
+}: { record: CanonicalChatLocator & { id: string }; restoreId: string; operation: string; error: unknown; nowMs: number }) {
     recordCanonicalChatProjectionRepair(db, {
         repairKey: operation === 'delete'
             ? `chat-restore:${restoreId}:delete:${record.ownerType}:${record.ownerId}:${encodeURIComponent(record.sourcePath)}`
@@ -242,25 +268,25 @@ function recordRestoreProjectionFailure(db, {
         operation,
         reason: 'restore_projection_failed',
         details: {
-            message: String(error?.message ?? error ?? ''),
+            message: String((error as ErrorView)?.message ?? error ?? ''),
         },
         nowMs,
     });
 }
 
-function projectRestoredSessions(db, {
+function projectRestoredSessions(db: DatabaseSync, {
     directories,
     previousSessions,
     stagedRecords,
     restoreId,
     nowMs,
-}) {
+}: { directories: Directories; previousSessions: SessionRow[]; stagedRecords: ChatRecord[]; restoreId: string; nowMs: number }) {
     const restoredPaths = new Set(stagedRecords.map(record => `${record.ownerType}\0${record.ownerId}\0${record.sourcePath}`));
     const failures = [];
 
     for (const record of stagedRecords) {
         try {
-            withCanonicalTransaction(db, txn => {
+            withCanonicalTransaction(db, (txn: DatabaseSync) => {
                 const current = txn.prepare(`SELECT source_jsonl FROM chat_sessions
                     WHERE owner_type = ? AND owner_id = ? AND source_path = ?`)
                     .get(record.ownerType, record.ownerId, record.sourcePath);
@@ -269,10 +295,10 @@ function projectRestoredSessions(db, {
                     directories, ownerType: record.ownerType, ownerId: record.ownerId, sourcePath: record.sourcePath,
                 });
                 fs.mkdirSync(path.dirname(filePath), { recursive: true });
-                writeFileAtomicSync(filePath, current.source_jsonl, 'utf8');
+                writeFileAtomicSync(filePath, current.source_jsonl as string, 'utf8');
                 recordImportLedgerEntry(txn, {
                     sliceKey: 'chats', sourcePath: record.sourcePath,
-                    contentHash: crypto.createHash('sha256').update(current.source_jsonl).digest('hex'),
+                    contentHash: crypto.createHash('sha256').update(current.source_jsonl as string).digest('hex'),
                     origin: 'projection', nowMs,
                 });
                 resolveCanonicalChatProjectionRepair(txn, {
@@ -299,12 +325,12 @@ function projectRestoredSessions(db, {
         }
         const record = {
             id: String(session.id),
-            ownerType: String(session.owner_type),
+            ownerType: String(session.owner_type) as CanonicalChatLocator['ownerType'],
             ownerId: String(session.owner_id),
             sourcePath: String(session.source_path),
         };
         try {
-            withCanonicalTransaction(db, txn => {
+            withCanonicalTransaction(db, (txn: DatabaseSync) => {
                 const current = txn.prepare(`SELECT 1 FROM chat_sessions
                     WHERE owner_type = ? AND owner_id = ? AND source_path = ?`)
                     .get(record.ownerType, record.ownerId, record.sourcePath);
@@ -340,13 +366,13 @@ function projectRestoredSessions(db, {
     return failures;
 }
 
-function restoreProjectionRepairs(db, repairs, nowMs) {
+function restoreProjectionRepairs(db: DatabaseSync, repairs: BackupView['projectionRepairs'], nowMs: number) {
     for (const repair of repairs ?? []) {
         recordCanonicalChatProjectionRepair(db, {
             repairKey: String(repair.repairKey),
             sessionId: repair.sessionId == null ? null : String(repair.sessionId),
             locator: {
-                ownerType: String(repair.ownerType),
+                ownerType: String(repair.ownerType) as CanonicalChatLocator['ownerType'],
                 ownerId: String(repair.ownerId),
                 sourcePath: String(repair.sourcePath),
             },
@@ -358,7 +384,7 @@ function restoreProjectionRepairs(db, repairs, nowMs) {
     }
 }
 
-function insertStagedChatRecord(db, record) {
+function insertStagedChatRecord(db: DatabaseSync, record: ChatRecord) {
     db.prepare(`
         INSERT INTO chat_sessions (
             id,
@@ -427,7 +453,7 @@ function insertStagedChatRecord(db, record) {
 export function createCanonicalChatBackup({
     db,
     createdAtMs = Date.now(),
-}) {
+}: { db: DatabaseSync; createdAtMs?: number }) {
     db.exec('SAVEPOINT canonical_chat_backup');
     try {
         const projectionRepairs = listOpenCanonicalChatProjectionRepairs(db);
@@ -459,7 +485,7 @@ export function createCanonicalChatBackup({
     }
 }
 
-export function getCanonicalChatRestoreStatus(db, restoreId = null) {
+export function getCanonicalChatRestoreStatus(db: DatabaseSync, restoreId: string | null = null) {
     try {
         ensureRestoreJournalTable(db);
         const query = `
@@ -486,14 +512,14 @@ export function getCanonicalChatRestoreStatus(db, restoreId = null) {
                 finishedAtMs: null,
             };
         }
-        let details = {};
+        let details: { commitState?: string } = {};
         try {
             details = JSON.parse(String(row.details_json ?? '{}'));
         } catch {
             details = {};
         }
         const commitState = RESTORE_ID_PATTERN.test(String(row.restore_id))
-            && ['committed', 'not_committed', 'unknown'].includes(details?.commitState) ? details.commitState : 'unknown';
+            && ['committed', 'not_committed', 'unknown'].includes(details?.commitState as string) ? details.commitState : 'unknown';
         return {
             restoreId: String(row.restore_id),
             status: String(row.status),
@@ -518,13 +544,14 @@ export function getCanonicalChatRestoreStatus(db, restoreId = null) {
 
 export async function restoreCanonicalChatBackup({
     db,
-    backup,
+    backup: inputBackup,
     handle,
     directories,
     nowMs = Date.now(),
     restoreId = `chat-restore-${randomUUID()}`,
     expectedVersion,
-}) {
+}: { db: DatabaseSync; backup: unknown; handle: string; directories: Directories; nowMs?: number; restoreId?: string; expectedVersion?: string }) {
+    const backup = inputBackup as BackupView;
     if (typeof restoreId !== 'string' || !RESTORE_ID_PATTERN.test(restoreId)) {
         return { ok: false, status: 'blocked', reasonCode: 'invalid_restore_id', restoreId, commitState: 'not_committed' };
     }
@@ -598,7 +625,7 @@ export async function restoreCanonicalChatBackup({
                 commitState,
                 reasonCode: 'invalid_backup_session',
                 details: {
-                    message: String(error?.message ?? error ?? ''),
+                    message: String((error as ErrorView)?.message ?? error ?? ''),
                 },
                 nowMs,
                 finishedAtMs: nowMs,
@@ -612,7 +639,7 @@ export async function restoreCanonicalChatBackup({
             };
         }
 
-        let previousSessions;
+        const previous = { sessions: undefined as SessionRow[] | undefined };
         writeRestoreStatus(db, {
             restoreId,
             manifestVersion: backup.manifestVersion,
@@ -622,9 +649,9 @@ export async function restoreCanonicalChatBackup({
             nowMs,
         });
         commitState = 'unknown';
-        withCanonicalTransaction(db, txnDb => {
+        withCanonicalTransaction(db, (txnDb: DatabaseSync) => {
             if (getCanonicalChatRestoreVersion(txnDb) !== expectedVersion) {
-                const error = new Error('chat_conflict');
+                const error: Error & { code?: string } = new Error('chat_conflict');
                 error.code = 'CHAT_RESTORE_CONFLICT';
                 throw error;
             }
@@ -633,7 +660,7 @@ export async function restoreCanonicalChatBackup({
             for (const row of Number(backup.manifestVersion) === 2 ? backup.operationResults : []) {
                 const existing = existingOperation.get(row.operation_id);
                 if (existing && (existing.fingerprint !== row.fingerprint || existing.result_json !== row.result_json)) {
-                    const error = new Error('chat_operation_conflict');
+                    const error: Error & { code?: string } = new Error('chat_operation_conflict');
                     error.code = 'CHAT_RESTORE_OPERATION_CONFLICT';
                     throw error;
                 }
@@ -643,7 +670,7 @@ export async function restoreCanonicalChatBackup({
             for (const row of Number(backup.manifestVersion) === 2 ? backup.tombstones : []) {
                 insertTombstone.run(row.owner_type, row.owner_id, row.source_path);
             }
-            previousSessions = listCanonicalChatSessions(txnDb);
+            previous.sessions = listCanonicalChatSessions(txnDb);
             txnDb.prepare('DELETE FROM chat_projection_repairs').run();
             txnDb.prepare('DELETE FROM chat_sessions').run();
             for (const record of stagedRecords) {
@@ -656,8 +683,8 @@ export async function restoreCanonicalChatBackup({
                 });
             }
             const restored = new Set(stagedRecords.map(record => `${record.ownerType}\0${record.ownerId}\0${record.sourcePath}`));
-            for (const session of previousSessions) {
-                const ownerType = String(session.owner_type), ownerId = String(session.owner_id), sourcePath = String(session.source_path);
+            for (const session of previous.sessions) {
+                const ownerType = String(session.owner_type) as CanonicalChatLocator['ownerType'], ownerId = String(session.owner_id), sourcePath = String(session.source_path);
                 if (restored.has(`${ownerType}\0${ownerId}\0${sourcePath}`)) continue;
                 recordCanonicalChatProjectionRepair(txnDb, {
                     repairKey: `chat-restore:${restoreId}:delete:${ownerType}:${ownerId}:${encodeURIComponent(sourcePath)}`,
@@ -674,7 +701,8 @@ export async function restoreCanonicalChatBackup({
         commitState = 'committed';
         const projectionFailures = projectRestoredSessions(db, {
             directories,
-            previousSessions,
+            // The synchronous transaction assigns this before it can return successfully.
+            previousSessions: previous.sessions as SessionRow[],
             stagedRecords,
             restoreId,
             nowMs,
@@ -705,7 +733,8 @@ export async function restoreCanonicalChatBackup({
                 commitState,
             };
         }
-        const audit = await auditCanonicalChatShadowImport({
+        // JS's default empty options object omits the required fields from inference.
+        const audit = await (auditCanonicalChatShadowImport as (options: { handle: string; directories: Directories; db: DatabaseSync; auditedAtMs: number; projection: string }) => ReturnType<typeof auditCanonicalChatShadowImport>)({
             handle,
             directories,
             db,
@@ -746,8 +775,8 @@ export async function restoreCanonicalChatBackup({
         });
         return { ok: true, status: 'restored', reasonCode: null, restoreId, commitState };
     } catch (error) {
-        if (error?.code === 'CHAT_RESTORE_CONFLICT' || error?.code === 'CHAT_RESTORE_OPERATION_CONFLICT') {
-            const reasonCode = error.code === 'CHAT_RESTORE_OPERATION_CONFLICT' ? 'chat_operation_conflict' : 'chat_conflict';
+        if ((error as ErrorView)?.code === 'CHAT_RESTORE_CONFLICT' || (error as ErrorView)?.code === 'CHAT_RESTORE_OPERATION_CONFLICT') {
+            const reasonCode = (error as ErrorView)?.code === 'CHAT_RESTORE_OPERATION_CONFLICT' ? 'chat_operation_conflict' : 'chat_conflict';
             writeRestoreStatus(db, { restoreId, manifestVersion, backupCreatedAtMs: backup?.createdAtMs ?? null,
                 status: 'blocked', commitState: 'not_committed', reasonCode, nowMs, finishedAtMs: nowMs });
             return { ok: false, status: 'blocked', reasonCode, restoreId, commitState: 'not_committed' };
@@ -763,7 +792,7 @@ export async function restoreCanonicalChatBackup({
                 commitState,
                 reasonCode: 'restore_failed',
                 details: {
-                    message: String(error?.message ?? error ?? ''),
+                    message: String((error as ErrorView)?.message ?? error ?? ''),
                 },
                 nowMs,
                 finishedAtMs: nowMs,

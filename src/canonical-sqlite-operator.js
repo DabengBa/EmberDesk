@@ -18,7 +18,7 @@ import {
 } from './canonical-chat-shadow-import.js';
 import { recordImportLedgerEntry, removeImportLedgerEntry } from './canonical-import-ledger.js';
 import { replayWorldProjection } from './canonical-world-info-projection.js';
-import { repairCanonicalManagedMediaProjection } from './endpoints/canonical-managed-media-write-service.js';
+import { repairCanonicalManagedMediaProjection } from './endpoints/canonical-managed-media-write-service.ts';
 import {
     auditCanonicalSecretsShadowImport,
     CANONICAL_SECRETS_AUDIT_SCOPE,

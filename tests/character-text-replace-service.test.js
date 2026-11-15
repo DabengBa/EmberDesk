@@ -8,7 +8,7 @@ import {
     transformEmbeddedBook,
     transformChatMessages,
     runCharacterTextReplace,
-} from '../src/endpoints/character-text-replace-service.js';
+} from '../src/endpoints/character-text-replace-service.ts';
 
 function makeMatcher(query, replacement, options = {}) {
     const result = buildTextMatcher(query, replacement, options);

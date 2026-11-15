@@ -13,7 +13,7 @@ import {
     createCanonicalChatBackup,
     restoreCanonicalChatBackup,
     getCanonicalChatRestoreVersion,
-} from '../src/endpoints/canonical-chat-backup-restore-service.js';
+} from '../src/endpoints/canonical-chat-backup-restore-service.ts';
 import {
     readCanonicalRecentChatPayload,
     searchCanonicalChatPayload,

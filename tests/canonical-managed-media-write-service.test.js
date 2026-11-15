@@ -13,7 +13,7 @@ import {
     invalidateCanonicalManagedMediaAudit,
     repairCanonicalManagedMediaProjection,
     writeCanonicalManagedMedia,
-} from '../src/endpoints/canonical-managed-media-write-service.js';
+} from '../src/endpoints/canonical-managed-media-write-service.ts';
 import {
     hashCanonicalManagedMediaBuffer,
     listCanonicalManagedMediaReferences,
@@ -277,7 +277,7 @@ describe('canonical managed media write service', () => {
             role: 'asset', displayName: 'old.png', contents: Buffer.from('current image'),
         });
 
-        const { renameCanonicalManagedMediaReference } = await import('../src/endpoints/canonical-managed-media-write-service.js');
+        const { renameCanonicalManagedMediaReference } = await import('../src/endpoints/canonical-managed-media-write-service.ts');
         const renamed = await renameCanonicalManagedMediaReference({
             handle: 'alice', directories, dependencies: dependencies(manager),
             oldCompatibilityPath: 'assets/old.png', newCompatibilityPath: 'assets/new.png',
@@ -479,7 +479,7 @@ describe('canonical managed media write service', () => {
         // Pre-existing stale projection at the old path must be removed.
         fs.writeFileSync(path.join(directories.assets, 'old.png'), 'stale-bytes');
 
-        const { renameCanonicalManagedMediaReference } = await import('../src/endpoints/canonical-managed-media-write-service.js');
+        const { renameCanonicalManagedMediaReference } = await import('../src/endpoints/canonical-managed-media-write-service.ts');
         const renamed = await renameCanonicalManagedMediaReference({
             ...options,
             oldCompatibilityPath: 'assets/old.png',

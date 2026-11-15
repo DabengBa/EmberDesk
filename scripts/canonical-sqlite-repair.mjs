@@ -27,13 +27,13 @@ import {
     runCanonicalWorldInfoAudit,
 } from '../src/canonical-sqlite-operator.js';
 import { exportCanonicalStorageToFiles } from '../src/canonical-sqlite-export.js';
-import { collectCanonicalManagedMediaGarbage } from '../src/endpoints/canonical-managed-media-write-service.js';
+import { collectCanonicalManagedMediaGarbage } from '../src/endpoints/canonical-managed-media-write-service.ts';
 import {
     createCanonicalChatBackup,
     getCanonicalChatRestoreStatus,
     getCanonicalChatRestoreVersion,
     restoreCanonicalChatBackup,
-} from '../src/endpoints/canonical-chat-backup-restore-service.js';
+} from '../src/endpoints/canonical-chat-backup-restore-service.ts';
 import { getUserDirectories } from '../src/user-directories.ts';
 
 const manager = createCanonicalSqliteManager({ logger: { info() {}, warn() {} } });

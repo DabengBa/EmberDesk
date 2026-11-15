@@ -362,7 +362,7 @@ export async function persistCharXAssets(assets, bufferMap, directories, charact
                 let committed = false;
                 try {
                     const { ensureCanonicalSliceBackend } = await import('./canonical-backend.js');
-                    const { writeCanonicalManagedMedia } = await import('./endpoints/canonical-managed-media-write-service.js');
+                    const { writeCanonicalManagedMedia } = await import('./endpoints/canonical-managed-media-write-service.ts');
                     const resolvedHandle = handle ?? directories.handle ?? path.basename(path.resolve(directories.root));
                     await ensureCanonicalSliceBackend('managed_media', directories, resolvedHandle);
                     const canonicalResult = await writeCanonicalManagedMedia({

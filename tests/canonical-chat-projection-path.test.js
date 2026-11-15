@@ -90,7 +90,7 @@ describe('canonical chat projection paths', () => {
         const consumers = [
             '../src/canonical-sqlite-export.js',
             '../src/canonical-sqlite-operator.js',
-            '../src/endpoints/canonical-chat-backup-restore-service.js',
+            '../src/endpoints/canonical-chat-backup-restore-service.ts',
         ].map(file => new URL(file, import.meta.url).href);
         const script = `
             import assert from 'node:assert/strict';
