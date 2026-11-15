@@ -39,7 +39,7 @@ import {
 } from '../src/endpoints/settings-store.ts';
 import { MANAGED_MEDIA_AUDIT_SCOPE } from '../src/canonical-managed-media-shadow-import.js';
 import { CANONICAL_CHAT_AUDIT_SCOPE } from '../src/canonical-chat-shadow-import.js';
-import { writeCanonicalChatPayload } from '../src/endpoints/canonical-chat-write-service.js';
+import { writeCanonicalChatPayload } from '../src/endpoints/canonical-chat-write-service.ts';
 import { recordCanonicalChatProjectionRepair } from '../src/endpoints/canonical-chat-store.ts';
 
 const tempRoots = [];

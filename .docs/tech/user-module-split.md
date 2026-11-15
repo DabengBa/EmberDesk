@@ -15,7 +15,7 @@ Primary files:
 - `src/users.js` — re-export barrel, middleware, routes, backup, security verification
 - `src/user-storage.ts` — `node-persist` CRUD and user record queries
 - `src/user-directories.ts` — per-user filesystem layout and directory creation
-- `src/user-migrations.js` — startup data migrations
+- `src/user-migrations.ts` — startup data migrations
 - `src/user-auth.ts` — credential verification, SSO, session crypto
 
 ## Architecture And Constraints
@@ -28,7 +28,7 @@ users.js (barrel + middleware + routes)
   │     └── user-storage.ts
   ├── user-directories.ts
   │     └── user-storage.ts
-  ├── user-migrations.js
+  ├── user-migrations.ts
   │     └── user-directories.ts
   └── user-storage.ts
 ```
@@ -69,15 +69,15 @@ Constraints:
 | `cleanUploads()` | function | Clears `UPLOADS_DIRECTORY` |
 | `getUserAvatar(handle)` | async | Reads avatar from storage or filesystem |
 
-### user-migrations.js
+### user-migrations.ts
 
 | Symbol | Type | Notes |
 |---|---|---|
 | `migrateUserData()` | async | One-time `public/` → per-user data root migration |
-| `migrateSystemPrompts()` | async | Per-user `instruct/` → `sysprompt/` migration with `.migrated` marker |
-| `migratePublicOverrides()` | async | System-wide `public/error/` → `DATA_ROOT/_errors/` migration |
+| `migratePublicOverrides()` | async | Moves legacy `public/error/` and `public/css/user.css` overrides into `DATA_ROOT/_errors/` and `DATA_ROOT/_css/`; existing targets are retained along with their sources |
 
-Each migration is self-contained with its own idempotency mechanism.
+The migration preserves its existing file and SQLite ordering; it does not provide an atomic cross-store recovery transaction.
+If `public/characters` was moved before a later settings migration failure, the next startup skips `migrateUserData()` even if the settings source remains; manual recovery may be needed.
 
 ### user-auth.ts
 

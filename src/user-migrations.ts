@@ -127,7 +127,7 @@ export async function migrateUserData() {
                 fs.rmSync(migration.old, { recursive: true, force: true });
             }
         } catch (error) {
-            console.error(color.red(`Error migrating ${migration.old} to ${migration.new}:`), error.message);
+            console.error(color.red(`Error migrating ${migration.old} to ${migration.new}:`), (error as Error).message);
             errors.push(migration.old);
         }
     }
@@ -166,7 +166,7 @@ export async function migrateUserData() {
             fs.cpSync(legacySettingsPath, path.join(backupDirectory, path.basename(legacySettingsPath)), { force: true });
             fs.rmSync(legacySettingsPath, { force: true });
         } catch (error) {
-            console.error(color.red(`Error migrating ${legacySettingsPath}:`), error.message);
+            console.error(color.red(`Error migrating ${legacySettingsPath}:`), (error as Error).message);
             errors.push(legacySettingsPath);
         }
     }

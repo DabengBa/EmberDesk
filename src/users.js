@@ -23,7 +23,7 @@ export {
 export {
     migrateUserData,
     migratePublicOverrides,
-} from './user-migrations.js';
+} from './user-migrations.ts';
 
 export {
     getCookieSecret,

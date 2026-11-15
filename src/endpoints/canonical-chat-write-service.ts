@@ -1,4 +1,6 @@
 import crypto from 'node:crypto';
+import type { DatabaseSync } from 'node:sqlite';
+import type { CanonicalChatLocator } from './canonical-chat-read-service.ts';
 import { withCanonicalTransaction } from '../canonical-sqlite.js';
 
 import {
@@ -19,7 +21,35 @@ import {
     syncCanonicalCharacterChatStats,
 } from './canonical-chat-store.ts';
 
-function buildRepairKey(locator, operation) {
+type OperationIdentity = NonNullable<Parameters<typeof createCanonicalChatSession>[2]>['operation'];
+type ProjectionFailure = { repairKey: string; error: unknown; locator: CanonicalChatLocator; operation: string };
+type CommonOptions = {
+    db: DatabaseSync;
+    locator: CanonicalChatLocator;
+    projection?: string;
+    nowMs?: number;
+    onProjectionFailure?: ((failure: ProjectionFailure) => void) | null;
+    operationIdentity?: OperationIdentity;
+};
+type WriteOptions = CommonOptions & {
+    payload: unknown[];
+    operation?: string;
+    projectJsonl: (jsonl: string) => void;
+    onAuthorityCommitted?: ((jsonl: string) => void) | null;
+    condition?: { create?: boolean; version?: unknown } | null;
+};
+type RenameOptions = CommonOptions & {
+    nextLocator: CanonicalChatLocator;
+    projectRename: (jsonl: string) => void;
+    onAuthorityCommitted?: ((jsonl: string | undefined) => void) | null;
+    version?: string | null;
+};
+type DeleteOptions = CommonOptions & { projectDelete: () => void; version?: string | null };
+// The store's result union includes failure and replay variants; this view
+// describes the existing optional property reads without changing those branches.
+type StoreResultView = { id?: string; status?: string; version?: string | null; sourceJsonl?: string; replayed?: boolean };
+
+function buildRepairKey(locator: CanonicalChatLocator, operation: string) {
     return [
         'chat',
         locator.ownerType,
@@ -29,7 +59,7 @@ function buildRepairKey(locator, operation) {
     ].join(':');
 }
 
-function listStringLeaves(value, fieldPath = []) {
+function listStringLeaves(value: unknown, fieldPath: (string | number)[] = []): { value: string; fieldPath: (string | number)[] }[] {
     if (typeof value === 'string') {
         return [{ value, fieldPath }];
     }
@@ -42,12 +72,12 @@ function listStringLeaves(value, fieldPath = []) {
     return Object.entries(value).flatMap(([key, entry]) => listStringLeaves(entry, [...fieldPath, key]));
 }
 
-function isManagedAttachmentCandidate(value) {
+function isManagedAttachmentCandidate(value: unknown) {
     return /^(files|assets|user\/files|user\/images|User Avatars)\//.test(String(value ?? ''));
 }
 
-function findFirstUnregisteredAttachmentPath(db, payload) {
-    const managedPaths = new Set();
+function findFirstUnregisteredAttachmentPath(db: DatabaseSync, payload: unknown[]) {
+    const managedPaths = new Set<string>();
     try {
         const rows = db.prepare(`
             SELECT compatibility_path
@@ -58,7 +88,7 @@ function findFirstUnregisteredAttachmentPath(db, payload) {
             managedPaths.add(String(row.compatibility_path));
         }
     } catch (error) {
-        if (String(error?.message ?? '').includes('no such table: media_references')) {
+        if (String((error as { message?: unknown } | null | undefined)?.message ?? '').includes('no such table: media_references')) {
             return null;
         }
         throw error;
@@ -94,7 +124,7 @@ export function writeCanonicalChatPayload({
     onAuthorityCommitted = null,
     condition = null,
     operationIdentity = null,
-}) {
+}: WriteOptions) {
     if (typeof projectJsonl !== 'function') {
         throw new Error('Canonical chat projection function is required.');
     }
@@ -110,7 +140,7 @@ export function writeCanonicalChatPayload({
 
     const record = createCanonicalChatSessionRecord(db, { locator, payload, nowMs });
     const repairKey = buildRepairKey(locator, operation);
-    const options = {
+    const options: NonNullable<Parameters<typeof createCanonicalChatSession>[2]> = {
         onPersist: projection === 'off' ? txn => syncCanonicalCharacterChatStats(txn, locator, nowMs) : (txn, result) => recordCanonicalChatProjectionRepair(txn, {
             repairKey,
             sessionId: result.id,
@@ -122,7 +152,7 @@ export function writeCanonicalChatPayload({
         }),
         operation: operationIdentity,
     };
-    const persisted = condition?.create
+    const persisted: StoreResultView = condition?.create
         ? createCanonicalChatSession(db, record, options)
         : condition?.version
             ? saveCanonicalChatSessionIfCurrent(db, record, condition.version, options)
@@ -148,15 +178,16 @@ export function writeCanonicalChatPayload({
         };
     }
     try {
-        withCanonicalTransaction(db, txn => {
+        withCanonicalTransaction(db, (txn: DatabaseSync) => {
             const session = txn.prepare('SELECT source_jsonl FROM chat_sessions WHERE owner_type = ? AND owner_id = ? AND source_path = ?')
                 .get(locator.ownerType, locator.ownerId, locator.sourcePath);
             if (!session) throw new Error('missing_canonical_chat_session');
-            projectJsonl(session.source_jsonl);
+            // The selected SQLite column is the JSONL text written by the store.
+            projectJsonl(session.source_jsonl as string);
             recordImportLedgerEntry(txn, {
                 sliceKey: 'chats',
                 sourcePath: locator.sourcePath,
-                contentHash: crypto.createHash('sha256').update(session.source_jsonl).digest('hex'),
+                contentHash: crypto.createHash('sha256').update(session.source_jsonl as string).digest('hex'),
                 origin: 'projection',
                 nowMs,
             });
@@ -183,7 +214,7 @@ export function writeCanonicalChatPayload({
     };
 }
 
-export function parseCanonicalChatJsonl(jsonl) {
+export function parseCanonicalChatJsonl(jsonl: unknown) {
     const lines = String(jsonl ?? '').split('\n').filter(line => line.length > 0);
     if (lines.length === 0) {
         throw new Error('Chat JSONL must include a header.');
@@ -196,7 +227,7 @@ export function parseCanonicalChatJsonl(jsonl) {
             }
             return payload;
         } catch (error) {
-            throw new Error(`Chat JSONL line ${index + 1} is invalid: ${String(error?.message ?? error ?? '')}`);
+            throw new Error(`Chat JSONL line ${index + 1} is invalid: ${String((error as { message?: unknown } | null | undefined)?.message ?? error ?? '')}`);
         }
     });
 }
@@ -212,13 +243,13 @@ export function renameCanonicalChat({
     onAuthorityCommitted = null,
     version = null,
     operationIdentity = null,
-}) {
+}: RenameOptions) {
     if (typeof projectRename !== 'function') {
         throw new Error('Canonical chat rename projection function is required.');
     }
 
     const repairKey = buildRepairKey(nextLocator, 'rename');
-    const renamed = renameCanonicalChatSession(db, {
+    const renamed: StoreResultView | null = renameCanonicalChatSession(db, {
         locator, nextLocator, nowMs, version, operation: operationIdentity,
         onPersist: projection === 'off' ? txn => {
             syncCanonicalCharacterChatStats(txn, locator, nowMs);
@@ -237,7 +268,7 @@ export function renameCanonicalChat({
     }
     if (projection === 'off') {
         try {
-            withCanonicalTransaction(db, txn => {
+            withCanonicalTransaction(db, (txn: DatabaseSync) => {
                 const current = txn.prepare('SELECT 1 FROM chat_sessions WHERE owner_type = ? AND owner_id = ? AND source_path = ?')
                     .get(locator.ownerType, locator.ownerId, locator.sourcePath);
                 if (current) return;
@@ -250,16 +281,17 @@ export function renameCanonicalChat({
         return { ok: true, authorityCommitted: true, sessionId: renamed.id, version: renamed.version };
     }
     try {
-        withCanonicalTransaction(db, txn => {
+        withCanonicalTransaction(db, (txn: DatabaseSync) => {
             const session = txn.prepare('SELECT source_jsonl FROM chat_sessions WHERE owner_type = ? AND owner_id = ? AND source_path = ?')
                 .get(nextLocator.ownerType, nextLocator.ownerId, nextLocator.sourcePath);
             const oldSession = txn.prepare('SELECT 1 FROM chat_sessions WHERE owner_type = ? AND owner_id = ? AND source_path = ?')
                 .get(locator.ownerType, locator.ownerId, locator.sourcePath);
             if (!session || oldSession) throw new Error('chat_projection_path_changed');
-            projectRename(session.source_jsonl);
+            // This column is the JSONL text written by the canonical store.
+            projectRename(session.source_jsonl as string);
             recordImportLedgerEntry(txn, {
                 sliceKey: 'chats', sourcePath: nextLocator.sourcePath,
-                contentHash: crypto.createHash('sha256').update(session.source_jsonl).digest('hex'), origin: 'projection', nowMs,
+                contentHash: crypto.createHash('sha256').update(session.source_jsonl as string).digest('hex'), origin: 'projection', nowMs,
             });
             if (locator.sourcePath !== nextLocator.sourcePath) removeImportLedgerEntry(txn, { sliceKey: 'chats', sourcePath: locator.sourcePath });
             resolveCanonicalChatProjectionRepair(txn, { repairKey, resolvedAtMs: nowMs });
@@ -287,19 +319,19 @@ export function deleteCanonicalChat({
     onProjectionFailure = null,
     version = null,
     operationIdentity = null,
-}) {
+}: DeleteOptions) {
     if (typeof projectDelete !== 'function') {
         throw new Error('Canonical chat delete projection function is required.');
     }
 
     const repairKey = buildRepairKey(locator, 'delete');
-    const options = {
+    const options: NonNullable<Parameters<typeof deleteCanonicalChatSession>[2]> = {
         onPersist: projection === 'off' ? txn => syncCanonicalCharacterChatStats(txn, locator, nowMs) : txn => recordCanonicalChatProjectionRepair(txn, {
             repairKey, sessionId: null, locator, operation: 'delete', reason: 'projection_failed', details: {}, nowMs,
         }),
         operation: operationIdentity,
     };
-    const deleted = version
+    const deleted: StoreResultView | null = version
         ? deleteCanonicalChatSessionIfCurrent(db, locator, version, options)
         : deleteCanonicalChatSession(db, locator, options);
     if (deleted?.status === 'conflict' || deleted?.status === 'operation_mismatch') {
@@ -311,7 +343,7 @@ export function deleteCanonicalChat({
     }
     if (projection === 'off') {
         try {
-            withCanonicalTransaction(db, txn => {
+            withCanonicalTransaction(db, (txn: DatabaseSync) => {
                 const current = txn.prepare('SELECT 1 FROM chat_sessions WHERE owner_type = ? AND owner_id = ? AND source_path = ?')
                     .get(locator.ownerType, locator.ownerId, locator.sourcePath);
                 if (current) return;
@@ -324,7 +356,7 @@ export function deleteCanonicalChat({
         return { ok: true, authorityCommitted: true, sessionId: deleted.id };
     }
     try {
-        withCanonicalTransaction(db, txn => {
+        withCanonicalTransaction(db, (txn: DatabaseSync) => {
             const session = txn.prepare('SELECT 1 FROM chat_sessions WHERE owner_type = ? AND owner_id = ? AND source_path = ?')
                 .get(locator.ownerType, locator.ownerId, locator.sourcePath);
             if (session) throw new Error('chat_projection_path_reused');

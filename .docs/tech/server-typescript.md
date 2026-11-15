@@ -6,6 +6,8 @@ topic: server-typescript
 
 # Server TypeScript
 
+`src/canonical-secrets-backend.ts` is the synchronous canonical Secrets backend. The existing SecretManager remains the public boundary; initialization, audit, SQLite authority and projection repair behavior are unchanged.
+
 ## Runtime and module boundary
 
 The supported runtime is Node.js 26.12.1 (`>=26.12.1 <27`). The server uses
@@ -109,6 +111,14 @@ transactions, conditional versions and operation replay, projection tombstones,
 opaque chat payloads, attachments, repair records and character statistics
 retain their prior behavior. Focused SQLite tests cover these contracts; a
 native Node subprocess exercises the real write consumer and migrated store.
+
+`src/endpoints/canonical-chat-write-service.ts` is the sole chat write service;
+its production callers and tests use the actual `.ts` extension. Attachment
+checks, version conditions, operation replay, SQLite authority commits and
+post-commit projection and repair retain their existing order and behavior.
+Focused integration tests and the native Node production write chain exercise
+the migrated service without a loader; this internal migration does not change
+user-visible behavior.
 
 
 `src/endpoints/canonical-secrets-store.ts` is the sole canonical secrets store
@@ -236,3 +246,13 @@ SSO and trusted-proxy configuration is still read at module load time. The
 native user/config test exercises the real barrel and auth module, trusted and
 untrusted SSO clients, anonymous and user CSRF secrets, and cookie-secret
 migration. This internal migration changes no user-visible semantic contract.
+
+## User data migrations
+
+`src/user-migrations.ts` is the sole implementation of the existing startup
+user-data and public-override migrations. `src/users.js` re-exports both
+functions via their real `.ts` path. SQLite settings remain authoritative;
+file backup and removal preserve their existing ordering and are not a single
+transaction with SQLite. The native user/config test imports both production
+modules and checks their shared exports without a loader. No user-visible
+behavior or semantic documentation changes are intended.

@@ -5,7 +5,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { afterEach, expect, test } from '@jest/globals';
 import { createCanonicalSqliteManager } from '../src/canonical-sqlite.js';
 import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
-import { writeCanonicalChatPayload, renameCanonicalChat, deleteCanonicalChat } from '../src/endpoints/canonical-chat-write-service.js';
+import { writeCanonicalChatPayload, renameCanonicalChat, deleteCanonicalChat } from '../src/endpoints/canonical-chat-write-service.ts';
 
 const cleanups = [];
 afterEach(() => { for (const cleanup of cleanups.splice(0).reverse()) cleanup(); });

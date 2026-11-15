@@ -13,7 +13,7 @@ import {
     listOpenCanonicalChatProjectionRepairs,
     renameCanonicalChat,
     writeCanonicalChatPayload,
-} from '../src/endpoints/canonical-chat-write-service.js';
+} from '../src/endpoints/canonical-chat-write-service.ts';
 
 const roots = [];
 
