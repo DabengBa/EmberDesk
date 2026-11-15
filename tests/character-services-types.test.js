@@ -43,8 +43,8 @@ test('strict consumers can compose reads, writes, text replacement and import ca
         import { listCanonicalCharacters, getCanonicalCharacter } from ${modulePath('character-store.ts')};
         import { runCharacterTextReplace } from ${modulePath('character-text-replace-service.js')};
         import type { CharacterTextReplaceDependencies } from ${modulePath('character-text-replace-service.js')};
-        import { createCharacterImportCoordinator } from ${modulePath('character-import-service.js')};
-        import type { CharacterImportHandler } from ${modulePath('character-import-service.js')};
+        import { createCharacterImportCoordinator } from ${modulePath('character-import-service.ts')};
+        import type { CharacterImportHandler } from ${modulePath('character-import-service.ts')};
 
         declare const request: Parameters<typeof createCharacterCard>[0]['request'];
         declare const dependencies: ${factoryReturnType};
@@ -86,4 +86,17 @@ test('strict consumers reject incomplete prepared writes and incompatible replac
     expect(result.status).not.toBe(0);
     expect(result.diagnostics).toContain('Property \'characterData\' is missing');
     expect(result.diagnostics).toContain('Promise<boolean>');
+});
+
+test('strict consumers reject missing importers and incompatible importer results', () => {
+    const result = compile(`
+        import { createCharacterImportCoordinator } from ${modulePath('character-import-service.ts')};
+        import type { CharacterImportHandler } from ${modulePath('character-import-service.ts')};
+        const importer: CharacterImportHandler = async () => 'Alice.png';
+        const invalid: CharacterImportHandler = async () => 42;
+        createCharacterImportCoordinator({ importFromYaml: importer, importFromJson: importer, importFromPng: importer, importFromCharX: importer });
+    `);
+    expect(result.status).not.toBe(0);
+    expect(result.diagnostics).toContain('Promise<number>');
+    expect(result.diagnostics).toContain('importFromByaf');
 });

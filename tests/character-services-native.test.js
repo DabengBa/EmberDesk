@@ -61,10 +61,13 @@ test('Node resolves the real character router, replacement and import graphs', (
             assert.equal(typeof router, 'function');
             assert.equal(typeof runCharacterTextReplace, 'function');
             assert.equal(typeof createCharacterImportCoordinator, 'function');
+            const importer = async () => 'Native';
+            const run = createCharacterImportCoordinator({ importFromYaml: importer, importFromJson: importer, importFromPng: importer, importFromCharX: importer, importFromByaf: importer });
+            assert.deepEqual(await run({ uploadPath: 'input', format: 'YML', request: {}, response: {} }), { ok: true, fileName: 'Native', avatarName: 'Native.png' });
             assert.ok(worldinfo && shadow && operator);
             console.log('character-callers:native');
         `, moduleUrl('util.js'), config, root, moduleUrl('endpoints/characters.js'),
-        moduleUrl('endpoints/character-text-replace-service.js'), moduleUrl('endpoints/character-import-service.js'),
+        moduleUrl('endpoints/character-text-replace-service.js'), moduleUrl('endpoints/character-import-service.ts'),
         moduleUrl('endpoints/character-store.ts'), moduleUrl('endpoints/worldinfo.js'),
         moduleUrl('canonical-sqlite-shadow-import.js'), moduleUrl('canonical-sqlite-operator.js'));
         expect({ status: result.status, stderr: result.status === 0 ? '' : result.stderr })

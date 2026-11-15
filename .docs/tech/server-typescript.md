@@ -185,7 +185,7 @@ router, text-replace service, and benchmark import the actual `.ts` file.
 SQLite integration tests cover the transaction and serialization contracts;
 native Node tests import the service and its production callers without a loader.
 
-## Character read and write services
+## Character read, write, and import services
 
 `src/endpoints/character-read-service.ts` and
 `src/endpoints/character-write-service.ts` now own the existing character
@@ -193,7 +193,10 @@ read and write flows. Their exported types describe service options,
 dependency ports, canonical outcomes, and projection repairs. The character
 router and text-replace service use explicit `.ts` imports; their dependency
 factories and import callbacks consume these types through JSDoc. The import
-coordinator remains JavaScript and uses the existing route callbacks.
+coordinator is `src/endpoints/character-import-service.ts`, imported by the
+router with its actual extension and using the existing route callbacks. Its
+types describe the existing handler and result contracts without new runtime
+validation; format dispatch, failure normalization and route cleanup are unchanged.
 
 `src/endpoints/character-store.ts` is the sole canonical character store
 implementation. Its JavaScript callers import the real `.ts` extension; its

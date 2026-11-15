@@ -16,7 +16,7 @@ Primary files:
 - `src/derived-cache-sqlite.js`
 - `src/endpoints/character-read-service.ts`
 - `src/endpoints/character-write-service.ts`
-- `src/endpoints/character-import-service.js`
+- `src/endpoints/character-import-service.ts`
 - `src/endpoints/characters.js`
 - `src/endpoints/thumbnails.js`
 - `src/image-processing.js`
@@ -46,7 +46,7 @@ The historical interaction-performance slice originally aimed to:
 - keep the indexed fast path self-healing when derived rows or SQLite state became inconsistent
 - add a reproducible local A/B runner that can prove whether the current SQLite slice is helping enough to justify its maintenance cost
 
-This tech note now treats the index details below as historical/helper-level context. Current runtime ownership lives in `src/endpoints/character-read-service.ts`, `src/endpoints/character-write-service.ts`, `src/endpoints/character-import-service.js`, `src/endpoints/chats.js`, and `src/endpoints/worldinfo.js`, none of which use `_cache/character-index.sqlite` as a normal path.
+This tech note now treats the index details below as historical/helper-level context. Current runtime ownership lives in `src/endpoints/character-read-service.ts`, `src/endpoints/character-write-service.ts`, `src/endpoints/character-import-service.ts`, `src/endpoints/chats.js`, and `src/endpoints/worldinfo.js`, none of which use `_cache/character-index.sqlite` as a normal path.
 
 Separate from the SQLite slice, EmberDesk now also applies a short browser cache policy on non-Firefox `/thumbnail` responses:
 
@@ -106,7 +106,7 @@ Separate from the read-side character route service, EmberDesk now also routes s
 - the related single-card `/api/characters/rename` path delegates old-card read/update, chats-directory copy/remove, and old avatar deletion to `renameCharacterCard`
 - routes keep request validation and legacy HTTP response mapping; the service owns write-side effect ordering through explicit dependencies that are covered by `tests/character-write-service.test.js`
 
-Separate from the single-card write service, EmberDesk now also routes `POST /api/characters/import` through `src/endpoints/character-import-service.js`:
+Separate from the single-card write service, EmberDesk now also routes `POST /api/characters/import` through `src/endpoints/character-import-service.ts`:
 
 - the route still owns request/file validation, upload cleanup, and HTTP `{ file_name }` / `400 { error: true }` response mapping
 - the import coordinator now owns format dispatch across PNG / JSON / YAML / CHARX / BYAF inputs and empty-result normalization
