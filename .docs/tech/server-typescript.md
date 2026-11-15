@@ -120,6 +120,12 @@ Focused integration tests and the native Node production write chain exercise
 the migrated service without a loader; this internal migration does not change
 user-visible behavior.
 
+`src/endpoints/canonical-chat-projection-path.ts` is the sole path resolver
+used by chat export, operator and backup restore. Its types describe the
+existing inputs and resolved path; ownership, extension and symbolic-link
+checks retain their existing behavior. Focused tests cover those checks and
+native Node imports of the production consumers.
+
 
 `src/endpoints/canonical-secrets-store.ts` is the sole canonical secrets store
 implementation. Existing callers use its real `.ts` path; the SecretManager
