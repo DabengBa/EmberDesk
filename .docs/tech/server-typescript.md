@@ -99,6 +99,13 @@ opaque chat payloads, attachments, repair records and character statistics
 retain their prior behavior. Focused SQLite tests cover these contracts; a
 native Node subprocess exercises the real write consumer and migrated store.
 
+`src/endpoints/canonical-secrets-store.ts` is the sole canonical secrets store
+implementation. Existing callers use its real `.ts` path; the SecretManager
+access boundary and the synchronous SQLite transactions, active-record
+selection, migration markers and projection-repair behavior remain unchanged.
+Focused SQLite integration and existing native Node caller tests cover this
+internal migration; no user-visible semantic documentation changes are needed.
+
 `src/endpoints/world-info-store.ts` is the sole implementation of the
 canonical World Info store. Its JavaScript callers use the real `.ts` path,
 including projection and shadow import. SQLite remains authoritative;
@@ -176,6 +183,13 @@ This is internal execution and type-checking work. It changes no user-facing
 page, feature, or term, so no semantic documentation database update is needed.
 
 ## User storage and configuration leaves
+
+`src/user-directories.ts` is the sole implementation of directory lookup,
+per-handle caching, public and user directory creation, upload cleanup and
+avatar lookup. Existing consumers, maintenance scripts and `src/users.js`
+use the actual `.ts` path; the barrel retains its existing exports and
+`UserDirectoryList` type. Native Node tests run the real module graph against
+isolated temporary data roots without changing directory or cleanup semantics.
 
 `src/user-storage.ts` and `src/config-init.ts` are the sole implementations of
 their existing modules. Their JavaScript callers use explicit `.ts` imports;

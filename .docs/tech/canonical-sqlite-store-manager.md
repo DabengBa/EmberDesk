@@ -15,7 +15,7 @@ Primary files:
 - `src/canonical-sqlite.js`
 - `src/storage-feature-flags.js`
 - `src/constants.js`
-- `src/user-directories.js`
+- `src/user-directories.ts`
 - `src/users.js`
 - `default/config.yaml`
 - `tests/canonical-sqlite.test.js`
@@ -74,7 +74,7 @@ Only the manager slice currently uses the master gate and strict gate directly. 
 
 `src/constants.js` adds `USER_DIRECTORY_TEMPLATE.storage = 'storage'`.
 
-`src/user-directories.js` now returns `directories.storage` alongside the existing per-user directories. This keeps canonical storage rooted in the same `DATA_ROOT/<handle>/` ownership model as the rest of EmberDesk user data without mixing it into account metadata under `DATA_ROOT/_storage`.
+`src/user-directories.ts` now returns `directories.storage` alongside the existing per-user directories. This keeps canonical storage rooted in the same `DATA_ROOT/<handle>/` ownership model as the rest of EmberDesk user data without mixing it into account metadata under `DATA_ROOT/_storage`.
 
 ### Manager lifecycle
 

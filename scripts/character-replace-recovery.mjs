@@ -11,7 +11,7 @@ import sanitize from 'sanitize-filename';
 import { resolveCanonicalDatabasePath } from '../src/canonical-sqlite.js';
 import { CANONICAL_SQLITE_MIGRATIONS } from '../src/canonical-sqlite-migrations.js';
 import { getReplaceIntent, interruptWorkspaceWriteSessionOffline } from '../src/character-replace-write-coordinator.js';
-import { getUserDirectories } from '../src/user-directories.js';
+import { getUserDirectories } from '../src/user-directories.ts';
 import { isPathUnderParent } from '../src/util.js';
 
 const usage = [

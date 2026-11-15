@@ -22,6 +22,11 @@ describe('validation gate selector', () => {
             .toEqual(['user-auth-storage']);
     });
 
+    test.each(['js', 'ts'])('keeps user directories validation after a .%s migration', extension => {
+        expect(selectValidationGates([`src/user-directories.${extension}`]).commands.map(command => command.id))
+            .toEqual(['user-auth-storage']);
+    });
+
     test('maps high-risk touched paths to focused validation gates with local rule sources', () => {
         const result = selectValidationGates([
             'public/scripts/slash-commands.js',
