@@ -53,7 +53,7 @@ import {
     renameCanonicalChat,
     writeCanonicalChatPayload,
 } from './canonical-chat-write-service.js';
-import { calculateCanonicalCharacterChatStats, getCanonicalChatOperation, getCanonicalChatSession } from './canonical-chat-store.js';
+import { calculateCanonicalCharacterChatStats, getCanonicalChatOperation, getCanonicalChatSession } from './canonical-chat-store.ts';
 import { coordinateWorkspaceWrite, openRequestCoordinationDatabase } from './coordinate-workspace-write.js';
 
 const isBackupEnabled = !!getConfigValue('backups.chat.enabled', true, 'boolean');

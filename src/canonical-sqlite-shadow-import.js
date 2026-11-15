@@ -7,7 +7,7 @@ import {
     calculateCharacterChatStats,
     getCharacterChatDirectory,
 } from './endpoints/character-file-snapshot.js';
-import { calculateCanonicalCharacterChatStats } from './endpoints/canonical-chat-store.js';
+import { calculateCanonicalCharacterChatStats } from './endpoints/canonical-chat-store.ts';
 import { getCanonicalSliceProjectionMode } from './storage-feature-flags.js';
 import { countMissingCharacterAvatarBlobs } from './canonical-avatar-blobs.js';
 import { listOpenProjectionRepairs } from './canonical-sqlite-rollout-contract.js';

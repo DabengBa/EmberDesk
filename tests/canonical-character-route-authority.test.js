@@ -15,7 +15,7 @@ import { markCanonicalCharacterDeleted, upsertCanonicalCharacter } from '../src/
 import {
     createCanonicalChatSessionRecord,
     upsertCanonicalChatSession,
-} from '../src/endpoints/canonical-chat-store.js';
+} from '../src/endpoints/canonical-chat-store.ts';
 import { recordCharacterAvatarBlob } from '../src/canonical-avatar-blob-service.js';
 import { getCanonicalSettingsDocument, upsertCanonicalSettingsDocument } from '../src/endpoints/settings-store.js';
 import { read } from '../src/character-card-parser.js';

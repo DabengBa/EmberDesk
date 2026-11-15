@@ -3,7 +3,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import {
     getCanonicalChatMessagePayloads,
     getCanonicalChatSession,
-} from './canonical-chat-store.js';
+} from './canonical-chat-store.ts';
 import { withCanonicalTransaction } from '../canonical-sqlite.js';
 
 export type CanonicalChatLocator = {
