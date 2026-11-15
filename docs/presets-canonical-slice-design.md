@@ -1,7 +1,7 @@
 # OpenAI presets 纳入 canonical SQLite（设计稿）
 
 > 状态：**已实施**。P0–P4 全量落地：migration v13（`preset_documents` +
-> `preset_migration_markers`）、`presets-store.js`、`canonical-presets-shadow-import.js`
+> `preset_migration_markers`）、`presets-store.ts`、`canonical-presets-shadow-import.js`
 > （一次性 marker 导入）、slice 注册、`/api/presets/*` 与 `/get` 走 canonical、
 > `content-manager` 播种改 `ensureCanonicalPreset`（content.log 防复活语义保留）、
 > `export-all` 物化 `OpenAI Settings/<name>.json`、`readPresetsFromDirectoryAsync`
