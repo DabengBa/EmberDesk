@@ -15,7 +15,7 @@ const reads = new URL('../src/endpoints/canonical-chat-read-service.ts', import.
 const textReplace = new URL('../src/endpoints/character-text-replace-service.js', import.meta.url).href;
 const util = new URL('../src/util.js', import.meta.url).href;
 const migrations = new URL('../src/canonical-sqlite-migrations.js', import.meta.url).href;
-const writes = new URL('../src/endpoints/canonical-chat-write-service.js', import.meta.url).href;
+const writes = new URL('../src/endpoints/canonical-chat-write-service.ts', import.meta.url).href;
 
 function runNode(source, ...args) {
     return spawnSync(process.execPath, ['--input-type=module', '--eval', source, ...args], { encoding: 'utf8' });

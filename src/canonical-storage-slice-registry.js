@@ -24,7 +24,7 @@ import { listOpenWorldInfoProjectionRepairs } from './endpoints/world-info-store
 import { listOpenSettingsProjectionRepairs } from './endpoints/settings-store.ts';
 import { listOpenSecretProjectionRepairs } from './endpoints/canonical-secrets-store.ts';
 import { listOpenCanonicalManagedMediaRepairs } from './endpoints/canonical-managed-media-store.js';
-import { listOpenCanonicalChatProjectionRepairs } from './endpoints/canonical-chat-write-service.js';
+import { listOpenCanonicalChatProjectionRepairs } from './endpoints/canonical-chat-write-service.ts';
 
 const REQUIRED_SLICE_FIELDS = Object.freeze([
     'key',

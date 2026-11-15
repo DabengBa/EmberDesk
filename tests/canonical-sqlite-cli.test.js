@@ -23,7 +23,7 @@ import {
     writeCanonicalSecret,
 } from '../src/endpoints/canonical-secrets-store.ts';
 import { buildCharacterFileSnapshotRow } from '../src/endpoints/character-file-snapshot.js';
-import { writeCanonicalChatPayload } from '../src/endpoints/canonical-chat-write-service.js';
+import { writeCanonicalChatPayload } from '../src/endpoints/canonical-chat-write-service.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
