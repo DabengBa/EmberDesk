@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import type { DatabaseSync } from 'node:sqlite';
 
 import mime from 'mime-types';
 
@@ -13,18 +14,33 @@ import {
     listCanonicalManagedMediaReferences,
 } from './canonical-managed-media-store.ts';
 
+type Reference = Pick<NonNullable<ReturnType<typeof getCanonicalManagedMediaReference>>, 'lifecycleState' | 'managedRelativePath'>
+    & Partial<Pick<NonNullable<ReturnType<typeof getCanonicalManagedMediaReference>>, 'deletedAtMs' | 'mediaType' | 'contentHash'>>;
+type Directories = import('../users.js').UserDirectoryList;
+type Flags = ReturnType<ReturnType<typeof getCanonicalStorageSlice>['getFeatureFlags']>;
+type OpenOptions = { handle: string | undefined; directories: Directories | undefined; featureFlags: { enabled: boolean; strict: boolean } };
+type MigrationOptions = Parameters<typeof runCanonicalMigrations>[1];
+type AuditOptions = Parameters<typeof getPersistedCanonicalAuditStatus>[1];
+type Dependencies = {
+    getSlice: () => ReturnType<typeof getCanonicalStorageSlice>;
+    getFeatureFlags: () => Flags;
+    openDatabase: (options: OpenOptions) => DatabaseSync | null;
+    runMigrations: (db: DatabaseSync, options: MigrationOptions) => ReturnType<typeof runCanonicalMigrations>;
+    getAuditStatus: (db: DatabaseSync, options: AuditOptions) => ReturnType<typeof getPersistedCanonicalAuditStatus>;
+};
+
 function getDefaultDependencies() {
     const slice = getCanonicalStorageSlice('managed_media');
     return {
         getFeatureFlags: () => slice.getFeatureFlags(),
         getSlice: () => slice,
-        openDatabase: options => canonicalSqliteManager.open(options),
-        runMigrations: (db, options) => runCanonicalMigrations(db, options),
-        getAuditStatus: (db, options) => getPersistedCanonicalAuditStatus(db, options),
+        openDatabase: (options: OpenOptions) => canonicalSqliteManager.open(options),
+        runMigrations: (db: DatabaseSync, options: MigrationOptions) => runCanonicalMigrations(db, options),
+        getAuditStatus: (db: DatabaseSync, options: AuditOptions) => getPersistedCanonicalAuditStatus(db, options),
     };
 }
 
-function blockedReadState({ reason, featureFlags, strict, details = {} }) {
+function blockedReadState({ reason, featureFlags, strict, details = {} }: { reason: string; featureFlags: Flags; strict: boolean; details?: object }) {
     if (strict) {
         throw new Error(`Canonical managed media reads blocked: ${reason}`);
     }
@@ -33,14 +49,14 @@ function blockedReadState({ reason, featureFlags, strict, details = {} }) {
         reason,
         featureFlags,
         ...details,
-    };
+    } as const;
 }
 
 export function getCanonicalManagedMediaReadState({
     handle,
     directories,
     dependencies = {},
-} = {}) {
+}: { handle?: string; directories?: Directories; dependencies?: Partial<Dependencies> } = {}) {
     const defaults = getDefaultDependencies();
     const getSlice = dependencies.getSlice ?? defaults.getSlice;
     const slice = getSlice();
@@ -55,7 +71,7 @@ export function getCanonicalManagedMediaReadState({
         return blockedReadState({ reason: 'canonical_reads_disabled', featureFlags, strict });
     }
 
-    const openDatabase = dependencies.openDatabase ?? defaults.openDatabase;
+    const openDatabase: Dependencies['openDatabase'] = dependencies.openDatabase ?? defaults.openDatabase;
     const db = openDatabase({
         handle,
         directories,
@@ -109,14 +125,14 @@ export function getCanonicalManagedMediaReadState({
         migrationStatus,
         auditStatus,
         sliceKey: slice.key,
-    };
+    } as const;
 }
 
-function normalizeCompatibilityPath(value) {
+function normalizeCompatibilityPath(value: unknown) {
     return String(value ?? '').split(path.sep).join(path.posix.sep);
 }
 
-function listOwnerReferences(db, ownerType, prefix) {
+function listOwnerReferences(db: DatabaseSync, ownerType: string, prefix: string) {
     return listCanonicalManagedMediaReferences(db)
         .filter(reference => reference.ownerType === ownerType)
         .filter(reference => normalizeCompatibilityPath(reference.compatibilityPath).startsWith(prefix));
@@ -131,7 +147,7 @@ function listOwnerReferences(db, ownerType, prefix) {
  * @param {object|string} referenceOrPath Reference object or compatibility path
  * @returns {{ok: boolean, reason?: string, contents?: Buffer, mediaType?: string, contentHash?: string, reference?: object}}
  */
-export function readManagedMediaContent(db, directories, referenceOrPath) {
+export function readManagedMediaContent(db: DatabaseSync, directories: Pick<Directories, 'storage'>, referenceOrPath: Reference | string | null | undefined) {
     const reference = typeof referenceOrPath === 'string'
         ? getCanonicalManagedMediaReference(db, normalizeCompatibilityPath(referenceOrPath))
         : referenceOrPath;
@@ -171,7 +187,7 @@ const USER_IMAGES_PREFIX = 'user/images/';
  * @param {number} type MEDIA_REQUEST_TYPE bitmask
  * @returns {string[]} File names
  */
-export function listCanonicalUserImageFiles(db, folder, sortBy = 'name', type = MEDIA_REQUEST_TYPE.IMAGE) {
+export function listCanonicalUserImageFiles(db: DatabaseSync, folder: string, sortBy = 'name', type = MEDIA_REQUEST_TYPE.IMAGE) {
     const prefix = `${USER_IMAGES_PREFIX}${String(folder ?? '').replace(/^\/+|\/+$/g, '')}/`;
     const collator = Intl.Collator();
     return listCanonicalManagedMediaReferences(db)
@@ -197,12 +213,14 @@ export function listCanonicalUserImageFiles(db, folder, sortBy = 'name', type = 
             const name = normalizeCompatibilityPath(reference.compatibilityPath).slice(prefix.length);
             return {
                 name,
+                // Store metadata is unchecked JSON; this view preserves the original property access.
                 sortKey: sortBy === 'date'
-                    ? Number(reference.metadata?.sourceMtimeMs ?? reference.updatedAtMs ?? 0)
+                    ? Number((reference.metadata as { sourceMtimeMs?: unknown } | null)?.sourceMtimeMs ?? reference.updatedAtMs ?? 0)
                     : name,
             };
         })
-        .sort((a, b) => sortBy === 'date' ? a.sortKey - b.sortKey : collator.compare(a.sortKey, b.sortKey))
+        // The same sortBy branch constructs and consumes each sort key.
+        .sort((a, b) => sortBy === 'date' ? (a.sortKey as number) - (b.sortKey as number) : collator.compare(a.sortKey as string, b.sortKey as string))
         .map(entry => entry.name);
 }
 
@@ -211,8 +229,8 @@ export function listCanonicalUserImageFiles(db, folder, sortBy = 'name', type = 
  * @param {object} db Canonical SQLite handle
  * @returns {string[]} Folder names
  */
-export function listCanonicalUserImageFolders(db) {
-    const folders = new Set();
+export function listCanonicalUserImageFolders(db: DatabaseSync) {
+    const folders = new Set<string>();
     for (const reference of listCanonicalManagedMediaReferences(db)) {
         const compatibilityPath = normalizeCompatibilityPath(reference.compatibilityPath);
         if (!compatibilityPath.startsWith(USER_IMAGES_PREFIX)) {
@@ -227,8 +245,8 @@ export function listCanonicalUserImageFolders(db) {
     return [...folders].sort(Intl.Collator().compare);
 }
 
-export function listCanonicalAssetPayload(db) {
-    const output = {};
+export function listCanonicalAssetPayload(db: DatabaseSync) {
+    const output: Record<string, string[] | { model: string[]; animation: string[] }> & { live2d?: string[]; vrm?: { model: string[]; animation: string[] } } = {};
     for (const reference of listOwnerReferences(db, 'asset', 'assets/')) {
         const compatibilityPath = normalizeCompatibilityPath(reference.compatibilityPath);
         const segments = compatibilityPath.split('/');
@@ -255,7 +273,8 @@ export function listCanonicalAssetPayload(db) {
         }
 
         output[category] ??= [];
-        output[category].push(compatibilityPath);
+        // live2d and vrm have already been handled above; other categories are arrays.
+        (output[category] as string[]).push(compatibilityPath);
     }
     return output;
 }

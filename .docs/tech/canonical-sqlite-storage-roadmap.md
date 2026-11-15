@@ -453,7 +453,7 @@ asset subdirectories (sprites, live2d) stay file-backed media, and only root-lev
     - Current status: delivered through migration v6 (`managed_blobs`, `media_references`,
       `media_folders`, memberships, and `managed_media_repairs`),
       `src/canonical-managed-media-shadow-import.js`,
-      `src/endpoints/canonical-managed-media-read-service.js`, and
+      `src/endpoints/canonical-managed-media-read-service.ts`, and
       `src/endpoints/canonical-managed-media-write-service.js`. The independently gated
       `features.storage.canonicalSqlite.slices.managedMedia.*` slice shadows existing media
       without moving it, permits DB-first background and asset reads only after a clean

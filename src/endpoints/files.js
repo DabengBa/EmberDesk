@@ -10,7 +10,7 @@ import {
     deleteCanonicalManagedMediaReference,
     writeCanonicalManagedMedia,
 } from './canonical-managed-media-write-service.js';
-import { getCanonicalManagedMediaReadState } from './canonical-managed-media-read-service.js';
+import { getCanonicalManagedMediaReadState } from './canonical-managed-media-read-service.ts';
 import { getCanonicalManagedMediaReference } from './canonical-managed-media-store.ts';
 import { ensureCanonicalSliceBackend } from '../canonical-backend.js';
 

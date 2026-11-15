@@ -126,7 +126,7 @@ describe('canonical managed media write service', () => {
 
         await expect(writeCanonicalManagedMedia({ ...options, contents: Buffer.from('new bytes') }))
             .rejects.toThrow('injected tombstone failure');
-        const { readManagedMediaContent } = await import('../src/endpoints/canonical-managed-media-read-service.js');
+        const { readManagedMediaContent } = await import('../src/endpoints/canonical-managed-media-read-service.ts');
         const result = readManagedMediaContent(db, directories, options.compatibilityPath);
         expect(result.ok).toBe(true);
         expect(result.contents.toString()).toBe('new bytes');
@@ -393,7 +393,7 @@ describe('canonical managed media write service', () => {
         expect(result).toEqual(expect.objectContaining({ ok: true, authorityCommitted: true }));
         expect(fs.existsSync(path.join(directories.files, 'notes.txt'))).toBe(false);
 
-        const { readManagedMediaContent } = await import('../src/endpoints/canonical-managed-media-read-service.js');
+        const { readManagedMediaContent } = await import('../src/endpoints/canonical-managed-media-read-service.ts');
         const served = readManagedMediaContent(db, directories, 'user/files/notes.txt');
         expect(served.ok).toBe(true);
         expect(served.contents.toString()).toBe('hello-blob');

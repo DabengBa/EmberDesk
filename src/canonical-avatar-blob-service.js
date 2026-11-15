@@ -13,7 +13,7 @@ import { writeCanonicalManagedMedia } from './endpoints/canonical-managed-media-
 import {
     getCanonicalManagedMediaReadState,
     readManagedMediaContent,
-} from './endpoints/canonical-managed-media-read-service.js';
+} from './endpoints/canonical-managed-media-read-service.ts';
 
 /**
  * Registers the pure image bytes of a character card PNG as a managed-media

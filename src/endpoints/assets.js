@@ -13,7 +13,7 @@ import { downloadExternalAsset, validateExternalAssetUrl } from './external-cont
 import {
     getCanonicalManagedMediaReadState,
     listCanonicalAssetPayload,
-} from './canonical-managed-media-read-service.js';
+} from './canonical-managed-media-read-service.ts';
 import {
     deleteCanonicalManagedMediaReference,
     writeCanonicalManagedMedia,
