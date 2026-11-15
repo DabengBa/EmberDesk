@@ -28,7 +28,7 @@ import {
 import {
     listCanonicalManagedMediaReferences,
 } from '../src/endpoints/canonical-managed-media-store.ts';
-import { readManagedMediaContent } from '../src/endpoints/canonical-managed-media-read-service.js';
+import { readManagedMediaContent } from '../src/endpoints/canonical-managed-media-read-service.ts';
 import { extractImageData, write } from '../src/character-card-parser.js';
 import encode from '../src/png/encode.js';
 import { getImportLedgerEntry } from '../src/canonical-import-ledger.js';

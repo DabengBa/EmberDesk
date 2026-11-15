@@ -15,7 +15,7 @@ import {
     getCanonicalManagedMediaReadState,
     listCanonicalUserImageFiles,
     listCanonicalUserImageFolders,
-} from './canonical-managed-media-read-service.js';
+} from './canonical-managed-media-read-service.ts';
 import { ensureCanonicalSliceBackend } from '../canonical-backend.js';
 
 /**

@@ -473,7 +473,7 @@ async function tryReadManagedMediaBlob(req, fullPath) {
         const {
             getCanonicalManagedMediaReadState,
             readManagedMediaContent,
-        } = await import('./endpoints/canonical-managed-media-read-service.js');
+        } = await import('./endpoints/canonical-managed-media-read-service.ts');
         const state = getCanonicalManagedMediaReadState({ handle, directories });
         if (!state.ok) {
             return null;
