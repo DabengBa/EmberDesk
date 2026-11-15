@@ -424,7 +424,7 @@ asset subdirectories (sprites, live2d) stay file-backed media, and only root-lev
     - Depends on the generalized control plane.
     - Moves `settings.json`, revisions and snapshot/restore into canonical SQLite while
       preserving the current `/api/settings/get` and `/save` payload.
-    - Current status: delivered via migration v4, `src/endpoints/settings-store.js`,
+    - Current status: delivered via migration v4, `src/endpoints/settings-store.ts`,
       `src/canonical-settings-shadow-import.js`, DB-first settings routes, snapshots, and
       revision conflict handling. Follow-ups removed every `settings.json` runtime role:
       no seeding, no projection writes, no file fallbacks, no import or audit surface,

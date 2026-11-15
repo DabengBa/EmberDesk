@@ -1,34 +1,47 @@
 import crypto from 'node:crypto';
+import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
 
 import { withCanonicalTransaction } from '../canonical-sqlite.js';
 import { uuidv4 } from '../util.js';
 
-function parseRequiredJson(value, fieldName) {
+// Views describe existing unchecked JSON access, not runtime validation.
+type PowerUserView = {
+    external_media_allowed_overrides?: unknown[];
+    external_media_forbidden_overrides?: unknown[];
+    external_media_authorization_canonical_ids?: Record<string, SQLInputValue>;
+};
+type SettingsPayloadView = { power_user?: PowerUserView };
+type UserOptions = { userId?: unknown };
+type MediaOptions = UserOptions & { characterId?: string; canonicalId?: SQLInputValue; allowed?: unknown; newCharacterId?: string | null };
+type UpsertOptions = UserOptions & { payload?: unknown; expectedRevision?: unknown; nowMs?: unknown; payloadJson?: unknown; preserveMediaAuthorization?: boolean };
+type SnapshotOptions = UserOptions & { sourceRevision?: unknown; payload?: unknown; payloadJson?: string | null; name?: unknown; nowMs?: unknown; id?: string | null };
+
+function parseRequiredJson(value: unknown, fieldName: string): SettingsPayloadView {
     if (typeof value !== 'string') {
         throw new Error(`${fieldName} must be a JSON string`);
     }
     try {
         return JSON.parse(value);
     } catch (error) {
-        throw new Error(`${fieldName} is not valid JSON: ${error?.message ?? error}`);
+        throw new Error(`${fieldName} is not valid JSON: ${(error as { message?: unknown } | null | undefined)?.message ?? error}`);
     }
 }
 
-export function stableSettingsPayloadJson(payload) {
+export function stableSettingsPayloadJson(payload: unknown): string {
     // Preserve object key order as provided by JSON.parse/JSON.stringify of the
     // source document. Do not re-sort keys; the document's identity is its
     // full text shape, while content_hash uses the same serialization path.
     return JSON.stringify(payload);
 }
 
-export function hashSettingsPayload(payloadOrJson) {
+export function hashSettingsPayload(payloadOrJson: unknown): string {
     const payloadJson = typeof payloadOrJson === 'string'
         ? payloadOrJson
         : stableSettingsPayloadJson(payloadOrJson);
     return crypto.createHash('sha256').update(payloadJson, 'utf8').digest('hex');
 }
 
-function getSettingsDocumentRow(db, userId) {
+function getSettingsDocumentRow(db: DatabaseSync, userId: unknown) {
     let row = null;
     try {
         row = db.prepare(`
@@ -37,7 +50,7 @@ function getSettingsDocumentRow(db, userId) {
             WHERE user_id = ?
         `).get(String(userId));
     } catch (error) {
-        if (String(error?.message ?? '').includes('no such table: settings_documents')) {
+        if (String((error as { message?: unknown } | null | undefined)?.message ?? '').includes('no such table: settings_documents')) {
             return null;
         }
         throw error;
@@ -45,12 +58,12 @@ function getSettingsDocumentRow(db, userId) {
     return row ?? null;
 }
 
-export function getCanonicalSettingsRevision(db, { userId } = {}) {
+export function getCanonicalSettingsRevision(db: DatabaseSync, { userId }: UserOptions = {}) {
     const row = getSettingsDocumentRow(db, userId);
     return row ? Number(row.revision) : 0;
 }
 
-export function getCanonicalSettingsDocument(db, { userId } = {}) {
+export function getCanonicalSettingsDocument(db: DatabaseSync, { userId }: UserOptions = {}) {
     const row = getSettingsDocumentRow(db, userId);
     if (!row) {
         return null;
@@ -67,7 +80,7 @@ export function getCanonicalSettingsDocument(db, { userId } = {}) {
 
 // Caller owns the surrounding transaction. Used by character lifecycle writes
 // so an avatar key can never be reused before its grants are moved/removed.
-export function mutateCharacterMediaAuthorizationInTransaction(db, { userId, characterId, canonicalId = null, allowed, newCharacterId = null } = {}) {
+export function mutateCharacterMediaAuthorizationInTransaction(db: DatabaseSync, { userId, characterId, canonicalId = null, allowed, newCharacterId = null }: MediaOptions = {}) {
     const doc = getCanonicalSettingsDocument(db, { userId });
     if (!doc) throw new Error('settings_document_missing');
     const power = doc.payload.power_user ??= {};
@@ -76,31 +89,31 @@ export function mutateCharacterMediaAuthorizationInTransaction(db, { userId, cha
         && !Array.isArray(power.external_media_authorization_canonical_ids)
         ? power.external_media_authorization_canonical_ids
         : {};
-    for (const key of ['external_media_allowed_overrides', 'external_media_forbidden_overrides']) {
+    for (const key of ['external_media_allowed_overrides', 'external_media_forbidden_overrides'] as const) {
         if (!Array.isArray(power[key])) continue;
         const had = power[key].includes(characterId);
         power[key] = power[key].filter(id => id !== characterId && (newCharacterId == null || id !== newCharacterId));
         if (newCharacterId && had) {
             power[key].push(newCharacterId);
-            if (identityMap[characterId]) identityMap[newCharacterId] = identityMap[characterId];
+            if (identityMap[characterId as string]) identityMap[newCharacterId] = identityMap[characterId as string];
             else delete identityMap[newCharacterId];
         }
     }
-    delete identityMap[characterId];
+    delete identityMap[characterId as string];
     if (typeof allowed === 'boolean') {
         const grants = Array.isArray(power.external_media_allowed_overrides) ? power.external_media_allowed_overrides : [];
         power.external_media_allowed_overrides = grants.filter(id => id !== characterId);
         if (allowed) {
             power.external_media_allowed_overrides.push(characterId);
-            identityMap[characterId] = canonicalId ?? getLiveCharacterCanonicalId(db, characterId);
+            identityMap[characterId as string] = canonicalId ?? getLiveCharacterCanonicalId(db, characterId);
         }
     }
     if (Object.keys(identityMap).length) power.external_media_authorization_canonical_ids = identityMap;
     else delete power.external_media_authorization_canonical_ids;
     const payloadJson = stableSettingsPayloadJson(doc.payload);
     db.prepare('UPDATE settings_documents SET revision = ?, payload_json = ?, content_hash = ?, updated_at_ms = ? WHERE user_id = ?').run(doc.revision + 1, payloadJson, hashSettingsPayload(payloadJson), Date.now(), String(userId));
-    const mediaAuthorization = {};
-    for (const key of ['external_media_allowed_overrides', 'external_media_forbidden_overrides']) {
+    const mediaAuthorization: PowerUserView = {};
+    for (const key of ['external_media_allowed_overrides', 'external_media_forbidden_overrides'] as const) {
         if (Object.hasOwn(power, key)) mediaAuthorization[key] = power[key];
     }
     if (Object.hasOwn(power, 'external_media_authorization_canonical_ids')) {
@@ -109,13 +122,13 @@ export function mutateCharacterMediaAuthorizationInTransaction(db, { userId, cha
     return { revision: doc.revision + 1, power_user: mediaAuthorization };
 }
 
-function getLiveCharacterCanonicalId(db, characterId) {
-    return db.prepare('SELECT id FROM characters WHERE avatar_filename = ? AND deleted_at_ms IS NULL').get(characterId)?.id ?? null;
+function getLiveCharacterCanonicalId(db: DatabaseSync, characterId: string | undefined) {
+    return db.prepare('SELECT id FROM characters WHERE avatar_filename = ? AND deleted_at_ms IS NULL').get(characterId as SQLInputValue)?.id ?? null;
 }
 
 
-export function updateCharacterMediaAuthorization(db, options) {
-    return withCanonicalTransaction(db, txn => mutateCharacterMediaAuthorizationInTransaction(txn, options));
+export function updateCharacterMediaAuthorization(db: DatabaseSync, options: MediaOptions) {
+    return withCanonicalTransaction(db, (txn: DatabaseSync) => mutateCharacterMediaAuthorizationInTransaction(txn, options));
 }
 
 /**
@@ -125,14 +138,14 @@ export function updateCharacterMediaAuthorization(db, options) {
  * @returns {{ok: true, revision: number, contentHash: string, updatedAtMs: number, payload: object, payloadJson: string}
  *   | {ok: false, conflict: true, currentRevision: number, current?: object}}
  */
-export function upsertCanonicalSettingsDocument(db, {
+export function upsertCanonicalSettingsDocument(db: DatabaseSync, {
     userId,
     payload,
     expectedRevision,
     nowMs = Date.now(),
     payloadJson = null,
     preserveMediaAuthorization = false,
-} = {}) {
+}: UpsertOptions = {}) {
     if (!userId) {
         throw new Error('userId is required');
     }
@@ -141,7 +154,7 @@ export function upsertCanonicalSettingsDocument(db, {
     }
 
     const resolvedPayload = payload != null
-        ? structuredClone(payload)
+        ? structuredClone(payload) as SettingsPayloadView
         : parseRequiredJson(payloadJson, 'payloadJson');
     let resolvedPayloadJson = payloadJson != null
         ? String(payloadJson)
@@ -149,7 +162,7 @@ export function upsertCanonicalSettingsDocument(db, {
     let contentHash = hashSettingsPayload(resolvedPayloadJson);
     const expected = Number(expectedRevision);
 
-    return withCanonicalTransaction(db, txnDb => {
+    return withCanonicalTransaction(db, (txnDb: DatabaseSync) => {
         const existing = getSettingsDocumentRow(txnDb, userId);
         const currentRevision = existing ? Number(existing.revision) : 0;
         if (currentRevision !== expected) {
@@ -172,10 +185,10 @@ export function upsertCanonicalSettingsDocument(db, {
 
         if (preserveMediaAuthorization && existing) {
             const current = parseRequiredJson(existing.payload_json, 'payload_json');
-            for (const key of ['external_media_allowed_overrides', 'external_media_forbidden_overrides', 'external_media_authorization_canonical_ids']) {
+            for (const key of ['external_media_allowed_overrides', 'external_media_forbidden_overrides', 'external_media_authorization_canonical_ids'] as const) {
                 if (Object.hasOwn(current.power_user ?? {}, key)) {
                     if (!resolvedPayload.power_user || typeof resolvedPayload.power_user !== 'object' || Array.isArray(resolvedPayload.power_user)) resolvedPayload.power_user = {};
-                    resolvedPayload.power_user[key] = current.power_user[key];
+                    (resolvedPayload.power_user as Record<string, unknown>)[key] = (current.power_user as PowerUserView)[key];
                 } else if (resolvedPayload.power_user && typeof resolvedPayload.power_user === 'object') delete resolvedPayload.power_user[key];
             }
             resolvedPayloadJson = stableSettingsPayloadJson(resolvedPayload);
@@ -225,7 +238,7 @@ export function upsertCanonicalSettingsDocument(db, {
  * @param {object} options { userId, defaults, nowMs }
  * @returns {{ok: true, document: object, created: boolean} | {ok: false, reason: string}}
  */
-export function ensureCanonicalSettingsDocument(db, { userId, defaults, nowMs = Date.now() } = {}) {
+export function ensureCanonicalSettingsDocument(db: DatabaseSync, { userId, defaults, nowMs = Date.now() }: UserOptions & { defaults?: unknown; nowMs?: unknown } = {}) {
     const existing = getCanonicalSettingsDocument(db, { userId });
     if (existing) {
         return { ok: true, document: existing, created: false };
@@ -248,13 +261,13 @@ export function ensureCanonicalSettingsDocument(db, { userId, defaults, nowMs = 
     return { ok: true, document: getCanonicalSettingsDocument(db, { userId }), created: true };
 }
 
-export function recordSettingsProjectionRepair(db, {
+export function recordSettingsProjectionRepair(db: DatabaseSync, {
     repairKey,
     userId,
     reason,
     details = {},
     nowMs = Date.now(),
-} = {}) {
+}: UserOptions & { repairKey?: unknown; reason?: unknown; details?: unknown; nowMs?: unknown } = {}) {
     db.prepare(`
         INSERT INTO settings_projection_repairs (
             repair_key,
@@ -282,10 +295,10 @@ export function recordSettingsProjectionRepair(db, {
     );
 }
 
-export function resolveSettingsProjectionRepair(db, {
+export function resolveSettingsProjectionRepair(db: DatabaseSync, {
     repairKey,
     resolvedAtMs = Date.now(),
-} = {}) {
+}: { repairKey?: unknown; resolvedAtMs?: unknown } = {}) {
     return db.prepare(`
         UPDATE settings_projection_repairs
         SET resolved_at_ms = ?,
@@ -300,7 +313,7 @@ export function resolveSettingsProjectionRepair(db, {
     );
 }
 
-export function listOpenSettingsProjectionRepairs(db) {
+export function listOpenSettingsProjectionRepairs(db: DatabaseSync) {
     let rows = [];
     try {
         rows = db.prepare(`
@@ -318,7 +331,7 @@ export function listOpenSettingsProjectionRepairs(db) {
             ORDER BY created_at_ms ASC, repair_key ASC
         `).all();
     } catch (error) {
-        if (String(error?.message ?? '').includes('no such table: settings_projection_repairs')) {
+        if (String((error as { message?: unknown } | null | undefined)?.message ?? '').includes('no such table: settings_projection_repairs')) {
             return [];
         }
         throw error;
@@ -336,7 +349,7 @@ export function listOpenSettingsProjectionRepairs(db) {
     }));
 }
 
-export function createSettingsSnapshot(db, {
+export function createSettingsSnapshot(db: DatabaseSync, {
     userId,
     sourceRevision = null,
     payload = null,
@@ -344,7 +357,7 @@ export function createSettingsSnapshot(db, {
     name = '',
     nowMs = Date.now(),
     id = null,
-} = {}) {
+}: SnapshotOptions = {}) {
     let resolvedPayloadJson = payloadJson;
     let resolvedSourceRevision = sourceRevision;
     let contentHash = null;
@@ -398,7 +411,7 @@ export function createSettingsSnapshot(db, {
     };
 }
 
-export function listSettingsSnapshots(db, { userId } = {}) {
+export function listSettingsSnapshots(db: DatabaseSync, { userId }: UserOptions = {}) {
     let rows = [];
     try {
         rows = db.prepare(`
@@ -408,7 +421,7 @@ export function listSettingsSnapshots(db, { userId } = {}) {
             ORDER BY created_at_ms DESC, id ASC
         `).all(String(userId));
     } catch (error) {
-        if (String(error?.message ?? '').includes('no such table: settings_snapshots')) {
+        if (String((error as { message?: unknown } | null | undefined)?.message ?? '').includes('no such table: settings_snapshots')) {
             return [];
         }
         throw error;
@@ -426,7 +439,7 @@ export function listSettingsSnapshots(db, { userId } = {}) {
     }));
 }
 
-export function getSettingsSnapshot(db, { userId, id } = {}) {
+export function getSettingsSnapshot(db: DatabaseSync, { userId, id }: UserOptions & { id?: unknown } = {}) {
     let row = null;
     try {
         row = db.prepare(`
@@ -435,7 +448,7 @@ export function getSettingsSnapshot(db, { userId, id } = {}) {
             WHERE user_id = ? AND id = ?
         `).get(String(userId), String(id));
     } catch (error) {
-        if (String(error?.message ?? '').includes('no such table: settings_snapshots')) {
+        if (String((error as { message?: unknown } | null | undefined)?.message ?? '').includes('no such table: settings_snapshots')) {
             return null;
         }
         throw error;
@@ -460,12 +473,12 @@ export function getSettingsSnapshot(db, { userId, id } = {}) {
  * Restore a snapshot as a new revision of the live document.
  * Does not rewind the revision counter.
  */
-export function restoreSettingsSnapshot(db, {
+export function restoreSettingsSnapshot(db: DatabaseSync, {
     userId,
     snapshotId,
     expectedRevision = null,
     nowMs = Date.now(),
-} = {}) {
+}: UserOptions & { snapshotId?: unknown; expectedRevision?: unknown; nowMs?: unknown } = {}) {
     const snapshot = getSettingsSnapshot(db, { userId, id: snapshotId });
     if (!snapshot) {
         return {

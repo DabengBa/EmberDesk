@@ -17,7 +17,7 @@ import {
     upsertCanonicalSettingsDocument,
     updateCharacterMediaAuthorization,
     mutateCharacterMediaAuthorizationInTransaction,
-} from '../src/endpoints/settings-store.js';
+} from '../src/endpoints/settings-store.ts';
 import {
     SETTINGS_AUDIT_SCOPE,
     auditCanonicalSettingsShadowImport,

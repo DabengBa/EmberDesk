@@ -60,7 +60,7 @@ import {
     assertCanonicalCharacterCardCurrent,
 } from './character-store.ts';
 import { getCanonicalWorldInfoBook, normalizeCanonicalWorldInfoName } from './world-info-store.ts';
-import { mutateCharacterMediaAuthorizationInTransaction } from './settings-store.js';
+import { mutateCharacterMediaAuthorizationInTransaction } from './settings-store.ts';
 import {
     createCharacterCard,
     deleteCharacterCard,

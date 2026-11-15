@@ -12,8 +12,8 @@ import { resolveCanonicalChatProjectionPath } from './endpoints/canonical-chat-p
 import { listCanonicalChatSessions } from './endpoints/canonical-chat-store.ts';
 import { getCanonicalManagedMediaReference, listCanonicalManagedMediaReferences } from './endpoints/canonical-managed-media-store.js';
 import { getCanonicalSecretsProjection } from './canonical-secrets-shadow-import.js';
-import { getCanonicalSettingsDocument } from './endpoints/settings-store.js';
-import { listCanonicalPresets } from './endpoints/presets-store.js';
+import { getCanonicalSettingsDocument } from './endpoints/settings-store.ts';
+import { listCanonicalPresets } from './endpoints/presets-store.ts';
 import { listCanonicalWorldInfoBookRows } from './endpoints/world-info-store.ts';
 import { withCanonicalTransaction } from './canonical-sqlite.js';
 

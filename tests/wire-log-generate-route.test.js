@@ -218,7 +218,7 @@ describe('POST /api/backends/chat-completions/generate wire logging', () => {
                 scope: getCanonicalStorageSlice('settings').auditScope,
             });
         } else {
-            const { recordSettingsProjectionRepair } = await import('../src/endpoints/settings-store.js');
+            const { recordSettingsProjectionRepair } = await import('../src/endpoints/settings-store.ts');
             recordSettingsProjectionRepair(db, { repairKey: 'blocked', userId: HANDLE, reason: 'test repair' });
         }
         const saved = await fetch(`${url}/api/wire-logs/config`, {

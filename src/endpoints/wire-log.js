@@ -27,7 +27,7 @@ import {
     ensureCanonicalSettingsDocument,
     getCanonicalSettingsDocument,
     upsertCanonicalSettingsDocument,
-} from './settings-store.js';
+} from './settings-store.ts';
 
 const SETTINGS_FEATURE_KEY = 'feature_settings';
 const WIRE_LOG_SETTINGS_KEY = 'wire_log';

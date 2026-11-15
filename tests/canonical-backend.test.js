@@ -14,7 +14,7 @@ import { closeCanonicalDatabase } from '../src/canonical-sqlite.js';
 import {
     getCanonicalSettingsDocument,
     upsertCanonicalSettingsDocument,
-} from '../src/endpoints/settings-store.js';
+} from '../src/endpoints/settings-store.ts';
 import {
     getPersistedCanonicalAuditStatus,
     invalidateCanonicalAuditStatus,

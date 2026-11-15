@@ -36,7 +36,7 @@ import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
 import {
     listOpenSettingsProjectionRepairs,
     recordSettingsProjectionRepair,
-} from '../src/endpoints/settings-store.js';
+} from '../src/endpoints/settings-store.ts';
 import { MANAGED_MEDIA_AUDIT_SCOPE } from '../src/canonical-managed-media-shadow-import.js';
 import { CANONICAL_CHAT_AUDIT_SCOPE } from '../src/canonical-chat-shadow-import.js';
 import { writeCanonicalChatPayload } from '../src/endpoints/canonical-chat-write-service.js';

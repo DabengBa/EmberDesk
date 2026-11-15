@@ -1,12 +1,23 @@
-import { stableSettingsPayloadJson, hashSettingsPayload } from './settings-store.js';
+import { stableSettingsPayloadJson, hashSettingsPayload } from './settings-store.ts';
+import type { DatabaseSync, SQLOutputValue } from 'node:sqlite';
+
+type PresetOptions = { apiId?: unknown; name?: unknown };
+type WriteOptions = PresetOptions & { payload?: unknown; source?: unknown; nowMs?: unknown };
+type Preset = {
+    apiId: string; name: string; payloadJson: string; revision: number;
+    contentHash: string; source: string; createdAtMs: number; updatedAtMs: number;
+};
+type UpsertResult =
+    | { ok: true; revision: number; contentHash: string; created: boolean; preset: Preset | null }
+    | { ok: false; conflicted: true; revision: number; preset?: undefined };
 
 export const PRESETS_OPENAI_API_ID = 'openai';
 
-function normalizePresetName(name) {
+function normalizePresetName(name: unknown) {
     return String(name ?? '').trim();
 }
 
-function mapPresetRow(row) {
+function mapPresetRow(row: Record<string, SQLOutputValue>): Preset {
     return {
         apiId: String(row.api_id),
         name: String(row.name),
@@ -25,7 +36,7 @@ function mapPresetRow(row) {
  * @returns {{apiId: string, name: string, payloadJson: string, revision: number,
  *   contentHash: string, source: string, createdAtMs: number, updatedAtMs: number}[]}
  */
-export function listCanonicalPresets(db, { apiId = PRESETS_OPENAI_API_ID } = {}) {
+export function listCanonicalPresets(db: DatabaseSync, { apiId = PRESETS_OPENAI_API_ID }: PresetOptions = {}) {
     const rows = db.prepare(`
         SELECT api_id, name, payload_json, revision, content_hash, source, created_at_ms, updated_at_ms
         FROM preset_documents
@@ -34,7 +45,7 @@ export function listCanonicalPresets(db, { apiId = PRESETS_OPENAI_API_ID } = {})
     return rows.map(mapPresetRow).sort((a, b) => a.name.localeCompare(b.name));
 }
 
-export function getCanonicalPreset(db, { apiId = PRESETS_OPENAI_API_ID, name } = {}) {
+export function getCanonicalPreset(db: DatabaseSync, { apiId = PRESETS_OPENAI_API_ID, name }: PresetOptions = {}) {
     const row = db.prepare(`
         SELECT api_id, name, payload_json, revision, content_hash, source, created_at_ms, updated_at_ms
         FROM preset_documents
@@ -49,14 +60,14 @@ export function getCanonicalPreset(db, { apiId = PRESETS_OPENAI_API_ID, name } =
  * @returns {{ok: true, conflicted?: false, revision: number, contentHash: string,
  *   created: boolean, preset: object} | {ok: false, conflicted: true, revision: number}}
  */
-export function upsertCanonicalPreset(db, {
+export function upsertCanonicalPreset(db: DatabaseSync, {
     apiId = PRESETS_OPENAI_API_ID,
     name,
     payload,
     source = 'user',
     expectedRevision = null,
     nowMs = Date.now(),
-} = {}) {
+}: WriteOptions & { expectedRevision?: unknown } = {}): UpsertResult {
     const resolvedName = normalizePresetName(name);
     if (!resolvedName) {
         throw new Error('Preset name is required.');
@@ -100,13 +111,13 @@ export function upsertCanonicalPreset(db, {
  * the content-seeding "copy when the target file does not exist" semantics.
  * @returns {{ok: true, inserted: boolean, preset: object|null}}
  */
-export function ensureCanonicalPreset(db, {
+export function ensureCanonicalPreset(db: DatabaseSync, {
     apiId = PRESETS_OPENAI_API_ID,
     name,
     payload,
     source = 'seed',
     nowMs = Date.now(),
-} = {}) {
+}: WriteOptions = {}) {
     const resolvedName = normalizePresetName(name);
     if (!resolvedName) {
         return { ok: true, inserted: false, preset: null };
@@ -119,14 +130,14 @@ export function ensureCanonicalPreset(db, {
     return { ok: result.ok, inserted: result.ok === true, preset: result.preset ?? null };
 }
 
-export function deleteCanonicalPreset(db, { apiId = PRESETS_OPENAI_API_ID, name } = {}) {
+export function deleteCanonicalPreset(db: DatabaseSync, { apiId = PRESETS_OPENAI_API_ID, name }: PresetOptions = {}) {
     const result = db.prepare(`
         DELETE FROM preset_documents WHERE api_id = ? AND name = ?
     `).run(String(apiId), normalizePresetName(name));
     return { ok: true, deleted: Number(result.changes) > 0 };
 }
 
-export function getPresetMigrationMarker(db, markerKey) {
+export function getPresetMigrationMarker(db: DatabaseSync, markerKey: unknown) {
     try {
         const row = db.prepare(`
             SELECT marker_key, source_hash, imported_at_ms
@@ -142,18 +153,18 @@ export function getPresetMigrationMarker(db, markerKey) {
             importedAtMs: Number(row.imported_at_ms),
         };
     } catch (error) {
-        if (String(error?.message ?? '').includes('no such table: preset_migration_markers')) {
+        if (String((error as { message?: unknown } | null | undefined)?.message ?? '').includes('no such table: preset_migration_markers')) {
             return null;
         }
         throw error;
     }
 }
 
-export function setPresetMigrationMarker(db, {
+export function setPresetMigrationMarker(db: DatabaseSync, {
     markerKey,
     sourceHash = '',
     nowMs = Date.now(),
-} = {}) {
+}: { markerKey?: unknown; sourceHash?: unknown; nowMs?: unknown } = {}) {
     db.prepare(`
         INSERT INTO preset_migration_markers (marker_key, source_hash, imported_at_ms)
         VALUES (?, ?, ?)
@@ -171,14 +182,14 @@ export function setPresetMigrationMarker(db, {
  * @returns {{status: 'imported'|'skipped_marker'|'skipped_conflict'|'unchanged'|'error',
  *   preset?: object, errorClass?: string}}
  */
-export function importPresetFile(db, {
+export function importPresetFile(db: DatabaseSync, {
     apiId = PRESETS_OPENAI_API_ID,
     name,
     payloadJson,
     markerKey,
     sourceHash = '',
     nowMs = Date.now(),
-} = {}) {
+}: PresetOptions & { payloadJson?: unknown; markerKey?: unknown; sourceHash?: unknown; nowMs?: unknown } = {}) {
     const resolvedName = normalizePresetName(name);
     if (!resolvedName) {
         return { status: 'error', errorClass: 'invalid_preset_name' };

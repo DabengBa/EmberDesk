@@ -70,7 +70,7 @@ describe('migratePublicOverrides', () => {
         expect(fs.existsSync(path.join(publicDir, 'settings.json'))).toBe(false);
 
         const { DatabaseSync } = await import('node:sqlite');
-        const { getCanonicalSettingsDocument } = await import('../src/endpoints/settings-store.js');
+        const { getCanonicalSettingsDocument } = await import('../src/endpoints/settings-store.ts');
         const db = new DatabaseSync(path.join(userRoot, 'storage', 'emberdesk.sqlite'));
         try {
             const document = getCanonicalSettingsDocument(db, { userId: 'default-user' });

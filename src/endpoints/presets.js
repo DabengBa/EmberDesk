@@ -12,7 +12,7 @@ import {
     listCanonicalPresets,
     PRESETS_OPENAI_API_ID,
     upsertCanonicalPreset,
-} from './presets-store.js';
+} from './presets-store.ts';
 
 function getRequestHandle(request) {
     return request.user?.profile?.handle ?? request.user?.handle ?? 'default-user';
