@@ -8,7 +8,7 @@ import sanitize from 'sanitize-filename';
 
 import { write as writeCharacterCard } from './character-card-parser.js';
 import { listImportLedgerEntries, recordImportLedgerEntry } from './canonical-import-ledger.js';
-import { resolveCanonicalChatProjectionPath } from './endpoints/canonical-chat-projection-path.js';
+import { resolveCanonicalChatProjectionPath } from './endpoints/canonical-chat-projection-path.ts';
 import { listCanonicalChatSessions } from './endpoints/canonical-chat-store.ts';
 import { getCanonicalManagedMediaReference, listCanonicalManagedMediaReferences } from './endpoints/canonical-managed-media-store.ts';
 import { getCanonicalSecretsProjection } from './canonical-secrets-shadow-import.js';

@@ -3,7 +3,14 @@ import path from 'node:path';
 
 import { isPathUnderParent } from '../util.js';
 
-function assertNoSymlinkComponents(root, filePath) {
+export type CanonicalChatProjectionPathInput = {
+    directories: { root?: string; chats?: string } | null | undefined;
+    ownerType: string;
+    ownerId: unknown;
+    sourcePath: unknown;
+};
+
+function assertNoSymlinkComponents(root: string, filePath: string): void {
     const relativePath = path.relative(root, filePath);
     let currentPath = root;
     for (const component of relativePath.split(path.sep).slice(0, -1)) {
@@ -13,7 +20,7 @@ function assertNoSymlinkComponents(root, filePath) {
                 throw new Error(`Canonical chat projection path contains a symbolic link: ${currentPath}`);
             }
         } catch (error) {
-            if (error?.code !== 'ENOENT') {
+            if ((error as NodeJS.ErrnoException | null | undefined)?.code !== 'ENOENT') {
                 throw error;
             }
             break;
@@ -26,7 +33,7 @@ export function resolveCanonicalChatProjectionPath({
     ownerType,
     ownerId,
     sourcePath,
-}) {
+}: CanonicalChatProjectionPathInput): string {
     if (!directories?.root) {
         throw new Error('Canonical chat projection root is required.');
     }
