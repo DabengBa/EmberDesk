@@ -1,11 +1,22 @@
 import crypto from 'node:crypto';
+import type { DatabaseSync } from 'node:sqlite';
+
+type SecretRow = Record<string, unknown>;
+type SecretInput = { id?: unknown; value?: unknown; label?: unknown; active?: unknown; createdAtMs?: unknown; updatedAtMs?: unknown };
+type MarkerOptions = { markerKey?: unknown; sourceHash?: unknown; nowMs?: unknown };
+type WriteOptions = { key?: unknown; value?: unknown; label?: unknown; id?: string | null; nowMs?: unknown };
+type ReplaceOptions = { recordsByKey?: Record<string, SecretInput[]> | null; sourceHash?: unknown; nowMs?: unknown };
+type TargetOptions = { key?: unknown; id?: unknown; nowMs?: unknown };
+type RenameOptions = TargetOptions & { label?: unknown };
+type RepairOptions = { repairKey?: unknown; key?: unknown; recordId?: unknown; operation?: unknown; errorClass?: unknown; nowMs?: unknown };
+type ResolveOptions = { repairKey?: unknown; resolvedAtMs?: unknown };
 
 import { withCanonicalTransaction } from '../canonical-sqlite.js';
 import { uuidv4 } from '../util.js';
 
 export const SECRET_MIGRATION_MARKER = 'secret_records_import';
 
-function normalizeRecord(row) {
+function normalizeRecord(row: SecretRow) {
     return {
         id: String(row.id),
         key: String(row.secret_key),
@@ -17,7 +28,7 @@ function normalizeRecord(row) {
     };
 }
 
-function getSecretRows(db, key = null) {
+function getSecretRows(db: DatabaseSync, key: unknown = null) {
     const query = key == null
         ? `
             SELECT id, secret_key, value, label, active, created_at_ms, updated_at_ms
@@ -33,23 +44,23 @@ function getSecretRows(db, key = null) {
     try {
         return key == null ? db.prepare(query).all() : db.prepare(query).all(String(key));
     } catch (error) {
-        if (String(error?.message ?? '').includes('no such table: secret_records')) {
+        if (String((error as { message?: unknown } | null)?.message ?? '').includes('no such table: secret_records')) {
             return [];
         }
         throw error;
     }
 }
 
-export function hashCanonicalSecretValue(value) {
+export function hashCanonicalSecretValue(value: unknown) {
     return crypto.createHash('sha256').update(String(value), 'utf8').digest('hex');
 }
 
-export function getCanonicalSecretRecords(db, key) {
+export function getCanonicalSecretRecords(db: DatabaseSync, key: unknown) {
     return getSecretRows(db, key).map(normalizeRecord);
 }
 
-export function getCanonicalSecrets(db) {
-    const result = {};
+export function getCanonicalSecrets(db: DatabaseSync) {
+    const result: Record<string, { id: string; value: string; label: string; active: boolean }[]> = {};
     for (const row of getSecretRows(db)) {
         const record = normalizeRecord(row);
         result[record.key] ??= [];
@@ -63,12 +74,12 @@ export function getCanonicalSecrets(db) {
     return result;
 }
 
-export function getCanonicalSecret(db, key, id = null) {
+export function getCanonicalSecret(db: DatabaseSync, key: unknown, id: unknown = null) {
     const records = getCanonicalSecretRecords(db, key);
     return records.find(record => id ? record.id === id : record.active) ?? null;
 }
 
-export function getSecretMigrationMarker(db, markerKey = SECRET_MIGRATION_MARKER) {
+export function getSecretMigrationMarker(db: DatabaseSync, markerKey: unknown = SECRET_MIGRATION_MARKER) {
     try {
         const row = db.prepare(`
             SELECT marker_key, source_hash, imported_at_ms
@@ -84,18 +95,18 @@ export function getSecretMigrationMarker(db, markerKey = SECRET_MIGRATION_MARKER
             importedAtMs: Number(row.imported_at_ms),
         };
     } catch (error) {
-        if (String(error?.message ?? '').includes('no such table: secret_migration_markers')) {
+        if (String((error as { message?: unknown } | null)?.message ?? '').includes('no such table: secret_migration_markers')) {
             return null;
         }
         throw error;
     }
 }
 
-export function setSecretMigrationMarker(db, {
+export function setSecretMigrationMarker(db: DatabaseSync, {
     markerKey = SECRET_MIGRATION_MARKER,
     sourceHash = '',
     nowMs = Date.now(),
-} = {}) {
+}: MarkerOptions = {}) {
     db.prepare(`
         INSERT INTO secret_migration_markers (marker_key, source_hash, imported_at_ms)
         VALUES (?, ?, ?)
@@ -105,18 +116,18 @@ export function setSecretMigrationMarker(db, {
     `).run(String(markerKey), String(sourceHash), Number(nowMs));
 }
 
-export function writeCanonicalSecret(db, {
+export function writeCanonicalSecret(db: DatabaseSync, {
     key,
     value,
     label = 'Unlabeled',
     id = null,
     nowMs = Date.now(),
-} = {}) {
+}: WriteOptions = {}) {
     if (!key || typeof value !== 'string') {
         throw new Error('Canonical secret key and value are required');
     }
     const secretId = id ?? uuidv4();
-    return withCanonicalTransaction(db, txnDb => {
+    return withCanonicalTransaction(db, (txnDb: DatabaseSync) => {
         txnDb.prepare(`
             UPDATE secret_records
             SET active = 0, updated_at_ms = ?
@@ -138,13 +149,13 @@ export function writeCanonicalSecret(db, {
     });
 }
 
-export function replaceCanonicalSecretRecords(db, {
+export function replaceCanonicalSecretRecords(db: DatabaseSync, {
     recordsByKey,
     sourceHash = '',
     nowMs = Date.now(),
-} = {}) {
+}: ReplaceOptions = {}) {
     const normalized = recordsByKey ?? {};
-    return withCanonicalTransaction(db, txnDb => {
+    return withCanonicalTransaction(db, (txnDb: DatabaseSync) => {
         txnDb.exec('DELETE FROM secret_records');
         const insert = txnDb.prepare(`
             INSERT INTO secret_records (
@@ -171,12 +182,12 @@ export function replaceCanonicalSecretRecords(db, {
     });
 }
 
-export function deleteCanonicalSecret(db, {
+export function deleteCanonicalSecret(db: DatabaseSync, {
     key,
     id = null,
     nowMs = Date.now(),
-} = {}) {
-    return withCanonicalTransaction(db, txnDb => {
+}: TargetOptions = {}) {
+    return withCanonicalTransaction(db, (txnDb: DatabaseSync) => {
         const target = id == null
             ? txnDb.prepare(`
                 SELECT id, active
@@ -215,12 +226,12 @@ export function deleteCanonicalSecret(db, {
     });
 }
 
-export function rotateCanonicalSecret(db, {
+export function rotateCanonicalSecret(db: DatabaseSync, {
     key,
     id,
     nowMs = Date.now(),
-} = {}) {
-    return withCanonicalTransaction(db, txnDb => {
+}: TargetOptions = {}) {
+    return withCanonicalTransaction(db, (txnDb: DatabaseSync) => {
         const target = txnDb.prepare(`
             SELECT id
             FROM secret_records
@@ -243,12 +254,12 @@ export function rotateCanonicalSecret(db, {
     });
 }
 
-export function renameCanonicalSecret(db, {
+export function renameCanonicalSecret(db: DatabaseSync, {
     key,
     id,
     label,
     nowMs = Date.now(),
-} = {}) {
+}: RenameOptions = {}) {
     const result = db.prepare(`
         UPDATE secret_records
         SET label = ?, updated_at_ms = ?
@@ -257,14 +268,14 @@ export function renameCanonicalSecret(db, {
     return Number(result.changes) > 0;
 }
 
-export function recordSecretProjectionRepair(db, {
+export function recordSecretProjectionRepair(db: DatabaseSync, {
     repairKey,
     key,
     recordId = null,
     operation,
     errorClass,
     nowMs = Date.now(),
-} = {}) {
+}: RepairOptions = {}) {
     db.prepare(`
         INSERT INTO secret_projection_repairs (
             repair_key, secret_key, record_id, operation, error_class,
@@ -288,10 +299,10 @@ export function recordSecretProjectionRepair(db, {
     );
 }
 
-export function resolveSecretProjectionRepair(db, {
+export function resolveSecretProjectionRepair(db: DatabaseSync, {
     repairKey,
     resolvedAtMs = Date.now(),
-} = {}) {
+}: ResolveOptions = {}) {
     return db.prepare(`
         UPDATE secret_projection_repairs
         SET resolved_at_ms = ?,
@@ -301,7 +312,7 @@ export function resolveSecretProjectionRepair(db, {
     `).run(Number(resolvedAtMs), Number(resolvedAtMs), Number(resolvedAtMs), String(repairKey));
 }
 
-export function listOpenSecretProjectionRepairs(db) {
+export function listOpenSecretProjectionRepairs(db: DatabaseSync) {
     try {
         return db.prepare(`
             SELECT
@@ -322,7 +333,7 @@ export function listOpenSecretProjectionRepairs(db) {
             resolvedAtMs: row.resolved_at_ms == null ? null : Number(row.resolved_at_ms),
         }));
     } catch (error) {
-        if (String(error?.message ?? '').includes('no such table: secret_projection_repairs')) {
+        if (String((error as { message?: unknown } | null)?.message ?? '').includes('no such table: secret_projection_repairs')) {
             return [];
         }
         throw error;

@@ -14,7 +14,7 @@ Primary files:
 
 - `src/users.js` — re-export barrel, middleware, routes, backup, security verification
 - `src/user-storage.ts` — `node-persist` CRUD and user record queries
-- `src/user-directories.js` — per-user filesystem layout and directory creation
+- `src/user-directories.ts` — per-user filesystem layout and directory creation
 - `src/user-migrations.js` — startup data migrations
 - `src/user-auth.ts` — credential verification, SSO, session crypto
 
@@ -26,10 +26,10 @@ The split follows a layered dependency graph with no back-edges:
 users.js (barrel + middleware + routes)
   ├── user-auth.ts
   │     └── user-storage.ts
-  ├── user-directories.js
+  ├── user-directories.ts
   │     └── user-storage.ts
   ├── user-migrations.js
-  │     └── user-directories.js
+  │     └── user-directories.ts
   └── user-storage.ts
 ```
 
@@ -59,7 +59,7 @@ Constraints:
 | `getAllEnabledUsers()` | async | Filters enabled users |
 | `getAccountVersion(user)` | function | Hash of handle+password+salt for session invalidation |
 
-### user-directories.js
+### user-directories.ts
 
 | Symbol | Type | Notes |
 |---|---|---|

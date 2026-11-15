@@ -23,7 +23,7 @@ Primary current files:
 - `src/endpoints/character-index.js` (retired helper; no normal runtime ownership)
 - `src/derived-cache-sqlite.js`
 - `src/users.js`
-- `src/user-directories.js`
+- `src/user-directories.ts`
 
 Future implementation candidates:
 

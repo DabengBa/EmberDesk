@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import { USER_DIRECTORY_TEMPLATE, PUBLIC_DIRECTORIES, UPLOADS_DIRECTORY } from './constants.js';
 import { getAllUserHandles, toAvatarKey } from './user-storage.ts';
 import storage from 'node-persist';
+import type { UserDirectoryList } from './users.js';
 
 const PUBLIC_USER_AVATAR = '/img/default-user.png';
 
@@ -10,7 +11,7 @@ const PUBLIC_USER_AVATAR = '/img/default-user.png';
  * Cache for user directories.
  * @type {Map<string, UserDirectoryList>}
  */
-const DIRECTORIES_CACHE = new Map();
+const DIRECTORIES_CACHE = new Map<string, UserDirectoryList>();
 
 /**
  * @typedef {Object} UserDirectoryList
@@ -35,7 +36,7 @@ const DIRECTORIES_CACHE = new Map();
  * @param {string} handle User handle
  * @returns {UserDirectoryList} User directories
  */
-export function getUserDirectories(handle) {
+export function getUserDirectories(handle: string): UserDirectoryList {
     if (DIRECTORIES_CACHE.has(handle)) {
         const cache = DIRECTORIES_CACHE.get(handle);
         if (cache) {
@@ -45,7 +46,8 @@ export function getUserDirectories(handle) {
 
     const directories = structuredClone(USER_DIRECTORY_TEMPLATE);
     for (const key in directories) {
-        directories[key] = path.join(globalThis.DATA_ROOT, handle, USER_DIRECTORY_TEMPLATE[key]);
+        const directoryKey = key as keyof UserDirectoryList;
+        directories[directoryKey] = path.join(globalThis.DATA_ROOT, handle, USER_DIRECTORY_TEMPLATE[directoryKey]);
     }
     DIRECTORIES_CACHE.set(handle, directories);
     return directories;
@@ -53,9 +55,9 @@ export function getUserDirectories(handle) {
 
 /**
  * Gets a list of all user directories.
- * @returns {Promise<import('./user-directories.js').UserDirectoryList[]>} - The list of user directories
+ * @returns {Promise<UserDirectoryList[]>} - The list of user directories
  */
-export async function getUserDirectoriesList() {
+export async function getUserDirectoriesList(): Promise<UserDirectoryList[]> {
     const userHandles = await getAllUserHandles();
     const directoriesList = userHandles.map(handle => getUserDirectories(handle));
     return directoriesList;
@@ -63,9 +65,9 @@ export async function getUserDirectoriesList() {
 
 /**
  * Ensures that the content directories exist.
- * @returns {Promise<import('./user-directories.js').UserDirectoryList[]>} - The list of user directories
+ * @returns {Promise<UserDirectoryList[]>} - The list of user directories
  */
-export async function ensurePublicDirectoriesExist() {
+export async function ensurePublicDirectoriesExist(): Promise<UserDirectoryList[]> {
     for (const dir of Object.values(PUBLIC_DIRECTORIES)) {
         if (!fs.existsSync(dir)) {
             fs.mkdirSync(dir, { recursive: true });
@@ -84,7 +86,7 @@ export async function ensurePublicDirectoriesExist() {
     return directoriesList;
 }
 
-export function cleanUploads() {
+export function cleanUploads(): void {
     try {
         const uploadsPath = path.join(globalThis.DATA_ROOT, UPLOADS_DIRECTORY);
         if (fs.existsSync(uploadsPath)) {
@@ -110,7 +112,7 @@ export function cleanUploads() {
  * @param {string} handle User handle
  * @returns {Promise<string>} User avatar URL
  */
-export async function getUserAvatar(handle) {
+export async function getUserAvatar(handle: string): Promise<string> {
     try {
         // Check if the user has a custom avatar
         const avatarKey = toAvatarKey(handle);

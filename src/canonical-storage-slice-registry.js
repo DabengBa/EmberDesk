@@ -22,7 +22,7 @@ import {
 } from './canonical-sqlite-rollout-contract.js';
 import { listOpenWorldInfoProjectionRepairs } from './endpoints/world-info-store.ts';
 import { listOpenSettingsProjectionRepairs } from './endpoints/settings-store.ts';
-import { listOpenSecretProjectionRepairs } from './endpoints/canonical-secrets-store.js';
+import { listOpenSecretProjectionRepairs } from './endpoints/canonical-secrets-store.ts';
 import { listOpenCanonicalManagedMediaRepairs } from './endpoints/canonical-managed-media-store.js';
 import { listOpenCanonicalChatProjectionRepairs } from './endpoints/canonical-chat-write-service.js';
 

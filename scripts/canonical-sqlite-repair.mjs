@@ -34,7 +34,7 @@ import {
     getCanonicalChatRestoreVersion,
     restoreCanonicalChatBackup,
 } from '../src/endpoints/canonical-chat-backup-restore-service.js';
-import { getUserDirectories } from '../src/user-directories.js';
+import { getUserDirectories } from '../src/user-directories.ts';
 
 const manager = createCanonicalSqliteManager({ logger: { info() {}, warn() {} } });
 let existingDatabase = null;

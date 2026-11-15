@@ -58,11 +58,38 @@ test.each([false, true])('native Node preserves config and account behavior (acc
                 assert.ok(!(await user.getAllUserHandles()).some(handle => handle.startsWith('avatar:')));
                 const barrel = await import(moduleUrl('users.js'));
                 const auth = await import(moduleUrl('user-auth.ts'));
-                const directories = await import(moduleUrl('user-directories.js'));
+                const directories = await import(moduleUrl('user-directories.ts'));
+                const constants = await import(moduleUrl('constants.js'));
                 assert.equal(barrel.getAccountVersion, user.getAccountVersion);
                 assert.equal(barrel.getCsrfSecret, auth.getCsrfSecret);
+                for (const name of ['getUserDirectories', 'getUserDirectoriesList', 'ensurePublicDirectoriesExist', 'cleanUploads', 'getUserAvatar']) {
+                    assert.equal(barrel[name], directories[name]);
+                }
                 assert.equal(typeof auth.getPasswordHash('password', 'salt'), 'string');
                 assert.equal(directories.getUserDirectories('alice').root, path.join(globalThis.DATA_ROOT, 'alice'));
+                const aliceDirectories = directories.getUserDirectories('alice');
+                assert.equal(directories.getUserDirectories('alice'), aliceDirectories);
+                const list = await directories.ensurePublicDirectoriesExist();
+                assert.ok(list.includes(aliceDirectories));
+                assert.deepEqual(Object.keys(aliceDirectories), Object.keys(constants.USER_DIRECTORY_TEMPLATE));
+                for (const [key, value] of Object.entries(aliceDirectories)) {
+                    assert.equal(value, path.join(globalThis.DATA_ROOT, 'alice', constants.USER_DIRECTORY_TEMPLATE[key]));
+                    assert.ok(fs.statSync(value).isDirectory());
+                }
+                for (const retired of ['groups', 'group chats', 'personas', 'movingUI', 'instruct', 'context', 'quickreplies', 'vectors', 'sysprompt', 'reasoning', 'comfyWorkflows', 'themes']) {
+                    assert.equal(fs.existsSync(path.join(aliceDirectories.root, retired)), false, retired);
+                }
+                for (const publicDirectory of Object.values(constants.PUBLIC_DIRECTORIES)) {
+                    assert.ok(fs.statSync(publicDirectory).isDirectory());
+                }
+                assert.equal(await directories.getUserAvatar('alice'), 'avatar-data');
+                assert.equal(await directories.getUserAvatar('missing'), '/img/default-user.png');
+                const uploads = path.join(globalThis.DATA_ROOT, constants.UPLOADS_DIRECTORY);
+                fs.mkdirSync(uploads, { recursive: true });
+                fs.writeFileSync(path.join(uploads, 'temporary-file'), 'temporary');
+                directories.cleanUploads();
+                assert.deepEqual(fs.readdirSync(uploads), []);
+                assert.ok(fs.existsSync(aliceDirectories.storage));
                 getConfig().cookieSecret = 'legacy-cookie-secret';
                 assert.equal(auth.getCookieSecret(root), 'legacy-cookie-secret');
                 assert.equal(fs.readFileSync(path.join(root, 'cookie-secret.txt'), 'utf8'), 'legacy-cookie-secret');

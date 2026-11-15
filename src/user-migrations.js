@@ -4,7 +4,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { DEFAULT_USER, PUBLIC_DIRECTORIES } from './constants.js';
 import { color, delay, setPermissionsSync } from './util.js';
 import { serverDirectory } from './server-directory.js';
-import { getUserDirectories } from './user-directories.js';
+import { getUserDirectories } from './user-directories.ts';
 import { applyCanonicalPragmas, resolveCanonicalDatabasePath } from './canonical-sqlite.js';
 import { runCanonicalMigrations } from './canonical-sqlite-migrations.js';
 import { upsertCanonicalSettingsDocument } from './endpoints/settings-store.ts';
