@@ -19,7 +19,7 @@ import {
     renameCanonicalSecret,
     rotateCanonicalSecret,
     writeCanonicalSecret,
-} from './canonical-secrets-store.js';
+} from './canonical-secrets-store.ts';
 
 export const SECRETS_FILE = 'secrets.json';
 export const SECRET_KEYS = {

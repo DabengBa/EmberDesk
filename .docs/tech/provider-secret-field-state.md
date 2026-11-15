@@ -80,7 +80,7 @@ Stable binding points:
 - `public/scripts/secrets.js`
 - `src/endpoints/secrets.js`
 - `src/canonical-secrets-backend.js`
-- `src/endpoints/canonical-secrets-store.js`
+- `src/endpoints/canonical-secrets-store.ts`
 - `src/canonical-secrets-shadow-import.js`
 - `SECRET_KEYS.OPENAI_FALLBACK`
 - `#fallback_provider_api_key`
