@@ -18,7 +18,7 @@ import {
     getHostFromUrl,
     isHostWhitelisted,
     validateExternalAssetUrl,
-} from '../src/endpoints/external-content-import-service.js';
+} from '../src/endpoints/external-content-import-service.ts';
 
 async function getExternalContentDownloaders() {
     setConfigFilePath(fileURLToPath(new URL('../default/config.yaml', import.meta.url)));
@@ -194,6 +194,34 @@ describe('external content import service', () => {
         });
     });
 
+    test('keeps non-2xx responses successful when requireOk is omitted', async () => {
+        const response = createResponse({ ok: false, status: 503, statusText: 'Unavailable' });
+        const result = await fetchExternalResource({ url: 'https://provider.test/file', fetchImpl: async () => response });
+        expect(result).toEqual({ ok: true, response, failure: {
+            kind: 'provider_non_2xx', source: 'external', stage: 'artifact',
+            url: 'https://provider.test/file', status: 503, statusText: 'Unavailable',
+        } });
+    });
+
+    test('rejects a successful asset response with a null body', async () => {
+        const url = 'https://cdn.example.test/file.mp3';
+        const result = await downloadExternalAsset({ url, allowlist: ['cdn.example.test'], fetchImpl: async () => createResponse({ body: null }) });
+        expect(result).toEqual({ ok: false, failure: { kind: 'invalid_artifact', source: 'asset_download', stage: 'asset', url } });
+    });
+
+    test('preserves arbitrary thrown values and downloader failure kinds', async () => {
+        const url = 'https://provider.test/file';
+        for (const [value, message] of [[null, 'null'], ['offline', 'offline'], [{ message: 0 }, '0']]) {
+            const result = await fetchExternalResource({ url, fetchImpl: async () => { throw value; } });
+            expect(result.failure).toEqual({ kind: 'network_error', source: 'external', stage: 'artifact', url, message });
+        }
+        const descriptor = { source: 'chub_character', type: 'character', id: 'a/b' };
+        const result = await downloadExternalContentArtifact({ descriptor, downloaders: {
+            chub_character: async () => { throw { failure: { kind: 0 }, message: false }; },
+        } });
+        expect(result).toEqual({ ok: false, failure: { kind: 0, source: 'chub_character', message: 'false' }, trace: [] });
+    });
+
     test('wraps provider downloaders into stable artifact envelopes with secondary fetch trace', async () => {
         const fetchImpl = jest.fn(async () => createResponse());
         const descriptor = {
@@ -361,6 +389,17 @@ describe('external content import service', () => {
             expect(result.trace).toEqual(item.trace);
             expect(fetchImpl).toHaveBeenCalledTimes(item.trace.length);
         }
+    });
+
+    test.each([
+        ['chub_lorebook', { node: { id: 42 } }, 'lorebook', 'lorebooks/creator/book'],
+        ['janitor_character', { status: 'ok', downloadUrl: 'https://janitor.example/card.png' }, 'character', '123e4567-e89b-12d3-a456-426614174000'],
+    ])('preserves a missing content type from the real %s downloader', async (source, metadata, type, id) => {
+        const downloaders = await getExternalContentDownloaders();
+        const responses = [createResponse({ jsonBody: metadata }), createResponse({ contentType: null })];
+        const result = await downloadExternalContentArtifact({ descriptor: { source, type, id }, downloaders, fetchImpl: async () => responses.shift() });
+        expect(result.ok).toBe(true);
+        expect(result.artifact.fileType).toBeNull();
     });
 
     test('validates asset download URL and host before returning a stream response envelope', async () => {
