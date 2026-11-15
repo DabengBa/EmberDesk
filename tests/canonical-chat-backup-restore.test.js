@@ -22,7 +22,7 @@ import {
 function restoreCanonicalChatBackup(options) {
     return restoreWithVersion({ expectedVersion: getCanonicalChatRestoreVersion(options.db), ...options });
 }
-import { deleteCanonicalChat, writeCanonicalChatPayload } from '../src/endpoints/canonical-chat-write-service.js';
+import { deleteCanonicalChat, writeCanonicalChatPayload } from '../src/endpoints/canonical-chat-write-service.ts';
 
 const roots = [];
 const managers = [];

@@ -16,7 +16,7 @@ import {
     resolveCanonicalChatProjectionRepair,
     serializeCanonicalChatSession,
 } from './canonical-chat-store.ts';
-import { parseCanonicalChatJsonl } from './canonical-chat-write-service.js';
+import { parseCanonicalChatJsonl } from './canonical-chat-write-service.ts';
 import { resolveCanonicalChatProjectionPath } from './canonical-chat-projection-path.js';
 import { getCanonicalStorageSlice } from '../canonical-storage-slice-registry.js';
 import { recordImportLedgerEntry, removeImportLedgerEntry } from '../canonical-import-ledger.js';

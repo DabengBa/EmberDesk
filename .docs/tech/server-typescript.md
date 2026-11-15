@@ -110,6 +110,14 @@ opaque chat payloads, attachments, repair records and character statistics
 retain their prior behavior. Focused SQLite tests cover these contracts; a
 native Node subprocess exercises the real write consumer and migrated store.
 
+`src/endpoints/canonical-chat-write-service.ts` is the sole chat write service;
+its production callers and tests use the actual `.ts` extension. Attachment
+checks, version conditions, operation replay, SQLite authority commits and
+post-commit projection and repair retain their existing order and behavior.
+Focused integration tests and the native Node production write chain exercise
+the migrated service without a loader; this internal migration does not change
+user-visible behavior.
+
 
 `src/endpoints/canonical-secrets-store.ts` is the sole canonical secrets store
 implementation. Existing callers use its real `.ts` path; the SecretManager
