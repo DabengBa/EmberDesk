@@ -11,7 +11,7 @@ import {
     invalidateCanonicalSecretsAfterFileWrite,
     projectCanonicalSecretsFile,
     recordCanonicalSecretsProjectionFailure,
-} from '../canonical-secrets-backend.js';
+} from '../canonical-secrets-backend.ts';
 import {
     deleteCanonicalSecret,
     getCanonicalSecret,
