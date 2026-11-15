@@ -3,6 +3,7 @@ import { characters, main_api, this_chid } from '../script.js';
 import { registerDebugFunction } from './power-user.js';
 import { oai_settings } from './openai.js';
 import { TOKEN_PADDING } from './constants.js';
+import { getRequestHeaders } from './request-context.js';
 import { getStringHash } from './utils.js';
 export { BYTES_PER_TOKEN as CHARACTERS_PER_TOKEN_RATIO };
 
@@ -474,14 +475,13 @@ export async function countTokensOpenAIAsync(messages, full = false) {
         if (typeof cachedCount === 'number') {
             token_count += cachedCount;
         } else {
-            const data = await jQuery.ajax({
-                async: true,
-                type: 'POST', //
-                url: tokenizerEndpoint,
-                data: JSON.stringify([message]),
-                dataType: 'json',
-                contentType: 'application/json',
+            const response = await fetch(tokenizerEndpoint, {
+                method: 'POST',
+                headers: getRequestHeaders(),
+                body: JSON.stringify([message]),
             });
+            if (!response.ok) throw new Error(`Got response status ${response.status}`);
+            const data = await response.json();
 
             token_count += Number(data.token_count);
             cacheObject[cacheKey] = Number(data.token_count);

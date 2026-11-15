@@ -10,7 +10,7 @@ import { MEDIA_EXTENSIONS, MEDIA_REQUEST_TYPE } from '../constants.js';
 import {
     deleteCanonicalManagedMediaReference,
     writeCanonicalManagedMedia,
-} from './canonical-managed-media-write-service.js';
+} from './canonical-managed-media-write-service.ts';
 import {
     getCanonicalManagedMediaReadState,
     listCanonicalUserImageFiles,

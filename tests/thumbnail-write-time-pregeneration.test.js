@@ -159,7 +159,7 @@ async function importCharacterRoutes({ generateThumbnailImpl, thumbnailsEnabled 
         default: { bust: jest.fn() },
     }));
 
-    jest.unstable_mockModule('../src/endpoints/canonical-managed-media-write-service.js', () => ({
+    jest.unstable_mockModule('../src/endpoints/canonical-managed-media-write-service.ts', () => ({
         deleteCanonicalManagedMediaReference: async () => ({ authorityCommitted: false }),
         invalidateCanonicalManagedMediaAudit: () => false,
         writeCanonicalManagedMedia: async () => ({ authorityCommitted: false }),

@@ -35,7 +35,7 @@ import { getCanonicalStorageSlice } from './canonical-storage-slice-registry.js'
 import { buildCharacterFileSnapshotRow } from './endpoints/character-file-snapshot.js';
 import { parse as parseCharacterCard } from './character-card-parser.js';
 import { getCharaCardV2 } from './endpoints/character-card-v2.js';
-import { backfillCharacterAvatarBlobs } from './canonical-avatar-blob-service.js';
+import { backfillCharacterAvatarBlobs } from './canonical-avatar-blob-service.ts';
 
 /**
  * Default canonical character snapshot builder: real PNG card decoding and

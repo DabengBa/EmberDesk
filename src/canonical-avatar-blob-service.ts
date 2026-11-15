@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import type { DatabaseSync } from 'node:sqlite';
 
 import { extractImageData } from './character-card-parser.js';
 import { ensureCanonicalSliceBackend } from './canonical-backend.js';
@@ -9,11 +10,14 @@ import {
     getCharacterAvatarBlobPath,
     listCharacterRowsMissingAvatarBlob,
 } from './canonical-avatar-blobs.js';
-import { writeCanonicalManagedMedia } from './endpoints/canonical-managed-media-write-service.js';
+import { writeCanonicalManagedMedia } from './endpoints/canonical-managed-media-write-service.ts';
 import {
     getCanonicalManagedMediaReadState,
     readManagedMediaContent,
 } from './endpoints/canonical-managed-media-read-service.ts';
+
+type Directories = import('./users.js').UserDirectoryList;
+type AvatarOptions = { handle?: string; directories: Directories; avatarFilename: string };
 
 /**
  * Registers the pure image bytes of a character card PNG as a managed-media
@@ -27,7 +31,7 @@ export async function recordCharacterAvatarBlob({
     avatarFilename,
     contents,
     nowMs = Date.now(),
-} = {}) {
+}: AvatarOptions & { contents: Buffer; nowMs?: number } = {} as AvatarOptions & { contents: Buffer }) {
     const imageBytes = extractImageData(contents);
     // The managed_media slice must have audited once before its write gate opens.
     await ensureCanonicalSliceBackend('managed_media', directories, handle);
@@ -53,7 +57,7 @@ export async function recordCharacterAvatarBlob({
  * not clean, or no avatar blob exists — callers fall back to the PNG file.
  * @returns {Promise<{contents: Buffer, contentHash: string, mediaType: string, reference: object}|null>}
  */
-export async function getCharacterAvatarBlobContents({ handle, directories, avatarFilename } = {}) {
+export async function getCharacterAvatarBlobContents({ handle, directories, avatarFilename }: AvatarOptions = {} as AvatarOptions) {
     try {
         await ensureCanonicalSliceBackend('managed_media', directories, handle);
         const state = getCanonicalManagedMediaReadState({ handle, directories });
@@ -78,8 +82,8 @@ export async function backfillCharacterAvatarBlobs({
     directories,
     db,
     nowMs = Date.now(),
-} = {}) {
-    const result = { checked: 0, backfilled: 0, missingFile: 0, errors: [] };
+}: { handle?: string; directories: Directories; db: DatabaseSync; nowMs?: number } = {} as { directories: Directories; db: DatabaseSync }) {
+    const result: { checked: number; backfilled: number; missingFile: number; errors: string[] } = { checked: 0, backfilled: 0, missingFile: 0, errors: [] };
     const rows = listCharacterRowsMissingAvatarBlob(db);
     if (rows.length === 0) {
         return result;
@@ -113,10 +117,10 @@ export async function backfillCharacterAvatarBlobs({
             if (write?.ok) {
                 result.backfilled += 1;
             } else {
-                result.errors.push(`${avatarFilename}:${write?.reason ?? 'write_blocked'}`);
+                result.errors.push(`${avatarFilename}:${(write as { reason?: string } | null | undefined)?.reason ?? 'write_blocked'}`);
             }
         } catch (error) {
-            result.errors.push(`${avatarFilename}:${String(error?.message ?? error ?? '')}`);
+            result.errors.push(`${avatarFilename}:${String((error as { message?: unknown } | null)?.message ?? error ?? '')}`);
         }
     }
     return result;

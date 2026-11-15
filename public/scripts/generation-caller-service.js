@@ -178,9 +178,9 @@ export function createGenerationCallerService(ports) {
     async function regenerateLastReply() {
         if (!canRegenerateLastReply()) return false;
         regenerateRequestInFlight = true;
-        try { await Generate('normal', { regenerate: true }); return true; }
-        catch (error) { console.warn('Regenerate failed:', error?.message ?? error); return false; }
-        finally { regenerateRequestInFlight = false; }
+        try { await Generate('normal', { regenerate: true }); return true; } catch (error) {
+            console.warn('Regenerate failed:', error?.message ?? error); return false;
+        } finally { regenerateRequestInFlight = false; }
     }
     function stopGeneration() {
         const bootstrapStopped = ports.stopBootstrap();

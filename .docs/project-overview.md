@@ -67,7 +67,7 @@ Key module structure:
 - `canonical-sqlite-rollout-contract.js` — shared flag legality and per-slice rollback-blocker builders, plus character compatibility helpers
 - `canonical-sqlite-operator.js` — multi-slice operator status, audit/repair routing, projection replay, blocker explanation, chat-stats rebuild, and backup/restore readiness reporting
 - `src/endpoints/canonical-chat-query-service.ts` — canonical character chat search/recent summary/query owner with a root-chat compatibility fallback for recent chats
-- `src/endpoints/canonical-chat-backup-restore-service.js` — canonical chat backup bundle and validated restore owner that binds attachment manifests and records restore-journal state
+- `src/endpoints/canonical-chat-backup-restore-service.ts` — canonical chat backup bundle and validated restore owner that binds attachment manifests and records restore-journal state
 - `src/endpoints/character-store.ts` — canonical character row helper that reconstructs route-compatible read payloads and now also normalizes DB-backed character metadata writes
 - `public/lib.js` — browser shared-library boundary for first-party modules; it preserves both source imports and bundled `/lib.js` output (see [frontend-shared-library-boundary](tech/frontend-shared-library-boundary.md))
 - `public/script.js` — browser composition root and compatibility entry for extracted contracts plus not-yet-migrated legacy workspace owners (see [workspace-composition-root](tech/workspace-composition-root.md))

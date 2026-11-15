@@ -41,8 +41,8 @@ test('strict consumers can compose reads, writes, text replacement and import ca
         import type { CharacterReadDependencies } from ${modulePath('character-read-service.ts')};
         import { createCharacterCard, editCharacterCard, renameCharacterCard, deleteCharacterCard } from ${modulePath('character-write-service.ts')};
         import { listCanonicalCharacters, getCanonicalCharacter } from ${modulePath('character-store.ts')};
-        import { runCharacterTextReplace } from ${modulePath('character-text-replace-service.js')};
-        import type { CharacterTextReplaceDependencies } from ${modulePath('character-text-replace-service.js')};
+        import { runCharacterTextReplace } from ${modulePath('character-text-replace-service.ts')};
+        import type { CharacterTextReplaceDependencies } from ${modulePath('character-text-replace-service.ts')};
         import { createCharacterImportCoordinator } from ${modulePath('character-import-service.ts')};
         import type { CharacterImportHandler } from ${modulePath('character-import-service.ts')};
 
@@ -77,7 +77,7 @@ test('strict consumers reject incomplete prepared writes and incompatible replac
     const result = compile(`
         import { createCharacterCard } from ${modulePath('character-write-service.ts')};
         import type { CharacterWriteDependencies } from ${modulePath('character-write-service.ts')};
-        import { runCharacterTextReplace } from ${modulePath('character-text-replace-service.js')};
+        import { runCharacterTextReplace } from ${modulePath('character-text-replace-service.ts')};
         declare const request: Parameters<typeof createCharacterCard>[0]['request'];
         declare const dependencies: CharacterWriteDependencies;
         await createCharacterCard({ request, internalName: 'MissingData', dependencies });

@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import type { DatabaseSync } from 'node:sqlite';
 
 import mime from 'mime-types';
 import { canonicalSqliteManager, withCanonicalTransaction } from '../canonical-sqlite.js';
@@ -24,7 +25,28 @@ import {
 
 const MANAGED_MEDIA_ROOT = 'managed-media';
 
-function normalizePath(value) {
+type Directories = import('../users.js').UserDirectoryList;
+type Flags = ReturnType<ReturnType<typeof getCanonicalStorageSlice>['getFeatureFlags']>;
+type OpenOptions = { handle: string | undefined; directories: Directories | undefined; featureFlags: { enabled: boolean; strict: boolean } };
+type Dependencies = {
+    getSlice: () => ReturnType<typeof getCanonicalStorageSlice>;
+    getFeatureFlags: () => Flags;
+    getProjectionMode: () => string;
+    openDatabase: (options: OpenOptions) => DatabaseSync | null;
+    runMigrations: (db: DatabaseSync, options: Parameters<typeof runCanonicalMigrations>[1]) => ReturnType<typeof runCanonicalMigrations>;
+    getAuditStatus: (db: DatabaseSync, options: Parameters<typeof getPersistedCanonicalAuditStatus>[1]) => ReturnType<typeof getPersistedCanonicalAuditStatus>;
+};
+type BaseOptions = { handle?: string; directories: Directories; dependencies?: Partial<Dependencies> };
+type Reference = ReturnType<typeof getCanonicalManagedMediaReference>;
+type ProjectionFile = { managedPath: string; compatibilityPath: string };
+type RenameProjection = { managedPath: string; oldPath: string; newPath: string };
+type Repair = ReturnType<typeof listOpenCanonicalManagedMediaRepairs>[number];
+// Repair details originate in unchecked JSON; preserve the existing property access.
+type RepairDetails = { compatibilityPath: string; previousCompatibilityPath?: string; managedRelativePath?: string };
+// JS audit API accepts these values despite inference from its null defaults.
+
+
+function normalizePath(value: unknown) {
     return String(value ?? '').split(path.sep).join(path.posix.sep).replace(/^\/+/, '');
 }
 
@@ -34,13 +56,13 @@ function getDefaultDependencies() {
         getFeatureFlags: () => slice.getFeatureFlags(),
         getSlice: () => slice,
         getProjectionMode: () => typeof slice.getProjectionMode === 'function' ? slice.getProjectionMode() : 'sync',
-        openDatabase: options => canonicalSqliteManager.open(options),
-        runMigrations: (db, options) => runCanonicalMigrations(db, options),
-        getAuditStatus: (db, options) => getPersistedCanonicalAuditStatus(db, options),
+        openDatabase: (options: OpenOptions): DatabaseSync | null => canonicalSqliteManager.open(options),
+        runMigrations: (db: DatabaseSync, options: Parameters<typeof runCanonicalMigrations>[1]) => runCanonicalMigrations(db, options),
+        getAuditStatus: (db: DatabaseSync, options: Parameters<typeof getPersistedCanonicalAuditStatus>[1]) => getPersistedCanonicalAuditStatus(db, options),
     };
 }
 
-function resolveProjectionMode(projection, dependencies) {
+function resolveProjectionMode(projection: string | null, dependencies: Partial<Dependencies>) {
     if (projection === 'off' || projection === 'sync') {
         return projection;
     }
@@ -48,18 +70,18 @@ function resolveProjectionMode(projection, dependencies) {
     return getProjectionMode();
 }
 
-function blockedWriteState({ reason, featureFlags, strict, details = {} }) {
+function blockedWriteState({ reason, featureFlags, strict, details = {} }: { reason: string; featureFlags: Flags; strict: boolean; details?: object }) {
     if (strict) {
         throw new Error(`Canonical managed media writes blocked: ${reason}`);
     }
-    return { ok: false, reason, featureFlags, ...details };
+    return { ok: false, reason, featureFlags, ...details } as const;
 }
 
 export function getCanonicalManagedMediaWriteState({
     handle,
     directories,
     dependencies = {},
-} = {}) {
+}: { handle?: string; directories?: Directories; dependencies?: Partial<Dependencies> } = {}) {
     const defaults = getDefaultDependencies();
     const slice = (dependencies.getSlice ?? defaults.getSlice)();
     const featureFlags = (dependencies.getFeatureFlags ?? defaults.getFeatureFlags)();
@@ -111,14 +133,14 @@ export function getCanonicalManagedMediaWriteState({
         });
     }
 
-    return { ok: true, db, featureFlags, migrationStatus, auditStatus, sliceKey: slice.key };
+    return { ok: true, db, featureFlags, migrationStatus, auditStatus, sliceKey: slice.key } as const;
 }
 
-function getManagedRoot(directories) {
+function getManagedRoot(directories: Directories) {
     return path.resolve(directories.storage, MANAGED_MEDIA_ROOT);
 }
 
-function assertCompatibilityPath(directories, compatibilityPath) {
+function assertCompatibilityPath(directories: Directories, compatibilityPath: string) {
     const normalized = normalizePath(compatibilityPath);
     const root = path.resolve(directories.root);
     const absolute = path.resolve(root, normalized);
@@ -128,7 +150,7 @@ function assertCompatibilityPath(directories, compatibilityPath) {
     return { normalized, absolute };
 }
 
-function getContentsBuffer(contents) {
+function getContentsBuffer(contents: unknown) {
     if (Buffer.isBuffer(contents)) {
         return contents;
     }
@@ -141,7 +163,7 @@ function getContentsBuffer(contents) {
     throw new Error('Managed media contents must be a buffer, Uint8Array, or source path');
 }
 
-function stageManagedContents({ directories, contents, contentHash }) {
+function stageManagedContents({ directories, contents, contentHash }: { directories: Directories; contents: Buffer; contentHash: string }) {
     const managedRoot = getManagedRoot(directories);
     const stagingRoot = path.join(managedRoot, '.staging');
     const managedPath = path.join(managedRoot, contentHash);
@@ -156,18 +178,18 @@ function stageManagedContents({ directories, contents, contentHash }) {
     return { managedPath, installed: false };
 }
 
-function projectCompatibilityFile({ managedPath, compatibilityPath }) {
+function projectCompatibilityFile({ managedPath, compatibilityPath }: ProjectionFile) {
     fs.mkdirSync(path.dirname(compatibilityPath), { recursive: true });
     const stagedPath = `${compatibilityPath}.${uuidv4()}.projection`;
     fs.copyFileSync(managedPath, stagedPath);
     fs.renameSync(stagedPath, compatibilityPath);
 }
 
-function createRepairKey(operation, referenceId) {
+function createRepairKey(operation: string, referenceId: string) {
     return `managed_media:${operation}:${referenceId}:${uuidv4()}`;
 }
 
-function getReferenceAndManagedPath(db, directories, compatibilityPath) {
+function getReferenceAndManagedPath(db: DatabaseSync, directories: Directories, compatibilityPath: string) {
     const reference = getCanonicalManagedMediaReference(db, compatibilityPath);
     if (!reference) {
         return { reference: null, managedPath: null };
@@ -180,7 +202,7 @@ function getReferenceAndManagedPath(db, directories, compatibilityPath) {
     return { reference, managedPath };
 }
 
-function saveProjectionRepair(db, { repairKey, reference, operation, compatibilityPath, previousCompatibilityPath = null, reason, nowMs }) {
+function saveProjectionRepair(db: DatabaseSync, { repairKey, reference, operation, compatibilityPath, previousCompatibilityPath = null, reason, nowMs }: { repairKey: string | null; reference: Reference; operation: string; compatibilityPath: string; previousCompatibilityPath?: string | null; reason: string; nowMs: number }) {
     recordCanonicalManagedMediaRepair(db, {
         repairKey,
         blobId: reference?.blobId ?? null,
@@ -211,7 +233,7 @@ export async function writeCanonicalManagedMedia({
     projection = null,
     dependencies = {},
     nowMs = Date.now(),
-} = {}) {
+}: BaseOptions & { compatibilityPath: string; ownerType: string; ownerId?: string; role?: string; displayName?: string; contents?: unknown; mediaType?: string | null; metadata?: unknown; projectCompatibility?: ((input: ProjectionFile) => void) | null; projection?: string | null; nowMs?: number } = {} as BaseOptions & { compatibilityPath: string; ownerType: string }) {
     const state = getCanonicalManagedMediaWriteState({ handle, directories, dependencies });
     if (!state.ok) {
         return state;
@@ -248,9 +270,10 @@ export async function writeCanonicalManagedMedia({
             nowMs,
         }),
     });
-    const reference = result.reference;
+    // The store reads back the reference it just upserted in the same transaction.
+    const reference = result.reference as NonNullable<Reference>;
     if (previousReference && previousReference.blobId !== reference.blobId) {
-        withCanonicalTransaction(state.db, db => {
+        withCanonicalTransaction(state.db, (db: DatabaseSync) => {
             const stillReferenced = db.prepare(`
                 SELECT 1 FROM media_references
                 WHERE blob_id = ? AND deleted_at_ms IS NULL
@@ -268,7 +291,7 @@ export async function writeCanonicalManagedMedia({
 
     try {
         if (projectionMode !== 'off') {
-            withCanonicalTransaction(state.db, db => {
+            withCanonicalTransaction(state.db, (db: DatabaseSync) => {
                 const current = getCanonicalManagedMediaReference(db, target.normalized);
                 if (!current || current.deletedAtMs != null) throw new Error('managed_media_projection_path_changed');
                 const currentPath = path.resolve(directories.storage, current.managedRelativePath);
@@ -282,10 +305,10 @@ export async function writeCanonicalManagedMedia({
         }
         return { ok: true, authorityCommitted: true, reference, managedPath: staged.managedPath };
     } catch (error) {
-        withCanonicalTransaction(state.db, db => saveProjectionRepair(db, {
+        withCanonicalTransaction(state.db, (db: DatabaseSync) => saveProjectionRepair(db, {
             repairKey, reference: getCanonicalManagedMediaReference(db, target.normalized),
             operation: 'project', compatibilityPath: target.normalized,
-            reason: String(error?.message ?? error ?? 'projection_failed'), nowMs,
+            reason: String((error as { message?: unknown } | null)?.message ?? error ?? 'projection_failed'), nowMs,
         }));
         return {
             ok: false,
@@ -305,18 +328,19 @@ export async function deleteCanonicalManagedMediaReference({
     projection = null,
     dependencies = {},
     nowMs = Date.now(),
-} = {}) {
+}: BaseOptions & { compatibilityPath: string; projectDelete?: ((path: string) => void) | null; projection?: string | null; nowMs?: number } = {} as BaseOptions & { compatibilityPath: string }) {
     const state = getCanonicalManagedMediaWriteState({ handle, directories, dependencies });
     if (!state.ok) {
         return state;
     }
     const projectionMode = resolveProjectionMode(projection, dependencies);
     const target = assertCompatibilityPath(directories, compatibilityPath);
-    let reference = null;
-    let managedPath = null;
+    // Assigned synchronously inside withCanonicalTransaction.
+    let reference = null as Reference;
+    let managedPath: string | null = null;
     let blobTombstoned = false;
-    let repairKey = null;
-    withCanonicalTransaction(state.db, db => {
+    let repairKey: string | null = null;
+    withCanonicalTransaction(state.db, (db: DatabaseSync) => {
         ({ reference, managedPath } = getReferenceAndManagedPath(db, directories, target.normalized));
         if (!reference || reference.deletedAtMs != null) return;
         repairKey = createRepairKey('delete', reference.id);
@@ -363,7 +387,7 @@ export async function deleteCanonicalManagedMediaReference({
     }
 
     try {
-        withCanonicalTransaction(state.db, db => {
+        withCanonicalTransaction(state.db, (db: DatabaseSync) => {
             if (getCanonicalManagedMediaReference(db, target.normalized)?.deletedAtMs == null) {
                 throw new Error('managed_media_projection_path_reused');
             }
@@ -380,9 +404,9 @@ export async function deleteCanonicalManagedMediaReference({
             managedPath,
         };
     } catch (error) {
-        withCanonicalTransaction(state.db, db => saveProjectionRepair(db, {
+        withCanonicalTransaction(state.db, (db: DatabaseSync) => saveProjectionRepair(db, {
             repairKey, reference, operation: 'delete', compatibilityPath: target.normalized,
-            reason: String(error?.message ?? error ?? 'projection_delete_failed'), nowMs,
+            reason: String((error as { message?: unknown } | null)?.message ?? error ?? 'projection_delete_failed'), nowMs,
         }));
         return { ok: false, authorityCommitted: true, reason: 'projection_failed', repairKey, reference, blobTombstoned };
     }
@@ -398,7 +422,7 @@ export async function renameCanonicalManagedMediaReference({
     projection = null,
     dependencies = {},
     nowMs = Date.now(),
-} = {}) {
+}: BaseOptions & { oldCompatibilityPath: string; newCompatibilityPath: string; displayName?: string | null; projectRename?: ((input: RenameProjection) => void) | null; projection?: string | null; nowMs?: number } = {} as BaseOptions & { oldCompatibilityPath: string; newCompatibilityPath: string }) {
     const state = getCanonicalManagedMediaWriteState({ handle, directories, dependencies });
     if (!state.ok) {
         return state;
@@ -406,10 +430,10 @@ export async function renameCanonicalManagedMediaReference({
     const projectionMode = resolveProjectionMode(projection, dependencies);
     const oldTarget = assertCompatibilityPath(directories, oldCompatibilityPath);
     const newTarget = assertCompatibilityPath(directories, newCompatibilityPath);
-    let reference = null;
-    let renamed = null;
-    let repairKey = null;
-    withCanonicalTransaction(state.db, db => {
+    let reference = null as Reference;
+    let renamed: Reference = null;
+    let repairKey: string | null = null;
+    withCanonicalTransaction(state.db, (db: DatabaseSync) => {
         reference = getCanonicalManagedMediaReference(db, oldTarget.normalized);
         if (!reference || reference.deletedAtMs != null) return;
         const conflict = db.prepare(`
@@ -446,7 +470,7 @@ export async function renameCanonicalManagedMediaReference({
     }
 
     try {
-        withCanonicalTransaction(state.db, db => {
+        withCanonicalTransaction(state.db, (db: DatabaseSync) => {
             const current = getCanonicalManagedMediaReference(db, newTarget.normalized);
             if (!current || current.deletedAtMs != null) throw new Error('managed_media_projection_path_changed');
             const currentManagedPath = path.resolve(directories.storage, current.managedRelativePath);
@@ -463,18 +487,19 @@ export async function renameCanonicalManagedMediaReference({
         });
         return { ok: true, authorityCommitted: true, reference: renamed };
     } catch (error) {
-        withCanonicalTransaction(state.db, db => saveProjectionRepair(db, {
+        withCanonicalTransaction(state.db, (db: DatabaseSync) => saveProjectionRepair(db, {
             repairKey, reference: renamed, operation: 'rename', compatibilityPath: newTarget.normalized,
             previousCompatibilityPath: oldTarget.normalized,
-            reason: String(error?.message ?? error ?? 'projection_rename_failed'), nowMs,
+            reason: String((error as { message?: unknown } | null)?.message ?? error ?? 'projection_rename_failed'), nowMs,
         }));
         return { ok: false, authorityCommitted: true, reason: 'projection_failed', repairKey, reference: renamed };
     }
 }
 
-function projectRepair({ directories, repair }) {
-    const compatibilityPath = assertCompatibilityPath(directories, repair.details.compatibilityPath);
-    const managedRelativePath = normalizePath(repair.details.managedRelativePath);
+function projectRepair({ directories, repair }: { directories: Directories; repair: Repair }) {
+    const details = repair.details as RepairDetails;
+    const compatibilityPath = assertCompatibilityPath(directories, details.compatibilityPath);
+    const managedRelativePath = normalizePath(details.managedRelativePath);
     const managedPath = path.resolve(directories.storage, managedRelativePath);
     if (!managedRelativePath || !fs.existsSync(managedPath)) {
         throw new Error('missing_managed_media_content');
@@ -484,8 +509,8 @@ function projectRepair({ directories, repair }) {
         return;
     }
     projectCompatibilityFile({ managedPath, compatibilityPath: compatibilityPath.absolute });
-    if (repair.operation === 'rename' && repair.details.previousCompatibilityPath) {
-        const previous = assertCompatibilityPath(directories, repair.details.previousCompatibilityPath);
+    if (repair.operation === 'rename' && details.previousCompatibilityPath) {
+        const previous = assertCompatibilityPath(directories, details.previousCompatibilityPath);
         fs.rmSync(previous.absolute, { force: true });
     }
 }
@@ -495,7 +520,7 @@ export async function repairCanonicalManagedMediaProjection({
     directories,
     repairKeys = null,
     nowMs = Date.now(),
-} = {}) {
+}: { db: DatabaseSync; directories: Directories; repairKeys?: string[] | null; nowMs?: number } = {} as { db: DatabaseSync; directories: Directories }) {
     const requested = repairKeys ? new Set(repairKeys) : null;
     const results = [];
     for (const repair of listOpenCanonicalManagedMediaRepairs(db)) {
@@ -504,12 +529,13 @@ export async function repairCanonicalManagedMediaProjection({
         }
         markCanonicalManagedMediaRepairAttempt(db, { repairKey: repair.repairKey, attemptedAtMs: nowMs });
         try {
-            withCanonicalTransaction(db, txn => {
+            withCanonicalTransaction(db, (txn: DatabaseSync) => {
                 const latest = listOpenCanonicalManagedMediaRepairs(txn)
                     .find(item => item.repairKey === repair.repairKey);
                 if (!latest) return;
-                const compatibilityPath = normalizePath(latest.details?.compatibilityPath);
-                const previousCompatibilityPath = normalizePath(latest.details?.previousCompatibilityPath);
+                const details = latest.details as RepairDetails | null;
+                const compatibilityPath = normalizePath(details?.compatibilityPath);
+                const previousCompatibilityPath = normalizePath(details?.previousCompatibilityPath);
                 const current = listCanonicalManagedMediaReferences(txn, { includeDeleted: true })
                     .find(item => item.id === latest.mediaReferenceId) ?? null;
                 if (latest.operation === 'delete') {
@@ -559,7 +585,7 @@ export async function repairCanonicalManagedMediaProjection({
                 repairKey: repair.repairKey,
                 status: 'blocked',
                 operation: repair.operation,
-                blocker: String(error?.message ?? error ?? 'projection_repair_failed'),
+                blocker: String((error as { message?: unknown } | null)?.message ?? error ?? 'projection_repair_failed'),
             });
         }
     }
@@ -580,7 +606,7 @@ export async function collectCanonicalManagedMediaGarbage({
     db = null,
     dryRun = true,
     dependencies = {},
-} = {}) {
+}: BaseOptions & { db?: DatabaseSync | null; dryRun?: boolean } = {} as BaseOptions) {
     let activeDb = db;
     if (!activeDb) {
         const state = getCanonicalManagedMediaWriteState({ handle, directories, dependencies });
@@ -638,7 +664,7 @@ export function invalidateCanonicalManagedMediaAudit({
     directories,
     operation,
     dependencies = {},
-} = {}) {
+}: { handle?: string; directories?: Directories; operation?: string; dependencies?: Partial<Dependencies> } = {}) {
     const defaults = getDefaultDependencies();
     const featureFlags = (dependencies.getFeatureFlags ?? defaults.getFeatureFlags)();
     if (!featureFlags.enabled) {

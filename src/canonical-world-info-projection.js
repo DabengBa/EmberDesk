@@ -74,7 +74,7 @@ export function commitWorldBookWithProjectionIntent(db, {
     nowMs = Date.now(),
     sourceMtimeMs = null,
     sourceSizeBytes = null,
-    expectedPayload = undefined,
+    expectedPayload = /** @type {unknown} */ (undefined),
 }) {
     return withCanonicalTransaction(db, txn => {
         if (expectedPayload !== undefined && JSON.stringify(getCanonicalWorldInfoBook(txn, name)) !== JSON.stringify(expectedPayload)) {

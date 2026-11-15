@@ -16,6 +16,44 @@ import {
     writeCanonicalChatForTextReplace,
 } from './chats.js';
 import { readCanonicalChatVersionedPayload } from './canonical-chat-read-service.ts';
+import type { Request } from 'express';
+import type { UserDirectoryList } from '../users.js';
+import type { CharacterWriteDependencies } from './character-write-service.ts';
+import type { DatabaseSync } from 'node:sqlite';
+import type { CanonicalChatLocator } from './canonical-chat-read-service.ts';
+
+type Matcher = { pattern: RegExp; replacer: string };
+type Match = { field: string; label: string; path: string; occurrences: number; samples: { before: string; after: string }[]; entryUid?: string; entryTitle?: string; index?: number; role?: string; name?: string };
+type FieldDefinition = { label: string; paths: string[][]; array?: boolean; dedupe?: boolean };
+type BookFieldDefinition = { label: string; fields: string[]; array: boolean };
+// Views of existing unchecked persisted JSON; these do not validate input.
+type JsonObject = Record<string, unknown>;
+type CardPayload = JsonObject & { data?: JsonObject & { extensions?: JsonObject; character_book?: unknown }; world?: unknown };
+type EmbeddedBook = JsonObject & { entries?: JsonObject[] };
+type WorldBook = { entries: Record<string, JsonObject>; originalData?: EmbeddedBook };
+type ChatMessage = JsonObject & { extra?: JsonObject };
+type ChatSession = { ok: boolean; reason?: string; db: DatabaseSync; locator: CanonicalChatLocator; filePath: string; cardName: string };
+// The JS projection helper's defaulted expectedPayload is inferred as only
+// undefined; its implementation accepts the existing book for compare-and-set.
+
+type AreaResult = { status: string; matches: Match[]; occurrences: number; name?: string | null; fileName?: string | null; boundCharacterCount?: number; embedded?: boolean; projectionFailed?: boolean; repairKey?: string; snapshotRefreshed?: boolean; reason?: string };
+type ReplaceResult = { ok: boolean; status?: number; reason?: string; partial?: boolean; outcomeUnknown?: boolean; applied: { card: boolean; worldBook: boolean; chat: boolean }; areas: { card: AreaResult; worldBook: AreaResult; chats: AreaResult }; totals: { occurrences: number; changedTargets: number }; warnings: JsonObject[] };
+
+export type CharacterTextReplaceDependencies = {
+    getCanonicalCharacterCardJson?: (handle: string | null, directories: UserDirectoryList, avatar: string) => Promise<string | null>;
+    getCharacterWriteDependencies?: () => CharacterWriteDependencies;
+    editCharacterCard?: typeof editCharacterCard;
+    getWorldInfoWriteState?: typeof getCanonicalWorldInfoWriteState;
+    getCanonicalWorldInfoBook?: typeof getCanonicalWorldInfoBook;
+    commitWorldBookWithProjectionIntent?: typeof commitWorldBookWithProjectionIntent;
+    replayWorldProjection?: typeof replayWorldProjection;
+    listCanonicalCharactersBoundToWorld?: typeof listCanonicalCharactersBoundToWorld;
+    convertWorldInfoToCharacterBook?: typeof convertWorldInfoToCharacterBook;
+    getCharacterFeatureFlags?: () => ReturnType<ReturnType<typeof getCanonicalStorageSlice>['getFeatureFlags']>;
+    openChatSession?: typeof openCanonicalChatForTextReplace;
+    writeChatSession?: typeof writeCanonicalChatForTextReplace;
+    readCanonicalChatVersionedPayload?: typeof readCanonicalChatVersionedPayload;
+};
 
 const MAX_SAMPLE_COUNT = 3;
 const SAMPLE_CONTEXT_RADIUS = 40;
@@ -45,7 +83,7 @@ export const CHAT_SCOPES = Object.freeze(['off', 'current']);
 
 // `label` carries the locale-independent field id; the client resolves the
 // user-facing copy from it, so this server never ships localized text.
-const CARD_FIELD_DEFS = Object.freeze({
+const CARD_FIELD_DEFS: Readonly<Record<string, FieldDefinition>> = Object.freeze({
     description: { label: 'description', paths: [['data', 'description'], ['description']] },
     scenario: { label: 'scenario', paths: [['data', 'scenario'], ['scenario']] },
     firstMes: { label: 'firstMes', paths: [['data', 'first_mes'], ['first_mes']] },
@@ -72,12 +110,12 @@ const EMBEDDED_BOOK_FIELD_MAP = Object.freeze({
     keys: { label: 'keys', fields: ['keys', 'secondary_keys'], array: true },
 });
 
-const CHAT_FIELD_DEFS = Object.freeze({
+const CHAT_FIELD_DEFS: Readonly<Record<string, { label: string }>> = Object.freeze({
     mes: { label: 'mes' },
     reasoning: { label: 'reasoning' },
 });
 
-function escapeRegExp(text) {
+function escapeRegExp(text: string) {
     return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
@@ -90,7 +128,7 @@ function escapeRegExp(text) {
  * @param {{caseSensitive?: boolean, wholeWord?: boolean, regex?: boolean}} options
  * @returns {{ ok: true, pattern: RegExp, replacer: string } | { ok: false, reason: string }}
  */
-export function buildTextMatcher(query, replacement, options = {}) {
+export function buildTextMatcher(query: string, replacement: string, options: { caseSensitive?: boolean; wholeWord?: boolean; regex?: boolean } = {}): ({ ok: true } & Matcher) | { ok: false; reason: string } {
     const rawQuery = String(query ?? '');
     if (!rawQuery.length) {
         return { ok: false, reason: 'empty_query' };
@@ -106,14 +144,14 @@ export function buildTextMatcher(query, replacement, options = {}) {
     try {
         pattern = new RegExp(source, `gu${caseSensitive ? '' : 'i'}`);
     } catch (error) {
-        return { ok: false, reason: `invalid_regex: ${String(error?.message ?? error ?? '')}` };
+        return { ok: false, reason: `invalid_regex: ${String((error as { message?: unknown } | null)?.message ?? error ?? '')}` };
     }
 
     const replacer = regex ? String(replacement ?? '') : String(replacement ?? '').replaceAll('$', '$$$$');
     return { ok: true, pattern, replacer };
 }
 
-function buildSampleContext(text, matchIndex, matchLength) {
+function buildSampleContext(text: string, matchIndex: number, matchLength: number) {
     const start = Math.max(0, matchIndex - SAMPLE_CONTEXT_RADIUS);
     const end = Math.min(text.length, matchIndex + matchLength + SAMPLE_CONTEXT_RADIUS);
     return {
@@ -132,7 +170,7 @@ function buildSampleContext(text, matchIndex, matchLength) {
  * @param {number} [maxSamples]
  * @returns {{ value: string, occurrences: number, samples: {before: string, after: string}[] }}
  */
-export function replaceInString(value, matcher, maxSamples = MAX_SAMPLE_COUNT) {
+export function replaceInString(value: unknown, matcher: Matcher, maxSamples = MAX_SAMPLE_COUNT): { value: string; occurrences: number; samples: { before: string; after: string }[] } {
     const text = String(value ?? '');
     const matches = [...text.matchAll(matcher.pattern)];
     if (!matches.length) {
@@ -162,31 +200,31 @@ export function replaceInString(value, matcher, maxSamples = MAX_SAMPLE_COUNT) {
     };
 }
 
-function getAtPath(object, path) {
-    let current = object;
+function getAtPath(object: unknown, path: string[]): unknown {
+    let current: unknown = object;
     for (const key of path) {
         if (current == null || typeof current !== 'object') {
             return undefined;
         }
-        current = current[key];
+        current = (current as JsonObject)[key];
     }
     return current;
 }
 
-function setAtPath(object, path, value) {
-    let current = object;
+function setAtPath(object: JsonObject, path: string[], value: unknown) {
+    let current: JsonObject = object;
     for (let index = 0; index < path.length - 1; index++) {
         const next = current[path[index]];
         if (next == null || typeof next !== 'object') {
             return false;
         }
-        current = next;
+        current = next as JsonObject;
     }
     current[path[path.length - 1]] = value;
     return true;
 }
 
-function dedupeStrings(values) {
+function dedupeStrings(values: unknown[]) {
     const seen = new Set();
     return values.filter(value => {
         const key = String(value);
@@ -203,8 +241,8 @@ function dedupeStrings(values) {
  * mirrors with their `data.*` counterparts. Mutates the payload.
  * @returns {{ changed: boolean, matches: object[] }}
  */
-export function transformCharacterCard(cardPayload, cardFields, matcher, excluded = new Set()) {
-    const matches = [];
+export function transformCharacterCard(cardPayload: JsonObject, cardFields: string[], matcher: Matcher, excluded = new Set<string>()): { changed: boolean; matches: Match[] } {
+    const matches: Match[] = [];
     let changed = false;
 
     // Exclusion and match reporting happen per logical field (the primary
@@ -270,7 +308,7 @@ export function transformCharacterCard(cardPayload, cardFields, matcher, exclude
             continue;
         }
         let occurrences = 0;
-        let samples = [];
+        let samples: Match['samples'] = [];
         let fieldChanged = false;
         for (const path of def.paths) {
             const result = replaceInString(getAtPath(cardPayload, path), matcher);
@@ -303,14 +341,14 @@ export function transformCharacterCard(cardPayload, cardFields, matcher, exclude
     return { changed, matches };
 }
 
-function getEntryTitle(entry) {
+function getEntryTitle(entry: JsonObject) {
     return String(entry?.comment ?? '')
         || (Array.isArray(entry?.key) ? entry.key.join(', ') : '')
         || (Array.isArray(entry?.keys) ? entry.keys.join(', ') : '')
         || '(unnamed)';
 }
 
-function transformBookEntryFields(entry, fieldMap, fieldIds, matcher, excluded, pathPrefix, matches) {
+function transformBookEntryFields(entry: JsonObject, fieldMap: Readonly<Record<string, BookFieldDefinition>>, fieldIds: string[], matcher: Matcher, excluded: Set<string>, pathPrefix: string, matches: Match[]) {
     let changed = false;
     for (const fieldId of fieldIds) {
         const def = fieldMap[fieldId];
@@ -368,8 +406,8 @@ function transformBookEntryFields(entry, fieldMap, fieldIds, matcher, excluded, 
  * by uid). Mutates the entries.
  * @returns {{ changed: boolean, matches: object[] }}
  */
-export function transformWorldBookEntries(entries, worldFields, matcher, excluded = new Set()) {
-    const matches = [];
+export function transformWorldBookEntries(entries: Record<string, JsonObject>, worldFields: string[], matcher: Matcher, excluded = new Set<string>()): { changed: boolean; matches: Match[] } {
+    const matches: Match[] = [];
     let changed = false;
 
     for (const [entryKey, entry] of Object.entries(entries ?? {})) {
@@ -401,8 +439,8 @@ export function transformWorldBookEntries(entries, worldFields, matcher, exclude
  * `keys`/`secondary_keys` field names). Mutates the book.
  * @returns {{ changed: boolean, matches: object[] }}
  */
-export function transformEmbeddedBook(book, worldFields, matcher, excluded = new Set()) {
-    const matches = [];
+export function transformEmbeddedBook(book: EmbeddedBook, worldFields: string[], matcher: Matcher, excluded = new Set<string>()): { changed: boolean; matches: Match[] } {
+    const matches: Match[] = [];
     let changed = false;
     const entries = Array.isArray(book?.entries) ? book.entries : [];
 
@@ -436,8 +474,8 @@ export function transformEmbeddedBook(book, worldFields, matcher, excluded = new
  * `is_*` flags, and `send_date` stay untouched. Mutates the payload.
  * @returns {{ changed: boolean, matches: object[] }}
  */
-export function transformChatMessages(chatPayload, chatFields, matcher, excluded = new Set()) {
-    const matches = [];
+export function transformChatMessages(chatPayload: ChatMessage[], chatFields: string[], matcher: Matcher, excluded = new Set<string>()): { changed: boolean; matches: Match[] } {
+    const matches: Match[] = [];
     let changed = false;
 
     for (let index = 1; index < chatPayload.length; index++) {
@@ -486,7 +524,7 @@ export function transformChatMessages(chatPayload, chatFields, matcher, excluded
     return { changed, matches };
 }
 
-function normalizeFieldSelection(requested, allowed, fallback) {
+function normalizeFieldSelection(requested: unknown, allowed: readonly string[], fallback: readonly string[]): string[] {
     if (!Array.isArray(requested)) {
         return [...fallback];
     }
@@ -494,23 +532,23 @@ function normalizeFieldSelection(requested, allowed, fallback) {
     return requested.filter(field => allowedSet.has(field));
 }
 
-function clonePayload(value) {
+function clonePayload<T>(value: T): T {
     return structuredClone(value);
 }
 
-function getBoundWorldName(cardPayload) {
+function getBoundWorldName(cardPayload: CardPayload) {
     return String(cardPayload?.data?.extensions?.world ?? cardPayload?.world ?? '').trim();
 }
 
-function getInternalName(avatarFilename) {
+function getInternalName(avatarFilename: string) {
     return String(avatarFilename ?? '').replace(/\.png$/i, '');
 }
 
-function getRequestHandle(request) {
-    return request.user?.profile?.handle ?? request.user?.handle ?? 'default-user';
+function getRequestHandle(request: Request) {
+    return request.user?.profile?.handle ?? (request.user as typeof request.user & { handle?: string })?.handle ?? 'default-user';
 }
 
-function errorResult(status, reason, extras = {}) {
+function errorResult(status: number, reason: string, extras: JsonObject = {}) {
     return { ok: false, status, reason, ...extras };
 }
 
@@ -546,7 +584,7 @@ function errorResult(status, reason, extras = {}) {
  * @param {CharacterTextReplaceDependencies} [options.dependencies] Injected for tests
  * @returns {Promise<object>} Structured result; `ok:false` carries `status`/`reason`
  */
-export async function runCharacterTextReplace({ request, apply = false, dependencies = {} }) {
+export async function runCharacterTextReplace({ request, apply = false, dependencies = {} }: { request: Request; apply?: boolean; dependencies?: CharacterTextReplaceDependencies }): Promise<ReplaceResult | ReturnType<typeof errorResult>> {
     const deps = {
         getCanonicalCharacterCardJson: dependencies.getCanonicalCharacterCardJson,
         getCharacterWriteDependencies: dependencies.getCharacterWriteDependencies,
@@ -587,7 +625,7 @@ export async function runCharacterTextReplace({ request, apply = false, dependen
     const cardFields = normalizeFieldSelection(body.cardFields, CARD_FIELD_IDS, CARD_FIELD_IDS);
     const worldFields = normalizeFieldSelection(body.worldFields, WORLD_FIELD_IDS, WORLD_FIELD_IDS);
     const chatFields = normalizeFieldSelection(body.chatFields, CHAT_FIELD_IDS, CHAT_FIELD_IDS);
-    const excluded = new Set(Array.isArray(body.excluded) ? body.excluded.map(String) : []);
+    const excluded = new Set<string>(Array.isArray(body.excluded) ? body.excluded.map(String) : []);
     const chatFileName = String(body.chatFileName ?? '');
     if (areas.chats === 'current' && !chatFileName) {
         return errorResult(400, 'missing_chat_file_name');
@@ -598,17 +636,18 @@ export async function runCharacterTextReplace({ request, apply = false, dependen
     const internalName = getInternalName(avatarUrl);
 
     // ---- Preflight: every requested area's authority must be reachable ----
-    const cardJson = await deps.getCanonicalCharacterCardJson(handle, directories, avatarUrl);
+    // The caller supplies these two dependencies; absent values still fail as before.
+    const cardJson = await (deps.getCanonicalCharacterCardJson as NonNullable<typeof deps.getCanonicalCharacterCardJson>)(handle, directories, avatarUrl);
     const cardMissing = cardJson == null;
     if (cardMissing && (areas.card || areas.worldBook)) {
         const flags = deps.getCharacterFeatureFlags();
         return errorResult(flags?.enabled ? 404 : 503, flags?.enabled ? 'character_not_found' : 'canonical_storage_disabled');
     }
 
-    const cardPayload = cardJson != null ? JSON.parse(cardJson) : null;
+    const cardPayload: CardPayload | null = cardJson != null ? JSON.parse(cardJson) : null;
     const boundWorldName = cardPayload ? getBoundWorldName(cardPayload) : '';
     const normalizedWorldName = normalizeCanonicalWorldInfoName(boundWorldName);
-    const embeddedBook = cardPayload?.data?.character_book;
+    const embeddedBook = cardPayload?.data?.character_book as EmbeddedBook;
     const hasEmbeddedBook = Array.isArray(embeddedBook?.entries) && embeddedBook.entries.length > 0;
 
     let worldInfoState = null;
@@ -619,16 +658,18 @@ export async function runCharacterTextReplace({ request, apply = false, dependen
         }
     }
 
-    let chatSession = null;
+    let chatSession: ChatSession | null = null;
     if (areas.chats === 'current') {
-        chatSession = await deps.openChatSession(request, { ownerId: internalName, chatFileName });
+        // The JS helper's JSDoc marks success fields optional even though its
+        // successful return supplies all of them.
+        chatSession = await deps.openChatSession(request, { ownerId: internalName, chatFileName }) as ChatSession;
         if (!chatSession?.ok) {
             return errorResult(503, 'canonical_chat_unavailable', { detail: chatSession?.reason ?? null });
         }
     }
 
     // ---- Transform: always computed on fresh canonical data ----
-    const result = {
+    const result: ReplaceResult = {
         ok: true,
         applied: { card: false, worldBook: false, chat: false },
         areas: {
@@ -639,7 +680,7 @@ export async function runCharacterTextReplace({ request, apply = false, dependen
         totals: { occurrences: 0, changedTargets: 0 },
         warnings: [],
     };
-    function failed(area, reason, status = 500, outcomeUnknown = false) {
+    function failed(area: keyof ReplaceResult['areas'], reason: string, status = 500, outcomeUnknown = false) {
         result.ok = false;
         result.status = status;
         result.reason = reason;
@@ -649,12 +690,12 @@ export async function runCharacterTextReplace({ request, apply = false, dependen
         return result;
     }
 
-    let currentArea = 'worldBook';
+    let currentArea: keyof ReplaceResult['areas'] = 'worldBook';
     try {
     // ---- Area 1: bound World Info book ----
         let refreshedCharacterBook = null;
         if (areas.worldBook && boundWorldName && worldInfoState?.ok) {
-            const book = deps.getCanonicalWorldInfoBook(worldInfoState.db, normalizedWorldName);
+            const book = deps.getCanonicalWorldInfoBook(worldInfoState.db, normalizedWorldName) as WorldBook | null;
             if (!book) {
                 result.areas.worldBook = { status: 'missing', name: boundWorldName, matches: [], occurrences: 0 };
             } else {
@@ -685,7 +726,7 @@ export async function runCharacterTextReplace({ request, apply = false, dependen
                             nowMs: Date.now(),
                         });
                     } catch (error) {
-                        if (error?.code === 'WORLD_BOOK_CONFLICT') return failed('worldBook', 'world_book_conflict', 409);
+                        if ((error as { code?: unknown } | null)?.code === 'WORLD_BOOK_CONFLICT') return failed('worldBook', 'world_book_conflict', 409);
                         return failed('worldBook', 'world_book_write_failed', 500, true);
                     }
                     result.applied.worldBook = true;
@@ -702,7 +743,7 @@ export async function runCharacterTextReplace({ request, apply = false, dependen
                 // The card's embedded snapshot must reflect the post-replace book —
                 // read it back from the same db so preview and apply agree.
                 if (apply && changed) {
-                    const persisted = deps.getCanonicalWorldInfoBook(worldInfoState.db, normalizedWorldName) ?? bookPayload;
+                    const persisted = (deps.getCanonicalWorldInfoBook(worldInfoState.db, normalizedWorldName) as WorldBook | null) ?? bookPayload;
                     refreshedCharacterBook = persisted.originalData
                     ?? (persisted.entries ? deps.convertWorldInfoToCharacterBook(normalizedWorldName, persisted.entries) : null);
                 } else if (changed) {
@@ -773,11 +814,11 @@ export async function runCharacterTextReplace({ request, apply = false, dependen
                     avatarUrl,
                     targetFile: internalName,
                     characterData: JSON.stringify(cardPayload),
-                    expectedCardJson: cardJson,
-                    dependencies: deps.getCharacterWriteDependencies(),
+                    expectedCardJson: cardJson as string,
+                    dependencies: (deps.getCharacterWriteDependencies as NonNullable<typeof deps.getCharacterWriteDependencies>)(),
                 });
             } catch (error) {
-                if (error?.code === 'CHARACTER_CARD_CONFLICT') return failed('card', 'card_conflict', 409);
+                if ((error as { code?: unknown } | null)?.code === 'CHARACTER_CARD_CONFLICT') return failed('card', 'card_conflict', 409);
                 return failed('card', 'card_write_failed', 500, true);
             }
             if (writeResult?.ok || writeResult?.authorityCommitted === true) {
@@ -819,7 +860,7 @@ export async function runCharacterTextReplace({ request, apply = false, dependen
                 result.warnings.push({ code: 'chat_session_missing', fileName: chatFileName });
                 if (apply) return failed('chats', 'chat_session_missing', 409);
             } else {
-                const chatPayload = clonePayload(snapshot.payload);
+                const chatPayload = clonePayload(snapshot.payload) as ChatMessage[];
                 const { changed, matches } = transformChatMessages(chatPayload, chatFields, matcher, excluded);
                 result.areas.chats = {
                     status: changed ? (apply ? 'applied' : 'preview') : 'unchanged',
@@ -834,6 +875,7 @@ export async function runCharacterTextReplace({ request, apply = false, dependen
                 if (apply && changed) {
                     let writeResult;
                     try {
+                        // The JS helper accepts version, although its JSDoc omits it.
                         writeResult = deps.writeChatSession(request, {
                             db: chatSession.db,
                             locator: chatSession.locator,
@@ -842,7 +884,7 @@ export async function runCharacterTextReplace({ request, apply = false, dependen
                             avatarUrl,
                             payload: chatPayload,
                             version: snapshot.version,
-                        });
+                        } as Parameters<typeof writeCanonicalChatForTextReplace>[1] & { version: string | null });
                     } catch {
                         return failed('chats', 'chat_write_failed', 500, true);
                     }
@@ -862,7 +904,7 @@ export async function runCharacterTextReplace({ request, apply = false, dependen
             }
         }
 
-        if (result.areas.worldBook.boundCharacterCount > 1) {
+        if ((result.areas.worldBook.boundCharacterCount as number) > 1) {
             result.warnings.push({
                 code: 'shared_world_book',
                 name: boundWorldName,

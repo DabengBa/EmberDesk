@@ -454,7 +454,7 @@ asset subdirectories (sprites, live2d) stay file-backed media, and only root-lev
       `media_folders`, memberships, and `managed_media_repairs`),
       `src/canonical-managed-media-shadow-import.js`,
       `src/endpoints/canonical-managed-media-read-service.ts`, and
-      `src/endpoints/canonical-managed-media-write-service.js`. The independently gated
+      `src/endpoints/canonical-managed-media-write-service.ts`. The independently gated
       `features.storage.canonicalSqlite.slices.managedMedia.*` slice shadows existing media
       without moving it, permits DB-first background and asset reads only after a clean
       `managed_media` audit, and writes content under

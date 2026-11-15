@@ -64,7 +64,7 @@ test('native Node reads managed bytes through the real users fallback route', ()
         `, url('util.js'), config, root, url('canonical-sqlite.js'), url('canonical-sqlite-migrations.js'),
         url('canonical-sqlite-shadow-import.js'), url('endpoints/canonical-managed-media-store.ts'),
         url('endpoints/canonical-managed-media-read-service.ts'), url('users.js'), url('endpoints/assets.js'),
-        url('endpoints/images.js'), url('endpoints/files.js'), url('canonical-avatar-blob-service.js')],
+        url('endpoints/images.js'), url('endpoints/files.js'), url('canonical-avatar-blob-service.ts')],
         { encoding: 'utf8', timeout: 20_000 });
         expect({ status: result.status, stderr: result.status === 0 ? '' : result.stderr })
             .toEqual({ status: 0, stderr: '' });

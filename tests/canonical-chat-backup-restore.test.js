@@ -17,7 +17,7 @@ import {
     getCanonicalChatRestoreStatus,
     restoreCanonicalChatBackup as restoreWithVersion,
     getCanonicalChatRestoreVersion,
-} from '../src/endpoints/canonical-chat-backup-restore-service.js';
+} from '../src/endpoints/canonical-chat-backup-restore-service.ts';
 
 function restoreCanonicalChatBackup(options) {
     return restoreWithVersion({ expectedVersion: getCanonicalChatRestoreVersion(options.db), ...options });
@@ -99,7 +99,7 @@ describe('canonical chat backup and restore service', () => {
         runCanonicalMigrations(db);
         const backup = createCanonicalChatBackup({ db });
         backup.sessions = [{ ownerType: 'character', ownerId: 'alice', sourcePath: 'chats/alice/first.jsonl', sourceMtimeMs: 0, jsonl: '{"chat_metadata":{}}' }];
-        const service = pathToFileURL(path.resolve(process.cwd(), '../src/endpoints/canonical-chat-backup-restore-service.js')).href;
+        const service = pathToFileURL(path.resolve(process.cwd(), '../src/endpoints/canonical-chat-backup-restore-service.ts')).href;
         const sqlite = pathToFileURL(path.resolve(process.cwd(), '../src/canonical-sqlite.js')).href;
         const child = `
             import { createCanonicalSqliteManager } from ${JSON.stringify(sqlite)};
