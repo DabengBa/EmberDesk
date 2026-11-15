@@ -6,6 +6,8 @@ topic: server-typescript
 
 # Server TypeScript
 
+`src/canonical-secrets-backend.ts` is the synchronous canonical Secrets backend. The existing SecretManager remains the public boundary; initialization, audit, SQLite authority and projection repair behavior are unchanged.
+
 ## Runtime and module boundary
 
 The supported runtime is Node.js 26.12.1 (`>=26.12.1 <27`). The server uses

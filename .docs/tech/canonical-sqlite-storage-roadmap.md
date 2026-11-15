@@ -440,7 +440,7 @@ asset subdirectories (sprites, live2d) stay file-backed media, and only root-lev
     - Current status: delivered via migration v5 `secret_records`,
       `secret_migration_markers`, and `secret_projection_repairs`;
       `src/canonical-secrets-shadow-import.js` performs idempotent flat/array import and
-      value-hash audit; `src/canonical-secrets-backend.js` keeps `SecretManager` DB-first
+      value-hash audit; `src/canonical-secrets-backend.ts` keeps `SecretManager` DB-first
       behind clean read/write gates; operator and CLI repair replay `secrets.json` from the
       database without exposing values in status or repair metadata.
     - Security note: SQLite and database backups contain the same plaintext secret values
