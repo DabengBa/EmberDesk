@@ -119,7 +119,7 @@ const RULES = [
                 /^src\/user-auth\.ts$/,
                 /^src\/user-storage\.[jt]s$/,
                 /^src\/user-directories\.[jt]s$/,
-                /^src\/user-migrations\.js$/,
+                /^src\/user-migrations\.ts$/,
                 /^src\/users\.js$/,
                 /^(user auth|user storage|user directories|user migrations|auth storage)$/i,
             ]);

@@ -59,9 +59,12 @@ test.each([false, true])('native Node preserves config and account behavior (acc
                 const barrel = await import(moduleUrl('users.js'));
                 const auth = await import(moduleUrl('user-auth.ts'));
                 const directories = await import(moduleUrl('user-directories.ts'));
+                const migrations = await import(moduleUrl('user-migrations.ts'));
                 const constants = await import(moduleUrl('constants.js'));
                 assert.equal(barrel.getAccountVersion, user.getAccountVersion);
                 assert.equal(barrel.getCsrfSecret, auth.getCsrfSecret);
+                assert.equal(barrel.migrateUserData, migrations.migrateUserData);
+                assert.equal(barrel.migratePublicOverrides, migrations.migratePublicOverrides);
                 for (const name of ['getUserDirectories', 'getUserDirectoriesList', 'ensurePublicDirectoriesExist', 'cleanUploads', 'getUserAvatar']) {
                     assert.equal(barrel[name], directories[name]);
                 }

@@ -229,3 +229,13 @@ SSO and trusted-proxy configuration is still read at module load time. The
 native user/config test exercises the real barrel and auth module, trusted and
 untrusted SSO clients, anonymous and user CSRF secrets, and cookie-secret
 migration. This internal migration changes no user-visible semantic contract.
+
+## User data migrations
+
+`src/user-migrations.ts` is the sole implementation of the existing startup
+user-data and public-override migrations. `src/users.js` re-exports both
+functions via their real `.ts` path. SQLite settings remain authoritative;
+file backup and removal preserve their existing ordering and are not a single
+transaction with SQLite. The native user/config test imports both production
+modules and checks their shared exports without a loader. No user-visible
+behavior or semantic documentation changes are intended.
